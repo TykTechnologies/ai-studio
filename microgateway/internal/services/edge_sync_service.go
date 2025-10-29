@@ -2,6 +2,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -309,6 +310,14 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 		// Handle Config JSON field with proper conversion
 		if pbPlugin.Config != "" {
 			plugin.Config = datatypes.JSON(pbPlugin.Config)
+		}
+
+		// Handle ServiceScopes JSON field with proper conversion
+		if len(pbPlugin.ServiceScopes) > 0 {
+			scopesJSON, err := json.Marshal(pbPlugin.ServiceScopes)
+			if err == nil {
+				plugin.ServiceScopes = datatypes.JSON(scopesJSON)
+			}
 		}
 
 		if err := tx.Create(plugin).Error; err != nil {

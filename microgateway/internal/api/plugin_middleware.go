@@ -302,14 +302,22 @@ func CreatePluginAwareLLMHandler(aiGatewayHandler http.Handler, config *PluginMi
 			return
 		}
 
+		// Get authentication context
+		authResult := auth.GetAuthResult(c)
+		var appID, userID uint
+		if authResult != nil {
+			appID = authResult.AppID
+			// userID would be available if we had user authentication
+		}
+
 		// Create plugin context
 		pluginCtx := map[string]interface{}{
 			"request_id":    generateRequestID(),
 			"llm_id":        llmID,
 			"llm_slug":      llmSlug,
 			"vendor":        vendor,
-			"app_id":        uint(1), // Default app ID for plugin auth
-			"user_id":       uint(0),
+			"app_id":        appID,
+			"user_id":       userID,
 			"metadata":      make(map[string]interface{}),
 			"trace_context": make(map[string]string),
 		}
@@ -324,15 +332,48 @@ func CreatePluginAwareLLMHandler(aiGatewayHandler http.Handler, config *PluginMi
 		}
 		log.Debug().Msg("Pre-auth plugins completed")
 
-		// Note: Auth plugins are now handled directly by AI Gateway credential validation
-		log.Debug().Msg("Skipping auth plugins - handled by AI Gateway")
-		
-		// Execute post-auth plugins
-		log.Debug().Msg("About to execute post-auth plugins")
-		if blocked := executePostAuthPlugins(config.PluginManager, llmID, c, pluginCtx); blocked {
-			return // Request was blocked by post-auth plugin
+		// Validate credential to get authenticated app_id for post-auth plugins
+		// In edge mode, this may duplicate validation but ensures post-auth plugins have auth context
+		token := extractToken(c)
+		var authenticatedAppID uint
+		if token != "" {
+			credInterface, err := config.Services.GatewayService.GetCredentialBySecret(token)
+			if err == nil {
+				if cred, ok := credInterface.(*database.Credential); ok {
+					appInterface, err := config.Services.GatewayService.GetAppByCredentialID(cred.ID)
+					if err == nil {
+						if app, ok := appInterface.(*database.App); ok {
+							authenticatedAppID = app.ID
+							pluginCtx["app_id"] = app.ID
+							log.Debug().Uint("app_id", app.ID).Msg("Credential validated, updated plugin context with authenticated app_id")
+						}
+					}
+				}
+			} else {
+				// Invalid credential - skip post-auth plugins and let AI Gateway return the error
+				log.Debug().Msg("Credential validation failed, skipping post-auth plugins, letting AI Gateway handle error")
+
+				// Store LLM context for AI Gateway
+				ctx := context.WithValue(c.Request.Context(), "llm_id", llmID)
+				ctx = context.WithValue(ctx, "llm_slug", llmSlug)
+				services.SetCurrentLLMContext(llmID, llmSlug)
+				defer services.ClearCurrentLLMContext()
+
+				aiGatewayHandler.ServeHTTP(c.Writer, c.Request.WithContext(ctx))
+				return
+			}
 		}
-		log.Debug().Msg("Post-auth plugins completed")
+
+		// Execute post-auth plugins only if we have valid authentication
+		if authenticatedAppID > 0 {
+			log.Debug().Uint("app_id", authenticatedAppID).Msg("About to execute post-auth plugins with authenticated app_id")
+			if blocked := executePostAuthPlugins(config.PluginManager, llmID, c, pluginCtx); blocked {
+				return // Request was blocked by post-auth plugin
+			}
+			log.Debug().Msg("Post-auth plugins completed")
+		} else {
+			log.Debug().Msg("No authenticated app_id, skipping post-auth plugins")
+		}
 
 		// Store plugin context for post-processing (not used for response hooks)
 		c.Set("plugin_context", pluginCtx)
@@ -526,11 +567,32 @@ func executePostAuthPlugins(manager PluginManagerInterface, llmID uint, c *gin.C
 		log.Debug().Interface("plugin_response", pluginResp).Msg("Post-auth plugin returned response, checking for modifications")
 		if block, hasBlock := pluginResp["block"].(bool); hasBlock && block {
 			log.Debug().Msg("Post-auth plugin blocked the request")
-			c.Status(http.StatusForbidden)
+
+			// Get status code from plugin or default to 403
+			statusCode := http.StatusForbidden
+			if code, ok := pluginResp["status_code"].(int); ok {
+				statusCode = code
+			}
+
+			// Set response status
+			c.Status(statusCode)
+
+			// Set headers from plugin
+			if headers, ok := pluginResp["headers"].(map[string]string); ok {
+				for key, value := range headers {
+					c.Header(key, value)
+				}
+			}
+
+			// Send body from plugin if provided
+			if body, ok := pluginResp["body"].([]byte); ok && len(body) > 0 {
+				c.Data(statusCode, c.GetHeader("Content-Type"), body)
+			}
+
 			c.Abort()
 			return true
 		}
-		
+
 		if modified, ok := pluginResp["modified"].(bool); ok && modified {
 			log.Debug().Msg("Post-auth plugin returned Modified: true, applying request modifications")
 			applyRequestModifications(c, pluginResp)

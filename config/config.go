@@ -66,6 +66,12 @@ type AppConf struct {
 	// OCI Plugin Configuration
 	OCIPlugins            OCIConfig
 
+	// Marketplace Configuration
+	MarketplaceEnabled      bool
+	MarketplaceIndexURL     string
+	MarketplaceSyncInterval time.Duration
+	MarketplaceCacheDir     string
+
 	// Hub-and-Spoke Configuration
 	GatewayMode        string
 	GRPCPort           int
@@ -365,6 +371,33 @@ func getConfigFromEnv() *AppConf {
 
 	// OCI Plugin configuration
 	conf.OCIPlugins = getOCIConfig()
+
+	// Marketplace configuration
+	conf.MarketplaceEnabled = true // Enabled by default
+	if enabledStr := os.Getenv("MARKETPLACE_ENABLED"); enabledStr != "" {
+		if enabled, err := strconv.ParseBool(enabledStr); err == nil {
+			conf.MarketplaceEnabled = enabled
+		}
+	}
+
+	conf.MarketplaceIndexURL = os.Getenv("MARKETPLACE_INDEX_URL")
+	if conf.MarketplaceIndexURL == "" {
+		conf.MarketplaceIndexURL = "https://raw.githubusercontent.com/lonelycode/tyk-ai-studio-plugins/main/index.yaml"
+	}
+
+	conf.MarketplaceSyncInterval = 1 * time.Hour // Default: sync every hour
+	if intervalStr := os.Getenv("MARKETPLACE_SYNC_INTERVAL"); intervalStr != "" {
+		if interval, err := time.ParseDuration(intervalStr); err == nil {
+			conf.MarketplaceSyncInterval = interval
+		} else {
+			cfgLog.Warnf("Warning: Invalid MARKETPLACE_SYNC_INTERVAL value: %s. Using default: %s", intervalStr, conf.MarketplaceSyncInterval)
+		}
+	}
+
+	conf.MarketplaceCacheDir = os.Getenv("MARKETPLACE_CACHE_DIR")
+	if conf.MarketplaceCacheDir == "" {
+		conf.MarketplaceCacheDir = "./.marketplace-cache"
+	}
 
 	// Log level configuration
 	conf.LogLevel = os.Getenv("LOG_LEVEL")

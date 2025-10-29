@@ -11,10 +11,13 @@ import (
 
 type CredentialExtractor func(r *http.Request) (string, error)
 
+type PostAuthCallback func(w http.ResponseWriter, r *http.Request, appID uint) bool
+
 type CredentialValidator struct {
-	service    services.ServiceInterface
-	p          *Proxy
-	validators map[string]CredentialExtractor
+	service          services.ServiceInterface
+	p                *Proxy
+	validators       map[string]CredentialExtractor
+	postAuthCallback PostAuthCallback // Hook for post-authentication logic
 }
 
 func NewCredentialValidator(service services.ServiceInterface, proxy *Proxy) *CredentialValidator {
@@ -23,6 +26,11 @@ func NewCredentialValidator(service services.ServiceInterface, proxy *Proxy) *Cr
 		p:          proxy,
 		validators: make(map[string]CredentialExtractor),
 	}
+}
+
+// SetPostAuthCallback sets a callback to execute after successful authentication
+func (cv *CredentialValidator) SetPostAuthCallback(callback PostAuthCallback) {
+	cv.postAuthCallback = callback
 }
 
 func (cv *CredentialValidator) RegisterValidator(vendor string, validator CredentialExtractor) {
@@ -77,6 +85,14 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				ctx = context.WithValue(ctx, "oauthClient", oauthClient)
 				ctx = context.WithValue(ctx, "scope", accessToken.Scope)
 
+				// Call post-auth callback if registered (for microgateway post-auth plugins)
+				// For OAuth, we don't have an app_id, so pass 0
+				if cv.postAuthCallback != nil {
+					if blocked := cv.postAuthCallback(w, r.WithContext(ctx), 0); blocked {
+						return // Post-auth plugin blocked the request
+					}
+				}
+
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -121,8 +137,18 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
 					}
-					
+
 					// Not a tool request - continue with LLM request
+					// Call post-auth callback if registered (for microgateway post-auth plugins)
+					if cv.postAuthCallback != nil {
+						log.Debug().Uint("app_id", app.ID).Msg("Bearer token auth: Calling post-auth callback")
+						if blocked := cv.postAuthCallback(w, r.WithContext(ctx), app.ID); blocked {
+							log.Debug().Msg("Bearer token auth: Post-auth callback blocked the request")
+							return // Post-auth plugin blocked the request
+						}
+						log.Debug().Msg("Bearer token auth: Post-auth callback completed")
+					}
+
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -240,6 +266,30 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		r = reqWithCtx
+
+		// Call post-auth callback if registered (for microgateway post-auth plugins)
+		if cv.postAuthCallback != nil {
+			log.Debug().Msg("Post-auth callback is registered, checking for app in context")
+			if app := r.Context().Value("app"); app != nil {
+				log.Debug().Msg("App found in context, attempting to extract app_id")
+				// Use interface to avoid circular import with models package
+				if appWithID, ok := app.(interface{ GetID() uint }); ok {
+					appID := appWithID.GetID()
+					log.Debug().Uint("app_id", appID).Msg("Calling post-auth callback with authenticated app_id")
+					if blocked := cv.postAuthCallback(w, r, appID); blocked {
+						log.Debug().Msg("Post-auth callback blocked the request")
+						return // Post-auth plugin blocked the request
+					}
+					log.Debug().Msg("Post-auth callback completed successfully")
+				} else {
+					log.Warn().Msg("App in context does not implement GetID() method - cannot extract app_id")
+				}
+			} else {
+				log.Debug().Msg("No app in context for post-auth callback")
+			}
+		} else {
+			log.Debug().Msg("No post-auth callback registered")
+		}
 
 		next.ServeHTTP(w, r)
 	})

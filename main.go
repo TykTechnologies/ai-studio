@@ -108,6 +108,42 @@ func main() {
 		}
 	}
 
+	// Initialize and start marketplace service if enabled
+	if appConf.MarketplaceEnabled && ociConfig != nil {
+		logger.Info("Initializing marketplace service...")
+
+		// Get OCI client from plugin service
+		var ociClient *ociplugins.OCIPluginClient
+		if service.PluginService != nil {
+			ociClient, _ = ociplugins.NewOCIPluginClient(ociConfig)
+		}
+
+		// Create marketplace service
+		service.MarketplaceService = services.NewMarketplaceService(
+			db,
+			ociClient,
+			service.PluginService,
+			service.AIStudioPluginManager,
+			appConf.MarketplaceCacheDir,
+			appConf.MarketplaceIndexURL,
+			appConf.MarketplaceSyncInterval,
+		)
+
+		// Start background sync in a goroutine
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go service.MarketplaceService.Start(ctx)
+
+		logger.Infof("Marketplace service started - index URL: %s, sync interval: %v",
+			appConf.MarketplaceIndexURL, appConf.MarketplaceSyncInterval)
+	} else {
+		if !appConf.MarketplaceEnabled {
+			logger.Info("Marketplace is disabled via MARKETPLACE_ENABLED=false")
+		} else if ociConfig == nil {
+			logger.Warn("Marketplace requires OCI support - set AI_STUDIO_OCI_CACHE_DIR to enable")
+		}
+	}
+
 	// Initialize mail service and notification service
 	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)
 	mailService := notifications.NewMailService(

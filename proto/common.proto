@@ -118,6 +118,7 @@ message PluginConfig {
   repeated uint32 llm_ids = 10; // Associated LLM IDs
   google.protobuf.Timestamp created_at = 11;
   google.protobuf.Timestamp updated_at = 12;
+  repeated string service_scopes = 13; // Service API scopes (for plugins with service access)
 }
 
 // ConfigurationSnapshot represents a complete configuration state

@@ -184,20 +184,19 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 			Msg("Setting hook types from manifest")
 	}
 
-	// For plugins with studio_ui or agent hooks, store the scopes (but don't authorize yet)
-	hasUIOrAgent := false
-	for _, hook := range hookTypes {
-		if hook == models.HookTypeStudioUI || hook == models.HookTypeAgent {
-			hasUIOrAgent = true
-			break
-		}
-	}
-
-	if hasUIOrAgent && len(scopes) > 0 {
+	// For plugins with service scopes, store them (but don't authorize yet)
+	// This includes AI Studio plugins (studio_ui, agent) AND gateway plugins that declare service scopes
+	if len(scopes) > 0 {
 		// Update plugin with extracted scopes (but keep ServiceAccessAuthorized as false)
 		plugin.ServiceScopes = scopes
 		plugin.ServiceAccessAuthorized = false
 		shouldUpdatePlugin = true
+
+		log.Info().
+			Uint("plugin_id", uint(id)).
+			Strs("service_scopes", scopes).
+			Strs("hook_types", hookTypes).
+			Msg("Extracted service scopes from manifest - admin approval required")
 	}
 
 	// Save plugin updates if needed
@@ -232,8 +231,8 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 
 	// Determine status
 	status := "ready"
-	if hasUIOrAgent && len(scopes) > 0 {
-		status = "scopes_pending" // Plugins with UI/Agent hooks and scopes need approval
+	if len(scopes) > 0 {
+		status = "scopes_pending" // Plugins with service scopes need admin approval
 	}
 
 	response := ValidateAndLoadResponse{

@@ -21,6 +21,7 @@ type Service struct {
 	PluginManifestService  *PluginManifestService
 	AIStudioPluginManager  *AIStudioPluginManager
 	PluginMetadataLoader   *PluginMetadataLoader
+	MarketplaceService     *MarketplaceService
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -88,6 +89,15 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		logger.Warn("AI Studio plugin manager not available - plugin metadata loader will not be available")
 	}
 
+	// Initialize marketplace service (will be started separately in main.go)
+	var marketplaceService *MarketplaceService
+	if ociClient != nil && pluginService != nil && aiStudioPluginManager != nil {
+		// Marketplace requires OCI support
+		// Configuration will be passed from main.go when starting the service
+		marketplaceService = nil // Will be initialized in main.go with proper config
+		logger.Info("Marketplace service will be initialized with configuration from main.go")
+	}
+
 	// Create service instance
 	service := &Service{
 		DB:                    db,
@@ -99,6 +109,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		PluginManifestService: pluginManifestService,
 		AIStudioPluginManager: aiStudioPluginManager,
 		PluginMetadataLoader:  pluginMetadataLoader,
+		MarketplaceService:    marketplaceService,
 	}
 
 	// Wire service reference to AI Studio plugin manager for proper service provider injection

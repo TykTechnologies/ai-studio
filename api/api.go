@@ -696,6 +696,21 @@ func (a *API) setupRoutes() {
 	v1.GET("/llms/:id/plugins/:pluginId/config", a.getLLMPluginConfig)
 	v1.PUT("/llms/:id/plugins/:pluginId/config", a.updateLLMPluginConfig)
 
+	// Marketplace routes (only register if marketplace service is available)
+	if a.service.MarketplaceService != nil {
+		marketplaceHandlers := NewMarketplaceHandlers(a.service.MarketplaceService)
+		v1.GET("/marketplace/plugins", marketplaceHandlers.ListPlugins)
+		v1.GET("/marketplace/plugins/:id", marketplaceHandlers.GetPlugin)
+		v1.GET("/marketplace/plugins/:id/versions", marketplaceHandlers.GetPluginVersions)
+		v1.GET("/marketplace/plugins/:id/install-metadata", marketplaceHandlers.GetInstallMetadata)
+		v1.GET("/marketplace/updates", marketplaceHandlers.GetAvailableUpdates)
+		v1.POST("/marketplace/sync", marketplaceHandlers.SyncMarketplace)
+		v1.GET("/marketplace/sync-status", marketplaceHandlers.GetSyncStatus)
+		v1.GET("/marketplace/categories", marketplaceHandlers.GetCategories)
+		v1.GET("/marketplace/publishers", marketplaceHandlers.GetPublishers)
+		v1.GET("/marketplace/stats", marketplaceHandlers.GetStats)
+	}
+
 	// Chat History Record routes
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)
 	v1.GET("/chat-history-records/messages/:session_id", a.getCMessagesForSession)

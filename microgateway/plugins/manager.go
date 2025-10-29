@@ -131,6 +131,9 @@ type PluginManager struct {
 
 	// Built-in plugin support
 	edgeClient interface{} // Edge client for built-in plugins (interface to avoid import cycle)
+
+	// Service broker for bidirectional plugin communication
+	managementServer interface{} // MicrogatewayManagementServiceServer (interface to avoid import cycle)
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -246,9 +249,15 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		return nil, fmt.Errorf("failed to dispense plugin: %w", err)
 	}
 
-	// Cast to gRPC client
-	grpcClient, ok := raw.(pb.PluginServiceClient)
-	if !ok {
+	// Cast to gRPC client - handle both wrapper and direct client
+	var grpcClient pb.PluginServiceClient
+	if wrapper, ok := raw.(*MicrogatewayPluginClient); ok {
+		// New wrapper type that supports service broker
+		grpcClient = wrapper
+	} else if directClient, ok := raw.(pb.PluginServiceClient); ok {
+		// Direct client (backward compatibility)
+		grpcClient = directClient
+	} else {
 		client.Kill()
 		err := fmt.Errorf("plugin does not implement PluginServiceClient interface")
 		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
@@ -304,6 +313,44 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		err := fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
 		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, err
+	}
+
+	// Setup service broker if management server is available
+	var brokerID uint32
+	if pm.managementServer != nil {
+		// Check if this is a MicrogatewayPluginClient that supports broker setup
+		if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
+			// Use type assertion without checking specific methods - the interface is defined elsewhere
+			// Setup the service broker - this creates bidirectional gRPC channel
+			setupBrokerID, err := clientWrapper.SetupServiceBroker(pm.managementServer)
+			if err != nil {
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Err(err).
+					Msg("Failed to setup service broker for plugin - service API will not be available")
+			} else {
+				brokerID = setupBrokerID
+				log.Info().
+					Uint("plugin_id", pluginID).
+					Uint32("broker_id", brokerID).
+					Msg("✅ Service broker setup complete - plugin can now access host services")
+
+				// Add broker ID to config so plugin can use it
+				configStrings["_service_broker_id"] = fmt.Sprintf("%d", brokerID)
+				configStrings["_plugin_id"] = fmt.Sprintf("%d", pluginID)
+
+				// Send updated config to plugin with broker ID
+				_, err = grpcClient.Initialize(context.Background(), &pb.InitRequest{
+					Config: configStrings,
+				})
+				if err != nil {
+					log.Warn().
+						Uint("plugin_id", pluginID).
+						Err(err).
+						Msg("Failed to reinitialize plugin with broker ID")
+				}
+			}
+		}
 	}
 
 	// Create loaded plugin instance
@@ -1298,6 +1345,14 @@ func (pm *PluginManager) SetEdgeClient(edgeClient interface{}) {
 	defer pm.mu.Unlock()
 	pm.edgeClient = edgeClient
 	log.Info().Msg("Edge client set for plugin manager built-in plugins")
+}
+
+// SetManagementServer sets the management server for service broker setup
+func (pm *PluginManager) SetManagementServer(server interface{}) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.managementServer = server
+	log.Info().Msg("Management server set for plugin manager service broker")
 }
 
 // LoadDeferredBuiltinPlugins loads any built-in plugins that were deferred during initial load

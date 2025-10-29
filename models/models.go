@@ -5,14 +5,13 @@ import (
 	"gorm.io/gorm"
 )
 
-
 func InitModels(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&User{},      //Done
 		&Group{},     //Done
 		&LLM{},       //Done
 		&Catalogue{}, //Done
-		&Tags{},
+		&Tag{},
 		&Datasource{},    //Done
 		&DataCatalogue{}, //Done
 		&Credential{},    // Done [partially handled by Apps]
@@ -42,10 +41,14 @@ func InitModels(db *gorm.DB) error {
 		&UIRegistry{},         // UI component registry
 		&PluginData{},         // Plugin key-value storage
 		&AgentConfig{},        // Agent plugin configurations
+		// Marketplace Models
+		&MarketplacePlugin{},      // Marketplace plugin catalog cache
+		&MarketplaceIndex{},       // Marketplace index metadata
+		&InstalledPluginVersion{}, // Installed plugin version tracking
+		&MarketplaceConfig{},      // Marketplace configuration
 	); err != nil {
 		return err
 	}
-
 
 	if err := db.Table("group_catalogues").AutoMigrate(&struct {
 		GroupID     uint `gorm:"primaryKey"`

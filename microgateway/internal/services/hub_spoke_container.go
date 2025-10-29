@@ -158,6 +158,19 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	budgetService := NewDatabaseBudgetService(db, repo, pluginManager)
 	analyticsService := NewDatabaseAnalyticsService(db, repo, cfg.Analytics)
 
+	// Create microgateway management server for plugin service broker
+	managementServer := NewMicrogatewayManagementServer(
+		db,
+		gatewayService,
+		budgetService,
+		management,
+		crypto,
+	)
+
+	// Connect management server to plugin manager for bidirectional plugin communication
+	pluginManager.SetManagementServer(managementServer)
+	log.Info().Msg("✅ Management server connected to plugin manager - plugins can now access service API")
+
 	return &ServiceContainer{
 		DB:         db,
 		Repository: repo,
@@ -173,7 +186,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 
 		AuthProvider: authProvider,
 		Crypto:       crypto,
-		
+
 		PluginManager: pluginManager,
 	}, nil
 }

@@ -1044,18 +1044,19 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 					Msg("Created merged plugin config for LLM")
 
 				pbPlugin := &pb.PluginConfig{
-					Id:          uint32(plugin.ID),
-					Name:        plugin.Name,
-					Description: plugin.Description,
-					Command:     plugin.Command,
-					Checksum:    plugin.Checksum,
-					Config:      mergedConfigJSON, // Merged configuration for this LLM
-					HookType:    plugin.HookType,
-					IsActive:    plugin.IsActive,
-					Namespace:   plugin.Namespace,
-					LlmIds:      []uint32{uint32(llmPlugin.LLMID)}, // Only for this specific LLM
-					CreatedAt:   timestamppb.New(plugin.CreatedAt),
-					UpdatedAt:   timestamppb.New(plugin.UpdatedAt),
+					Id:           uint32(plugin.ID),
+					Name:         plugin.Name,
+					Description:  plugin.Description,
+					Command:      plugin.Command,
+					Checksum:     plugin.Checksum,
+					Config:       mergedConfigJSON, // Merged configuration for this LLM
+					HookType:     plugin.HookType,
+					IsActive:     plugin.IsActive,
+					Namespace:    plugin.Namespace,
+					LlmIds:       []uint32{uint32(llmPlugin.LLMID)}, // Only for this specific LLM
+					ServiceScopes: plugin.ServiceScopes, // Service API scopes
+					CreatedAt:    timestamppb.New(plugin.CreatedAt),
+					UpdatedAt:    timestamppb.New(plugin.UpdatedAt),
 				}
 				snapshot.Plugins = append(snapshot.Plugins, pbPlugin)
 			}
@@ -1069,18 +1070,19 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 
 			pbPlugin := &pb.PluginConfig{
-				Id:          uint32(plugin.ID),
-				Name:        plugin.Name,
-				Description: plugin.Description,
-				Command:     plugin.Command,
-				Checksum:    plugin.Checksum,
-				Config:      configJSON,
-				HookType:    plugin.HookType,
-				IsActive:    plugin.IsActive,
-				Namespace:   plugin.Namespace,
-				LlmIds:      []uint32{}, // No LLM associations
-				CreatedAt:   timestamppb.New(plugin.CreatedAt),
-				UpdatedAt:   timestamppb.New(plugin.UpdatedAt),
+				Id:           uint32(plugin.ID),
+				Name:         plugin.Name,
+				Description:  plugin.Description,
+				Command:      plugin.Command,
+				Checksum:     plugin.Checksum,
+				Config:       configJSON,
+				HookType:     plugin.HookType,
+				IsActive:     plugin.IsActive,
+				Namespace:    plugin.Namespace,
+				LlmIds:       []uint32{}, // No LLM associations
+				ServiceScopes: plugin.ServiceScopes, // Service API scopes
+				CreatedAt:    timestamppb.New(plugin.CreatedAt),
+				UpdatedAt:    timestamppb.New(plugin.UpdatedAt),
 			}
 			snapshot.Plugins = append(snapshot.Plugins, pbPlugin)
 		}

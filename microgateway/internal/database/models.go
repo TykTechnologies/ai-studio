@@ -2,6 +2,7 @@
 package database
 
 import (
+	"encoding/json"
 	"time"
 
 	"gorm.io/datatypes"
@@ -216,6 +217,7 @@ type Plugin struct {
 	HookTypes           datatypes.JSON `gorm:"type:json" json:"hook_types"`                         // All hook types this plugin supports
 	HookTypesCustomized bool           `gorm:"default:false" json:"hook_types_customized"`          // True if user overrode manifest hooks
 	IsActive            bool           `gorm:"index:idx_plugins_is_active" json:"is_active"`
+	ServiceScopes       datatypes.JSON `gorm:"type:json" json:"service_scopes"`                     // Service API scopes (e.g., ["llms.read", "apps.read"])
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
 	DeletedAt           gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
@@ -225,6 +227,55 @@ type Plugin struct {
 
 	// Relationships
 	LLMs []LLM `gorm:"many2many:llm_plugins;" json:"llms,omitempty"`
+}
+
+// HasServiceAccess checks if the plugin has been authorized for service API access
+func (p *Plugin) HasServiceAccess() bool {
+	// Plugin has service access if it has any service scopes defined
+	if p.ServiceScopes == nil || len(p.ServiceScopes) == 0 {
+		return false
+	}
+
+	var scopes []string
+	if err := json.Unmarshal(p.ServiceScopes, &scopes); err != nil {
+		return false
+	}
+
+	return len(scopes) > 0
+}
+
+// HasServiceScope checks if the plugin has a specific service scope
+func (p *Plugin) HasServiceScope(requiredScope string) bool {
+	if p.ServiceScopes == nil || len(p.ServiceScopes) == 0 {
+		return false
+	}
+
+	var scopes []string
+	if err := json.Unmarshal(p.ServiceScopes, &scopes); err != nil {
+		return false
+	}
+
+	for _, scope := range scopes {
+		if scope == requiredScope {
+			return true
+		}
+	}
+
+	return false
+}
+
+// GetServiceScopes returns the list of service scopes for this plugin
+func (p *Plugin) GetServiceScopes() []string {
+	if p.ServiceScopes == nil || len(p.ServiceScopes) == 0 {
+		return []string{}
+	}
+
+	var scopes []string
+	if err := json.Unmarshal(p.ServiceScopes, &scopes); err != nil {
+		return []string{}
+	}
+
+	return scopes
 }
 
 // LLMPlugin represents the many-to-many relationship between LLMs and plugins
@@ -267,6 +318,17 @@ type EdgeInstance struct {
 	UpdatedAt     time.Time
 }
 
+// PluginKV represents plugin key-value storage
+type PluginKV struct {
+	ID        uint      `gorm:"primaryKey"`
+	Key       string    `gorm:"uniqueIndex;not null"`
+	Value     []byte    `gorm:"type:bytea;not null"`
+	PluginID  uint      `gorm:"not null;index"`
+	Plugin    *Plugin   `gorm:"foreignKey:PluginID"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
 
 // TableName methods for new models
 func (EdgeInstance) TableName() string { return "edge_instances" }
+func (PluginKV) TableName() string     { return "plugin_kv" }

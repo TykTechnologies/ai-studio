@@ -564,6 +564,12 @@ func (p *Proxy) AddResponseHook(hook ResponseHook) {
 	}
 }
 
+func (p *Proxy) SetPostAuthCallback(callback PostAuthCallback) {
+	if p.credValidator != nil {
+		p.credValidator.SetPostAuthCallback(callback)
+	}
+}
+
 // GetResponseHookManager returns the response hook manager for external configuration
 func (p *Proxy) GetResponseHookManager() ResponseHookManager {
 	return p.responseHookManager
