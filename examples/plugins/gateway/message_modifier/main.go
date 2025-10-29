@@ -4,10 +4,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	_ "embed"
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
 )
+
+//go:embed manifest.json
+var manifestBytes []byte
 
 // MessageModifierPlugin modifies outbound LLM requests to add instructions
 type MessageModifierPlugin struct {
@@ -42,6 +46,11 @@ func (p *MessageModifierPlugin) GetVersion() string {
 // Shutdown implements BasePlugin
 func (p *MessageModifierPlugin) Shutdown() error {
 	return nil
+}
+
+// GetManifest implements ManifestProvider
+func (p *MessageModifierPlugin) GetManifest() ([]byte, error) {
+	return manifestBytes, nil
 }
 
 // GetConfigSchema implements ConfigSchemaProvider

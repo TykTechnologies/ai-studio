@@ -55,21 +55,6 @@ const (
 
 // OnInitialize implements AIStudioPluginImplementation interface
 func (p *CustomAuthUIPlugin) OnInitialize(serviceAPI mgmt.AIStudioManagementServiceClient, pluginID uint32, config map[string]string) error {
-	log.Printf("%s: ===== INITIALIZATION START =====", PluginName)
-	log.Printf("%s: Plugin ID: %d", PluginName, pluginID)
-	log.Printf("%s: Config keys received: %d", PluginName, len(config))
-	for key, value := range config {
-		if key == "tokens" {
-			preview := value
-			if len(value) > 100 {
-				preview = value[:100] + "..."
-			}
-			log.Printf("%s: Config[%s] = %s (will parse below)", PluginName, key, preview)
-		} else {
-			log.Printf("%s: Config[%s] = %s", PluginName, key, value)
-		}
-	}
-
 	p.serviceAPI = serviceAPI
 	p.pluginID = pluginID
 	p.tokenMap = make(map[string]*TokenConfig)
@@ -80,19 +65,13 @@ func (p *CustomAuthUIPlugin) OnInitialize(serviceAPI mgmt.AIStudioManagementServ
 	p.rejectUnknownTokens = true
 	p.defaultAppID = 1
 
-	// Parse tokens from config - CRITICAL: This matches gateway plugin logic
+	// Parse tokens from config
 	if tokensValue, hasTokens := config["tokens"]; hasTokens {
-		log.Printf("%s: ===== FOUND TOKENS IN CONFIG =====", PluginName)
-		log.Printf("%s: Tokens value: %s", PluginName, tokensValue)
-
 		// Parse JSON string to tokens array
 		var tokens []TokenConfig
 		if err := json.Unmarshal([]byte(tokensValue), &tokens); err != nil {
-			log.Printf("%s: ❌ FAILED TO PARSE TOKENS: %v", PluginName, err)
 			return fmt.Errorf("failed to parse tokens array: %w", err)
 		}
-
-		log.Printf("%s: ✅ Successfully parsed %d tokens from config", PluginName, len(tokens))
 
 		// Load tokens into maps
 		for _, token := range tokens {
@@ -105,17 +84,12 @@ func (p *CustomAuthUIPlugin) OnInitialize(serviceAPI mgmt.AIStudioManagementServ
 			}
 			p.tokenMap[token.Token] = &token
 			p.tokenByID[token.ID] = &token
-			log.Printf("%s: Loaded token ID='%s' (masked), AppID=%d, UserID='%s'",
-				PluginName, token.ID, token.AppID, token.UserID)
 		}
-	} else {
-		log.Printf("%s: No 'tokens' key in config - plugin will start with empty token map", PluginName)
 	}
 
 	// Parse reject_unknown_tokens
 	if rejectStr, ok := config["reject_unknown_tokens"]; ok {
 		p.rejectUnknownTokens = (rejectStr == "true" || rejectStr == "1")
-		log.Printf("%s: Using config reject_unknown_tokens: %v", PluginName, p.rejectUnknownTokens)
 	}
 
 	// Parse default_app_id
@@ -123,13 +97,10 @@ func (p *CustomAuthUIPlugin) OnInitialize(serviceAPI mgmt.AIStudioManagementServ
 		var appID uint64
 		if _, err := fmt.Sscanf(appIDStr, "%d", &appID); err == nil {
 			p.defaultAppID = uint(appID)
-			log.Printf("%s: Using config default_app_id: %d", PluginName, p.defaultAppID)
 		}
 	}
 
-	log.Printf("%s: Plugin initialized with %d tokens, rejectUnknown=%v, defaultApp=%d",
-		PluginName, len(p.tokenMap), p.rejectUnknownTokens, p.defaultAppID)
-
+	log.Printf("%s: Initialized with %d tokens", PluginName, len(p.tokenMap))
 	return nil
 }
 
@@ -228,25 +199,17 @@ func (p *CustomAuthUIPlugin) HandleCall(method string, payload []byte) ([]byte, 
 func (p *CustomAuthUIPlugin) Authenticate(ctx context.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
 	// Extract token from credential
 	token := req.Credential
-	log.Printf("%s: Authenticate called with credential: %s", PluginName, token)
 
 	// Handle Bearer token format
 	if strings.HasPrefix(token, "Bearer ") {
 		token = strings.TrimPrefix(token, "Bearer ")
-		log.Printf("%s: Stripped Bearer prefix, token now: %s", PluginName, token)
 	}
 
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	log.Printf("%s: Looking up token in map (map size: %d)", PluginName, len(p.tokenMap))
-	for mapToken := range p.tokenMap {
-		log.Printf("%s: Map contains token: %s", PluginName, mapToken)
-	}
-
 	// Lookup token in configured token map
 	if tokenConfig, ok := p.tokenMap[token]; ok {
-		log.Printf("%s: ✅ TOKEN FOUND! AppID=%d, UserID=%s", PluginName, tokenConfig.AppID, tokenConfig.UserID)
 		// Token found - return configured app and user
 		return &pb.AuthResponse{
 			Authenticated: true,
@@ -261,16 +224,12 @@ func (p *CustomAuthUIPlugin) Authenticate(ctx context.Context, req *pb.AuthReque
 	}
 
 	// Token not in map - handle based on policy
-	log.Printf("%s: ❌ TOKEN NOT FOUND in map", PluginName)
 	if p.rejectUnknownTokens {
-		log.Printf("%s: Rejecting unknown token (reject_unknown_tokens=true)", PluginName)
 		return &pb.AuthResponse{
 			Authenticated: false,
 			ErrorMessage:  "Invalid token. Token not found in custom auth plugin configuration.",
 		}, nil
 	}
-
-	log.Printf("%s: Accepting unknown token with default app ID %d", PluginName, p.defaultAppID)
 
 	// Accept unknown tokens with default app ID
 	return &pb.AuthResponse{

@@ -3,11 +3,15 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
 )
+
+//go:embed manifest.json
+var manifestBytes []byte
 
 // ResponseModifierPlugin modifies LLM responses
 type ResponseModifierPlugin struct {
@@ -50,6 +54,11 @@ func (p *ResponseModifierPlugin) GetVersion() string {
 // Shutdown implements BasePlugin
 func (p *ResponseModifierPlugin) Shutdown() error {
 	return nil
+}
+
+// GetManifest implements ManifestProvider
+func (p *ResponseModifierPlugin) GetManifest() ([]byte, error) {
+	return manifestBytes, nil
 }
 
 // OnBeforeWriteHeaders implements ResponsePlugin (new clean interface)

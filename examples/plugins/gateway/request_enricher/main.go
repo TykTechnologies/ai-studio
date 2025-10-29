@@ -3,10 +3,14 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
 )
+
+//go:embed manifest.json
+var manifestBytes []byte
 
 // RequestEnricherPlugin adds additional instructions to authenticated requests
 type RequestEnricherPlugin struct {
@@ -41,6 +45,11 @@ func (p *RequestEnricherPlugin) GetVersion() string {
 // Shutdown implements BasePlugin
 func (p *RequestEnricherPlugin) Shutdown() error {
 	return nil
+}
+
+// GetManifest implements ManifestProvider
+func (p *RequestEnricherPlugin) GetManifest() ([]byte, error) {
+	return manifestBytes, nil
 }
 
 // ProcessRequest implements PostAuthPlugin

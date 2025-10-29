@@ -401,3 +401,31 @@ func (s *ConfigProviderGRPC) Ping(ctx context.Context, req *configpb.ConfigPingR
 		Healthy:   true,
 	}, nil
 }
+
+func (s *ConfigProviderGRPC) GetManifest(ctx context.Context, req *configpb.GetManifestRequest) (*configpb.GetManifestResponse, error) {
+	// Check if the plugin implements ManifestProvider
+	type ManifestProvider interface {
+		GetManifest() ([]byte, error)
+	}
+
+	if manifestProvider, ok := s.Impl.(ManifestProvider); ok {
+		manifestBytes, err := manifestProvider.GetManifest()
+		if err != nil {
+			return &configpb.GetManifestResponse{
+				Success:      false,
+				ErrorMessage: err.Error(),
+			}, nil
+		}
+
+		return &configpb.GetManifestResponse{
+			Success:      true,
+			ManifestJson: string(manifestBytes),
+		}, nil
+	}
+
+	// Plugin doesn't provide manifest
+	return &configpb.GetManifestResponse{
+		Success:      false,
+		ErrorMessage: "plugin does not implement GetManifest",
+	}, nil
+}

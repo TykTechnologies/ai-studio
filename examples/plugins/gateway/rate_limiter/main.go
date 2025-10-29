@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"strconv"
 	"sync"
@@ -10,6 +11,9 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
 )
+
+//go:embed manifest.json
+var manifestBytes []byte
 
 // RateLimiterPlugin implements a simple rate limiter for pre-authentication
 type RateLimiterPlugin struct {
@@ -147,6 +151,11 @@ func (p *RateLimiterPlugin) Shutdown() error {
 		close(p.cleanupStop)
 	}
 	return nil
+}
+
+// GetManifest implements ManifestProvider
+func (p *RateLimiterPlugin) GetManifest() ([]byte, error) {
+	return manifestBytes, nil
 }
 
 // ProcessRequest implements PreAuthPlugin

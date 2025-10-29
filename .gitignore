@@ -79,3 +79,5 @@ examples/plugins/studio/service-api-test/service-api-test
 examples/plugins/gateway/response_modifier/response_modifier
 examples/plugins/studio/echo-agent/server/echo-agent
 examples/plugins/studio/echo-agent/server/echo-agent-plugin
+examples/plugins/studio/custom-auth-ui/server/custom-auth-ui
+examples/plugins/studio/service-api-test/server/service-api-test

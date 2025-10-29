@@ -121,10 +121,10 @@ const PluginCreationWizard = () => {
 
         // If there are scopes (UI/Agent plugins), go to approval step
         if (attrs.scopes && attrs.scopes.length > 0) {
-          handleNext(); // Go to scope approval step
+          handleNext(); // Go to scope approval step (activeStep becomes 1)
         } else {
-          // No scopes, skip to configuration
-          setActiveStep(2);
+          // No scopes, skip to configuration (activeStep becomes 1 since scope step is hidden)
+          handleNext();
           setWorkflowState(WORKFLOW_STATES.READY);
         }
       } catch (metadataErr) {
@@ -137,7 +137,7 @@ const PluginCreationWizard = () => {
           status: 'ready',
         });
         setWorkflowState(WORKFLOW_STATES.READY);
-        setActiveStep(2); // Go to configuration step anyway
+        handleNext(); // Go to configuration step (activeStep becomes 1)
       } finally {
         setMetadataLoading(false);
       }
