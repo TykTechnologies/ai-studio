@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -6,10 +6,12 @@ import {
   CircularProgress,
   Alert,
   IconButton,
-  Paper,
+  Grid,
+  Button,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import AddIcon from '@mui/icons-material/Add';
 import { TitleBox } from '../../admin/styles/sharedStyles';
 import agentService from '../services/agentService';
 import ChatInput from '../components/chat/ChatInput';
@@ -27,10 +29,19 @@ const AgentChat = () => {
   const [sending, setSending] = useState(false);
   const [sessionId, setSessionId] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [showSystemMessages, setShowSystemMessages] = useState(() => {
+    const saved = localStorage.getItem('showSystemMessages');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
 
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
   const currentAgentMessageRef = useRef(null);
+
+  const hasUserMessages = useMemo(() =>
+    messages.some(message => message.role === 'user'),
+    [messages]
+  );
 
   useEffect(() => {
     loadAgent();
@@ -208,6 +219,24 @@ const AgentChat = () => {
     navigate('/agents');
   };
 
+  const handleNewChat = () => {
+    // Close SSE connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    // Clear state
+    setMessages([]);
+    setInputMessage('');
+    setSessionId('');
+    setIsConnected(false);
+    setSending(false);
+
+    // Reconnect to agent
+    connectToAgent();
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
@@ -230,96 +259,199 @@ const AgentChat = () => {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <>
       {/* Header */}
       <TitleBox top="64px">
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
           <IconButton onClick={handleBack} size="small">
             <ArrowBackIcon />
           </IconButton>
           <SmartToyIcon fontSize="large" color="primary" />
-          <Box>
-            <Typography variant="headingXLarge">{agent.name}</Typography>
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Typography variant="headingXLarge">
+              {agent.name}
+            </Typography>
             {agent.description && (
               <Typography variant="bodySmallDefault" color="text.secondary">
                 {agent.description}
               </Typography>
             )}
           </Box>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={handleNewChat}
+          >
+            New Chat
+          </Button>
         </Box>
       </TitleBox>
 
-      {/* Messages */}
-      <Box
-        sx={{
-          flex: 1,
-          overflow: 'auto',
-          p: 3,
-          pt: 10,
-        }}
-      >
-        {messages.length === 0 ? (
-          <Box sx={{ textAlign: 'center', mt: 8 }}>
-            <SmartToyIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="headingLarge" gutterBottom>
-              Start a conversation
-            </Typography>
-            <Typography variant="bodyLargeDefault" color="text.secondary">
-              Send a message to begin
-            </Typography>
-          </Box>
-        ) : (
-          <Box sx={{ maxWidth: 800, margin: '0 auto' }}>
-            {messages.map((message) => (
-              <AgentMessage key={message.id} message={message} />
-            ))}
-            {sending && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, my: 2 }}>
-                <CircularProgress size={20} />
-                <Typography variant="bodySmallDefault" color="text.secondary">
-                  Agent is thinking...
-                </Typography>
+      <Box sx={{ height: '85vh', display: 'flex', flexDirection: 'column' }}>
+        <Grid container sx={{ flexGrow: 1, overflow: 'hidden', mb: 4 }}>
+          <Grid item xs={12} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            {/* Messages container */}
+            <Box
+              sx={{
+                flexGrow: 1,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                width: '100%',
+              }}
+              ref={messagesEndRef}
+            >
+              <Box sx={{
+                maxWidth: '740px',
+                width: '100%',
+                mx: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                flexGrow: 1,
+              }}>
+                {!hasUserMessages ? (
+                  <Box sx={{
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flex: 1,
+                  }}>
+                    <Box sx={{
+                      width: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      justifyContent: 'start',
+                      textAlign: 'start',
+                    }}>
+                      <Typography variant="headingXLarge" mb={2}>
+                        Welcome to {agent.name} chat
+                      </Typography>
+                      <Typography variant="headingXLargSub" mb={3}>
+                        How can I help you today?
+                      </Typography>
+                      {agent.description && (
+                        <Typography variant="bodyLargeDefault" color="text.defaultSubdued" mb={4} maxWidth="600px">
+                          {agent.description}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Box sx={{ width: '100%', mt: 2 }}>
+                      {!isConnected ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <CircularProgress size={20} />
+                          <Typography variant="bodySmallDefault" color="text.secondary">
+                            Connecting to agent...
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <ChatInput
+                          inputMessage={inputMessage}
+                          setInputMessage={setInputMessage}
+                          handleSendMessage={handleSendMessage}
+                          isConnected={!sending && !!sessionId}
+                          uploadedFiles={[]}
+                          setUploadedFiles={() => {}}
+                          onDrop={() => {}}
+                          isUploading={false}
+                          renderUploadIndicator={() => null}
+                          chatId={agentId}
+                          messages={messages}
+                          hideFileUpload={true}
+                        />
+                      )}
+                    </Box>
+                  </Box>
+                ) : (
+                  <>
+                    {/* System message toggle - reserve space even when not shown to prevent layout shift */}
+                    <Box sx={{ mt: 2, textAlign: 'right', minHeight: '24px' }}>
+                      {messages.length > 1 && (
+                        <Typography
+                          variant="caption"
+                          component="div"
+                          onClick={() => {
+                            const newValue = !showSystemMessages;
+                            setShowSystemMessages(newValue);
+                            localStorage.setItem('showSystemMessages', JSON.stringify(newValue));
+                          }}
+                          sx={{
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            color: showSystemMessages ? 'primary.main' : 'text.secondary',
+                            '&:hover': {
+                              color: 'primary.main',
+                            },
+                          }}
+                        >
+                          {showSystemMessages ? 'Hide' : 'Show'} System Messages
+                        </Typography>
+                      )}
+                    </Box>
+                    {messages
+                      .filter(msg => showSystemMessages || msg.type !== 'system')
+                      .map((message) => (
+                        <AgentMessage key={message.id} message={message} />
+                      ))
+                    }
+                    {sending && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, my: 2 }}>
+                        <CircularProgress size={20} />
+                        <Typography variant="bodySmallDefault" color="text.secondary">
+                          Agent is thinking...
+                        </Typography>
+                      </Box>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
+              </Box>
+            </Box>
+
+            {hasUserMessages && (
+              <Box sx={{
+                width: '100%',
+                padding: 2,
+                paddingTop: 0,
+              }}>
+                <Box sx={{
+                  maxWidth: '740px',
+                  width: '100%',
+                  mx: 'auto',
+                }}>
+                  {!isConnected ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <CircularProgress size={20} />
+                      <Typography variant="bodySmallDefault" color="text.secondary">
+                        Connecting to agent...
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <ChatInput
+                      inputMessage={inputMessage}
+                      setInputMessage={setInputMessage}
+                      handleSendMessage={handleSendMessage}
+                      isConnected={!sending && !!sessionId}
+                      uploadedFiles={[]}
+                      setUploadedFiles={() => {}}
+                      onDrop={() => {}}
+                      isUploading={false}
+                      renderUploadIndicator={() => null}
+                      chatId={agentId}
+                      messages={messages}
+                      hideFileUpload={true}
+                    />
+                  )}
+                </Box>
               </Box>
             )}
-            <div ref={messagesEndRef} />
-          </Box>
-        )}
+          </Grid>
+        </Grid>
       </Box>
-
-      {/* Input */}
-      <Paper
-        elevation={3}
-        sx={{
-          p: 2,
-          borderTop: (theme) => `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Box sx={{ maxWidth: 800, margin: '0 auto' }}>
-          {!isConnected ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <CircularProgress size={20} />
-              <Typography variant="bodySmallDefault" color="text.secondary">
-                Connecting to agent...
-              </Typography>
-            </Box>
-          ) : (
-            <ChatInput
-              inputMessage={inputMessage}
-              setInputMessage={setInputMessage}
-              handleSendMessage={handleSendMessage}
-              isConnected={!sending && !!sessionId}
-              uploadedFiles={[]}
-              setUploadedFiles={() => {}}
-              onDrop={() => {}}
-              isUploading={false}
-              renderUploadIndicator={() => null}
-              chatId={agentId}
-              messages={messages}
-            />
-          )}
-        </Box>
-      </Paper>
-    </Box>
+    </>
   );
 };
 

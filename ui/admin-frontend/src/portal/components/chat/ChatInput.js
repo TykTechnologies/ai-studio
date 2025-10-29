@@ -16,7 +16,8 @@ const ChatInput = ({
 	isUploading,
 	renderUploadIndicator,
 	chatId,
-	messages = []
+	messages = [],
+	hideFileUpload = false
 }) => {
 	// Use a ref for the input element to prevent unnecessary re-renders
 	const inputRef = useRef(null);
@@ -93,7 +94,7 @@ const ChatInput = ({
 					InputProps={{
 						endAdornment: (
 							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-								{uploadedFiles.length > 0 && (
+								{!hideFileUpload && uploadedFiles.length > 0 && (
 									<Chip
 										icon={<AttachFileIcon />}
 										label={uploadedFiles.length}
@@ -101,10 +102,12 @@ const ChatInput = ({
 										onDelete={() => setUploadedFiles([])}
 									/>
 								)}
-								{renderUploadIndicator()}
-								<IconButton onClick={open} size="small">
-									<AttachFileIcon />
-								</IconButton>
+								{!hideFileUpload && renderUploadIndicator()}
+								{!hideFileUpload && (
+									<IconButton onClick={open} size="small">
+										<AttachFileIcon />
+									</IconButton>
+								)}
 								<IconButton
 									onClick={handleSendMessage}
 									disabled={!isConnected || (!inputMessage.trim() && uploadedFiles.length === 0)}
