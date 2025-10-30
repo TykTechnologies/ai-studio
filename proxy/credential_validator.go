@@ -308,6 +308,42 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			r = r.WithContext(ctx)
 		}
 
+		// === TRY CUSTOM AUTH (Auth Plugin) for API Key ===
+		if cv.authHooks != nil && cv.authHooks.CustomAuth != nil {
+			appID, authenticated, authErr := cv.authHooks.CustomAuth(apiKey, r)
+			if authErr != nil {
+				// Auth plugin error
+				respondWithError(w, http.StatusUnauthorized, "Authentication failed", authErr, true)
+				return
+			}
+
+			if authenticated {
+				// Auth plugin successfully validated
+				app, err := cv.service.GetAppByID(appID)
+				if err != nil {
+					respondWithError(w, http.StatusInternalServerError, "Failed to retrieve app", err, false)
+					return
+				}
+
+				ctx := r.Context()
+				ctx = context.WithValue(ctx, "app", app)
+				r = r.WithContext(ctx)
+
+				// === HOOK POINT: POST-AUTH (Custom Auth Plugin via API Key) ===
+				if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
+					if blocked := cv.authHooks.PostAuth(w, r, appID); blocked {
+						return // Post-auth hook blocked the request
+					}
+				}
+
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Auth plugin returned false - this means authentication failed (no fallback)
+			// The error should have been returned above
+		}
+
+		// === STANDARD API KEY VALIDATION (only if no auth plugin) ===
 		validAPIKey, reqWithCtx := cv.CheckAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug, r)
 		if !validAPIKey {
 			respondWithError(w, http.StatusUnauthorized, "Invalid API key or insufficient permissions.", nil, true) // true for wwwAuth

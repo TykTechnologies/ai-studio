@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -190,11 +191,27 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 			TraceContext: make(map[string]string),
 		}
 
-		// Create auth request
-		authReq := map[string]interface{}{
-			"credential": credential,
-			"auth_type":  "bearer",
-			"context":    pluginCtx,
+		// Read request body for the auth plugin
+		headers := make(map[string]string)
+		for key, values := range r.Header {
+			if len(values) > 0 {
+				headers[key] = values[0]
+			}
+		}
+		bodyBytes, _ := readBodyWithoutConsuming(r)
+
+		// Create auth request matching interfaces.AuthRequest structure
+		authReq := &interfaces.AuthRequest{
+			Credential: credential,
+			AuthType:   "bearer",
+			Request: &interfaces.PluginRequest{
+				Method:     r.Method,
+				Path:       r.URL.Path,
+				Headers:    headers,
+				Body:       bodyBytes,
+				RemoteAddr: r.RemoteAddr,
+				Context:    pluginCtx,
+			},
 		}
 
 		// Execute auth plugin chain
@@ -205,35 +222,35 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 		}
 
 		// Parse plugin response
-		if authResult, ok := result.(map[string]interface{}); ok {
-			if authenticated, hasAuth := authResult["authenticated"].(bool); hasAuth {
-				if !authenticated {
-					log.Debug().Msg("Auth plugin rejected authentication")
-					return 0, false, nil // Auth plugin rejected
+		if authResp, ok := result.(*interfaces.AuthResponse); ok {
+			if !authResp.Authenticated {
+				// Auth plugin rejected authentication - this is a hard failure
+				// Do NOT fall back to standard validation when auth plugin exists
+				errMsg := authResp.ErrorMessage
+				if errMsg == "" {
+					errMsg = "authentication rejected by auth plugin"
 				}
-
-				// Extract app_id from plugin response
-				var appID uint
-				if appIDVal, ok := authResult["app_id"].(float64); ok {
-					appID = uint(appIDVal)
-				} else if appIDStr, ok := authResult["app_id"].(string); ok {
-					if id, err := strconv.ParseUint(appIDStr, 10, 32); err == nil {
-						appID = uint(id)
-					}
-				} else if appIDUint, ok := authResult["app_id"].(uint); ok {
-					appID = appIDUint
-				}
-
-				if appID == 0 {
-					appID = 1 // Default fallback
-				}
-
-				log.Debug().Uint("app_id", appID).Msg("Auth plugin authenticated request")
-				return appID, true, nil
+				log.Debug().Str("error", errMsg).Msg("Auth plugin rejected authentication")
+				return 0, false, fmt.Errorf(errMsg)
 			}
+
+			// Extract app_id from plugin response (it's a string in the interface)
+			var appID uint
+			if authResp.AppID != "" {
+				if id, err := strconv.ParseUint(authResp.AppID, 10, 32); err == nil {
+					appID = uint(id)
+				}
+			}
+
+			if appID == 0 {
+				appID = 1 // Default fallback
+			}
+
+			log.Debug().Uint("app_id", appID).Msg("Auth plugin authenticated request")
+			return appID, true, nil
 		}
 
-		return 0, false, nil // Invalid plugin response format
+		return 0, false, fmt.Errorf("invalid plugin response format")
 	}
 }
 

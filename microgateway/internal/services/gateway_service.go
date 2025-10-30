@@ -72,8 +72,6 @@ func (s *DatabaseGatewayService) GetAppByID(id uint) (interface{}, error) {
 	var app database.App
 	err := s.db.Where("id = ?", id).
 		Preload("LLMs").
-		Preload("Datasources").
-		Preload("Tools").
 		First(&app).Error
 
 	if err != nil {
