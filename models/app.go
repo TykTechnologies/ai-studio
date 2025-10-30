@@ -65,6 +65,11 @@ func (a *App) Delete(db *gorm.DB) error {
 	return db.Delete(a).Error
 }
 
+// GetID returns the app ID
+func (a *App) GetID() uint {
+	return a.ID
+}
+
 // GetByUserID gets all apps for a specific user
 func (a *App) GetByUserID(db *gorm.DB, userID uint) ([]App, error) {
 	var apps []App

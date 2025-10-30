@@ -95,6 +95,14 @@ func (s *HubSpokeGatewayService) GetCredentialBySecret(secret string) (interface
 }
 
 // GetAppByCredentialID returns the app associated with a credential
+func (s *HubSpokeGatewayService) GetAppByID(id uint) (interface{}, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Get app from database via configProvider
+	return s.configProvider.GetApp(id)
+}
+
 func (s *HubSpokeGatewayService) GetAppByCredentialID(credID uint) (interface{}, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -99,11 +99,11 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	gateway.AddResponseHook(responsePluginAdapter)
 	log.Info().Msg("gRPC response plugin adapter registered with AI Gateway")
 
-	// Register post-auth callback for executing post-auth plugins after AI Gateway authentication
-	log.Info().Msg("Setting up post-auth callback for plugin execution")
-	postAuthCallback := api.CreatePostAuthPluginCallback(serviceContainer, pluginManager)
-	gateway.SetPostAuthCallback(postAuthCallback)
-	log.Info().Msg("Post-auth callback registered with AI Gateway")
+	// Register authentication hooks for executing pre-auth, auth, and post-auth plugins
+	log.Info().Msg("Setting up authentication hooks for plugin execution")
+	authHooks := api.CreateAuthHooks(serviceContainer, pluginManager)
+	gateway.SetAuthHooks(authHooks)
+	log.Info().Msg("Authentication hooks registered with AI Gateway")
 
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{

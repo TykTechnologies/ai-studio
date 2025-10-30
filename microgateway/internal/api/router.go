@@ -182,33 +182,15 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		}
 	}
 
-	// Gateway endpoints - mount the AI Gateway handler with middleware
+	// Gateway endpoints - mount the AI Gateway handler
+	// Plugins are now integrated via hooks in the proxy layer, so router is a simple passthrough
 	if config.Gateway != nil {
 		gateway := router.Group("/")
-		
-		log.Debug().Bool("has_plugin_manager", config.PluginManager != nil).Msg("Router setup - checking plugin manager availability")
-		
-		// Create plugin-aware handlers for LLM endpoints
-		if config.PluginManager != nil {
-			log.Info().Msg("Adding plugin-aware handlers for gateway endpoints")
-			log.Debug().Msg("Plugin manager is available for router setup")
-			pluginMiddlewareConfig := &PluginMiddlewareConfig{
-				PluginManager: config.PluginManager,
-				Services:      config.Services,
-			}
-			
-			// Create plugin-aware LLM handler that bypasses AI Gateway auth when auth plugins are configured
-			gateway.Any("/llm/*path", CreatePluginAwareLLMHandler(config.Gateway.Handler(), pluginMiddlewareConfig))
-			
-			// Tools and datasources don't need plugin processing
-			gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
-			gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
-		} else {
-			// No plugin manager, use standard handlers
-			gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
-			gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
-			gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
-		}
+
+		log.Info().Msg("Mounting AI Gateway handler (plugins integrated via hooks)")
+		gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
+		gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
+		gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
 	}
 
 	// Metrics endpoint if enabled

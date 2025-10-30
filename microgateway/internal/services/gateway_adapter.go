@@ -530,6 +530,24 @@ func (a *GatewayServiceAdapter) GetOAuthClient(clientID string) (*models.OAuthCl
 
 // GetAppByCredentialID returns an app by credential ID
 // NOTE: In our token-only system, the "credential ID" is actually a token ID from our credential
+func (a *GatewayServiceAdapter) GetAppByID(id uint) (*models.App, error) {
+	log.Debug().Uint("app_id", id).Msg("GatewayServiceAdapter.GetAppByID() called")
+
+	// Delegate to the underlying gateway service
+	appInterface, err := a.gatewayService.GetAppByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to *models.App
+	if app, ok := appInterface.(*database.App); ok {
+		convertedApp := a.convertDatabaseAppToModel(app)
+		return &convertedApp, nil
+	}
+
+	return nil, fmt.Errorf("unexpected app type returned from gateway service")
+}
+
 func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, error) {
 	log.Debug().Uint("credential_id", credID).Msg("GatewayServiceAdapter.GetAppByCredentialID() called by AI Gateway")
 	

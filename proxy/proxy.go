@@ -564,6 +564,15 @@ func (p *Proxy) AddResponseHook(hook ResponseHook) {
 	}
 }
 
+// SetAuthHooks sets authentication lifecycle hooks
+func (p *Proxy) SetAuthHooks(hooks *AuthHooks) {
+	if p.credValidator != nil {
+		p.credValidator.SetAuthHooks(hooks)
+	}
+}
+
+// SetPostAuthCallback is deprecated, use SetAuthHooks instead
+// Kept for backward compatibility
 func (p *Proxy) SetPostAuthCallback(callback PostAuthCallback) {
 	if p.credValidator != nil {
 		p.credValidator.SetPostAuthCallback(callback)

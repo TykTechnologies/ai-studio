@@ -20,6 +20,9 @@ type GatewayServiceInterface interface {
 	// GetCredentialBySecret validates and returns credential
 	GetCredentialBySecret(secret string) (interface{}, error)
 
+	// GetAppByID returns app by its ID
+	GetAppByID(id uint) (interface{}, error)
+
 	// GetAppByCredentialID returns app associated with credential
 	GetAppByCredentialID(credID uint) (interface{}, error)
 

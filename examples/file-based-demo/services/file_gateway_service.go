@@ -347,6 +347,16 @@ func (s *FileGatewayService) GetCredentialBySecret(secret string) (*models.Crede
 	return nil, fmt.Errorf("credential not found or inactive")
 }
 
+// GetAppByID returns an app by its ID
+func (s *FileGatewayService) GetAppByID(id uint) (*models.App, error) {
+	for _, app := range s.apps {
+		if app.ID == id {
+			return &app, nil
+		}
+	}
+	return nil, fmt.Errorf("app not found for ID: %d", id)
+}
+
 // GetAppByCredentialID returns an app by its credential ID
 func (s *FileGatewayService) GetAppByCredentialID(credID uint) (*models.App, error) {
 	for _, app := range s.apps {

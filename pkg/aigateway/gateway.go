@@ -29,7 +29,10 @@ type Gateway interface {
 	// AddResponseHook adds a response hook for REST request processing (REST-only, not streaming)
 	AddResponseHook(hook proxy.ResponseHook)
 
-	// SetPostAuthCallback sets a callback to execute after successful authentication
+	// SetAuthHooks sets authentication lifecycle hooks (replaces SetPostAuthCallback)
+	SetAuthHooks(hooks *proxy.AuthHooks)
+
+	// SetPostAuthCallback is deprecated, use SetAuthHooks instead
 	SetPostAuthCallback(callback proxy.PostAuthCallback)
 }
 
@@ -140,6 +143,12 @@ func (g *gateway) AddResponseHook(hook proxy.ResponseHook) {
 	g.proxy.AddResponseHook(hook)
 }
 
+// SetAuthHooks sets authentication lifecycle hooks
+func (g *gateway) SetAuthHooks(hooks *proxy.AuthHooks) {
+	g.proxy.SetAuthHooks(hooks)
+}
+
+// SetPostAuthCallback is deprecated, use SetAuthHooks instead
 func (g *gateway) SetPostAuthCallback(callback proxy.PostAuthCallback) {
 	g.proxy.SetPostAuthCallback(callback)
 }
