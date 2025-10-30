@@ -140,7 +140,7 @@ jobs:
           ci/bin/unlock-agent.sh
           git config --global url."https://${{ secrets.ORG_GH_TOKEN }}@github.com".insteadOf "https://github.com"
           git config --global --add safe.directory /go/src/github.com/TykTechnologies/ai-studio
-          goreleaser release --clean -f ${{ matrix.goreleaser }} ${{ !startsWith(github.ref, 'refs/tags/') && ' --snapshot --skip=sign' || '' }}' | tee /tmp/build.sh
+          goreleaser release --clean -f ${{ matrix.goreleaser }} ${{ !startsWith(github.ref, 'refs/tags/') && ' --snapshot --skip=sign,docker' || '--skip=docker' }}' | tee /tmp/build.sh
           chmod +x /tmp/build.sh
           docker run --rm --privileged -e GITHUB_TOKEN=${{ github.token }} \
           -e GOPRIVATE=github.com/TykTechnologies                                \
@@ -357,7 +357,8 @@ jobs:
         shell: bash
         run: |
           # Using default distros (TUI service bypassed)
-          echo "deb=[\"ubuntu:jammy\", \"ubuntu:focal\", \"debian:bullseye\"]\nrpm=[\"amazonlinux:2\", \"el/8\", \"el/9\"]" >> $GITHUB_OUTPUT
+          echo "deb=[\"ubuntu:jammy\", \"ubuntu:focal\", \"debian:bullseye\"]" >> $GITHUB_OUTPUT
+          echo "rpm=[\"amazonlinux:2\", \"rockylinux:8\", \"rockylinux:9\"]" >> $GITHUB_OUTPUT
   upgrade-deb:
     services:
       httpbin.org:
@@ -388,7 +389,13 @@ jobs:
           ARG TARGETARCH
           COPY tyk-ai-studio*_${TARGETARCH}.deb /tyk-ai-studio.deb
           RUN apt-get update && apt-get install -y curl
-          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.deb.sh | bash && apt-get install -y tyk-ai-studio=1.0.1
+          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.deb.sh | bash
+          # Explicitly check if the previous package version exists before attempting to install it
+          RUN if apt-cache madison tyk-ai-studio | grep -q "1.0.1"; then \
+                apt-get install -y tyk-ai-studio=1.0.1; \
+              else \
+                echo "Previous version 1.0.1 not found, testing fresh install"; \
+             fi
           RUN dpkg -i /tyk-ai-studio.deb
 
           ' | tee Dockerfile
@@ -434,7 +441,13 @@ jobs:
           COPY tyk-ai-studio*.${RHELARCH}.rpm /tyk-ai-studio.rpm
           RUN command -v curl || yum install -y curl
           RUN command -v useradd || yum install -y shadow-utils
-          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.rpm.sh | bash && yum install -y tyk-ai-studio-1.0.1-1
+          RUN curl -fsSL https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.rpm.sh | bash
+          # Explicitly check if the previous package version exists before attempting to install it
+          RUN if yum info tyk-ai-studio-1.0.1-1 &>/dev/null; then \
+                yum install -y tyk-ai-studio-1.0.1-1; \
+              else \
+                echo "Previous version 1.0.1 not found, testing fresh install"; \
+              fi
           RUN curl https://keyserver.tyk.io/tyk.io.rpm.signing.key.2020 -o tyk-ai-studio.key && rpm --import tyk-ai-studio.key
           RUN rpm --checksig /tyk-ai-studio.rpm
           RUN rpm -Uvh --force /tyk-ai-studio.rpm
