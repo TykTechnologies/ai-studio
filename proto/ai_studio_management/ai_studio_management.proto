@@ -388,6 +388,11 @@ message AppInfo {
     repeated uint32 llm_ids = 7;
     google.protobuf.Timestamp created_at = 8;
     google.protobuf.Timestamp updated_at = 9;
+    string owner_email = 10;
+    string metadata = 11; // JSON string
+    repeated uint32 tool_ids = 12;
+    repeated uint32 datasource_ids = 13;
+    uint32 user_id = 14;
 }
 
 // App CRUD Messages
@@ -419,6 +424,7 @@ message UpdateAppRequest {
     repeated uint32 tool_ids = 7;
     optional double monthly_budget = 8;
     string metadata = 9; // JSON string
+    repeated uint32 datasource_ids = 10;
 }
 
 message UpdateAppResponse {

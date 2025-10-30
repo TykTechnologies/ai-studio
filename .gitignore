@@ -61,6 +61,7 @@ performance/targets.md
 examples/plugins/rate-limiting-ui/server/rate-limiting-ui
 TODO-Fix-Per-LLM-Config-Loading.md
 cache/plugins
+.marketplace-cache/
 examples/plugins/service-api-test/server/service-api-test
 examples/plugins/echo-agent/server/echo-agent
 examples/plugins/gateway/custom_auth/custom_auth

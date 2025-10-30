@@ -440,3 +440,18 @@ func (p *AIStudioAgentPlugin) SetServiceAPI(serviceClient mgmtpb.AIStudioManagem
 	p.ServiceAPI = serviceClient
 	log.Info().Msg("✅ Service API client injected into SDK agent plugin")
 }
+
+// ProcessPostAuth implements the post_auth hook by delegating to the implementation
+func (p *AIStudioPlugin) ProcessPostAuth(ctx context.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+	// Check if implementation has ProcessPostAuth method
+	type postAuthImplementation interface {
+		ProcessPostAuth(context.Context, *pb.EnrichedRequest) (*pb.PluginResponse, error)
+	}
+
+	if impl, ok := p.impl.(postAuthImplementation); ok {
+		return impl.ProcessPostAuth(ctx, req)
+	}
+
+	// Not implemented - return unmodified
+	return &pb.PluginResponse{Modified: false}, nil
+}

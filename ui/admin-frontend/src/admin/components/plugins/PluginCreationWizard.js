@@ -9,7 +9,7 @@ import {
   CircularProgress,
   Snackbar,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import {
   SecondaryLinkButton,
@@ -34,6 +34,7 @@ const WORKFLOW_STATES = {
 
 const PluginCreationWizard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [activeStep, setActiveStep] = useState(0);
   const [workflowState, setWorkflowState] = useState(WORKFLOW_STATES.CREATED);
@@ -41,14 +42,18 @@ const PluginCreationWizard = () => {
   const [error, setError] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
+  // Check if we're coming from marketplace
+  const fromMarketplace = location.state?.fromMarketplace || false;
+  const marketplaceData = location.state?.marketplaceData || null;
+
   // Plugin data from each step
   const [pluginData, setPluginData] = useState({
-    name: '',
+    name: marketplaceData?.name || '',
     slug: '',
-    description: '',
-    command: '',
-    hookType: '',
-    hookTypes: [],
+    description: marketplaceData?.description || '',
+    command: marketplaceData?.oci_reference || '',
+    hookType: marketplaceData?.hook_type || '',
+    hookTypes: marketplaceData?.hook_types || [],
     manifestHookTypes: [],
     hookTypesCustomized: false,
     isActive: true,
@@ -305,18 +310,24 @@ const PluginCreationWizard = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="headingXLarge">
-          Add Plugin
+          {fromMarketplace ? 'Install Plugin from Marketplace' : 'Add Plugin'}
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/admin/plugins')}
+          onClick={() => navigate(fromMarketplace ? '/admin/marketplace' : '/admin/plugins')}
           color="inherit"
         >
-          Back to plugins
+          {fromMarketplace ? 'Back to marketplace' : 'Back to plugins'}
         </SecondaryLinkButton>
       </TitleBox>
 
       <Box sx={{ p: 3 }}>
+        {fromMarketplace && marketplaceData && (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            Installing <strong>{marketplaceData.name}</strong> v{marketplaceData.version} from the marketplace.
+            The plugin details have been pre-filled for you.
+          </Alert>
+        )}
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mb: 3 }}>
           Create a new plugin by following these steps. Plugins with UI or Agent capabilities will require scope approval for security.
         </Typography>

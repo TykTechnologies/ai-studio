@@ -1,0 +1,18 @@
+{
+  "id": "com.tyk.llm-rate-limiter",
+  "version": "1.0.0",
+  "name": "LLM Rate Limiter (Gateway)",
+  "description": "Enforces token-per-minute, requests-per-minute, and concurrent request limits for LLM traffic",
+  "hook_type": "post_auth",
+  "permissions": {
+    "services": ["apps.read", "kv.read", "kv.write"],
+    "kv": ["read", "write"]
+  },
+  "config_schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "LLM Rate Limiter Gateway Configuration",
+    "description": "Configuration is managed via AI Studio UI. No gateway-level configuration needed.",
+    "properties": {}
+  }
+}

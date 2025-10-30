@@ -46,6 +46,12 @@ const Drawer = () => {
       path: '/admin/plugins'
     },
     {
+      id: 'marketplace',
+      text: 'Marketplace',
+      icon: <Icon name="store" />,
+      path: '/admin/marketplace'
+    },
+    {
       id: 'llm-management',
       text: 'LLM management',
       icon: <Icon name="microchip-ai" />,

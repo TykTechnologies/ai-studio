@@ -434,6 +434,27 @@ func UpdateApp(ctx context.Context, appID uint32, name, description string, isAc
 	})
 }
 
+// UpdateAppWithMetadata updates an application including metadata
+func UpdateAppWithMetadata(ctx context.Context, appID uint32, name, description string, isActive bool, llmIDs, toolIDs, datasourceIDs []uint32, monthlyBudget *float64, metadata string) (*mgmtpb.UpdateAppResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateApp(ctx, &mgmtpb.UpdateAppRequest{
+		Context:       createPluginContext(AvailableScopes.AppsWrite),
+		AppId:         appID,
+		Name:          name,
+		Description:   description,
+		IsActive:      isActive,
+		LlmIds:        llmIDs,
+		ToolIds:       toolIDs,
+		DatasourceIds: datasourceIDs,
+		MonthlyBudget: monthlyBudget,
+		Metadata:      metadata,
+	})
+}
+
 // DeleteApp deletes an application
 func DeleteApp(ctx context.Context, appID uint32) error {
 	client, err := getServiceClient(ctx)

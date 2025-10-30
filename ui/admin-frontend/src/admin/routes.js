@@ -71,6 +71,8 @@ import AgentList from "./pages/AgentList";
 import AgentDetail from "./components/agents/AgentDetail";
 import AgentForm from "./components/agents/AgentForm";
 
+import Marketplace from "./components/marketplace/Marketplace";
+
 const mainAdminRoutes = (
   <>
     <Route index element={<Overview />} />
@@ -98,6 +100,8 @@ const mainAdminRoutes = (
     <Route path="llm-settings/new" element={<LLMSettingsForm />} />
 
     <Route path="plugins/*" element={<PluginsPage />} />
+
+    <Route path="marketplace" element={<Marketplace />} />
 
     <Route path="model-prices" element={<ModelPriceList />} />
     <Route path="model-prices/:id" element={<ModelPriceDetail />} />

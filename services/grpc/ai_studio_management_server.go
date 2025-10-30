@@ -326,6 +326,10 @@ func (s *AIStudioManagementServer) UpdateApp(ctx context.Context, req *pb.Update
 	for i, id := range req.GetToolIds() {
 		toolIDs[i] = uint(id)
 	}
+	datasourceIDs := make([]uint, len(req.GetDatasourceIds()))
+	for i, id := range req.GetDatasourceIds() {
+		datasourceIDs[i] = uint(id)
+	}
 
 	// Parse metadata JSON if provided
 	var metadata map[string]interface{}
@@ -335,13 +339,19 @@ func (s *AIStudioManagementServer) UpdateApp(ctx context.Context, req *pb.Update
 		}
 	}
 
+	// Get existing app to preserve user_id
+	existingApp, err := s.service.GetAppByID(uint(appID))
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "app not found: %d", appID)
+	}
+
 	// Call existing service method with full parameters
 	app, err := s.service.UpdateApp(
 		uint(appID),
 		req.GetName(),
 		req.GetDescription(),
-		0, // userID - not updated via this method
-		[]uint{}, // datasourceIDs - not in update request
+		existingApp.UserID, // Preserve existing user_id
+		datasourceIDs,
 		llmIDs,
 		toolIDs,
 		req.MonthlyBudget,
@@ -636,6 +646,30 @@ func convertAppToPB(app *models.App) *pb.AppInfo {
 		llmIDs[i] = uint32(llm.ID)
 	}
 
+	// Extract Tool IDs from relationships
+	toolIDs := make([]uint32, len(app.Tools))
+	for i, tool := range app.Tools {
+		toolIDs[i] = uint32(tool.ID)
+	}
+
+	// Extract Datasource IDs from relationships
+	datasourceIDs := make([]uint32, len(app.Datasources))
+	for i, ds := range app.Datasources {
+		datasourceIDs[i] = uint32(ds.ID)
+	}
+
+	// Serialize metadata to JSON string
+	var metadataJSON string
+	if app.Metadata != nil && len(app.Metadata) > 0 {
+		if metadataBytes, err := json.Marshal(app.Metadata); err == nil {
+			metadataJSON = string(metadataBytes)
+		}
+	}
+
+	// Owner email - left empty for now as User relationship may not be preloaded
+	// Can be populated by caller if needed
+	ownerEmail := ""
+
 	return &pb.AppInfo{
 		Id:            uint32(app.ID),
 		Name:          app.Name,
@@ -644,8 +678,13 @@ func convertAppToPB(app *models.App) *pb.AppInfo {
 		Namespace:     app.Namespace,
 		MonthlyBudget: monthlyBudget,
 		LlmIds:        llmIDs,
+		ToolIds:       toolIDs,
+		DatasourceIds: datasourceIDs,
+		UserId:        uint32(app.UserID),
 		CreatedAt:     timestamppb.New(app.CreatedAt),
 		UpdatedAt:     timestamppb.New(app.UpdatedAt),
+		OwnerEmail:    ownerEmail,
+		Metadata:      metadataJSON,
 	}
 }
 
