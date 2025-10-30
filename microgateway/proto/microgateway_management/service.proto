@@ -125,6 +125,7 @@ message AppInfo {
     repeated string allowed_ips = 9;
     google.protobuf.Timestamp created_at = 10;
     google.protobuf.Timestamp updated_at = 11;
+    string metadata = 12; // JSON string
 }
 
 // Budget Messages

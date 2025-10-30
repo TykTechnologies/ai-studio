@@ -9,16 +9,17 @@ import (
 
 type App struct {
 	gorm.Model
-	ID              uint   `json:"id" gorm:"primary_key"`
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	UserID          uint   `json:"user_id" gorm:"foreignKey:ID"`
-	CredentialID    uint   `json:"credential_id"`
+	ID              uint                   `json:"id" gorm:"primary_key"`
+	Name            string                 `json:"name"`
+	Description     string                 `json:"description"`
+	UserID          uint                   `json:"user_id" gorm:"foreignKey:ID"`
+	CredentialID    uint                   `json:"credential_id"`
 	Credential      Credential
-	MonthlyBudget   *float64   `json:"monthly_budget" gorm:"column:monthly_budget"`
-	BudgetStartDate *time.Time `json:"budget_start_date" gorm:"column:budget_start_date"`
-	IsOrphaned      bool       `json:"is_orphaned" gorm:"default:false"`
-	IsActive        bool       `json:"is_active" gorm:"default:true"`
+	MonthlyBudget   *float64               `json:"monthly_budget" gorm:"column:monthly_budget"`
+	BudgetStartDate *time.Time             `json:"budget_start_date" gorm:"column:budget_start_date"`
+	IsOrphaned      bool                   `json:"is_orphaned" gorm:"default:false"`
+	IsActive        bool                   `json:"is_active" gorm:"default:true"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty" gorm:"serializer:json"`
 	// Hub-and-Spoke Configuration
 	Namespace   string       `json:"namespace" gorm:"default:'';index:idx_app_namespace"`
 	Datasources []Datasource `json:"datasources" gorm:"many2many:app_datasources;"`

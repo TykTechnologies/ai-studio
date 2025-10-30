@@ -13,7 +13,7 @@ import (
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
 
 // CreateApp creates a new app with validity checks
-func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
+func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}) (*models.App, error) {
 	// toolIDs is already of type []uint, no conversion needed
 
 	// Check if datasources have higher privacy score than LLMs
@@ -28,6 +28,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		MonthlyBudget:   monthlyBudget,
 		BudgetStartDate: budgetStartDate,
 		Namespace:       "", // Default to global namespace
+		Metadata:        metadata,
 	}
 
 	if err := app.Create(s.DB); err != nil {
@@ -107,7 +108,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 }
 
 // CreateAppWithNamespace creates a new app with namespace support
-func (s *Service) CreateAppWithNamespace(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, namespace string) (*models.App, error) {
+func (s *Service) CreateAppWithNamespace(name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, namespace string, metadata map[string]interface{}) (*models.App, error) {
 	// toolIDs is already of type []uint, no conversion needed
 
 	// Check if datasources have higher privacy score than LLMs
@@ -122,6 +123,7 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 		MonthlyBudget:   monthlyBudget,
 		BudgetStartDate: budgetStartDate,
 		Namespace:       namespace,
+		Metadata:        metadata,
 	}
 
 	if err := app.Create(s.DB); err != nil {
@@ -170,7 +172,7 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 }
 
 // UpdateApp updates an existing app with validity checks
-func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time) (*models.App, error) {
+func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}) (*models.App, error) {
 	app, err := s.GetAppByID(id)
 	if err != nil {
 		return nil, err
@@ -188,6 +190,7 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	app.UserID = userID
 	app.MonthlyBudget = monthlyBudget
 	app.BudgetStartDate = budgetStartDate
+	app.Metadata = metadata
 
 	// Update datasources
 	if err := s.updateAppDatasources(app, datasourceIDs); err != nil {

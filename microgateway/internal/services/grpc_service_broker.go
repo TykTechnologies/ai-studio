@@ -479,6 +479,12 @@ func (s *MicrogatewayManagementServer) convertAppToPB(app *database.App) *pb.App
 		json.Unmarshal(app.AllowedIPs, &allowedIPs)
 	}
 
+	// Convert metadata to JSON string
+	var metadataJSON string
+	if app.Metadata != nil && len(app.Metadata) > 0 {
+		metadataJSON = string(app.Metadata)
+	}
+
 	return &pb.AppInfo{
 		Id:             uint32(app.ID),
 		Name:           app.Name,
@@ -489,6 +495,7 @@ func (s *MicrogatewayManagementServer) convertAppToPB(app *database.App) *pb.App
 		BudgetResetDay: int32(app.BudgetResetDay),
 		RateLimitRpm:   int32(app.RateLimitRPM),
 		AllowedIps:     allowedIPs,
+		Metadata:       metadataJSON,
 		CreatedAt:      timestamppb.New(app.CreatedAt),
 		UpdatedAt:      timestamppb.New(app.UpdatedAt),
 	}

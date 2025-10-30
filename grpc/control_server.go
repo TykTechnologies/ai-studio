@@ -885,6 +885,14 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			monthlyBudget = *app.MonthlyBudget
 		}
 		
+		// Serialize metadata to JSON string
+		var metadataJSON string
+		if app.Metadata != nil {
+			if metadataBytes, err := json.Marshal(app.Metadata); err == nil {
+				metadataJSON = string(metadataBytes)
+			}
+		}
+
 		pbApp := &pb.AppConfig{
 			Id:            uint32(app.ID),
 			Name:          app.Name,
@@ -892,6 +900,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			OwnerEmail:    "", // AI Studio doesn't have owner email field yet
 			IsActive:      app.IsActive,
 			MonthlyBudget: monthlyBudget,
+			Metadata:      metadataJSON,
 			Namespace:     app.Namespace,
 			LlmIds:        llmIDs,
 			CreatedAt:     timestamppb.New(app.CreatedAt),

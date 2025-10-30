@@ -250,7 +250,7 @@ func TestHandleToolRequest_ValidGET(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, registeredToolDef)
 
-	app, err := service.CreateApp("Test App", "App for testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil)
+	app, err := service.CreateApp("Test App", "App for testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, app)
 
@@ -366,7 +366,7 @@ func TestHandleToolRequest_ValidPOST(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, registeredToolDef)
 
-	app, err := service.CreateApp("Test App POST", "Test App POST", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil)
+	app, err := service.CreateApp("Test App POST", "Test App POST", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil, nil)
 	require.NoError(t, err)
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)
@@ -465,7 +465,7 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, registeredToolDef)
 
-	app, err := service.CreateApp("Test App InvalidBody", "App for InvalidBody testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil)
+	app, err := service.CreateApp("Test App InvalidBody", "App for InvalidBody testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil, nil)
 	require.NoError(t, err)
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)

@@ -696,6 +696,7 @@ type AppInfo struct {
 	AllowedIps     []string               `protobuf:"bytes,9,rep,name=allowed_ips,json=allowedIps,proto3" json:"allowed_ips,omitempty"`
 	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Metadata       string                 `protobuf:"bytes,12,opt,name=metadata,proto3" json:"metadata,omitempty"` // JSON string
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -805,6 +806,13 @@ func (x *AppInfo) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *AppInfo) GetMetadata() string {
+	if x != nil {
+		return x.Metadata
+	}
+	return ""
 }
 
 type GetBudgetStatusRequest struct {
@@ -1786,7 +1794,7 @@ const file_proto_microgateway_management_service_proto_rawDesc = "" +
 	"\acontext\x18\x01 \x01(\v2&.microgateway_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\rR\x05appId\"D\n" +
 	"\x0eGetAppResponse\x122\n" +
-	"\x03app\x18\x01 \x01(\v2 .microgateway_management.AppInfoR\x03app\"\x9b\x03\n" +
+	"\x03app\x18\x01 \x01(\v2 .microgateway_management.AppInfoR\x03app\"\xb7\x03\n" +
 	"\aAppInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1803,7 +1811,8 @@ const file_proto_microgateway_management_service_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x98\x01\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1a\n" +
+	"\bmetadata\x18\f \x01(\tR\bmetadata\"\x98\x01\n" +
 	"\x16GetBudgetStatusRequest\x12@\n" +
 	"\acontext\x18\x01 \x01(\v2&.microgateway_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\rR\x05appId\x12\x1a\n" +

@@ -271,6 +271,14 @@ func (s *AIStudioManagementServer) CreateApp(ctx context.Context, req *pb.Create
 		return nil, status.Errorf(codes.InvalidArgument, "name is required")
 	}
 
+	// Parse metadata JSON if provided
+	var metadata map[string]interface{}
+	if req.GetMetadata() != "" {
+		if err := json.Unmarshal([]byte(req.GetMetadata()), &metadata); err != nil {
+			log.Warn().Err(err).Msg("Failed to parse metadata JSON in CreateApp request")
+		}
+	}
+
 	// Call existing service method
 	app, err := s.service.CreateApp(
 		req.GetName(),
@@ -281,6 +289,7 @@ func (s *AIStudioManagementServer) CreateApp(ctx context.Context, req *pb.Create
 		[]uint{}, // ToolIDs - convert from req.GetToolIds()
 		req.MonthlyBudget,
 		nil, // BudgetStartDate
+		metadata,
 	)
 	if err != nil {
 		log.Error().Err(err).
@@ -318,6 +327,14 @@ func (s *AIStudioManagementServer) UpdateApp(ctx context.Context, req *pb.Update
 		toolIDs[i] = uint(id)
 	}
 
+	// Parse metadata JSON if provided
+	var metadata map[string]interface{}
+	if req.GetMetadata() != "" {
+		if err := json.Unmarshal([]byte(req.GetMetadata()), &metadata); err != nil {
+			log.Warn().Err(err).Msg("Failed to parse metadata JSON in UpdateApp request")
+		}
+	}
+
 	// Call existing service method with full parameters
 	app, err := s.service.UpdateApp(
 		uint(appID),
@@ -329,6 +346,7 @@ func (s *AIStudioManagementServer) UpdateApp(ctx context.Context, req *pb.Update
 		toolIDs,
 		req.MonthlyBudget,
 		nil, // budgetStartDate
+		metadata,
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

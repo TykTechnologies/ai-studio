@@ -48,6 +48,7 @@ func (a *API) createApp(c *gin.Context) {
 	datasourceIDs := input.Data.Attributes.DatasourceIDs
 	llmIDs := input.Data.Attributes.LLMIDs
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
+	metadata := input.Data.Attributes.Metadata
 
 	// Use namespace-aware service method if namespace is provided
 	var app *models.App
@@ -63,6 +64,7 @@ func (a *API) createApp(c *gin.Context) {
 			input.Data.Attributes.MonthlyBudget,
 			input.Data.Attributes.BudgetStartDate,
 			input.Data.Attributes.Namespace,
+			metadata, // Pass metadata
 		)
 	} else {
 		app, err = a.service.CreateApp(
@@ -74,6 +76,7 @@ func (a *API) createApp(c *gin.Context) {
 			toolIDs, // Pass toolIDs to service method
 			input.Data.Attributes.MonthlyBudget,
 			input.Data.Attributes.BudgetStartDate,
+			metadata, // Pass metadata
 		)
 	}
 	if err != nil {
@@ -173,6 +176,7 @@ func (a *API) updateApp(c *gin.Context) {
 	datasourceIDs := input.Data.Attributes.DatasourceIDs
 	llmIDs := input.Data.Attributes.LLMIDs
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
+	metadata := input.Data.Attributes.Metadata
 
 	app, err := a.service.UpdateApp(
 		uint(id),
@@ -184,6 +188,7 @@ func (a *API) updateApp(c *gin.Context) {
 		toolIDs, // Pass toolIDs to service method
 		input.Data.Attributes.MonthlyBudget,
 		input.Data.Attributes.BudgetStartDate,
+		metadata, // Pass metadata to service method
 	)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -342,16 +347,18 @@ func serializeApp(app *models.App) AppResponse {
 		Type: "app",
 		ID:   strconv.FormatUint(uint64(app.ID), 10),
 		Attributes: struct {
-			Name            string     `json:"name"`
-			Description     string     `json:"description"`
-			UserID          uint       `json:"user_id"`
-			CredentialID    uint       `json:"credential_id"`
-			DatasourceIDs   []uint     `json:"datasource_ids"`
-			LLMIDs          []uint     `json:"llm_ids"`
-			ToolIDs         []uint     `json:"tool_ids"`
-			MonthlyBudget   *float64   `json:"monthly_budget"`
-			BudgetStartDate *time.Time `json:"budget_start_date"`
-			IsOrphaned      bool       `json:"is_orphaned"`
+			Name            string                 `json:"name"`
+			Description     string                 `json:"description"`
+			UserID          uint                   `json:"user_id"`
+			CredentialID    uint                   `json:"credential_id"`
+			DatasourceIDs   []uint                 `json:"datasource_ids"`
+			LLMIDs          []uint                 `json:"llm_ids"`
+			ToolIDs         []uint                 `json:"tool_ids"`
+			MonthlyBudget   *float64               `json:"monthly_budget"`
+			BudgetStartDate *time.Time             `json:"budget_start_date"`
+			IsOrphaned      bool                   `json:"is_orphaned"`
+			Metadata        map[string]interface{} `json:"metadata,omitempty"`
+			Namespace       string                 `json:"namespace,omitempty"`
 		}{
 			Name:            app.Name,
 			Description:     app.Description,
@@ -363,6 +370,8 @@ func serializeApp(app *models.App) AppResponse {
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
 			IsOrphaned:      app.IsOrphaned,
+			Metadata:        app.Metadata,
+			Namespace:       app.Namespace,
 		},
 	}
 }
@@ -398,16 +407,18 @@ func serializeApps(apps []models.App) []AppResponse {
 			Type: "app",
 			ID:   strconv.FormatUint(uint64(app.ID), 10),
 			Attributes: struct {
-				Name            string     `json:"name"`
-				Description     string     `json:"description"`
-				UserID          uint       `json:"user_id"`
-				CredentialID    uint       `json:"credential_id"`
-				DatasourceIDs   []uint     `json:"datasource_ids"`
-				LLMIDs          []uint     `json:"llm_ids"`
-				ToolIDs         []uint     `json:"tool_ids"`
-				MonthlyBudget   *float64   `json:"monthly_budget"`
-				BudgetStartDate *time.Time `json:"budget_start_date"`
-				IsOrphaned      bool       `json:"is_orphaned"`
+				Name            string                 `json:"name"`
+				Description     string                 `json:"description"`
+				UserID          uint                   `json:"user_id"`
+				CredentialID    uint                   `json:"credential_id"`
+				DatasourceIDs   []uint                 `json:"datasource_ids"`
+				LLMIDs          []uint                 `json:"llm_ids"`
+				ToolIDs         []uint                 `json:"tool_ids"`
+				MonthlyBudget   *float64               `json:"monthly_budget"`
+				BudgetStartDate *time.Time             `json:"budget_start_date"`
+				IsOrphaned      bool                   `json:"is_orphaned"`
+				Metadata        map[string]interface{} `json:"metadata,omitempty"`
+				Namespace       string                 `json:"namespace,omitempty"`
 			}{
 				Name:            app.Name,
 				Description:     app.Description,
@@ -419,6 +430,8 @@ func serializeApps(apps []models.App) []AppResponse {
 				MonthlyBudget:   app.MonthlyBudget,
 				BudgetStartDate: app.BudgetStartDate,
 				IsOrphaned:      app.IsOrphaned,
+				Metadata:        app.Metadata,
+				Namespace:       app.Namespace,
 			},
 		}
 	}

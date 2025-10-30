@@ -2568,6 +2568,7 @@ type CreateAppRequest struct {
 	ToolIds       []uint32               `protobuf:"varint,7,rep,packed,name=tool_ids,json=toolIds,proto3" json:"tool_ids,omitempty"`
 	MonthlyBudget *float64               `protobuf:"fixed64,8,opt,name=monthly_budget,json=monthlyBudget,proto3,oneof" json:"monthly_budget,omitempty"`
 	Namespace     string                 `protobuf:"bytes,9,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Metadata      string                 `protobuf:"bytes,10,opt,name=metadata,proto3" json:"metadata,omitempty"` // JSON string
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2665,6 +2666,13 @@ func (x *CreateAppRequest) GetNamespace() string {
 	return ""
 }
 
+func (x *CreateAppRequest) GetMetadata() string {
+	if x != nil {
+		return x.Metadata
+	}
+	return ""
+}
+
 type CreateAppResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	App           *AppInfo               `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
@@ -2719,6 +2727,7 @@ type UpdateAppRequest struct {
 	LlmIds        []uint32               `protobuf:"varint,6,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`
 	ToolIds       []uint32               `protobuf:"varint,7,rep,packed,name=tool_ids,json=toolIds,proto3" json:"tool_ids,omitempty"`
 	MonthlyBudget *float64               `protobuf:"fixed64,8,opt,name=monthly_budget,json=monthlyBudget,proto3,oneof" json:"monthly_budget,omitempty"`
+	Metadata      string                 `protobuf:"bytes,9,opt,name=metadata,proto3" json:"metadata,omitempty"` // JSON string
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2807,6 +2816,13 @@ func (x *UpdateAppRequest) GetMonthlyBudget() float64 {
 		return *x.MonthlyBudget
 	}
 	return 0
+}
+
+func (x *UpdateAppRequest) GetMetadata() string {
+	if x != nil {
+		return x.Metadata
+	}
+	return ""
 }
 
 type UpdateAppResponse struct {
@@ -10951,7 +10967,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x11\n" +
-	"\x0f_monthly_budget\"\xd8\x02\n" +
+	"\x0f_monthly_budget\"\xf4\x02\n" +
 	"\x10CreateAppRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -10961,10 +10977,12 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\allm_ids\x18\x06 \x03(\rR\x06llmIds\x12\x19\n" +
 	"\btool_ids\x18\a \x03(\rR\atoolIds\x12*\n" +
 	"\x0emonthly_budget\x18\b \x01(\x01H\x00R\rmonthlyBudget\x88\x01\x01\x12\x1c\n" +
-	"\tnamespace\x18\t \x01(\tR\tnamespaceB\x11\n" +
+	"\tnamespace\x18\t \x01(\tR\tnamespace\x12\x1a\n" +
+	"\bmetadata\x18\n" +
+	" \x01(\tR\bmetadataB\x11\n" +
 	"\x0f_monthly_budget\"D\n" +
 	"\x11CreateAppResponse\x12/\n" +
-	"\x03app\x18\x01 \x01(\v2\x1d.ai_studio_management.AppInfoR\x03app\"\xae\x02\n" +
+	"\x03app\x18\x01 \x01(\v2\x1d.ai_studio_management.AppInfoR\x03app\"\xca\x02\n" +
 	"\x10UpdateAppRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\rR\x05appId\x12\x12\n" +
@@ -10973,7 +10991,8 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\tis_active\x18\x05 \x01(\bR\bisActive\x12\x17\n" +
 	"\allm_ids\x18\x06 \x03(\rR\x06llmIds\x12\x19\n" +
 	"\btool_ids\x18\a \x03(\rR\atoolIds\x12*\n" +
-	"\x0emonthly_budget\x18\b \x01(\x01H\x00R\rmonthlyBudget\x88\x01\x01B\x11\n" +
+	"\x0emonthly_budget\x18\b \x01(\x01H\x00R\rmonthlyBudget\x88\x01\x01\x12\x1a\n" +
+	"\bmetadata\x18\t \x01(\tR\bmetadataB\x11\n" +
 	"\x0f_monthly_budget\"D\n" +
 	"\x11UpdateAppResponse\x12/\n" +
 	"\x03app\x18\x01 \x01(\v2\x1d.ai_studio_management.AppInfoR\x03app\"h\n" +

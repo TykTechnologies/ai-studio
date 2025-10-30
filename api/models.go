@@ -376,15 +376,16 @@ type AppInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name            string     `json:"name"`
-			Description     string     `json:"description"`
-			UserID          uint       `json:"user_id"`
-			DatasourceIDs   []uint     `json:"datasource_ids"`
-			LLMIDs          []uint     `json:"llm_ids"`
-			ToolIDs         []uint     `json:"tool_ids"`
-			MonthlyBudget   *float64   `json:"monthly_budget"`
-			BudgetStartDate *time.Time `json:"budget_start_date"`
-			Namespace       string     `json:"namespace,omitempty"`
+			Name            string                 `json:"name"`
+			Description     string                 `json:"description"`
+			UserID          uint                   `json:"user_id"`
+			DatasourceIDs   []uint                 `json:"datasource_ids"`
+			LLMIDs          []uint                 `json:"llm_ids"`
+			ToolIDs         []uint                 `json:"tool_ids"`
+			MonthlyBudget   *float64               `json:"monthly_budget"`
+			BudgetStartDate *time.Time             `json:"budget_start_date"`
+			Namespace       string                 `json:"namespace,omitempty"`
+			Metadata        map[string]interface{} `json:"metadata,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -395,16 +396,18 @@ type AppResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name            string     `json:"name"`
-		Description     string     `json:"description"`
-		UserID          uint       `json:"user_id"`
-		CredentialID    uint       `json:"credential_id"`
-		DatasourceIDs   []uint     `json:"datasource_ids"`
-		LLMIDs          []uint     `json:"llm_ids"`
-		ToolIDs         []uint     `json:"tool_ids"`
-		MonthlyBudget   *float64   `json:"monthly_budget"`
-		BudgetStartDate *time.Time `json:"budget_start_date"`
-		IsOrphaned      bool       `json:"is_orphaned"`
+		Name            string                 `json:"name"`
+		Description     string                 `json:"description"`
+		UserID          uint                   `json:"user_id"`
+		CredentialID    uint                   `json:"credential_id"`
+		DatasourceIDs   []uint                 `json:"datasource_ids"`
+		LLMIDs          []uint                 `json:"llm_ids"`
+		ToolIDs         []uint                 `json:"tool_ids"`
+		MonthlyBudget   *float64               `json:"monthly_budget"`
+		BudgetStartDate *time.Time             `json:"budget_start_date"`
+		IsOrphaned      bool                   `json:"is_orphaned"`
+		Metadata        map[string]interface{} `json:"metadata,omitempty"`
+		Namespace       string                 `json:"namespace,omitempty"`
 	} `json:"attributes"`
 }
 

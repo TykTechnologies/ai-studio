@@ -544,6 +544,12 @@ func extractContextMetadata(ctx context.Context, pluginCtx *sdk.PluginContext) *
 		} else if appResp.App == nil {
 			fmt.Printf("⚠️ GetApp response has nil App for app_id=%d\n", pluginCtx.AppID)
 		} else {
+			// Parse metadata JSON if present
+			var appMetadata map[string]interface{}
+			if appResp.App.Metadata != "" {
+				json.Unmarshal([]byte(appResp.App.Metadata), &appMetadata)
+			}
+
 			// Convert App protobuf to map to show all fields
 			appDetails := map[string]interface{}{
 				"id":               appResp.App.Id,
@@ -555,6 +561,7 @@ func extractContextMetadata(ctx context.Context, pluginCtx *sdk.PluginContext) *
 				"budget_reset_day": appResp.App.BudgetResetDay,
 				"rate_limit_rpm":   appResp.App.RateLimitRpm,
 				"allowed_ips":      appResp.App.AllowedIps,
+				"metadata":         appMetadata,
 				"created_at":       appResp.App.CreatedAt.AsTime().Format(time.RFC3339),
 				"updated_at":       appResp.App.UpdatedAt.AsTime().Format(time.RFC3339),
 			}

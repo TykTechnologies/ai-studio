@@ -402,6 +402,7 @@ message CreateAppRequest {
     repeated uint32 tool_ids = 7;
     optional double monthly_budget = 8;
     string namespace = 9;
+    string metadata = 10; // JSON string
 }
 
 message CreateAppResponse {
@@ -417,6 +418,7 @@ message UpdateAppRequest {
     repeated uint32 llm_ids = 6;
     repeated uint32 tool_ids = 7;
     optional double monthly_budget = 8;
+    string metadata = 9; // JSON string
 }
 
 message UpdateAppResponse {
