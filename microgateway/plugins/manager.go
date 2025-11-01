@@ -579,8 +579,13 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 		case interfaces.HookTypePostAuth:
 			enrichedReq, ok := result.(*interfaces.EnrichedRequest)
 			if !ok {
-				return nil, fmt.Errorf("invalid input type for post-auth hook")
+				return nil, fmt.Errorf("invalid input type for post-auth hook: got %T, expected *interfaces.EnrichedRequest", result)
 			}
+
+			log.Info().
+				Str("plugin_name", plugin.Name).
+				Int("input_body_len", len(enrichedReq.PluginRequest.Body)).
+				Msg("🔗 Executing post-auth plugin in chain")
 
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertEnrichedRequest(enrichedReq, pbCtx)
@@ -598,10 +603,23 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			}
 
 			if resp.Modified {
-				// Return the plugin response directly so modifications are preserved
-				log.Debug().Bool("resp_modified", resp.Modified).Int("body_len", len(resp.Body)).Msg("Post-auth plugin returned Modified=true, converting response")
-				result = convertPluginResponse(resp)
-				log.Debug().Interface("converted_result", result).Msg("Post-auth plugin response converted")
+				// For post-auth hooks, update the enriched request with modifications
+				// Don't convert to PluginResponse - keep it as EnrichedRequest for the next plugin in the chain
+				log.Info().
+					Str("plugin_name", plugin.Name).
+					Bool("resp_modified", resp.Modified).
+					Int("original_body_len", len(enrichedReq.PluginRequest.Body)).
+					Int("modified_body_len", len(resp.Body)).
+					Msg("🔄 Post-auth plugin modified request, updating for next plugin")
+
+				// Update the request fields with modifications
+				if len(resp.Headers) > 0 {
+					enrichedReq.PluginRequest.Headers = resp.Headers
+				}
+				if len(resp.Body) > 0 {
+					enrichedReq.PluginRequest.Body = resp.Body
+				}
+				// result stays as enrichedReq for the next plugin
 			}
 
 		case interfaces.HookTypeOnResponse:

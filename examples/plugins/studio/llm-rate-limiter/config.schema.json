@@ -1,0 +1,7 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "LLM Rate Limiter Plugin Configuration",
+  "description": "Configuration for the LLM rate limiting plugin - no configuration needed as settings are managed via UI",
+  "properties": {}
+}

@@ -119,6 +119,7 @@ message PluginConfig {
   google.protobuf.Timestamp created_at = 11;
   google.protobuf.Timestamp updated_at = 12;
   repeated string service_scopes = 13; // Service API scopes (for plugins with service access)
+  repeated string hook_types = 14; // NEW: All hook types this plugin supports (for hybrid plugins)
 }
 
 // ConfigurationSnapshot represents a complete configuration state

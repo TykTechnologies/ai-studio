@@ -1,0 +1,59 @@
+{
+  "id": "com.tyk.llm-rate-limiter",
+  "version": "1.0.0",
+  "name": "LLM Rate Limiter",
+  "description": "Policy-based rate limiting for LLM requests with TPM, RPM, and concurrent request controls",
+  "capabilities": {
+    "hooks": ["studio_ui", "post_auth"],
+    "primary_hook": "post_auth"
+  },
+  "permissions": {
+    "services": ["apps.read", "apps.write", "kv.readwrite"],
+    "ui": ["sidebar.register", "route.register"],
+    "rpc": ["call"],
+    "routes": ["GET:/plugin/com.tyk.llm-rate-limiter/rpc/*"]
+  },
+  "ui": {
+    "slots": [
+      {
+        "slot": "sidebar.section",
+        "label": "Rate Limiting",
+        "icon": "/assets/rate-limit-icon.svg",
+        "items": [
+          {
+            "type": "route",
+            "path": "/admin/rate-limiter/policies",
+            "title": "Rate Limit Policies",
+            "mount": {
+              "kind": "webc",
+              "tag": "rate-limit-policy-manager",
+              "entry": "/ui/webc/policy-manager.js"
+            }
+          },
+          {
+            "type": "route",
+            "path": "/admin/rate-limiter/apps",
+            "title": "App Assignments",
+            "mount": {
+              "kind": "webc",
+              "tag": "rate-limit-app-assigner",
+              "entry": "/ui/webc/app-assigner.js"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "compat": {
+    "min_gateway_version": "1.0.0",
+    "min_studio_version": "2.6.0"
+  },
+  "security": {
+    "csp": "script-src 'self'; object-src 'none'; frame-ancestors 'none'"
+  },
+  "assets": [
+    "/assets/rate-limit-icon.svg",
+    "/ui/webc/policy-manager.js",
+    "/ui/webc/app-assigner.js"
+  ]
+}

@@ -371,6 +371,24 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 					r.ContentLength = int64(len(pluginResp.Body))
 				}
 			}
+		} else if modifiedEnrichedReq, ok := result.(*interfaces.EnrichedRequest); ok {
+			// Handle EnrichedRequest from post-auth chain (new behavior for chained plugins)
+			// Apply modifications from the plugin chain
+			if modifiedEnrichedReq.PluginRequest != nil {
+				// Apply header modifications
+				for key, value := range modifiedEnrichedReq.PluginRequest.Headers {
+					r.Header.Set(key, value)
+				}
+				// Apply body modifications
+				if len(modifiedEnrichedReq.PluginRequest.Body) > 0 {
+					r.Body = io.NopCloser(bytes.NewReader(modifiedEnrichedReq.PluginRequest.Body))
+					r.ContentLength = int64(len(modifiedEnrichedReq.PluginRequest.Body))
+
+					log.Info().
+						Int("modified_body_len", len(modifiedEnrichedReq.PluginRequest.Body)).
+						Msg("✅ Applied post-auth plugin chain modifications to request")
+				}
+			}
 		}
 		return false // Continue to proxy
 	}

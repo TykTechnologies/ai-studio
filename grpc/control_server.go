@@ -1046,11 +1046,15 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 					}
 				}
 
-				log.Debug().
+				log.Info().
 					Uint("plugin_id", plugin.ID).
+					Str("plugin_name", plugin.Name).
 					Uint("llm_id", llmPlugin.LLMID).
 					Bool("has_override", len(llmPlugin.ConfigOverride) > 0).
-					Msg("Created merged plugin config for LLM")
+					Str("hook_type", plugin.HookType).
+					Strs("hook_types", plugin.HookTypes).
+					Int("hook_types_count", len(plugin.HookTypes)).
+					Msg("📦 Syncing plugin to edge with hook types")
 
 				pbPlugin := &pb.PluginConfig{
 					Id:           uint32(plugin.ID),
@@ -1060,6 +1064,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 					Checksum:     plugin.Checksum,
 					Config:       mergedConfigJSON, // Merged configuration for this LLM
 					HookType:     plugin.HookType,
+					HookTypes:    plugin.HookTypes, // NEW: All hook types for hybrid plugins
 					IsActive:     plugin.IsActive,
 					Namespace:    plugin.Namespace,
 					LlmIds:       []uint32{uint32(llmPlugin.LLMID)}, // Only for this specific LLM
@@ -1071,6 +1076,14 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 		} else {
 			// Plugin has no LLM associations, use base config only
+			log.Info().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Str("hook_type", plugin.HookType).
+				Strs("hook_types", plugin.HookTypes).
+				Int("hook_types_count", len(plugin.HookTypes)).
+				Msg("📦 Syncing plugin to edge (no LLM associations)")
+
 			var configJSON string
 			if plugin.Config != nil {
 				if configBytes, err := json.Marshal(plugin.Config); err == nil {
@@ -1086,6 +1099,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				Checksum:     plugin.Checksum,
 				Config:       configJSON,
 				HookType:     plugin.HookType,
+				HookTypes:    plugin.HookTypes, // NEW: All hook types for hybrid plugins
 				IsActive:     plugin.IsActive,
 				Namespace:    plugin.Namespace,
 				LlmIds:       []uint32{}, // No LLM associations

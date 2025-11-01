@@ -957,6 +957,7 @@ type PluginConfig struct {
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	ServiceScopes []string               `protobuf:"bytes,13,rep,name=service_scopes,json=serviceScopes,proto3" json:"service_scopes,omitempty"` // Service API scopes (for plugins with service access)
+	HookTypes     []string               `protobuf:"bytes,14,rep,name=hook_types,json=hookTypes,proto3" json:"hook_types,omitempty"`             // NEW: All hook types this plugin supports (for hybrid plugins)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1078,6 +1079,13 @@ func (x *PluginConfig) GetUpdatedAt() *timestamppb.Timestamp {
 func (x *PluginConfig) GetServiceScopes() []string {
 	if x != nil {
 		return x.ServiceScopes
+	}
+	return nil
+}
+
+func (x *PluginConfig) GetHookTypes() []string {
+	if x != nil {
+		return x.HookTypes
 	}
 	return nil
 }
@@ -1445,7 +1453,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xb0\x03\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xcf\x03\n" +
 	"\fPluginConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1462,7 +1470,9 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12%\n" +
-	"\x0eservice_scopes\x18\r \x03(\tR\rserviceScopes\"\xa2\x03\n" +
+	"\x0eservice_scopes\x18\r \x03(\tR\rserviceScopes\x12\x1d\n" +
+	"\n" +
+	"hook_types\x18\x0e \x03(\tR\thookTypes\"\xa2\x03\n" +
 	"\x15ConfigurationSnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12+\n" +
 	"\x04llms\x18\x02 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +

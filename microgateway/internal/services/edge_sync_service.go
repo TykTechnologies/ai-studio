@@ -312,6 +312,14 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 			plugin.Config = datatypes.JSON(pbPlugin.Config)
 		}
 
+		// Handle HookTypes JSON field with proper conversion
+		if len(pbPlugin.HookTypes) > 0 {
+			hookTypesJSON, err := json.Marshal(pbPlugin.HookTypes)
+			if err == nil {
+				plugin.HookTypes = datatypes.JSON(hookTypesJSON)
+			}
+		}
+
 		// Handle ServiceScopes JSON field with proper conversion
 		if len(pbPlugin.ServiceScopes) > 0 {
 			scopesJSON, err := json.Marshal(pbPlugin.ServiceScopes)
