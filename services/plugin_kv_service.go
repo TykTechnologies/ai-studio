@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
@@ -28,7 +29,8 @@ func NewPluginKVService(db *gorm.DB) *PluginKVService {
 
 // WriteKV creates or updates a key-value entry for a plugin
 // Returns true if a new entry was created, false if an existing entry was updated
-func (s *PluginKVService) WriteKV(pluginID uint, key string, value []byte) (bool, error) {
+// expireAt is optional - pass nil for no expiration
+func (s *PluginKVService) WriteKV(pluginID uint, key string, value []byte, expireAt *time.Time) (bool, error) {
 	// Validate inputs
 	if pluginID == 0 {
 		return false, fmt.Errorf("plugin ID cannot be zero")
@@ -61,6 +63,7 @@ func (s *PluginKVService) WriteKV(pluginID uint, key string, value []byte) (bool
 		PluginName: plugin.Name,
 		DataKey:    key,
 		DataValue:  value,
+		ExpireAt:   expireAt,
 	}
 
 	// Upsert (create or update)
@@ -73,6 +76,7 @@ func (s *PluginKVService) WriteKV(pluginID uint, key string, value []byte) (bool
 }
 
 // ReadKV retrieves a value by key for a specific plugin
+// Returns error if key is not found or has expired
 func (s *PluginKVService) ReadKV(pluginID uint, key string) ([]byte, error) {
 	// Validate inputs
 	if pluginID == 0 {
@@ -93,6 +97,11 @@ func (s *PluginKVService) ReadKV(pluginID uint, key string) ([]byte, error) {
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to read KV data: %w", err)
+	}
+
+	// Check if entry has expired
+	if pluginData.IsExpired() {
+		return nil, fmt.Errorf("key not found: %s", key) // Return same error as not found for consistency
 	}
 
 	return pluginData.DataValue, nil
@@ -187,4 +196,39 @@ func (s *PluginKVService) ListPluginKeys(pluginID uint) ([]string, error) {
 	}
 
 	return keys, nil
+}
+
+// CleanupExpiredData deletes plugin data entries that have expired beyond the grace period
+// gracePeriod is the time to wait after expiration before actually deleting (handles clock skew)
+func (s *PluginKVService) CleanupExpiredData(gracePeriod time.Duration) (int64, error) {
+	// Calculate cutoff time (now - grace period)
+	cutoff := time.Now().Add(-gracePeriod)
+
+	// Delete all entries where ExpireAt is not null and ExpireAt < cutoff
+	result := s.db.Where("expire_at IS NOT NULL AND expire_at < ?", cutoff).Delete(&models.PluginData{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to cleanup expired data: %w", result.Error)
+	}
+
+	return result.RowsAffected, nil
+}
+
+// StartCleanupRoutine starts a background goroutine that periodically cleans up expired data
+// interval is how often to run the cleanup
+// gracePeriod is the time to wait after expiration before actually deleting
+func (s *PluginKVService) StartCleanupRoutine(interval, gracePeriod time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			deleted, err := s.CleanupExpiredData(gracePeriod)
+			if err != nil {
+				// Log error but continue running
+				fmt.Printf("Plugin KV cleanup error: %v\n", err)
+			} else if deleted > 0 {
+				fmt.Printf("Plugin KV cleanup: deleted %d expired entries\n", deleted)
+			}
+		}
+	}()
 }

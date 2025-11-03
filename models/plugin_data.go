@@ -15,6 +15,7 @@ type PluginData struct {
 	PluginName string         `json:"plugin_name" gorm:"not null;size:255;index:idx_plugin_data_plugin_name"`
 	DataKey    string         `json:"data_key" gorm:"not null;size:255;uniqueIndex:idx_plugin_data_composite"`
 	DataValue  []byte         `json:"data_value" gorm:"type:bytea"` // Binary data support for any serialization format
+	ExpireAt   *time.Time     `json:"expire_at,omitempty" gorm:"index:idx_plugin_data_expire_at"` // Optional expiration timestamp
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
 	DeletedAt  gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
@@ -79,6 +80,7 @@ func (pd *PluginData) Upsert(db *gorm.DB) (bool, error) {
 	// Update existing entry
 	existing.DataValue = pd.DataValue
 	existing.PluginName = pd.PluginName
+	existing.ExpireAt = pd.ExpireAt // Update expiration
 	if err := existing.Update(db); err != nil {
 		return false, err
 	}
@@ -89,6 +91,14 @@ func (pd *PluginData) Upsert(db *gorm.DB) (bool, error) {
 	pd.UpdatedAt = existing.UpdatedAt
 
 	return false, nil
+}
+
+// IsExpired checks if the plugin data entry has expired
+func (pd *PluginData) IsExpired() bool {
+	if pd.ExpireAt == nil {
+		return false // No expiration set
+	}
+	return pd.ExpireAt.Before(time.Now())
 }
 
 // PluginDataCollection represents a collection of plugin data entries

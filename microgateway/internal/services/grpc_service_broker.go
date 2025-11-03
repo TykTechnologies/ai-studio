@@ -366,6 +366,13 @@ func (s *MicrogatewayManagementServer) WritePluginKV(ctx context.Context, req *p
 	// Create namespaced key: plugin_<id>_<key>
 	namespacedKey := fmt.Sprintf("plugin_%d_%s", plugin.ID, req.Key)
 
+	// Extract optional expiration from request
+	var expireAt *time.Time
+	if req.GetExpireAt() != nil {
+		expireTime := req.GetExpireAt().AsTime()
+		expireAt = &expireTime
+	}
+
 	// Check if key exists
 	var existing database.PluginKV
 	created := s.db.Where("key = ?", namespacedKey).First(&existing).Error == gorm.ErrRecordNotFound
@@ -375,6 +382,7 @@ func (s *MicrogatewayManagementServer) WritePluginKV(ctx context.Context, req *p
 		Key:      namespacedKey,
 		Value:    req.Value,
 		PluginID: plugin.ID,
+		ExpireAt: expireAt,
 	}
 
 	if created {
@@ -385,6 +393,7 @@ func (s *MicrogatewayManagementServer) WritePluginKV(ctx context.Context, req *p
 	} else {
 		if err := s.db.Model(&existing).Updates(map[string]interface{}{
 			"value":      req.Value,
+			"expire_at":  expireAt,
 			"updated_at": time.Now(),
 		}).Error; err != nil {
 			log.Error().Err(err).Str("key", req.Key).Msg("Failed to update plugin KV")
@@ -413,6 +422,11 @@ func (s *MicrogatewayManagementServer) ReadPluginKV(ctx context.Context, req *pb
 		}
 		log.Error().Err(err).Str("key", req.Key).Msg("Failed to read plugin KV")
 		return nil, status.Errorf(codes.Internal, "failed to read KV data")
+	}
+
+	// Check if entry has expired
+	if kv.IsExpired() {
+		return nil, status.Errorf(codes.NotFound, "key not found") // Return same error as not found for consistency
 	}
 
 	return &pb.ReadPluginKVResponse{

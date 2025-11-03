@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"time"
 
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -44,8 +45,15 @@ func (s *PluginKVServer) WritePluginKV(ctx context.Context, req *pb.WritePluginK
 		value = []byte{}
 	}
 
+	// Extract optional expiration from request
+	var expireAt *time.Time
+	if req.GetExpireAt() != nil {
+		expireTime := req.GetExpireAt().AsTime()
+		expireAt = &expireTime
+	}
+
 	// Write KV data - plugin ID is automatically scoped from authenticated context
-	created, err := s.kvService.WriteKV(plugin.ID, key, value)
+	created, err := s.kvService.WriteKV(plugin.ID, key, value, expireAt)
 	if err != nil {
 		log.Error().
 			Err(err).

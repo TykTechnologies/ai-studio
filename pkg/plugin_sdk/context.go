@@ -3,7 +3,7 @@ package plugin_sdk
 import (
 	"context"
 	"os"
-
+	"time"
 )
 
 // RuntimeType indicates where the plugin is running
@@ -74,12 +74,18 @@ type ServiceBroker interface {
 // In Gateway: Uses local database storage per gateway instance.
 type KVService interface {
 	// Read retrieves a value by key
-	// Returns empty bytes if key doesn't exist
+	// Returns error if key doesn't exist or has expired
 	Read(ctx context.Context, key string) ([]byte, error)
 
-	// Write stores a value with the given key
+	// Write stores a value with the given key and optional expiration
+	// expireAt is optional - pass nil for no expiration
 	// Returns whether a new key was created (true) or existing updated (false)
-	Write(ctx context.Context, key string, value []byte) (bool, error)
+	Write(ctx context.Context, key string, value []byte, expireAt *time.Time) (bool, error)
+
+	// WriteWithTTL stores a value with a TTL (time-to-live)
+	// Expiration is calculated as time.Now().Add(ttl)
+	// Returns whether a new key was created (true) or existing updated (false)
+	WriteWithTTL(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)
 
 	// Delete removes a key
 	// Returns whether the key existed and was deleted

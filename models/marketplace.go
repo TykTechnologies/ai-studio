@@ -200,11 +200,39 @@ func ListMarketplacePlugins(db *gorm.DB, pageSize, pageNumber int, category, pub
 	}
 
 	// Get paginated results - only latest version of each plugin
-	// Use DISTINCT ON or GROUP BY to get only one version per plugin_id
+	// Use a subquery to get the latest version ID for each plugin_id, then fetch those records
+	// This approach works with both PostgreSQL and SQLite
+
+	// First, get the IDs of the latest versions for each plugin
+	subquery := db.Model(&MarketplacePlugin{}).
+		Select("MAX(id) as id").
+		Where("deleted_at IS NULL")
+
+	// Apply same filters to subquery
+	if category != "" && category != "all" {
+		subquery = subquery.Where("category = ?", category)
+	}
+	if publisher != "" && publisher != "all" {
+		subquery = subquery.Where("publisher = ?", publisher)
+	}
+	if maturity != "" && maturity != "all" {
+		subquery = subquery.Where("maturity = ?", maturity)
+	}
+	if !includeDeprecated {
+		subquery = subquery.Where("deprecated = ?", false)
+	}
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		subquery = subquery.Where("name LIKE ? OR description LIKE ? OR plugin_id LIKE ?", searchPattern, searchPattern, searchPattern)
+	}
+
+	subquery = subquery.Group("plugin_id")
+
+	// Now fetch the actual plugin records with these IDs
 	offset := (pageNumber - 1) * pageSize
-	err := query.
-		Group("plugin_id").
-		Order("plugin_id, plugin_updated_at DESC").
+	err := db.Model(&MarketplacePlugin{}).
+		Where("id IN (?)", subquery).
+		Order("plugin_updated_at DESC").
 		Offset(offset).
 		Limit(pageSize).
 		Find(&plugins).Error

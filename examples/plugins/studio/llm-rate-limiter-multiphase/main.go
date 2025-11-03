@@ -278,11 +278,11 @@ func (p *LLMRateLimiterPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.En
 	state.EstimatedTokens += estimatedTokens
 	state.UpdatedAt = now.Unix()
 
-	// Save updated minute-based state
+	// Save updated minute-based state with 2-minute TTL (survives 1 full minute + buffer)
 	stateJSON, _ := json.Marshal(state)
-	ctx.Services.KV().Write(ctx, rateKey, stateJSON)
+	ctx.Services.KV().WriteWithTTL(ctx, rateKey, stateJSON, 2*time.Minute)
 
-	// Save request-specific state for response phase to find
+	// Save request-specific state for response phase to find with 5-minute TTL
 	// This links post-auth and response phases across minute boundaries
 	reqState := map[string]interface{}{
 		"minute_key": minuteKey,
@@ -292,7 +292,7 @@ func (p *LLMRateLimiterPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.En
 		"timestamp":  now.Unix(),
 	}
 	reqStateJSON, _ := json.Marshal(reqState)
-	created, err := ctx.Services.KV().Write(ctx, reqStateKey, reqStateJSON)
+	created, err := ctx.Services.KV().WriteWithTTL(ctx, reqStateKey, reqStateJSON, 5*time.Minute)
 	if err != nil {
 		log.Printf("❌ %s: [POST-AUTH] Failed to save request state to KV (key=%s): %v", PluginName, reqStateKey, err)
 	} else {
@@ -558,9 +558,9 @@ func (p *LLMRateLimiterPlugin) OnBeforeWrite(ctx plugin_sdk.Context, req *pb.Res
 	}
 	state.UpdatedAt = now.Unix()
 
-	// Save updated state
+	// Save updated state with 2-minute TTL
 	stateJSON, _ := json.Marshal(state)
-	ctx.Services.KV().Write(ctx, rateKey, stateJSON)
+	ctx.Services.KV().WriteWithTTL(ctx, rateKey, stateJSON, 2*time.Minute)
 
 	// Cleanup: Delete request-specific state (no longer needed)
 	ctx.Services.KV().Delete(ctx, reqStateKey)
@@ -796,9 +796,9 @@ func (p *LLMRateLimiterPlugin) getAppRateLimitConfig(ctx plugin_sdk.Context, app
 		return nil, fmt.Errorf("failed to parse rate limiter config: %w", err)
 	}
 
-	// Cache for 5 minutes
+	// Cache for 5 minutes with TTL
 	configJSON, _ := json.Marshal(config)
-	ctx.Services.KV().Write(ctx, cacheKey, configJSON)
+	ctx.Services.KV().WriteWithTTL(ctx, cacheKey, configJSON, 5*time.Minute)
 
 	return &config, nil
 }
@@ -909,7 +909,7 @@ func (p *LLMRateLimiterPlugin) rpcCreatePolicy(payload []byte) (interface{}, err
 		return nil, fmt.Errorf("failed to marshal policy: %v", err)
 	}
 
-	_, err = ai_studio_sdk.WritePluginKV(ctx, key, policyData)
+	_, err = ai_studio_sdk.WritePluginKV(ctx, key, policyData, nil) // No expiration for policies
 	if err != nil {
 		return nil, fmt.Errorf("failed to write policy: %v", err)
 	}
@@ -960,7 +960,7 @@ func (p *LLMRateLimiterPlugin) rpcUpdatePolicy(payload []byte) (interface{}, err
 		return nil, fmt.Errorf("failed to marshal policy: %v", err)
 	}
 
-	_, err = ai_studio_sdk.WritePluginKV(ctx, key, policyData)
+	_, err = ai_studio_sdk.WritePluginKV(ctx, key, policyData, nil) // No expiration for policies
 	if err != nil {
 		return nil, fmt.Errorf("failed to write policy: %v", err)
 	}
@@ -1184,7 +1184,7 @@ func (p *LLMRateLimiterPlugin) addPolicyToIndex(ctx context.Context, policyName 
 	if !exists {
 		policyNames = append(policyNames, policyName)
 		indexJSON, _ := json.Marshal(policyNames)
-		ai_studio_sdk.WritePluginKV(ctx, indexKey, indexJSON)
+		ai_studio_sdk.WritePluginKV(ctx, indexKey, indexJSON, nil) // No expiration for policy index
 	}
 
 	return nil
@@ -1206,6 +1206,6 @@ func (p *LLMRateLimiterPlugin) removePolicyFromIndex(ctx context.Context, policy
 	}
 
 	indexJSON, _ := json.Marshal(newNames)
-	ai_studio_sdk.WritePluginKV(ctx, indexKey, indexJSON)
+	ai_studio_sdk.WritePluginKV(ctx, indexKey, indexJSON, nil) // No expiration for policy index
 	return nil
 }

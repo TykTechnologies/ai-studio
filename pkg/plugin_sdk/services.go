@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 )
@@ -70,11 +71,16 @@ func (kv *defaultKVService) Read(ctx context.Context, key string) ([]byte, error
 	return ai_studio_sdk.ReadPluginKV(ctx, key)
 }
 
-func (kv *defaultKVService) Write(ctx context.Context, key string, value []byte) (bool, error) {
+func (kv *defaultKVService) Write(ctx context.Context, key string, value []byte, expireAt *time.Time) (bool, error) {
 	if kv.runtime == RuntimeGateway {
-		return writeKVGateway(ctx, key, value)
+		return writeKVGateway(ctx, key, value, expireAt)
 	}
-	return ai_studio_sdk.WritePluginKV(ctx, key, value)
+	return ai_studio_sdk.WritePluginKV(ctx, key, value, expireAt)
+}
+
+func (kv *defaultKVService) WriteWithTTL(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	expireAt := time.Now().Add(ttl)
+	return kv.Write(ctx, key, value, &expireAt)
 }
 
 func (kv *defaultKVService) Delete(ctx context.Context, key string) (bool, error) {

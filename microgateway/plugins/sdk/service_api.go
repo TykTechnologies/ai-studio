@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	pb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Global SDK state for service API access
@@ -253,22 +255,37 @@ func ValidateCredential(ctx context.Context, secret string) (*pb.ValidateCredent
 
 // WritePluginKV writes a key-value entry for the calling plugin
 // Returns true if a new entry was created, false if an existing entry was updated
-func WritePluginKV(ctx context.Context, key string, value []byte) (bool, error) {
+// expireAt is optional - pass nil for no expiration
+func WritePluginKV(ctx context.Context, key string, value []byte, expireAt *time.Time) (bool, error) {
 	client, err := getServiceClient(ctx)
 	if err != nil {
 		return false, fmt.Errorf("service client unavailable: %w", err)
 	}
 
-	resp, err := client.WritePluginKV(ctx, &pb.WritePluginKVRequest{
+	req := &pb.WritePluginKVRequest{
 		Context: createPluginContext("kv.readwrite"),
 		Key:     key,
 		Value:   value,
-	})
+	}
+
+	// Set expiration if provided
+	if expireAt != nil {
+		req.ExpireAt = timestamppb.New(*expireAt)
+	}
+
+	resp, err := client.WritePluginKV(ctx, req)
 	if err != nil {
 		return false, fmt.Errorf("failed to write KV data: %w", err)
 	}
 
 	return resp.Created, nil
+}
+
+// WritePluginKVWithTTL is a convenience function that writes a key-value entry with a TTL (time-to-live)
+// The expiration time is calculated as time.Now().Add(ttl)
+func WritePluginKVWithTTL(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	expireAt := time.Now().Add(ttl)
+	return WritePluginKV(ctx, key, value, &expireAt)
 }
 
 // ReadPluginKV reads a key-value entry for the calling plugin
@@ -309,13 +326,22 @@ func DeletePluginKV(ctx context.Context, key string) (bool, error) {
 
 // Helper Functions
 
-// WritePluginKVJSON writes a JSON-encodable value to KV storage
+// WritePluginKVJSON writes a JSON-encodable value to KV storage without expiration
 func WritePluginKVJSON(ctx context.Context, key string, value interface{}) (bool, error) {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return false, fmt.Errorf("failed to marshal value: %w", err)
 	}
-	return WritePluginKV(ctx, key, data)
+	return WritePluginKV(ctx, key, data, nil)
+}
+
+// WritePluginKVJSONWithTTL writes a JSON-encodable value to KV storage with a TTL
+func WritePluginKVJSONWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal value: %w", err)
+	}
+	return WritePluginKVWithTTL(ctx, key, data, ttl)
 }
 
 // ReadPluginKVJSON reads and unmarshals a JSON value from KV storage

@@ -1137,6 +1137,7 @@ message WritePluginKVRequest {
     PluginContext context = 1;
     string key = 2;    // Data key (max 255 chars)
     bytes value = 3;   // Binary data value
+    google.protobuf.Timestamp expire_at = 4;  // Optional expiration timestamp (nil = no expiration)
 }
 
 message WritePluginKVResponse {

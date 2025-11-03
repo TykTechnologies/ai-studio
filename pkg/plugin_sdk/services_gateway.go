@@ -68,8 +68,8 @@ func readKVGateway(ctx context.Context, key string) ([]byte, error) {
 }
 
 // writeKVGateway wraps the Microgateway SDK's KV write
-func writeKVGateway(ctx context.Context, key string, value []byte) (bool, error) {
-	return mgwsdk.WritePluginKV(ctx, key, value)
+func writeKVGateway(ctx context.Context, key string, value []byte, expireAt *time.Time) (bool, error) {
+	return mgwsdk.WritePluginKV(ctx, key, value, expireAt)
 }
 
 // deleteKVGateway wraps the Microgateway SDK's KV delete

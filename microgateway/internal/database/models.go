@@ -320,13 +320,22 @@ type EdgeInstance struct {
 
 // PluginKV represents plugin key-value storage
 type PluginKV struct {
-	ID        uint      `gorm:"primaryKey"`
-	Key       string    `gorm:"uniqueIndex;not null"`
-	Value     []byte    `gorm:"type:bytea;not null"`
-	PluginID  uint      `gorm:"not null;index"`
-	Plugin    *Plugin   `gorm:"foreignKey:PluginID"`
+	ID        uint       `gorm:"primaryKey"`
+	Key       string     `gorm:"uniqueIndex;not null"`
+	Value     []byte     `gorm:"type:bytea;not null"`
+	PluginID  uint       `gorm:"not null;index"`
+	Plugin    *Plugin    `gorm:"foreignKey:PluginID"`
+	ExpireAt  *time.Time `gorm:"index:idx_plugin_kv_expire_at"` // Optional expiration timestamp
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+// IsExpired checks if the plugin KV entry has expired
+func (pkv *PluginKV) IsExpired() bool {
+	if pkv.ExpireAt == nil {
+		return false // No expiration set
+	}
+	return pkv.ExpireAt.Before(time.Now())
 }
 
 // TableName methods for new models

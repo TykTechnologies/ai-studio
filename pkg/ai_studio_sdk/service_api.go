@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Global SDK state for service API access
@@ -260,22 +262,37 @@ func Reset() {
 
 // WritePluginKV writes a key-value entry for the calling plugin
 // Returns true if a new entry was created, false if an existing entry was updated
-func WritePluginKV(ctx context.Context, key string, value []byte) (bool, error) {
+// expireAt is optional - pass nil for no expiration
+func WritePluginKV(ctx context.Context, key string, value []byte, expireAt *time.Time) (bool, error) {
 	client, err := getServiceClient(ctx)
 	if err != nil {
 		return false, fmt.Errorf("service client unavailable: %w", err)
 	}
 
-	resp, err := client.WritePluginKV(ctx, &mgmtpb.WritePluginKVRequest{
+	req := &mgmtpb.WritePluginKVRequest{
 		Context: createPluginContext(AvailableScopes.KVReadWrite),
 		Key:     key,
 		Value:   value,
-	})
+	}
+
+	// Set expiration if provided
+	if expireAt != nil {
+		req.ExpireAt = timestamppb.New(*expireAt)
+	}
+
+	resp, err := client.WritePluginKV(ctx, req)
 	if err != nil {
 		return false, fmt.Errorf("failed to write KV data: %w", err)
 	}
 
 	return resp.Created, nil
+}
+
+// WritePluginKVWithTTL is a convenience function that writes a key-value entry with a TTL (time-to-live)
+// The expiration time is calculated as time.Now().Add(ttl)
+func WritePluginKVWithTTL(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	expireAt := time.Now().Add(ttl)
+	return WritePluginKV(ctx, key, value, &expireAt)
 }
 
 // ReadPluginKV reads a key-value entry for the calling plugin
