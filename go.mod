@@ -6,7 +6,7 @@ toolchain go1.24.7
 
 require (
 	dario.cat/mergo v1.0.2
-	github.com/TykTechnologies/midsommar/microgateway v0.0.0-00010101000000-000000000000
+	github.com/TykTechnologies/midsommar/microgateway v0.0.0
 	github.com/TykTechnologies/tyk-identity-broker v1.7.0
 	github.com/d5/tengo/v2 v2.17.0
 	github.com/dslipak/pdf v0.0.2

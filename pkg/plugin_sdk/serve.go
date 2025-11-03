@@ -66,10 +66,21 @@ func (p *grpcPluginImpl) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server)
 	// Register the proto service
 	pb.RegisterPluginServiceServer(s, p.wrapper)
 
-	// Initialize the AI Studio SDK for broker access
-	// This allows plugins to call back to host services
-	if err := ai_studio_sdk.Initialize(s, broker, 0); err != nil {
-		log.Printf("Warning: Failed to initialize AI Studio SDK: %v", err)
+	// Initialize SDK based on detected runtime
+	// IMPORTANT: Only initialize ONE SDK - they share the same broker and will conflict
+	// The broker has EITHER MicrogatewayManagementService OR AIStudioManagementService, not both
+
+	runtime := detectRuntime()
+	if runtime == RuntimeGateway {
+		// Gateway context - use Microgateway SDK
+		if err := initializeMicrogatewaySDK(s, broker, 0); err != nil {
+			log.Printf("Warning: Failed to initialize Microgateway SDK: %v", err)
+		}
+	} else {
+		// Studio context - use AI Studio SDK
+		if err := ai_studio_sdk.Initialize(s, broker, 0); err != nil {
+			log.Printf("Warning: Failed to initialize AI Studio SDK: %v", err)
+		}
 	}
 
 	return nil
@@ -180,11 +191,29 @@ func (w *pluginServerWrapper) Initialize(ctx context.Context, req *pb.InitReques
 	// Extract plugin ID from config if available
 	var pluginID uint32
 	if req.Config != nil {
-		if idStr, ok := req.Config["plugin_id"]; ok {
+		// Try both _plugin_id (Microgateway) and plugin_id (AI Studio)
+		if idStr, ok := req.Config["_plugin_id"]; ok {
 			// Parse plugin ID
 			var id int
 			if _, err := fmt.Sscanf(idStr, "%d", &id); err == nil {
 				pluginID = uint32(id)
+			}
+		} else if idStr, ok := req.Config["plugin_id"]; ok {
+			// Parse plugin ID
+			var id int
+			if _, err := fmt.Sscanf(idStr, "%d", &id); err == nil {
+				pluginID = uint32(id)
+			}
+		}
+
+		// Set plugin ID in the appropriate SDK
+		if pluginID > 0 {
+			if w.runtime == RuntimeGateway {
+				setPluginIDForMicrogatewaySDK(pluginID)
+				log.Printf("Set Microgateway plugin ID: %d", pluginID)
+			} else {
+				ai_studio_sdk.SetPluginID(pluginID)
+				log.Printf("Set AI Studio plugin ID: %d", pluginID)
 			}
 		}
 
@@ -200,8 +229,14 @@ func (w *pluginServerWrapper) Initialize(ctx context.Context, req *pb.InitReques
 		if brokerIDStr != "" {
 			var brokerID int
 			if _, err := fmt.Sscanf(brokerIDStr, "%d", &brokerID); err == nil {
-				ai_studio_sdk.SetServiceBrokerID(uint32(brokerID))
-				log.Printf("Set service broker ID: %d", brokerID)
+				// Set broker ID for the appropriate SDK based on runtime
+				if w.runtime == RuntimeGateway {
+					setBrokerIDForMicrogatewaySDK(uint32(brokerID))
+					log.Printf("Set Microgateway service broker ID: %d", brokerID)
+				} else {
+					ai_studio_sdk.SetServiceBrokerID(uint32(brokerID))
+					log.Printf("Set AI Studio service broker ID: %d", brokerID)
+				}
 			}
 		}
 	}

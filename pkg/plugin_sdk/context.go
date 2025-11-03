@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	mgmt "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 )
 
 // RuntimeType indicates where the plugin is running
@@ -53,17 +52,21 @@ type Context struct {
 }
 
 // ServiceBroker provides access to host services.
-// The actual implementation differs between Studio and Gateway,
-// but the interface remains the same for plugin developers.
+// Services are accessed via runtime-specific methods for clarity and type safety.
 type ServiceBroker interface {
-	// KV returns the key-value storage service
+	// KV returns the key-value storage service (works in both contexts)
 	KV() KVService
 
-	// Logger returns the logging service
+	// Logger returns the logging service (works in both contexts)
 	Logger() LogService
 
-	// AppManager returns the app management service (may be nil in some contexts)
-	AppManager() AppManagerService
+	// Gateway returns Gateway-specific services (only available in RuntimeGateway)
+	// Returns nil if called in Studio context
+	Gateway() GatewayServices
+
+	// Studio returns Studio-specific services (only available in RuntimeStudio)
+	// Returns nil if called in Gateway context
+	Studio() StudioServices
 }
 
 // KVService provides key-value storage for plugin data.
@@ -95,21 +98,59 @@ type LogService interface {
 	Error(msg string, fields ...interface{})
 }
 
-// AppManagerService provides access to application management.
-// This is primarily available in Studio context. In Gateway, it may make
-// remote calls back to Studio.
-type AppManagerService interface {
-	// GetApp retrieves app details by ID
-	GetApp(ctx context.Context, appID uint32) (*mgmt.GetAppResponse, error)
+// GatewayServices provides access to Microgateway-specific services
+// Only available when Runtime == RuntimeGateway
+type GatewayServices interface {
+	// GetApp retrieves app details from local Gateway database
+	// Returns microgateway_management.GetAppResponse proto type
+	GetApp(ctx context.Context, appID uint32) (interface{}, error)
 
-	// ListApps lists all apps with pagination
-	ListApps(ctx context.Context, page, limit int32) (*mgmt.ListAppsResponse, error)
+	// ListApps lists apps from local Gateway database
+	ListApps(ctx context.Context, page, limit int32, isActive *bool) (interface{}, error)
 
-	// UpdateApp updates app configuration
-	UpdateApp(ctx context.Context, req *mgmt.UpdateAppRequest) (*mgmt.UpdateAppResponse, error)
+	// GetLLM retrieves LLM details from local Gateway database
+	GetLLM(ctx context.Context, llmID uint32) (interface{}, error)
 
-	// ListLLMs lists available LLMs
-	ListLLMs(ctx context.Context, page, limit int32) (*mgmt.ListLLMsResponse, error)
+	// ListLLMs lists LLMs from local Gateway database
+	ListLLMs(ctx context.Context, page, limit int32, vendor string, isActive *bool) (interface{}, error)
+
+	// GetBudgetStatus retrieves budget status (Gateway-only feature)
+	GetBudgetStatus(ctx context.Context, appID uint32, llmID *uint32) (interface{}, error)
+
+	// GetModelPrice retrieves model pricing from local Gateway database
+	GetModelPrice(ctx context.Context, modelName, vendor string) (interface{}, error)
+
+	// ListModelPrices lists model prices from local Gateway database
+	ListModelPrices(ctx context.Context, vendor string) (interface{}, error)
+
+	// ValidateCredential validates an API credential (Gateway-only feature)
+	ValidateCredential(ctx context.Context, secret string) (interface{}, error)
+}
+
+// StudioServices provides access to AI Studio-specific services
+// Only available when Runtime == RuntimeStudio
+type StudioServices interface {
+	// GetApp retrieves app details from AI Studio database
+	// Returns ai_studio_management.GetAppResponse proto type
+	GetApp(ctx context.Context, appID uint32) (interface{}, error)
+
+	// ListApps lists apps from AI Studio database
+	ListApps(ctx context.Context, page, limit int32) (interface{}, error)
+
+	// UpdateAppWithMetadata updates app configuration including metadata
+	UpdateAppWithMetadata(ctx context.Context, appID uint32, name, description string, isActive bool, llmIDs, toolIDs, datasourceIDs []uint32, monthlyBudget *float64, metadata string) (interface{}, error)
+
+	// GetLLM retrieves LLM details from AI Studio database
+	GetLLM(ctx context.Context, llmID uint32) (interface{}, error)
+
+	// ListLLMs lists LLMs from AI Studio database
+	ListLLMs(ctx context.Context, page, limit int32) (interface{}, error)
+
+	// ListTools lists tools (Studio-only feature)
+	ListTools(ctx context.Context, page, limit int32) (interface{}, error)
+
+	// CallLLM proxies LLM requests (for agent plugins, Studio-only)
+	CallLLM(ctx context.Context, llmID uint32, model string, messages interface{}, temperature float64, maxTokens int32) (interface{}, error)
 }
 
 // detectRuntime determines the runtime environment from environment variables
