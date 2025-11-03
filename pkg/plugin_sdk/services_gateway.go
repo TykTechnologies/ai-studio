@@ -59,3 +59,20 @@ func setBrokerIDForMicrogatewaySDK(brokerID uint32) {
 func setPluginIDForMicrogatewaySDK(pluginID uint32) {
 	mgwsdk.SetPluginID(pluginID)
 }
+
+// ===== KV Service Wrappers for Gateway =====
+
+// readKVGateway wraps the Microgateway SDK's KV read
+func readKVGateway(ctx context.Context, key string) ([]byte, error) {
+	return mgwsdk.ReadPluginKV(ctx, key)
+}
+
+// writeKVGateway wraps the Microgateway SDK's KV write
+func writeKVGateway(ctx context.Context, key string, value []byte) (bool, error) {
+	return mgwsdk.WritePluginKV(ctx, key, value)
+}
+
+// deleteKVGateway wraps the Microgateway SDK's KV delete
+func deleteKVGateway(ctx context.Context, key string) (bool, error) {
+	return mgwsdk.DeletePluginKV(ctx, key)
+}

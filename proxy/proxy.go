@@ -248,6 +248,7 @@ func fixDoubleSlash(next http.Handler) http.Handler {
 	})
 }
 
+
 func (p *Proxy) createHandler() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/.well-known/oauth-protected-resource", p.handleOAuthProtectedResourceMetadata).Methods("GET", "OPTIONS")
@@ -263,6 +264,11 @@ func (p *Proxy) createHandler() http.Handler {
 	r.HandleFunc("/tools/{toolSlug}/mcp", p.handleMCPToolStreamable).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}/mcp/sse", p.handleMCPToolSSE).Methods("GET")
 	r.HandleFunc("/tools/{toolSlug}/mcp/message", p.handleMCPToolMessage).Methods("POST")
+	// Middleware chain (innermost to outermost):
+	// 1. requestIDMiddleware - Generate canonical request ID (MUST BE FIRST)
+	// 2. credValidator.Middleware - Authenticate requests
+	// 3. outboundRequestMiddleware - Prepare outbound requests
+	// 4. cloudflareHeadersMiddleware - Add Cloudflare headers
 	return p.cloudflareHeadersMiddleware(p.outboundRequestMiddleware(p.credValidator.Middleware(r)))
 }
 
@@ -477,19 +483,25 @@ func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, l
 		return nil // No hooks configured
 	}
 
+	// Get canonical request ID from context (set by requestIDMiddleware at proxy entry)
+	// This MUST exist - if it doesn't, the middleware chain is broken
+	requestID := ""
+	if reqID := r.Context().Value("request_id"); reqID != nil {
+		requestID = reqID.(string)
+	}
+	if requestID == "" {
+		// CRITICAL: Request ID middleware didn't run - fail loudly
+		return fmt.Errorf("request ID not found in context - requestIDMiddleware not configured")
+	}
+
 	// Create plugin context
 	pluginCtx := &PluginContext{
-		RequestID: r.Header.Get("X-Request-ID"),
+		RequestID: requestID, // Use canonical request ID from context
 		LLMSlug:   llm.Name,
 		LLMID:     llm.ID,
 		AppID:     app.ID,
 		UserID:    app.UserID,
 		Metadata:  make(map[string]string),
-	}
-
-	// If no request ID, generate one
-	if pluginCtx.RequestID == "" {
-		pluginCtx.RequestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
 	}
 
 	ctx := context.Background()

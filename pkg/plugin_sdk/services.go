@@ -57,23 +57,30 @@ func (b *defaultServiceBroker) Studio() StudioServices {
 	return b.studioService
 }
 
-// ===== KV Service (Universal) =====
+// ===== KV Service (Runtime-Aware) =====
 
 type defaultKVService struct {
 	runtime RuntimeType
 }
 
 func (kv *defaultKVService) Read(ctx context.Context, key string) ([]byte, error) {
-	// Both SDKs use ai_studio_sdk for KV operations
-	// This works because the Microgateway SDK also delegates to ai_studio_sdk for KV
+	if kv.runtime == RuntimeGateway {
+		return readKVGateway(ctx, key)
+	}
 	return ai_studio_sdk.ReadPluginKV(ctx, key)
 }
 
 func (kv *defaultKVService) Write(ctx context.Context, key string, value []byte) (bool, error) {
+	if kv.runtime == RuntimeGateway {
+		return writeKVGateway(ctx, key, value)
+	}
 	return ai_studio_sdk.WritePluginKV(ctx, key, value)
 }
 
 func (kv *defaultKVService) Delete(ctx context.Context, key string) (bool, error) {
+	if kv.runtime == RuntimeGateway {
+		return deleteKVGateway(ctx, key)
+	}
 	return ai_studio_sdk.DeletePluginKV(ctx, key)
 }
 

@@ -67,9 +67,20 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 			return false // No plugins, continue
 		}
 
+		// Get canonical request ID from context (set by RequestIDMiddleware)
+		requestID := ""
+		if reqID := r.Context().Value("request_id"); reqID != nil {
+			requestID = reqID.(string)
+		}
+		if requestID == "" {
+			log.Error().Msg("Request ID not found in context - RequestIDMiddleware not configured")
+			respondWithError(w, http.StatusInternalServerError, "Internal server error", nil)
+			return true
+		}
+
 		// Create plugin context (NO app_id yet - not authenticated)
 		pluginCtx := &interfaces.PluginContext{
-			RequestID:    generateRequestID(),
+			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
 			LLMSlug:      llmSlug,
 			Vendor:       vendor,
@@ -182,9 +193,19 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 			return 0, false, nil // No auth plugins, use standard validation
 		}
 
+		// Get canonical request ID from context
+		requestID := ""
+		if reqID := r.Context().Value("request_id"); reqID != nil {
+			requestID = reqID.(string)
+		}
+		if requestID == "" {
+			log.Error().Msg("Request ID not found in context - RequestIDMiddleware not configured")
+			return 0, false, fmt.Errorf("request ID missing")
+		}
+
 		// Create plugin context for auth
 		pluginCtx := &interfaces.PluginContext{
-			RequestID:    generateRequestID(),
+			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
 			LLMSlug:      llmSlug,
 			Metadata:     make(map[string]interface{}),
@@ -291,9 +312,22 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			return false // No plugins, continue
 		}
 
+		// Get canonical request ID from context (set by requestIDMiddleware)
+		// This MUST exist - if it doesn't, the middleware chain is broken
+		requestID := ""
+		if reqID := r.Context().Value("request_id"); reqID != nil {
+			requestID = reqID.(string)
+		}
+		if requestID == "" {
+			// CRITICAL: Request ID middleware didn't run
+			log.Error().Msg("Request ID not found in context - requestIDMiddleware not configured")
+			respondWithError(w, http.StatusInternalServerError, "Internal server error", nil)
+			return true
+		}
+
 		// Create plugin context (NOW with authenticated app_id)
 		pluginCtx := &interfaces.PluginContext{
-			RequestID:    generateRequestID(),
+			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
 			LLMSlug:      llmSlug,
 			Vendor:       vendor,

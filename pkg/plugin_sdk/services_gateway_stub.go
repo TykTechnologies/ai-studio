@@ -60,3 +60,16 @@ func (g *gatewayServicesImpl) ValidateCredential(ctx context.Context, secret str
 func setPluginIDForMicrogatewaySDK(pluginID uint32) {
 	// No-op in Studio-only builds
 }
+
+// KV stubs for Studio-only builds
+func readKVGateway(ctx context.Context, key string) ([]byte, error) {
+	return nil, fmt.Errorf("gateway KV not available in this build")
+}
+
+func writeKVGateway(ctx context.Context, key string, value []byte) (bool, error) {
+	return false, fmt.Errorf("gateway KV not available in this build")
+}
+
+func deleteKVGateway(ctx context.Context, key string) (bool, error) {
+	return false, fmt.Errorf("gateway KV not available in this build")
+}

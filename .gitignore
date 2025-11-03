@@ -83,3 +83,5 @@ examples/plugins/studio/echo-agent/server/echo-agent-plugin
 examples/plugins/studio/custom-auth-ui/server/custom-auth-ui
 examples/plugins/studio/service-api-test/server/service-api-test
 examples/plugins/gateway/gateway-service-test/gateway-service-test
+examples/plugins/studio/llm-rate-limiter/llm-rate-limiter
+examples/plugins/studio/llm-rate-limiter-multiphase/llm-rate-limiter

@@ -79,9 +79,20 @@ func CreatePluginMiddleware(config *PluginMiddlewareConfig) gin.HandlerFunc {
 			// userID would be available if we had user authentication
 		}
 
+		// Get canonical request ID from context (set by RequestIDMiddleware)
+		requestID := ""
+		if reqID := c.Request.Context().Value("request_id"); reqID != nil {
+			requestID = reqID.(string)
+		}
+		if requestID == "" {
+			log.Error().Msg("Request ID not found in context - RequestIDMiddleware not configured")
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
 		// Create plugin context
 		pluginCtx := &interfaces.PluginContext{
-			RequestID:    generateRequestID(),
+			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
 			LLMSlug:      llmSlug,
 			Vendor:       vendor,

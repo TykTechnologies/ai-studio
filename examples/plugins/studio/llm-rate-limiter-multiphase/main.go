@@ -194,9 +194,13 @@ func (p *LLMRateLimiterPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.En
 	now := time.Now()
 	minuteKey := now.Format("2006-01-02T15:04")
 	resetTime := now.Truncate(time.Minute).Add(time.Minute)
+	requestID := pluginCtx.RequestId
 
-	// Build rate state key
+	// Build rate state key (minute-based for aggregation)
 	rateKey := fmt.Sprintf("%s%d:%s:%s", RatePrefix, appID, model, minuteKey)
+
+	// Build request-specific state key (links post-auth and response phases)
+	reqStateKey := fmt.Sprintf("rate-req:%s", requestID)
 
 	// Get or create lock for atomic updates
 	lockKey := fmt.Sprintf("%d:%s", appID, model)
@@ -216,8 +220,11 @@ func (p *LLMRateLimiterPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.En
 	stateData, err := ctx.Services.KV().Read(ctx, rateKey)
 	if err == nil && len(stateData) > 0 {
 		json.Unmarshal(stateData, &state)
+		log.Printf("📖 %s: [POST-AUTH] Read existing state from KV (key=%s): TPM=%d, RPM=%d, Concurrent=%d",
+			PluginName, rateKey, state.TokenCount, state.RequestCount, state.ConcurrentCount)
 	} else {
 		// Initialize new state for this minute
+		log.Printf("🆕 %s: [POST-AUTH] Creating new state (key=%s) - first request in this minute", PluginName, rateKey)
 		state = RateState{
 			MinuteKey:       minuteKey,
 			TokenCount:      0,
@@ -244,14 +251,24 @@ func (p *LLMRateLimiterPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.En
 			state.RequestCount, limits.RPM, resetTime, appID, model), nil
 	}
 
-	// SOFT LIMIT: Estimate TPM and warn (don't block)
+	// HARD LIMIT: Check if current TPM (from previous requests) already exceeded
+	// This prevents new requests when we've already used up the quota
+	if limits.TPM > 0 && state.TokenCount >= limits.TPM {
+		log.Printf("🚫 %s: TPM limit already exceeded for app %d, model %s: current=%d, limit=%d",
+			PluginName, appID, model, state.TokenCount, limits.TPM)
+		return p.buildRateLimitResponse(rateLimitConfig.PolicyName, "tpm",
+			state.TokenCount, limits.TPM, resetTime, appID, model), nil
+	}
+
+	// SOFT CHECK: Estimate TPM for this request and warn if it would exceed
+	// We allow it through because estimates are inaccurate, but log for visibility
 	estimatedTokens := p.estimateTokensFromRequest(pluginReq.Body, vendor)
 	if limits.TPM > 0 && estimatedTokens > 0 {
 		projectedTPM := state.TokenCount + estimatedTokens
 		if projectedTPM > limits.TPM {
-			log.Printf("⚠️ %s: Estimated TPM would exceed limit for app %d, model %s: projected=%d, limit=%d (allowing request, will enforce on actual)",
+			log.Printf("⚠️ %s: This request's estimate would exceed TPM limit for app %d, model %s: projected=%d, limit=%d (allowing request, will track actual usage)",
 				PluginName, appID, model, projectedTPM, limits.TPM)
-			// Don't block - let it through and enforce on actual usage
+			// Don't block on estimates - actual enforcement happens after response
 		}
 	}
 
@@ -261,9 +278,30 @@ func (p *LLMRateLimiterPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.En
 	state.EstimatedTokens += estimatedTokens
 	state.UpdatedAt = now.Unix()
 
-	// Save updated state
+	// Save updated minute-based state
 	stateJSON, _ := json.Marshal(state)
 	ctx.Services.KV().Write(ctx, rateKey, stateJSON)
+
+	// Save request-specific state for response phase to find
+	// This links post-auth and response phases across minute boundaries
+	reqState := map[string]interface{}{
+		"minute_key": minuteKey,
+		"app_id":     appID,
+		"model":      model,
+		"rate_key":   rateKey, // The minute-based key to update
+		"timestamp":  now.Unix(),
+	}
+	reqStateJSON, _ := json.Marshal(reqState)
+	created, err := ctx.Services.KV().Write(ctx, reqStateKey, reqStateJSON)
+	if err != nil {
+		log.Printf("❌ %s: [POST-AUTH] Failed to save request state to KV (key=%s): %v", PluginName, reqStateKey, err)
+	} else {
+		log.Printf("💾 %s: [POST-AUTH] Saved request state to KV (key=%s, created=%v, size=%d bytes)",
+			PluginName, reqStateKey, created, len(reqStateJSON))
+	}
+
+	log.Printf("💾 %s: [POST-AUTH] Saved minute state to KV (minute_key=%s): TPM=%d, RPM=%d, Concurrent=%d",
+		PluginName, rateKey, state.TokenCount, state.RequestCount, state.ConcurrentCount)
 
 	log.Printf("✅ %s: Rate limit check passed for app %d, model %s (RPM: %d/%d, Concurrent: %d/%d, Est.TPM: %d/%d)",
 		PluginName, appID, model,
@@ -439,11 +477,47 @@ func (p *LLMRateLimiterPlugin) OnBeforeWrite(ctx plugin_sdk.Context, req *pb.Res
 		}
 	}
 
-	// Get current minute
+	// Use request ID to find the exact minute key from post-auth phase
+	// This handles minute boundary crossings robustly
+	requestID := pluginCtx.RequestId
+	reqStateKey := fmt.Sprintf("rate-req:%s", requestID)
+
+	// Read request-specific state to get the correct minute key
+	log.Printf("🔍 %s: [RESPONSE] Looking for request state with key=%s", PluginName, reqStateKey)
+	reqStateData, err := ctx.Services.KV().Read(ctx, reqStateKey)
+	if err != nil {
+		log.Printf("❌ %s: [RESPONSE] KV Read failed for key=%s: %v", PluginName, reqStateKey, err)
+		return &pb.ResponseWriteResponse{Modified: false, Body: req.Body, Headers: req.Headers}, nil
+	}
+	if len(reqStateData) == 0 {
+		log.Printf("⚠️ %s: [RESPONSE] Request state empty (req_id=%s, key=%s) - post-auth may have skipped or KV not persisting", PluginName, requestID, reqStateKey)
+		return &pb.ResponseWriteResponse{Modified: false, Body: req.Body, Headers: req.Headers}, nil
+	}
+	log.Printf("✅ %s: [RESPONSE] Found request state (size=%d bytes)", PluginName, len(reqStateData))
+
+	var reqState map[string]interface{}
+	if err := json.Unmarshal(reqStateData, &reqState); err != nil {
+		log.Printf("⚠️ %s: [RESPONSE] Failed to parse request state", PluginName)
+		return &pb.ResponseWriteResponse{Modified: false, Body: req.Body, Headers: req.Headers}, nil
+	}
+
+	// Extract the minute key and rate key from post-auth
+	rateKey, ok := reqState["rate_key"].(string)
+	if !ok {
+		log.Printf("⚠️ %s: [RESPONSE] No rate_key in request state", PluginName)
+		return &pb.ResponseWriteResponse{Modified: false, Body: req.Body, Headers: req.Headers}, nil
+	}
+
+	minuteKey, ok := reqState["minute_key"].(string)
+	if !ok {
+		log.Printf("⚠️ %s: [RESPONSE] No minute_key in request state", PluginName)
+		return &pb.ResponseWriteResponse{Modified: false, Body: req.Body, Headers: req.Headers}, nil
+	}
+
 	now := time.Now()
-	minuteKey := now.Format("2006-01-02T15:04")
 	resetTime := now.Truncate(time.Minute).Add(time.Minute)
-	rateKey := fmt.Sprintf("%s%d:%s:%s", RatePrefix, appID, model, minuteKey)
+
+	log.Printf("🔗 %s: [RESPONSE] Found request state for req_id=%s, using minute_key=%s", PluginName, requestID, minuteKey)
 
 	// Get lock
 	lockKey := fmt.Sprintf("%d:%s", appID, model)
@@ -457,13 +531,16 @@ func (p *LLMRateLimiterPlugin) OnBeforeWrite(ctx plugin_sdk.Context, req *pb.Res
 	rateLock.Lock()
 	defer rateLock.Unlock()
 
-	// Read current state
+	// Read current state from the SAME minute as post-auth
 	var state RateState
 	stateData, err := ctx.Services.KV().Read(ctx, rateKey)
 	if err == nil && len(stateData) > 0 {
 		json.Unmarshal(stateData, &state)
+		log.Printf("📖 %s: [RESPONSE] Read existing state from KV: TPM=%d, RPM=%d, Concurrent=%d",
+			PluginName, state.TokenCount, state.RequestCount, state.ConcurrentCount)
 	} else {
-		// State should exist from post-auth, but handle gracefully
+		// This shouldn't happen since post-auth created it
+		log.Printf("⚠️ %s: [RESPONSE] State missing for key=%s (post-auth should have created it)", PluginName, rateKey)
 		state = RateState{
 			MinuteKey:       minuteKey,
 			TokenCount:      0,
@@ -484,6 +561,10 @@ func (p *LLMRateLimiterPlugin) OnBeforeWrite(ctx plugin_sdk.Context, req *pb.Res
 	// Save updated state
 	stateJSON, _ := json.Marshal(state)
 	ctx.Services.KV().Write(ctx, rateKey, stateJSON)
+
+	// Cleanup: Delete request-specific state (no longer needed)
+	ctx.Services.KV().Delete(ctx, reqStateKey)
+	log.Printf("🧹 %s: [RESPONSE] Cleaned up request state for req_id=%s", PluginName, requestID)
 
 	// Build enhanced headers with rate limit info
 	modifiedHeaders := make(map[string]string)
