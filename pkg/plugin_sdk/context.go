@@ -161,7 +161,7 @@ type StudioServices interface {
 
 // detectRuntime determines the runtime environment from environment variables
 func detectRuntime() RuntimeType {
-	// Check for explicit runtime setting
+	// Check for explicit runtime setting (takes precedence)
 	if runtime := os.Getenv("PLUGIN_RUNTIME"); runtime != "" {
 		if runtime == "studio" {
 			return RuntimeStudio
@@ -171,12 +171,21 @@ func detectRuntime() RuntimeType {
 		}
 	}
 
-	// Try to detect based on other env vars
-	if os.Getenv("GATEWAY_MODE") != "" || os.Getenv("MICROGATEWAY_MODE") != "" {
+	// IMPORTANT: GATEWAY_MODE=control means AI Studio is running in control/hub mode
+	// This does NOT mean plugins should use Gateway runtime
+	// Only detect Gateway runtime if we're actually IN the microgateway process
+	gatewayMode := os.Getenv("GATEWAY_MODE")
+	if gatewayMode == "edge" || gatewayMode == "standalone_gateway" {
+		// Only these modes indicate we're in actual microgateway process
 		return RuntimeGateway
 	}
 
-	// Default to studio if ambiguous
+	// Legacy check for MICROGATEWAY_MODE (used by old standalone gateway)
+	if os.Getenv("MICROGATEWAY_MODE") == "standalone" {
+		return RuntimeGateway
+	}
+
+	// Default to studio (including when GATEWAY_MODE=control)
 	return RuntimeStudio
 }
 

@@ -784,10 +784,27 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("method", method).
+		Uint32("service_broker_id", serviceBrokerID).
+		Str("payload", string(payloadBytes)).
+		Msg("🔥 Calling plugin RPC with broker ID")
+
 	resp, err := loadedPlugin.GRPCClient.Call(ctx, &pb.CallRequest{
-		Method:  method,
-		Payload: string(payloadBytes),
+		Method:           method,
+		Payload:          string(payloadBytes),
+		ServiceBrokerId:  serviceBrokerID,
 	})
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("method", method).
+		Bool("success", resp != nil && resp.Success).
+		Str("error_message", func() string { if resp != nil { return resp.ErrorMessage } else { return "" } }()).
+		Err(err).
+		Msg("🔥 Plugin RPC returned")
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to call plugin RPC method: %w", err)
 	}

@@ -5,6 +5,7 @@ package plugin_sdk
 import (
 	"context"
 	"fmt"
+	"time"
 
 	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
@@ -66,7 +67,7 @@ func readKVGateway(ctx context.Context, key string) ([]byte, error) {
 	return nil, fmt.Errorf("gateway KV not available in this build")
 }
 
-func writeKVGateway(ctx context.Context, key string, value []byte) (bool, error) {
+func writeKVGateway(ctx context.Context, key string, value []byte, expireAt *time.Time) (bool, error) {
 	return false, fmt.Errorf("gateway KV not available in this build")
 }
 

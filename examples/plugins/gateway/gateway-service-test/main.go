@@ -7,96 +7,99 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	mgwsdk "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
 //go:embed manifest.json
 var manifestBytes []byte
 
+const (
+	PluginName    = "gateway-service-test"
+	PluginVersion = "1.0.0"
+)
+
 // GatewayServiceTestPlugin tests all microgateway service APIs
 type GatewayServiceTestPlugin struct {
-	pluginID uint32
+	plugin_sdk.BasePlugin
 }
 
-// Initialize implements BasePlugin
-func (p *GatewayServiceTestPlugin) Initialize(config map[string]interface{}) error {
-	// Extract broker ID and plugin ID from config
-	configStrings := make(map[string]string)
-	for k, v := range config {
-		if str, ok := v.(string); ok {
-			configStrings[k] = str
+// NewGatewayServiceTestPlugin creates a new gateway service test plugin
+func NewGatewayServiceTestPlugin() *GatewayServiceTestPlugin {
+	return &GatewayServiceTestPlugin{
+		BasePlugin: plugin_sdk.NewBasePlugin(PluginName, PluginVersion, "Gateway Service API Test Plugin"),
+	}
+}
+
+// Initialize implements plugin_sdk.Plugin
+func (p *GatewayServiceTestPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+	fmt.Printf("🧪 %s: Initialized in %s runtime\n", PluginName, ctx.Runtime)
+
+	// Extract and set broker ID for service API access
+	brokerIDStr := ""
+	if id, ok := config["_service_broker_id"]; ok {
+		brokerIDStr = id
+	} else if id, ok := config["service_broker_id"]; ok {
+		brokerIDStr = id
+	}
+
+	if brokerIDStr != "" {
+		var brokerID uint32
+		if _, err := fmt.Sscanf(brokerIDStr, "%d", &brokerID); err == nil {
+			mgwsdk.SetServiceBrokerID(brokerID)
+			fmt.Printf("🧪 %s: Set service broker ID: %d\n", PluginName, brokerID)
 		}
 	}
 
-	brokerID := sdk.ExtractBrokerIDFromConfig(configStrings)
-	p.pluginID = sdk.ExtractPluginIDFromConfig(configStrings)
-
-	if brokerID != 0 {
-		sdk.SetServiceBrokerID(brokerID)
-		sdk.SetPluginID(p.pluginID)
-		fmt.Printf("✅ Gateway Service Test Plugin initialized with broker ID: %d, plugin ID: %d\n", brokerID, p.pluginID)
-	} else {
-		fmt.Println("⚠️ No broker ID provided - service API will not be available")
+	// Extract plugin ID if present
+	if pluginIDStr, ok := config["_plugin_id"]; ok {
+		var pluginID uint32
+		fmt.Sscanf(pluginIDStr, "%d", &pluginID)
+		mgwsdk.SetPluginID(pluginID)
+		fmt.Printf("🧪 %s: Plugin ID set to: %d\n", PluginName, pluginID)
 	}
 
+	fmt.Printf("✅ %s: Initialized successfully\n", PluginName)
 	return nil
 }
 
-// GetHookType implements BasePlugin
-func (p *GatewayServiceTestPlugin) GetHookType() sdk.HookType {
-	return sdk.HookTypePostAuth
-}
-
-// GetName implements BasePlugin
-func (p *GatewayServiceTestPlugin) GetName() string {
-	return "gateway-service-test"
-}
-
-// GetVersion implements BasePlugin
-func (p *GatewayServiceTestPlugin) GetVersion() string {
-	return "1.0.0"
-}
-
-// Shutdown implements BasePlugin
-func (p *GatewayServiceTestPlugin) Shutdown() error {
+// Shutdown implements plugin_sdk.Plugin
+func (p *GatewayServiceTestPlugin) Shutdown(ctx plugin_sdk.Context) error {
+	fmt.Printf("🧪 %s: Shutdown called\n", PluginName)
 	return nil
 }
 
-// GetManifest implements ManifestProvider
+// GetManifest implements plugin_sdk.UIProvider
 func (p *GatewayServiceTestPlugin) GetManifest() ([]byte, error) {
 	return manifestBytes, nil
 }
 
-// GetConfigSchema implements ConfigSchemaProvider
+// GetConfigSchema implements plugin_sdk.ConfigProvider
 func (p *GatewayServiceTestPlugin) GetConfigSchema() ([]byte, error) {
 	schema := map[string]interface{}{
-		"$schema": "http://json-schema.org/draft-07/schema#",
-		"type":    "object",
-		"title":   "Gateway Service Test Plugin Configuration",
+		"$schema":     "http://json-schema.org/draft-07/schema#",
+		"type":        "object",
+		"title":       "Gateway Service Test Plugin Configuration",
 		"description": "No configuration needed - this plugin tests service API access",
-		"properties": map[string]interface{}{},
+		"properties":  map[string]interface{}{},
 	}
 
-	schemaBytes, err := json.Marshal(schema)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate config schema: %w", err)
-	}
-
-	return schemaBytes, nil
+	return json.Marshal(schema)
 }
 
-// ProcessRequest implements PostAuthPlugin - runs all service API tests and returns results
-func (p *GatewayServiceTestPlugin) ProcessRequest(ctx context.Context, req *sdk.EnrichedRequest, pluginCtx *sdk.PluginContext) (*sdk.PluginResponse, error) {
+// HandlePostAuth implements plugin_sdk.PostAuthHandler - runs all service API tests and returns results
+func (p *GatewayServiceTestPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
 	fmt.Println("🧪 Starting Gateway Service API Tests...")
 
 	// Check if SDK is initialized
-	if !sdk.IsInitialized() {
+	if !mgwsdk.IsInitialized() {
 		errorResponse := map[string]interface{}{
 			"error":   "SDK not initialized",
 			"message": "Service API unavailable - broker not setup",
 		}
 		body, _ := json.Marshal(errorResponse)
-		return &sdk.PluginResponse{
+		return &pb.PluginResponse{
 			Block:      true,
 			StatusCode: 500,
 			Headers:    map[string]string{"Content-Type": "application/json"},
@@ -104,8 +107,8 @@ func (p *GatewayServiceTestPlugin) ProcessRequest(ctx context.Context, req *sdk.
 		}, nil
 	}
 
-	// Run all tests with plugin context
-	report := runAllTests(ctx, pluginCtx)
+	// Run all tests
+	report := runAllTests(ctx.Context, req.Request.Context)
 
 	// Convert report to JSON
 	reportJSON, err := json.MarshalIndent(report, "", "  ")
@@ -115,7 +118,7 @@ func (p *GatewayServiceTestPlugin) ProcessRequest(ctx context.Context, req *sdk.
 			"message": err.Error(),
 		}
 		body, _ := json.Marshal(errorResponse)
-		return &sdk.PluginResponse{
+		return &pb.PluginResponse{
 			Block:      true,
 			StatusCode: 500,
 			Headers:    map[string]string{"Content-Type": "application/json"},
@@ -127,7 +130,7 @@ func (p *GatewayServiceTestPlugin) ProcessRequest(ctx context.Context, req *sdk.
 		report.PassedTests, report.FailedTests, report.TotalTests)
 
 	// Block the request and return test results directly to user
-	return &sdk.PluginResponse{
+	return &pb.PluginResponse{
 		Block:      true,
 		StatusCode: 200,
 		Headers:    map[string]string{"Content-Type": "application/json"},
@@ -154,7 +157,7 @@ type ContextMetadata struct {
 	AppID       uint                   `json:"app_id"`
 	AppDetails  map[string]interface{} `json:"app_details,omitempty"` // Full app data from GetApp()
 	UserID      uint                   `json:"user_id"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Metadata    map[string]string      `json:"metadata,omitempty"` // Changed to match proto
 }
 
 // TestReport aggregates all test results
@@ -175,7 +178,7 @@ type TestReport struct {
 }
 
 // runAllTests executes all service API tests
-func runAllTests(ctx context.Context, pluginCtx *sdk.PluginContext) *TestReport {
+func runAllTests(ctx context.Context, pluginCtx *pb.PluginContext) *TestReport {
 	report := &TestReport{
 		StartTime: time.Now(),
 	}
@@ -219,7 +222,7 @@ func runLLMTests(ctx context.Context) []TestResult {
 
 	// Test: List LLMs
 	start := time.Now()
-	resp, err := sdk.ListLLMs(ctx, 1, 10, "", nil)
+	resp, err := mgwsdk.ListLLMs(ctx, 1, 10, "", nil)
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -240,7 +243,7 @@ func runLLMTests(ctx context.Context) []TestResult {
 		// Test: Get LLM (if any exist)
 		if len(resp.Llms) > 0 {
 			start = time.Now()
-			llmResp, err := sdk.GetLLM(ctx, resp.Llms[0].Id)
+			llmResp, err := mgwsdk.GetLLM(ctx, resp.Llms[0].Id)
 			duration = time.Since(start).Milliseconds()
 
 			if err != nil {
@@ -270,7 +273,7 @@ func runAppTests(ctx context.Context) []TestResult {
 
 	// Test: List Apps
 	start := time.Now()
-	resp, err := sdk.ListApps(ctx, 1, 10, nil)
+	resp, err := mgwsdk.ListApps(ctx, 1, 10, nil)
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -291,7 +294,7 @@ func runAppTests(ctx context.Context) []TestResult {
 		// Test: Get App (if any exist)
 		if len(resp.Apps) > 0 {
 			start = time.Now()
-			appResp, err := sdk.GetApp(ctx, resp.Apps[0].Id)
+			appResp, err := mgwsdk.GetApp(ctx, resp.Apps[0].Id)
 			duration = time.Since(start).Milliseconds()
 
 			if err != nil {
@@ -320,7 +323,7 @@ func runBudgetTests(ctx context.Context) []TestResult {
 	var results []TestResult
 
 	// First get an app to test with
-	appResp, err := sdk.ListApps(ctx, 1, 1, nil)
+	appResp, err := mgwsdk.ListApps(ctx, 1, 1, nil)
 	if err != nil || len(appResp.Apps) == 0 {
 		results = append(results, TestResult{
 			Name:     "Get Budget Status",
@@ -333,7 +336,7 @@ func runBudgetTests(ctx context.Context) []TestResult {
 
 	// Test: Get Budget Status
 	start := time.Now()
-	budgetResp, err := sdk.GetBudgetStatus(ctx, appResp.Apps[0].Id, nil)
+	budgetResp, err := mgwsdk.GetBudgetStatus(ctx, appResp.Apps[0].Id, nil)
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -361,7 +364,7 @@ func runPricingTests(ctx context.Context) []TestResult {
 
 	// Test: List Model Prices
 	start := time.Now()
-	resp, err := sdk.ListModelPrices(ctx, "")
+	resp, err := mgwsdk.ListModelPrices(ctx, "")
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -382,7 +385,7 @@ func runPricingTests(ctx context.Context) []TestResult {
 		// Test: Get Model Price (if any exist)
 		if len(resp.ModelPrices) > 0 {
 			start = time.Now()
-			priceResp, err := sdk.GetModelPrice(ctx, resp.ModelPrices[0].ModelName, resp.ModelPrices[0].Vendor)
+			priceResp, err := mgwsdk.GetModelPrice(ctx, resp.ModelPrices[0].ModelName, resp.ModelPrices[0].Vendor)
 			duration = time.Since(start).Milliseconds()
 
 			if err != nil {
@@ -412,7 +415,7 @@ func runCredentialTests(ctx context.Context) []TestResult {
 
 	// Test: Validate Credential (with invalid credential - should fail gracefully)
 	start := time.Now()
-	resp, err := sdk.ValidateCredential(ctx, "invalid-test-credential")
+	resp, err := mgwsdk.ValidateCredential(ctx, "invalid-test-credential")
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -443,7 +446,7 @@ func runKVTests(ctx context.Context) []TestResult {
 
 	// Test: Write KV
 	start := time.Now()
-	created, err := sdk.WritePluginKV(ctx, testKey, testValue)
+	created, err := mgwsdk.WritePluginKV(ctx, testKey, testValue, nil) // No expiration for test
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -465,7 +468,7 @@ func runKVTests(ctx context.Context) []TestResult {
 
 	// Test: Read KV
 	start = time.Now()
-	readValue, err := sdk.ReadPluginKV(ctx, testKey)
+	readValue, err := mgwsdk.ReadPluginKV(ctx, testKey)
 	duration = time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -493,7 +496,7 @@ func runKVTests(ctx context.Context) []TestResult {
 
 	// Test: Delete KV
 	start = time.Now()
-	deleted, err := sdk.DeletePluginKV(ctx, testKey)
+	deleted, err := mgwsdk.DeletePluginKV(ctx, testKey)
 	duration = time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -516,33 +519,33 @@ func runKVTests(ctx context.Context) []TestResult {
 }
 
 // extractContextMetadata extracts and enriches metadata from the plugin context
-func extractContextMetadata(ctx context.Context, pluginCtx *sdk.PluginContext) *ContextMetadata {
+func extractContextMetadata(ctx context.Context, pluginCtx *pb.PluginContext) *ContextMetadata {
 	metadata := &ContextMetadata{
-		RequestID: pluginCtx.RequestID,
-		LLMID:     pluginCtx.LLMID,
-		LLMSlug:   pluginCtx.LLMSlug,
+		RequestID: pluginCtx.RequestId,
+		LLMID:     uint(pluginCtx.LlmId),
+		LLMSlug:   pluginCtx.LlmSlug,
 		Vendor:    pluginCtx.Vendor,
-		AppID:     pluginCtx.AppID,
-		UserID:    pluginCtx.UserID,
+		AppID:     uint(pluginCtx.AppId),
+		UserID:    uint(pluginCtx.UserId),
 		Metadata:  pluginCtx.Metadata,
 	}
 
 	// Try to get LLM details from service API
-	if pluginCtx.LLMID > 0 {
-		if llmResp, err := sdk.GetLLM(ctx, uint32(pluginCtx.LLMID)); err == nil {
+	if pluginCtx.LlmId > 0 {
+		if llmResp, err := mgwsdk.GetLLM(ctx, pluginCtx.LlmId); err == nil {
 			metadata.LLMName = llmResp.Llm.Name
 		}
 	}
 
 	// Try to get App details from service API and serialize all fields
-	if pluginCtx.AppID > 0 {
-		appResp, err := sdk.GetApp(ctx, uint32(pluginCtx.AppID))
+	if pluginCtx.AppId > 0 {
+		appResp, err := mgwsdk.GetApp(ctx, pluginCtx.AppId)
 		if err != nil {
-			fmt.Printf("⚠️ Failed to get app details for app_id=%d: %v\n", pluginCtx.AppID, err)
+			fmt.Printf("⚠️ Failed to get app details for app_id=%d: %v\n", pluginCtx.AppId, err)
 		} else if appResp == nil {
-			fmt.Printf("⚠️ GetApp returned nil response for app_id=%d\n", pluginCtx.AppID)
+			fmt.Printf("⚠️ GetApp returned nil response for app_id=%d\n", pluginCtx.AppId)
 		} else if appResp.App == nil {
-			fmt.Printf("⚠️ GetApp response has nil App for app_id=%d\n", pluginCtx.AppID)
+			fmt.Printf("⚠️ GetApp response has nil App for app_id=%d\n", pluginCtx.AppId)
 		} else {
 			// Parse metadata JSON if present
 			var appMetadata map[string]interface{}
@@ -566,7 +569,7 @@ func extractContextMetadata(ctx context.Context, pluginCtx *sdk.PluginContext) *
 				"updated_at":       appResp.App.UpdatedAt.AsTime().Format(time.RFC3339),
 			}
 			metadata.AppDetails = appDetails
-			fmt.Printf("✅ Successfully retrieved app details for app_id=%d: %s\n", pluginCtx.AppID, appResp.App.Name)
+			fmt.Printf("✅ Successfully retrieved app details for app_id=%d: %s\n", pluginCtx.AppId, appResp.App.Name)
 		}
 	}
 
@@ -574,6 +577,9 @@ func extractContextMetadata(ctx context.Context, pluginCtx *sdk.PluginContext) *
 }
 
 func main() {
-	plugin := &GatewayServiceTestPlugin{}
-	sdk.ServePlugin(plugin)
+	fmt.Printf("🧪 Starting %s Plugin v%s\n", PluginName, PluginVersion)
+	fmt.Printf("Gateway service API testing plugin using unified SDK\n")
+
+	plugin := NewGatewayServiceTestPlugin()
+	plugin_sdk.Serve(plugin)
 }

@@ -2341,11 +2341,12 @@ func (x *GetManifestResponse) GetErrorMessage() string {
 
 // Generic RPC call messages (for AI Studio plugins)
 type CallRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Method        string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`   // RPC method name (e.g., "get_statistics")
-	Payload       string                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"` // JSON payload as string
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Method          string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`                                             // RPC method name (e.g., "get_statistics")
+	Payload         string                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`                                           // JSON payload as string
+	ServiceBrokerId uint32                 `protobuf:"varint,3,opt,name=service_broker_id,json=serviceBrokerId,proto3" json:"service_broker_id,omitempty"` // Broker ID for service API access during RPC
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CallRequest) Reset() {
@@ -2390,6 +2391,13 @@ func (x *CallRequest) GetPayload() string {
 		return x.Payload
 	}
 	return ""
+}
+
+func (x *CallRequest) GetServiceBrokerId() uint32 {
+	if x != nil {
+		return x.ServiceBrokerId
+	}
+	return 0
 }
 
 type CallResponse struct {
@@ -2559,6 +2567,7 @@ type AgentMessageRequest struct {
 	ConfigJson           string                      `protobuf:"bytes,6,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"` // Plugin configuration from AgentConfig
 	History              []*AgentConversationMessage `protobuf:"bytes,7,rep,name=history,proto3" json:"history,omitempty"`
 	Context              *PluginContext              `protobuf:"bytes,8,opt,name=context,proto3" json:"context,omitempty"`
+	ServiceBrokerId      uint32                      `protobuf:"varint,9,opt,name=service_broker_id,json=serviceBrokerId,proto3" json:"service_broker_id,omitempty"` // Broker ID for service API access during agent calls
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -2647,6 +2656,13 @@ func (x *AgentMessageRequest) GetContext() *PluginContext {
 		return x.Context
 	}
 	return nil
+}
+
+func (x *AgentMessageRequest) GetServiceBrokerId() uint32 {
+	if x != nil {
+		return x.ServiceBrokerId
+	}
+	return 0
 }
 
 type AgentMessageChunk struct {
@@ -3265,10 +3281,11 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x13GetManifestResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rmanifest_json\x18\x02 \x01(\tR\fmanifestJson\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"?\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"k\n" +
 	"\vCallRequest\x12\x16\n" +
 	"\x06method\x18\x01 \x01(\tR\x06method\x12\x18\n" +
-	"\apayload\x18\x02 \x01(\tR\apayload\"a\n" +
+	"\apayload\x18\x02 \x01(\tR\apayload\x12*\n" +
+	"\x11service_broker_id\x18\x03 \x01(\rR\x0fserviceBrokerId\"a\n" +
 	"\fCallResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\tR\x04data\x12#\n" +
@@ -3278,7 +3295,7 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1f\n" +
 	"\vschema_json\x18\x02 \x01(\tR\n" +
 	"schemaJson\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\xb4\x03\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\xe0\x03\n" +
 	"\x13AgentMessageRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12!\n" +
@@ -3289,7 +3306,8 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\vconfig_json\x18\x06 \x01(\tR\n" +
 	"configJson\x12:\n" +
 	"\ahistory\x18\a \x03(\v2 .plugin.AgentConversationMessageR\ahistory\x12/\n" +
-	"\acontext\x18\b \x01(\v2\x15.plugin.PluginContextR\acontext\"\x83\x02\n" +
+	"\acontext\x18\b \x01(\v2\x15.plugin.PluginContextR\acontext\x12*\n" +
+	"\x11service_broker_id\x18\t \x01(\rR\x0fserviceBrokerId\"\x83\x02\n" +
 	"\x11AgentMessageChunk\x127\n" +
 	"\x04type\x18\x01 \x01(\x0e2#.plugin.AgentMessageChunk.ChunkTypeR\x04type\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12#\n" +

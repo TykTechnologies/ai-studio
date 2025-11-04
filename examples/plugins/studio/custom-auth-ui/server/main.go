@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -10,8 +9,8 @@ import (
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
-	mgmt "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 )
 
 // Embed UI assets and manifest into the binary
@@ -34,36 +33,54 @@ type TokenConfig struct {
 	Description string `json:"description"`
 }
 
-// CustomAuthUIPlugin implements both auth and studio_ui hooks
-// demonstrating the universal plugin architecture
-type CustomAuthUIPlugin struct {
-	pb.UnimplementedPluginServiceServer
-	tokenMap            map[string]*TokenConfig // token -> config
-	tokenByID           map[string]*TokenConfig // id -> config
-	defaultAppID        uint
-	rejectUnknownTokens bool
-	pluginID            uint32
-	serviceAPI          mgmt.AIStudioManagementServiceClient
-	mu                  sync.RWMutex // Protects token maps
-	nextID              int
-}
-
 const (
 	PluginName    = "custom-auth-ui"
 	PluginVersion = "1.0.0"
 )
 
-// OnInitialize implements AIStudioPluginImplementation interface
-func (p *CustomAuthUIPlugin) OnInitialize(serviceAPI mgmt.AIStudioManagementServiceClient, pluginID uint32, config map[string]string) error {
-	p.serviceAPI = serviceAPI
-	p.pluginID = pluginID
-	p.tokenMap = make(map[string]*TokenConfig)
-	p.tokenByID = make(map[string]*TokenConfig)
-	p.nextID = 1
+// CustomAuthUIPlugin implements both auth and UI capabilities
+// using the unified plugin SDK
+type CustomAuthUIPlugin struct {
+	plugin_sdk.BasePlugin
+	tokenMap            map[string]*TokenConfig // token -> config
+	tokenByID           map[string]*TokenConfig // id -> config
+	defaultAppID        uint
+	rejectUnknownTokens bool
+	mu                  sync.RWMutex // Protects token maps
+	nextID              int
+}
 
-	// Set defaults
-	p.rejectUnknownTokens = true
-	p.defaultAppID = 1
+// NewCustomAuthUIPlugin creates a new custom auth UI plugin
+func NewCustomAuthUIPlugin() *CustomAuthUIPlugin {
+	return &CustomAuthUIPlugin{
+		BasePlugin:          plugin_sdk.NewBasePlugin(PluginName, PluginVersion, "Custom Auth with UI"),
+		tokenMap:            make(map[string]*TokenConfig),
+		tokenByID:           make(map[string]*TokenConfig),
+		rejectUnknownTokens: true,
+		defaultAppID:        1,
+		nextID:              1,
+	}
+}
+
+// Initialize implements plugin_sdk.Plugin
+func (p *CustomAuthUIPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+	log.Printf("%s: Initialized in %s runtime", PluginName, ctx.Runtime)
+
+	// Extract and set broker ID for service API access
+	brokerIDStr := ""
+	if id, ok := config["_service_broker_id"]; ok {
+		brokerIDStr = id
+	} else if id, ok := config["service_broker_id"]; ok {
+		brokerIDStr = id
+	}
+
+	if brokerIDStr != "" {
+		var brokerID uint32
+		if _, err := fmt.Sscanf(brokerIDStr, "%d", &brokerID); err == nil {
+			ai_studio_sdk.SetServiceBrokerID(brokerID)
+			log.Printf("%s: Set service broker ID: %d", PluginName, brokerID)
+		}
+	}
 
 	// Parse tokens from config
 	if tokensValue, hasTokens := config["tokens"]; hasTokens {
@@ -104,13 +121,13 @@ func (p *CustomAuthUIPlugin) OnInitialize(serviceAPI mgmt.AIStudioManagementServ
 	return nil
 }
 
-// OnShutdown implements AIStudioPluginImplementation interface
-func (p *CustomAuthUIPlugin) OnShutdown() error {
-	log.Printf("%s: OnShutdown called", PluginName)
+// Shutdown implements plugin_sdk.Plugin
+func (p *CustomAuthUIPlugin) Shutdown(ctx plugin_sdk.Context) error {
+	log.Printf("%s: Shutdown called", PluginName)
 	return nil
 }
 
-// GetAsset implements AIStudioPluginImplementation interface
+// GetAsset implements plugin_sdk.UIProvider
 func (p *CustomAuthUIPlugin) GetAsset(assetPath string) ([]byte, string, error) {
 	// Remove leading slash
 	if strings.HasPrefix(assetPath, "/") {
@@ -148,18 +165,27 @@ func (p *CustomAuthUIPlugin) GetAsset(assetPath string) ([]byte, string, error) 
 	return content, mimeType, nil
 }
 
-// GetManifest implements AIStudioPluginImplementation interface
+// GetManifest implements plugin_sdk.UIProvider
 func (p *CustomAuthUIPlugin) GetManifest() ([]byte, error) {
 	return manifestFile, nil
 }
 
-// GetConfigSchema implements AIStudioPluginImplementation interface
+// ListAssets implements plugin_sdk.UIProvider
+func (p *CustomAuthUIPlugin) ListAssets(pathPrefix string) ([]*pb.AssetInfo, error) {
+	return []*pb.AssetInfo{}, nil
+}
+
+// GetConfigSchema implements plugin_sdk.ConfigProvider
 func (p *CustomAuthUIPlugin) GetConfigSchema() ([]byte, error) {
 	return configSchemaFile, nil
 }
 
-// HandleCall implements AIStudioPluginImplementation interface
-func (p *CustomAuthUIPlugin) HandleCall(method string, payload []byte) ([]byte, error) {
+// HandleRPC implements plugin_sdk.UIProvider
+func (p *CustomAuthUIPlugin) HandleRPC(method string, payload []byte) ([]byte, error) {
+	// Extract broker ID from payload
+	if brokerID := ai_studio_sdk.ExtractBrokerIDFromPayload(payload); brokerID != 0 {
+		ai_studio_sdk.SetServiceBrokerID(brokerID)
+	}
 	log.Printf("%s: RPC Call - method: %s, payload size: %d bytes", PluginName, method, len(payload))
 
 	var result interface{}
@@ -195,8 +221,8 @@ func (p *CustomAuthUIPlugin) HandleCall(method string, payload []byte) ([]byte, 
 	return resultJSON, nil
 }
 
-// Authenticate implements the auth hook
-func (p *CustomAuthUIPlugin) Authenticate(ctx context.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
+// HandleAuth implements plugin_sdk.AuthHandler
+func (p *CustomAuthUIPlugin) HandleAuth(ctx plugin_sdk.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
 	// Extract token from credential
 	token := req.Credential
 
@@ -241,6 +267,66 @@ func (p *CustomAuthUIPlugin) Authenticate(ctx context.Context, req *pb.AuthReque
 			"token":  "unknown",
 		},
 	}, nil
+}
+
+// GetAppByCredential implements plugin_sdk.AuthHandler
+func (p *CustomAuthUIPlugin) GetAppByCredential(ctx plugin_sdk.Context, credential string) (*pb.App, error) {
+	// Extract token from credential
+	token := credential
+	if strings.HasPrefix(token, "Bearer ") {
+		token = strings.TrimPrefix(token, "Bearer ")
+	}
+
+	p.mu.RLock()
+	tokenConfig, tokenFound := p.tokenMap[token]
+	p.mu.RUnlock()
+
+	var appID uint
+	if tokenFound {
+		appID = tokenConfig.AppID
+	} else if !p.rejectUnknownTokens {
+		appID = p.defaultAppID
+	} else {
+		return nil, fmt.Errorf("token not found")
+	}
+
+	// Fetch real app data from service API based on runtime
+	var app *pb.App
+	var err error
+
+	if ctx.Runtime == plugin_sdk.RuntimeGateway {
+		// Use Gateway services
+		resp, err := ctx.Services.Gateway().GetApp(ctx, uint32(appID))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get app from gateway: %w", err)
+		}
+		// Convert gateway proto to pb.App
+		if gwResp, ok := resp.(*pb.GetAppResponse); ok && gwResp.App != nil {
+			app = gwResp.App
+		} else {
+			return nil, fmt.Errorf("failed to get app data from gateway response")
+		}
+	} else {
+		// Use Studio services
+		resp, err := ctx.Services.Studio().GetApp(ctx, uint32(appID))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get app from studio: %w", err)
+		}
+		// Convert studio proto to pb.App
+		if studioResp, ok := resp.(*pb.GetAppResponse); ok && studioResp.App != nil {
+			app = studioResp.App
+		} else {
+			return nil, fmt.Errorf("failed to get app data from studio response")
+		}
+	}
+
+	return app, err
+}
+
+// GetUserByCredential implements plugin_sdk.AuthHandler
+func (p *CustomAuthUIPlugin) GetUserByCredential(ctx plugin_sdk.Context, credential string) (*pb.User, error) {
+	// User data is not available in microgateway - this method is not supported
+	return nil, fmt.Errorf("GetUserByCredential not supported - user data not available in this context")
 }
 
 // === RPC Method Implementations ===
@@ -467,11 +553,8 @@ func maskToken(token string) string {
 
 func main() {
 	log.Printf("Starting %s Plugin v%s", PluginName, PluginVersion)
-	log.Printf("Demonstrating hybrid plugin with auth + studio_ui hooks")
+	log.Printf("Hybrid plugin with auth + UI capabilities using unified SDK")
 
-	// Create plugin implementation
-	plugin := &CustomAuthUIPlugin{}
-
-	// Use SDK's ServePlugin helper
-	ai_studio_sdk.ServePlugin(plugin)
+	plugin := NewCustomAuthUIPlugin()
+	plugin_sdk.Serve(plugin)
 }

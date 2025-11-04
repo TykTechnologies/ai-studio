@@ -6,9 +6,12 @@ toolchain go1.24.7
 
 replace github.com/TykTechnologies/midsommar/v2 => ../../../../../
 
+replace github.com/TykTechnologies/midsommar/microgateway => ../../../../../microgateway
+
 require github.com/TykTechnologies/midsommar/v2 v2.0.0
 
 require (
+	github.com/TykTechnologies/midsommar/microgateway v0.0.0 // indirect
 	github.com/fatih/color v1.17.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/hashicorp/go-hclog v1.6.3 // indirect

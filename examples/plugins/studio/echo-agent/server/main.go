@@ -8,6 +8,7 @@ import (
 	"log"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	mgmt "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 )
@@ -18,15 +19,10 @@ var manifestFile []byte
 //go:embed config.schema.json
 var configSchemaFile []byte
 
-type EchoAgentPlugin struct {
-	serviceAPI      mgmt.AIStudioManagementServiceClient
-	pluginID        uint32
-	prefix          string
-	suffix          string
-	includeMetadata bool
-	defaultLLMID    uint32
-	model           string
-}
+const (
+	PluginName    = "echo-agent"
+	PluginVersion = "1.0.0"
+)
 
 type Config struct {
 	Prefix          string `json:"prefix"`
@@ -36,73 +32,111 @@ type Config struct {
 	Model           string `json:"model"`
 }
 
-// OnInitialize is called when the plugin starts up
-func (p *EchoAgentPlugin) OnInitialize(serviceAPI mgmt.AIStudioManagementServiceClient, pluginID uint32, config map[string]string) error {
-	log.Printf("🤖 EchoAgent: Initialize called with plugin ID %d, config keys: %d", pluginID, len(config))
+type EchoAgentPlugin struct {
+	plugin_sdk.BasePlugin
+	prefix          string
+	suffix          string
+	includeMetadata bool
+	defaultLLMID    uint32
+	model           string
+}
 
-	p.serviceAPI = serviceAPI
-	p.pluginID = pluginID
+// NewEchoAgentPlugin creates a new echo agent plugin
+func NewEchoAgentPlugin() *EchoAgentPlugin {
+	return &EchoAgentPlugin{
+		BasePlugin:      plugin_sdk.NewBasePlugin(PluginName, PluginVersion, "Echo Agent with LLM wrapping"),
+		prefix:          "<<",
+		suffix:          ">>",
+		includeMetadata: false,
+		defaultLLMID:    0,
+	}
+}
 
-	// Set defaults
-	p.prefix = "<<"
-	p.suffix = ">>"
-	p.includeMetadata = false
-	p.defaultLLMID = 0 // 0 means use first available
+// Initialize implements plugin_sdk.Plugin
+func (p *EchoAgentPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+	log.Printf("🤖 %s: Initialized in %s runtime", PluginName, ctx.Runtime)
+
+	// Extract and set broker ID for service API access
+	brokerIDStr := ""
+	if id, ok := config["_service_broker_id"]; ok {
+		brokerIDStr = id
+	} else if id, ok := config["service_broker_id"]; ok {
+		brokerIDStr = id
+	}
+
+	if brokerIDStr != "" {
+		var brokerID uint32
+		if _, err := fmt.Sscanf(brokerIDStr, "%d", &brokerID); err == nil {
+			ai_studio_sdk.SetServiceBrokerID(brokerID)
+			log.Printf("🤖 %s: Set service broker ID: %d", PluginName, brokerID)
+		}
+	}
 
 	// Parse config for prefix, suffix, etc.
 	if prefix, ok := config["prefix"]; ok {
 		p.prefix = prefix
-		log.Printf("🤖 EchoAgent: Using config prefix: %s", p.prefix)
+		log.Printf("🤖 %s: Using config prefix: %s", PluginName, p.prefix)
 	}
 
 	if suffix, ok := config["suffix"]; ok {
 		p.suffix = suffix
-		log.Printf("🤖 EchoAgent: Using config suffix: %s", p.suffix)
+		log.Printf("🤖 %s: Using config suffix: %s", PluginName, p.suffix)
 	}
 
 	if metadataStr, ok := config["include_metadata"]; ok {
 		p.includeMetadata = (metadataStr == "true")
-		log.Printf("🤖 EchoAgent: Using config include_metadata: %v", p.includeMetadata)
+		log.Printf("🤖 %s: Using config include_metadata: %v", PluginName, p.includeMetadata)
 	}
 
 	if llmIDStr, ok := config["default_llm_id"]; ok {
 		var llmID uint64
 		if _, err := fmt.Sscanf(llmIDStr, "%d", &llmID); err == nil {
 			p.defaultLLMID = uint32(llmID)
-			log.Printf("🤖 EchoAgent: Using config default_llm_id: %d", p.defaultLLMID)
+			log.Printf("🤖 %s: Using config default_llm_id: %d", PluginName, p.defaultLLMID)
 		}
 	}
 
 	if modelStr, ok := config["model"]; ok {
 		p.model = modelStr
-		log.Printf("🤖 EchoAgent: Using config model: %s", p.model)
+		log.Printf("🤖 %s: Using config model: %s", PluginName, p.model)
 	}
 
-	log.Printf("🤖 EchoAgent: Initialized successfully - prefix=%s, suffix=%s, metadata=%v, llmID=%d, model=%s",
-		p.prefix, p.suffix, p.includeMetadata, p.defaultLLMID, p.model)
+	log.Printf("🤖 %s: Initialized successfully - prefix=%s, suffix=%s, metadata=%v, llmID=%d, model=%s",
+		PluginName, p.prefix, p.suffix, p.includeMetadata, p.defaultLLMID, p.model)
 	return nil
 }
 
-// OnShutdown is called when the plugin is shutting down
-func (p *EchoAgentPlugin) OnShutdown() error {
-	log.Println("EchoAgent: Shutdown called")
+// Shutdown implements plugin_sdk.Plugin
+func (p *EchoAgentPlugin) Shutdown(ctx plugin_sdk.Context) error {
+	log.Printf("🤖 %s: Shutdown called", PluginName)
 	return nil
 }
 
-// GetManifest returns the plugin manifest
+// GetManifest implements plugin_sdk.UIProvider
 func (p *EchoAgentPlugin) GetManifest() ([]byte, error) {
 	return manifestFile, nil
 }
 
-// GetConfigSchema returns the configuration schema
+// GetConfigSchema implements plugin_sdk.ConfigProvider
 func (p *EchoAgentPlugin) GetConfigSchema() ([]byte, error) {
 	return configSchemaFile, nil
 }
 
-// HandleAgentMessage processes incoming agent messages
+// ListAssets implements plugin_sdk.UIProvider
+func (p *EchoAgentPlugin) ListAssets(pathPrefix string) ([]*pb.AssetInfo, error) {
+	return []*pb.AssetInfo{}, nil
+}
+
+// HandleAgentMessage implements plugin_sdk.AgentPlugin
 func (p *EchoAgentPlugin) HandleAgentMessage(req *pb.AgentMessageRequest, stream pb.PluginService_HandleAgentMessageServer) error {
 	log.Printf("EchoAgent: Received message: %s", req.UserMessage)
 	log.Printf("EchoAgent: Available LLMs: %d", len(req.AvailableLlms))
+
+	// Set service broker ID if provided (needed for LLM calls via service API)
+	if req.ServiceBrokerId != 0 {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+		log.Printf("EchoAgent: Set service broker ID: %d", req.ServiceBrokerId)
+	}
 
 	// Parse config from request if present
 	if req.ConfigJson != "" {
@@ -287,11 +321,9 @@ func (p *EchoAgentPlugin) callLLM(req *pb.AgentMessageRequest, llm *pb.AgentLLMI
 }
 
 func main() {
-	log.Printf("🤖 Starting Echo Agent Plugin with AI Studio SDK")
+	log.Printf("🤖 Starting %s Plugin v%s", PluginName, PluginVersion)
+	log.Printf("Agent plugin with LLM wrapping using unified SDK")
 
-	// Create plugin implementation
-	plugin := &EchoAgentPlugin{}
-
-	// Use SDK's ServeAgentPlugin helper - this handles all the go-plugin boilerplate
-	ai_studio_sdk.ServeAgentPlugin(plugin)
+	plugin := NewEchoAgentPlugin()
+	plugin_sdk.Serve(plugin)
 }

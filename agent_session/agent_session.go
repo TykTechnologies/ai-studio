@@ -239,6 +239,7 @@ func (as *AgentSession) buildAgentRequest(userMessage string, history []map[stri
 		ConfigJson:           string(configJSON),
 		History:              protoHistory,
 		Context:              pluginContext,
+		ServiceBrokerId:      as.serviceBrokerID,
 	}, nil
 }
 

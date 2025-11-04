@@ -337,8 +337,12 @@ func (w *pluginServerWrapper) Call(ctx context.Context, req *pb.CallRequest) (*p
 		}, nil
 	}
 
+	// Note: The server already injects the broker ID into the payload JSON
+	// We just pass it through to the plugin's RPC handler
+	payload := []byte(req.Payload)
+
 	// Call the plugin's RPC handler
-	response, err := provider.HandleRPC(req.Method, []byte(req.Payload))
+	response, err := provider.HandleRPC(req.Method, payload)
 	if err != nil {
 		return &pb.CallResponse{
 			Success:      false,

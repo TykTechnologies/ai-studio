@@ -294,6 +294,7 @@ message GetManifestResponse {
 message CallRequest {
     string method = 1;   // RPC method name (e.g., "get_statistics")
     string payload = 2;  // JSON payload as string
+    uint32 service_broker_id = 3;  // Broker ID for service API access during RPC
 }
 
 message CallResponse {
@@ -324,6 +325,7 @@ message AgentMessageRequest {
     string config_json = 6;                      // Plugin configuration from AgentConfig
     repeated AgentConversationMessage history = 7;
     PluginContext context = 8;
+    uint32 service_broker_id = 9;                // Broker ID for service API access during agent calls
 }
 
 message AgentMessageChunk {

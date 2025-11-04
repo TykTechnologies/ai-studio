@@ -71,6 +71,9 @@ func (p *grpcPluginImpl) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server)
 	// The broker has EITHER MicrogatewayManagementService OR AIStudioManagementService, not both
 
 	runtime := detectRuntime()
+	// IMPORTANT: Cannot use fmt.Printf during plugin startup - breaks go-plugin handshake
+	// Use log.Printf which goes to hclog and doesn't interfere
+
 	if runtime == RuntimeGateway {
 		// Gateway context - use Microgateway SDK
 		if err := initializeMicrogatewaySDK(s, broker, 0); err != nil {

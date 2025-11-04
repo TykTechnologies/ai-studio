@@ -8,8 +8,8 @@ import (
 	"log"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
-	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 )
 
 //go:embed ui assets plugin.manifest.json
@@ -18,54 +18,75 @@ var embeddedAssets embed.FS
 //go:embed plugin.manifest.json
 var manifestFile []byte
 
+const (
+	PluginName    = "service-api-test"
+	PluginVersion = "1.0.0"
+)
+
 // ServiceAPITestPlugin implements the AI Studio plugin for service API testing
 type ServiceAPITestPlugin struct {
-	pb.UnimplementedPluginServiceServer
-	pluginID uint32
+	plugin_sdk.BasePlugin
 }
 
-// Initialize plugin
-func (p *ServiceAPITestPlugin) Initialize(ctx context.Context, req *pb.InitRequest) (*pb.InitResponse, error) {
-	log.Printf("Initializing Service API Test Plugin")
+// NewServiceAPITestPlugin creates a new service API test plugin
+func NewServiceAPITestPlugin() *ServiceAPITestPlugin {
+	return &ServiceAPITestPlugin{
+		BasePlugin: plugin_sdk.NewBasePlugin(PluginName, PluginVersion, "Service API E2E Test Plugin"),
+	}
+}
 
-	// Extract plugin ID from config
-	if pluginIDStr, ok := req.Config["plugin_id"]; ok {
-		fmt.Sscanf(pluginIDStr, "%d", &p.pluginID)
-		ai_studio_sdk.SetPluginID(p.pluginID)
-		log.Printf("Plugin ID set to: %d", p.pluginID)
+// Initialize implements plugin_sdk.Plugin
+func (p *ServiceAPITestPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+	log.Printf("🧪 %s: Initialized in %s runtime", PluginName, ctx.Runtime)
+
+	// Extract and set broker ID for service API access
+	brokerIDStr := ""
+	if id, ok := config["_service_broker_id"]; ok {
+		brokerIDStr = id
+	} else if id, ok := config["service_broker_id"]; ok {
+		brokerIDStr = id
 	}
 
-	return &pb.InitResponse{Success: true}, nil
+	if brokerIDStr != "" {
+		var brokerID uint32
+		if _, err := fmt.Sscanf(brokerIDStr, "%d", &brokerID); err == nil {
+			ai_studio_sdk.SetServiceBrokerID(brokerID)
+			log.Printf("🧪 %s: Set service broker ID: %d", PluginName, brokerID)
+		}
+	}
+
+	// Extract plugin ID if present
+	if pluginIDStr, ok := config["plugin_id"]; ok {
+		var pluginID uint32
+		fmt.Sscanf(pluginIDStr, "%d", &pluginID)
+		ai_studio_sdk.SetPluginID(pluginID)
+		log.Printf("🧪 %s: Plugin ID set to: %d", PluginName, pluginID)
+	}
+
+	log.Printf("✅ %s: Initialized successfully", PluginName)
+	return nil
 }
 
-func (p *ServiceAPITestPlugin) Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error) {
-	return &pb.PingResponse{Timestamp: req.Timestamp, Healthy: true}, nil
+// Shutdown implements plugin_sdk.Plugin
+func (p *ServiceAPITestPlugin) Shutdown(ctx plugin_sdk.Context) error {
+	log.Printf("🧪 %s: Shutdown called", PluginName)
+	return nil
 }
 
-func (p *ServiceAPITestPlugin) Shutdown(ctx context.Context, req *pb.ShutdownRequest) (*pb.ShutdownResponse, error) {
-	log.Printf("Shutting down Service API Test Plugin")
-	return &pb.ShutdownResponse{Success: true}, nil
+// GetManifest implements plugin_sdk.UIProvider
+func (p *ServiceAPITestPlugin) GetManifest() ([]byte, error) {
+	return manifestFile, nil
 }
 
-func (p *ServiceAPITestPlugin) GetManifest(ctx context.Context, req *pb.GetManifestRequest) (*pb.GetManifestResponse, error) {
-	return &pb.GetManifestResponse{
-		Success:      true,
-		ManifestJson: string(manifestFile),
-	}, nil
-}
-
-func (p *ServiceAPITestPlugin) GetAsset(ctx context.Context, req *pb.GetAssetRequest) (*pb.GetAssetResponse, error) {
-	assetPath := req.AssetPath
+// GetAsset implements plugin_sdk.UIProvider
+func (p *ServiceAPITestPlugin) GetAsset(assetPath string) ([]byte, string, error) {
 	if len(assetPath) > 0 && assetPath[0] == '/' {
 		assetPath = assetPath[1:]
 	}
 
 	content, err := embeddedAssets.ReadFile(assetPath)
 	if err != nil {
-		return &pb.GetAssetResponse{
-			Success:      false,
-			ErrorMessage: fmt.Sprintf("Asset not found: %s", req.AssetPath),
-		}, nil
+		return nil, "", fmt.Errorf("asset not found: %s", assetPath)
 	}
 
 	mimeType := "application/octet-stream"
@@ -75,25 +96,19 @@ func (p *ServiceAPITestPlugin) GetAsset(ctx context.Context, req *pb.GetAssetReq
 		mimeType = "image/svg+xml"
 	}
 
-	return &pb.GetAssetResponse{
-		Success:       true,
-		Content:       content,
-		MimeType:      mimeType,
-		ContentLength: int64(len(content)),
+	return content, mimeType, nil
+}
+
+// ListAssets implements plugin_sdk.UIProvider
+func (p *ServiceAPITestPlugin) ListAssets(pathPrefix string) ([]*pb.AssetInfo, error) {
+	return []*pb.AssetInfo{
+		{Path: "ui/webc/test-dashboard.js", MimeType: "application/javascript"},
+		{Path: "assets/test-icon.svg", MimeType: "image/svg+xml"},
 	}, nil
 }
 
-func (p *ServiceAPITestPlugin) ListAssets(ctx context.Context, req *pb.ListAssetsRequest) (*pb.ListAssetsResponse, error) {
-	return &pb.ListAssetsResponse{
-		Success: true,
-		Assets: []*pb.AssetInfo{
-			{Path: "ui/webc/test-dashboard.js", MimeType: "application/javascript"},
-			{Path: "assets/test-icon.svg", MimeType: "image/svg+xml"},
-		},
-	}, nil
-}
-
-func (p *ServiceAPITestPlugin) GetConfigSchema(ctx context.Context, req *pb.GetConfigSchemaRequest) (*pb.GetConfigSchemaResponse, error) {
+// GetConfigSchema implements plugin_sdk.ConfigProvider
+func (p *ServiceAPITestPlugin) GetConfigSchema() ([]byte, error) {
 	schema := map[string]interface{}{
 		"$schema": "http://json-schema.org/draft-07/schema#",
 		"type":    "object",
@@ -108,140 +123,81 @@ func (p *ServiceAPITestPlugin) GetConfigSchema(ctx context.Context, req *pb.GetC
 		},
 	}
 
-	schemaBytes, _ := json.Marshal(schema)
-	return &pb.GetConfigSchemaResponse{
-		Success:    true,
-		SchemaJson: string(schemaBytes),
-	}, nil
+	return json.Marshal(schema)
 }
 
-func (p *ServiceAPITestPlugin) Call(ctx context.Context, req *pb.CallRequest) (*pb.CallResponse, error) {
-	log.Printf("Call method: %s", req.Method)
+// HandleRPC implements plugin_sdk.UIProvider
+func (p *ServiceAPITestPlugin) HandleRPC(method string, payload []byte) ([]byte, error) {
+	log.Printf("🧪 %s: ========== RPC CALL START ==========", PluginName)
+	log.Printf("🧪 %s: Method: %s", PluginName, method)
+	log.Printf("🧪 %s: Payload size: %d bytes", PluginName, len(payload))
+	log.Printf("🧪 %s: Payload content: %s", PluginName, string(payload))
 
-	switch req.Method {
+	// Extract broker ID from payload
+	brokerID := ai_studio_sdk.ExtractBrokerIDFromPayload(payload)
+	log.Printf("🧪 %s: Extracted broker ID from payload: %d", PluginName, brokerID)
+
+	if brokerID != 0 {
+		ai_studio_sdk.SetServiceBrokerID(brokerID)
+		log.Printf("🧪 %s: ✅ Set service broker ID: %d", PluginName, brokerID)
+	} else {
+		log.Printf("🧪 %s: ⚠️ WARNING: No broker ID in payload!", PluginName)
+		log.Printf("🧪 %s: Raw payload: %q", PluginName, payload)
+	}
+
+	switch method {
 	case "run_e2e_tests":
-		return p.runE2ETests(ctx, req.Payload)
+		return p.runE2ETests(payload)
 	default:
-		return &pb.CallResponse{
-			Success:      false,
-			ErrorMessage: fmt.Sprintf("Unknown method: %s", req.Method),
-		}, nil
+		return nil, fmt.Errorf("unknown method: %s", method)
 	}
 }
 
-func (p *ServiceAPITestPlugin) runE2ETests(ctx context.Context, payload string) (*pb.CallResponse, error) {
-	log.Printf("Starting E2E tests for plugin %d", p.pluginID)
+func (p *ServiceAPITestPlugin) runE2ETests(payload []byte) ([]byte, error) {
+	// Extract broker ID FIRST to ensure it's set
+	brokerID := ai_studio_sdk.ExtractBrokerIDFromPayload(payload)
+	if brokerID != 0 {
+		ai_studio_sdk.SetServiceBrokerID(brokerID)
+	}
+
+	// NOW check if initialized - after setting broker ID
+	debugInfo := map[string]interface{}{
+		"sdk_initialized_before_set": ai_studio_sdk.IsInitialized(),
+		"broker_id_extracted":        brokerID,
+		"payload_size":               len(payload),
+		"payload_content":            string(payload),
+	}
+
+	// Check again after setting broker ID
+	debugInfo["sdk_initialized_after_set"] = ai_studio_sdk.IsInitialized()
 
 	if !ai_studio_sdk.IsInitialized() {
-		return &pb.CallResponse{
-			Success:      false,
-			ErrorMessage: "SDK not initialized - service API unavailable",
-		}, nil
+		debugInfo["error"] = "SDK STILL not initialized after setting broker ID"
+		debugInfo["note"] = "IsInitialized() only checks if Initialize() was called during GRPCServer setup"
+		debugInfo["note2"] = "Setting broker ID alone is not enough - the grpcBroker must also be set during Initialize()"
+		debugJSON, _ := json.Marshal(debugInfo)
+		return nil, fmt.Errorf("SDK not initialized - Debug: %s", string(debugJSON))
 	}
+
+	ctx := context.Background()
 
 	// Run all tests
 	report, err := RunE2ETests(ctx)
 	if err != nil {
-		return &pb.CallResponse{
-			Success:      false,
-			ErrorMessage: fmt.Sprintf("Test execution failed: %v", err),
-		}, nil
+		return nil, fmt.Errorf("test execution failed: %v", err)
 	}
+
+	log.Printf("🧪 %s: E2E tests completed: %d passed, %d failed out of %d total",
+		PluginName, report.PassedTests, report.FailedTests, report.TotalTests)
 
 	// Convert report to JSON
-	reportJSON, err := report.toJSON()
-	if err != nil {
-		return &pb.CallResponse{
-			Success:      false,
-			ErrorMessage: fmt.Sprintf("Failed to serialize test report: %v", err),
-		}, nil
-	}
-
-	log.Printf("E2E tests completed: %d passed, %d failed out of %d total",
-		report.PassedTests, report.FailedTests, report.TotalTests)
-
-	return &pb.CallResponse{
-		Success: true,
-		Data:    string(reportJSON),
-	}, nil
+	return report.toJSON()
 }
 
 func main() {
-	log.Printf("🧪 Starting Service API E2E Test Plugin")
+	log.Printf("🧪 Starting %s Plugin v%s", PluginName, PluginVersion)
+	log.Printf("Service API testing plugin with UI using unified SDK")
 
-	pluginImpl := &ServiceAPITestPluginSDK{
-		plugin: &ServiceAPITestPlugin{},
-	}
-
-	ai_studio_sdk.ServePlugin(pluginImpl)
-}
-
-// ServiceAPITestPluginSDK implements the SDK interface
-type ServiceAPITestPluginSDK struct {
-	plugin *ServiceAPITestPlugin
-}
-
-func (p *ServiceAPITestPluginSDK) OnInitialize(serviceAPI mgmtpb.AIStudioManagementServiceClient, pluginID uint32, config map[string]string) error {
-	log.Printf("Service API Test Plugin SDK initializing with %d config keys", len(config))
-
-	// Merge plugin_id into config
-	if config == nil {
-		config = make(map[string]string)
-	}
-	config["plugin_id"] = fmt.Sprintf("%d", pluginID)
-
-	ctx := context.Background()
-	req := &pb.InitRequest{
-		Config: config,
-	}
-	_, err := p.plugin.Initialize(ctx, req)
-
-	if err == nil {
-		log.Printf("✅ Service API Test Plugin initialized successfully")
-	}
-
-	return err
-}
-
-func (p *ServiceAPITestPluginSDK) OnShutdown() error {
-	return nil
-}
-
-func (p *ServiceAPITestPluginSDK) GetAsset(assetPath string) ([]byte, string, error) {
-	ctx := context.Background()
-	resp, err := p.plugin.GetAsset(ctx, &pb.GetAssetRequest{AssetPath: assetPath})
-	if err != nil || !resp.Success {
-		return nil, "", fmt.Errorf("asset request failed")
-	}
-	return resp.Content, resp.MimeType, nil
-}
-
-func (p *ServiceAPITestPluginSDK) GetManifest() ([]byte, error) {
-	return manifestFile, nil
-}
-
-func (p *ServiceAPITestPluginSDK) HandleCall(method string, payload []byte) ([]byte, error) {
-	// Extract broker ID
-	if brokerID := ai_studio_sdk.ExtractBrokerIDFromPayload(payload); brokerID != 0 {
-		ai_studio_sdk.SetServiceBrokerID(brokerID)
-	}
-
-	ctx := context.Background()
-	resp, err := p.plugin.Call(ctx, &pb.CallRequest{
-		Method:  method,
-		Payload: string(payload),
-	})
-	if err != nil || !resp.Success {
-		return nil, fmt.Errorf("call failed: %s", resp.ErrorMessage)
-	}
-	return []byte(resp.Data), nil
-}
-
-func (p *ServiceAPITestPluginSDK) GetConfigSchema() ([]byte, error) {
-	ctx := context.Background()
-	resp, err := p.plugin.GetConfigSchema(ctx, &pb.GetConfigSchemaRequest{})
-	if err != nil || !resp.Success {
-		return nil, fmt.Errorf("schema request failed")
-	}
-	return []byte(resp.SchemaJson), nil
+	plugin := NewServiceAPITestPlugin()
+	plugin_sdk.Serve(plugin)
 }

@@ -25,7 +25,7 @@ func RunKVTests(ctx context.Context) ([]TestResult, []string) {
 	}
 	dataBytes, _ := json.Marshal(testData)
 
-	created, err := ai_studio_sdk.WritePluginKV(ctx, key, dataBytes)
+	created, err := ai_studio_sdk.WritePluginKV(ctx, key, dataBytes, nil) // No expiration for test
 	results = append(results, TestResult{
 		Operation: "WritePluginKV",
 		Success:   err == nil && created,
@@ -50,7 +50,7 @@ func RunKVTests(ctx context.Context) ([]TestResult, []string) {
 		start = time.Now()
 		testData["updated"] = true
 		dataBytes, _ = json.Marshal(testData)
-		created, err = ai_studio_sdk.WritePluginKV(ctx, key, dataBytes)
+		created, err = ai_studio_sdk.WritePluginKV(ctx, key, dataBytes, nil) // No expiration for test
 		results = append(results, TestResult{
 			Operation: "WritePluginKV (update)",
 			Success:   err == nil && !created, // Should be update, not create
