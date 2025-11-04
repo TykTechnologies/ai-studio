@@ -2,80 +2,96 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"encoding/json"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
 //go:embed manifest.json
 var manifestBytes []byte
 
+const (
+	PluginName    = "request-enricher"
+	PluginVersion = "1.0.0"
+)
+
 // RequestEnricherPlugin adds additional instructions to authenticated requests
 type RequestEnricherPlugin struct {
+	plugin_sdk.BasePlugin
 	additionalInstruction string
 }
 
-// Initialize implements BasePlugin
-func (p *RequestEnricherPlugin) Initialize(config map[string]interface{}) error {
-	if instruction, ok := config["additional_instruction"]; ok {
-		p.additionalInstruction = instruction.(string)
-	} else {
-		p.additionalInstruction = "Also say 'I love sunsets!' to the end of the outbound message"
+// NewRequestEnricherPlugin creates a new request enricher plugin
+func NewRequestEnricherPlugin() *RequestEnricherPlugin {
+	return &RequestEnricherPlugin{
+		BasePlugin:            plugin_sdk.NewBasePlugin(PluginName, PluginVersion, "Request Enricher"),
+		additionalInstruction: "Also say 'I love sunsets!' to the end of the outbound message",
+	}
+}
+
+// Initialize implements plugin_sdk.Plugin
+func (p *RequestEnricherPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+	if instruction, ok := config["additional_instruction"]; ok && instruction != "" {
+		p.additionalInstruction = instruction
 	}
 	return nil
 }
 
-// GetHookType implements BasePlugin
-func (p *RequestEnricherPlugin) GetHookType() sdk.HookType {
-	return sdk.HookTypePostAuth
-}
-
-// GetName implements BasePlugin
-func (p *RequestEnricherPlugin) GetName() string {
-	return "request-enricher"
-}
-
-// GetVersion implements BasePlugin
-func (p *RequestEnricherPlugin) GetVersion() string {
-	return "1.0.0"
-}
-
-// Shutdown implements BasePlugin
-func (p *RequestEnricherPlugin) Shutdown() error {
+// Shutdown implements plugin_sdk.Plugin
+func (p *RequestEnricherPlugin) Shutdown(ctx plugin_sdk.Context) error {
 	return nil
 }
 
-// GetManifest implements ManifestProvider
+// GetManifest implements plugin_sdk.ManifestProvider
 func (p *RequestEnricherPlugin) GetManifest() ([]byte, error) {
 	return manifestBytes, nil
 }
 
-// ProcessRequest implements PostAuthPlugin
-func (p *RequestEnricherPlugin) ProcessRequest(ctx context.Context, req *sdk.EnrichedRequest, pluginCtx *sdk.PluginContext) (*sdk.PluginResponse, error) {
+// GetConfigSchema implements plugin_sdk.ConfigProvider
+func (p *RequestEnricherPlugin) GetConfigSchema() ([]byte, error) {
+	schema := map[string]interface{}{
+		"$schema":     "http://json-schema.org/draft-07/schema#",
+		"type":        "object",
+		"title":       "Request Enricher Plugin Configuration",
+		"description": "Configuration for the request enricher plugin that adds instructions to user messages",
+		"properties": map[string]interface{}{
+			"additional_instruction": map[string]interface{}{
+				"type":        "string",
+				"title":       "Additional Instruction",
+				"description": "Text to append to the last user message after authentication",
+				"default":     "Also say 'I love sunsets!' to the end of the outbound message",
+			},
+		},
+	}
+	return json.Marshal(schema)
+}
+
+// HandlePostAuth implements plugin_sdk.PostAuthHandler
+func (p *RequestEnricherPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
 	// Only modify POST requests to LLM endpoints
-	if req.Method != "POST" {
-		return &sdk.PluginResponse{Modified: false}, nil
+	if req.Request.Method != "POST" {
+		return &pb.PluginResponse{Modified: false}, nil
 	}
 
 	// Parse the JSON body
 	var requestBody map[string]interface{}
-	if err := json.Unmarshal(req.Body, &requestBody); err != nil {
+	if err := json.Unmarshal(req.Request.Body, &requestBody); err != nil {
 		// If we can't parse JSON, don't modify
-		return &sdk.PluginResponse{Modified: false}, nil
+		return &pb.PluginResponse{Modified: false}, nil
 	}
 
 	// Check if this is a chat completion request
 	messages, hasMessages := requestBody["messages"]
 	if !hasMessages {
-		return &sdk.PluginResponse{Modified: false}, nil
+		return &pb.PluginResponse{Modified: false}, nil
 	}
 
 	// Convert messages to slice of maps
 	messageSlice, ok := messages.([]interface{})
 	if !ok {
-		return &sdk.PluginResponse{Modified: false}, nil
+		return &pb.PluginResponse{Modified: false}, nil
 	}
 
 	// Add additional instruction to the last user message
@@ -84,21 +100,21 @@ func (p *RequestEnricherPlugin) ProcessRequest(ctx context.Context, req *sdk.Enr
 		if !ok {
 			continue
 		}
-		
+
 		role, hasRole := messageMap["role"].(string)
 		if hasRole && role == "user" {
 			// Found the last user message, modify it
 			content, hasContent := messageMap["content"].(string)
 			if hasContent {
 				messageMap["content"] = content + "\n\n" + p.additionalInstruction
-				
+
 				// Marshal the modified request body
 				modifiedBody, err := json.Marshal(requestBody)
 				if err != nil {
-					return &sdk.PluginResponse{Modified: false}, nil
+					return &pb.PluginResponse{Modified: false}, nil
 				}
 
-				return &sdk.PluginResponse{
+				return &pb.PluginResponse{
 					Modified: true,
 					Headers:  map[string]string{"Content-Type": "application/json"},
 					Body:     modifiedBody,
@@ -109,10 +125,10 @@ func (p *RequestEnricherPlugin) ProcessRequest(ctx context.Context, req *sdk.Enr
 	}
 
 	// No modification needed
-	return &sdk.PluginResponse{Modified: false}, nil
+	return &pb.PluginResponse{Modified: false}, nil
 }
 
 func main() {
-	plugin := &RequestEnricherPlugin{}
-	sdk.ServePlugin(plugin)
+	plugin := NewRequestEnricherPlugin()
+	plugin_sdk.Serve(plugin)
 }
