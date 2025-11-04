@@ -55,13 +55,10 @@ const Drawer = () => {
       id: 'plugins',
       text: 'Plugins',
       icon: <Icon name="screwdriver-wrench" />,
-      path: '/admin/plugins'
-    },
-    {
-      id: 'marketplace',
-      text: 'Marketplace',
-      icon: <Icon name="store" />,
-      path: '/admin/marketplace'
+      subItems: [
+        { id: 'marketplace', text: 'Marketplace', path: '/admin/marketplace' },
+        { id: 'plugin-list', text: 'Installed Plugins', path: '/admin/plugins' },
+      ],
     },
     {
       id: 'llm-management',
