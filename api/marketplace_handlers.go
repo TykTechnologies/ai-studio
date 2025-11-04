@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -219,9 +220,10 @@ func (h *MarketplaceHandlers) GetAvailableUpdates(c *gin.Context) {
 func (h *MarketplaceHandlers) SyncMarketplace(c *gin.Context) {
 	log.Info().Msg("Manual marketplace sync triggered")
 
-	// Run sync in background to avoid blocking the request
+	// Run sync in background with a new context (not tied to HTTP request)
 	go func() {
-		if err := h.marketplaceService.SyncAll(c.Request.Context()); err != nil {
+		ctx := context.Background()
+		if err := h.marketplaceService.SyncAll(ctx); err != nil {
 			log.Error().Err(err).Msg("Manual marketplace sync failed")
 		} else {
 			log.Info().Msg("Manual marketplace sync completed successfully")
