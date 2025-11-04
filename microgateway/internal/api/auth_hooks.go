@@ -252,7 +252,7 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 					errMsg = "authentication rejected by auth plugin"
 				}
 				log.Debug().Str("error", errMsg).Msg("Auth plugin rejected authentication")
-				return 0, false, fmt.Errorf(errMsg)
+				return 0, false, fmt.Errorf("%s", errMsg)
 			}
 
 			// Extract app_id from plugin response (it's a string in the interface)

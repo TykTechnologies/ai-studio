@@ -130,6 +130,7 @@ func TestConfig_Validate(t *testing.T) {
 			modifyConfig: func(c *Config) {
 				c.Security.EncryptionKey = "12345678901234567890123456789012"
 				c.Security.JWTSecret = "valid-jwt-secret"
+				c.HubSpoke.Mode = "standalone" // Set gateway mode to avoid validation error
 			},
 			expectError: false,
 		},

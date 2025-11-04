@@ -118,7 +118,7 @@ class EdgeGatewayService {
   async getReloadStatus(operationId) {
     try {
       const response = await apiClient.get(`/reload-operations/${operationId}/status`);
-      
+
       if (response.data?.data) {
         const operation = response.data.data;
         return {
@@ -132,11 +132,21 @@ class EdgeGatewayService {
           initiatedAt: operation.attributes.initiated_at,
         };
       }
-      
+
       return null;
     } catch (error) {
       console.error('Error fetching reload status:', error);
       throw new Error(error.response?.data?.message || 'Failed to fetch reload status');
+    }
+  }
+
+  async deleteEdgeGateway(edgeId) {
+    try {
+      await apiClient.delete(`/edges/${edgeId}`);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting edge gateway:', error);
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to delete edge gateway');
     }
   }
 

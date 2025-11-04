@@ -297,6 +297,10 @@ func (s *MarketplaceService) indexedPluginToModel(indexed *marketplace.IndexedPl
 		PluginCreatedAt:  indexed.CreatedAt,
 		PluginUpdatedAt:  indexed.UpdatedAt,
 		Deprecated:       indexed.Deprecated,
+		RequiredServices: indexed.RequiredServices,
+		RequiredKV:       indexed.RequiredKV,
+		RequiredRPC:      indexed.RequiredRPC,
+		RequiredUI:       indexed.RequiredUI,
 		LastSynced:       time.Now(),
 		SyncedFromURL:    sourceURL,
 	}

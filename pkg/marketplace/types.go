@@ -143,6 +143,12 @@ type IndexedPlugin struct {
 	UpdatedAt        time.Time `yaml:"updated_at" json:"updated_at"`
 	Deprecated       bool      `yaml:"deprecated" json:"deprecated"`
 	ManifestURL      string    `yaml:"manifest_url" json:"manifest_url"` // URL to full manifest.yaml
+
+	// Permissions
+	RequiredServices []string `yaml:"required_services" json:"required_services"`
+	RequiredKV       []string `yaml:"required_kv" json:"required_kv"`
+	RequiredRPC      []string `yaml:"required_rpc" json:"required_rpc"`
+	RequiredUI       []string `yaml:"required_ui" json:"required_ui"`
 }
 
 // SearchFilters contains marketplace search and filter parameters

@@ -300,6 +300,7 @@ func TestFullAuthorizationCodeFlowAndProxyAccess(t *testing.T) {
 		[]uint{dummyTool.ID}, // one tool
 		nil,                  // no budget
 		nil,                  // no budget start date
+		nil,                  // no metadata
 	)
 	require.NoError(t, err)
 	require.NotNil(t, testApp)

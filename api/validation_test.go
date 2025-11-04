@@ -6,6 +6,16 @@ import (
 )
 
 func TestValidatePluginCommand(t *testing.T) {
+	// Ensure ALLOW_INTERNAL_NETWORK_ACCESS is not set for this test
+	// This test expects internal network access to be blocked by default
+	originalValue := os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS")
+	os.Unsetenv("ALLOW_INTERNAL_NETWORK_ACCESS")
+	t.Cleanup(func() {
+		if originalValue != "" {
+			os.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", originalValue)
+		}
+	})
+
 	testCases := []struct {
 		name        string
 		command     string

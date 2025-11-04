@@ -696,7 +696,7 @@ func TestHandleToolRequest_ToolNotFound(t *testing.T) {
 		AccessToSSOConfig:    false,
 	})
 	require.NoError(t, err)
-	app, err := service.CreateApp("Test App NotFound", "App for NotFound testing", user.ID, []uint{}, []uint{}, []uint{registeredTool.ID}, nil, nil) // Associate with valid tool
+	app, err := service.CreateApp("Test App NotFound", "App for NotFound testing", user.ID, []uint{}, []uint{}, []uint{registeredTool.ID}, nil, nil, nil) // Associate with valid tool
 	require.NoError(t, err)
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)
@@ -790,7 +790,7 @@ func TestHandleToolRequest_OperationNotFound(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, registeredToolDef)
 
-	app, err := service.CreateApp("Test App OpNotFound", "App for OpNotFound testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil)
+	app, err := service.CreateApp("Test App OpNotFound", "App for OpNotFound testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil, nil)
 	require.NoError(t, err)
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)
@@ -889,7 +889,7 @@ func TestHandleToolRequest_BackendServerError(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, registeredToolDef)
 
-	app, err := service.CreateApp("Test App ServerError", "App for ServerError testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil)
+	app, err := service.CreateApp("Test App ServerError", "App for ServerError testing", user.ID, []uint{}, []uint{}, []uint{registeredToolDef.ID}, nil, nil, nil)
 	require.NoError(t, err)
 	// Activate the app's credential
 	err = service.ActivateAppCredential(app.ID)

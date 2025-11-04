@@ -88,7 +88,6 @@ func createPerformanceTestData(t *testing.T, db *gorm.DB) {
 		plugin := &models.Plugin{
 			Model:       gorm.Model{ID: uint(i)},
 			Name:        fmt.Sprintf("TestPlugin%d", i),
-			Slug:        fmt.Sprintf("test-plugin-%d", i),
 			Description: fmt.Sprintf("Test plugin %d", i),
 			Command:     fmt.Sprintf("./plugin%d", i),
 			HookType:    "post_auth",

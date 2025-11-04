@@ -31,6 +31,8 @@ func (m *MockGateway) Stop(ctx context.Context) error                    { retur
 func (m *MockGateway) Handler() http.Handler                             { return http.NotFoundHandler() }
 func (m *MockGateway) GetPort() int                                      { return 8080 }
 func (m *MockGateway) AddResponseHook(hook proxy.ResponseHook)           { /* no-op for testing */ }
+func (m *MockGateway) SetAuthHooks(hooks *proxy.AuthHooks)               { /* no-op for testing */ }
+func (m *MockGateway) SetPostAuthCallback(callback proxy.PostAuthCallback) { /* no-op for testing */ }
 
 func TestReloadConfiguration_Handler(t *testing.T) {
 	_, router := setupTestHandlers(t)

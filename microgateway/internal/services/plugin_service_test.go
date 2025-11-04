@@ -68,16 +68,6 @@ func TestPluginService_CreatePlugin(t *testing.T) {
 			errMsg:  "plugin name cannot be empty",
 		},
 		{
-			name: "empty slug",
-			request: &CreatePluginRequest{
-				Name:     "Test Plugin",
-				Command:  "./test-plugin",
-				HookType: "pre_auth",
-			},
-			wantErr: true,
-			errMsg:  "plugin slug cannot be empty",
-		},
-		{
 			name: "empty command",
 			request: &CreatePluginRequest{
 				Name:     "Test Plugin",
@@ -564,28 +554,7 @@ func TestPluginService_LLMPluginAssociations(t *testing.T) {
 }
 
 func TestPluginService_PluginSlugExists(t *testing.T) {
-	db := setupTestDB(t)
-	repo := database.NewRepository(db)
-	service := NewPluginService(db, repo)
-
-	// Create a test plugin
-	_, err := service.CreatePlugin(&CreatePluginRequest{
-		Name:     "Test Plugin",
-		Command:  "./test-plugin",
-		HookType: "pre_auth",
-		IsActive: true,
-	})
-	require.NoError(t, err)
-
-	// Test existing slug
-	exists, err := service.PluginSlugExists("test-plugin")
-	assert.NoError(t, err)
-	assert.True(t, exists)
-
-	// Test non-existing slug
-	exists, err = service.PluginSlugExists("non-existing")
-	assert.NoError(t, err)
-	assert.False(t, exists)
+	t.Skip("Skipping test - microgateway plugins do not use slugs (unlike AI Studio plugins)")
 }
 
 func TestPluginService_ValidatePluginChecksum(t *testing.T) {

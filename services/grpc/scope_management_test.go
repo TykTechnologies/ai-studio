@@ -19,6 +19,10 @@ func TestManifestScopeExtraction(t *testing.T) {
 			Version:     "1.0.0",
 			Name:        "Test Plugin",
 			Description: "Test plugin for scope extraction",
+			Capabilities: &models.PluginCapabilities{
+				Hooks:       []string{"post_auth"},
+				PrimaryHook: "post_auth",
+			},
 			Permissions: struct {
 				KV       []string `json:"kv"`
 				RPC      []string `json:"rpc"`
@@ -51,6 +55,10 @@ func TestManifestScopeExtraction(t *testing.T) {
 			ID:      "test.plugin.no.scopes",
 			Version: "1.0.0",
 			Name:    "Plugin Without Scopes",
+			Capabilities: &models.PluginCapabilities{
+				Hooks:       []string{"studio_ui"},
+				PrimaryHook: "studio_ui",
+			},
 			Permissions: struct {
 				KV       []string `json:"kv"`
 				RPC      []string `json:"rpc"`
@@ -74,6 +82,10 @@ func TestManifestScopeExtraction(t *testing.T) {
 			ID:      "valid.plugin",
 			Version: "1.0.0",
 			Name:    "Valid Plugin",
+			Capabilities: &models.PluginCapabilities{
+				Hooks:       []string{"post_auth"},
+				PrimaryHook: "post_auth",
+			},
 			Permissions: struct {
 				KV       []string `json:"kv"`
 				RPC      []string `json:"rpc"`
@@ -93,6 +105,10 @@ func TestManifestScopeExtraction(t *testing.T) {
 			ID:      "analytics.plugin",
 			Version: "1.0.0",
 			Name:    "Analytics Plugin",
+			Capabilities: &models.PluginCapabilities{
+				Hooks:       []string{"post_auth"},
+				PrimaryHook: "post_auth",
+			},
 			Permissions: struct {
 				KV       []string `json:"kv"`
 				RPC      []string `json:"rpc"`
@@ -251,6 +267,10 @@ func TestPluginManifestJSONSerialization(t *testing.T) {
 			Version:     "1.0.0",
 			Name:        "Serialization Test Plugin",
 			Description: "Test plugin for JSON serialization",
+			Capabilities: &models.PluginCapabilities{
+				Hooks:       []string{"studio_ui"},
+				PrimaryHook: "studio_ui",
+			},
 			Permissions: struct {
 				KV       []string `json:"kv"`
 				RPC      []string `json:"rpc"`

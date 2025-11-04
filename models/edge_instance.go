@@ -60,9 +60,10 @@ func (e *EdgeInstance) Update(db *gorm.DB) error {
 	return db.Save(e).Error
 }
 
-// Delete soft deletes an edge instance
+// Delete permanently deletes an edge instance
+// We use hard delete (not soft delete) to allow edges to re-register with the same edge_id
 func (e *EdgeInstance) Delete(db *gorm.DB) error {
-	return db.Delete(e).Error
+	return db.Unscoped().Delete(e).Error
 }
 
 // UpdateHeartbeat updates the last heartbeat timestamp
