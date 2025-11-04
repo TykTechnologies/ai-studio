@@ -2,67 +2,88 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"encoding/json"
 	"strings"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
 //go:embed manifest.json
 var manifestBytes []byte
 
+const (
+	PluginName    = "response-modifier"
+	PluginVersion = "1.0.0"
+)
+
 // ResponseModifierPlugin modifies LLM responses
 type ResponseModifierPlugin struct {
+	plugin_sdk.BasePlugin
 	restModifier   string
 	streamModifier string
 }
 
-// Initialize implements BasePlugin
-func (p *ResponseModifierPlugin) Initialize(config map[string]interface{}) error {
-	if restMod, ok := config["rest_modifier"]; ok {
-		p.restModifier = restMod.(string)
-	} else {
-		p.restModifier = "REST RESPONSE MOD"
+// NewResponseModifierPlugin creates a new response modifier plugin
+func NewResponseModifierPlugin() *ResponseModifierPlugin {
+	return &ResponseModifierPlugin{
+		BasePlugin:     plugin_sdk.NewBasePlugin(PluginName, PluginVersion, "Response Modifier"),
+		restModifier:   "REST RESPONSE MOD",
+		streamModifier: "STREAM RESPONSE MOD",
+	}
+}
+
+// Initialize implements plugin_sdk.Plugin
+func (p *ResponseModifierPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+	if restMod, ok := config["rest_modifier"]; ok && restMod != "" {
+		p.restModifier = restMod
 	}
 
-	if streamMod, ok := config["stream_modifier"]; ok {
-		p.streamModifier = streamMod.(string)
-	} else {
-		p.streamModifier = "STREAM RESPONSE MOD"
+	if streamMod, ok := config["stream_modifier"]; ok && streamMod != "" {
+		p.streamModifier = streamMod
 	}
 
 	return nil
 }
 
-// GetHookType implements BasePlugin
-func (p *ResponseModifierPlugin) GetHookType() sdk.HookType {
-	return sdk.HookTypeOnResponse
-}
-
-// GetName implements BasePlugin
-func (p *ResponseModifierPlugin) GetName() string {
-	return "response-modifier"
-}
-
-// GetVersion implements BasePlugin
-func (p *ResponseModifierPlugin) GetVersion() string {
-	return "1.0.0"
-}
-
-// Shutdown implements BasePlugin
-func (p *ResponseModifierPlugin) Shutdown() error {
+// Shutdown implements plugin_sdk.Plugin
+func (p *ResponseModifierPlugin) Shutdown(ctx plugin_sdk.Context) error {
 	return nil
 }
 
-// GetManifest implements ManifestProvider
+// GetManifest implements plugin_sdk.ManifestProvider
 func (p *ResponseModifierPlugin) GetManifest() ([]byte, error) {
 	return manifestBytes, nil
 }
 
-// OnBeforeWriteHeaders implements ResponsePlugin (new clean interface)
-func (p *ResponseModifierPlugin) OnBeforeWriteHeaders(ctx context.Context, req *sdk.HeadersRequest, pluginCtx *sdk.PluginContext) (*sdk.HeadersResponse, error) {
+// GetConfigSchema implements plugin_sdk.ConfigProvider
+func (p *ResponseModifierPlugin) GetConfigSchema() ([]byte, error) {
+	schema := map[string]interface{}{
+		"$schema":     "http://json-schema.org/draft-07/schema#",
+		"type":        "object",
+		"title":       "Response Modifier Plugin Configuration",
+		"description": "Configuration for the response modifier plugin",
+		"properties": map[string]interface{}{
+			"rest_modifier": map[string]interface{}{
+				"type":        "string",
+				"title":       "REST Response Modifier",
+				"description": "Text to append to REST (non-streaming) responses",
+				"default":     "REST RESPONSE MOD",
+			},
+			"stream_modifier": map[string]interface{}{
+				"type":        "string",
+				"title":       "Stream Response Modifier",
+				"description": "Text to append to streaming response chunks",
+				"default":     "STREAM RESPONSE MOD",
+			},
+		},
+	}
+	return json.Marshal(schema)
+}
+
+// OnBeforeWriteHeaders implements plugin_sdk.ResponseHandler
+func (p *ResponseModifierPlugin) OnBeforeWriteHeaders(ctx plugin_sdk.Context, req *pb.HeadersRequest) (*pb.HeadersResponse, error) {
 	// Add custom response headers
 	modifiedHeaders := make(map[string]string)
 	
@@ -75,14 +96,14 @@ func (p *ResponseModifierPlugin) OnBeforeWriteHeaders(ctx context.Context, req *
 	modifiedHeaders["X-Plugin-Modified"] = "response-modifier"
 	modifiedHeaders["X-Modification-Type"] = "headers"
 
-	return &sdk.HeadersResponse{
+	return &pb.HeadersResponse{
 		Modified: true,
 		Headers:  modifiedHeaders,
 	}, nil
 }
 
-// OnBeforeWrite implements ResponsePlugin (new clean interface)
-func (p *ResponseModifierPlugin) OnBeforeWrite(ctx context.Context, req *sdk.ResponseWriteRequest, pluginCtx *sdk.PluginContext) (*sdk.ResponseWriteResponse, error) {
+// OnBeforeWrite implements plugin_sdk.ResponseHandler
+func (p *ResponseModifierPlugin) OnBeforeWrite(ctx plugin_sdk.Context, req *pb.ResponseWriteRequest) (*pb.ResponseWriteResponse, error) {
 	// Choose modifier based on stream chunk vs complete response
 	modifier := p.restModifier
 	if req.IsStreamChunk {
@@ -93,7 +114,7 @@ func (p *ResponseModifierPlugin) OnBeforeWrite(ctx context.Context, req *sdk.Res
 	var responseBody map[string]interface{}
 	if err := json.Unmarshal(req.Body, &responseBody); err != nil {
 		// If we can't parse JSON, don't modify
-		return &sdk.ResponseWriteResponse{
+		return &pb.ResponseWriteResponse{
 			Modified: false,
 			Body:     req.Body,
 			Headers:  req.Headers,
@@ -111,10 +132,10 @@ func (p *ResponseModifierPlugin) OnBeforeWrite(ctx context.Context, req *sdk.Res
 						
 						modifiedData, err := json.Marshal(responseBody)
 						if err != nil {
-							return &sdk.ResponseWriteResponse{Modified: false, Body: req.Body, Headers: req.Headers}, nil
+							return &pb.ResponseWriteResponse{Modified: false, Body: req.Body, Headers: req.Headers}, nil
 						}
 						
-						return &sdk.ResponseWriteResponse{
+						return &pb.ResponseWriteResponse{
 							Modified: true,
 							Body:     modifiedData,
 							Headers:  req.Headers,
@@ -135,10 +156,10 @@ func (p *ResponseModifierPlugin) OnBeforeWrite(ctx context.Context, req *sdk.Res
 				
 				modifiedData, err := json.Marshal(responseBody)
 				if err != nil {
-					return &sdk.ResponseWriteResponse{Modified: false, Body: req.Body, Headers: req.Headers}, nil
+					return &pb.ResponseWriteResponse{Modified: false, Body: req.Body, Headers: req.Headers}, nil
 				}
 				
-				return &sdk.ResponseWriteResponse{
+				return &pb.ResponseWriteResponse{
 					Modified: true,
 					Body:     modifiedData,
 					Headers:  req.Headers,
@@ -148,7 +169,7 @@ func (p *ResponseModifierPlugin) OnBeforeWrite(ctx context.Context, req *sdk.Res
 	}
 
 	// No modification needed
-	return &sdk.ResponseWriteResponse{
+	return &pb.ResponseWriteResponse{
 		Modified: false,
 		Body:     req.Body,
 		Headers:  req.Headers,
@@ -156,6 +177,6 @@ func (p *ResponseModifierPlugin) OnBeforeWrite(ctx context.Context, req *sdk.Res
 }
 
 func main() {
-	plugin := &ResponseModifierPlugin{}
-	sdk.ServePlugin(plugin)
+	plugin := NewResponseModifierPlugin()
+	plugin_sdk.Serve(plugin)
 }

@@ -88,3 +88,4 @@ examples/plugins/studio/llm-rate-limiter/llm-rate-limiter
 examples/plugins/studio/llm-rate-limiter-multiphase/llm-rate-limiter
 examples/plugins/gateway/message_modifier/message-modifier
 examples/plugins/gateway/request_enricher/request-enricher
+examples/plugins/gateway/response_modifier/response-modifier
