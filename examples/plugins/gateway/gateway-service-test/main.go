@@ -1,15 +1,14 @@
 package main
 
 import (
-	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	mgwsdk "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	mgmtpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
 )
 
 //go:embed manifest.json
@@ -34,43 +33,17 @@ func NewGatewayServiceTestPlugin() *GatewayServiceTestPlugin {
 
 // Initialize implements plugin_sdk.Plugin
 func (p *GatewayServiceTestPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
-	fmt.Printf("🧪 %s: Initialized in %s runtime\n", PluginName, ctx.Runtime)
-
-	// Extract and set broker ID for service API access
-	brokerIDStr := ""
-	if id, ok := config["_service_broker_id"]; ok {
-		brokerIDStr = id
-	} else if id, ok := config["service_broker_id"]; ok {
-		brokerIDStr = id
-	}
-
-	if brokerIDStr != "" {
-		var brokerID uint32
-		if _, err := fmt.Sscanf(brokerIDStr, "%d", &brokerID); err == nil {
-			mgwsdk.SetServiceBrokerID(brokerID)
-			fmt.Printf("🧪 %s: Set service broker ID: %d\n", PluginName, brokerID)
-		}
-	}
-
-	// Extract plugin ID if present
-	if pluginIDStr, ok := config["_plugin_id"]; ok {
-		var pluginID uint32
-		fmt.Sscanf(pluginIDStr, "%d", &pluginID)
-		mgwsdk.SetPluginID(pluginID)
-		fmt.Printf("🧪 %s: Plugin ID set to: %d\n", PluginName, pluginID)
-	}
-
-	fmt.Printf("✅ %s: Initialized successfully\n", PluginName)
+	// Note: Broker ID and Plugin ID are automatically set up by unified SDK
+	// No manual setup needed
 	return nil
 }
 
 // Shutdown implements plugin_sdk.Plugin
 func (p *GatewayServiceTestPlugin) Shutdown(ctx plugin_sdk.Context) error {
-	fmt.Printf("🧪 %s: Shutdown called\n", PluginName)
 	return nil
 }
 
-// GetManifest implements plugin_sdk.UIProvider
+// GetManifest implements plugin_sdk.ManifestProvider
 func (p *GatewayServiceTestPlugin) GetManifest() ([]byte, error) {
 	return manifestBytes, nil
 }
@@ -90,13 +63,11 @@ func (p *GatewayServiceTestPlugin) GetConfigSchema() ([]byte, error) {
 
 // HandlePostAuth implements plugin_sdk.PostAuthHandler - runs all service API tests and returns results
 func (p *GatewayServiceTestPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
-	fmt.Println("🧪 Starting Gateway Service API Tests...")
-
-	// Check if SDK is initialized
-	if !mgwsdk.IsInitialized() {
+	// Check if Gateway services are available
+	if ctx.Services.Gateway() == nil {
 		errorResponse := map[string]interface{}{
-			"error":   "SDK not initialized",
-			"message": "Service API unavailable - broker not setup",
+			"error":   "Gateway services not available",
+			"message": "Service API not available in this context",
 		}
 		body, _ := json.Marshal(errorResponse)
 		return &pb.PluginResponse{
@@ -107,8 +78,8 @@ func (p *GatewayServiceTestPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *p
 		}, nil
 	}
 
-	// Run all tests
-	report := runAllTests(ctx.Context, req.Request.Context)
+	// Run all tests with plugin context
+	report := runAllTests(ctx, req.Request.Context)
 
 	// Convert report to JSON
 	reportJSON, err := json.MarshalIndent(report, "", "  ")
@@ -125,9 +96,6 @@ func (p *GatewayServiceTestPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *p
 			Body:       body,
 		}, nil
 	}
-
-	fmt.Printf("✅ Tests completed: %d passed, %d failed out of %d total\n",
-		report.PassedTests, report.FailedTests, report.TotalTests)
 
 	// Block the request and return test results directly to user
 	return &pb.PluginResponse{
@@ -178,21 +146,21 @@ type TestReport struct {
 }
 
 // runAllTests executes all service API tests
-func runAllTests(ctx context.Context, pluginCtx *pb.PluginContext) *TestReport {
+func runAllTests(pluginCtx plugin_sdk.Context, reqCtx *pb.PluginContext) *TestReport {
 	report := &TestReport{
 		StartTime: time.Now(),
 	}
 
 	// Extract and enrich context metadata
-	report.Context = extractContextMetadata(ctx, pluginCtx)
+	report.Context = extractContextMetadata(pluginCtx, reqCtx)
 
-	// Run test suites
-	report.LLMTests = runLLMTests(ctx)
-	report.AppTests = runAppTests(ctx)
-	report.BudgetTests = runBudgetTests(ctx)
-	report.PricingTests = runPricingTests(ctx)
-	report.CredentialTests = runCredentialTests(ctx)
-	report.KVTests = runKVTests(ctx)
+	// Run test suites with plugin context
+	report.LLMTests = runLLMTests(pluginCtx)
+	report.AppTests = runAppTests(pluginCtx)
+	report.BudgetTests = runBudgetTests(pluginCtx)
+	report.PricingTests = runPricingTests(pluginCtx)
+	report.CredentialTests = runCredentialTests(pluginCtx)
+	report.KVTests = runKVTests(pluginCtx)
 
 	// Calculate summary
 	report.EndTime = time.Now()
@@ -217,12 +185,13 @@ func runAllTests(ctx context.Context, pluginCtx *pb.PluginContext) *TestReport {
 }
 
 // runLLMTests tests LLM service operations
-func runLLMTests(ctx context.Context) []TestResult {
+func runLLMTests(pluginCtx plugin_sdk.Context) []TestResult {
 	var results []TestResult
+	ctx := pluginCtx.Context
 
 	// Test: List LLMs
 	start := time.Now()
-	resp, err := mgwsdk.ListLLMs(ctx, 1, 10, "", nil)
+	resp, err := pluginCtx.Services.Gateway().ListLLMs(ctx, 1, 10, "", nil)
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -232,35 +201,55 @@ func runLLMTests(ctx context.Context) []TestResult {
 			Error:    err.Error(),
 			Duration: duration,
 		})
-	} else {
+		return results
+	}
+
+	// Type assert the response
+	llmListResp, ok := resp.(*mgmtpb.ListLLMsResponse)
+	if !ok {
 		results = append(results, TestResult{
 			Name:     "List LLMs",
-			Success:  true,
+			Success:  false,
+			Error:    "Failed to parse ListLLMs response",
 			Duration: duration,
-			Details:  fmt.Sprintf("Found %d LLMs", resp.TotalCount),
 		})
+		return results
+	}
 
-		// Test: Get LLM (if any exist)
-		if len(resp.Llms) > 0 {
-			start = time.Now()
-			llmResp, err := mgwsdk.GetLLM(ctx, resp.Llms[0].Id)
-			duration = time.Since(start).Milliseconds()
+	results = append(results, TestResult{
+		Name:     "List LLMs",
+		Success:  true,
+		Duration: duration,
+		Details:  fmt.Sprintf("Found %d LLMs", llmListResp.TotalCount),
+	})
 
-			if err != nil {
-				results = append(results, TestResult{
-					Name:     "Get LLM",
-					Success:  false,
-					Error:    err.Error(),
-					Duration: duration,
-				})
-			} else {
-				results = append(results, TestResult{
-					Name:     "Get LLM",
-					Success:  true,
-					Duration: duration,
-					Details:  fmt.Sprintf("Retrieved LLM: %s", llmResp.Llm.Name),
-				})
-			}
+	// Test: Get LLM (if any exist)
+	if len(llmListResp.Llms) > 0 {
+		start = time.Now()
+		llmResp, err := pluginCtx.Services.Gateway().GetLLM(ctx, llmListResp.Llms[0].Id)
+		duration = time.Since(start).Milliseconds()
+
+		if err != nil {
+			results = append(results, TestResult{
+				Name:     "Get LLM",
+				Success:  false,
+				Error:    err.Error(),
+				Duration: duration,
+			})
+		} else if llmGetResp, ok := llmResp.(*mgmtpb.GetLLMResponse); ok && llmGetResp.Llm != nil {
+			results = append(results, TestResult{
+				Name:     "Get LLM",
+				Success:  true,
+				Duration: duration,
+				Details:  fmt.Sprintf("Retrieved LLM: %s", llmGetResp.Llm.Name),
+			})
+		} else {
+			results = append(results, TestResult{
+				Name:     "Get LLM",
+				Success:  false,
+				Error:    "Failed to parse GetLLM response",
+				Duration: duration,
+			})
 		}
 	}
 
@@ -268,12 +257,13 @@ func runLLMTests(ctx context.Context) []TestResult {
 }
 
 // runAppTests tests App service operations
-func runAppTests(ctx context.Context) []TestResult {
+func runAppTests(pluginCtx plugin_sdk.Context) []TestResult {
 	var results []TestResult
+	ctx := pluginCtx.Context
 
 	// Test: List Apps
 	start := time.Now()
-	resp, err := mgwsdk.ListApps(ctx, 1, 10, nil)
+	resp, err := pluginCtx.Services.Gateway().ListApps(ctx, 1, 10, nil)
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -283,35 +273,54 @@ func runAppTests(ctx context.Context) []TestResult {
 			Error:    err.Error(),
 			Duration: duration,
 		})
-	} else {
+		return results
+	}
+
+	listResp, ok := resp.(*mgmtpb.ListAppsResponse)
+	if !ok {
 		results = append(results, TestResult{
 			Name:     "List Apps",
-			Success:  true,
+			Success:  false,
+			Error:    "Failed to parse ListApps response",
 			Duration: duration,
-			Details:  fmt.Sprintf("Found %d apps", resp.TotalCount),
 		})
+		return results
+	}
 
-		// Test: Get App (if any exist)
-		if len(resp.Apps) > 0 {
-			start = time.Now()
-			appResp, err := mgwsdk.GetApp(ctx, resp.Apps[0].Id)
-			duration = time.Since(start).Milliseconds()
+	results = append(results, TestResult{
+		Name:     "List Apps",
+		Success:  true,
+		Duration: duration,
+		Details:  fmt.Sprintf("Found %d apps", listResp.TotalCount),
+	})
 
-			if err != nil {
-				results = append(results, TestResult{
-					Name:     "Get App",
-					Success:  false,
-					Error:    err.Error(),
-					Duration: duration,
-				})
-			} else {
-				results = append(results, TestResult{
-					Name:     "Get App",
-					Success:  true,
-					Duration: duration,
-					Details:  fmt.Sprintf("Retrieved app: %s", appResp.App.Name),
-				})
-			}
+	// Test: Get App (if any exist)
+	if len(listResp.Apps) > 0 {
+		start = time.Now()
+		appResp, err := pluginCtx.Services.Gateway().GetApp(ctx, listResp.Apps[0].Id)
+		duration = time.Since(start).Milliseconds()
+
+		if err != nil {
+			results = append(results, TestResult{
+				Name:     "Get App",
+				Success:  false,
+				Error:    err.Error(),
+				Duration: duration,
+			})
+		} else if getResp, ok := appResp.(*mgmtpb.GetAppResponse); ok && getResp.App != nil {
+			results = append(results, TestResult{
+				Name:     "Get App",
+				Success:  true,
+				Duration: duration,
+				Details:  fmt.Sprintf("Retrieved app: %s", getResp.App.Name),
+			})
+		} else {
+			results = append(results, TestResult{
+				Name:     "Get App",
+				Success:  false,
+				Error:    "Failed to parse GetApp response",
+				Duration: duration,
+			})
 		}
 	}
 
@@ -319,12 +328,24 @@ func runAppTests(ctx context.Context) []TestResult {
 }
 
 // runBudgetTests tests Budget service operations
-func runBudgetTests(ctx context.Context) []TestResult {
+func runBudgetTests(pluginCtx plugin_sdk.Context) []TestResult {
 	var results []TestResult
+	ctx := pluginCtx.Context
 
 	// First get an app to test with
-	appResp, err := mgwsdk.ListApps(ctx, 1, 1, nil)
-	if err != nil || len(appResp.Apps) == 0 {
+	appsResp, err := pluginCtx.Services.Gateway().ListApps(ctx, 1, 1, nil)
+	if err != nil {
+		results = append(results, TestResult{
+			Name:     "Get Budget Status",
+			Success:  false,
+			Error:    fmt.Sprintf("Failed to list apps: %v", err),
+			Duration: 0,
+		})
+		return results
+	}
+
+	listResp, ok := appsResp.(*mgmtpb.ListAppsResponse)
+	if !ok || len(listResp.Apps) == 0 {
 		results = append(results, TestResult{
 			Name:     "Get Budget Status",
 			Success:  false,
@@ -336,7 +357,7 @@ func runBudgetTests(ctx context.Context) []TestResult {
 
 	// Test: Get Budget Status
 	start := time.Now()
-	budgetResp, err := mgwsdk.GetBudgetStatus(ctx, appResp.Apps[0].Id, nil)
+	budgetResp, err := pluginCtx.Services.Gateway().GetBudgetStatus(ctx, listResp.Apps[0].Id, nil)
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -346,12 +367,22 @@ func runBudgetTests(ctx context.Context) []TestResult {
 			Error:    err.Error(),
 			Duration: duration,
 		})
-	} else {
+		return results
+	}
+
+	if getBudgetResp, ok := budgetResp.(*mgmtpb.GetBudgetStatusResponse); ok {
 		results = append(results, TestResult{
 			Name:     "Get Budget Status",
 			Success:  true,
 			Duration: duration,
-			Details:  fmt.Sprintf("Monthly budget: %.2f, Usage: %.2f", budgetResp.MonthlyBudget, budgetResp.CurrentUsage),
+			Details:  fmt.Sprintf("Monthly budget: %.2f, Usage: %.2f", getBudgetResp.MonthlyBudget, getBudgetResp.CurrentUsage),
+		})
+	} else {
+		results = append(results, TestResult{
+			Name:     "Get Budget Status",
+			Success:  false,
+			Error:    "Failed to parse GetBudgetStatus response",
+			Duration: duration,
 		})
 	}
 
@@ -359,12 +390,13 @@ func runBudgetTests(ctx context.Context) []TestResult {
 }
 
 // runPricingTests tests Model Price service operations
-func runPricingTests(ctx context.Context) []TestResult {
+func runPricingTests(pluginCtx plugin_sdk.Context) []TestResult {
 	var results []TestResult
+	ctx := pluginCtx.Context
 
 	// Test: List Model Prices
 	start := time.Now()
-	resp, err := mgwsdk.ListModelPrices(ctx, "")
+	resp, err := pluginCtx.Services.Gateway().ListModelPrices(ctx, "")
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -374,35 +406,54 @@ func runPricingTests(ctx context.Context) []TestResult {
 			Error:    err.Error(),
 			Duration: duration,
 		})
-	} else {
+		return results
+	}
+
+	listPriceResp, ok := resp.(*mgmtpb.ListModelPricesResponse)
+	if !ok {
 		results = append(results, TestResult{
 			Name:     "List Model Prices",
-			Success:  true,
+			Success:  false,
+			Error:    "Failed to parse ListModelPrices response",
 			Duration: duration,
-			Details:  fmt.Sprintf("Found %d model prices", len(resp.ModelPrices)),
 		})
+		return results
+	}
 
-		// Test: Get Model Price (if any exist)
-		if len(resp.ModelPrices) > 0 {
-			start = time.Now()
-			priceResp, err := mgwsdk.GetModelPrice(ctx, resp.ModelPrices[0].ModelName, resp.ModelPrices[0].Vendor)
-			duration = time.Since(start).Milliseconds()
+	results = append(results, TestResult{
+		Name:     "List Model Prices",
+		Success:  true,
+		Duration: duration,
+		Details:  fmt.Sprintf("Found %d model prices", len(listPriceResp.ModelPrices)),
+	})
 
-			if err != nil {
-				results = append(results, TestResult{
-					Name:     "Get Model Price",
-					Success:  false,
-					Error:    err.Error(),
-					Duration: duration,
-				})
-			} else {
-				results = append(results, TestResult{
-					Name:     "Get Model Price",
-					Success:  true,
-					Duration: duration,
-					Details:  fmt.Sprintf("Model: %s, CPT: %.6f", priceResp.ModelPrice.ModelName, priceResp.ModelPrice.Cpt),
-				})
-			}
+	// Test: Get Model Price (if any exist)
+	if len(listPriceResp.ModelPrices) > 0 {
+		start = time.Now()
+		priceResp, err := pluginCtx.Services.Gateway().GetModelPrice(ctx, listPriceResp.ModelPrices[0].ModelName, listPriceResp.ModelPrices[0].Vendor)
+		duration = time.Since(start).Milliseconds()
+
+		if err != nil {
+			results = append(results, TestResult{
+				Name:     "Get Model Price",
+				Success:  false,
+				Error:    err.Error(),
+				Duration: duration,
+			})
+		} else if getPriceResp, ok := priceResp.(*mgmtpb.GetModelPriceResponse); ok && getPriceResp.ModelPrice != nil {
+			results = append(results, TestResult{
+				Name:     "Get Model Price",
+				Success:  true,
+				Duration: duration,
+				Details:  fmt.Sprintf("Model: %s, CPT: %.6f", getPriceResp.ModelPrice.ModelName, getPriceResp.ModelPrice.Cpt),
+			})
+		} else {
+			results = append(results, TestResult{
+				Name:     "Get Model Price",
+				Success:  false,
+				Error:    "Failed to parse GetModelPrice response",
+				Duration: duration,
+			})
 		}
 	}
 
@@ -410,12 +461,13 @@ func runPricingTests(ctx context.Context) []TestResult {
 }
 
 // runCredentialTests tests Credential service operations
-func runCredentialTests(ctx context.Context) []TestResult {
+func runCredentialTests(pluginCtx plugin_sdk.Context) []TestResult {
 	var results []TestResult
+	ctx := pluginCtx.Context
 
 	// Test: Validate Credential (with invalid credential - should fail gracefully)
 	start := time.Now()
-	resp, err := mgwsdk.ValidateCredential(ctx, "invalid-test-credential")
+	resp, err := pluginCtx.Services.Gateway().ValidateCredential(ctx, "invalid-test-credential")
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -425,12 +477,22 @@ func runCredentialTests(ctx context.Context) []TestResult {
 			Error:    err.Error(),
 			Duration: duration,
 		})
-	} else {
+		return results
+	}
+
+	if validateResp, ok := resp.(*mgmtpb.ValidateCredentialResponse); ok {
 		results = append(results, TestResult{
 			Name:     "Validate Credential",
 			Success:  true,
 			Duration: duration,
-			Details:  fmt.Sprintf("Credential validation returned (expected invalid): valid=%v", resp.Valid),
+			Details:  fmt.Sprintf("Credential validation returned (expected invalid): valid=%v", validateResp.Valid),
+		})
+	} else {
+		results = append(results, TestResult{
+			Name:     "Validate Credential",
+			Success:  false,
+			Error:    "Failed to parse ValidateCredential response",
+			Duration: duration,
 		})
 	}
 
@@ -438,15 +500,16 @@ func runCredentialTests(ctx context.Context) []TestResult {
 }
 
 // runKVTests tests Plugin KV storage operations
-func runKVTests(ctx context.Context) []TestResult {
+func runKVTests(pluginCtx plugin_sdk.Context) []TestResult {
 	var results []TestResult
+	ctx := pluginCtx.Context
 
 	testKey := "test_key"
 	testValue := []byte("test_value_" + time.Now().Format("20060102150405"))
 
 	// Test: Write KV
 	start := time.Now()
-	created, err := mgwsdk.WritePluginKV(ctx, testKey, testValue, nil) // No expiration for test
+	created, err := pluginCtx.Services.KV().Write(ctx, testKey, testValue, nil) // No expiration for test
 	duration := time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -468,7 +531,7 @@ func runKVTests(ctx context.Context) []TestResult {
 
 	// Test: Read KV
 	start = time.Now()
-	readValue, err := mgwsdk.ReadPluginKV(ctx, testKey)
+	readValue, err := pluginCtx.Services.KV().Read(ctx, testKey)
 	duration = time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -496,7 +559,7 @@ func runKVTests(ctx context.Context) []TestResult {
 
 	// Test: Delete KV
 	start = time.Now()
-	deleted, err := mgwsdk.DeletePluginKV(ctx, testKey)
+	deleted, err := pluginCtx.Services.KV().Delete(ctx, testKey)
 	duration = time.Since(start).Milliseconds()
 
 	if err != nil {
@@ -519,57 +582,56 @@ func runKVTests(ctx context.Context) []TestResult {
 }
 
 // extractContextMetadata extracts and enriches metadata from the plugin context
-func extractContextMetadata(ctx context.Context, pluginCtx *pb.PluginContext) *ContextMetadata {
+func extractContextMetadata(pluginCtx plugin_sdk.Context, reqCtx *pb.PluginContext) *ContextMetadata {
+	ctx := pluginCtx.Context
+
 	metadata := &ContextMetadata{
-		RequestID: pluginCtx.RequestId,
-		LLMID:     uint(pluginCtx.LlmId),
-		LLMSlug:   pluginCtx.LlmSlug,
-		Vendor:    pluginCtx.Vendor,
-		AppID:     uint(pluginCtx.AppId),
-		UserID:    uint(pluginCtx.UserId),
-		Metadata:  pluginCtx.Metadata,
+		RequestID: reqCtx.RequestId,
+		LLMID:     uint(reqCtx.LlmId),
+		LLMSlug:   reqCtx.LlmSlug,
+		Vendor:    reqCtx.Vendor,
+		AppID:     uint(reqCtx.AppId),
+		UserID:    uint(reqCtx.UserId),
+		Metadata:  reqCtx.Metadata,
 	}
 
 	// Try to get LLM details from service API
-	if pluginCtx.LlmId > 0 {
-		if llmResp, err := mgwsdk.GetLLM(ctx, pluginCtx.LlmId); err == nil {
-			metadata.LLMName = llmResp.Llm.Name
+	if reqCtx.LlmId > 0 {
+		if llmResp, err := pluginCtx.Services.Gateway().GetLLM(ctx, reqCtx.LlmId); err == nil {
+			if getLLMResp, ok := llmResp.(*mgmtpb.GetLLMResponse); ok && getLLMResp.Llm != nil {
+				metadata.LLMName = getLLMResp.Llm.Name
+			}
 		}
 	}
 
 	// Try to get App details from service API and serialize all fields
-	if pluginCtx.AppId > 0 {
-		appResp, err := mgwsdk.GetApp(ctx, pluginCtx.AppId)
+	if reqCtx.AppId > 0 {
+		appResp, err := pluginCtx.Services.Gateway().GetApp(ctx, reqCtx.AppId)
 		if err != nil {
-			fmt.Printf("⚠️ Failed to get app details for app_id=%d: %v\n", pluginCtx.AppId, err)
-		} else if appResp == nil {
-			fmt.Printf("⚠️ GetApp returned nil response for app_id=%d\n", pluginCtx.AppId)
-		} else if appResp.App == nil {
-			fmt.Printf("⚠️ GetApp response has nil App for app_id=%d\n", pluginCtx.AppId)
-		} else {
+			// Error getting app - skip details
+		} else if getAppResp, ok := appResp.(*mgmtpb.GetAppResponse); ok && getAppResp.App != nil {
 			// Parse metadata JSON if present
 			var appMetadata map[string]interface{}
-			if appResp.App.Metadata != "" {
-				json.Unmarshal([]byte(appResp.App.Metadata), &appMetadata)
+			if getAppResp.App.Metadata != "" {
+				json.Unmarshal([]byte(getAppResp.App.Metadata), &appMetadata)
 			}
 
 			// Convert App protobuf to map to show all fields
 			appDetails := map[string]interface{}{
-				"id":               appResp.App.Id,
-				"name":             appResp.App.Name,
-				"description":      appResp.App.Description,
-				"owner_email":      appResp.App.OwnerEmail,
-				"is_active":        appResp.App.IsActive,
-				"monthly_budget":   appResp.App.MonthlyBudget,
-				"budget_reset_day": appResp.App.BudgetResetDay,
-				"rate_limit_rpm":   appResp.App.RateLimitRpm,
-				"allowed_ips":      appResp.App.AllowedIps,
+				"id":               getAppResp.App.Id,
+				"name":             getAppResp.App.Name,
+				"description":      getAppResp.App.Description,
+				"owner_email":      getAppResp.App.OwnerEmail,
+				"is_active":        getAppResp.App.IsActive,
+				"monthly_budget":   getAppResp.App.MonthlyBudget,
+				"budget_reset_day": getAppResp.App.BudgetResetDay,
+				"rate_limit_rpm":   getAppResp.App.RateLimitRpm,
+				"allowed_ips":      getAppResp.App.AllowedIps,
 				"metadata":         appMetadata,
-				"created_at":       appResp.App.CreatedAt.AsTime().Format(time.RFC3339),
-				"updated_at":       appResp.App.UpdatedAt.AsTime().Format(time.RFC3339),
+				"created_at":       getAppResp.App.CreatedAt.AsTime().Format(time.RFC3339),
+				"updated_at":       getAppResp.App.UpdatedAt.AsTime().Format(time.RFC3339),
 			}
 			metadata.AppDetails = appDetails
-			fmt.Printf("✅ Successfully retrieved app details for app_id=%d: %s\n", pluginCtx.AppId, appResp.App.Name)
 		}
 	}
 
@@ -577,9 +639,6 @@ func extractContextMetadata(ctx context.Context, pluginCtx *pb.PluginContext) *C
 }
 
 func main() {
-	fmt.Printf("🧪 Starting %s Plugin v%s\n", PluginName, PluginVersion)
-	fmt.Printf("Gateway service API testing plugin using unified SDK\n")
-
 	plugin := NewGatewayServiceTestPlugin()
 	plugin_sdk.Serve(plugin)
 }

@@ -102,6 +102,17 @@ type ConfigProvider interface {
 	GetConfigSchema() ([]byte, error)
 }
 
+// ManifestProvider provides a plugin manifest without requiring full UI capabilities.
+// This is useful for gateway-only plugins that need to be installed via Studio
+// but don't have a UI component.
+type ManifestProvider interface {
+	Plugin
+
+	// GetManifest returns the plugin manifest as JSON bytes.
+	// The manifest declares hooks, permissions, and metadata.
+	GetManifest() ([]byte, error)
+}
+
 // AgentPlugin handles conversational AI agent interactions.
 // This is for plugins that implement custom agent behavior.
 type AgentPlugin interface {

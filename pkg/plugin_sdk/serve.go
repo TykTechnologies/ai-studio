@@ -182,6 +182,21 @@ func (s *configProviderServer) GetManifest(ctx context.Context, req *configpb.Ge
 		}, nil
 	}
 
+	// Try ManifestProvider (for gateway plugins that need manifest but not full UI)
+	if manifestProvider, ok := s.wrapper.plugin.(ManifestProvider); ok {
+		manifestBytes, err := manifestProvider.GetManifest()
+		if err != nil {
+			return &configpb.GetManifestResponse{
+				Success:      false,
+				ErrorMessage: err.Error(),
+			}, nil
+		}
+		return &configpb.GetManifestResponse{
+			Success:      true,
+			ManifestJson: string(manifestBytes),
+		}, nil
+	}
+
 	// Return empty manifest
 	return &configpb.GetManifestResponse{
 		Success:      true,
