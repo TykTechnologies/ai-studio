@@ -455,7 +455,13 @@ class PluginLoaderService {
   async refresh() {
     this.loadedComponents.clear();
     this.pluginRegistry.clear();
-    return await this.initialize();
+    const result = await this.initialize();
+
+    // Dispatch event to notify UI components to refresh
+    window.dispatchEvent(new CustomEvent('plugin-loader-refreshed'));
+    console.log('Plugin loader refreshed and notification dispatched');
+
+    return result;
   }
 
   /**

@@ -19,6 +19,7 @@ import {
 } from '../../styles/sharedStyles';
 import pluginService from '../../services/pluginService';
 import agentService from '../../services/agentService';
+import pluginLoaderService from '../../services/pluginLoaderService';
 import Step1BasicInfo from './wizard/Step1BasicInfo';
 import Step2ScopeApproval from './wizard/Step2ScopeApproval';
 import Step3Configuration from './wizard/Step3Configuration';
@@ -223,6 +224,20 @@ const PluginCreationWizard = () => {
         handleNext();
       } else {
         // Complete without agent configuration
+        // For UI plugins, reload the plugin to register UI components
+        const supportsUI = hookTypes.includes('studio_ui');
+        if (supportsUI) {
+          try {
+            console.log('Reloading UI plugin to register components...');
+            await pluginService.reloadPlugin(pluginId);
+            console.log('Plugin reloaded, refreshing UI loader...');
+            await pluginLoaderService.refresh();
+            console.log('Plugin loader refreshed - UI plugin is now available');
+          } catch (refreshErr) {
+            console.warn('Failed to reload/refresh plugin:', refreshErr);
+          }
+        }
+
         setSnackbar({
           open: true,
           message: 'Plugin created successfully!',
@@ -246,6 +261,21 @@ const PluginCreationWizard = () => {
       const createdAgent = await agentService.createAgent(agentData);
       setAgentId(createdAgent.id);
 
+      // For UI plugins, reload the plugin to register UI components
+      const hookTypes = pluginData.hookTypes || [];
+      const supportsUI = hookTypes.includes('studio_ui');
+      if (supportsUI) {
+        try {
+          console.log('Reloading UI plugin to register components...');
+          await pluginService.reloadPlugin(pluginId);
+          console.log('Plugin reloaded, refreshing UI loader...');
+          await pluginLoaderService.refresh();
+          console.log('Plugin loader refreshed - UI plugin is now available');
+        } catch (refreshErr) {
+          console.warn('Failed to reload/refresh plugin:', refreshErr);
+        }
+      }
+
       setSnackbar({
         open: true,
         message: 'Plugin and agent created successfully!',
@@ -263,7 +293,22 @@ const PluginCreationWizard = () => {
   };
 
   // Step 4: Skip agent configuration
-  const handleSkipAgentConfiguration = () => {
+  const handleSkipAgentConfiguration = async () => {
+    // For UI plugins, reload the plugin to register UI components
+    const hookTypes = pluginData.hookTypes || [];
+    const supportsUI = hookTypes.includes('studio_ui');
+    if (supportsUI) {
+      try {
+        console.log('Reloading UI plugin to register components...');
+        await pluginService.reloadPlugin(pluginId);
+        console.log('Plugin reloaded, refreshing UI loader...');
+        await pluginLoaderService.refresh();
+        console.log('Plugin loader refreshed - UI plugin is now available');
+      } catch (refreshErr) {
+        console.warn('Failed to reload/refresh plugin:', refreshErr);
+      }
+    }
+
     setSnackbar({
       open: true,
       message: 'Plugin created successfully!',

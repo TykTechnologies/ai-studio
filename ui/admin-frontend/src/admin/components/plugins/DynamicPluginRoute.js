@@ -71,6 +71,18 @@ const DynamicPluginRoute = () => {
     };
 
     loadRoutes();
+
+    // Listen for plugin loader refresh events
+    const handlePluginRefresh = () => {
+      console.log('DynamicPluginRoute received plugin refresh event, reloading routes');
+      loadRoutes();
+    };
+
+    window.addEventListener('plugin-loader-refreshed', handlePluginRefresh);
+
+    return () => {
+      window.removeEventListener('plugin-loader-refreshed', handlePluginRefresh);
+    };
   }, []);
 
   if (!initialized) {
@@ -102,6 +114,18 @@ export const usePluginRoutes = () => {
     };
 
     fetchRoutes();
+
+    // Listen for plugin loader refresh events
+    const handlePluginRefresh = () => {
+      console.log('usePluginRoutes received plugin refresh event, reloading routes');
+      fetchRoutes();
+    };
+
+    window.addEventListener('plugin-loader-refreshed', handlePluginRefresh);
+
+    return () => {
+      window.removeEventListener('plugin-loader-refreshed', handlePluginRefresh);
+    };
   }, []);
 
   return { routes: pluginRoutes, isLoading };

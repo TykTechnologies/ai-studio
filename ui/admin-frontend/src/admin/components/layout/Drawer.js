@@ -10,6 +10,18 @@ const Drawer = () => {
 
   useEffect(() => {
     loadPluginMenuItems();
+
+    // Listen for plugin loader refresh events
+    const handlePluginRefresh = () => {
+      console.log('Drawer received plugin refresh event, reloading menu items');
+      loadPluginMenuItems();
+    };
+
+    window.addEventListener('plugin-loader-refreshed', handlePluginRefresh);
+
+    return () => {
+      window.removeEventListener('plugin-loader-refreshed', handlePluginRefresh);
+    };
   }, []);
 
   const loadPluginMenuItems = async () => {

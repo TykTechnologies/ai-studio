@@ -14,6 +14,18 @@ const PluginRouter = () => {
 
   useEffect(() => {
     initializePluginRoutes();
+
+    // Listen for plugin loader refresh events
+    const handlePluginRefresh = () => {
+      console.log('PluginRouter received plugin refresh event, reloading routes');
+      initializePluginRoutes();
+    };
+
+    window.addEventListener('plugin-loader-refreshed', handlePluginRefresh);
+
+    return () => {
+      window.removeEventListener('plugin-loader-refreshed', handlePluginRefresh);
+    };
   }, []);
 
   const initializePluginRoutes = async () => {
