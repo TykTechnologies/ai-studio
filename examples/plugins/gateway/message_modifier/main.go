@@ -2,49 +2,46 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	_ "embed"
 	"fmt"
 
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
 //go:embed manifest.json
 var manifestBytes []byte
 
+const (
+	PluginName    = "message-modifier"
+	PluginVersion = "1.0.0"
+)
+
 // MessageModifierPlugin modifies outbound LLM requests to add instructions
 type MessageModifierPlugin struct {
+	plugin_sdk.BasePlugin
 	instruction string
 }
 
-// Initialize implements BasePlugin
-func (p *MessageModifierPlugin) Initialize(config map[string]interface{}) error {
-	if instruction, ok := config["instruction"]; ok {
-		p.instruction = instruction.(string)
-	} else {
-		p.instruction = "Say Moo! at the end of your response"
+// NewMessageModifierPlugin creates a new message modifier plugin
+func NewMessageModifierPlugin() *MessageModifierPlugin {
+	return &MessageModifierPlugin{
+		BasePlugin:  plugin_sdk.NewBasePlugin(PluginName, PluginVersion, "Message Modifier"),
+		instruction: "Say Moo! at the end of your response",
+	}
+}
+
+// Initialize implements plugin_sdk.Plugin
+func (p *MessageModifierPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+	if instruction, ok := config["instruction"]; ok && instruction != "" {
+		p.instruction = instruction
 	}
 	return nil
 }
 
-// GetHookType implements BasePlugin
-func (p *MessageModifierPlugin) GetHookType() sdk.HookType {
-	return sdk.HookTypePreAuth
-}
-
-// GetName implements BasePlugin
-func (p *MessageModifierPlugin) GetName() string {
-	return "message-modifier"
-}
-
-// GetVersion implements BasePlugin
-func (p *MessageModifierPlugin) GetVersion() string {
-	return "1.0.0"
-}
-
-// Shutdown implements BasePlugin
-func (p *MessageModifierPlugin) Shutdown() error {
+// Shutdown implements plugin_sdk.Plugin
+func (p *MessageModifierPlugin) Shutdown(ctx plugin_sdk.Context) error {
 	return nil
 }
 
@@ -88,30 +85,30 @@ func (p *MessageModifierPlugin) GetConfigSchema() ([]byte, error) {
 	return schemaBytes, nil
 }
 
-// ProcessRequest implements PreAuthPlugin
-func (p *MessageModifierPlugin) ProcessRequest(ctx context.Context, req *sdk.PluginRequest, pluginCtx *sdk.PluginContext) (*sdk.PluginResponse, error) {
+// HandlePreAuth implements plugin_sdk.PreAuthHandler
+func (p *MessageModifierPlugin) HandlePreAuth(ctx plugin_sdk.Context, req *pb.PluginRequest) (*pb.PluginResponse, error) {
 	// Only modify POST requests to LLM endpoints
 	if req.Method != "POST" {
-		return &sdk.PluginResponse{Modified: false}, nil
+		return &pb.PluginResponse{Modified: false}, nil
 	}
 
 	// Parse the JSON body
 	var requestBody map[string]interface{}
 	if err := json.Unmarshal(req.Body, &requestBody); err != nil {
 		// If we can't parse JSON, don't modify
-		return &sdk.PluginResponse{Modified: false}, nil
+		return &pb.PluginResponse{Modified: false}, nil
 	}
 
 	// Check if this is a chat completion request
 	messages, hasMessages := requestBody["messages"]
 	if !hasMessages {
-		return &sdk.PluginResponse{Modified: false}, nil
+		return &pb.PluginResponse{Modified: false}, nil
 	}
 
 	// Convert messages to slice of maps
 	messageSlice, ok := messages.([]interface{})
 	if !ok {
-		return &sdk.PluginResponse{Modified: false}, nil
+		return &pb.PluginResponse{Modified: false}, nil
 	}
 
 	// Add instruction to the last user message
@@ -120,21 +117,21 @@ func (p *MessageModifierPlugin) ProcessRequest(ctx context.Context, req *sdk.Plu
 		if !ok {
 			continue
 		}
-		
+
 		role, hasRole := messageMap["role"].(string)
 		if hasRole && role == "user" {
 			// Found the last user message, modify it
 			content, hasContent := messageMap["content"].(string)
 			if hasContent {
 				messageMap["content"] = content + "\n\n" + p.instruction
-				
+
 				// Marshal the modified request body
 				modifiedBody, err := json.Marshal(requestBody)
 				if err != nil {
-					return &sdk.PluginResponse{Modified: false}, nil
+					return &pb.PluginResponse{Modified: false}, nil
 				}
 
-				return &sdk.PluginResponse{
+				return &pb.PluginResponse{
 					Modified: true,
 					Headers:  map[string]string{"Content-Type": "application/json"},
 					Body:     modifiedBody,
@@ -145,10 +142,10 @@ func (p *MessageModifierPlugin) ProcessRequest(ctx context.Context, req *sdk.Plu
 	}
 
 	// No modification needed
-	return &sdk.PluginResponse{Modified: false}, nil
+	return &pb.PluginResponse{Modified: false}, nil
 }
 
 func main() {
-	plugin := &MessageModifierPlugin{}
-	sdk.ServePlugin(plugin)
+	plugin := NewMessageModifierPlugin()
+	plugin_sdk.Serve(plugin)
 }
