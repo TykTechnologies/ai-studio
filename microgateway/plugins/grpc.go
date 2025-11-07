@@ -178,3 +178,11 @@ func (c *MicrogatewayPluginClient) HandleBudgetUsage(ctx context.Context, req *p
 func (c *MicrogatewayPluginClient) HandleAgentMessage(ctx context.Context, req *pb.AgentMessageRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.AgentMessageChunk], error) {
 	return c.pluginStub.HandleAgentMessage(ctx, req, opts...)
 }
+
+func (c *MicrogatewayPluginClient) GetObjectHookRegistrations(ctx context.Context, req *pb.GetObjectHookRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetObjectHookRegistrationsResponse, error) {
+	return c.pluginStub.GetObjectHookRegistrations(ctx, req, opts...)
+}
+
+func (c *MicrogatewayPluginClient) HandleObjectHook(ctx context.Context, req *pb.ObjectHookRequest, opts ...grpc.CallOption) (*pb.ObjectHookResponse, error) {
+	return c.pluginStub.HandleObjectHook(ctx, req, opts...)
+}

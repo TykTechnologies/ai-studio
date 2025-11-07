@@ -319,6 +319,7 @@ type LLMInfo struct {
 	RateLimitRpm   int32                  `protobuf:"varint,14,opt,name=rate_limit_rpm,json=rateLimitRpm,proto3" json:"rate_limit_rpm,omitempty"`
 	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Metadata       map[string]string      `protobuf:"bytes,17,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Plugin-stored data
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -461,6 +462,13 @@ func (x *LLMInfo) GetCreatedAt() *timestamppb.Timestamp {
 func (x *LLMInfo) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *LLMInfo) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
 	}
 	return nil
 }
@@ -1763,7 +1771,7 @@ const file_microgateway_proto_microgateway_management_service_proto_rawDesc = ""
 	"\acontext\x18\x01 \x01(\v2&.microgateway_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\"D\n" +
 	"\x0eGetLLMResponse\x122\n" +
-	"\x03llm\x18\x01 \x01(\v2 .microgateway_management.LLMInfoR\x03llm\"\xc2\x04\n" +
+	"\x03llm\x18\x01 \x01(\v2 .microgateway_management.LLMInfoR\x03llm\"\xcb\x05\n" +
 	"\aLLMInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -1785,7 +1793,11 @@ const file_microgateway_proto_microgateway_management_service_proto_rawDesc = ""
 	"\n" +
 	"created_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x11\n" +
+	"updated_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12J\n" +
+	"\bmetadata\x18\x11 \x03(\v2..microgateway_management.LLMInfo.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x11\n" +
 	"\x0f_monthly_budget\"\xad\x01\n" +
 	"\x0fListAppsRequest\x12@\n" +
 	"\acontext\x18\x01 \x01(\v2&.microgateway_management.PluginContextR\acontext\x12 \n" +
@@ -1922,7 +1934,7 @@ func file_microgateway_proto_microgateway_management_service_proto_rawDescGZIP()
 	return file_microgateway_proto_microgateway_management_service_proto_rawDescData
 }
 
-var file_microgateway_proto_microgateway_management_service_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_microgateway_proto_microgateway_management_service_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_microgateway_proto_microgateway_management_service_proto_goTypes = []any{
 	(*PluginContext)(nil),              // 0: microgateway_management.PluginContext
 	(*ListLLMsRequest)(nil),            // 1: microgateway_management.ListLLMsRequest
@@ -1950,60 +1962,62 @@ var file_microgateway_proto_microgateway_management_service_proto_goTypes = []an
 	(*ReadPluginKVResponse)(nil),       // 23: microgateway_management.ReadPluginKVResponse
 	(*DeletePluginKVRequest)(nil),      // 24: microgateway_management.DeletePluginKVRequest
 	(*DeletePluginKVResponse)(nil),     // 25: microgateway_management.DeletePluginKVResponse
-	(*timestamppb.Timestamp)(nil),      // 26: google.protobuf.Timestamp
+	nil,                                // 26: microgateway_management.LLMInfo.MetadataEntry
+	(*timestamppb.Timestamp)(nil),      // 27: google.protobuf.Timestamp
 }
 var file_microgateway_proto_microgateway_management_service_proto_depIdxs = []int32{
 	0,  // 0: microgateway_management.ListLLMsRequest.context:type_name -> microgateway_management.PluginContext
 	5,  // 1: microgateway_management.ListLLMsResponse.llms:type_name -> microgateway_management.LLMInfo
 	0,  // 2: microgateway_management.GetLLMRequest.context:type_name -> microgateway_management.PluginContext
 	5,  // 3: microgateway_management.GetLLMResponse.llm:type_name -> microgateway_management.LLMInfo
-	26, // 4: microgateway_management.LLMInfo.created_at:type_name -> google.protobuf.Timestamp
-	26, // 5: microgateway_management.LLMInfo.updated_at:type_name -> google.protobuf.Timestamp
-	0,  // 6: microgateway_management.ListAppsRequest.context:type_name -> microgateway_management.PluginContext
-	10, // 7: microgateway_management.ListAppsResponse.apps:type_name -> microgateway_management.AppInfo
-	0,  // 8: microgateway_management.GetAppRequest.context:type_name -> microgateway_management.PluginContext
-	10, // 9: microgateway_management.GetAppResponse.app:type_name -> microgateway_management.AppInfo
-	26, // 10: microgateway_management.AppInfo.created_at:type_name -> google.protobuf.Timestamp
-	26, // 11: microgateway_management.AppInfo.updated_at:type_name -> google.protobuf.Timestamp
-	0,  // 12: microgateway_management.GetBudgetStatusRequest.context:type_name -> microgateway_management.PluginContext
-	0,  // 13: microgateway_management.ListModelPricesRequest.context:type_name -> microgateway_management.PluginContext
-	17, // 14: microgateway_management.ListModelPricesResponse.model_prices:type_name -> microgateway_management.ModelPriceInfo
-	0,  // 15: microgateway_management.GetModelPriceRequest.context:type_name -> microgateway_management.PluginContext
-	17, // 16: microgateway_management.GetModelPriceResponse.model_price:type_name -> microgateway_management.ModelPriceInfo
-	26, // 17: microgateway_management.ModelPriceInfo.created_at:type_name -> google.protobuf.Timestamp
-	26, // 18: microgateway_management.ModelPriceInfo.updated_at:type_name -> google.protobuf.Timestamp
-	0,  // 19: microgateway_management.ValidateCredentialRequest.context:type_name -> microgateway_management.PluginContext
-	0,  // 20: microgateway_management.WritePluginKVRequest.context:type_name -> microgateway_management.PluginContext
-	26, // 21: microgateway_management.WritePluginKVRequest.expire_at:type_name -> google.protobuf.Timestamp
-	0,  // 22: microgateway_management.ReadPluginKVRequest.context:type_name -> microgateway_management.PluginContext
-	0,  // 23: microgateway_management.DeletePluginKVRequest.context:type_name -> microgateway_management.PluginContext
-	1,  // 24: microgateway_management.MicrogatewayManagementService.ListLLMs:input_type -> microgateway_management.ListLLMsRequest
-	3,  // 25: microgateway_management.MicrogatewayManagementService.GetLLM:input_type -> microgateway_management.GetLLMRequest
-	6,  // 26: microgateway_management.MicrogatewayManagementService.ListApps:input_type -> microgateway_management.ListAppsRequest
-	8,  // 27: microgateway_management.MicrogatewayManagementService.GetApp:input_type -> microgateway_management.GetAppRequest
-	11, // 28: microgateway_management.MicrogatewayManagementService.GetBudgetStatus:input_type -> microgateway_management.GetBudgetStatusRequest
-	13, // 29: microgateway_management.MicrogatewayManagementService.ListModelPrices:input_type -> microgateway_management.ListModelPricesRequest
-	15, // 30: microgateway_management.MicrogatewayManagementService.GetModelPrice:input_type -> microgateway_management.GetModelPriceRequest
-	18, // 31: microgateway_management.MicrogatewayManagementService.ValidateCredential:input_type -> microgateway_management.ValidateCredentialRequest
-	20, // 32: microgateway_management.MicrogatewayManagementService.WritePluginKV:input_type -> microgateway_management.WritePluginKVRequest
-	22, // 33: microgateway_management.MicrogatewayManagementService.ReadPluginKV:input_type -> microgateway_management.ReadPluginKVRequest
-	24, // 34: microgateway_management.MicrogatewayManagementService.DeletePluginKV:input_type -> microgateway_management.DeletePluginKVRequest
-	2,  // 35: microgateway_management.MicrogatewayManagementService.ListLLMs:output_type -> microgateway_management.ListLLMsResponse
-	4,  // 36: microgateway_management.MicrogatewayManagementService.GetLLM:output_type -> microgateway_management.GetLLMResponse
-	7,  // 37: microgateway_management.MicrogatewayManagementService.ListApps:output_type -> microgateway_management.ListAppsResponse
-	9,  // 38: microgateway_management.MicrogatewayManagementService.GetApp:output_type -> microgateway_management.GetAppResponse
-	12, // 39: microgateway_management.MicrogatewayManagementService.GetBudgetStatus:output_type -> microgateway_management.GetBudgetStatusResponse
-	14, // 40: microgateway_management.MicrogatewayManagementService.ListModelPrices:output_type -> microgateway_management.ListModelPricesResponse
-	16, // 41: microgateway_management.MicrogatewayManagementService.GetModelPrice:output_type -> microgateway_management.GetModelPriceResponse
-	19, // 42: microgateway_management.MicrogatewayManagementService.ValidateCredential:output_type -> microgateway_management.ValidateCredentialResponse
-	21, // 43: microgateway_management.MicrogatewayManagementService.WritePluginKV:output_type -> microgateway_management.WritePluginKVResponse
-	23, // 44: microgateway_management.MicrogatewayManagementService.ReadPluginKV:output_type -> microgateway_management.ReadPluginKVResponse
-	25, // 45: microgateway_management.MicrogatewayManagementService.DeletePluginKV:output_type -> microgateway_management.DeletePluginKVResponse
-	35, // [35:46] is the sub-list for method output_type
-	24, // [24:35] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	27, // 4: microgateway_management.LLMInfo.created_at:type_name -> google.protobuf.Timestamp
+	27, // 5: microgateway_management.LLMInfo.updated_at:type_name -> google.protobuf.Timestamp
+	26, // 6: microgateway_management.LLMInfo.metadata:type_name -> microgateway_management.LLMInfo.MetadataEntry
+	0,  // 7: microgateway_management.ListAppsRequest.context:type_name -> microgateway_management.PluginContext
+	10, // 8: microgateway_management.ListAppsResponse.apps:type_name -> microgateway_management.AppInfo
+	0,  // 9: microgateway_management.GetAppRequest.context:type_name -> microgateway_management.PluginContext
+	10, // 10: microgateway_management.GetAppResponse.app:type_name -> microgateway_management.AppInfo
+	27, // 11: microgateway_management.AppInfo.created_at:type_name -> google.protobuf.Timestamp
+	27, // 12: microgateway_management.AppInfo.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 13: microgateway_management.GetBudgetStatusRequest.context:type_name -> microgateway_management.PluginContext
+	0,  // 14: microgateway_management.ListModelPricesRequest.context:type_name -> microgateway_management.PluginContext
+	17, // 15: microgateway_management.ListModelPricesResponse.model_prices:type_name -> microgateway_management.ModelPriceInfo
+	0,  // 16: microgateway_management.GetModelPriceRequest.context:type_name -> microgateway_management.PluginContext
+	17, // 17: microgateway_management.GetModelPriceResponse.model_price:type_name -> microgateway_management.ModelPriceInfo
+	27, // 18: microgateway_management.ModelPriceInfo.created_at:type_name -> google.protobuf.Timestamp
+	27, // 19: microgateway_management.ModelPriceInfo.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 20: microgateway_management.ValidateCredentialRequest.context:type_name -> microgateway_management.PluginContext
+	0,  // 21: microgateway_management.WritePluginKVRequest.context:type_name -> microgateway_management.PluginContext
+	27, // 22: microgateway_management.WritePluginKVRequest.expire_at:type_name -> google.protobuf.Timestamp
+	0,  // 23: microgateway_management.ReadPluginKVRequest.context:type_name -> microgateway_management.PluginContext
+	0,  // 24: microgateway_management.DeletePluginKVRequest.context:type_name -> microgateway_management.PluginContext
+	1,  // 25: microgateway_management.MicrogatewayManagementService.ListLLMs:input_type -> microgateway_management.ListLLMsRequest
+	3,  // 26: microgateway_management.MicrogatewayManagementService.GetLLM:input_type -> microgateway_management.GetLLMRequest
+	6,  // 27: microgateway_management.MicrogatewayManagementService.ListApps:input_type -> microgateway_management.ListAppsRequest
+	8,  // 28: microgateway_management.MicrogatewayManagementService.GetApp:input_type -> microgateway_management.GetAppRequest
+	11, // 29: microgateway_management.MicrogatewayManagementService.GetBudgetStatus:input_type -> microgateway_management.GetBudgetStatusRequest
+	13, // 30: microgateway_management.MicrogatewayManagementService.ListModelPrices:input_type -> microgateway_management.ListModelPricesRequest
+	15, // 31: microgateway_management.MicrogatewayManagementService.GetModelPrice:input_type -> microgateway_management.GetModelPriceRequest
+	18, // 32: microgateway_management.MicrogatewayManagementService.ValidateCredential:input_type -> microgateway_management.ValidateCredentialRequest
+	20, // 33: microgateway_management.MicrogatewayManagementService.WritePluginKV:input_type -> microgateway_management.WritePluginKVRequest
+	22, // 34: microgateway_management.MicrogatewayManagementService.ReadPluginKV:input_type -> microgateway_management.ReadPluginKVRequest
+	24, // 35: microgateway_management.MicrogatewayManagementService.DeletePluginKV:input_type -> microgateway_management.DeletePluginKVRequest
+	2,  // 36: microgateway_management.MicrogatewayManagementService.ListLLMs:output_type -> microgateway_management.ListLLMsResponse
+	4,  // 37: microgateway_management.MicrogatewayManagementService.GetLLM:output_type -> microgateway_management.GetLLMResponse
+	7,  // 38: microgateway_management.MicrogatewayManagementService.ListApps:output_type -> microgateway_management.ListAppsResponse
+	9,  // 39: microgateway_management.MicrogatewayManagementService.GetApp:output_type -> microgateway_management.GetAppResponse
+	12, // 40: microgateway_management.MicrogatewayManagementService.GetBudgetStatus:output_type -> microgateway_management.GetBudgetStatusResponse
+	14, // 41: microgateway_management.MicrogatewayManagementService.ListModelPrices:output_type -> microgateway_management.ListModelPricesResponse
+	16, // 42: microgateway_management.MicrogatewayManagementService.GetModelPrice:output_type -> microgateway_management.GetModelPriceResponse
+	19, // 43: microgateway_management.MicrogatewayManagementService.ValidateCredential:output_type -> microgateway_management.ValidateCredentialResponse
+	21, // 44: microgateway_management.MicrogatewayManagementService.WritePluginKV:output_type -> microgateway_management.WritePluginKVResponse
+	23, // 45: microgateway_management.MicrogatewayManagementService.ReadPluginKV:output_type -> microgateway_management.ReadPluginKVResponse
+	25, // 46: microgateway_management.MicrogatewayManagementService.DeletePluginKV:output_type -> microgateway_management.DeletePluginKVResponse
+	36, // [36:47] is the sub-list for method output_type
+	25, // [25:36] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_microgateway_proto_microgateway_management_service_proto_init() }
@@ -2023,7 +2037,7 @@ func file_microgateway_proto_microgateway_management_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_microgateway_proto_microgateway_management_service_proto_rawDesc), len(file_microgateway_proto_microgateway_management_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   26,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

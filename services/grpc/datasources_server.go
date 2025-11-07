@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"time"
@@ -341,6 +342,22 @@ func convertDatasourceToPB(datasource *models.Datasource) *pb.DatasourceInfo {
 		}
 	}
 
+	// Convert metadata (JSONMap is already map[string]interface{})
+	metadata := make(map[string]string)
+	if datasource.Metadata != nil && len(datasource.Metadata) > 0 {
+		// Convert interface{} values to strings for proto
+		for k, v := range datasource.Metadata {
+			if str, ok := v.(string); ok {
+				metadata[k] = str
+			} else {
+				// Convert non-string values to JSON strings
+				if jsonBytes, err := json.Marshal(v); err == nil {
+					metadata[k] = string(jsonBytes)
+				}
+			}
+		}
+	}
+
 	return &pb.DatasourceInfo{
 		Id:               uint32(datasource.ID),
 		Name:             datasource.Name,
@@ -360,5 +377,6 @@ func convertDatasourceToPB(datasource *models.Datasource) *pb.DatasourceInfo {
 		HasEmbedApiKey:   datasource.EmbedAPIKey != "",
 		CreatedAt:        timestamppb.New(datasource.CreatedAt),
 		UpdatedAt:        timestamppb.New(datasource.UpdatedAt),
+		Metadata:         metadata, // Plugin-stored data
 	}
 }

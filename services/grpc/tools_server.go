@@ -371,6 +371,22 @@ func convertToolToPB(tool *models.Tool) *pb.ToolInfo {
 	// Generate slug from name if not present in model
 	slug := strings.ToLower(strings.ReplaceAll(tool.Name, " ", "-"))
 
+	// Convert metadata (JSONMap is already map[string]interface{})
+	metadata := make(map[string]string)
+	if tool.Metadata != nil && len(tool.Metadata) > 0 {
+		// Convert interface{} values to strings for proto
+		for k, v := range tool.Metadata {
+			if str, ok := v.(string); ok {
+				metadata[k] = str
+			} else {
+				// Convert non-string values to JSON strings
+				if jsonBytes, err := json.Marshal(v); err == nil {
+					metadata[k] = string(jsonBytes)
+				}
+			}
+		}
+	}
+
 	return &pb.ToolInfo{
 		Id:           uint32(tool.ID),
 		Name:         tool.Name,
@@ -384,5 +400,6 @@ func convertToolToPB(tool *models.Tool) *pb.ToolInfo {
 		PrivacyScore: int32(tool.PrivacyScore),
 		CreatedAt:    timestamppb.New(tool.CreatedAt),
 		UpdatedAt:    timestamppb.New(tool.UpdatedAt),
+		Metadata:     metadata, // Plugin-stored data
 	}
 }

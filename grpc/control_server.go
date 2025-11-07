@@ -834,6 +834,14 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedAPIKey = resolvedAPIKey // Fallback to plaintext
 		}
 		
+		// Serialize metadata to JSON string
+		var metadataJSON string
+		if llm.Metadata != nil {
+			if metadataBytes, err := json.Marshal(llm.Metadata); err == nil {
+				metadataJSON = string(metadataBytes)
+			}
+		}
+
 		pbLLM := &pb.LLMConfig{
 			Id:               uint32(llm.ID),
 			Name:             llm.Name,
@@ -848,6 +856,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			IsActive:         llm.Active,
 			MonthlyBudget:    monthlyBudget,
 			RateLimitRpm:     0,    // AI Studio doesn't have this field yet
+			Metadata:         metadataJSON,
 			Namespace:        llm.Namespace,
 			FilterIds:        filterIDs,
 			CreatedAt:        timestamppb.New(llm.CreatedAt),

@@ -84,6 +84,7 @@ message LLMInfo {
     int32 rate_limit_rpm = 14;
     google.protobuf.Timestamp created_at = 15;
     google.protobuf.Timestamp updated_at = 16;
+    map<string, string> metadata = 17;  // Plugin-stored data
 }
 
 // App Management Messages
