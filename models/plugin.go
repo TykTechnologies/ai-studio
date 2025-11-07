@@ -57,8 +57,9 @@ const (
 	HookTypeDataCollection = "data_collection"
 
 	// AI Studio plugin hook types
-	HookTypeStudioUI = "studio_ui" // AI Studio UI extension plugins
-	HookTypeAgent    = "agent"     // AI Studio agent plugins
+	HookTypeStudioUI   = "studio_ui"   // AI Studio UI extension plugins
+	HookTypeAgent      = "agent"       // AI Studio agent plugins
+	HookTypeObjectHooks = "object_hooks" // AI Studio object interaction hooks (CRUD operations)
 )
 
 // validHookTypes contains all valid hook type constants
@@ -70,6 +71,7 @@ var validHookTypes = []string{
 	HookTypeDataCollection,
 	HookTypeStudioUI,
 	HookTypeAgent,
+	HookTypeObjectHooks,
 }
 
 // IsValidHookType validates if a hook type string is valid

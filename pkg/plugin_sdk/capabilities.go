@@ -129,6 +129,22 @@ type AgentPlugin interface {
 	GetManifest() ([]byte, error)
 }
 
+// ObjectHookHandler intercepts CRUD operations on AI Studio objects (LLMs, Datasources, Tools, Users).
+// Use this to implement custom validation, enrichment, or integration with external systems.
+// Hooks are executed in priority order, and "before_*" hooks can reject operations.
+type ObjectHookHandler interface {
+	Plugin
+
+	// GetObjectHookRegistrations declares which object operations this plugin wants to handle.
+	// Returns a list of registrations specifying object types, hook types, and execution priority.
+	GetObjectHookRegistrations() ([]*pb.ObjectHookRegistration, error)
+
+	// HandleObjectHook processes a single object hook invocation.
+	// req contains: hook type, object type, object data (JSON), user ID, operation ID
+	// Returns: allow/reject decision, optional modified object, plugin metadata
+	HandleObjectHook(ctx Context, req *pb.ObjectHookRequest) (*pb.ObjectHookResponse, error)
+}
+
 // HookType represents the type of plugin hook (for gateway compatibility)
 type HookType string
 

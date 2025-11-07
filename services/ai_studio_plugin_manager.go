@@ -246,6 +246,14 @@ func (c *AIStudioPluginClient) HandleAgentMessage(ctx context.Context, req *pb.A
 	return c.pluginStub.HandleAgentMessage(ctx, req, opts...)
 }
 
+func (c *AIStudioPluginClient) GetObjectHookRegistrations(ctx context.Context, req *pb.GetObjectHookRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetObjectHookRegistrationsResponse, error) {
+	return c.pluginStub.GetObjectHookRegistrations(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) HandleObjectHook(ctx context.Context, req *pb.ObjectHookRequest, opts ...grpc.CallOption) (*pb.ObjectHookResponse, error) {
+	return c.pluginStub.HandleObjectHook(ctx, req, opts...)
+}
+
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
 // Uses a universal handshake that works with any plugin type
 type ConfigOnlyGRPC struct {
@@ -437,6 +445,30 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		Bool("has_service_provider", serviceProvider != nil).
 		Msg("AI Studio plugin loaded successfully")
 
+	// Register object hooks if plugin implements ObjectHookHandler
+	if m.service != nil && m.service.HookRegistry != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		regs, err := clientWrapper.GetObjectHookRegistrations(ctx, &pb.GetObjectHookRegistrationsRequest{})
+		if err == nil && regs != nil && len(regs.Registrations) > 0 {
+			err = m.service.HookRegistry.RegisterHooks(uint32(pluginID), plugin.Name, regs.Registrations)
+			if err != nil {
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Str("plugin_name", plugin.Name).
+					Err(err).
+					Msg("Failed to register object hooks")
+			} else {
+				log.Info().
+					Uint("plugin_id", pluginID).
+					Str("plugin_name", plugin.Name).
+					Int("hook_count", len(regs.Registrations)).
+					Msg("✅ Registered object hooks for plugin")
+			}
+		}
+	}
+
 	// Auto-fetch and register manifest (new streamlined workflow)
 	go func() {
 		log.Info().
@@ -528,6 +560,18 @@ func (m *AIStudioPluginManager) injectServiceProvider(loadedPlugin *LoadedAIStud
 	return nil
 }
 
+// GetPlugin returns a loaded plugin by ID
+func (m *AIStudioPluginManager) GetPlugin(pluginID uint) (*LoadedAIStudioPlugin, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if loadedPlugin, exists := m.loadedPlugins[pluginID]; exists {
+		return loadedPlugin, nil
+	}
+
+	return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+}
+
 // GetServiceProvider returns the service provider for a loaded plugin
 func (m *AIStudioPluginManager) GetServiceProvider(pluginID uint) (plugin_services.AIStudioServiceProvider, bool) {
 	m.mu.RLock()
@@ -564,6 +608,15 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 				Err(err).
 				Msg("Failed to shutdown plugin gracefully")
 		}
+	}
+
+	// Unregister object hooks if registry is available
+	if m.service != nil && m.service.HookRegistry != nil {
+		m.service.HookRegistry.UnregisterPlugin(uint32(pluginID))
+		log.Info().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", loadedPlugin.Name).
+			Msg("Unregistered object hooks for plugin")
 	}
 
 	// Kill plugin process
@@ -1049,22 +1102,23 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 		return fmt.Errorf("failed to get plugins: %w", err)
 	}
 
-	log.Info().Int("total_plugins", len(plugins)).Msg("Checking plugins for UI/Agent support")
+	log.Info().Int("total_plugins", len(plugins)).Msg("Checking plugins for AI Studio support (UI/Agent/Object Hooks)")
 
 	var loadErrors []string
 	loadedCount := 0
 
 	for _, plugin := range plugins {
-		// Check if plugin supports studio_ui or agent hooks
+		// Check if plugin supports studio_ui, agent, or object_hooks
 		supportsUI := plugin.SupportsHookType(models.HookTypeStudioUI)
 		supportsAgent := plugin.SupportsHookType(models.HookTypeAgent)
+		supportsObjectHooks := plugin.SupportsHookType(models.HookTypeObjectHooks)
 
-		if !supportsUI && !supportsAgent {
+		if !supportsUI && !supportsAgent && !supportsObjectHooks {
 			log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
 				Strs("hooks", plugin.GetAllHookTypes()).
-				Msg("Plugin does not support UI or Agent hooks, skipping")
+				Msg("Plugin does not support UI, Agent, or Object Hooks, skipping")
 			continue
 		}
 
@@ -1083,14 +1137,14 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
 				Strs("hooks", plugin.GetAllHookTypes()).
-				Msg("Successfully loaded UI/Agent plugin")
+				Msg("Successfully loaded AI Studio plugin")
 		}
 	}
 
 	log.Info().
 		Int("loaded", loadedCount).
 		Int("failed", len(loadErrors)).
-		Msg("Completed UI/Agent plugin loading")
+		Msg("Completed AI Studio plugin loading")
 
 	if len(loadErrors) > 0 {
 		return fmt.Errorf("failed to load some plugins: %s", strings.Join(loadErrors, "; "))

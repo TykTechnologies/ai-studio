@@ -98,13 +98,13 @@ func main() {
 
 	service := services.NewServiceWithOCI(db, ociConfig)
 
-	// Load UI and Agent plugins at startup
+	// Load AI Studio plugins at startup (UI, Agent, and Object Hooks)
 	if service.AIStudioPluginManager != nil {
-		logger.Info("Loading UI and Agent plugins...")
+		logger.Info("Loading AI Studio plugins (UI, Agent, Object Hooks)...")
 		if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
-			logger.Warnf("Failed to load some UI/Agent plugins: %v", err)
+			logger.Warnf("Failed to load some AI Studio plugins: %v", err)
 		} else {
-			logger.Info("UI and Agent plugins loaded successfully")
+			logger.Info("AI Studio plugins loaded successfully")
 		}
 	}
 

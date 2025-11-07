@@ -22,6 +22,9 @@ type Service struct {
 	AIStudioPluginManager  *AIStudioPluginManager
 	PluginMetadataLoader   *PluginMetadataLoader
 	MarketplaceService     *MarketplaceService
+	// Object Hooks
+	HookRegistry           *HookRegistry
+	HookManager            *HookManager
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -98,6 +101,16 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		logger.Info("Marketplace service will be initialized with configuration from main.go")
 	}
 
+	// Initialize object hooks system
+	hookRegistry := NewHookRegistry()
+	var hookManager *HookManager
+	if aiStudioPluginManager != nil {
+		hookManager = NewHookManager(hookRegistry, aiStudioPluginManager)
+		logger.Info("Initialized object hooks system")
+	} else {
+		logger.Warn("AI Studio plugin manager not available - object hooks will not be available")
+	}
+
 	// Create service instance
 	service := &Service{
 		DB:                    db,
@@ -110,6 +123,8 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		AIStudioPluginManager: aiStudioPluginManager,
 		PluginMetadataLoader:  pluginMetadataLoader,
 		MarketplaceService:    marketplaceService,
+		HookRegistry:          hookRegistry,
+		HookManager:           hookManager,
 	}
 
 	// Wire service reference to AI Studio plugin manager for proper service provider injection

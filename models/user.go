@@ -38,6 +38,9 @@ type User struct {
 	APIKey               string
 	NotificationsEnabled bool    `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
 	Groups               []Group `json:"groups" gorm:"many2many:user_groups;"`
+
+	// Plugin-stored metadata
+	Metadata JSONMap `json:"metadata" gorm:"type:json"`
 }
 
 type Users []User

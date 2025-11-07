@@ -471,6 +471,7 @@ func isValidHookType(hookType string) bool {
 		models.HookTypeDataCollection,
 		models.HookTypeStudioUI,
 		models.HookTypeAgent,
+		models.HookTypeObjectHooks,
 	}
 	for _, validType := range validTypes {
 		if hookType == validType {
@@ -939,21 +940,32 @@ func (s *PluginService) AuthorizePluginServiceAccess(pluginID uint, adminApprova
 		return fmt.Errorf("failed to get plugin: %w", err)
 	}
 
-	if len(plugin.ServiceScopes) == 0 {
-		return fmt.Errorf("plugin has no service scopes declared - load manifest first")
-	}
-
 	if adminApproval {
-		// Authorize access with the scopes declared in manifest
-		if err := plugin.AuthorizeServiceAccess(s.db, plugin.ServiceScopes); err != nil {
-			return fmt.Errorf("failed to authorize service access: %w", err)
-		}
+		// If plugin has service scopes, authorize them
+		if len(plugin.ServiceScopes) > 0 {
+			// Authorize access with the scopes declared in manifest
+			if err := plugin.AuthorizeServiceAccess(s.db, plugin.ServiceScopes); err != nil {
+				return fmt.Errorf("failed to authorize service access: %w", err)
+			}
 
-		log.Info().
-			Uint("plugin_id", pluginID).
-			Str("plugin_name", plugin.Name).
-			Strs("authorized_scopes", plugin.ServiceScopes).
-			Msg("Admin authorized plugin service access")
+			log.Info().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Strs("authorized_scopes", plugin.ServiceScopes).
+				Msg("Admin authorized plugin service access")
+		} else {
+			// Plugin has no service scopes (e.g., object_hooks plugins)
+			// Just mark as reviewed/approved by setting ServiceAccessAuthorized to true
+			plugin.ServiceAccessAuthorized = true
+			if err := plugin.Update(s.db); err != nil {
+				return fmt.Errorf("failed to update plugin authorization: %w", err)
+			}
+
+			log.Info().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Msg("Admin approved plugin (no service scopes required)")
+		}
 	} else {
 		// Revoke access
 		if err := plugin.RevokeServiceAccess(s.db); err != nil {

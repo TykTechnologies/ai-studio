@@ -1,6 +1,10 @@
 package services
 
 import (
+	"context"
+	"fmt"
+
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
@@ -25,12 +29,58 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 		Active:           active,
 	}
 
+	// Execute "before_create" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeDatasource,
+			HookBeforeCreate,
+			datasource,
+			uint32(userID),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.Datasource); ok {
+				datasource = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(datasource, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := datasource.Create(s.DB); err != nil {
 		return nil, err
 	}
 
 	if err := datasource.AddTags(s.DB, tagNames); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_create" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeDatasource,
+			HookAfterCreate,
+			datasource,
+			uint32(userID),
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-create hooks failed: %v", err))
+		}
 	}
 
 	return datasource, nil
@@ -82,6 +132,37 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		oldTags = append(oldTags, tag.Name)
 	}
 
+	// Execute "before_update" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeDatasource,
+			HookBeforeUpdate,
+			datasource,
+			uint32(userID),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.Datasource); ok {
+				datasource = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(datasource, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := datasource.Update(s.DB); err != nil {
 		return nil, err
 	}
@@ -92,6 +173,21 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 
 	if err := datasource.AddTags(s.DB, tagNames); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_update" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeDatasource,
+			HookAfterUpdate,
+			datasource,
+			uint32(userID),
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-update hooks failed: %v", err))
+		}
 	}
 
 	return datasource, nil
@@ -114,7 +210,45 @@ func (s *Service) DeleteDatasource(id uint) error {
 		return err
 	}
 
-	return datasource.Delete(s.DB)
+	// Execute "before_delete" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeDatasource,
+			HookBeforeDelete,
+			datasource,
+			uint32(datasource.UserID),
+		)
+		if err != nil {
+			return fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+	}
+
+	if err := datasource.Delete(s.DB); err != nil {
+		return err
+	}
+
+	// Execute "after_delete" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeDatasource,
+			HookAfterDelete,
+			datasource,
+			uint32(datasource.UserID),
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-delete hooks failed: %v", err))
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) GetAllDatasources(pageSize int, pageNumber int, all bool) (models.Datasources, int64, int, error) {

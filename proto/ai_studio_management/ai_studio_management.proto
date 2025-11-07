@@ -223,6 +223,7 @@ message LLMInfo {
     optional double monthly_budget = 12;
     google.protobuf.Timestamp created_at = 13;
     google.protobuf.Timestamp updated_at = 14;
+    map<string, string> metadata = 15;  // Plugin-stored data
 }
 
 // LLM CRUD Messages
@@ -507,6 +508,7 @@ message ToolInfo {
     int32 privacy_score = 10;
     google.protobuf.Timestamp created_at = 11;
     google.protobuf.Timestamp updated_at = 12;
+    map<string, string> metadata = 13;  // Plugin-stored data
 }
 
 message ToolOperation {
@@ -703,6 +705,7 @@ message DatasourceInfo {
     bool has_embed_api_key = 16;     // Don't expose actual key
     google.protobuf.Timestamp created_at = 17;
     google.protobuf.Timestamp updated_at = 18;
+    map<string, string> metadata = 19;  // Plugin-stored data
 }
 
 // Data Catalogues Management Messages (Phase 1.2)

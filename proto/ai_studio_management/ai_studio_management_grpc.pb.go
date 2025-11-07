@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: proto/ai_studio_management/ai_studio_management.proto
+// source: ai_studio_management/ai_studio_management.proto
 
 package ai_studio_management
 
@@ -2664,5 +2664,5 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "proto/ai_studio_management/ai_studio_management.proto",
+	Metadata: "ai_studio_management/ai_studio_management.proto",
 }

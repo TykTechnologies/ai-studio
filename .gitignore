@@ -89,3 +89,5 @@ examples/plugins/studio/llm-rate-limiter-multiphase/llm-rate-limiter
 examples/plugins/gateway/message_modifier/message-modifier
 examples/plugins/gateway/request_enricher/request-enricher
 examples/plugins/gateway/response_modifier/response-modifier
+examples/plugins/studio/hook-test-plugin/hook-test-plugin
+examples/plugins/studio/llm-validator/llm-validator

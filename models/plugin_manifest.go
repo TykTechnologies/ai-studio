@@ -20,11 +20,12 @@ type PluginManifest struct {
 
 	// Permissions and security
 	Permissions struct {
-		KV       []string `json:"kv"`       // KV access permissions: read, write, list
-		RPC      []string `json:"rpc"`      // RPC permissions: call
-		Routes   []string `json:"routes"`   // Route patterns this plugin can register
-		UI       []string `json:"ui"`       // UI permissions: sidebar.register, route.register
-		Services []string `json:"services"` // AI Studio service access scopes: analytics.read, plugins.config, etc.
+		KV          []string `json:"kv"`           // KV access permissions: read, write, list
+		RPC         []string `json:"rpc"`          // RPC permissions: call
+		Routes      []string `json:"routes"`       // Route patterns this plugin can register
+		UI          []string `json:"ui"`           // UI permissions: sidebar.register, route.register
+		Services    []string `json:"services"`     // AI Studio service access scopes: analytics.read, plugins.config, etc.
+		ObjectHooks []string `json:"object_hooks"` // Object hook permissions: llm.before_create, datasource.after_update, etc.
 	} `json:"permissions"`
 
 	// Key-value namespace for plugin data
@@ -261,6 +262,12 @@ func (pm *PluginManifest) HasPermission(permType, permission string) bool {
 				return true
 			}
 		}
+	case "object_hooks":
+		for _, perm := range pm.Permissions.ObjectHooks {
+			if perm == permission {
+				return true
+			}
+		}
 	}
 	return false
 }
@@ -289,6 +296,19 @@ func (pm *PluginManifest) GetServiceScopes() []string {
 // HasServiceScope checks if the manifest declares a specific service scope
 func (pm *PluginManifest) HasServiceScope(scope string) bool {
 	return pm.HasPermission("services", scope)
+}
+
+// GetObjectHooks returns all object hook permissions declared in the manifest
+func (pm *PluginManifest) GetObjectHooks() []string {
+	return pm.Permissions.ObjectHooks
+}
+
+// GetAllPermissionScopes returns all permission scopes (services + object_hooks) for approval workflow
+func (pm *PluginManifest) GetAllPermissionScopes() []string {
+	scopes := make([]string, 0, len(pm.Permissions.Services)+len(pm.Permissions.ObjectHooks))
+	scopes = append(scopes, pm.Permissions.Services...)
+	scopes = append(scopes, pm.Permissions.ObjectHooks...)
+	return scopes
 }
 
 // TableName returns table name for RegisteredPlugin

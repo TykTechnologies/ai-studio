@@ -29,6 +29,9 @@ type Datasource struct {
 	Files []FileStore `gorm:"many2many:datasource_filestores;" json:"files"`
 
 	Active bool
+
+	// Plugin-stored metadata
+	Metadata JSONMap `json:"metadata" gorm:"type:json"`
 }
 
 type Datasources []Datasource

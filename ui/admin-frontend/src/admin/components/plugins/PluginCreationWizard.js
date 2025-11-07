@@ -129,14 +129,9 @@ const PluginCreationWizard = () => {
 
         setWorkflowState(attrs.status);
 
-        // If there are scopes (UI/Agent plugins), go to approval step
-        if (attrs.scopes && attrs.scopes.length > 0) {
-          handleNext(); // Go to scope approval step (activeStep becomes 1)
-        } else {
-          // No scopes, skip to configuration (activeStep becomes 1 since scope step is hidden)
-          handleNext();
-          setWorkflowState(WORKFLOW_STATES.READY);
-        }
+        // Always go to manifest/scope approval step
+        // All plugins must show their manifest for user review (hook types, capabilities, permissions)
+        handleNext(); // Go to scope approval step (activeStep becomes 1)
       } catch (metadataErr) {
         // If metadata loading fails, log but continue to configuration step
         console.warn('Failed to load plugin metadata:', metadataErr);
@@ -200,13 +195,24 @@ const PluginCreationWizard = () => {
     setLoading(true);
     try {
       // Update plugin with final configuration and hook types
-      await pluginService.updatePlugin(pluginId, {
+      // Determine hook types to use (customized or from manifest)
+      const finalHookTypes = configData.hookTypes || pluginData.hookTypes || [];
+      const finalPrimaryHook = pluginData.hookType || finalHookTypes[0];
+
+      // Only include hookType in update if we have a valid value
+      const updatePayload = {
         config: configData.config,
-        hookType: configData.hookTypes?.[0] || pluginData.hookType,
-        hookTypes: configData.hookTypes || pluginData.hookTypes,
+        hookTypes: finalHookTypes,
         hookTypesCustomized: configData.hookTypesCustomized || false,
         isActive: true,
-      });
+      };
+
+      // Only include hookType if it's not empty/pending
+      if (finalPrimaryHook && finalPrimaryHook !== 'pending') {
+        updatePayload.hookType = finalPrimaryHook;
+      }
+
+      await pluginService.updatePlugin(pluginId, updatePayload);
 
       // Update pluginData with the final config for Step 4
       setPluginData(prev => ({
@@ -323,8 +329,8 @@ const PluginCreationWizard = () => {
   };
 
   // Determine which steps to show based on plugin characteristics
-  const hasScopes = metadata.scopes && metadata.scopes.length > 0;
-  const shouldShowScopeStep = hasScopes;
+  // Always show scope/manifest step for all plugins (they need to see hook types and permissions)
+  const shouldShowScopeStep = true;
 
   // Check if plugin has agent hook type for step 4
   const hookTypes = pluginData.hookTypes || [];

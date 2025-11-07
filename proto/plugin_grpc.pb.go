@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: proto/plugin.proto
+// source: plugin.proto
 
 package proto
 
@@ -19,25 +19,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PluginService_Initialize_FullMethodName           = "/plugin.PluginService/Initialize"
-	PluginService_Ping_FullMethodName                 = "/plugin.PluginService/Ping"
-	PluginService_Shutdown_FullMethodName             = "/plugin.PluginService/Shutdown"
-	PluginService_ProcessPreAuth_FullMethodName       = "/plugin.PluginService/ProcessPreAuth"
-	PluginService_Authenticate_FullMethodName         = "/plugin.PluginService/Authenticate"
-	PluginService_GetAppByCredential_FullMethodName   = "/plugin.PluginService/GetAppByCredential"
-	PluginService_GetUserByCredential_FullMethodName  = "/plugin.PluginService/GetUserByCredential"
-	PluginService_ProcessPostAuth_FullMethodName      = "/plugin.PluginService/ProcessPostAuth"
-	PluginService_OnBeforeWriteHeaders_FullMethodName = "/plugin.PluginService/OnBeforeWriteHeaders"
-	PluginService_OnBeforeWrite_FullMethodName        = "/plugin.PluginService/OnBeforeWrite"
-	PluginService_HandleProxyLog_FullMethodName       = "/plugin.PluginService/HandleProxyLog"
-	PluginService_HandleAnalytics_FullMethodName      = "/plugin.PluginService/HandleAnalytics"
-	PluginService_HandleBudgetUsage_FullMethodName    = "/plugin.PluginService/HandleBudgetUsage"
-	PluginService_GetAsset_FullMethodName             = "/plugin.PluginService/GetAsset"
-	PluginService_ListAssets_FullMethodName           = "/plugin.PluginService/ListAssets"
-	PluginService_GetManifest_FullMethodName          = "/plugin.PluginService/GetManifest"
-	PluginService_Call_FullMethodName                 = "/plugin.PluginService/Call"
-	PluginService_GetConfigSchema_FullMethodName      = "/plugin.PluginService/GetConfigSchema"
-	PluginService_HandleAgentMessage_FullMethodName   = "/plugin.PluginService/HandleAgentMessage"
+	PluginService_Initialize_FullMethodName                 = "/plugin.PluginService/Initialize"
+	PluginService_Ping_FullMethodName                       = "/plugin.PluginService/Ping"
+	PluginService_Shutdown_FullMethodName                   = "/plugin.PluginService/Shutdown"
+	PluginService_ProcessPreAuth_FullMethodName             = "/plugin.PluginService/ProcessPreAuth"
+	PluginService_Authenticate_FullMethodName               = "/plugin.PluginService/Authenticate"
+	PluginService_GetAppByCredential_FullMethodName         = "/plugin.PluginService/GetAppByCredential"
+	PluginService_GetUserByCredential_FullMethodName        = "/plugin.PluginService/GetUserByCredential"
+	PluginService_ProcessPostAuth_FullMethodName            = "/plugin.PluginService/ProcessPostAuth"
+	PluginService_OnBeforeWriteHeaders_FullMethodName       = "/plugin.PluginService/OnBeforeWriteHeaders"
+	PluginService_OnBeforeWrite_FullMethodName              = "/plugin.PluginService/OnBeforeWrite"
+	PluginService_HandleProxyLog_FullMethodName             = "/plugin.PluginService/HandleProxyLog"
+	PluginService_HandleAnalytics_FullMethodName            = "/plugin.PluginService/HandleAnalytics"
+	PluginService_HandleBudgetUsage_FullMethodName          = "/plugin.PluginService/HandleBudgetUsage"
+	PluginService_GetAsset_FullMethodName                   = "/plugin.PluginService/GetAsset"
+	PluginService_ListAssets_FullMethodName                 = "/plugin.PluginService/ListAssets"
+	PluginService_GetManifest_FullMethodName                = "/plugin.PluginService/GetManifest"
+	PluginService_Call_FullMethodName                       = "/plugin.PluginService/Call"
+	PluginService_GetConfigSchema_FullMethodName            = "/plugin.PluginService/GetConfigSchema"
+	PluginService_HandleAgentMessage_FullMethodName         = "/plugin.PluginService/HandleAgentMessage"
+	PluginService_GetObjectHookRegistrations_FullMethodName = "/plugin.PluginService/GetObjectHookRegistrations"
+	PluginService_HandleObjectHook_FullMethodName           = "/plugin.PluginService/HandleObjectHook"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -76,6 +78,9 @@ type PluginServiceClient interface {
 	GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error)
 	// Agent Plugin Methods
 	HandleAgentMessage(ctx context.Context, in *AgentMessageRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentMessageChunk], error)
+	// Object Hook Methods (for AI Studio plugins)
+	GetObjectHookRegistrations(ctx context.Context, in *GetObjectHookRegistrationsRequest, opts ...grpc.CallOption) (*GetObjectHookRegistrationsResponse, error)
+	HandleObjectHook(ctx context.Context, in *ObjectHookRequest, opts ...grpc.CallOption) (*ObjectHookResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -285,6 +290,26 @@ func (c *pluginServiceClient) HandleAgentMessage(ctx context.Context, in *AgentM
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PluginService_HandleAgentMessageClient = grpc.ServerStreamingClient[AgentMessageChunk]
 
+func (c *pluginServiceClient) GetObjectHookRegistrations(ctx context.Context, in *GetObjectHookRegistrationsRequest, opts ...grpc.CallOption) (*GetObjectHookRegistrationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetObjectHookRegistrationsResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetObjectHookRegistrations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) HandleObjectHook(ctx context.Context, in *ObjectHookRequest, opts ...grpc.CallOption) (*ObjectHookResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ObjectHookResponse)
+	err := c.cc.Invoke(ctx, PluginService_HandleObjectHook_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -321,6 +346,9 @@ type PluginServiceServer interface {
 	GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error)
 	// Agent Plugin Methods
 	HandleAgentMessage(*AgentMessageRequest, grpc.ServerStreamingServer[AgentMessageChunk]) error
+	// Object Hook Methods (for AI Studio plugins)
+	GetObjectHookRegistrations(context.Context, *GetObjectHookRegistrationsRequest) (*GetObjectHookRegistrationsResponse, error)
+	HandleObjectHook(context.Context, *ObjectHookRequest) (*ObjectHookResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -387,6 +415,12 @@ func (UnimplementedPluginServiceServer) GetConfigSchema(context.Context, *GetCon
 }
 func (UnimplementedPluginServiceServer) HandleAgentMessage(*AgentMessageRequest, grpc.ServerStreamingServer[AgentMessageChunk]) error {
 	return status.Errorf(codes.Unimplemented, "method HandleAgentMessage not implemented")
+}
+func (UnimplementedPluginServiceServer) GetObjectHookRegistrations(context.Context, *GetObjectHookRegistrationsRequest) (*GetObjectHookRegistrationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetObjectHookRegistrations not implemented")
+}
+func (UnimplementedPluginServiceServer) HandleObjectHook(context.Context, *ObjectHookRequest) (*ObjectHookResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleObjectHook not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -744,6 +778,42 @@ func _PluginService_HandleAgentMessage_Handler(srv interface{}, stream grpc.Serv
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PluginService_HandleAgentMessageServer = grpc.ServerStreamingServer[AgentMessageChunk]
 
+func _PluginService_GetObjectHookRegistrations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetObjectHookRegistrationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetObjectHookRegistrations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetObjectHookRegistrations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetObjectHookRegistrations(ctx, req.(*GetObjectHookRegistrationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_HandleObjectHook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ObjectHookRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).HandleObjectHook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_HandleObjectHook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).HandleObjectHook(ctx, req.(*ObjectHookRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -823,6 +893,14 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetConfigSchema",
 			Handler:    _PluginService_GetConfigSchema_Handler,
 		},
+		{
+			MethodName: "GetObjectHookRegistrations",
+			Handler:    _PluginService_GetObjectHookRegistrations_Handler,
+		},
+		{
+			MethodName: "HandleObjectHook",
+			Handler:    _PluginService_HandleObjectHook_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -831,5 +909,5 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "proto/plugin.proto",
+	Metadata: "plugin.proto",
 }

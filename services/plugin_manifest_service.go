@@ -242,11 +242,19 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 		}
 	}
 
+	// Count UI components safely
+	uiComponentCount := 0
+	if manifest.UI != nil {
+		for _, slot := range manifest.UI.Slots {
+			uiComponentCount += len(slot.Items)
+		}
+	}
+
 	log.Info().
 		Uint("plugin_id", plugin.ID).
 		Str("plugin_name", plugin.Name).
 		Str("manifest_version", manifest.Version).
-		Int("ui_components", len(manifest.UI.Slots)).
+		Int("ui_components", uiComponentCount).
 		Msg("Plugin UI components registered successfully")
 
 	return nil

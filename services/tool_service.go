@@ -1,12 +1,14 @@
 package services
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
@@ -25,8 +27,54 @@ func (s *Service) CreateTool(name, description, toolType string, oasSpec string,
 		AuthKey:        APIKey,
 	}
 
+	// Execute "before_create" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookBeforeCreate,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.Tool); ok {
+				tool = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(tool, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := tool.Create(s.DB); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_create" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookAfterCreate,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-create hooks failed: %v", err))
+		}
 	}
 
 	return tool, nil
@@ -47,8 +95,54 @@ func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpe
 	tool.AuthSchemaName = schemaName
 	tool.AuthKey = APIKey
 
+	// Execute "before_update" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookBeforeUpdate,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.Tool); ok {
+				tool = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(tool, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := tool.Update(s.DB); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_update" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookAfterUpdate,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-update hooks failed: %v", err))
+		}
 	}
 
 	return tool, nil
@@ -72,7 +166,45 @@ func (s *Service) DeleteTool(id uint) error {
 		return err
 	}
 
-	return tool.Delete(s.DB)
+	// Execute "before_delete" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookBeforeDelete,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+	}
+
+	if err := tool.Delete(s.DB); err != nil {
+		return err
+	}
+
+	// Execute "after_delete" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookAfterDelete,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-delete hooks failed: %v", err))
+		}
+	}
+
+	return nil
 }
 
 // GetToolByName retrieves a tool by its name

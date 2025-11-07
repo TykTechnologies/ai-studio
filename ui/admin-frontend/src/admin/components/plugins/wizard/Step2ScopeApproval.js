@@ -46,6 +46,20 @@ const Step2ScopeApproval = ({ scopes, manifest, pluginData, onApprove, onBack, l
             <Typography variant="body2">
               • Version: {manifest.version}
             </Typography>
+            {manifest.capabilities && (
+              <>
+                {manifest.capabilities.primary_hook && (
+                  <Typography variant="body2">
+                    • Primary Hook: {manifest.capabilities.primary_hook}
+                  </Typography>
+                )}
+                {manifest.capabilities.hooks && manifest.capabilities.hooks.length > 0 && (
+                  <Typography variant="body2">
+                    • Supported Hooks: {manifest.capabilities.hooks.join(', ')}
+                  </Typography>
+                )}
+              </>
+            )}
           </>
         )}
       </Alert>

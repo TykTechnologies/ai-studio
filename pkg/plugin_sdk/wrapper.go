@@ -320,6 +320,21 @@ func (w *pluginServerWrapper) GetManifest(ctx context.Context, req *pb.GetManife
 		}, nil
 	}
 
+	// Try ManifestProvider (for non-UI plugins that still need installation metadata)
+	if provider, ok := w.plugin.(ManifestProvider); ok {
+		manifestBytes, err := provider.GetManifest()
+		if err != nil {
+			return &pb.GetManifestResponse{
+				Success:      false,
+				ErrorMessage: err.Error(),
+			}, nil
+		}
+		return &pb.GetManifestResponse{
+			Success:      true,
+			ManifestJson: string(manifestBytes),
+		}, nil
+	}
+
 	return &pb.GetManifestResponse{
 		Success:      false,
 		ErrorMessage: "plugin does not provide a manifest",
@@ -392,4 +407,41 @@ func (w *pluginServerWrapper) HandleAgentMessage(req *pb.AgentMessageRequest, st
 	}
 
 	return agent.HandleAgentMessage(req, stream)
+}
+
+// GetObjectHookRegistrations implements pb.PluginServiceServer
+func (w *pluginServerWrapper) GetObjectHookRegistrations(ctx context.Context, req *pb.GetObjectHookRegistrationsRequest) (*pb.GetObjectHookRegistrationsResponse, error) {
+	// Check if plugin implements ObjectHookHandler
+	handler, ok := w.plugin.(ObjectHookHandler)
+	if !ok {
+		// Plugin doesn't handle object hooks - return empty registrations
+		return &pb.GetObjectHookRegistrationsResponse{
+			Registrations: nil,
+		}, nil
+	}
+
+	regs, err := handler.GetObjectHookRegistrations()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get object hook registrations: %w", err)
+	}
+
+	return &pb.GetObjectHookRegistrationsResponse{
+		Registrations: regs,
+	}, nil
+}
+
+// HandleObjectHook implements pb.PluginServiceServer
+func (w *pluginServerWrapper) HandleObjectHook(ctx context.Context, req *pb.ObjectHookRequest) (*pb.ObjectHookResponse, error) {
+	// Check if plugin implements ObjectHookHandler
+	handler, ok := w.plugin.(ObjectHookHandler)
+	if !ok {
+		// Plugin doesn't handle object hooks - allow operation without modification
+		return &pb.ObjectHookResponse{
+			AllowOperation: true,
+			Modified:       false,
+		}, nil
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	return handler.HandleObjectHook(pluginCtx, req)
 }

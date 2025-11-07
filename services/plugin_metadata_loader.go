@@ -135,18 +135,21 @@ func (l *PluginMetadataLoader) LoadPluginMetadataByID(ctx context.Context, plugi
 	return l.LoadPluginMetadata(ctx, plugin.Command)
 }
 
-// ExtractScopesFromMetadata extracts service scopes from metadata (if manifest is available)
+// ExtractScopesFromMetadata extracts all permission scopes from metadata (if manifest is available)
+// This includes both service scopes (AI Studio services) and object_hooks permissions
 func (l *PluginMetadataLoader) ExtractScopesFromMetadata(metadata *PluginMetadata) []string {
 	if metadata.Manifest == nil {
 		log.Debug().Str("command", metadata.Command).Msg("No manifest available - no scopes to extract")
 		return []string{}
 	}
 
-	scopes := metadata.Manifest.GetServiceScopes()
+	scopes := metadata.Manifest.GetAllPermissionScopes()
 	log.Debug().
 		Str("command", metadata.Command).
 		Strs("scopes", scopes).
-		Msg("Extracted service scopes from manifest")
+		Int("service_scopes", len(metadata.Manifest.GetServiceScopes())).
+		Int("object_hooks", len(metadata.Manifest.GetObjectHooks())).
+		Msg("Extracted permission scopes from manifest")
 
 	return scopes
 }

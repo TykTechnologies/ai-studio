@@ -46,6 +46,10 @@ service PluginService {
 
     // Agent Plugin Methods
     rpc HandleAgentMessage(AgentMessageRequest) returns (stream AgentMessageChunk);
+
+    // Object Hook Methods (for AI Studio plugins)
+    rpc GetObjectHookRegistrations(GetObjectHookRegistrationsRequest) returns (GetObjectHookRegistrationsResponse);
+    rpc HandleObjectHook(ObjectHookRequest) returns (ObjectHookResponse);
 }
 
 // Common messages
@@ -375,4 +379,51 @@ message AgentConversationMessage {
     string content = 2;
     int64 timestamp = 3;         // Unix timestamp
     string metadata_json = 4;    // Additional metadata as JSON
+}
+
+// Object Hook Messages
+
+message GetObjectHookRegistrationsRequest {
+    // Empty - plugin returns its registrations
+}
+
+message GetObjectHookRegistrationsResponse {
+    repeated ObjectHookRegistration registrations = 1;
+}
+
+message ObjectHookRegistration {
+    string object_type = 1;  // "llm", "datasource", "tool", "user"
+    repeated string hook_types = 2;  // e.g., "before_create", "after_update", "before_delete"
+    int32 priority = 3;  // Execution order (lower = earlier)
+}
+
+message ObjectHookRequest {
+    string hook_type = 1;        // "before_create", "after_create", "before_update", "after_update", "before_delete", "after_delete"
+    string object_type = 2;       // "llm", "datasource", "tool", "user"
+    string operation_id = 3;      // Unique ID for this operation (for correlation)
+    uint32 user_id = 4;           // User performing the operation
+    uint32 plugin_id = 5;         // Plugin being invoked
+    PluginContext context = 6;    // Plugin context with metadata
+
+    // The object being modified/created/deleted (JSON encoded)
+    string object_json = 10;      // JSON representation of the object
+
+    // Additional context about the operation
+    map<string, string> metadata = 20;
+    int64 timestamp = 21;         // Unix timestamp
+}
+
+message ObjectHookResponse {
+    bool allow_operation = 1;     // Whether to proceed with operation (for "before_*" hooks)
+    string rejection_reason = 2;   // If not allowed, why (shown to user)
+
+    // Modified object (JSON encoded)
+    string modified_object_json = 10;  // JSON representation if plugin modified the object
+
+    // Plugin-specific metadata to store with the object
+    map<string, string> plugin_metadata = 20;
+
+    // Additional response metadata
+    string message = 30;  // Optional message to log
+    bool modified = 31;   // Whether the plugin modified the object
 }

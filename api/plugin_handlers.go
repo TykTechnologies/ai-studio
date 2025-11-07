@@ -300,9 +300,10 @@ func (a *API) createPlugin(c *gin.Context) {
 		return
 	}
 
-	// Auto-load AI Studio plugins if requested
-	if req.LoadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
-		log.Printf("Auto-loading AI Studio plugin: %s (ID: %d)", plugin.Name, plugin.ID)
+	// Auto-load AI Studio plugins if requested or if hook_type is pending
+	shouldAutoLoad := req.LoadImmediately || plugin.HookType == "pending"
+	if shouldAutoLoad && a.service.AIStudioPluginManager != nil {
+		log.Printf("Auto-loading plugin to fetch manifest: %s (ID: %d)", plugin.Name, plugin.ID)
 
 		// Load the plugin
 		if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(plugin.ID); loadErr != nil {
@@ -313,15 +314,43 @@ func (a *API) createPlugin(c *gin.Context) {
 			if manifestJSON, manifestErr := a.service.AIStudioPluginManager.GetPluginManifest(plugin.ID); manifestErr != nil {
 				log.Printf("Warning: Failed to auto-fetch manifest for plugin %s: %v", plugin.Name, manifestErr)
 			} else {
-				// Parse and register UI components
+				// Parse manifest
 				manifest := &models.PluginManifest{}
 				if parseErr := json.Unmarshal([]byte(manifestJSON), manifest); parseErr != nil {
 					log.Printf("Warning: Failed to parse auto-fetched manifest for plugin %s: %v", plugin.Name, parseErr)
 				} else {
-					if registerErr := a.service.PluginManifestService.RegisterPluginUI(plugin, manifest); registerErr != nil {
-						log.Printf("Warning: Failed to auto-register UI for plugin %s: %v", plugin.Name, registerErr)
-					} else {
-						log.Printf("✅ Auto-loaded and registered UI for plugin: %s", plugin.Name)
+					// Update hook types from manifest if they were pending
+					if plugin.HookType == "pending" && manifest.Capabilities.PrimaryHook != "" {
+						log.Printf("Updating plugin hook_type from manifest: %s -> %s", plugin.HookType, manifest.Capabilities.PrimaryHook)
+
+						// Update the plugin with manifest-derived hook types
+						updateReq := services.UpdatePluginRequest{
+							HookType: &manifest.Capabilities.PrimaryHook,
+						}
+
+						// If hook_types_customized is false, also update hook_types array from manifest
+						if !plugin.HookTypesCustomized && len(manifest.Capabilities.Hooks) > 0 {
+							updateReq.HookTypes = manifest.Capabilities.Hooks
+						}
+
+						if _, updateErr := a.service.PluginService.UpdatePlugin(plugin.ID, &updateReq); updateErr != nil {
+							log.Printf("Warning: Failed to update plugin hook types from manifest: %v", updateErr)
+						} else {
+							log.Printf("✅ Updated plugin hook types from manifest")
+							// Refresh plugin object for response
+							if updatedPlugin, getErr := a.service.PluginService.GetPlugin(plugin.ID); getErr == nil {
+								plugin = updatedPlugin
+							}
+						}
+					}
+
+					// Register UI components if it's a studio_ui plugin
+					if plugin.SupportsHookType(models.HookTypeStudioUI) {
+						if registerErr := a.service.PluginManifestService.RegisterPluginUI(plugin, manifest); registerErr != nil {
+							log.Printf("Warning: Failed to auto-register UI for plugin %s: %v", plugin.Name, registerErr)
+						} else {
+							log.Printf("✅ Auto-loaded and registered UI for plugin: %s", plugin.Name)
+						}
 					}
 				}
 			}
@@ -1152,7 +1181,7 @@ func (a *API) getPluginsByType(c *gin.Context) {
 	case "gateway":
 		hookTypes = []string{models.HookTypeAuth, models.HookTypePreAuth, models.HookTypePostAuth, models.HookTypeOnResponse, models.HookTypeDataCollection}
 	case "ai_studio":
-		hookTypes = []string{models.HookTypeStudioUI, models.HookTypeAgent}
+		hookTypes = []string{models.HookTypeStudioUI, models.HookTypeAgent, models.HookTypeObjectHooks}
 	default:
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {

@@ -179,8 +179,9 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 		shouldUpdatePlugin = true
 		log.Info().
 			Uint("plugin_id", uint(id)).
-			Str("primary_hook", primaryHook).
-			Strs("hook_types", hookTypes).
+			Str("old_hook_type", plugin.HookType).
+			Str("new_primary_hook", primaryHook).
+			Strs("new_hook_types", hookTypes).
 			Msg("Setting hook types from manifest")
 	}
 
@@ -201,12 +202,34 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 
 	// Save plugin updates if needed
 	if shouldUpdatePlugin {
+		log.Info().
+			Uint("plugin_id", uint(id)).
+			Str("hook_type_to_save", plugin.HookType).
+			Strs("hook_types_to_save", plugin.HookTypes).
+			Msg("About to save plugin updates to database")
+
 		if err := plugin.Update(a.service.DB); err != nil {
-			log.Warn().
+			log.Error().
 				Err(err).
 				Uint("plugin_id", uint(id)).
+				Str("hook_type", plugin.HookType).
+				Strs("hook_types", plugin.HookTypes).
 				Msg("Failed to update plugin with manifest data")
+			// Return the error so the UI knows it failed
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: fmt.Sprintf("Failed to update plugin: %v", err)}},
+			})
+			return
 		}
+
+		log.Info().
+			Uint("plugin_id", uint(id)).
+			Str("hook_type", plugin.HookType).
+			Strs("hook_types", plugin.HookTypes).
+			Msg("Successfully saved plugin updates to database")
 	}
 
 	// Parse config schema for response
@@ -412,8 +435,8 @@ func (a *API) getPluginWorkflowStatus(c *gin.Context) {
 	status := "ready"
 	requiresApproval := false
 
-	// Check if plugin supports UI or Agent hooks (AI Studio plugins)
-	if (plugin.SupportsHookType(models.HookTypeStudioUI) || plugin.SupportsHookType(models.HookTypeAgent)) && len(plugin.ServiceScopes) > 0 {
+	// Check if plugin supports UI, Agent, or Object Hooks (AI Studio plugins)
+	if (plugin.SupportsHookType(models.HookTypeStudioUI) || plugin.SupportsHookType(models.HookTypeAgent) || plugin.SupportsHookType(models.HookTypeObjectHooks)) && len(plugin.ServiceScopes) > 0 {
 		if !plugin.ServiceAccessAuthorized {
 			status = "scopes_pending"
 			requiresApproval = true

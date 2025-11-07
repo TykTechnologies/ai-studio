@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "LLM Validator Plugin Configuration",
+  "description": "Configuration for LLM validation rules and policies",
+  "properties": {
+    "require_https": {
+      "type": "boolean",
+      "title": "Require HTTPS",
+      "description": "Enforce that all LLM API endpoints use HTTPS",
+      "default": true
+    },
+    "blocked_vendors": {
+      "type": "array",
+      "title": "Blocked Vendors",
+      "description": "List of LLM vendors that are blocked by policy",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "min_privacy_score": {
+      "type": "integer",
+      "title": "Minimum Privacy Score",
+      "description": "Minimum required privacy score for LLMs (0-100)",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 0
+    },
+    "require_description": {
+      "type": "boolean",
+      "title": "Require Description",
+      "description": "Require that all LLMs have a description",
+      "default": true
+    }
+  }
+}
