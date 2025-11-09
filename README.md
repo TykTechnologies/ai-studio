@@ -195,15 +195,77 @@ make build
 
 Tyk AI Studio follows a clean three-tier architecture:
 
-**Model Layer**: Data structures and database-level CRUD operations  
-**Service Layer**: Business logic and data access to the model layer  
-**API Layer**: REST interface to the service layer  
+**Model Layer**: Data structures and database-level CRUD operations
+**Service Layer**: Business logic and data access to the model layer
+**API Layer**: REST interface to the service layer
 
 **Frontend Structure**:
 - **Admin**: Managing AI models, tools, and data sources
 - **Portal**: User interface for interacting with AI models and tools
 
 The AI Gateway sits at the center, proxying all AI interactions while enforcing policies, monitoring usage, and maintaining security controls.
+
+## Plugin System
+
+Tyk AI Studio features a powerful **Unified Plugin SDK** that enables extensive customization and integration across the entire platform. Plugins run as isolated processes using gRPC communication, providing security and fault tolerance.
+
+### Plugin Capabilities
+
+Build plugins that extend AI Studio in multiple ways:
+
+**Gateway Extensions**
+- Custom authentication and authorization
+- Request/response transformation and filtering
+- Content policy enforcement
+- Data export to external systems (Elasticsearch, ClickHouse, etc.)
+- Custom rate limiting and budget controls
+
+**UI Extensions**
+- Add custom pages and dashboards to the admin interface
+- Extend sidebar navigation with new sections
+- Build interactive WebComponents with full JavaScript framework support
+- Access platform APIs to manage LLMs, apps, tools, and datasources
+
+**Conversational AI Agents**
+- Create custom chat agents with specialized behaviors
+- Wrap LLMs with custom logic and validation
+- Integrate external services into conversations
+- Build multi-turn dialogue experiences with tool access
+
+**Object Hooks**
+- Intercept CRUD operations on LLMs, tools, datasources, and users
+- Enforce validation rules and approval workflows
+- Integrate with external systems (LDAP, ticketing, CMDBs)
+- Add audit trails and policy enforcement
+
+### Key Features
+
+✨ **Single SDK**: One import works everywhere (AI Studio and Microgateway)
+🔌 **10 Plugin Capabilities**: Mix and match to build exactly what you need
+🔒 **Secure Isolation**: Plugins run as separate processes
+🎯 **Fine-grained Permissions**: Control access with declarative scopes
+🚀 **Multiple Deployment Options**: Local files, remote gRPC, or OCI containers
+
+### Quick Start
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+
+type MyPlugin struct {
+    plugin_sdk.BasePlugin
+}
+
+func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *plugin_sdk.EnrichedRequest) (*plugin_sdk.Response, error) {
+    // Your custom logic here
+    return &plugin_sdk.Response{Modified: false}, nil
+}
+
+func main() {
+    plugin_sdk.Serve(NewMyPlugin())
+}
+```
+
+**Learn More**: See [Plugin System Documentation](docs/site/docs/plugins-overview.md) for comprehensive guides, examples, and API references.
 
 ## Supported AI Vendors
 
