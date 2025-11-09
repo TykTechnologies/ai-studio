@@ -1,0 +1,14 @@
+{
+  "id": "com.tyk.request-enricher",
+  "version": "1.0.0",
+  "name": "Request Enricher",
+  "description": "Enriches requests with additional context after authentication",
+  "capabilities": {
+    "hooks": ["post_auth"],
+    "primary_hook": "post_auth"
+  },
+  "permissions": {},
+  "compat": {
+    "min_gateway_version": "1.0.0"
+  }
+}

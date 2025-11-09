@@ -1,0 +1,61 @@
+# Example configuration with MIXED approach (Unified SDK)
+# Different strategies per data type based on typical use cases:
+#   - Proxy logs: Files only (high volume, can overwhelm database)
+#   - Analytics: Both files and database (needed for dashboard)
+#   - Budget: Database only with file backup (critical data)
+#
+# Usage:
+#   export PLUGINS_CONFIG_PATH=./examples/plugins/data-collector-plugin-config/plugins-file-collectors-mixed.yaml
+#   export DATA_OUTPUT_DIR=./data/collected
+#   cd microgateway && ./bin/mgw
+
+version: "1.0"
+
+data_collection_plugins:
+  # Proxy logs are high-volume and detailed - often too much for the database
+  # Write to files ONLY to reduce database load
+  - name: "proxy-log-files-only"
+    path: "./examples/plugins/data-collectors/file-proxy-collector/file_proxy_collector"
+    enabled: true
+    priority: 100
+    replace_database: true  # High volume - skip database
+    hook_types:
+      - "proxy_log"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected/proxy_logs}"
+      enabled: "true"
+
+  # Analytics data is needed for the dashboard and reporting
+  # Write to BOTH files and database for flexibility
+  - name: "analytics-files-and-db"
+    path: "./examples/plugins/data-collectors/file-analytics-collector/file_analytics_collector"
+    enabled: true
+    priority: 200
+    replace_database: false  # Write to both - dashboard needs this
+    hook_types:
+      - "analytics"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected/analytics}"
+      enabled: "true"
+      format: "jsonl"  # JSONL for log processing pipelines
+
+  # Budget data is critical and queried frequently
+  # Write to BOTH with aggregation enabled for fast access
+  - name: "budget-files-and-db"
+    path: "./examples/plugins/data-collectors/file-budget-collector/file_budget_collector"
+    enabled: true
+    priority: 300
+    replace_database: false  # Critical data - keep in database
+    hook_types:
+      - "budget"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected/budget}"
+      enabled: "true"
+      format: "csv"
+      aggregate_mode: "true"  # Maintain aggregate file for quick reporting
+
+# This mixed approach is recommended for production:
+#   ✓ Proxy logs don't overwhelm the database
+#   ✓ Dashboard analytics still work from database
+#   ✓ Budget tracking remains reliable
+#   ✓ All data backed up to files for recovery/analysis

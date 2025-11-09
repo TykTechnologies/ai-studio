@@ -1,0 +1,66 @@
+{
+  "id": "com.tyk.hook-test-plugin",
+  "version": "1.0.0",
+  "name": "Object Hooks Test Plugin",
+  "description": "Comprehensive test plugin for all object hook types with automated testing",
+  "capabilities": {
+    "hooks": ["object_hooks", "studio_ui"],
+    "primary_hook": "studio_ui"
+  },
+  "ui": {
+    "slots": [
+      {
+        "slot": "sidebar.section",
+        "label": "Hook Tests",
+        "icon": "",
+        "items": [
+          {
+            "type": "route",
+            "path": "/admin/plugins/hook-test",
+            "title": "Object Hooks Test Runner",
+            "mount": {
+              "kind": "webc",
+              "tag": "hook-test-runner",
+              "entry": "/ui/app.js"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "object_hooks": [
+      "llm.before_create",
+      "llm.after_create",
+      "llm.before_update",
+      "llm.after_update",
+      "llm.before_delete",
+      "llm.after_delete",
+      "datasource.before_create",
+      "datasource.after_create",
+      "datasource.before_update",
+      "datasource.after_update",
+      "datasource.before_delete",
+      "datasource.after_delete",
+      "tool.before_create",
+      "tool.after_create",
+      "tool.before_update",
+      "tool.after_update",
+      "tool.before_delete",
+      "tool.after_delete",
+      "user.before_create",
+      "user.after_create",
+      "user.before_update",
+      "user.after_update",
+      "user.before_delete",
+      "user.after_delete"
+    ],
+    "rpc": ["call"]
+  },
+  "compat": {
+    "min_studio_version": "2.6.0"
+  },
+  "security": {
+    "csp": "default-src 'self' 'unsafe-inline'"
+  }
+}

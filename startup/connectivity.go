@@ -3,12 +3,12 @@ package startup
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/nats-io/nats.go"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -19,11 +19,11 @@ import (
 func TestConnectivity(cfg *config.AppConf) error {
 	// Skip connectivity tests in CI/test environments to avoid configuration issues
 	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("SKIP_CONNECTIVITY_TESTS") != "" {
-		log.Println("Skipping connectivity tests in CI/test environment")
+		logger.Info("Skipping connectivity tests in CI/test environment")
 		return nil
 	}
 
-	log.Println("Starting connectivity tests...")
+	logger.Info("Starting connectivity tests...")
 
 	// Test database connectivity
 	if err := testDatabaseConnectivity(cfg); err != nil {
@@ -35,22 +35,22 @@ func TestConnectivity(cfg *config.AppConf) error {
 		return fmt.Errorf("queue connectivity test failed: %w", err)
 	}
 
-	log.Println("✅ All connectivity tests passed")
+	logger.Info("✅ All connectivity tests passed")
 	return nil
 }
 
 // testDatabaseConnectivity tests connection to the configured database
 func testDatabaseConnectivity(cfg *config.AppConf) error {
-	log.Printf("Testing database connectivity (type: %s)...", cfg.DatabaseType)
+	logger.Infof("Testing database connectivity (type: %s)...", cfg.DatabaseType)
 
 	var dialector gorm.Dialector
 	switch cfg.DatabaseType {
 	case "sqlite":
 		dialector = sqlite.Open(cfg.DatabaseURL)
-		log.Printf("Testing SQLite database: %s", cfg.DatabaseURL)
+		logger.Infof("Testing SQLite database: %s", cfg.DatabaseURL)
 	case "postgres":
 		dialector = postgres.Open(cfg.DatabaseURL)
-		log.Printf("Testing PostgreSQL database")
+		logger.Infof("Testing PostgreSQL database")
 	default:
 		return fmt.Errorf("unsupported database type: %s", cfg.DatabaseType)
 	}
@@ -77,18 +77,18 @@ func testDatabaseConnectivity(cfg *config.AppConf) error {
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Printf("✅ Database connectivity test passed (%s)", cfg.DatabaseType)
+	logger.Infof("✅ Database connectivity test passed (%s)", cfg.DatabaseType)
 	return nil
 }
 
 // testQueueConnectivity tests connection to the configured message queue
 func testQueueConnectivity(queueConfig config.QueueConfig) error {
-	log.Printf("Testing queue connectivity (type: %s)...", queueConfig.Type)
+	logger.Infof("Testing queue connectivity (type: %s)...", queueConfig.Type)
 
 	switch queueConfig.Type {
 	case "inmemory":
 		// In-memory queue doesn't require external connectivity
-		log.Println("✅ In-memory queue connectivity test passed (no external dependencies)")
+		logger.Info("✅ In-memory queue connectivity test passed (no external dependencies)")
 		return nil
 
 	case "nats":
@@ -104,7 +104,7 @@ func testQueueConnectivity(queueConfig config.QueueConfig) error {
 
 // testNATSConnectivity tests connection to NATS server and JetStream
 func testNATSConnectivity(natsConfig config.NATSConfig) error {
-	log.Printf("Testing NATS connectivity to: %s", natsConfig.URL)
+	logger.Infof("Testing NATS connectivity to: %s", natsConfig.URL)
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -121,7 +121,7 @@ func testNATSConnectivity(natsConfig config.NATSConfig) error {
 		nats.ReconnectWait(1 * time.Second),
 		nats.MaxReconnects(1), // Limited for startup test
 		nats.ErrorHandler(func(conn *nats.Conn, s *nats.Subscription, err error) {
-			log.Printf("NATS startup test error: %v", err)
+			logger.Infof("NATS startup test error: %v", err)
 		}),
 	}
 
@@ -154,7 +154,7 @@ func testNATSConnectivity(natsConfig config.NATSConfig) error {
 		return fmt.Errorf("failed to get JetStream account info: %w", err)
 	}
 
-	log.Printf("✅ NATS connectivity test passed (JetStream enabled: %t, Memory: %d, Storage: %d)", 
+	logger.Infof("✅ NATS connectivity test passed (JetStream enabled: %t, Memory: %d, Storage: %d)", 
 		true, info.Memory, info.Store)
 
 	return nil
@@ -235,31 +235,31 @@ func addNATSAuthOptions(opts *[]nats.Option, config config.NATSConfig) error {
 	// Handle credentials file authentication (JWT/NKeys)
 	if config.CredentialsFile != "" {
 		*opts = append(*opts, nats.UserCredentials(config.CredentialsFile))
-		log.Printf("NATS authentication configured with credentials file: %s", config.CredentialsFile)
+		logger.Infof("NATS authentication configured with credentials file: %s", config.CredentialsFile)
 	}
 	
 	// Handle NKey file authentication
 	if config.NKeyFile != "" {
 		*opts = append(*opts, nats.UserCredentials(config.NKeyFile))
-		log.Printf("NATS authentication configured with NKey file: %s", config.NKeyFile)
+		logger.Infof("NATS authentication configured with NKey file: %s", config.NKeyFile)
 	}
 	
 	// Handle basic username/password authentication
 	if config.Username != "" && config.Password != "" {
 		*opts = append(*opts, nats.UserInfo(config.Username, config.Password))
-		log.Printf("NATS authentication configured with username: %s", config.Username)
+		logger.Infof("NATS authentication configured with username: %s", config.Username)
 	}
 	
 	// Handle token-based authentication
 	if config.Token != "" {
 		*opts = append(*opts, nats.Token(config.Token))
-		log.Printf("NATS authentication configured with token")
+		logger.Infof("NATS authentication configured with token")
 	}
 	
 	// Handle TLS configuration
 	if config.TLSEnabled {
 		*opts = append(*opts, nats.Secure())
-		log.Printf("NATS TLS connection enabled")
+		logger.Infof("NATS TLS connection enabled")
 	}
 	
 	return nil
@@ -267,7 +267,7 @@ func addNATSAuthOptions(opts *[]nats.Option, config config.NATSConfig) error {
 
 // testPostgreSQLQueueConnectivity tests PostgreSQL connectivity for queue functionality
 func testPostgreSQLQueueConnectivity(pgConfig config.PostgreSQLQueueConfig) error {
-	log.Println("Testing PostgreSQL queue connectivity...")
+	logger.Info("Testing PostgreSQL queue connectivity...")
 
 	// PostgreSQL queues require DATABASE_URL environment variable
 	databaseURL := config.Get().DatabaseURL
@@ -304,6 +304,6 @@ func testPostgreSQLQueueConnectivity(pgConfig config.PostgreSQLQueueConfig) erro
 		return fmt.Errorf("PostgreSQL LISTEN/NOTIFY test failed: %w", err)
 	}
 
-	log.Println("✅ PostgreSQL queue connectivity test passed (LISTEN/NOTIFY available)")
+	logger.Info("✅ PostgreSQL queue connectivity test passed (LISTEN/NOTIFY available)")
 	return nil
 }

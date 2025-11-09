@@ -8,7 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
-	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 )
 
@@ -50,12 +50,14 @@ func (a *GRPCResponsePluginAdapter) OnBeforeWriteHeaders(ctx context.Context, re
 	}
 	
 	if len(plugins) == 0 {
-		log.Debug().Uint("llm_id", req.Context.LLMID).Msg("No response plugins configured for LLM")
+		log.Info().Uint("llm_id", req.Context.LLMID).Msg("ℹ️ No response plugins configured for LLM")
 		return &proxy.HeadersResponse{
 			Modified: false,
 			Headers:  req.Headers,
 		}, nil
 	}
+
+	log.Info().Uint("llm_id", req.Context.LLMID).Int("plugin_count", len(plugins)).Msg("📝 Executing response plugins (OnBeforeWriteHeaders)")
 	
 	// Convert to protobuf and execute plugins
 	result := &proxy.HeadersResponse{
@@ -106,13 +108,15 @@ func (a *GRPCResponsePluginAdapter) OnBeforeWrite(ctx context.Context, req *prox
 	}
 	
 	if len(plugins) == 0 {
-		log.Debug().Uint("llm_id", req.Context.LLMID).Msg("No response plugins configured for LLM")
+		log.Info().Uint("llm_id", req.Context.LLMID).Msg("ℹ️ No response plugins configured for LLM (OnBeforeWrite)")
 		return &proxy.ResponseWriteResponse{
 			Modified: false,
 			Body:     req.Body,
 			Headers:  req.Headers,
 		}, nil
 	}
+
+	log.Info().Uint("llm_id", req.Context.LLMID).Int("plugin_count", len(plugins)).Msg("📝 Executing response plugins (OnBeforeWrite)")
 	
 	// Convert to protobuf and execute plugins
 	result := &proxy.ResponseWriteResponse{

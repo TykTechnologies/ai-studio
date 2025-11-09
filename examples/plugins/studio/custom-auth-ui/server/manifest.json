@@ -1,0 +1,46 @@
+{
+  "id": "com.tyk.custom-auth-ui",
+  "version": "1.0.0",
+  "name": "Custom Authentication with Management UI",
+  "description": "Token-based authentication with live management interface - demonstrates hybrid plugin capabilities",
+  "capabilities": {
+    "hooks": ["auth", "studio_ui"],
+    "primary_hook": "auth"
+  },
+  "permissions": {
+    "services": ["apps.read"],
+    "ui": ["sidebar.register", "route.register"],
+    "kv": ["read", "write"],
+    "rpc": ["call"],
+    "routes": ["GET:/plugin/com.tyk.custom-auth-ui/rpc/*"]
+  },
+  "ui": {
+    "slots": [
+      {
+        "slot": "sidebar.section",
+        "label": "Custom Auth",
+        "icon": "/assets/shield.svg",
+        "items": [
+          {
+            "type": "route",
+            "path": "/admin/custom-auth/tokens",
+            "title": "Token Management",
+            "mount": {
+              "kind": "webc",
+              "tag": "custom-auth-manager",
+              "entry": "/ui/webc/manager.js"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "compat": {
+    "min_gateway_version": "1.0.0",
+    "min_studio_version": "2.6.0"
+  },
+  "security": {
+    "csp": "script-src 'self'; object-src 'none'; frame-ancestors 'none'"
+  },
+  "assets": ["/assets/shield.svg", "/ui/webc/manager.js"]
+}

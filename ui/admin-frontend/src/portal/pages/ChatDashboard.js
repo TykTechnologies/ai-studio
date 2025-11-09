@@ -17,7 +17,9 @@ import {
 } from "@mui/material";
 import { useNavigate, useLocation } from "react-router-dom";
 import ChatIcon from "@mui/icons-material/Chat";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
 import pubClient from "../../admin/utils/pubClient";
+import agentService from "../services/agentService";
 import {
   StyledTableCell,
   StyledTableRow,
@@ -29,6 +31,7 @@ import {
 const ChatDashboard = () => {
   const [chatHistory, setChatHistory] = useState([]);
   const [chatRooms, setChatRooms] = useState([]);
+  const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -40,12 +43,21 @@ const ChatDashboard = () => {
   const fetchData = React.useCallback(async () => {
     try {
       setLoading(true);
-      const [historyResponse, chatRoomsResponse] = await Promise.all([
+      const [historyResponse, chatRoomsResponse, agentsData] = await Promise.all([
         pubClient.get(`/common/history?page_size=5&page=${currentPage}`),
         pubClient.get("/common/me"),
+        agentService.listAccessibleAgents().catch(err => {
+          console.error("Error fetching agents:", err);
+          return [];
+        }),
       ]);
       setChatHistory(historyResponse.data.data);
       setChatRooms(chatRoomsResponse.data.attributes.entitlements.chats || []);
+
+      // Filter to only active agents
+      const activeAgents = agentsData.filter(agent => agent.isActive);
+      setAgents(activeAgents);
+
       setTotalPages(
         parseInt(historyResponse.headers["x-total-pages"], 10) || 1,
       );
@@ -78,6 +90,10 @@ const ChatDashboard = () => {
 
   const handleStartNewChat = (chatId) => {
     navigate(`/chat/${chatId}`);
+  };
+
+  const handleStartAgent = (agentId) => {
+    navigate(`/chat/agent/${agentId}`);
   };
 
   const handlePageChange = (event, value) => {
@@ -178,6 +194,77 @@ const ChatDashboard = () => {
                         onClick={() => handleStartNewChat(chat.id)}
                       >
                         Start chat
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+          </Grid>
+        </Box>
+      )}
+
+      {agents.length > 0 && (
+        <Box sx={{ p: 7, pt: 0 }}>
+          <Typography variant="headingLarge">
+            Explore agents
+          </Typography>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            {agents
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((agent) => (
+                <Grid item xs={6} sm={4} md={3} key={agent.id}>
+                  <Card
+                    sx={{
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <CardContent>
+                      <Box>
+                        <Box
+                          sx={{ display: "flex", alignItems: "center", mb: 1 }}
+                        >
+                          <SmartToyIcon
+                            sx={{
+                              mr: 1,
+                              fontSize: 20,
+                              color: "primary.main",
+                            }}
+                          />
+                          <Typography variant="headingMedium" component="div" noWrap>
+                            {agent.name}
+                          </Typography>
+                        </Box>
+                        {agent.description && (
+                          <Typography
+                            variant="bodyLargeDefault"
+                            color="text.defaultSubdued"
+                            sx={{
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              mt: 3,
+                            }}
+                          >
+                            {agent.description}
+                          </Typography>
+                        )}
+                      </Box>
+                    </CardContent>
+                    <CardActions sx={{
+                      justifyContent: "flex-end",
+                      p: 2,
+                      mt: 2,
+                      borderTop: (theme) => `1px solid ${theme.palette.border.neutralDefaultSubdued}`,
+                    }}>
+                      <Button
+                        onClick={() => handleStartAgent(agent.id)}
+                      >
+                        Start agent
                       </Button>
                     </CardActions>
                   </Card>

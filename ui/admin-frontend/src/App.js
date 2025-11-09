@@ -128,6 +128,18 @@ function App() {
     initialize();
   }, []);
 
+  // Store admin entitlements for security checks (no global API exposure)
+  useEffect(() => {
+    if (entitlements?.is_admin) {
+      // Store entitlements globally for security checks
+      window.adminEntitlements = entitlements;
+      console.log('Admin entitlements stored');
+    } else {
+      // Clean up admin entitlements for non-admin users
+      delete window.adminEntitlements;
+    }
+  }, [entitlements]);
+
   if (loading || !configLoaded) {
     return (
       <Box

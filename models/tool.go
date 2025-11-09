@@ -24,6 +24,9 @@ type Tool struct {
 	Filters      []Filter    `gorm:"many2many:tool_filters;" json:"filters"`
 	Dependencies []*Tool     `gorm:"many2many:tool_dependencies" json:"dependencies"`
 	Apps         []*App      `gorm:"many2many:app_tools;" json:"apps"`
+
+	// Plugin-stored metadata
+	Metadata JSONMap `json:"metadata" gorm:"type:json"`
 }
 
 type Tools []Tool

@@ -6,6 +6,7 @@ import {
   Grid,
   Snackbar,
   Alert,
+  AlertTitle,
   FormControl,
   InputLabel,
   Select,
@@ -14,10 +15,19 @@ import {
   Switch,
   AccordionSummary,
   AccordionDetails,
+  Button,
+  CircularProgress,
+  Chip,
+  Checkbox,
+  ListItemText,
+  FormHelperText,
 } from '@mui/material';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import LockIcon from '@mui/icons-material/Lock';
+import StarIcon from '@mui/icons-material/Star';
+import EditIcon from '@mui/icons-material/Edit';
 import {
   SecondaryLinkButton,
   TitleBox,
@@ -25,8 +35,10 @@ import {
   PrimaryButton,
   StyledAccordion,
 } from '../../styles/sharedStyles';
-import pluginService from '../../services/pluginService';
+import pluginService, { PluginService } from '../../services/pluginService';
 import EdgeAvailabilitySection from '../common/EdgeAvailabilitySection';
+import PluginConfigurationSection from './PluginConfigurationSection';
+import ScopeReviewSection from './ScopeReviewSection';
 
 const PluginForm = ({ mode = 'create' }) => {
   const { id } = useParams();
@@ -35,14 +47,17 @@ const PluginForm = ({ mode = 'create' }) => {
   
   const [formData, setFormData] = useState({
     name: '',
-    slug: '',
     description: '',
     command: '',
-    checksum: '',
     config: {},
-    hookType: '',
+    hookType: '',                   // Primary hook (required)
+    hookTypes: [],                  // Additional hooks
+    manifestHookTypes: [],          // From manifest (read-only)
+    hookTypesCustomized: false,     // User overrode manifest
     isActive: true,
     namespace: '',
+    ociReference: '',
+    loadImmediately: false,
   });
   
   const [errors, setErrors] = useState({});
@@ -56,6 +71,17 @@ const PluginForm = ({ mode = 'create' }) => {
   const [configJson, setConfigJson] = useState('{}');
   const [configError, setConfigError] = useState(null);
 
+  // Accordion expansion state
+  const [accordionExpanded, setAccordionExpanded] = useState(false);
+
+  // Command change detection state
+  const [originalCommand, setOriginalCommand] = useState('');
+  const [requiresReapproval, setRequiresReapproval] = useState(false);
+  const [showCommandChangeWarning, setShowCommandChangeWarning] = useState(false);
+  const [showScopeApproval, setShowScopeApproval] = useState(false);
+  const [extractedScopes, setExtractedScopes] = useState([]);
+  const [scopeLoading, setScopeLoading] = useState(false);
+
   useEffect(() => {
     if (isEdit) {
       fetchPlugin();
@@ -68,16 +94,22 @@ const PluginForm = ({ mode = 'create' }) => {
       if (plugin) {
         setFormData({
           name: plugin.name,
-          slug: plugin.slug,
           description: plugin.description,
           command: plugin.command,
-          checksum: plugin.checksum || '',
           config: plugin.config || {},
-          hookType: plugin.hookType,
+          hookType: plugin.hookType || '',
+          hookTypes: plugin.hookTypes || [],
+          manifestHookTypes: [], // Will be populated if we load metadata
+          hookTypesCustomized: plugin.hookTypesCustomized || false,
           isActive: plugin.isActive,
           namespace: plugin.namespace === 'global' ? '' : plugin.namespace,
+          ociReference: plugin.ociReference || '',
+          loadImmediately: false,
         });
         setConfigJson(JSON.stringify(plugin.config || {}, null, 2));
+
+        // Store original command for change detection
+        setOriginalCommand(plugin.command);
       }
     } catch (error) {
       console.error('Error fetching plugin:', error);
@@ -92,21 +124,24 @@ const PluginForm = ({ mode = 'create' }) => {
   const handleInputChange = (field) => (event) => {
     const { name, value } = event.target;
     const fieldName = name || field;
-    
+
     setFormData(prev => ({
       ...prev,
       [fieldName]: value
     }));
-    
-    // Auto-generate slug from name if creating new plugin
-    if (fieldName === 'name' && !isEdit && !formData.slug) {
-      const slug = value
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-')
-        .trim();
-      setFormData(prev => ({ ...prev, slug }));
+
+    // Command change detection for edit mode
+    // Check if plugin has UI or Agent hooks (which need scope approval)
+    if (fieldName === 'command' && isEdit && value !== originalCommand) {
+      const hasUIOrAgent = formData.hookType === 'studio_ui' || formData.hookType === 'agent' ||
+                          formData.hookTypes.includes('studio_ui') || formData.hookTypes.includes('agent');
+      if (hasUIOrAgent) {
+        setRequiresReapproval(true);
+        setShowCommandChangeWarning(true);
+        setShowScopeApproval(false);
+        // Reset any previous scope approval state
+        setExtractedScopes([]);
+      }
     }
   };
 
@@ -122,17 +157,29 @@ const PluginForm = ({ mode = 'create' }) => {
     }));
   };
 
-  const handleConfigChange = (event) => {
-    const value = event.target.value;
-    setConfigJson(value);
+  const handleConfigChange = (configData) => {
     setConfigError(null);
-    
-    try {
-      const parsed = JSON.parse(value);
-      setFormData(prev => ({ ...prev, config: parsed }));
-    } catch (err) {
-      setConfigError('Invalid JSON format');
+
+    if (typeof configData === 'string') {
+      // Handle raw JSON string (from JSON editor)
+      const value = configData;
+      setConfigJson(value);
+
+      try {
+        const parsed = JSON.parse(value);
+        setFormData(prev => ({ ...prev, config: parsed }));
+      } catch (err) {
+        setConfigError('Invalid JSON format');
+      }
+    } else {
+      // Handle parsed config object (from schema form)
+      setFormData(prev => ({ ...prev, config: configData }));
+      setConfigJson(JSON.stringify(configData || {}, null, 2));
     }
+  };
+
+  const handleAccordionChange = (event, isExpanded) => {
+    setAccordionExpanded(isExpanded);
   };
 
   const handleNamespaceChange = (namespaces) => {
@@ -144,32 +191,128 @@ const PluginForm = ({ mode = 'create' }) => {
     }));
   };
 
+  // Command change handlers
+  const handleLoadNewScopes = async () => {
+    setScopeLoading(true);
+    try {
+      // Call validate-and-load API to get new scopes and hook types
+      const response = await pluginService.validateAndLoadPlugin(id, {
+        command: formData.command,
+      });
+
+      const attrs = response.data.attributes;
+      setExtractedScopes(attrs.scopes || []);
+
+      // Update hook types from manifest
+      if (attrs.hook_types && attrs.hook_types.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          hookType: attrs.primary_hook || attrs.hook_types[0],
+          hookTypes: attrs.hook_types,
+          manifestHookTypes: attrs.hook_types,
+          hookTypesCustomized: false,
+        }));
+      }
+
+      setShowScopeApproval(true);
+      setShowCommandChangeWarning(false);
+    } catch (error) {
+      console.error('Error loading new scopes:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to load plugin metadata',
+        severity: 'error',
+      });
+    } finally {
+      setScopeLoading(false);
+    }
+  };
+
+  const handleScopeApproval = async (approved) => {
+    if (approved) {
+      setScopeLoading(true);
+      try {
+        await pluginService.approvePluginScopes(id, true);
+        setRequiresReapproval(false);
+        setShowScopeApproval(false);
+        setSnackbar({
+          open: true,
+          message: 'Plugin scopes approved successfully',
+          severity: 'success',
+        });
+      } catch (error) {
+        console.error('Error approving scopes:', error);
+        setSnackbar({
+          open: true,
+          message: error.message || 'Failed to approve scopes',
+          severity: 'error',
+        });
+      } finally {
+        setScopeLoading(false);
+      }
+    } else {
+      // User declined - revert command or navigate away
+      setFormData(prev => ({ ...prev, command: originalCommand }));
+      setRequiresReapproval(false);
+      setShowScopeApproval(false);
+      setShowCommandChangeWarning(false);
+      setSnackbar({
+        open: true,
+        message: 'Command reverted to original value',
+        severity: 'info',
+      });
+    }
+  };
+
   const validateForm = () => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Plugin name is required';
-    if (!formData.slug.trim()) newErrors.slug = 'Plugin slug is required';
-    if (!formData.command.trim()) newErrors.command = 'Plugin command is required';
-    if (!formData.hookType) newErrors.hookType = 'Hook type is required';
+
+    // Validate command (auto-detect OCI vs local from prefix)
+    if (!formData.command.trim()) {
+      newErrors.command = 'Plugin command is required';
+    } else if (formData.command.startsWith('oci://') && formData.ociReference && !formData.ociReference.trim()) {
+      newErrors.command = 'OCI reference cannot be empty for OCI plugins';
+    }
+
+    // Hook type is always required
+    if (!formData.hookType) {
+      newErrors.hookType = 'Primary hook type is required';
+    }
     if (configError) newErrors.config = configError;
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     try {
+      // Prepare submission data with hook types
+      const submissionData = {
+        name: formData.name,
+        description: formData.description,
+        command: formData.command,
+        hook_type: formData.hookType,
+        hook_types: formData.hookTypes.length > 0 ? formData.hookTypes : [formData.hookType],
+        hook_types_customized: formData.hookTypesCustomized,
+        config: formData.config,
+        is_active: formData.isActive,
+        namespace: formData.namespace,
+        oci_reference: formData.ociReference,
+      };
+
       if (isEdit) {
-        await pluginService.updatePlugin(id, formData);
+        await pluginService.updatePlugin(id, submissionData);
       } else {
-        await pluginService.createPlugin(formData);
+        await pluginService.createPlugin(submissionData);
       }
-      
+
       setSnackbar({
         open: true,
         message: isEdit ? 'Plugin updated successfully' : 'Plugin created successfully',
@@ -236,18 +379,6 @@ const PluginForm = ({ mode = 'create' }) => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Slug"
-                name="slug"
-                value={formData.slug}
-                onChange={handleChange}
-                error={!!errors.slug}
-                helperText={errors.slug || 'Unique identifier (auto-generated from name)'}
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
                 label="Description"
                 name="description"
                 value={formData.description}
@@ -257,18 +388,25 @@ const PluginForm = ({ mode = 'create' }) => {
                 helperText="Optional description of what this plugin does"
               />
             </Grid>
+            {/* Primary Hook Type - Required */}
             <Grid item xs={12}>
               <FormControl fullWidth required error={!!errors.hookType}>
-                <InputLabel>Hook Type</InputLabel>
+                <InputLabel>Primary Hook Type</InputLabel>
                 <Select
                   name="hookType"
                   value={formData.hookType}
-                  label="Hook Type"
+                  label="Primary Hook Type"
                   onChange={handleChange}
+                  disabled={!formData.hookTypesCustomized && formData.manifestHookTypes.length > 0}
                 >
                   {availableHookTypes.map((hookType) => (
                     <MenuItem key={hookType.value} value={hookType.value}>
-                      {hookType.label}
+                      <Box>
+                        <Typography variant="body1">{hookType.label}</Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          {PluginService.HOOK_TYPE_DESCRIPTIONS[hookType.value]}
+                        </Typography>
+                      </Box>
                     </MenuItem>
                   ))}
                 </Select>
@@ -277,7 +415,113 @@ const PluginForm = ({ mode = 'create' }) => {
                     {errors.hookType}
                   </Typography>
                 )}
+                <FormHelperText>
+                  {formData.manifestHookTypes.length > 0 && !formData.hookTypesCustomized
+                    ? "From plugin manifest (click Customize to edit)"
+                    : "The primary capability of this plugin"}
+                </FormHelperText>
               </FormControl>
+            </Grid>
+
+            {/* Additional Hook Types */}
+            <Grid item xs={12}>
+              {!formData.hookTypesCustomized && formData.manifestHookTypes.length > 0 ? (
+                <Box>
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                    Plugin Capabilities (from manifest)
+                  </Typography>
+                  <Box display="flex" gap={1} flexWrap="wrap" mb={2}>
+                    {formData.manifestHookTypes.map(hook => (
+                      <Chip
+                        key={hook}
+                        label={PluginService.HOOK_TYPE_LABELS[hook] || hook}
+                        color={hook === formData.hookType ? "primary" : "default"}
+                        icon={hook === formData.hookType ? <StarIcon /> : <LockIcon />}
+                        size="small"
+                      />
+                    ))}
+                  </Box>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<EditIcon />}
+                    onClick={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        hookTypesCustomized: true,
+                        hookTypes: [...prev.manifestHookTypes],
+                      }));
+                    }}
+                  >
+                    Customize Hook Types (Advanced)
+                  </Button>
+                </Box>
+              ) : (
+                <Box>
+                  {formData.manifestHookTypes.length > 0 && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      <AlertTitle>Customizing Hook Types</AlertTitle>
+                      You are customizing hook types. Removing hooks declared in the manifest may cause the plugin to malfunction.
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            hookTypes: [...prev.manifestHookTypes],
+                            hookType: prev.manifestHookTypes[0] || '',
+                            hookTypesCustomized: false,
+                          }));
+                        }}
+                        sx={{ ml: 2 }}
+                      >
+                        Reset to Manifest
+                      </Button>
+                    </Alert>
+                  )}
+                  <FormControl fullWidth>
+                    <InputLabel>Additional Hook Types</InputLabel>
+                    <Select
+                      multiple
+                      value={formData.hookTypes}
+                      onChange={(e) => {
+                        const selectedHooks = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          hookTypes: selectedHooks,
+                          // Ensure primary hook is in the list
+                          hookType: selectedHooks.includes(prev.hookType)
+                            ? prev.hookType
+                            : (selectedHooks[0] || ''),
+                        }));
+                      }}
+                      renderValue={(selected) => (
+                        <Box display="flex" gap={0.5} flexWrap="wrap">
+                          {selected.map(hook => (
+                            <Chip
+                              key={hook}
+                              label={PluginService.HOOK_TYPE_LABELS[hook] || hook}
+                              size="small"
+                            />
+                          ))}
+                        </Box>
+                      )}
+                    >
+                      {availableHookTypes.map((hookType) => (
+                        <MenuItem key={hookType.value} value={hookType.value}>
+                          <Checkbox checked={formData.hookTypes.includes(hookType.value)} />
+                          <ListItemText
+                            primary={hookType.label}
+                            secondary={PluginService.HOOK_TYPE_DESCRIPTIONS[hookType.value]}
+                          />
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    <FormHelperText>
+                      Select all hook types this plugin implements
+                    </FormHelperText>
+                  </FormControl>
+                </Box>
+              )}
             </Grid>
             <Grid item xs={12}>
               <TextField
@@ -287,18 +531,12 @@ const PluginForm = ({ mode = 'create' }) => {
                 value={formData.command}
                 onChange={handleChange}
                 error={!!errors.command}
-                helperText={errors.command || 'Full path to the plugin executable'}
+                helperText={
+                  errors.command ||
+                  'Plugin command - use oci:// for OCI artifacts, grpc:// for external services, or local path for binaries'
+                }
+                placeholder="e.g., oci://registry.com/my-plugin:latest or /path/to/plugin-binary"
                 required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Checksum"
-                name="checksum"
-                value={formData.checksum}
-                onChange={handleChange}
-                helperText="Optional checksum for plugin integrity verification"
               />
             </Grid>
             <Grid item xs={12}>
@@ -323,27 +561,60 @@ const PluginForm = ({ mode = 'create' }) => {
             defaultExpanded={false}
           />
 
+          {/* Command Change Warning */}
+          {showCommandChangeWarning && (
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography variant="body2" fontWeight="medium">
+                    Command Changed - Scope Re-approval Required
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    AI Studio plugins require security approval when the command changes.
+                    Click "Load New Scopes" to review the new permissions.
+                  </Typography>
+                </Box>
+                <Button
+                  onClick={handleLoadNewScopes}
+                  variant="outlined"
+                  size="small"
+                  disabled={scopeLoading}
+                  startIcon={scopeLoading ? <CircularProgress size={16} /> : null}
+                >
+                  {scopeLoading ? 'Loading...' : 'Load New Scopes'}
+                </Button>
+              </Box>
+            </Alert>
+          )}
+
+          {/* Scope Approval Section */}
+          {showScopeApproval && (
+            <Box sx={{ mb: 3, p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+              <ScopeReviewSection
+                scopes={extractedScopes}
+                onApprove={() => handleScopeApproval(true)}
+                onDeny={() => handleScopeApproval(false)}
+                loading={scopeLoading}
+                disabled={scopeLoading}
+              />
+            </Box>
+          )}
+
           {/* Configuration Section */}
-          <StyledAccordion>
+          <StyledAccordion
+            expanded={accordionExpanded}
+            onChange={handleAccordionChange}
+          >
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography>Plugin Configuration</Typography>
             </AccordionSummary>
             <AccordionDetails>
-              <Typography variant="body2" color="textSecondary" paragraph>
-                Optional JSON configuration that will be passed to the plugin. This can include
-                any plugin-specific settings or parameters.
-              </Typography>
-              
-              <TextField
-                fullWidth
-                label="Configuration JSON"
-                value={configJson}
-                onChange={handleConfigChange}
-                multiline
-                rows={8}
-                error={!!configError}
-                helperText={configError || 'Valid JSON configuration object'}
-                sx={{ fontFamily: 'monospace' }}
+              <PluginConfigurationSection
+                pluginId={isEdit ? id : null}
+                config={formData.config}
+                onConfigChange={handleConfigChange}
+                configError={configError}
+                isEdit={isEdit}
               />
             </AccordionDetails>
           </StyledAccordion>

@@ -21,6 +21,7 @@ import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import AppsIcon from "@mui/icons-material/Apps";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import ExtensionIcon from "@mui/icons-material/Extension"; // Import for Tools icon
+import SmartToyIcon from "@mui/icons-material/SmartToy"; // Import for Agents icon
 
 import pubClient from "../../admin/utils/pubClient";
 import useSystemFeatures from "../../admin/hooks/useSystemFeatures";
@@ -202,6 +203,16 @@ const PortalDrawer = () => {
                 ))}
               </List>
             </Collapse>
+
+            <ListItem button component={Link} to="/agents" sx={{ mb: 1 }}>
+              <ListItemIcon>
+                <SmartToyIcon />
+              </ListItemIcon>
+              <ListItemText
+                primary="Agents"
+                primaryTypographyProps={{ noWrap: true }}
+              />
+            </ListItem>
           </>
         )}
 

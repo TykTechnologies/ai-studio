@@ -2,13 +2,19 @@
 package services
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/rs/zerolog/log"
 )
 
@@ -43,14 +49,34 @@ func ClearCurrentLLMContext() {
 	currentRequestContext.active = false
 }
 
+// generateNegativeCredID generates a unique negative credential ID for plugin auth
+// Negative IDs indicate plugin authentication and cannot collide with real database IDs
+func generateNegativeCredID() int {
+	// Use random 32-bit value as negative ID for uniqueness
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp if random fails
+		return -int(time.Now().UnixNano())
+	}
+	positiveID := int(binary.BigEndian.Uint32(b))
+	if positiveID == 0 {
+		positiveID = 1 // Avoid -0
+	}
+	return -positiveID // Always negative
+}
+
 // GatewayServiceAdapter adapts our DatabaseGatewayService to implement services.ServiceInterface
 type GatewayServiceAdapter struct {
 	gatewayService GatewayServiceInterface
 	management     ManagementServiceInterface
 	analytics      AnalyticsServiceInterface
+
+	// Cache for ephemeral plugin auth credentials (not stored in DB)
+	pluginAuthCredentials sync.Map // credID (int) -> *models.Credential
 	crypto         CryptoServiceInterface
 	filterService  FilterServiceInterface
 	pluginService  PluginServiceInterface
+	pluginManager  PluginManagerInterface
 }
 
 // NewGatewayServiceAdapter creates a new adapter that implements services.ServiceInterface
@@ -61,6 +87,7 @@ func NewGatewayServiceAdapter(
 	crypto CryptoServiceInterface,
 	filterService FilterServiceInterface,
 	pluginService PluginServiceInterface,
+	pluginManager PluginManagerInterface,
 ) services.ServiceInterface {
 	adapter := &GatewayServiceAdapter{
 		gatewayService: gatewayService,
@@ -69,6 +96,7 @@ func NewGatewayServiceAdapter(
 		crypto:         crypto,
 		filterService:  filterService,
 		pluginService:  pluginService,
+		pluginManager:  pluginManager,
 	}
 	
 	log.Info().Msg("GatewayServiceAdapter created - testing LLM loading...")
@@ -326,20 +354,86 @@ func (a *GatewayServiceAdapter) tryAuthPluginsForSpecificLLM(secret string, llmI
 	// Find auth plugins and try to authenticate
 	for _, plugin := range plugins {
 		if plugin.HookType == "auth" && plugin.IsActive {
-			log.Debug().Uint("plugin_id", plugin.ID).Str("plugin_name", plugin.Name).Msg("Calling auth plugin for specific LLM")
-			
-			// For now, since we know the example plugin accepts "moocow",
-			// let's implement a simple check and return appropriate credential
-			if secret == "moocow" {
-				log.Info().Str("llm_slug", llmSlug).Str("plugin_name", plugin.Name).Msg("Auth plugin accepted token for specific LLM")
-				
-				return &models.Credential{
-					ID:     1000 + llmID, // Use LLM-specific ID  
-					KeyID:  "plugin-auth-" + llmSlug,
-					Secret: secret,
-					Active: true,
-				}, nil
+			log.Info().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Str("secret_prefix", secret[:min(len(secret), 8)]).
+				Msg("Executing auth plugin via gRPC")
+
+			// Execute auth plugin via plugin manager
+			authReq := &interfaces.AuthRequest{
+				Credential: secret,
+				AuthType:   "bearer",
 			}
+
+			pluginCtx := &interfaces.PluginContext{
+				LLMID:   llmID,
+				LLMSlug: llmSlug,
+			}
+
+			result, err := a.pluginManager.ExecutePluginChain(llmID, "auth", authReq, pluginCtx)
+			if err != nil {
+				log.Debug().
+					Err(err).
+					Uint("plugin_id", plugin.ID).
+					Str("plugin_name", plugin.Name).
+					Msg("Auth plugin rejected token or execution failed")
+				continue // Try next auth plugin
+			}
+
+			authResp, ok := result.(*interfaces.AuthResponse)
+			if !ok {
+				log.Error().
+					Interface("result", result).
+					Str("plugin_name", plugin.Name).
+					Msg("Auth plugin returned invalid response type")
+				continue
+			}
+
+			if !authResp.Authenticated {
+				log.Debug().
+					Str("plugin_name", plugin.Name).
+					Str("error", authResp.ErrorMessage).
+					Msg("Auth plugin rejected authentication")
+				continue // Try next auth plugin
+			}
+
+			// Auth plugin accepted - extract AppID
+			appIDUint, err := strconv.ParseUint(authResp.AppID, 10, 32)
+			if err != nil {
+				log.Error().
+					Str("app_id", authResp.AppID).
+					Str("plugin_name", plugin.Name).
+					Msg("Auth plugin returned invalid AppID format")
+				return nil, fmt.Errorf("auth plugin returned invalid app_id: %s", authResp.AppID)
+			}
+
+			log.Info().
+				Str("llm_slug", llmSlug).
+				Str("plugin_name", plugin.Name).
+				Uint("app_id", uint(appIDUint)).
+				Str("user_id", authResp.UserID).
+				Msg("Auth plugin authenticated token successfully")
+
+			// Generate unique negative credential ID
+			credID := generateNegativeCredID()
+
+			credential := &models.Credential{
+				ID:     uint(credID), // Negative ID (cast to uint for interface compatibility)
+				KeyID:  fmt.Sprintf("plugin-auth-llm-%d-app-%d", llmID, appIDUint),
+				Secret: secret,
+				Active: true,
+			}
+
+			// Store in cache for later retrieval by GetAppByCredentialID
+			a.pluginAuthCredentials.Store(credID, credential)
+
+			log.Debug().
+				Int("cred_id", credID).
+				Str("key_id", credential.KeyID).
+				Msg("Stored plugin auth credential in cache")
+
+			return credential, nil
 		}
 	}
 	
@@ -436,28 +530,83 @@ func (a *GatewayServiceAdapter) GetOAuthClient(clientID string) (*models.OAuthCl
 
 // GetAppByCredentialID returns an app by credential ID
 // NOTE: In our token-only system, the "credential ID" is actually a token ID from our credential
+func (a *GatewayServiceAdapter) GetAppByID(id uint) (*models.App, error) {
+	log.Debug().Uint("app_id", id).Msg("GatewayServiceAdapter.GetAppByID() called")
+
+	// Delegate to the underlying gateway service
+	appInterface, err := a.gatewayService.GetAppByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to *models.App
+	if app, ok := appInterface.(*database.App); ok {
+		convertedApp := a.convertDatabaseAppToModel(app)
+		return &convertedApp, nil
+	}
+
+	return nil, fmt.Errorf("unexpected app type returned from gateway service")
+}
+
 func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, error) {
 	log.Debug().Uint("credential_id", credID).Msg("GatewayServiceAdapter.GetAppByCredentialID() called by AI Gateway")
 	
-	// Check if this is a plugin auth credential (ID >= 1000)
-	if credID >= 1000 {
-		llmID := credID - 1000
-		log.Debug().Uint("llm_id", llmID).Msg("Plugin auth credential detected, returning plugin app")
-		
-		// Get the LLM information to include in the plugin app
-		dbLLM, err := a.management.GetLLM(llmID)
-		if err != nil {
-			log.Error().Err(err).Uint("llm_id", llmID).Msg("Failed to get LLM for plugin auth app")
-			return nil, fmt.Errorf("failed to get LLM for plugin auth: %w", err)
+	// Check if this is a plugin auth credential (negative ID)
+	// Negative IDs indicate ephemeral credentials from auth plugins
+	if int(credID) < 0 {
+		log.Debug().Int("cred_id", int(credID)).Msg("Plugin auth credential detected (negative ID)")
+
+		// Retrieve credential from cache
+		credInterface, ok := a.pluginAuthCredentials.Load(int(credID))
+		if !ok {
+			return nil, fmt.Errorf("plugin auth credential %d not found in cache (may have expired)", int(credID))
 		}
-		
+
+		cred, ok := credInterface.(*models.Credential)
+		if !ok {
+			return nil, fmt.Errorf("invalid credential type in cache")
+		}
+
+		// Parse KeyID to extract LLM ID and App ID
+		// Format: "plugin-auth-llm-{llmID}-app-{appID}"
+		if !strings.HasPrefix(cred.KeyID, "plugin-auth-llm-") {
+			return nil, fmt.Errorf("invalid plugin auth KeyID format: %s", cred.KeyID)
+		}
+
+		parts := strings.Split(cred.KeyID, "-")
+		if len(parts) != 6 || parts[0] != "plugin" || parts[1] != "auth" || parts[2] != "llm" || parts[4] != "app" {
+			return nil, fmt.Errorf("invalid plugin auth KeyID structure: %s (expected: plugin-auth-llm-{llmID}-app-{appID})", cred.KeyID)
+		}
+
+		llmID, err := strconv.ParseUint(parts[3], 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse LLM ID from KeyID '%s': %w", cred.KeyID, err)
+		}
+
+		appID, err := strconv.ParseUint(parts[5], 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse App ID from KeyID '%s': %w", cred.KeyID, err)
+		}
+
+		log.Info().
+			Uint("llm_id", uint(llmID)).
+			Uint("app_id", uint(appID)).
+			Str("key_id", cred.KeyID).
+			Msg("Parsed plugin auth credential - using App ID from auth plugin")
+
+		// Get the LLM
+		dbLLM, err := a.management.GetLLM(uint(llmID))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get LLM %d for plugin auth: %w", llmID, err)
+		}
+
 		llm := a.convertDatabaseLLMToModel(dbLLM)
-		
-		// Return a plugin-authenticated app with access to the specific LLM
+
+		// Return app with the REAL AppID from auth plugin (no hardcoding, no fallback)
 		return &models.App{
-			ID:   1, // Default app ID for plugin auth  
-			Name: fmt.Sprintf("Plugin Auth App (LLM %d)", llmID),
-			LLMs: []models.LLM{llm}, // Grant access to the specific LLM that has the auth plugin
+			ID:   uint(appID),
+			Name: fmt.Sprintf("Plugin Auth App %d (LLM %d)", appID, llmID),
+			LLMs: []models.LLM{llm},
 		}, nil
 	}
 	

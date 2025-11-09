@@ -1,0 +1,23 @@
+{
+  "id": "com.tyk.gateway-service-test",
+  "version": "1.0.0",
+  "name": "Gateway Service API Test",
+  "description": "Tests all microgateway service API endpoints",
+  "capabilities": {
+    "hooks": ["post_auth"],
+    "primary_hook": "post_auth"
+  },
+  "permissions": {
+    "services": [
+      "llms.read",
+      "apps.read",
+      "budget.read",
+      "pricing.read",
+      "credentials.validate",
+      "kv.readwrite"
+    ]
+  },
+  "compat": {
+    "min_gateway_version": "1.0.0"
+  }
+}

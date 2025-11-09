@@ -1,10 +1,37 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import BaseDrawer from './base-drawer';
 import useAdminData from '../../hooks/useAdminData';
 import Icon from '../../../components/common/Icon';
+import pluginLoaderService from '../../services/pluginLoaderService';
 
 const Drawer = () => {
   const { features, uiOptions, config, loading, error } = useAdminData();
+  const [pluginMenuItems, setPluginMenuItems] = useState([]);
+
+  useEffect(() => {
+    loadPluginMenuItems();
+
+    // Listen for plugin loader refresh events
+    const handlePluginRefresh = () => {
+      console.log('Drawer received plugin refresh event, reloading menu items');
+      loadPluginMenuItems();
+    };
+
+    window.addEventListener('plugin-loader-refreshed', handlePluginRefresh);
+
+    return () => {
+      window.removeEventListener('plugin-loader-refreshed', handlePluginRefresh);
+    };
+  }, []);
+
+  const loadPluginMenuItems = async () => {
+    try {
+      const menuItems = await pluginLoaderService.getSidebarMenuItems();
+      setPluginMenuItems(menuItems);
+    } catch (error) {
+      console.error('Failed to load plugin menu items:', error);
+    }
+  };
 
   if (loading || error) {
     return null;
@@ -25,12 +52,20 @@ const Drawer = () => {
       path: '/admin/dash'
     },
     {
+      id: 'plugins',
+      text: 'Plugins',
+      icon: <Icon name="screwdriver-wrench" />,
+      subItems: [
+        { id: 'marketplace', text: 'Marketplace', path: '/admin/marketplace' },
+        { id: 'plugin-list', text: 'Installed Plugins', path: '/admin/plugins' },
+      ],
+    },
+    {
       id: 'llm-management',
       text: 'LLM management',
       icon: <Icon name="microchip-ai" />,
       subItems: [
         { id: 'llms', text: 'LLM providers', path: '/admin/llms' },
-        { id: 'plugins', text: 'Plugins', path: '/admin/plugins' },
         { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices' },
       ],
     },
@@ -96,6 +131,7 @@ const Drawer = () => {
             icon: <Icon name="message-lines" />,
             subItems: [
               { id: 'chats', text: 'Chats', path: '/admin/chats' },
+              { id: 'agents', text: 'Agents', path: '/admin/agents' },
               { id: 'llm-settings', text: 'Model call settings', path: '/admin/llm-settings' },
             ],
           },
@@ -119,6 +155,19 @@ const Drawer = () => {
           },
         ]
       : []),
+    // Add plugin-contributed menu items
+    ...pluginMenuItems.map(item => ({
+      id: item.id,
+      text: item.label,
+      icon: <Icon name="puzzle-piece" />, // Default icon for plugins
+      path: item.path,
+      title: item.title,
+      subItems: item.sub_items?.map(subItem => ({
+        id: subItem.id,
+        text: subItem.text,
+        path: subItem.path
+      })) || []
+    }))
   ];
 
   return (

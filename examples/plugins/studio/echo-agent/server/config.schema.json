@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Echo Agent Configuration",
+  "description": "Configuration options for the Echo Agent plugin",
+  "properties": {
+    "prefix": {
+      "type": "string",
+      "title": "Response Prefix",
+      "description": "Text to prepend before LLM responses",
+      "default": "<<"
+    },
+    "suffix": {
+      "type": "string",
+      "title": "Response Suffix",
+      "description": "Text to append after LLM responses",
+      "default": ">>"
+    },
+    "include_metadata": {
+      "type": "boolean",
+      "title": "Include Metadata",
+      "description": "Whether to include metadata about the LLM call in the response",
+      "default": false
+    },
+    "default_llm_id": {
+      "type": "integer",
+      "title": "Default LLM ID",
+      "description": "The ID of the default LLM to use. If not set, uses the first available LLM from the app.",
+      "minimum": 1
+    },
+    "model": {
+      "type": "string",
+      "title": "Model Name",
+      "description": "The specific model to use for LLM calls. If not set, uses the LLM's default model. Examples: 'gpt-4', 'claude-3-5-sonnet-20241022', 'gpt-3.5-turbo'",
+      "default": ""
+    }
+  },
+  "additionalProperties": false
+}

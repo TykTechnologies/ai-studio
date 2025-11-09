@@ -41,7 +41,10 @@ const AppForm = () => {
     monthly_budget: null,
     budget_start_date: null,
     namespace: "", // Added for edge availability
+    metadata: {}, // Added for custom metadata
   });
+  const [metadataJSON, setMetadataJSON] = useState("{}"); // JSON string for editor
+  const [metadataError, setMetadataError] = useState("");
   const [credential, setCredential] = useState(null);
   const [users, setUsers] = useState([]);
   const [llms, setLLMs] = useState([]);
@@ -69,6 +72,7 @@ const AppForm = () => {
     try {
       const response = await apiClient.get(`/apps/${id}`);
       const appData = response.data.data.attributes;
+      const metadata = appData.metadata || {};
       setApp({
         ...appData,
         llm_ids: Array.isArray(appData.llm_ids)
@@ -81,7 +85,9 @@ const AppForm = () => {
           ? appData.tool_ids.map(String)
           : [],
         namespace: appData.namespace || "",
+        metadata: metadata,
       });
+      setMetadataJSON(JSON.stringify(metadata, null, 2));
       if (appData.credential_id) {
         fetchCredential(appData.credential_id);
       }
@@ -223,12 +229,28 @@ const AppForm = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
+    // Parse metadata JSON
+    let parsedMetadata = {};
+    if (metadataJSON.trim()) {
+      try {
+        parsedMetadata = JSON.parse(metadataJSON);
+      } catch (err) {
+        setSnackbar({
+          open: true,
+          message: "Invalid JSON in metadata field",
+          severity: "error",
+        });
+        return;
+      }
+    }
+
     const appPayload = {
       ...app,
       user_id: parseInt(app.user_id, 10),
       llm_ids: app.llm_ids.map((id) => parseInt(id, 10)),
       datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
       tool_ids: app.tool_ids.map((id) => parseInt(id, 10)),
+      metadata: parsedMetadata,
     };
 
     const appData = {
@@ -526,6 +548,49 @@ const AppForm = () => {
               </AccordionDetails>
             </StyledAccordion>
           )}
+
+          {/* Metadata JSON Editor */}
+          <StyledAccordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Custom Metadata (JSON)</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                    Add custom metadata as JSON. This data will be synced to edge instances and available to plugins.
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={8}
+                    label="Metadata (JSON)"
+                    value={metadataJSON}
+                    onChange={(e) => {
+                      setMetadataJSON(e.target.value);
+                      // Validate JSON on change
+                      try {
+                        JSON.parse(e.target.value || "{}");
+                        setMetadataError("");
+                      } catch (err) {
+                        setMetadataError("Invalid JSON: " + err.message);
+                      }
+                    }}
+                    error={!!metadataError}
+                    helperText={metadataError || "Example: {\"environment\": \"production\", \"region\": \"us-east-1\"}"}
+                    placeholder='{"key": "value"}'
+                    sx={{
+                      fontFamily: 'Monaco, "Courier New", monospace',
+                      "& textarea": {
+                        fontFamily: 'Monaco, "Courier New", monospace',
+                        fontSize: "0.875rem",
+                      },
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </AccordionDetails>
+          </StyledAccordion>
 
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">

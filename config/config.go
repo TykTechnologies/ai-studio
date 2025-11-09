@@ -2,13 +2,35 @@ package config
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
+
+// configLogger is a simple logger that writes to stdout before the main logger is initialized
+type configLogger struct{}
+
+func (l configLogger) Info(msg string) {
+	fmt.Println(msg)
+}
+
+func (l configLogger) Infof(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
+}
+
+func (l configLogger) Warn(msg string) {
+	fmt.Println(msg)
+}
+
+func (l configLogger) Warnf(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
+}
+
+var cfgLog = configLogger{}
 
 type AppConf struct {
 	SMTPServer            string
@@ -39,7 +61,17 @@ type AppConf struct {
 	ProxyOAuthMetadataURL string
 	TelemetryEnabled      bool
 	QueueConfig           QueueConfig
-	
+	LogLevel              string
+
+	// OCI Plugin Configuration
+	OCIPlugins            OCIConfig
+
+	// Marketplace Configuration
+	MarketplaceEnabled      bool
+	MarketplaceIndexURL     string
+	MarketplaceSyncInterval time.Duration
+	MarketplaceCacheDir     string
+
 	// Hub-and-Spoke Configuration
 	GatewayMode        string
 	GRPCPort           int
@@ -100,13 +132,13 @@ type DocsLinks map[string]string
 func (d DocsLinks) ReadFromFile(fileName string) {
 	data, err := os.ReadFile(fileName)
 	if err != nil {
-		log.Printf("Warning: Failed to parse docs_links.json: %v", err)
+		cfgLog.Infof("Warning: Failed to parse docs_links.json: %v", err)
 		return
 	}
 
 	err = json.Unmarshal(data, &d)
 	if err != nil {
-		log.Printf("Warning: Could not read docs_links.json: %v", err)
+		cfgLog.Infof("Warning: Could not read docs_links.json: %v", err)
 	}
 }
 
@@ -117,7 +149,7 @@ func getConfigFromEnv() *AppConf {
 
 	// Try to load .env file first
 	if envMap, err := godotenv.Read(".env"); err == nil {
-		log.Println("Successfully loaded .env file (environment variables will take precedence if set)")
+		cfgLog.Info("Successfully loaded .env file (environment variables will take precedence if set)")
 		// Set environment variables from .env file if they're not already set
 		for key, value := range envMap {
 			if os.Getenv(key) == "" {
@@ -125,21 +157,21 @@ func getConfigFromEnv() *AppConf {
 			}
 		}
 	} else {
-		log.Println("No .env file found or error loading it - this is expected when running in containers. Will use environment variables.")
+		cfgLog.Info("No .env file found or error loading it - this is expected when running in containers. Will use environment variables.")
 	}
 
 	conf.SMTPServer = os.Getenv("SMTP_SERVER")
 	if conf.SMTPServer == "" {
-		log.Println("Warning: SMTP_SERVER environment variable is not set")
+		cfgLog.Warn("Warning: SMTP_SERVER environment variable is not set")
 	}
 
 	smtpPortStr := os.Getenv("SMTP_PORT")
 	if smtpPortStr == "" {
-		log.Println("Warning: SMTP_PORT environment variable is not set")
+		cfgLog.Warn("Warning: SMTP_PORT environment variable is not set")
 	} else {
 		port, err := strconv.Atoi(smtpPortStr)
 		if err != nil {
-			log.Printf("Warning: Invalid SMTP_PORT value: %s", smtpPortStr)
+			cfgLog.Warnf("Warning: Invalid SMTP_PORT value: %s", smtpPortStr)
 		} else {
 			conf.SMTPPort = port
 		}
@@ -147,21 +179,21 @@ func getConfigFromEnv() *AppConf {
 
 	conf.SMTPUser = os.Getenv("SMTP_USER")
 	if conf.SMTPUser == "" {
-		log.Println("Warning: SMTP_USER environment variable is not set")
+		cfgLog.Warn("Warning: SMTP_USER environment variable is not set")
 	}
 
 	conf.SMTPPass = os.Getenv("SMTP_PASS")
 	if conf.SMTPPass == "" {
-		log.Println("Warning: SMTP_PASS environment variable is not set")
+		cfgLog.Warn("Warning: SMTP_PASS environment variable is not set")
 	}
 
 	allowRegStr := os.Getenv("ALLOW_REGISTRATIONS")
 	if allowRegStr == "" {
-		log.Println("Warning: ALLOW_REGISTRATIONS environment variable is not set")
+		cfgLog.Warn("Warning: ALLOW_REGISTRATIONS environment variable is not set")
 	} else {
 		allowReg, err := strconv.ParseBool(allowRegStr)
 		if err != nil {
-			log.Printf("Warning: Invalid ALLOW_REGISTRATIONS value: %s", allowRegStr)
+			cfgLog.Warnf("Warning: Invalid ALLOW_REGISTRATIONS value: %s", allowRegStr)
 		} else {
 			conf.AllowRegistrations = allowReg
 		}
@@ -169,29 +201,29 @@ func getConfigFromEnv() *AppConf {
 
 	conf.AdminEmail = os.Getenv("ADMIN_EMAIL")
 	if conf.AdminEmail != "" {
-		log.Println("Warning: ADMIN_EMAIL is deprecated")
+		cfgLog.Warn("Warning: ADMIN_EMAIL is deprecated")
 	}
 
 	conf.FromEmail = os.Getenv("FROM_EMAIL")
 	if conf.FromEmail == "" {
-		log.Println("Warning: FROM_EMAIL environment variable is not set")
+		cfgLog.Warn("Warning: FROM_EMAIL environment variable is not set")
 	}
 
 	conf.SiteURL = os.Getenv("SITE_URL")
 	if conf.SiteURL == "" {
-		log.Println("Warning: SITE_URL environment variable is not set")
+		cfgLog.Warn("Warning: SITE_URL environment variable is not set")
 	}
 
 	conf.ServerPort = os.Getenv("SERVER_PORT")
 	if conf.ServerPort == "" {
-		log.Println("Warning: SERVER_PORT environment variable is not set, defaulting to 8080")
+		cfgLog.Warn("Warning: SERVER_PORT environment variable is not set, defaulting to 8080")
 		conf.ServerPort = "8080"
 	}
 
 	conf.CertFile = os.Getenv("CERT_FILE")
 	conf.KeyFile = os.Getenv("KEY_FILE")
 	if conf.KeyFile == "" || conf.CertFile == "" {
-		log.Println("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
+		cfgLog.Warn("Warning: KEY_FILE or CERT_FILE environment variable is not set, server will run in standard HTTP mode")
 	}
 
 	devMode := os.Getenv("DEVMODE")
@@ -202,25 +234,25 @@ func getConfigFromEnv() *AppConf {
 
 	conf.DatabaseURL = os.Getenv("DATABASE_URL")
 	if conf.DatabaseURL == "" {
-		log.Println("Warning: DATABASE_URL environment variable is not set, defaulting to SQLite")
+		cfgLog.Info("Warning: DATABASE_URL environment variable is not set, defaulting to SQLite")
 		conf.DatabaseURL = "midsommar.db"
 	}
 
 	conf.DatabaseType = os.Getenv("DATABASE_TYPE")
 	if conf.DatabaseType == "" {
-		log.Println("Warning: DATABASE_TYPE environment variable is not set, defaulting to sqlite")
+		cfgLog.Info("Warning: DATABASE_TYPE environment variable is not set, defaulting to sqlite")
 		conf.DatabaseType = "sqlite"
 	}
 
 	if conf.DatabaseType != "sqlite" && conf.DatabaseType != "postgres" {
-		log.Printf("Warning: Unsupported DATABASE_TYPE: %s. Defaulting to sqlite", conf.DatabaseType)
+		cfgLog.Infof("Warning: Unsupported DATABASE_TYPE: %s. Defaulting to sqlite", conf.DatabaseType)
 		conf.DatabaseType = "sqlite"
 	}
 
 	filterDomains := os.Getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {
 		conf.FilterSignupDomains = strings.Split(filterDomains, ",")
-		log.Println("Filtering signup domains to:", conf.FilterSignupDomains)
+		cfgLog.Infof("Filtering signup domains to: %v", conf.FilterSignupDomains)
 	}
 
 	echoConvStr := os.Getenv("ECHO_CONVERSATION")
@@ -243,7 +275,7 @@ func getConfigFromEnv() *AppConf {
 
 	conf.ProxyURL = os.Getenv("PROXY_URL")
 	if conf.ProxyURL == "" {
-		log.Println("Warning: PROXY_URL environment variable is not set")
+		cfgLog.Info("Warning: PROXY_URL environment variable is not set")
 	}
 
 	conf.DefaultSignupMode = os.Getenv("DEFAULT_SIGNUP_MODE")
@@ -258,7 +290,7 @@ func getConfigFromEnv() *AppConf {
 
 	conf.TIBAPISecret = os.Getenv("TYK_AI_SECRET_KEY")
 	if conf.TIBAPISecret == "" && conf.TIBEnabled {
-		log.Println("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
+		cfgLog.Info("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
 	}
 
 	// Licensing has been removed - TYK_AI_LICENSE no longer required
@@ -275,10 +307,10 @@ func getConfigFromEnv() *AppConf {
 	if conf.AuthServerURL == "" {
 		if conf.SiteURL != "" {
 			conf.AuthServerURL = conf.SiteURL
-			log.Printf("AUTH_SERVER_URL not set, using SITE_URL: %s", conf.AuthServerURL)
+			cfgLog.Infof("AUTH_SERVER_URL not set, using SITE_URL: %s", conf.AuthServerURL)
 		} else {
 			conf.AuthServerURL = "http://localhost:3000"
-			log.Println("Warning: AUTH_SERVER_URL and SITE_URL not set, defaulting to http://localhost:3000")
+			cfgLog.Info("Warning: AUTH_SERVER_URL and SITE_URL not set, defaulting to http://localhost:3000")
 		}
 	}
 
@@ -287,10 +319,10 @@ func getConfigFromEnv() *AppConf {
 		var baseURL string
 		if conf.ProxyURL != "" {
 			baseURL = conf.ProxyURL
-			log.Printf("PROXY_OAUTH_METADATA_URL not set, using PROXY_URL: %s", baseURL)
+			cfgLog.Infof("PROXY_OAUTH_METADATA_URL not set, using PROXY_URL: %s", baseURL)
 		} else {
 			baseURL = "http://localhost:9090"
-			log.Println("Warning: PROXY_OAUTH_METADATA_URL and PROXY_URL not set, defaulting to http://localhost:9090")
+			cfgLog.Info("Warning: PROXY_OAUTH_METADATA_URL and PROXY_URL not set, defaulting to http://localhost:9090")
 		}
 		conf.ProxyOAuthMetadataURL = baseURL + "/.well-known/oauth-protected-resource"
 	}
@@ -309,7 +341,7 @@ func getConfigFromEnv() *AppConf {
 		if port, err := strconv.Atoi(grpcPortStr); err == nil {
 			conf.GRPCPort = port
 		} else {
-			log.Printf("Warning: Invalid GRPC_PORT value: %s. Using default: 9090", grpcPortStr)
+			cfgLog.Infof("Warning: Invalid GRPC_PORT value: %s. Using default: 9090", grpcPortStr)
 			conf.GRPCPort = 9090
 		}
 	} else {
@@ -325,17 +357,53 @@ func getConfigFromEnv() *AppConf {
 	grpcTLSInsecureStr := os.Getenv("GRPC_TLS_INSECURE")
 	if grpcTLSInsecureStr == "true" || grpcTLSInsecureStr == "1" {
 		conf.GRPCTLSEnabled = false
-		log.Println("⚠️  SECURITY WARNING: gRPC TLS is DISABLED. This should only be used for development!")
-		log.Println("⚠️  To enable TLS for production, remove GRPC_TLS_INSECURE=true")
+		cfgLog.Info("⚠️  SECURITY WARNING: gRPC TLS is DISABLED. This should only be used for development!")
+		cfgLog.Info("⚠️  To enable TLS for production, remove GRPC_TLS_INSECURE=true")
 	} else {
 		conf.GRPCTLSEnabled = true
-		log.Println("✅ gRPC TLS enabled (secure by default)")
+		cfgLog.Info("✅ gRPC TLS enabled (secure by default)")
 	}
 
 	conf.GRPCTLSCertPath = os.Getenv("GRPC_TLS_CERT_PATH")
 	conf.GRPCTLSKeyPath = os.Getenv("GRPC_TLS_KEY_PATH")
 	conf.GRPCAuthToken = os.Getenv("GRPC_AUTH_TOKEN")
 	conf.GRPCNextAuthToken = os.Getenv("GRPC_AUTH_TOKEN_NEXT")
+
+	// OCI Plugin configuration
+	conf.OCIPlugins = getOCIConfig()
+
+	// Marketplace configuration
+	conf.MarketplaceEnabled = true // Enabled by default
+	if enabledStr := os.Getenv("MARKETPLACE_ENABLED"); enabledStr != "" {
+		if enabled, err := strconv.ParseBool(enabledStr); err == nil {
+			conf.MarketplaceEnabled = enabled
+		}
+	}
+
+	conf.MarketplaceIndexURL = os.Getenv("MARKETPLACE_INDEX_URL")
+	if conf.MarketplaceIndexURL == "" {
+		conf.MarketplaceIndexURL = "https://raw.githubusercontent.com/lonelycode/tyk-ai-studio-plugins/main/index.yaml"
+	}
+
+	conf.MarketplaceSyncInterval = 1 * time.Hour // Default: sync every hour
+	if intervalStr := os.Getenv("MARKETPLACE_SYNC_INTERVAL"); intervalStr != "" {
+		if interval, err := time.ParseDuration(intervalStr); err == nil {
+			conf.MarketplaceSyncInterval = interval
+		} else {
+			cfgLog.Warnf("Warning: Invalid MARKETPLACE_SYNC_INTERVAL value: %s. Using default: %s", intervalStr, conf.MarketplaceSyncInterval)
+		}
+	}
+
+	conf.MarketplaceCacheDir = os.Getenv("MARKETPLACE_CACHE_DIR")
+	if conf.MarketplaceCacheDir == "" {
+		conf.MarketplaceCacheDir = "./.marketplace-cache"
+	}
+
+	// Log level configuration
+	conf.LogLevel = os.Getenv("LOG_LEVEL")
+	if conf.LogLevel == "" {
+		conf.LogLevel = "info" // Default to info level
+	}
 
 	return conf
 }
@@ -352,7 +420,7 @@ func getQueueConfig() QueueConfig {
 	if queueType == "nats" || queueType == "inmemory" || queueType == "postgres" {
 		config.Type = queueType
 	} else if queueType != "" {
-		log.Printf("Warning: Invalid QUEUE_TYPE value: %s. Defaulting to inmemory", queueType)
+		cfgLog.Infof("Warning: Invalid QUEUE_TYPE value: %s. Defaulting to inmemory", queueType)
 	}
 
 	// Parse buffer size
@@ -360,7 +428,7 @@ func getQueueConfig() QueueConfig {
 		if bufferSize, err := strconv.Atoi(bufferSizeStr); err == nil && bufferSize > 0 {
 			config.BufferSize = bufferSize
 		} else {
-			log.Printf("Warning: Invalid QUEUE_BUFFER_SIZE value: %s. Using default: %d", bufferSizeStr, config.BufferSize)
+			cfgLog.Infof("Warning: Invalid QUEUE_BUFFER_SIZE value: %s. Using default: %d", bufferSizeStr, config.BufferSize)
 		}
 	}
 
@@ -399,7 +467,7 @@ func getNATSConfig() NATSConfig {
 	if storageType := os.Getenv("NATS_STORAGE_TYPE"); storageType == "memory" || storageType == "file" {
 		config.StorageType = storageType
 	} else if storageType != "" {
-		log.Printf("Warning: Invalid NATS_STORAGE_TYPE value: %s. Using default: %s", storageType, config.StorageType)
+		cfgLog.Infof("Warning: Invalid NATS_STORAGE_TYPE value: %s. Using default: %s", storageType, config.StorageType)
 	}
 
 	// Retention policy
@@ -407,7 +475,7 @@ func getNATSConfig() NATSConfig {
 	if retentionPolicy == "limits" || retentionPolicy == "interest" || retentionPolicy == "workqueue" {
 		config.RetentionPolicy = retentionPolicy
 	} else if retentionPolicy != "" {
-		log.Printf("Warning: Invalid NATS_RETENTION_POLICY value: %s. Using default: %s", retentionPolicy, config.RetentionPolicy)
+		cfgLog.Infof("Warning: Invalid NATS_RETENTION_POLICY value: %s. Using default: %s", retentionPolicy, config.RetentionPolicy)
 	}
 
 	// Max age
@@ -420,7 +488,7 @@ func getNATSConfig() NATSConfig {
 		if maxBytes, err := strconv.ParseInt(maxBytesStr, 10, 64); err == nil && maxBytes > 0 {
 			config.MaxBytes = maxBytes
 		} else {
-			log.Printf("Warning: Invalid NATS_MAX_BYTES value: %s. Using default: %d", maxBytesStr, config.MaxBytes)
+			cfgLog.Infof("Warning: Invalid NATS_MAX_BYTES value: %s. Using default: %d", maxBytesStr, config.MaxBytes)
 		}
 	}
 
@@ -429,7 +497,7 @@ func getNATSConfig() NATSConfig {
 		if durable, err := strconv.ParseBool(durableStr); err == nil {
 			config.DurableConsumer = durable
 		} else {
-			log.Printf("Warning: Invalid NATS_DURABLE_CONSUMER value: %s. Using default: %t", durableStr, config.DurableConsumer)
+			cfgLog.Infof("Warning: Invalid NATS_DURABLE_CONSUMER value: %s. Using default: %t", durableStr, config.DurableConsumer)
 		}
 	}
 
@@ -443,7 +511,7 @@ func getNATSConfig() NATSConfig {
 		if maxDeliver, err := strconv.Atoi(maxDeliverStr); err == nil && maxDeliver > 0 {
 			config.MaxDeliver = maxDeliver
 		} else {
-			log.Printf("Warning: Invalid NATS_MAX_DELIVER value: %s. Using default: %d", maxDeliverStr, config.MaxDeliver)
+			cfgLog.Infof("Warning: Invalid NATS_MAX_DELIVER value: %s. Using default: %d", maxDeliverStr, config.MaxDeliver)
 		}
 	}
 
@@ -462,7 +530,7 @@ func getNATSConfig() NATSConfig {
 		if maxRetries, err := strconv.Atoi(maxRetriesStr); err == nil && maxRetries >= 0 {
 			config.MaxRetries = maxRetries
 		} else {
-			log.Printf("Warning: Invalid NATS_MAX_RETRIES value: %s. Using default: %d", maxRetriesStr, config.MaxRetries)
+			cfgLog.Infof("Warning: Invalid NATS_MAX_RETRIES value: %s. Using default: %d", maxRetriesStr, config.MaxRetries)
 		}
 	}
 
@@ -493,7 +561,7 @@ func getNATSConfig() NATSConfig {
 		if tls, err := strconv.ParseBool(tlsStr); err == nil {
 			config.TLSEnabled = tls
 		} else {
-			log.Printf("Warning: Invalid NATS_TLS_ENABLED value: %s. Using default: %t", tlsStr, config.TLSEnabled)
+			cfgLog.Infof("Warning: Invalid NATS_TLS_ENABLED value: %s. Using default: %t", tlsStr, config.TLSEnabled)
 		}
 	}
 	
@@ -513,7 +581,7 @@ func getNATSConfig() NATSConfig {
 		if skipVerify, err := strconv.ParseBool(skipVerifyStr); err == nil {
 			config.TLSSkipVerify = skipVerify
 		} else {
-			log.Printf("Warning: Invalid NATS_TLS_SKIP_VERIFY value: %s. Using default: %t", skipVerifyStr, config.TLSSkipVerify)
+			cfgLog.Infof("Warning: Invalid NATS_TLS_SKIP_VERIFY value: %s. Using default: %t", skipVerifyStr, config.TLSSkipVerify)
 		}
 	}
 
@@ -538,7 +606,7 @@ func getPostgreSQLQueueConfig() PostgreSQLQueueConfig {
 		if maxRetries, err := strconv.Atoi(maxRetriesStr); err == nil && maxRetries >= 0 {
 			config.MaxReconnectRetries = maxRetries
 		} else {
-			log.Printf("Warning: Invalid POSTGRES_QUEUE_MAX_RECONNECT_RETRIES value: %s. Using default: %d", maxRetriesStr, config.MaxReconnectRetries)
+			cfgLog.Infof("Warning: Invalid POSTGRES_QUEUE_MAX_RECONNECT_RETRIES value: %s. Using default: %d", maxRetriesStr, config.MaxReconnectRetries)
 		}
 	}
 
@@ -547,6 +615,99 @@ func getPostgreSQLQueueConfig() PostgreSQLQueueConfig {
 		config.NotifyTimeout = notifyTimeout
 	}
 
+	return config
+}
+
+// getOCIConfig parses OCI plugin-related environment variables
+func getOCIConfig() OCIConfig {
+	config := OCIConfig{}
+
+	// Cache directory - if not set, OCI support is disabled
+	config.CacheDir = os.Getenv("AI_STUDIO_OCI_CACHE_DIR")
+
+	// Only parse other settings if OCI is enabled
+	if config.CacheDir == "" {
+		return config
+	}
+
+	// Max cache size
+	if cacheSizeStr := os.Getenv("AI_STUDIO_OCI_MAX_CACHE_SIZE"); cacheSizeStr != "" {
+		if cacheSize, err := strconv.ParseInt(cacheSizeStr, 10, 64); err == nil && cacheSize > 0 {
+			config.MaxCacheSize = cacheSize
+		} else {
+			cfgLog.Infof("Warning: Invalid AI_STUDIO_OCI_MAX_CACHE_SIZE value: %s. Using default: %d", cacheSizeStr, config.MaxCacheSize)
+		}
+	}
+
+	// Allowed registries
+	if allowedRegistries := os.Getenv("AI_STUDIO_OCI_ALLOWED_REGISTRIES"); allowedRegistries != "" {
+		config.AllowedRegistries = strings.Split(allowedRegistries, ",")
+		for i, registry := range config.AllowedRegistries {
+			config.AllowedRegistries[i] = strings.TrimSpace(registry)
+		}
+	}
+
+	// Require signature verification
+	if requireSigStr := os.Getenv("AI_STUDIO_OCI_REQUIRE_SIGNATURE"); requireSigStr != "" {
+		if requireSig, err := strconv.ParseBool(requireSigStr); err == nil {
+			config.RequireSignature = requireSig
+		} else {
+			cfgLog.Infof("Warning: Invalid AI_STUDIO_OCI_REQUIRE_SIGNATURE value: %s. Using default: %t", requireSigStr, config.RequireSignature)
+		}
+	}
+
+	// Network timeout
+	if timeoutStr := os.Getenv("AI_STUDIO_OCI_TIMEOUT"); timeoutStr != "" {
+		if timeout, err := time.ParseDuration(timeoutStr); err == nil {
+			config.Timeout = timeout
+		} else {
+			cfgLog.Infof("Warning: Invalid AI_STUDIO_OCI_TIMEOUT value: %s. Using default: %s", timeoutStr, config.Timeout)
+		}
+	}
+
+	// Retry attempts
+	if retriesStr := os.Getenv("AI_STUDIO_OCI_RETRY_ATTEMPTS"); retriesStr != "" {
+		if retries, err := strconv.Atoi(retriesStr); err == nil && retries >= 0 {
+			config.RetryAttempts = retries
+		} else {
+			cfgLog.Infof("Warning: Invalid AI_STUDIO_OCI_RETRY_ATTEMPTS value: %s. Using default: %d", retriesStr, config.RetryAttempts)
+		}
+	}
+
+	// Garbage collection interval
+	if gcIntervalStr := os.Getenv("AI_STUDIO_OCI_GC_INTERVAL"); gcIntervalStr != "" {
+		if gcInterval, err := time.ParseDuration(gcIntervalStr); err == nil {
+			config.GCInterval = gcInterval
+		} else {
+			cfgLog.Infof("Warning: Invalid AI_STUDIO_OCI_GC_INTERVAL value: %s. Using default: %s", gcIntervalStr, config.GCInterval)
+		}
+	}
+
+	// Keep versions
+	if keepVersionsStr := os.Getenv("AI_STUDIO_OCI_KEEP_VERSIONS"); keepVersionsStr != "" {
+		if keepVersions, err := strconv.Atoi(keepVersionsStr); err == nil && keepVersions > 0 {
+			config.KeepVersions = keepVersions
+		} else {
+			cfgLog.Infof("Warning: Invalid AI_STUDIO_OCI_KEEP_VERSIONS value: %s. Using default: %d", keepVersionsStr, config.KeepVersions)
+		}
+	}
+
+	// Insecure registries
+	if insecureRegistries := os.Getenv("AI_STUDIO_OCI_INSECURE_REGISTRIES"); insecureRegistries != "" {
+		config.InsecureRegistries = strings.Split(insecureRegistries, ",")
+		for i, registry := range config.InsecureRegistries {
+			config.InsecureRegistries[i] = strings.TrimSpace(registry)
+		}
+	}
+
+	// Apply defaults and validate
+	config.SetDefaults()
+	if err := config.Validate(); err != nil {
+		cfgLog.Infof("Warning: Invalid OCI configuration: %v. OCI support will be disabled.", err)
+		return OCIConfig{} // Return empty config to disable OCI
+	}
+
+	cfgLog.Infof("✅ AI Studio OCI configuration loaded successfully - cache dir: %s", config.CacheDir)
 	return config
 }
 

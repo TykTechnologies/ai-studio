@@ -31,11 +31,13 @@ import {
   Visibility as ViewIcon,
   CloudSync as PushIcon,
   MoreVert as MoreVertIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import edgeGatewayService from '../../services/edgeGatewayService';
 import useNamespaces from '../../hooks/useNamespaces';
 import PushConfigurationModal from './PushConfigurationModal';
+import RemoveEdgeModal from './RemoveEdgeModal';
 import {
   TitleBox,
   ContentBox,
@@ -56,8 +58,10 @@ const EdgeGatewayList = () => {
   const [error, setError] = useState(null);
   const [selectedNamespace, setSelectedNamespace] = useState('');
   const [pushModalOpen, setPushModalOpen] = useState(false);
+  const [removeModalOpen, setRemoveModalOpen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
-  
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
   // Menu state for actions
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
@@ -107,6 +111,24 @@ const EdgeGatewayList = () => {
 
   const handleViewDetail = (edgeId) => {
     navigate(`/admin/edge-gateways/${edgeId}`);
+  };
+
+  const handleRemoveClick = () => {
+    handleMenuClose();
+    setRemoveModalOpen(true);
+  };
+
+  const handleRemoveSuccess = () => {
+    setSnackbar({
+      open: true,
+      message: `Edge gateway "${selectedEdge?.edgeId}" removed successfully`,
+      severity: 'success',
+    });
+    fetchEdgeGateways();
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbar({ ...snackbar, open: false });
   };
 
   const handleNamespaceChange = (event) => {
@@ -284,7 +306,15 @@ const EdgeGatewayList = () => {
               handleMenuClose();
             }}
           >
+            <ViewIcon fontSize="small" sx={{ mr: 1 }} />
             View Details
+          </MenuItem>
+          <MenuItem
+            onClick={handleRemoveClick}
+            sx={{ color: 'error.main' }}
+          >
+            <DeleteIcon fontSize="small" sx={{ mr: 1 }} />
+            Remove Entry
           </MenuItem>
         </Menu>
       </Box>
@@ -294,6 +324,24 @@ const EdgeGatewayList = () => {
         onClose={() => setPushModalOpen(false)}
         onSuccess={handleRefresh}
       />
+
+      <RemoveEdgeModal
+        open={removeModalOpen}
+        onClose={() => setRemoveModalOpen(false)}
+        edge={selectedEdge}
+        onSuccess={handleRemoveSuccess}
+      />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

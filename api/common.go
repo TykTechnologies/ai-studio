@@ -407,7 +407,7 @@ func (a *API) createUserApp(c *gin.Context) {
 	}
 
 	// Create the app
-	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate)
+	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil)
 	if err != nil {
 		// Check for specific error types and return appropriate responses
 		if errors.Is(err, services.ERRPrivacyScoreMismatch) {
@@ -437,16 +437,18 @@ func (a *API) createUserApp(c *gin.Context) {
 		Type: "app",
 		ID:   strconv.FormatUint(uint64(app.ID), 10),
 		Attributes: struct {
-			Name            string     `json:"name"`
-			Description     string     `json:"description"`
-			UserID          uint       `json:"user_id"`
-			CredentialID    uint       `json:"credential_id"`
-			DatasourceIDs   []uint     `json:"datasource_ids"`
-			LLMIDs          []uint     `json:"llm_ids"`
-			ToolIDs         []uint     `json:"tool_ids"`
-			MonthlyBudget   *float64   `json:"monthly_budget"`
-			BudgetStartDate *time.Time `json:"budget_start_date"`
-			IsOrphaned      bool       `json:"is_orphaned"`
+			Name            string                 `json:"name"`
+			Description     string                 `json:"description"`
+			UserID          uint                   `json:"user_id"`
+			CredentialID    uint                   `json:"credential_id"`
+			DatasourceIDs   []uint                 `json:"datasource_ids"`
+			LLMIDs          []uint                 `json:"llm_ids"`
+			ToolIDs         []uint                 `json:"tool_ids"`
+			MonthlyBudget   *float64               `json:"monthly_budget"`
+			BudgetStartDate *time.Time             `json:"budget_start_date"`
+			IsOrphaned      bool                   `json:"is_orphaned"`
+			Metadata        map[string]interface{} `json:"metadata,omitempty"`
+			Namespace       string                 `json:"namespace,omitempty"`
 		}{
 			Name:          app.Name,
 			Description:   app.Description,
@@ -464,6 +466,8 @@ func (a *API) createUserApp(c *gin.Context) {
 			MonthlyBudget:   app.MonthlyBudget,
 			BudgetStartDate: app.BudgetStartDate,
 			IsOrphaned:      app.IsOrphaned,
+			Metadata:        app.Metadata,
+			Namespace:       app.Namespace,
 		},
 	}
 
@@ -615,16 +619,18 @@ func (a *API) getUserApps(c *gin.Context) {
 			Type: "app",
 			ID:   strconv.FormatUint(uint64(app.ID), 10),
 			Attributes: struct {
-				Name            string     `json:"name"`
-				Description     string     `json:"description"`
-				UserID          uint       `json:"user_id"`
-				CredentialID    uint       `json:"credential_id"`
-				DatasourceIDs   []uint     `json:"datasource_ids"`
-				LLMIDs          []uint     `json:"llm_ids"`
-				ToolIDs         []uint     `json:"tool_ids"`
-				MonthlyBudget   *float64   `json:"monthly_budget"`
-				BudgetStartDate *time.Time `json:"budget_start_date"`
-				IsOrphaned      bool       `json:"is_orphaned"`
+				Name            string                 `json:"name"`
+				Description     string                 `json:"description"`
+				UserID          uint                   `json:"user_id"`
+				CredentialID    uint                   `json:"credential_id"`
+				DatasourceIDs   []uint                 `json:"datasource_ids"`
+				LLMIDs          []uint                 `json:"llm_ids"`
+				ToolIDs         []uint                 `json:"tool_ids"`
+				MonthlyBudget   *float64               `json:"monthly_budget"`
+				BudgetStartDate *time.Time             `json:"budget_start_date"`
+				IsOrphaned      bool                   `json:"is_orphaned"`
+				Metadata        map[string]interface{} `json:"metadata,omitempty"`
+				Namespace       string                 `json:"namespace,omitempty"`
 			}{
 				Name:            app.Name,
 				Description:     app.Description,
@@ -654,6 +660,8 @@ func (a *API) getUserApps(c *gin.Context) {
 					return ids
 				}(),
 				IsOrphaned: app.IsOrphaned,
+				Metadata:   app.Metadata,
+				Namespace:  app.Namespace,
 			},
 		}
 	}

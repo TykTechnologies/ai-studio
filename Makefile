@@ -25,6 +25,44 @@ build-local:
 	cd $(ADMIN_FRONTEND_DIR) && npm run build
 	go build -o midsommar
 
+# Build all plugins
+plugins:
+	@echo "Building studio plugins..."
+	@failed_plugins=""; \
+	for plugin in examples/plugins/studio/*/; do \
+		if [ -d "$$plugin/server" ]; then \
+			plugin_name=$$(basename "$$plugin"); \
+			echo "Building studio plugin: $$plugin_name"; \
+			if (cd "$$plugin/server" && go build -o ../$$plugin_name); then \
+				echo "  ✓ Successfully built $$plugin_name"; \
+			else \
+				echo "  ✗ Failed to build $$plugin_name"; \
+				failed_plugins="$$failed_plugins $$plugin_name"; \
+			fi; \
+		fi; \
+	done; \
+	echo "Building gateway plugins..."; \
+	for plugin in examples/plugins/gateway/*/; do \
+		if [ -f "$$plugin/main.go" ]; then \
+			plugin_name=$$(basename "$$plugin"); \
+			echo "Building gateway plugin: $$plugin_name"; \
+			if (cd microgateway && go build -o "../$$plugin/$$plugin_name" "../$$plugin"); then \
+				echo "  ✓ Successfully built $$plugin_name"; \
+			else \
+				echo "  ✗ Failed to build $$plugin_name"; \
+				failed_plugins="$$failed_plugins $$plugin_name"; \
+			fi; \
+		fi; \
+	done; \
+	if [ -n "$$failed_plugins" ]; then \
+		echo ""; \
+		echo "⚠️  Some plugins failed to build:$$failed_plugins"; \
+		echo "The following plugins built successfully can be used."; \
+	else \
+		echo ""; \
+		echo "✅ All plugins built successfully!"; \
+	fi
+
 # Test target
 test:
 	go test ./...
@@ -135,4 +173,4 @@ build-docker-extras:
 	cd extra/reranker && \
 	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/reranker_cpu:latest --push -f dockerfile.cpu .
 
-.PHONY: all build build-frontend build-binaries build-local test clean start-dev stop-dev perf-test perf-profile perf-baseline perf-compare perf-report perf-clean
+.PHONY: all build build-frontend build-binaries build-local plugins test clean start-dev stop-dev perf-test perf-profile perf-baseline perf-compare perf-report perf-clean

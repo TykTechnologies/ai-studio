@@ -1,12 +1,14 @@
 package services
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
@@ -25,8 +27,54 @@ func (s *Service) CreateTool(name, description, toolType string, oasSpec string,
 		AuthKey:        APIKey,
 	}
 
+	// Execute "before_create" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookBeforeCreate,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.Tool); ok {
+				tool = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(tool, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := tool.Create(s.DB); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_create" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookAfterCreate,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-create hooks failed: %v", err))
+		}
 	}
 
 	return tool, nil
@@ -47,8 +95,54 @@ func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpe
 	tool.AuthSchemaName = schemaName
 	tool.AuthKey = APIKey
 
+	// Execute "before_update" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookBeforeUpdate,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.Tool); ok {
+				tool = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(tool, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := tool.Update(s.DB); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_update" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookAfterUpdate,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-update hooks failed: %v", err))
+		}
 	}
 
 	return tool, nil
@@ -72,7 +166,45 @@ func (s *Service) DeleteTool(id uint) error {
 		return err
 	}
 
-	return tool.Delete(s.DB)
+	// Execute "before_delete" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookBeforeDelete,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+	}
+
+	if err := tool.Delete(s.DB); err != nil {
+		return err
+	}
+
+	// Execute "after_delete" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeTool,
+			HookAfterDelete,
+			tool,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-delete hooks failed: %v", err))
+		}
+	}
+
+	return nil
 }
 
 // GetToolByName retrieves a tool by its name
@@ -585,4 +717,69 @@ func (s *Service) CallToolOperation(toolID uint, operationID string, params map[
 	}
 
 	return result, nil
+}
+
+// ToolOperationDetail represents detailed information about a tool operation
+type ToolOperationDetail struct {
+	OperationID string
+	Method      string
+	Path        string
+	Summary     string
+	Description string
+}
+
+// GetToolOperationDetails retrieves detailed information about tool operations from OpenAPI spec
+func (s *Service) GetToolOperationDetails(toolID uint) ([]ToolOperationDetail, error) {
+	tool, err := s.GetToolByID(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	if tool.OASSpec == "" {
+		return nil, fmt.Errorf("tool has no OpenAPI specification")
+	}
+
+	// Get basic operations list first
+	operations, err := s.ListToolOperationsFromSpec(toolID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decode the spec for detailed parsing
+	decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
+	}
+
+	// Create universal client for parsing
+	client, err := universalclient.NewClient(decodedSpec, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create universal client: %w", err)
+	}
+
+	// Extract detailed information for each operation
+	details := make([]ToolOperationDetail, 0, len(operations))
+	for _, operationID := range operations {
+		detail := ToolOperationDetail{
+			OperationID: operationID,
+			Method:      "POST", // Default for tool calls through proxy
+			Path:        "",
+			Summary:     "",
+			Description: "",
+		}
+
+		// Try to get tool definition for this operation
+		tools, err := client.AsTool(operationID)
+		if err == nil && len(tools) > 0 {
+			tool := tools[0]
+			if tool.Function != nil {
+				detail.Summary = tool.Function.Name
+				detail.Description = tool.Function.Description
+			}
+		}
+
+		details = append(details, detail)
+	}
+
+	return details, nil
 }

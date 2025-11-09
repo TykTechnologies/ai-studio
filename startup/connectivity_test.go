@@ -59,37 +59,58 @@ func TestQueueConnectivity(t *testing.T) {
 		name        string
 		queueType   string
 		expectError bool
+		setupFunc   func() func() // Setup function that returns cleanup function
 	}{
 		{
 			name:        "inmemory queue",
 			queueType:   "inmemory",
 			expectError: false,
+			setupFunc:   nil,
 		},
 		{
 			name:        "postgres queue (no DATABASE_URL)",
 			queueType:   "postgres",
 			expectError: true, // Should fail without DATABASE_URL
+			setupFunc: func() func() {
+				// Save original DATABASE_URL and unset it for this test
+				originalURL := os.Getenv("DATABASE_URL")
+				os.Unsetenv("DATABASE_URL")
+				config.ResetGlobalConfig() // Force config reload on next Get()
+				return func() {
+					if originalURL != "" {
+						os.Setenv("DATABASE_URL", originalURL)
+					}
+					config.ResetGlobalConfig() // Force config reload with original DATABASE_URL
+				}
+			},
 		},
 		{
 			name:        "invalid queue type",
 			queueType:   "invalid",
 			expectError: true,
+			setupFunc:   nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Run setup if provided
+			if tt.setupFunc != nil {
+				cleanup := tt.setupFunc()
+				defer cleanup()
+			}
+
 			queueConfig := config.QueueConfig{
 				Type:       tt.queueType,
 				BufferSize: 100,
 			}
 
 			err := testQueueConnectivity(queueConfig)
-			
+
 			if tt.expectError && err == nil {
 				t.Errorf("expected error but got none")
 			}
-			
+
 			if !tt.expectError && err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

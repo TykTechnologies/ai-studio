@@ -1,0 +1,429 @@
+syntax = "proto3";
+
+package plugin;
+
+option go_package = "github.com/TykTechnologies/midsommar/v2/proto";
+
+// PluginService defines the gRPC interface for plugin communication
+service PluginService {
+    // Lifecycle management
+    rpc Initialize(InitRequest) returns (InitResponse);
+    rpc Ping(PingRequest) returns (PingResponse);
+    rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+    
+    // Pre-auth hook
+    rpc ProcessPreAuth(PluginRequest) returns (PluginResponse);
+    
+    // Auth hook
+    rpc Authenticate(AuthRequest) returns (AuthResponse);
+    
+    // Auth context methods (for auth plugins only)
+    rpc GetAppByCredential(GetAppRequest) returns (GetAppResponse);
+    rpc GetUserByCredential(GetUserRequest) returns (GetUserResponse);
+    
+    // Post-auth hook
+    rpc ProcessPostAuth(EnrichedRequest) returns (PluginResponse);
+    
+    // Response hooks (new clean interface)
+    rpc OnBeforeWriteHeaders(HeadersRequest) returns (HeadersResponse);
+    rpc OnBeforeWrite(ResponseWriteRequest) returns (ResponseWriteResponse);
+    
+    // Data collection hooks
+    rpc HandleProxyLog(ProxyLogRequest) returns (DataCollectionResponse);
+    rpc HandleAnalytics(AnalyticsRequest) returns (DataCollectionResponse);
+    rpc HandleBudgetUsage(BudgetUsageRequest) returns (DataCollectionResponse);
+
+    // AI Studio UI Asset serving (for AI Studio plugins only)
+    rpc GetAsset(GetAssetRequest) returns (GetAssetResponse);
+    rpc ListAssets(ListAssetsRequest) returns (ListAssetsResponse);
+    rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
+
+    // Generic RPC call method (for AI Studio plugins)
+    rpc Call(CallRequest) returns (CallResponse);
+
+    // Configuration schema method (for both systems)
+    rpc GetConfigSchema(GetConfigSchemaRequest) returns (GetConfigSchemaResponse);
+
+    // Agent Plugin Methods
+    rpc HandleAgentMessage(AgentMessageRequest) returns (stream AgentMessageChunk);
+
+    // Object Hook Methods (for AI Studio plugins)
+    rpc GetObjectHookRegistrations(GetObjectHookRegistrationsRequest) returns (GetObjectHookRegistrationsResponse);
+    rpc HandleObjectHook(ObjectHookRequest) returns (ObjectHookResponse);
+}
+
+// Common messages
+
+message InitRequest {
+    map<string, string> config = 1;
+}
+
+message InitResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message PingRequest {
+    int64 timestamp = 1;
+}
+
+message PingResponse {
+    int64 timestamp = 1;
+    bool healthy = 2;
+}
+
+message ShutdownRequest {
+    int64 timeout_seconds = 1;
+}
+
+message ShutdownResponse {
+    bool success = 1;
+}
+
+message PluginContext {
+    string request_id = 1;
+    string vendor = 2;
+    uint32 llm_id = 3;
+    string llm_slug = 4;
+    uint32 app_id = 5;
+    uint32 user_id = 6;
+    map<string, string> metadata = 7;
+    map<string, string> trace_context = 8;
+}
+
+message PluginRequest {
+    string method = 1;
+    string path = 2;
+    map<string, string> headers = 3;
+    bytes body = 4;
+    PluginContext context = 5;
+    string remote_addr = 6;
+}
+
+message PluginResponse {
+    bool modified = 1;
+    int32 status_code = 2;
+    map<string, string> headers = 3;
+    bytes body = 4;
+    bool block = 5;  // Stop processing if true
+    string error_message = 6;
+}
+
+message AuthRequest {
+    string credential = 1;
+    string auth_type = 2;
+    PluginRequest request = 3;
+    PluginContext context = 4;
+}
+
+message AuthResponse {
+    bool authenticated = 1;
+    string user_id = 2;
+    string app_id = 3;
+    map<string, string> claims = 4;
+    string error_message = 5;
+}
+
+message EnrichedRequest {
+    PluginRequest request = 1;
+    string user_id = 2;
+    string app_id = 3;
+    map<string, string> auth_claims = 4;
+    bool authenticated = 5;
+}
+
+message HeadersRequest {
+    map<string, string> headers = 1;
+    PluginContext context = 2;
+}
+
+message HeadersResponse {
+    bool modified = 1;
+    map<string, string> headers = 2;
+}
+
+message ResponseWriteRequest {
+    bytes body = 1;
+    map<string, string> headers = 2;
+    bool is_stream_chunk = 3;
+    PluginContext context = 4;
+}
+
+message ResponseWriteResponse {
+    bool modified = 1;
+    bytes body = 2;
+    map<string, string> headers = 3;
+}
+
+// Auth plugin context methods
+
+message GetAppRequest {
+    string credential = 1;
+    PluginContext context = 2;
+}
+
+message GetAppResponse {
+    bool success = 1;
+    string error_message = 2;
+    App app = 3;
+}
+
+message GetUserRequest {
+    string credential = 1;
+    PluginContext context = 2;
+}
+
+message GetUserResponse {
+    bool success = 1;
+    string error_message = 2;
+    User user = 3;
+}
+
+message App {
+    uint32 id = 1;
+    string name = 2;
+    string description = 3;
+    string owner_email = 4;
+    bool is_active = 5;
+    double monthly_budget = 6;
+    int32 rate_limit = 7;
+    map<string, string> metadata = 8;
+}
+
+message User {
+    uint32 id = 1;
+    string email = 2;
+    string name = 3;
+    bool is_active = 4;
+    map<string, string> metadata = 5;
+}
+
+// Data collection messages
+
+message ProxyLogRequest {
+    uint32 app_id = 1;
+    uint32 user_id = 2;
+    string vendor = 3;
+    bytes request_body = 4;
+    bytes response_body = 5;
+    int32 response_code = 6;
+    int64 timestamp = 7;  // Unix timestamp in seconds
+    string request_id = 8;
+    PluginContext context = 9;
+}
+
+message AnalyticsRequest {
+    uint32 llm_id = 1;
+    string model_name = 2;
+    string vendor = 3;
+    int32 prompt_tokens = 4;
+    int32 response_tokens = 5;
+    int32 cache_write_prompt_tokens = 6;
+    int32 cache_read_prompt_tokens = 7;
+    int32 total_tokens = 8;
+    double cost = 9;
+    string currency = 10;
+    uint32 app_id = 11;
+    uint32 user_id = 12;
+    int64 timestamp = 13;  // Unix timestamp in seconds
+    int32 tool_calls = 14;
+    int32 choices = 15;
+    string request_id = 16;
+    PluginContext context = 17;
+}
+
+message BudgetUsageRequest {
+    uint32 app_id = 1;
+    uint32 llm_id = 2;
+    int64 tokens_used = 3;
+    double cost = 4;
+    int32 requests_count = 5;
+    int64 prompt_tokens = 6;
+    int64 completion_tokens = 7;
+    int64 period_start = 8;  // Unix timestamp in seconds
+    int64 period_end = 9;    // Unix timestamp in seconds
+    int64 timestamp = 10;    // Unix timestamp in seconds
+    string request_id = 11;
+    PluginContext context = 12;
+}
+
+message DataCollectionResponse {
+    bool success = 1;
+    bool handled = 2;
+    string error_message = 3;
+    map<string, string> metadata = 4;
+}
+
+// AI Studio UI Asset serving messages
+
+message GetAssetRequest {
+    string asset_path = 1;  // Relative path to asset (e.g., "ui/webc/dashboard.js")
+}
+
+message GetAssetResponse {
+    bool success = 1;
+    bytes content = 2;      // Asset file content
+    string mime_type = 3;   // MIME type (e.g., "application/javascript")
+    string error_message = 4;
+    int64 content_length = 5;
+}
+
+message ListAssetsRequest {
+    string path_prefix = 1; // Optional filter (e.g., "ui/")
+}
+
+message ListAssetsResponse {
+    bool success = 1;
+    repeated AssetInfo assets = 2;
+    string error_message = 3;
+}
+
+message AssetInfo {
+    string path = 1;        // Asset path
+    string mime_type = 2;   // MIME type
+    int64 size = 3;         // File size in bytes
+}
+
+message GetManifestRequest {
+    // No parameters needed - each plugin has one manifest
+}
+
+message GetManifestResponse {
+    bool success = 1;
+    string manifest_json = 2;  // Complete manifest as JSON string
+    string error_message = 3;
+}
+
+// Generic RPC call messages (for AI Studio plugins)
+message CallRequest {
+    string method = 1;   // RPC method name (e.g., "get_statistics")
+    string payload = 2;  // JSON payload as string
+    uint32 service_broker_id = 3;  // Broker ID for service API access during RPC
+}
+
+message CallResponse {
+    bool success = 1;
+    string data = 2;          // JSON response data as string
+    string error_message = 3;
+}
+
+// Configuration schema messages
+message GetConfigSchemaRequest {
+    // Empty - each plugin returns its own configuration schema
+}
+
+message GetConfigSchemaResponse {
+    bool success = 1;
+    string schema_json = 2;    // JSON Schema as string (jsonschema.org format)
+    string error_message = 3;
+}
+
+// Agent Plugin Messages
+
+message AgentMessageRequest {
+    string session_id = 1;
+    string user_message = 2;
+    repeated AgentToolInfo available_tools = 3;
+    repeated AgentDatasourceInfo available_datasources = 4;
+    repeated AgentLLMInfo available_llms = 5;
+    string config_json = 6;                      // Plugin configuration from AgentConfig
+    repeated AgentConversationMessage history = 7;
+    PluginContext context = 8;
+    uint32 service_broker_id = 9;                // Broker ID for service API access during agent calls
+}
+
+message AgentMessageChunk {
+    enum ChunkType {
+        CONTENT = 0;         // Regular content chunk
+        TOOL_CALL = 1;       // Tool call being made
+        TOOL_RESULT = 2;     // Tool execution result
+        THINKING = 3;        // Agent reasoning/planning
+        ERROR = 4;           // Error occurred
+        DONE = 5;            // Processing complete
+    }
+
+    ChunkType type = 1;
+    string content = 2;          // Text content
+    string metadata_json = 3;    // Additional metadata as JSON
+    bool is_final = 4;           // True if this is the final chunk
+}
+
+message AgentToolInfo {
+    uint32 id = 1;
+    string name = 2;
+    string slug = 3;
+    string description = 4;
+    repeated string operations = 5;  // Available operation IDs
+    int32 privacy_score = 6;
+}
+
+message AgentDatasourceInfo {
+    uint32 id = 1;
+    string name = 2;
+    string description = 3;
+    string db_source_type = 4;
+    int32 privacy_score = 5;
+}
+
+message AgentLLMInfo {
+    uint32 id = 1;
+    string name = 2;
+    string vendor = 3;
+    string default_model = 4;
+    repeated string allowed_models = 5;
+    int32 privacy_score = 6;
+}
+
+message AgentConversationMessage {
+    string role = 1;             // "user", "assistant", "system"
+    string content = 2;
+    int64 timestamp = 3;         // Unix timestamp
+    string metadata_json = 4;    // Additional metadata as JSON
+}
+
+// Object Hook Messages
+
+message GetObjectHookRegistrationsRequest {
+    // Empty - plugin returns its registrations
+}
+
+message GetObjectHookRegistrationsResponse {
+    repeated ObjectHookRegistration registrations = 1;
+}
+
+message ObjectHookRegistration {
+    string object_type = 1;  // "llm", "datasource", "tool", "user"
+    repeated string hook_types = 2;  // e.g., "before_create", "after_update", "before_delete"
+    int32 priority = 3;  // Execution order (lower = earlier)
+}
+
+message ObjectHookRequest {
+    string hook_type = 1;        // "before_create", "after_create", "before_update", "after_update", "before_delete", "after_delete"
+    string object_type = 2;       // "llm", "datasource", "tool", "user"
+    string operation_id = 3;      // Unique ID for this operation (for correlation)
+    uint32 user_id = 4;           // User performing the operation
+    uint32 plugin_id = 5;         // Plugin being invoked
+    PluginContext context = 6;    // Plugin context with metadata
+
+    // The object being modified/created/deleted (JSON encoded)
+    string object_json = 10;      // JSON representation of the object
+
+    // Additional context about the operation
+    map<string, string> metadata = 20;
+    int64 timestamp = 21;         // Unix timestamp
+}
+
+message ObjectHookResponse {
+    bool allow_operation = 1;     // Whether to proceed with operation (for "before_*" hooks)
+    string rejection_reason = 2;   // If not allowed, why (shown to user)
+
+    // Modified object (JSON encoded)
+    string modified_object_json = 10;  // JSON representation if plugin modified the object
+
+    // Plugin-specific metadata to store with the object
+    map<string, string> plugin_metadata = 20;
+
+    // Additional response metadata
+    string message = 30;  // Optional message to log
+    bool modified = 31;   // Whether the plugin modified the object
+}

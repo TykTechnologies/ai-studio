@@ -68,6 +68,22 @@ func (s *DatabaseGatewayService) GetCredentialBySecret(secret string) (interface
 }
 
 // GetAppByCredentialID returns the app associated with a credential
+func (s *DatabaseGatewayService) GetAppByID(id uint) (interface{}, error) {
+	var app database.App
+	err := s.db.Where("id = ?", id).
+		Preload("LLMs").
+		First(&app).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("app not found")
+		}
+		return nil, fmt.Errorf("failed to get app: %w", err)
+	}
+
+	return &app, nil
+}
+
 func (s *DatabaseGatewayService) GetAppByCredentialID(credID uint) (interface{}, error) {
 	// Get credential first
 	var cred database.Credential

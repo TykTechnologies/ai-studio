@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Custom Authentication with UI Plugin Configuration",
+  "description": "Configure custom token-based authentication with app and user mappings. Tokens can also be managed via the plugin's UI.",
+  "properties": {
+    "tokens": {
+      "type": "array",
+      "title": "Authentication Tokens",
+      "description": "List of valid tokens with their app and user mappings. Can also be managed via the plugin UI.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Token ID",
+            "description": "Unique identifier for this token (auto-generated if not provided)",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "token": {
+            "type": "string",
+            "title": "Token Value",
+            "description": "The authentication token (without 'Bearer ' prefix)",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "app_id": {
+            "type": "integer",
+            "title": "App ID",
+            "description": "Numeric App ID from the database that this token authenticates",
+            "minimum": 1
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User ID",
+            "description": "User identifier associated with this token",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Optional description for this token (e.g., 'John's dev token')",
+            "default": ""
+          }
+        },
+        "required": ["token", "app_id"],
+        "additionalProperties": false
+      },
+      "default": []
+    },
+    "default_app_id": {
+      "type": "integer",
+      "title": "Default App ID",
+      "description": "Fallback App ID if a token doesn't specify one (used for backward compatibility)",
+      "default": 1,
+      "minimum": 1
+    },
+    "reject_unknown_tokens": {
+      "type": "boolean",
+      "title": "Reject Unknown Tokens",
+      "description": "If true, reject tokens not in the configured list. If false, accept with default app ID.",
+      "default": true
+    }
+  },
+  "additionalProperties": false
+}

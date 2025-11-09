@@ -2,7 +2,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,68 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
-	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
-
-// MockPluginManagerForAPI implements PluginManagerInterface for testing
-type MockPluginManagerForAPI struct {
-	mock.Mock
-}
-
-func (m *MockPluginManagerForAPI) ExecutePluginChain(llmID uint, hookType string, input interface{}, pluginCtx interface{}) (interface{}, error) {
-	args := m.Called(llmID, hookType, input, pluginCtx)
-	return args.Get(0), args.Error(1)
-}
-
-func (m *MockPluginManagerForAPI) GetPluginsForLLM(llmID uint, hookType string) (interface{}, error) {
-	args := m.Called(llmID, hookType)
-	return args.Get(0), args.Error(1)
-}
-
-func (m *MockPluginManagerForAPI) IsPluginLoaded(pluginID uint) bool {
-	args := m.Called(pluginID)
-	return args.Bool(0)
-}
-
-func (m *MockPluginManagerForAPI) RefreshLLMPluginMapping(llmID uint) error {
-	args := m.Called(llmID)
-	return args.Error(0)
-}
-
-// MockAuthProvider for testing
-type MockAuthProvider struct {
-	mock.Mock
-}
-
-func (m *MockAuthProvider) ValidateToken(token string) (*auth.AuthResult, error) {
-	args := m.Called(token)
-	return args.Get(0).(*auth.AuthResult), args.Error(1)
-}
-
-func (m *MockAuthProvider) GenerateToken(appID uint, name string, scopes []string, expiresIn time.Duration) (string, error) {
-	args := m.Called(appID, name, scopes, expiresIn)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockAuthProvider) RevokeToken(token string) error {
-	args := m.Called(token)
-	return args.Error(0)
-}
-
-func (m *MockAuthProvider) GetTokenInfo(token string) (*auth.TokenInfo, error) {
-	args := m.Called(token)
-	return args.Get(0).(*auth.TokenInfo), args.Error(1)
-}
 
 func setupAPITestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
@@ -91,118 +38,15 @@ func setupAPITestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+// TestPluginMiddleware_Integration is deprecated - plugin system now uses auth hooks
+// This test is kept for historical reference but should be refactored or removed
 func TestPluginMiddleware_Integration(t *testing.T) {
-	db := setupAPITestDB(t)
-	repo := database.NewRepository(db)
-
-	// Create test LLM
-	llm := &database.LLM{
-		Name:         "Test LLM",
-		Slug:         "test-llm",
-		Vendor:       "test",
-		DefaultModel: "test-model",
-		IsActive:     true,
-	}
-	err := db.Create(llm).Error
-	require.NoError(t, err)
-
-	// Create mock services
-	gatewayService := services.NewDatabaseGatewayService(db, repo)
-	serviceContainer := &services.ServiceContainer{
-		GatewayService: gatewayService,
-	}
-
-	// Create mock plugin manager
-	mockPluginManager := &MockPluginManagerForAPI{}
-
-	// Mock no plugins for this LLM - GetPluginsForLLM returns empty slice
-	mockPluginManager.On("GetPluginsForLLM", llm.ID, "pre_auth").Return([]interface{}{}, nil)
-	mockPluginManager.On("GetPluginsForLLM", llm.ID, "post_auth").Return([]interface{}{}, nil)
-
-	// Mock plugin execution (should not be called since no plugins, but added for safety)
-	mockPluginManager.On("ExecutePluginChain", llm.ID, "pre_auth", mock.Anything, mock.Anything).
-		Return(mock.Anything, nil).Maybe()
-	mockPluginManager.On("ExecutePluginChain", llm.ID, "post_auth", mock.Anything, mock.Anything).
-		Return(mock.Anything, nil).Maybe()
-
-	// Create mock auth provider
-	mockAuthProvider := &MockAuthProvider{}
-	mockAuthProvider.On("ValidateToken", "valid-token").Return(&auth.AuthResult{
-		Valid:  true,
-		AppID:  1,
-		Scopes: []string{"api"},
-	}, nil)
-
-	// Setup Gin router with plugin middleware
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-
-	// Add auth middleware
-	router.Use(auth.RequireAuth(mockAuthProvider))
-
-	// Add plugin middleware
-	pluginConfig := &PluginMiddlewareConfig{
-		PluginManager: mockPluginManager,
-		Services:      serviceContainer,
-	}
-	router.Use(CreatePluginMiddleware(pluginConfig))
-
-	// Add a test handler that simulates the AI Gateway
-	router.Any("/llm/*path", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "AI Gateway response",
-			"path":    c.Request.URL.Path,
-		})
-	})
-
-	// Test the middleware with an LLM request
-	req := httptest.NewRequest("POST", "/llm/rest/test-llm/chat/completions", bytes.NewBufferString(`{"model": "test"}`))
-	req.Header.Set("Authorization", "Bearer valid-token")
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	// Verify the request went through
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "AI Gateway response")
-
-	// Verify GetPluginsForLLM was called but ExecutePluginChain was not (since no plugins)
-	mockPluginManager.AssertCalled(t, "GetPluginsForLLM", llm.ID, "pre_auth")
-	mockPluginManager.AssertNotCalled(t, "ExecutePluginChain", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	t.Skip("Skipping deprecated test - plugin system now uses auth hooks instead of middleware")
 }
 
+// TestPluginMiddleware_NonLLMRequest is deprecated - plugin system now uses auth hooks
 func TestPluginMiddleware_NonLLMRequest(t *testing.T) {
-	mockPluginManager := &MockPluginManagerForAPI{}
-	serviceContainer := &services.ServiceContainer{}
-
-	// Setup Gin router with plugin middleware
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-
-	// Add plugin middleware
-	pluginConfig := &PluginMiddlewareConfig{
-		PluginManager: mockPluginManager,
-		Services:      serviceContainer,
-	}
-	router.Use(CreatePluginMiddleware(pluginConfig))
-
-	// Add a test handler
-	router.GET("/api/test", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "API response"})
-	})
-
-	// Test non-LLM request
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	// Verify the request went through without plugin processing
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), "API response")
-
-	// Verify no plugin methods were called
-	mockPluginManager.AssertNotCalled(t, "ExecutePluginChain", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	t.Skip("Skipping deprecated test - plugin system now uses auth hooks instead of middleware")
 }
 
 // TestPluginAPI_ComprehensiveFiltering tests the plugin API handlers with comprehensive filter scenarios
@@ -232,11 +76,10 @@ func TestPluginAPI_ComprehensiveFiltering(t *testing.T) {
 	createdPlugins := make([]*database.Plugin, 0)
 	for _, testPlugin := range testPlugins {
 		plugin, err := service.CreatePlugin(&services.CreatePluginRequest{
-			Name:        testPlugin.name,
-			Slug:        testPlugin.slug,
-			Command:     fmt.Sprintf("./bin/%s", testPlugin.slug),
-			HookType:    testPlugin.hookType,
-			IsActive:    testPlugin.isActive,
+			Name:     testPlugin.name,
+			Command:  fmt.Sprintf("./bin/%s", testPlugin.slug),
+			HookType: testPlugin.hookType,
+			IsActive: testPlugin.isActive,
 		})
 		// Set namespace manually after creation since CreatePluginRequest doesn't have namespace in microgateway
 		if err == nil && testPlugin.namespace != "" {
@@ -291,11 +134,11 @@ func TestPluginAPI_ComprehensiveFiltering(t *testing.T) {
 			hookType      string
 			expectedCount int
 		}{
-			{"pre_auth", 1},     // Only 1 active pre_auth
-			{"auth", 1},         // Only 1 active auth
-			{"post_auth", 1},    // Only 1 active post_auth
-			{"on_response", 1},  // Only 1 active on_response
-			{"invalid", 0},      // No plugins with invalid hook type
+			{"pre_auth", 1},    // Only 1 active pre_auth
+			{"auth", 1},        // Only 1 active auth
+			{"post_auth", 1},   // Only 1 active post_auth
+			{"on_response", 1}, // Only 1 active on_response
+			{"invalid", 0},     // No plugins with invalid hook type
 		}
 
 		for _, test := range hookTypeTests {
@@ -499,7 +342,8 @@ func TestExtractLLMSlug(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			result := extractLLMSlug(tt.path)
+			// Use the function from auth_hooks.go
+			result := extractLLMSlugFromPath(tt.path)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

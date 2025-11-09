@@ -1,0 +1,48 @@
+{
+  "name": "LLM Validator",
+  "version": "1.0.0",
+  "description": "Validates LLM configurations against organizational policies",
+  "author": "AI Studio Team",
+  "capabilities": ["object_hooks"],
+  "object_hooks": [
+    {
+      "object_type": "llm",
+      "hook_types": ["before_create", "before_update"],
+      "priority": 10
+    }
+  ],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "require_https": {
+        "type": "boolean",
+        "title": "Require HTTPS",
+        "description": "Require all API endpoints to use HTTPS",
+        "default": true
+      },
+      "blocked_vendors": {
+        "type": "array",
+        "title": "Blocked Vendors",
+        "description": "List of LLM vendors that are not allowed",
+        "items": {
+          "type": "string"
+        },
+        "default": []
+      },
+      "min_privacy_score": {
+        "type": "integer",
+        "title": "Minimum Privacy Score",
+        "description": "Minimum allowed privacy score for LLMs",
+        "minimum": 0,
+        "maximum": 10,
+        "default": 0
+      },
+      "require_description": {
+        "type": "boolean",
+        "title": "Require Description",
+        "description": "Require a short description for all LLMs",
+        "default": true
+      }
+    }
+  }
+}

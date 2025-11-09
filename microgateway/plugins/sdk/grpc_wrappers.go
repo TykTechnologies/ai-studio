@@ -5,8 +5,10 @@ import (
 	"context"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
-	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	"github.com/hashicorp/go-plugin"
+	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 )
 
@@ -17,6 +19,11 @@ type PreAuthPluginGRPC struct {
 }
 
 func (p *PreAuthPluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
+	// Initialize SDK with broker access for service API
+	if err := InitializeServiceAPI(s, broker, 0); err != nil {
+		log.Warn().Err(err).Msg("Failed to initialize microgateway service API SDK")
+	}
+
 	pb.RegisterPluginServiceServer(s, &PreAuthGRPCServer{Impl: p.Impl})
 	return nil
 }
@@ -32,6 +39,11 @@ type AuthPluginGRPC struct {
 }
 
 func (p *AuthPluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
+	// Initialize SDK with broker access for service API
+	if err := InitializeServiceAPI(s, broker, 0); err != nil {
+		log.Warn().Err(err).Msg("Failed to initialize microgateway service API SDK")
+	}
+
 	pb.RegisterPluginServiceServer(s, &AuthGRPCServer{Impl: p.Impl})
 	return nil
 }
@@ -47,6 +59,12 @@ type PostAuthPluginGRPC struct {
 }
 
 func (p *PostAuthPluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
+	// Initialize SDK with broker access for service API
+	// Plugin ID will be set later during Initialize() call from config
+	if err := InitializeServiceAPI(s, broker, 0); err != nil {
+		log.Warn().Err(err).Msg("Failed to initialize microgateway service API SDK")
+	}
+
 	pb.RegisterPluginServiceServer(s, &PostAuthGRPCServer{Impl: p.Impl})
 	return nil
 }
@@ -83,4 +101,19 @@ func (p *DataCollectionPluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc
 
 func (p *DataCollectionPluginGRPC) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return pb.NewPluginServiceClient(c), nil
+}
+
+// ConfigProviderPluginGRPC implements the plugin.Plugin interface for config-only service
+type ConfigProviderPluginGRPC struct {
+	plugin.Plugin
+	Impl interfaces.BasePlugin
+}
+
+func (p *ConfigProviderPluginGRPC) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error {
+	configpb.RegisterConfigProviderServiceServer(s, &ConfigProviderGRPC{Impl: p.Impl})
+	return nil
+}
+
+func (p *ConfigProviderPluginGRPC) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+	return configpb.NewConfigProviderServiceClient(c), nil
 }

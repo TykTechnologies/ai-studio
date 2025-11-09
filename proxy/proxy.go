@@ -160,7 +160,7 @@ func (p *Proxy) Start() error {
 		originalHandler := handler
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			logPath := false
-			if strings.HasPrefix(r.URL.Path, "/llm/") || strings.HasPrefix(r.URL.Path, "/tools/") || strings.HasPrefix(r.URL.Path, "/datasource/") || strings.HasPrefix(r.URL.Path, "/.well-known/") {
+			if strings.HasPrefix(r.URL.Path, "/llm/") || strings.HasPrefix(r.URL.Path, "/tools/") || strings.HasPrefix(r.URL.Path, "/datasource/") || strings.HasPrefix(r.URL.Path, "/.well-known/") || strings.HasPrefix(r.URL.Path, "/ai/") {
 				logPath = true
 			}
 			if logPath {
@@ -248,16 +248,27 @@ func fixDoubleSlash(next http.Handler) http.Handler {
 	})
 }
 
+
 func (p *Proxy) createHandler() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/.well-known/oauth-protected-resource", p.handleOAuthProtectedResourceMetadata).Methods("GET", "OPTIONS")
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleLLMRequest)))
 	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleStreamingLLMRequest)))
+
+	// OpenAI-compatible translation endpoints
+	r.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
+	r.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
+
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}", p.handleToolRequest).Methods("GET", "POST", "PUT", "DELETE")
 	r.HandleFunc("/tools/{toolSlug}/mcp", p.handleMCPToolStreamable).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}/mcp/sse", p.handleMCPToolSSE).Methods("GET")
 	r.HandleFunc("/tools/{toolSlug}/mcp/message", p.handleMCPToolMessage).Methods("POST")
+	// Middleware chain (innermost to outermost):
+	// 1. requestIDMiddleware - Generate canonical request ID (MUST BE FIRST)
+	// 2. credValidator.Middleware - Authenticate requests
+	// 3. outboundRequestMiddleware - Prepare outbound requests
+	// 4. cloudflareHeadersMiddleware - Add Cloudflare headers
 	return p.cloudflareHeadersMiddleware(p.outboundRequestMiddleware(p.credValidator.Middleware(r)))
 }
 
@@ -472,19 +483,25 @@ func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, l
 		return nil // No hooks configured
 	}
 
+	// Get canonical request ID from context (set by requestIDMiddleware at proxy entry)
+	// This MUST exist - if it doesn't, the middleware chain is broken
+	requestID := ""
+	if reqID := r.Context().Value("request_id"); reqID != nil {
+		requestID = reqID.(string)
+	}
+	if requestID == "" {
+		// CRITICAL: Request ID middleware didn't run - fail loudly
+		return fmt.Errorf("request ID not found in context - requestIDMiddleware not configured")
+	}
+
 	// Create plugin context
 	pluginCtx := &PluginContext{
-		RequestID: r.Header.Get("X-Request-ID"),
+		RequestID: requestID, // Use canonical request ID from context
 		LLMSlug:   llm.Name,
 		LLMID:     llm.ID,
 		AppID:     app.ID,
 		UserID:    app.UserID,
 		Metadata:  make(map[string]string),
-	}
-
-	// If no request ID, generate one
-	if pluginCtx.RequestID == "" {
-		pluginCtx.RequestID = fmt.Sprintf("req-%d", time.Now().UnixNano())
 	}
 
 	ctx := context.Background()
@@ -556,6 +573,21 @@ func (p *Proxy) AddResponseHook(hook ResponseHook) {
 	if manager, ok := p.responseHookManager.(*DefaultResponseHookManager); ok {
 		manager.AddHook(hook)
 		log.Printf("Added response hook: %s", hook.GetName())
+	}
+}
+
+// SetAuthHooks sets authentication lifecycle hooks
+func (p *Proxy) SetAuthHooks(hooks *AuthHooks) {
+	if p.credValidator != nil {
+		p.credValidator.SetAuthHooks(hooks)
+	}
+}
+
+// SetPostAuthCallback is deprecated, use SetAuthHooks instead
+// Kept for backward compatibility
+func (p *Proxy) SetPostAuthCallback(callback PostAuthCallback) {
+	if p.credValidator != nil {
+		p.credValidator.SetPostAuthCallback(callback)
 	}
 }
 

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Object Hooks Test Runner</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧪 Object Hooks Test Runner</h1>
+            <p>Comprehensive automated testing for all object hooks (24 combinations)</p>
+        </header>
+
+        <div class="test-controls">
+            <button id="runTests" class="btn-primary">Run All Tests</button>
+            <button id="clearResults" class="btn-secondary">Clear Results</button>
+            <div class="test-status">
+                <span id="statusText">Ready</span>
+                <div id="progressBar" class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="summary-cards">
+            <div class="card">
+                <div class="card-title">Total Tests</div>
+                <div id="totalTests" class="card-value">24</div>
+            </div>
+            <div class="card success">
+                <div class="card-title">Passed</div>
+                <div id="passedTests" class="card-value">0</div>
+            </div>
+            <div class="card error">
+                <div class="card-title">Failed</div>
+                <div id="failedTests" class="card-value">0</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Duration</div>
+                <div id="duration" class="card-value">-</div>
+            </div>
+        </div>
+
+        <div class="test-results">
+            <h2>Test Results</h2>
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="passed">Passed</button>
+                <button class="filter-btn" data-filter="failed">Failed</button>
+            </div>
+            <div id="resultsContainer" class="results-container">
+                <div class="empty-state">
+                    <p>No tests run yet. Click "Run All Tests" to start.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-matrix">
+            <h2>Coverage Matrix</h2>
+            <table id="coverageMatrix">
+                <thead>
+                    <tr>
+                        <th>Object Type</th>
+                        <th>before_create</th>
+                        <th>after_create</th>
+                        <th>before_update</th>
+                        <th>after_update</th>
+                        <th>before_delete</th>
+                        <th>after_delete</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr data-object="llm">
+                        <td class="object-name">LLM</td>
+                        <td data-hook="before_create" class="status-cell">-</td>
+                        <td data-hook="after_create" class="status-cell">-</td>
+                        <td data-hook="before_update" class="status-cell">-</td>
+                        <td data-hook="after_update" class="status-cell">-</td>
+                        <td data-hook="before_delete" class="status-cell">-</td>
+                        <td data-hook="after_delete" class="status-cell">-</td>
+                    </tr>
+                    <tr data-object="datasource">
+                        <td class="object-name">Datasource</td>
+                        <td data-hook="before_create" class="status-cell">-</td>
+                        <td data-hook="after_create" class="status-cell">-</td>
+                        <td data-hook="before_update" class="status-cell">-</td>
+                        <td data-hook="after_update" class="status-cell">-</td>
+                        <td data-hook="before_delete" class="status-cell">-</td>
+                        <td data-hook="after_delete" class="status-cell">-</td>
+                    </tr>
+                    <tr data-object="tool">
+                        <td class="object-name">Tool</td>
+                        <td data-hook="before_create" class="status-cell">-</td>
+                        <td data-hook="after_create" class="status-cell">-</td>
+                        <td data-hook="before_update" class="status-cell">-</td>
+                        <td data-hook="after_update" class="status-cell">-</td>
+                        <td data-hook="before_delete" class="status-cell">-</td>
+                        <td data-hook="after_delete" class="status-cell">-</td>
+                    </tr>
+                    <tr data-object="user">
+                        <td class="object-name">User</td>
+                        <td data-hook="before_create" class="status-cell">-</td>
+                        <td data-hook="after_create" class="status-cell">-</td>
+                        <td data-hook="before_update" class="status-cell">-</td>
+                        <td data-hook="after_update" class="status-cell">-</td>
+                        <td data-hook="before_delete" class="status-cell">-</td>
+                        <td data-hook="after_delete" class="status-cell">-</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

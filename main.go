@@ -10,11 +10,8 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
-	"log"
 	"net/http"
 	"time"
-
-	logrus "github.com/sirupsen/logrus"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/api"
@@ -22,10 +19,13 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
 	"github.com/TykTechnologies/midsommar/v2/grpc"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/startup"
 	"github.com/go-mail/mail"
 	"gorm.io/driver/sqlite"
@@ -43,17 +43,16 @@ func printWelcome() {
 func main() {
 	printWelcome()
 
-	// Set up debug logging
-	logrus.SetLevel(logrus.DebugLevel)
-	logrus.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-	})
-
+	// Get configuration first to initialize logger with correct level
 	appConf := config.Get()
+
+	// Initialize logger with configured level
+	logger.Init(appConf.LogLevel)
+	logger.Infof("Log level set to: %s", appConf.LogLevel)
 
 	// Perform connectivity tests before proceeding with initialization
 	if err := startup.TestConnectivity(appConf); err != nil {
-		log.Fatalf("Connectivity tests failed: %v", err)
+		logger.FatalErr("Connectivity tests failed", err)
 	}
 
 	var dialector gorm.Dialector
@@ -63,33 +62,87 @@ func main() {
 	case "postgres":
 		dialector = postgres.Open(appConf.DatabaseURL)
 	default:
-		log.Fatalf("Unsupported database type: %s", appConf.DatabaseType)
+		logger.Fatalf("Unsupported database type: %s", appConf.DatabaseType)
 	}
 
 	db, err := gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.FatalErr("Failed to connect to database", err)
 	}
 
 	// Test the database connection
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Fatalf("Failed to get database instance: %v", err)
+		logger.FatalErr("Failed to get database instance", err)
 	}
 	err = sqlDB.Ping()
 	if err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+		logger.FatalErr("Failed to ping database", err)
 	}
-	log.Println("Successfully connected to the database")
+	logger.Info("Successfully connected to the database")
 
 	// Auto Migrate the schemas
 	err = models.InitModels(db)
 	if err != nil {
-		log.Fatalf("Failed to initialize models: %v", err)
+		logger.FatalErr("Failed to initialize models", err)
 	}
 
-	// Create a new service instance
-	service := services.NewService(db)
+	// Create a new service instance with OCI support if configured
+	var ociConfig *ociplugins.OCIConfig
+	if appConf.OCIPlugins.IsEnabled() {
+		ociConfig = appConf.OCIPlugins.ToOCILibConfig()
+		logger.Infof("OCI plugin support enabled - cache dir: %s", appConf.OCIPlugins.CacheDir)
+	} else {
+		logger.Info("OCI plugin support disabled - set AI_STUDIO_OCI_CACHE_DIR to enable")
+	}
+
+	service := services.NewServiceWithOCI(db, ociConfig)
+
+	// Load AI Studio plugins at startup (UI, Agent, and Object Hooks)
+	if service.AIStudioPluginManager != nil {
+		logger.Info("Loading AI Studio plugins (UI, Agent, Object Hooks)...")
+		if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
+			logger.Warnf("Failed to load some AI Studio plugins: %v", err)
+		} else {
+			logger.Info("AI Studio plugins loaded successfully")
+		}
+	}
+
+	// Initialize and start marketplace service if enabled
+	if appConf.MarketplaceEnabled && ociConfig != nil {
+		logger.Info("Initializing marketplace service...")
+
+		// Get OCI client from plugin service
+		var ociClient *ociplugins.OCIPluginClient
+		if service.PluginService != nil {
+			ociClient, _ = ociplugins.NewOCIPluginClient(ociConfig)
+		}
+
+		// Create marketplace service
+		service.MarketplaceService = services.NewMarketplaceService(
+			db,
+			ociClient,
+			service.PluginService,
+			service.AIStudioPluginManager,
+			appConf.MarketplaceCacheDir,
+			appConf.MarketplaceIndexURL,
+			appConf.MarketplaceSyncInterval,
+		)
+
+		// Start background sync in a goroutine
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go service.MarketplaceService.Start(ctx)
+
+		logger.Infof("Marketplace service started - index URL: %s, sync interval: %v",
+			appConf.MarketplaceIndexURL, appConf.MarketplaceSyncInterval)
+	} else {
+		if !appConf.MarketplaceEnabled {
+			logger.Info("Marketplace is disabled via MARKETPLACE_ENABLED=false")
+		} else if ociConfig == nil {
+			logger.Warn("Marketplace requires OCI support - set AI_STUDIO_OCI_CACHE_DIR to enable")
+		}
+	}
 
 	// Initialize mail service and notification service
 	mailer := mail.NewDialer(appConf.SMTPServer, appConf.SMTPPort, appConf.SMTPUser, appConf.SMTPPass)
@@ -177,20 +230,20 @@ func main() {
 		
 		// Connect reload coordinator to namespace service
 		service.NamespaceService.SetReloadCoordinator(reloadCoordinator)
-		
-		log.Printf("✅ Reload coordinator created and connected to control server and namespace service")
-		
+
+		logger.Info("Reload coordinator created and connected to control server and namespace service")
+
 		go func() {
-			log.Printf("Starting AI Studio gRPC control server on port %d", appConf.GRPCPort)
+			logger.Infof("Starting AI Studio gRPC control server on port %d", appConf.GRPCPort)
 			if err := controlServer.Start(); err != nil {
-				log.Fatalf("Failed to start gRPC control server: %v", err)
+				logger.FatalErr("Failed to start gRPC control server", err)
 			}
 		}()
-		
+
 		// Graceful shutdown of gRPC server
 		defer func() {
 			if controlServer != nil {
-				log.Printf("Shutting down gRPC control server...")
+				logger.Info("Shutting down gRPC control server...")
 				controlServer.Stop()
 			}
 		}()
@@ -221,9 +274,9 @@ func main() {
 		// listEmbeddedFiles(staticFiles)
 		// Run the API
 		listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
-		log.Println("server listening on", listenOn)
+		logger.Infof("Server listening on %s", listenOn)
 		if err := api.Run(listenOn, appConf.CertFile, appConf.KeyFile); err != nil {
-			log.Fatalf("Failed to run server: %v", err)
+			logger.FatalErr("Failed to run server", err)
 		}
 	} else {
 		// wait for Ctrl+C

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/rs/zerolog/log"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -37,9 +38,6 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*database.Plugin
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, fmt.Errorf("plugin name cannot be empty")
 	}
-	if strings.TrimSpace(req.Slug) == "" {
-		return nil, fmt.Errorf("plugin slug cannot be empty")
-	}
 	if strings.TrimSpace(req.Command) == "" {
 		return nil, fmt.Errorf("plugin command cannot be empty")
 	}
@@ -50,15 +48,6 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*database.Plugin
 	// Security validation for plugin command
 	if err := s.validatePluginCommand(req.Command); err != nil {
 		return nil, err
-	}
-
-	// Check if slug already exists
-	exists, err := s.PluginSlugExists(req.Slug)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check plugin slug existence: %w", err)
-	}
-	if exists {
-		return nil, fmt.Errorf("plugin slug '%s' already exists", req.Slug)
 	}
 
 	// Convert config to JSON
@@ -73,7 +62,6 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*database.Plugin
 
 	plugin := &database.Plugin{
 		Name:        req.Name,
-		Slug:        req.Slug,
 		Description: req.Description,
 		Command:     req.Command,
 		Checksum:    req.Checksum,
@@ -193,20 +181,79 @@ func (s *PluginService) DeletePlugin(id uint) error {
 	return nil
 }
 
-// GetPluginsForLLM returns plugins associated with an LLM, ordered by execution order
+// GetPluginsForLLM returns plugins associated with an LLM with merged configurations, ordered by execution order
 func (s *PluginService) GetPluginsForLLM(llmID uint) ([]database.Plugin, error) {
+	// Get LLM-plugin associations first
+	var llmPlugins []database.LLMPlugin
+	err := s.db.Where("llm_id = ? AND is_active = ?", llmID, true).
+		Order("order_index ASC").
+		Find(&llmPlugins).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LLM plugin associations: %w", err)
+	}
+
+	if len(llmPlugins) == 0 {
+		return []database.Plugin{}, nil
+	}
+
+	// Get plugin IDs
+	pluginIDs := make([]uint, len(llmPlugins))
+	for i, lp := range llmPlugins {
+		pluginIDs[i] = lp.PluginID
+	}
+
+	// Get plugins with active filter
 	var plugins []database.Plugin
-	
-	err := s.db.Joins("JOIN llm_plugins lp ON lp.plugin_id = plugins.id").
-		Where("lp.llm_id = ? AND lp.is_active = ? AND plugins.is_active = ?", llmID, true, true).
-		Order("lp.order_index ASC").
+	err = s.db.Where("id IN ? AND is_active = ?", pluginIDs, true).
 		Find(&plugins).Error
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get plugins for LLM: %w", err)
+		return nil, fmt.Errorf("failed to get plugins: %w", err)
 	}
 
-	return plugins, nil
+	// Create plugin map for fast lookup
+	pluginMap := make(map[uint]database.Plugin)
+	for _, plugin := range plugins {
+		pluginMap[plugin.ID] = plugin
+	}
+
+	// Build result with merged configurations, maintaining order
+	result := make([]database.Plugin, 0, len(llmPlugins))
+
+	for _, llmPlugin := range llmPlugins {
+		plugin, exists := pluginMap[llmPlugin.PluginID]
+		if !exists {
+			// Plugin might be inactive, skip it
+			continue
+		}
+
+		// Merge base plugin config with per-LLM override
+		baseConfigJSON := []byte(plugin.Config)
+		overrideConfigJSON := []byte(llmPlugin.ConfigOverride)
+
+		mergedConfigJSON, err := config.MergePluginConfigsJSON(baseConfigJSON, overrideConfigJSON)
+		if err != nil {
+			log.Error().Err(err).
+				Uint("plugin_id", plugin.ID).
+				Uint("llm_id", llmID).
+				Msg("Failed to merge plugin config, using base config")
+			mergedConfigJSON = baseConfigJSON
+		}
+
+		// Update plugin with merged config
+		plugin.Config = datatypes.JSON(mergedConfigJSON)
+
+		log.Debug().
+			Uint("plugin_id", plugin.ID).
+			Uint("llm_id", llmID).
+			Bool("has_override", len(overrideConfigJSON) > 0).
+			Msg("Merged plugin configuration for LLM")
+
+		result = append(result, plugin)
+	}
+
+	return result, nil
 }
 
 // UpdateLLMPlugins updates plugin associations for an LLM
@@ -304,7 +351,6 @@ func (s *PluginService) TestPlugin(pluginID uint, testData interface{}) (interfa
 	testResult := map[string]interface{}{
 		"plugin_id":   pluginID,
 		"plugin_name": plugin.Name,
-		"plugin_slug": plugin.Slug,
 		"hook_type":   plugin.HookType,
 		"status":      "unknown",
 		"message":     "",

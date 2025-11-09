@@ -386,6 +386,10 @@ func (a *API) setupRoutes() {
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
+	authed.GET("/agents", a.HandleListAgents)                // List accessible agents for current user
+	authed.GET("/agents/:id", a.HandleGetAgent)              // Get specific agent
+	authed.GET("/agents/:id/stream", a.HandleAgentSSE)       // Establish SSE connection for agent
+	authed.POST("/agents/:id/message", a.HandleAgentMessage) // Send message to agent session
 	// Use secure version for portal users that hides sensitive fields like auth_key and oas_spec
 	authed.GET("/tool-catalogues/:id/tools", a.getToolCatalogueToolsSecure)
 	// Route for tool documentation page
@@ -571,6 +575,17 @@ func (a *API) setupRoutes() {
 	// Prompt Template route
 	v1.PATCH("/chats/:id/prompt-templates", a.updateChatPromptTemplates)
 
+	// Agent routes
+	v1.GET("/agents/:id/stream", a.HandleAgentSSE)             // Establish SSE connection for agent
+	v1.POST("/agents/:id/message", a.HandleAgentMessage)       // Send message to agent session
+	v1.GET("/agents", a.HandleListAgents)                      // List agent configs
+	v1.GET("/agents/:id", a.HandleGetAgent)                    // Get agent config
+	v1.POST("/agents", a.HandleCreateAgent)                    // Create agent config (admin only)
+	v1.PUT("/agents/:id", a.HandleUpdateAgent)                 // Update agent config (admin only)
+	v1.DELETE("/agents/:id", a.HandleDeleteAgent)              // Delete agent config (admin only)
+	v1.POST("/agents/:id/activate", a.HandleActivateAgent)     // Activate agent (admin only)
+	v1.POST("/agents/:id/deactivate", a.HandleDeactivateAgent) // Deactivate agent (admin only)
+
 	// Tool routes
 	v1.POST("/tools", a.createTool)
 	v1.GET("/tools/:id", a.getTool)
@@ -632,12 +647,69 @@ func (a *API) setupRoutes() {
 	v1.GET("/plugins/:id", a.getPlugin)
 	v1.PATCH("/plugins/:id", a.updatePlugin)
 	v1.DELETE("/plugins/:id", a.deletePlugin)
+	v1.DELETE("/plugins/:id/data", a.clearPluginData)
 	v1.GET("/plugins", a.listPlugins)
 	v1.POST("/plugins/:id/test", a.testPlugin)
+
+	// OCI Plugin routes
+	v1.POST("/plugins/oci", a.createOCIPlugin)
+	v1.GET("/plugins/oci/cached", a.listCachedOCIPlugins)
+	v1.POST("/plugins/:id/refresh", a.refreshOCIPlugin)
+	v1.GET("/plugins/type/:type", a.getPluginsByType)
+	v1.GET("/plugins/ai-studio/manifests", a.getAIStudioPluginsWithManifests)
+
+	// Plugin UI Management routes
+	v1.GET("/plugins/ui-registry", a.getUIRegistry)
+	v1.GET("/plugins/sidebar-menu", a.getSidebarMenuItems)
+	v1.POST("/plugins/:id/ui/load", a.loadPluginUI)
+	v1.POST("/plugins/:id/ui/unload", a.unloadPluginUI)
+	v1.POST("/plugins/:id/manifest/parse", a.parsePluginManifest)
+
+	// Plugin RPC routes
+	v1.POST("/plugins/:id/rpc/:method", a.callPluginRPC)
+	v1.POST("/plugins/:id/reload", a.reloadPlugin)
+
+	// Plugin runtime status routes (for debugging)
+	v1.GET("/plugins/:id/status", a.getPluginStatus)
+	v1.GET("/plugins/loaded", a.getLoadedPlugins)
+
+	// Plugin configuration schema routes
+	v1.GET("/plugins/:id/config-schema", a.getPluginConfigSchema)
+	v1.POST("/plugins/:id/config-schema/refresh", a.refreshPluginConfigSchema)
+
+	// Plugin workflow routes (for step-by-step creation and approval)
+	v1.POST("/plugins/:id/validate-and-load", a.validateAndLoadPlugin)
+	v1.POST("/plugins/:id/approve-scopes", a.approvePluginScopes)
+	v1.GET("/plugins/:id/workflow-status", a.getPluginWorkflowStatus)
+
+	// Plugin cleanup routes
+	v1.POST("/plugins/cleanup-orphaned-registry", a.cleanupOrphanedUIRegistry)
+
+	// Plugin asset serving (outside of v1 group for simpler URLs)
+	v1.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)
 
 	// LLM-Plugin association routes (extend existing LLM routes)
 	v1.GET("/llms/:id/plugins", a.getLLMPlugins)
 	v1.PUT("/llms/:id/plugins", a.updateLLMPlugins)
+
+	// LLM-Plugin configuration routes
+	v1.GET("/llms/:id/plugins/:pluginId/config", a.getLLMPluginConfig)
+	v1.PUT("/llms/:id/plugins/:pluginId/config", a.updateLLMPluginConfig)
+
+	// Marketplace routes (only register if marketplace service is available)
+	if a.service.MarketplaceService != nil {
+		marketplaceHandlers := NewMarketplaceHandlers(a.service.MarketplaceService)
+		v1.GET("/marketplace/plugins", marketplaceHandlers.ListPlugins)
+		v1.GET("/marketplace/plugins/:id", marketplaceHandlers.GetPlugin)
+		v1.GET("/marketplace/plugins/:id/versions", marketplaceHandlers.GetPluginVersions)
+		v1.GET("/marketplace/plugins/:id/install-metadata", marketplaceHandlers.GetInstallMetadata)
+		v1.GET("/marketplace/updates", marketplaceHandlers.GetAvailableUpdates)
+		v1.POST("/marketplace/sync", marketplaceHandlers.SyncMarketplace)
+		v1.GET("/marketplace/sync-status", marketplaceHandlers.GetSyncStatus)
+		v1.GET("/marketplace/categories", marketplaceHandlers.GetCategories)
+		v1.GET("/marketplace/publishers", marketplaceHandlers.GetPublishers)
+		v1.GET("/marketplace/stats", marketplaceHandlers.GetStats)
+	}
 
 	// Chat History Record routes
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)

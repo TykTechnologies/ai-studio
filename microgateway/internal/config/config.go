@@ -51,8 +51,8 @@ type ServerConfig struct {
 	TLSEnabled      bool          `env:"TLS_ENABLED" envDefault:"false"`
 	TLSCertPath     string        `env:"TLS_CERT_PATH"`
 	TLSKeyPath      string        `env:"TLS_KEY_PATH"`
-	ReadTimeout     time.Duration `env:"READ_TIMEOUT" envDefault:"30s"`
-	WriteTimeout    time.Duration `env:"WRITE_TIMEOUT" envDefault:"30s"`
+	ReadTimeout     time.Duration `env:"READ_TIMEOUT" envDefault:"300s"`
+	WriteTimeout    time.Duration `env:"WRITE_TIMEOUT" envDefault:"300s"`
 	IdleTimeout     time.Duration `env:"IDLE_TIMEOUT" envDefault:"120s"`
 	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"30s"`
 }

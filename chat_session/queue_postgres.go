@@ -248,7 +248,7 @@ func (psq *PostgreSQLQueue) handleNotification(notification *pq.Notification) er
 		}
 
 		select {
-		case psq.errorsChan <- fmt.Errorf(errorStr):
+		case psq.errorsChan <- fmt.Errorf("%s", errorStr):
 		default:
 			slog.Warn("error channel full, dropping error", "session_id", psq.sessionID)
 		}

@@ -1,18 +1,24 @@
 package services
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
 // PluginService implements plugin management for AI Studio
 type PluginService struct {
-	db *gorm.DB
+	db               *gorm.DB
+	ociClient        *ociplugins.OCIPluginClient
+	pluginManager    *AIStudioPluginManager // For loading plugins to get config schemas
 }
 
 // NewPluginService creates a new plugin service
@@ -22,28 +28,58 @@ func NewPluginService(db *gorm.DB) *PluginService {
 	}
 }
 
+// SetPluginManager sets the AI Studio plugin manager (to avoid circular dependency)
+func (s *PluginService) SetPluginManager(pluginManager *AIStudioPluginManager) {
+	s.pluginManager = pluginManager
+}
+
+// NewPluginServiceWithOCI creates a new plugin service with OCI support
+func NewPluginServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) (*PluginService, error) {
+	var ociClient *ociplugins.OCIPluginClient
+	var err error
+
+	if ociConfig != nil {
+		ociClient, err = ociplugins.NewOCIPluginClient(ociConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OCI plugin client: %w", err)
+		}
+	}
+
+	return &PluginService{
+		db:        db,
+		ociClient: ociClient,
+	}, nil
+}
+
 // Plugin request/response structures (adapted from microgateway)
 type CreatePluginRequest struct {
-	Name        string                 `json:"name" binding:"required"`
-	Slug        string                 `json:"slug" binding:"required"`
-	Description string                 `json:"description"`
-	Command     string                 `json:"command" binding:"required"`
-	Checksum    string                 `json:"checksum"` // Optional
-	Config      map[string]interface{} `json:"config"`
-	HookType    string                 `json:"hook_type" binding:"required"`
-	IsActive    bool                   `json:"is_active"`
-	Namespace   string                 `json:"namespace,omitempty"`
+	Name            string                 `json:"name" binding:"required"`
+	Description     string                 `json:"description"`
+	Command         string                 `json:"command" binding:"required"`
+	Checksum        string                 `json:"checksum"` // Optional
+	Config          map[string]interface{} `json:"config"`
+	HookType        string                 `json:"hook_type"` // Optional - will be populated from manifest
+	HookTypes       []string               `json:"hook_types"`
+	HookTypesCustomized bool               `json:"hook_types_customized"`
+	IsActive        bool                   `json:"is_active"`
+	Namespace       string                 `json:"namespace,omitempty"`
+	OCIReference    string                 `json:"oci_reference,omitempty"` // OCI artifact reference
+	LoadImmediately bool                   `json:"load_immediately,omitempty"` // Auto-load AI Studio plugins
 }
 
 type UpdatePluginRequest struct {
-	Name        *string                `json:"name"`
-	Description *string                `json:"description"`
-	Command     *string                `json:"command"`
-	Checksum    *string                `json:"checksum"`
-	Config      map[string]interface{} `json:"config"`
-	HookType    *string                `json:"hook_type"`
-	IsActive    *bool                  `json:"is_active"`
-	Namespace   *string                `json:"namespace"`
+	Name                *string                `json:"name"`
+	Description         *string                `json:"description"`
+	Command             *string                `json:"command"`
+	Checksum            *string                `json:"checksum"`
+	Config              map[string]interface{} `json:"config"`
+	HookType            *string                `json:"hook_type"`
+	HookTypes           []string               `json:"hook_types"`
+	HookTypesCustomized *bool                  `json:"hook_types_customized"`
+	IsActive            *bool                  `json:"is_active"`
+	Namespace           *string                `json:"namespace"`
+	OCIReference        *string                `json:"oci_reference"`
+	LoadImmediately     *bool                  `json:"load_immediately,omitempty"` // Auto-load AI Studio plugins
 }
 
 // PluginServiceInterface defines the interface for plugin operations (adapted from microgateway)
@@ -63,7 +99,6 @@ type PluginServiceInterface interface {
 	
 	// Validation and utilities
 	TestPlugin(pluginID uint, testData interface{}) (interface{}, error)
-	PluginSlugExists(slug string) (bool, error)
 }
 
 // CreatePlugin creates a new plugin (adapted from microgateway)
@@ -72,14 +107,8 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 	if strings.TrimSpace(req.Name) == "" {
 		return nil, fmt.Errorf("plugin name cannot be empty")
 	}
-	if strings.TrimSpace(req.Slug) == "" {
-		return nil, fmt.Errorf("plugin slug cannot be empty")
-	}
 	if strings.TrimSpace(req.Command) == "" {
 		return nil, fmt.Errorf("plugin command cannot be empty")
-	}
-	if !isValidHookType(req.HookType) {
-		return nil, fmt.Errorf("invalid hook type: %s", req.HookType)
 	}
 
 	// Security validation for plugin command
@@ -87,25 +116,35 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 		return nil, err
 	}
 
-	// Check if slug already exists
-	exists, err := s.PluginSlugExists(req.Slug)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check plugin slug existence: %w", err)
+	// Hook type is optional during creation - will be populated from manifest
+	// If provided, validate it
+	hookType := req.HookType
+	if hookType == "" {
+		// Default to "pending" - will be updated from manifest via validate-and-load
+		hookType = "pending"
+	} else if !models.IsValidHookType(hookType) {
+		return nil, fmt.Errorf("invalid hook type: %s - must be one of: %v", hookType, models.GetValidHookTypes())
 	}
-	if exists {
-		return nil, fmt.Errorf("plugin slug '%s' already exists", req.Slug)
+
+	// Hook types from request (if customized)
+	hookTypes := req.HookTypes
+	if len(hookTypes) == 0 && hookType != "pending" {
+		hookTypes = []string{hookType}
 	}
 
 	plugin := &models.Plugin{
-		Name:        req.Name,
-		Slug:        req.Slug,
-		Description: req.Description,
-		Command:     req.Command,
-		Checksum:    req.Checksum,
-		Config:      req.Config,
-		HookType:    req.HookType,
-		IsActive:    req.IsActive,
-		Namespace:   req.Namespace,
+		Name:                req.Name,
+		Description:         req.Description,
+		Command:             req.Command,
+		Checksum:            req.Checksum,
+		Config:              req.Config,
+		HookType:            hookType,
+		HookTypes:           hookTypes,
+		HookTypesCustomized: req.HookTypesCustomized,
+		IsActive:            req.IsActive,
+		Namespace:           req.Namespace,
+		OCIReference:        req.OCIReference,
+		Manifest:            make(map[string]interface{}),
 	}
 
 	if err := plugin.Create(s.db); err != nil {
@@ -185,6 +224,11 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 	if req.Namespace != nil {
 		plugin.Namespace = *req.Namespace
 	}
+	// PluginType field removed - use hook types instead
+	// IsOCI is now determined by command prefix, no need to set explicitly
+	if req.OCIReference != nil {
+		plugin.OCIReference = *req.OCIReference
+	}
 
 	if err := plugin.Update(s.db); err != nil {
 		return nil, fmt.Errorf("failed to update plugin: %w", err)
@@ -205,8 +249,75 @@ func (s *PluginService) DeletePlugin(id uint) error {
 		return fmt.Errorf("failed to remove plugin associations: %w", err)
 	}
 
+	// Clean up UI registry entries for this plugin
+	if err := s.db.Where("plugin_id = ?", id).Delete(&models.UIRegistry{}).Error; err != nil {
+		log.Warn().Err(err).Uint("plugin_id", id).Msg("Failed to clean up UI registry entries")
+		// Don't fail the deletion, just log warning
+	} else {
+		log.Info().Uint("plugin_id", id).Msg("Cleaned up UI registry entries for deleted plugin")
+	}
+
+	// Clean up registered plugin entries
+	if err := s.db.Where("plugin_id = ?", id).Delete(&models.RegisteredPlugin{}).Error; err != nil {
+		log.Warn().Err(err).Uint("plugin_id", id).Msg("Failed to clean up registered plugin entries")
+		// Don't fail the deletion, just log warning
+	} else {
+		log.Info().Uint("plugin_id", id).Msg("Cleaned up registered plugin entries for deleted plugin")
+	}
+
+	// Clean up config schema if no other plugins use this command
+	var otherPluginsCount int64
+	if err := s.db.Model(&models.Plugin{}).
+		Where("command = ? AND id != ?", plugin.Command, id).
+		Count(&otherPluginsCount).Error; err != nil {
+		log.Warn().Err(err).Uint("plugin_id", id).Msg("Failed to check for other plugins with same command")
+	} else if otherPluginsCount == 0 {
+		// No other plugins use this command, safe to delete the cached schema
+		if err := s.db.Where("command = ?", plugin.Command).Delete(&models.PluginConfigSchema{}).Error; err != nil {
+			log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to clean up plugin config schema")
+		} else {
+			log.Info().Str("command", plugin.Command).Msg("Cleaned up plugin config schema for deleted plugin")
+		}
+	} else {
+		log.Debug().
+			Str("command", plugin.Command).
+			Int64("other_plugins_count", otherPluginsCount).
+			Msg("Keeping config schema - other plugins still use this command")
+	}
+
 	if err := plugin.Delete(s.db); err != nil {
 		return fmt.Errorf("failed to delete plugin: %w", err)
+	}
+
+	return nil
+}
+
+// CleanupOrphanedUIRegistryEntries removes UI registry entries for plugins that no longer exist
+func (s *PluginService) CleanupOrphanedUIRegistryEntries() error {
+	// Get all existing plugin IDs (non-deleted)
+	var existingPluginIDs []uint
+	if err := s.db.Model(&models.Plugin{}).Pluck("id", &existingPluginIDs).Error; err != nil {
+		return fmt.Errorf("failed to get existing plugin IDs: %w", err)
+	}
+
+	// Delete UI registry entries where plugin_id is not in the existing plugins list
+	result := s.db.Where("plugin_id NOT IN ?", existingPluginIDs).Delete(&models.UIRegistry{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to cleanup orphaned UI registry entries: %w", result.Error)
+	}
+
+	if result.RowsAffected > 0 {
+		log.Info().Int64("cleaned_entries", result.RowsAffected).Msg("Cleaned up orphaned UI registry entries")
+	}
+
+	// Also cleanup orphaned registered plugin entries
+	result = s.db.Where("plugin_id NOT IN ?", existingPluginIDs).Delete(&models.RegisteredPlugin{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to cleanup orphaned registered plugin entries: %w", result.Error)
+	}
+
+	if result.RowsAffected > 0 {
+		log.Info().Int64("cleaned_entries", result.RowsAffected).Msg("Cleaned up orphaned registered plugin entries")
 	}
 
 	return nil
@@ -248,6 +359,30 @@ func (s *PluginService) GetLLMPluginConfig(llmID, pluginID uint) (map[string]int
 	return llmPlugin.ConfigOverride, nil
 }
 
+// UpdateLLMPluginConfig updates the configuration override for a specific plugin-LLM association
+func (s *PluginService) UpdateLLMPluginConfig(llmID, pluginID uint, configOverride map[string]interface{}) error {
+	var llmPlugin models.LLMPlugin
+	if err := llmPlugin.Get(s.db, llmID, pluginID); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("plugin-LLM association not found")
+		}
+		return fmt.Errorf("failed to get plugin-LLM association: %w", err)
+	}
+
+	// Update the configuration override
+	if err := llmPlugin.UpdateConfig(s.db, configOverride); err != nil {
+		return fmt.Errorf("failed to update plugin-LLM config: %w", err)
+	}
+
+	log.Info().
+		Uint("llm_id", llmID).
+		Uint("plugin_id", pluginID).
+		Int("config_keys", len(configOverride)).
+		Msg("Updated LLM plugin configuration override")
+
+	return nil
+}
+
 // TestPlugin tests a plugin with provided test data (simplified from microgateway)
 func (s *PluginService) TestPlugin(pluginID uint, testData interface{}) (interface{}, error) {
 	plugin, err := s.GetPlugin(pluginID)
@@ -263,7 +398,6 @@ func (s *PluginService) TestPlugin(pluginID uint, testData interface{}) (interfa
 	testResult := map[string]interface{}{
 		"plugin_id":   pluginID,
 		"plugin_name": plugin.Name,
-		"plugin_slug": plugin.Slug,
 		"hook_type":   plugin.HookType,
 		"status":      "passed",
 		"message":     "Plugin configuration validation completed successfully",
@@ -296,16 +430,6 @@ func (s *PluginService) TestPlugin(pluginID uint, testData interface{}) (interfa
 	}
 
 	return testResult, nil
-}
-
-// PluginSlugExists checks if a plugin slug already exists (adapted from microgateway)
-func (s *PluginService) PluginSlugExists(slug string) (bool, error) {
-	var count int64
-	err := s.db.Model(&models.Plugin{}).Where("slug = ?", slug).Count(&count).Error
-	if err != nil {
-		return false, fmt.Errorf("failed to check plugin slug existence: %w", err)
-	}
-	return count > 0, nil
 }
 
 // GetPluginsInNamespace returns plugins in a specific namespace (AI Studio specific)
@@ -345,6 +469,9 @@ func isValidHookType(hookType string) bool {
 		models.HookTypePostAuth,
 		models.HookTypeOnResponse,
 		models.HookTypeDataCollection,
+		models.HookTypeStudioUI,
+		models.HookTypeAgent,
+		models.HookTypeObjectHooks,
 	}
 	for _, validType := range validTypes {
 		if hookType == validType {
@@ -427,4 +554,429 @@ func (s *PluginService) containsInternalIP(command string) bool {
 		}
 	}
 	return false
+}
+
+// OCI Plugin Management Methods
+
+// CreateOCIPluginFromReference creates a plugin from an OCI reference
+func (s *PluginService) CreateOCIPluginFromReference(req *CreateOCIPluginRequest) (*models.Plugin, error) {
+	if s.ociClient == nil {
+		return nil, fmt.Errorf("OCI client not configured")
+	}
+
+	// Parse OCI reference
+	ref, params, err := ociplugins.ParseOCICommand(req.OCIReference)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse OCI reference: %w", err)
+	}
+
+	// Fetch plugin from registry to verify it exists
+	ctx := context.Background()
+	_, err = s.ociClient.FetchPlugin(ctx, ref, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch OCI plugin: %w", err)
+	}
+
+	// For MVP, we'll use a default manifest structure
+	// In full implementation, this would extract manifest.json from the OCI artifact
+	manifest := map[string]interface{}{
+		"id":      fmt.Sprintf("plugin-%d", time.Now().Unix()),
+		"version": "1.0.0",
+		"name":    req.Name,
+		"description": req.Description,
+		// Manifest will be populated later when parsed from the OCI artifact
+	}
+
+	// Create plugin record
+	plugin := &models.Plugin{
+		Name:         req.Name,
+		Description:  req.Description,
+		Command:      req.OCIReference, // Store OCI reference as command
+		OCIReference: req.OCIReference,
+		HookType:     models.HookTypeStudioUI, // OCI plugins default to studio_ui hook type
+		HookTypes:    []string{models.HookTypeStudioUI}, // OCI plugins support UI extensions
+		IsActive:     req.IsActive,
+		Namespace:    req.Namespace,
+		Config:       req.Config,
+		Manifest:     manifest,
+	}
+
+	if err := plugin.Create(s.db); err != nil {
+		return nil, fmt.Errorf("failed to create OCI plugin record: %w", err)
+	}
+
+	return plugin, nil
+}
+
+// ListCachedOCIPlugins returns all cached OCI plugins
+func (s *PluginService) ListCachedOCIPlugins() ([]*ociplugins.LocalPlugin, error) {
+	if s.ociClient == nil {
+		return nil, fmt.Errorf("OCI client not configured")
+	}
+	return s.ociClient.ListCached()
+}
+
+// RefreshOCIPlugin refreshes an OCI plugin from the registry
+func (s *PluginService) RefreshOCIPlugin(pluginID uint) (*models.Plugin, error) {
+	if s.ociClient == nil {
+		return nil, fmt.Errorf("OCI client not configured")
+	}
+
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !plugin.IsOCIPlugin() {
+		return nil, fmt.Errorf("plugin is not an OCI plugin")
+	}
+
+	// Parse OCI reference
+	ref, params, err := ociplugins.ParseOCICommand(plugin.OCIReference)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse OCI reference: %w", err)
+	}
+
+	// Fetch latest version to verify it exists and update cache
+	ctx := context.Background()
+	_, err = s.ociClient.FetchPlugin(ctx, ref, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to refresh OCI plugin: %w", err)
+	}
+
+	// For MVP, maintain existing manifest
+	// In full implementation, this would re-extract manifest.json from the updated OCI artifact
+	// The manifest will be properly populated when ParsePluginManifest is called
+
+	if err := plugin.Update(s.db); err != nil {
+		return nil, fmt.Errorf("failed to update plugin: %w", err)
+	}
+
+	return plugin, nil
+}
+
+// GetPluginsByType returns plugins filtered by type
+func (s *PluginService) GetPluginsByType(pluginType string) ([]models.Plugin, error) {
+	var plugins []models.Plugin
+
+	if err := s.db.Where("plugin_type = ? AND is_active = ?", pluginType, true).
+		Order("created_at DESC").Find(&plugins).Error; err != nil {
+		return nil, fmt.Errorf("failed to get plugins by type: %w", err)
+	}
+
+	return plugins, nil
+}
+
+// GetAIStudioPluginsWithManifests returns AI Studio plugins that have UI manifests
+func (s *PluginService) GetAIStudioPluginsWithManifests() ([]models.Plugin, error) {
+	// Get all active plugins
+	var allPlugins []models.Plugin
+	if err := s.db.Where("is_active = ?", true).
+		Order("created_at DESC").Find(&allPlugins).Error; err != nil {
+		return nil, fmt.Errorf("failed to get plugins: %w", err)
+	}
+
+	// Filter for plugins that support studio_ui hook and have manifests
+	var plugins []models.Plugin
+	for _, plugin := range allPlugins {
+		if plugin.SupportsHookType(models.HookTypeStudioUI) && len(plugin.Manifest) > 0 {
+			plugins = append(plugins, plugin)
+		}
+	}
+
+	return plugins, nil
+}
+
+// CreateOCIPluginRequest represents a request to create a plugin from an OCI artifact
+type CreateOCIPluginRequest struct {
+	Name         string                 `json:"name" binding:"required"`
+	Description  string                 `json:"description"`
+	OCIReference string                 `json:"oci_reference" binding:"required"`
+	Config       map[string]interface{} `json:"config"`
+	HookType     string                 `json:"hook_type" binding:"required"`
+	IsActive     bool                   `json:"is_active"`
+	Namespace    string                 `json:"namespace,omitempty"`
+}
+
+// Plugin Config Schema Methods
+
+// GetPluginConfigSchema retrieves the configuration schema for a plugin, using cache when possible
+func (s *PluginService) GetPluginConfigSchema(ctx context.Context, pluginID uint) (string, error) {
+	// Get plugin to access its command
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	return s.GetPluginConfigSchemaByCommand(ctx, plugin.Command)
+}
+
+// GetPluginConfigSchemaByCommand retrieves schema by command, using cache when possible
+func (s *PluginService) GetPluginConfigSchemaByCommand(ctx context.Context, command string) (string, error) {
+	// Check cache first
+	cachedSchema := &models.PluginConfigSchema{}
+	err := cachedSchema.GetByCommand(s.db, command)
+
+	if err == nil {
+		// Cache hit - check if it's still fresh (24 hour TTL)
+		if !cachedSchema.IsStale(24 * 60 * 60 * time.Second) {
+			log.Debug().
+				Str("command", command).
+				Time("last_fetched", cachedSchema.LastFetched).
+				Msg("Using cached plugin config schema")
+			return cachedSchema.SchemaJSON, nil
+		}
+	} else if err != gorm.ErrRecordNotFound {
+		return "", fmt.Errorf("failed to check schema cache: %w", err)
+	}
+
+	// Cache miss or stale - fetch from plugin
+	log.Debug().
+		Str("command", command).
+		Msg("Cache miss or stale - fetching schema from plugin")
+
+	schemaJSON, err := s.fetchSchemaFromPlugin(ctx, command)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch schema from plugin: %w", err)
+	}
+
+	// Update cache
+	if err := cachedSchema.Upsert(s.db, command, schemaJSON); err != nil {
+		log.Warn().Err(err).Str("command", command).Msg("Failed to update schema cache")
+		// Don't fail the request just because caching failed
+	}
+
+	return schemaJSON, nil
+}
+
+// RefreshPluginConfigSchema forces a refresh of the schema from the plugin
+func (s *PluginService) RefreshPluginConfigSchema(ctx context.Context, pluginID uint) (string, error) {
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("command", plugin.Command).
+		Msg("Refreshing plugin config schema - fetching fresh from plugin")
+
+	// Fetch fresh schema from plugin
+	schemaJSON, err := s.fetchSchemaFromPlugin(ctx, plugin.Command)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch fresh schema from plugin: %w", err)
+	}
+
+	// Use GORM's proper upsert with Where + Updates
+	now := time.Now()
+	result := s.db.Model(&models.PluginConfigSchema{}).
+		Where("command = ?", plugin.Command).
+		Updates(map[string]interface{}{
+			"schema_json":  schemaJSON,
+			"last_fetched": now,
+			"updated_at":   now,
+		})
+
+	if result.Error != nil {
+		log.Warn().Err(result.Error).Str("command", plugin.Command).Msg("Failed to update schema cache")
+	} else if result.RowsAffected == 0 {
+		// No existing record to update, create new one
+		cachedSchema := &models.PluginConfigSchema{
+			Command:     plugin.Command,
+			SchemaJSON:  schemaJSON,
+			LastFetched: now,
+		}
+		if err := s.db.Create(cachedSchema).Error; err != nil {
+			log.Warn().Err(err).Str("command", plugin.Command).Msg("Failed to create new schema cache entry")
+		}
+	}
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("command", plugin.Command).
+		Int("schema_bytes", len(schemaJSON)).
+		Msg("Successfully refreshed plugin config schema")
+
+	return schemaJSON, nil
+}
+
+// InvalidateSchemaCache removes a schema from the cache
+func (s *PluginService) InvalidateSchemaCache(command string) error {
+	cachedSchema := &models.PluginConfigSchema{}
+	err := cachedSchema.GetByCommand(s.db, command)
+	if err == gorm.ErrRecordNotFound {
+		return nil // Already not cached
+	}
+	if err != nil {
+		return fmt.Errorf("failed to find cached schema: %w", err)
+	}
+
+	if err := cachedSchema.Delete(s.db); err != nil {
+		return fmt.Errorf("failed to delete cached schema: %w", err)
+	}
+
+	log.Debug().Str("command", command).Msg("Invalidated plugin config schema cache")
+	return nil
+}
+
+// fetchSchemaFromPlugin loads a plugin and calls GetConfigSchema
+func (s *PluginService) fetchSchemaFromPlugin(ctx context.Context, command string) (string, error) {
+	// Check if we have the AI Studio plugin manager available
+	if s.pluginManager == nil {
+		log.Warn().Str("command", command).Msg("Plugin manager not available - SetPluginManager may not have been called")
+
+		// Return an error instead of default schema to help diagnose issues
+		return "", fmt.Errorf("plugin manager not available - cannot fetch schema from plugin")
+	}
+
+	// Use plugin manager to load plugin for config-only access
+	log.Info().Str("command", command).Msg("Loading plugin for schema extraction")
+
+	configProvider, err := s.pluginManager.LoadPluginForConfigOnly(ctx, command)
+	if err != nil {
+		log.Error().Err(err).Str("command", command).Msg("Failed to load plugin for schema extraction")
+		return "", fmt.Errorf("failed to load plugin for schema extraction: %w", err)
+	}
+	defer s.pluginManager.UnloadConfigProvider(configProvider)
+
+	// Get schema from plugin
+	schemaBytes, err := configProvider.GetConfigSchema(ctx)
+	if err != nil {
+		log.Error().Err(err).Str("command", command).Msg("Failed to get schema from plugin")
+		return "", fmt.Errorf("failed to get config schema from plugin: %w", err)
+	}
+
+	log.Debug().
+		Str("command", command).
+		Int("schema_bytes", len(schemaBytes)).
+		Msg("Successfully fetched schema from plugin")
+
+	return string(schemaBytes), nil
+}
+
+// Universal Manifest Loading Methods
+
+// LoadPluginManifestViaGRPC loads manifest from any plugin type using the GetManifest gRPC method
+func (s *PluginService) LoadPluginManifestViaGRPC(pluginID uint) (*models.PluginManifest, error) {
+	// Verify plugin exists and is AI Studio type
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	if !plugin.SupportsHookType(models.HookTypeStudioUI) {
+		return nil, fmt.Errorf("manifest loading only supported for AI Studio UI plugins")
+	}
+
+	// Check if AI Studio plugin manager is available
+	if s.pluginManager == nil {
+		return nil, fmt.Errorf("AI Studio plugin manager not configured")
+	}
+
+	// Get manifest via gRPC (works for all deployment types: file, remote, OCI)
+	manifestJSON, err := s.pluginManager.GetPluginManifest(pluginID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get manifest via gRPC: %w", err)
+	}
+
+	// Parse manifest
+	var manifest models.PluginManifest
+	if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
+		return nil, fmt.Errorf("failed to parse manifest JSON: %w", err)
+	}
+
+	// Validate manifest structure
+	if err := manifest.ValidateManifest(); err != nil {
+		return nil, fmt.Errorf("invalid manifest: %w", err)
+	}
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", plugin.Name).
+		Int("service_scopes", len(manifest.GetServiceScopes())).
+		Msg("Successfully loaded plugin manifest via gRPC")
+
+	return &manifest, nil
+}
+
+// ExtractAndStoreServiceScopes extracts service scopes from manifest and stores them in the database
+func (s *PluginService) ExtractAndStoreServiceScopes(pluginID uint) error {
+	// Load manifest via gRPC
+	manifest, err := s.LoadPluginManifestViaGRPC(pluginID)
+	if err != nil {
+		return fmt.Errorf("failed to load plugin manifest: %w", err)
+	}
+
+	// Extract service scopes from manifest
+	serviceScopes := manifest.GetServiceScopes()
+
+	// Get plugin from database
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	// Update plugin with extracted scopes (but don't authorize yet - admin must approve)
+	plugin.ServiceScopes = serviceScopes
+	plugin.ServiceAccessAuthorized = false // Require admin authorization
+
+	if err := plugin.Update(s.db); err != nil {
+		return fmt.Errorf("failed to update plugin with service scopes: %w", err)
+	}
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", plugin.Name).
+		Strs("service_scopes", serviceScopes).
+		Msg("Extracted and stored service scopes from manifest")
+
+	return nil
+}
+
+// AuthorizePluginServiceAccess authorizes service access for a plugin (admin operation)
+func (s *PluginService) AuthorizePluginServiceAccess(pluginID uint, adminApproval bool) error {
+	plugin, err := s.GetPlugin(pluginID)
+	if err != nil {
+		return fmt.Errorf("failed to get plugin: %w", err)
+	}
+
+	if adminApproval {
+		// If plugin has service scopes, authorize them
+		if len(plugin.ServiceScopes) > 0 {
+			// Authorize access with the scopes declared in manifest
+			if err := plugin.AuthorizeServiceAccess(s.db, plugin.ServiceScopes); err != nil {
+				return fmt.Errorf("failed to authorize service access: %w", err)
+			}
+
+			log.Info().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Strs("authorized_scopes", plugin.ServiceScopes).
+				Msg("Admin authorized plugin service access")
+		} else {
+			// Plugin has no service scopes (e.g., object_hooks plugins)
+			// Just mark as reviewed/approved by setting ServiceAccessAuthorized to true
+			plugin.ServiceAccessAuthorized = true
+			if err := plugin.Update(s.db); err != nil {
+				return fmt.Errorf("failed to update plugin authorization: %w", err)
+			}
+
+			log.Info().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Msg("Admin approved plugin (no service scopes required)")
+		}
+	} else {
+		// Revoke access
+		if err := plugin.RevokeServiceAccess(s.db); err != nil {
+			return fmt.Errorf("failed to revoke service access: %w", err)
+		}
+
+		log.Info().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", plugin.Name).
+			Msg("Admin revoked plugin service access")
+	}
+
+	return nil
 }

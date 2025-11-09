@@ -29,6 +29,9 @@ type Datasource struct {
 	Files []FileStore `gorm:"many2many:datasource_filestores;" json:"files"`
 
 	Active bool
+
+	// Plugin-stored metadata
+	Metadata JSONMap `json:"metadata" gorm:"type:json"`
 }
 
 type Datasources []Datasource
@@ -61,6 +64,39 @@ func (d *Datasource) Delete(db *gorm.DB) error {
 func (d *Datasources) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&Datasource{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	err := query.Preload("Tags").Find(d).Error
+	return totalCount, totalPages, err
+}
+
+// GetAllWithFilters returns all datasources with filtering by active status and user ID
+func (d *Datasources) GetAllWithFilters(db *gorm.DB, pageSize int, pageNumber int, all bool, isActive *bool, userID *uint) (int64, int, error) {
+	var totalCount int64
+	query := db.Model(&Datasource{})
+
+	// Apply is_active filtering
+	if isActive != nil {
+		query = query.Where("active = ?", *isActive)
+	}
+
+	// Apply user_id filtering
+	if userID != nil {
+		query = query.Where("user_id = ?", *userID)
+	}
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err

@@ -1,0 +1,218 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Object Hooks Test Plugin Configuration",
+  "description": "Configure behavior for each hook type to test object hooks functionality",
+  "properties": {
+    "enable_logging": {
+      "type": "boolean",
+      "title": "Enable Logging",
+      "description": "Log all hook invocations to stderr",
+      "default": true
+    },
+    "before_create": {
+      "type": "object",
+      "title": "Before Create Hook",
+      "description": "Configuration for before_create hook",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "title": "Mode",
+          "description": "Hook behavior mode",
+          "enum": ["allow", "reject", "modify", "metadata"],
+          "default": "allow"
+        },
+        "rejection_reason": {
+          "type": "string",
+          "title": "Rejection Reason",
+          "description": "Message to show when rejecting (mode=reject)",
+          "default": "Operation rejected by test plugin"
+        },
+        "modify_field": {
+          "type": "string",
+          "title": "Modify Field",
+          "description": "Field name to modify (mode=modify)",
+          "default": "name"
+        },
+        "modify_value": {
+          "type": "string",
+          "title": "Modify Value",
+          "description": "New value for field (mode=modify)",
+          "default": "modified-by-hook"
+        },
+        "metadata_key": {
+          "type": "string",
+          "title": "Metadata Key",
+          "description": "Metadata key to add (mode=metadata)",
+          "default": "test_key"
+        },
+        "metadata_value": {
+          "type": "string",
+          "title": "Metadata Value",
+          "description": "Metadata value to add (mode=metadata)",
+          "default": "test_value"
+        }
+      }
+    },
+    "after_create": {
+      "type": "object",
+      "title": "After Create Hook",
+      "description": "Configuration for after_create hook",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["allow", "reject", "modify", "metadata"],
+          "default": "allow"
+        },
+        "rejection_reason": {
+          "type": "string",
+          "default": "Operation rejected by test plugin"
+        },
+        "modify_field": {
+          "type": "string",
+          "default": "name"
+        },
+        "modify_value": {
+          "type": "string",
+          "default": "modified-by-hook"
+        },
+        "metadata_key": {
+          "type": "string",
+          "default": "test_key"
+        },
+        "metadata_value": {
+          "type": "string",
+          "default": "test_value"
+        }
+      }
+    },
+    "before_update": {
+      "type": "object",
+      "title": "Before Update Hook",
+      "description": "Configuration for before_update hook",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["allow", "reject", "modify", "metadata"],
+          "default": "allow"
+        },
+        "rejection_reason": {
+          "type": "string",
+          "default": "Operation rejected by test plugin"
+        },
+        "modify_field": {
+          "type": "string",
+          "default": "name"
+        },
+        "modify_value": {
+          "type": "string",
+          "default": "modified-by-hook"
+        },
+        "metadata_key": {
+          "type": "string",
+          "default": "test_key"
+        },
+        "metadata_value": {
+          "type": "string",
+          "default": "test_value"
+        }
+      }
+    },
+    "after_update": {
+      "type": "object",
+      "title": "After Update Hook",
+      "description": "Configuration for after_update hook",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["allow", "reject", "modify", "metadata"],
+          "default": "allow"
+        },
+        "rejection_reason": {
+          "type": "string",
+          "default": "Operation rejected by test plugin"
+        },
+        "modify_field": {
+          "type": "string",
+          "default": "name"
+        },
+        "modify_value": {
+          "type": "string",
+          "default": "modified-by-hook"
+        },
+        "metadata_key": {
+          "type": "string",
+          "default": "test_key"
+        },
+        "metadata_value": {
+          "type": "string",
+          "default": "test_value"
+        }
+      }
+    },
+    "before_delete": {
+      "type": "object",
+      "title": "Before Delete Hook",
+      "description": "Configuration for before_delete hook",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["allow", "reject", "modify", "metadata"],
+          "default": "allow"
+        },
+        "rejection_reason": {
+          "type": "string",
+          "default": "Operation rejected by test plugin"
+        },
+        "modify_field": {
+          "type": "string",
+          "default": "name"
+        },
+        "modify_value": {
+          "type": "string",
+          "default": "modified-by-hook"
+        },
+        "metadata_key": {
+          "type": "string",
+          "default": "test_key"
+        },
+        "metadata_value": {
+          "type": "string",
+          "default": "test_value"
+        }
+      }
+    },
+    "after_delete": {
+      "type": "object",
+      "title": "After Delete Hook",
+      "description": "Configuration for after_delete hook",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["allow", "reject", "modify", "metadata"],
+          "default": "allow"
+        },
+        "rejection_reason": {
+          "type": "string",
+          "default": "Operation rejected by test plugin"
+        },
+        "modify_field": {
+          "type": "string",
+          "default": "name"
+        },
+        "modify_value": {
+          "type": "string",
+          "default": "modified-by-hook"
+        },
+        "metadata_key": {
+          "type": "string",
+          "default": "test_key"
+        },
+        "metadata_value": {
+          "type": "string",
+          "default": "test_value"
+        }
+      }
+    }
+  }
+}

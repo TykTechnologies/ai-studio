@@ -556,7 +556,6 @@ func (p *GRPCProvider) convertPBPluginToDatabase(pbPlugin *pb.PluginConfig) *dat
 	return &database.Plugin{
 		ID:          uint(pbPlugin.Id),
 		Name:        pbPlugin.Name,
-		Slug:        pbPlugin.Slug,
 		Description: pbPlugin.Description,
 		Command:     pbPlugin.Command,
 		Checksum:    pbPlugin.Checksum,

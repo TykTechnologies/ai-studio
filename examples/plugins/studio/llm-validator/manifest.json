@@ -1,0 +1,19 @@
+{
+  "id": "com.tyk.llm-validator",
+  "version": "1.0.0",
+  "name": "LLM Validator",
+  "description": "Validates LLM configurations against security and compliance policies",
+  "capabilities": {
+    "hooks": ["object_hooks"],
+    "primary_hook": "object_hooks"
+  },
+  "permissions": {
+    "object_hooks": ["llm.before_create", "llm.before_update"]
+  },
+  "compat": {
+    "min_studio_version": "2.6.0"
+  },
+  "security": {
+    "csp": "default-src 'none'"
+  }
+}

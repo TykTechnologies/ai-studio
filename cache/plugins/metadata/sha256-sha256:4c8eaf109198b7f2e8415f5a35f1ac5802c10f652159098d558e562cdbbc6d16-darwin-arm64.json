@@ -1,0 +1,29 @@
+{
+  "reference": {
+    "registry": "localhost:5101",
+    "repository": "plugins/message_modifier",
+    "digest": "sha256:4c8eaf109198b7f2e8415f5a35f1ac5802c10f652159098d558e562cdbbc6d16",
+    "tag": "",
+    "params": {
+      "pubkey": "CI"
+    }
+  },
+  "params": {
+    "architecture": "darwin/arm64",
+    "public_key": "CI",
+    "auth_config": ""
+  },
+  "fetch_time": "2025-09-19T18:26:48.06844+12:00",
+  "config": {
+    "name": "message_modifier",
+    "version": "1.0.0",
+    "plugin_api": "2",
+    "os": "darwin",
+    "arch": "amd64",
+    "host_min_version": "0.23.0"
+  },
+  "verified": false,
+  "size": 18174690,
+  "last_accessed": "2025-09-19T18:46:41.374057+12:00",
+  "version": "1.0.0"
+}

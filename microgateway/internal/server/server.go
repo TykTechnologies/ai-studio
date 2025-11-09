@@ -47,6 +47,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		serviceContainer.Crypto,
 		serviceContainer.FilterService,
 		serviceContainer.PluginService,
+		serviceContainer.PluginManager,
 	)
 
 	budgetServiceAdapter := services.NewBudgetServiceAdapter(
@@ -97,6 +98,12 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	responsePluginAdapter := api.NewGRPCResponsePluginAdapter(serviceContainer, pluginManager)
 	gateway.AddResponseHook(responsePluginAdapter)
 	log.Info().Msg("gRPC response plugin adapter registered with AI Gateway")
+
+	// Register authentication hooks for executing pre-auth, auth, and post-auth plugins
+	log.Info().Msg("Setting up authentication hooks for plugin execution")
+	authHooks := api.CreateAuthHooks(serviceContainer, pluginManager)
+	gateway.SetAuthHooks(authHooks)
+	log.Info().Msg("Authentication hooks registered with AI Gateway")
 
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{

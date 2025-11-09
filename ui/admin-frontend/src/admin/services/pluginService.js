@@ -8,6 +8,8 @@ class PluginService {
     POST_AUTH: 'post_auth',
     ON_RESPONSE: 'on_response',
     DATA_COLLECTION: 'data_collection',
+    STUDIO_UI: 'studio_ui',
+    AGENT: 'agent',
   };
 
   static HOOK_TYPE_LABELS = {
@@ -16,6 +18,18 @@ class PluginService {
     [PluginService.HOOK_TYPES.POST_AUTH]: 'Post-Authentication',
     [PluginService.HOOK_TYPES.ON_RESPONSE]: 'Response Processing',
     [PluginService.HOOK_TYPES.DATA_COLLECTION]: 'Data Collection',
+    [PluginService.HOOK_TYPES.STUDIO_UI]: 'UI Extension',
+    [PluginService.HOOK_TYPES.AGENT]: 'Conversational Agent',
+  };
+
+  static HOOK_TYPE_DESCRIPTIONS = {
+    [PluginService.HOOK_TYPES.PRE_AUTH]: 'Process requests before authentication',
+    [PluginService.HOOK_TYPES.AUTH]: 'Handle authentication and authorization',
+    [PluginService.HOOK_TYPES.POST_AUTH]: 'Process authenticated requests',
+    [PluginService.HOOK_TYPES.ON_RESPONSE]: 'Modify or process responses',
+    [PluginService.HOOK_TYPES.DATA_COLLECTION]: 'Collect analytics and metrics',
+    [PluginService.HOOK_TYPES.STUDIO_UI]: 'Extend AI Studio UI with custom interfaces',
+    [PluginService.HOOK_TYPES.AGENT]: 'Implement conversational AI agents',
   };
 
   async listPlugins(page = 1, limit = 50, hookType = '', isActive) {
@@ -34,7 +48,6 @@ class PluginService {
           data: response.data.data.map(plugin => ({
             id: plugin.id,
             name: plugin.attributes.name,
-            slug: plugin.attributes.slug,
             description: plugin.attributes.description,
             command: plugin.attributes.command,
             checksum: plugin.attributes.checksum,
@@ -42,6 +55,9 @@ class PluginService {
             hookType: plugin.attributes.hook_type,
             isActive: plugin.attributes.is_active,
             namespace: plugin.attributes.namespace || 'global',
+            pluginType: plugin.attributes.plugin_type || 'gateway',
+            ociReference: plugin.attributes.oci_reference || '',
+            manifest: plugin.attributes.manifest || {},
             createdAt: plugin.attributes.created_at,
             updatedAt: plugin.attributes.updated_at,
           })),
@@ -65,7 +81,6 @@ class PluginService {
         return {
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           checksum: plugin.attributes.checksum,
@@ -73,6 +88,9 @@ class PluginService {
           hookType: plugin.attributes.hook_type,
           isActive: plugin.attributes.is_active,
           namespace: plugin.attributes.namespace || 'global',
+          pluginType: plugin.attributes.plugin_type || 'gateway',
+          ociReference: plugin.attributes.oci_reference || '',
+          manifest: plugin.attributes.manifest || {},
           createdAt: plugin.attributes.created_at,
           updatedAt: plugin.attributes.updated_at,
           // Include associated LLMs if present with full data
@@ -96,7 +114,6 @@ class PluginService {
     try {
       const payload = {
         name: pluginData.name,
-        slug: pluginData.slug,
         description: pluginData.description || '',
         command: pluginData.command,
         checksum: pluginData.checksum || '',
@@ -104,8 +121,11 @@ class PluginService {
         hook_type: pluginData.hookType,
         is_active: pluginData.isActive !== undefined ? pluginData.isActive : true,
         namespace: pluginData.namespace || '',
+        plugin_type: pluginData.pluginType || 'gateway',
+        oci_reference: pluginData.ociReference || '',
+        load_immediately: pluginData.loadImmediately || false,
       };
-      
+
       const response = await apiClient.post('/plugins', payload);
       
       if (response.data?.data) {
@@ -113,7 +133,6 @@ class PluginService {
         return {
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           checksum: plugin.attributes.checksum,
@@ -137,36 +156,41 @@ class PluginService {
     try {
       const payload = {
         name: pluginData.name,
-        slug: pluginData.slug,
         description: pluginData.description || '',
         command: pluginData.command,
         checksum: pluginData.checksum || '',
         config: pluginData.config || {},
         hook_type: pluginData.hookType,
+        hook_types: pluginData.hookTypes,
+        hook_types_customized: pluginData.hookTypesCustomized,
         is_active: pluginData.isActive !== undefined ? pluginData.isActive : true,
         namespace: pluginData.namespace || '',
+        plugin_type: pluginData.pluginType || 'gateway',
+        oci_reference: pluginData.ociReference || '',
+        load_immediately: pluginData.loadImmediately || false,
       };
-      
+
       const response = await apiClient.patch(`/plugins/${id}`, payload);
-      
+
       if (response.data?.data) {
         const plugin = response.data.data;
         return {
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           checksum: plugin.attributes.checksum,
           config: plugin.attributes.config || {},
           hookType: plugin.attributes.hook_type,
+          hookTypes: plugin.attributes.hook_types,
+          hookTypesCustomized: plugin.attributes.hook_types_customized,
           isActive: plugin.attributes.is_active,
           namespace: plugin.attributes.namespace || 'global',
           createdAt: plugin.attributes.created_at,
           updatedAt: plugin.attributes.updated_at,
         };
       }
-      
+
       return null;
     } catch (error) {
       console.error('Error updating plugin:', error);
@@ -192,7 +216,6 @@ class PluginService {
         return response.data.data.map(plugin => ({
           id: plugin.id,
           name: plugin.attributes.name,
-          slug: plugin.attributes.slug,
           description: plugin.attributes.description,
           command: plugin.attributes.command,
           hookType: plugin.attributes.hook_type,
@@ -253,12 +276,11 @@ class PluginService {
       errors.name = 'Plugin name is required';
     }
 
-    if (!pluginData.slug?.trim()) {
-      errors.slug = 'Plugin slug is required';
-    }
-
+    // Validate command (auto-detect OCI vs local from prefix)
     if (!pluginData.command?.trim()) {
       errors.command = 'Plugin command is required';
+    } else if (pluginData.command.startsWith('oci://') && (!pluginData.command.includes('/'))) {
+      errors.command = 'Invalid OCI reference format';
     }
 
     if (!pluginData.hookType) {
@@ -272,6 +294,232 @@ class PluginService {
       errors,
     };
   }
+
+  // OCI Plugin Operations
+
+  async createOCIPlugin(ociPluginData) {
+    try {
+      const payload = {
+        name: ociPluginData.name,
+        description: ociPluginData.description || '',
+        oci_reference: ociPluginData.ociReference,
+        config: ociPluginData.config || {},
+        hook_type: ociPluginData.hookType,
+        is_active: ociPluginData.isActive !== undefined ? ociPluginData.isActive : true,
+        namespace: ociPluginData.namespace || '',
+      };
+
+      const response = await apiClient.post('/plugins/oci', payload);
+
+      if (response.data?.data) {
+        const plugin = response.data.data;
+        return {
+          id: plugin.id,
+          name: plugin.attributes.name,
+          description: plugin.attributes.description,
+          command: plugin.attributes.command,
+          pluginType: plugin.attributes.plugin_type,
+          ociReference: plugin.attributes.oci_reference,
+          manifest: plugin.attributes.manifest || {},
+          hookType: plugin.attributes.hook_type,
+          isActive: plugin.attributes.is_active,
+          namespace: plugin.attributes.namespace || 'global',
+          createdAt: plugin.attributes.created_at,
+          updatedAt: plugin.attributes.updated_at,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error creating OCI plugin:', error);
+      throw new Error(error.response?.data?.message || 'Failed to create OCI plugin');
+    }
+  }
+
+  async refreshOCIPlugin(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/refresh`);
+
+      if (response.data?.data) {
+        const plugin = response.data.data;
+        return {
+          id: plugin.id,
+          name: plugin.attributes.name,
+          description: plugin.attributes.description,
+          command: plugin.attributes.command,
+          pluginType: plugin.attributes.plugin_type,
+          ociReference: plugin.attributes.oci_reference,
+          manifest: plugin.attributes.manifest || {},
+          hookType: plugin.attributes.hook_type,
+          isActive: plugin.attributes.is_active,
+          namespace: plugin.attributes.namespace || 'global',
+          createdAt: plugin.attributes.created_at,
+          updatedAt: plugin.attributes.updated_at,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error refreshing OCI plugin:', error);
+      throw new Error(error.response?.data?.message || 'Failed to refresh OCI plugin');
+    }
+  }
+
+  async parsePluginManifest(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/manifest/parse`);
+      return response.data;
+    } catch (error) {
+      console.error('Error parsing plugin manifest:', error);
+      throw new Error(error.response?.data?.message || 'Failed to parse plugin manifest');
+    }
+  }
+
+  async loadPluginUI(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/ui/load`);
+      return response.data;
+    } catch (error) {
+      console.error('Error loading plugin UI:', error);
+      throw new Error(error.response?.data?.message || 'Failed to load plugin UI');
+    }
+  }
+
+  async unloadPluginUI(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/ui/unload`);
+      return response.data;
+    } catch (error) {
+      console.error('Error unloading plugin UI:', error);
+      throw new Error(error.response?.data?.message || 'Failed to unload plugin UI');
+    }
+  }
+
+  async getPluginsByType(pluginType) {
+    try {
+      const response = await apiClient.get(`/plugins/type/${pluginType}`);
+
+      if (response.data?.data) {
+        return response.data.data.map(plugin => ({
+          id: plugin.id,
+          name: plugin.attributes.name,
+          description: plugin.attributes.description,
+          command: plugin.attributes.command,
+          pluginType: plugin.attributes.plugin_type,
+          ociReference: plugin.attributes.oci_reference,
+          hookType: plugin.attributes.hook_type,
+          isActive: plugin.attributes.is_active,
+          namespace: plugin.attributes.namespace || 'global',
+          createdAt: plugin.attributes.created_at,
+          updatedAt: plugin.attributes.updated_at,
+        }));
+      }
+
+      return [];
+    } catch (error) {
+      console.error('Error fetching plugins by type:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch plugins by type');
+    }
+  }
+
+  async getUIRegistry() {
+    try {
+      const response = await apiClient.get('/plugins/ui-registry');
+      return response.data?.data || [];
+    } catch (error) {
+      console.error('Error fetching UI registry:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch UI registry');
+    }
+  }
+
+  async getSidebarMenuItems() {
+    try {
+      const response = await apiClient.get('/plugins/sidebar-menu');
+      return response.data?.data || [];
+    } catch (error) {
+      console.error('Error fetching sidebar menu items:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch sidebar menu items');
+    }
+  }
+
+  async reloadPlugin(id) {
+    try {
+      const response = await apiClient.post(`/plugins/${id}/reload`);
+      return response.data;
+    } catch (error) {
+      console.error('Error reloading plugin:', error);
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to reload plugin');
+    }
+  }
+
+  async getPluginConfigSchema(pluginId) {
+    try {
+      const response = await apiClient.get(`/plugins/${pluginId}/config-schema`);
+      return response.data?.data?.attributes?.schema || null;
+    } catch (error) {
+      console.error('Error fetching plugin config schema:', error);
+
+      // Log the specific error for debugging
+      if (error.response?.data?.errors?.[0]?.detail) {
+        console.error('Backend error:', error.response.data.errors[0].detail);
+      }
+
+      // Return null instead of throwing to allow graceful fallback to JSON editor
+      return null;
+    }
+  }
+
+  async refreshPluginConfigSchema(pluginId) {
+    try {
+      const response = await apiClient.post(`/plugins/${pluginId}/config-schema/refresh`);
+      return response.data?.data?.attributes?.schema || null;
+    } catch (error) {
+      console.error('Error refreshing plugin config schema:', error);
+
+      // Log the specific error for debugging
+      if (error.response?.data?.errors?.[0]?.detail) {
+        console.error('Backend refresh error:', error.response.data.errors[0].detail);
+      }
+
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to refresh plugin schema');
+    }
+  }
+
+  // Plugin workflow methods for step-by-step creation and approval
+
+  async validateAndLoadPlugin(pluginId, commandData = {}) {
+    try {
+      const response = await apiClient.post(`/plugins/${pluginId}/validate-and-load`, commandData);
+      return response.data;
+    } catch (error) {
+      console.error('Error validating and loading plugin:', error);
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to validate and load plugin');
+    }
+  }
+
+  async approvePluginScopes(pluginId, approved) {
+    try {
+      const response = await apiClient.post(`/plugins/${pluginId}/approve-scopes`, {
+        approved,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error approving plugin scopes:', error);
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to approve plugin scopes');
+    }
+  }
+
+  async getPluginWorkflowStatus(pluginId) {
+    try {
+      const response = await apiClient.get(`/plugins/${pluginId}/workflow-status`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting plugin workflow status:', error);
+      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to get plugin workflow status');
+    }
+  }
 }
 
+// Export both the class and a default instance
+export { PluginService };
 export default new PluginService();

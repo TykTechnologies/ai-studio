@@ -39,6 +39,7 @@ import {
 } from "../../styles/sharedStyles";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import pluginService from "../../services/pluginService";
+import PluginConfigDialog from './PluginConfigDialog';
 import {
   getVendorName,
   getVendorLogo,
@@ -47,6 +48,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import Stack from "@mui/material/Stack";
 import AddIcon from "@mui/icons-material/Add";
+import SettingsIcon from "@mui/icons-material/Settings";
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -90,6 +92,10 @@ const LLMForm = () => {
     severity: "success",
   });
   const [showApiKey, setShowApiKey] = useState(false);
+
+  // Plugin configuration dialog state
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [selectedPluginForConfig, setSelectedPluginForConfig] = useState(null);
   const navigate = useNavigate();
   const { id } = useParams();
   const theme = useTheme();
@@ -243,6 +249,19 @@ const LLMForm = () => {
   const handlePluginRemove = (pluginIdToRemove) => {
     const updatedPlugins = llm.plugins.filter(id => id !== pluginIdToRemove);
     setLLM({ ...llm, plugins: updatedPlugins });
+  };
+
+  const handlePluginConfig = (pluginId) => {
+    const plugin = availablePlugins.find((p) => p.id.toString() === pluginId);
+    if (plugin) {
+      setSelectedPluginForConfig(plugin);
+      setConfigDialogOpen(true);
+    }
+  };
+
+  const handlePluginConfigClose = () => {
+    setConfigDialogOpen(false);
+    setSelectedPluginForConfig(null);
   };
 
   const validateForm = () => {
@@ -745,7 +764,7 @@ const LLMForm = () => {
                     {llm.plugins.map((pluginId, index) => {
                       const plugin = availablePlugins.find((p) => p.id.toString() === pluginId);
                       return plugin ? (
-                        <Box key={pluginId} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Box key={pluginId} sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 0.5 }}>
                           <Typography variant="body2" sx={{ minWidth: 24 }}>
                             {index + 1}.
                           </Typography>
@@ -758,6 +777,16 @@ const LLMForm = () => {
                           <Typography variant="body2" sx={{ flex: 1 }}>
                             {plugin.name}
                           </Typography>
+                          <IconButton
+                            size="small"
+                            onClick={() => handlePluginConfig(pluginId)}
+                            sx={{
+                              color: 'action.secondary',
+                              '&:hover': { color: 'primary.main' }
+                            }}
+                          >
+                            <SettingsIcon fontSize="small" />
+                          </IconButton>
                         </Box>
                       ) : null;
                     })}
@@ -829,6 +858,18 @@ const LLMForm = () => {
           </PrimaryButton>
         </DialogActions>
       </Dialog>
+
+      {/* Plugin Configuration Dialog */}
+      <PluginConfigDialog
+        open={configDialogOpen}
+        onClose={handlePluginConfigClose}
+        plugin={selectedPluginForConfig}
+        llmId={id}
+        onConfigSaved={(pluginId, config) => {
+          console.log('Plugin config saved:', pluginId, config);
+          // Could trigger a refresh or show success message here
+        }}
+      />
     </>
   );
 };

@@ -17,9 +17,9 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
-	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
-	configpb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	configpb "github.com/TykTechnologies/midsommar/v2/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 )
@@ -35,38 +35,52 @@ type PluginServiceInterface interface {
 
 // PluginData represents plugin data from database (minimal interface)
 type PluginData struct {
-	ID          uint
-	Name        string
-	Slug        string
-	HookType    string
-	Command     string
-	Config      []byte  // JSON-encoded config (matches datatypes.JSON from database)
-	Checksum    string
-	IsActive    bool
+	ID        uint
+	Name      string
+	HookType  string
+	HookTypes []string // All hook types this plugin supports
+	Command   string
+	Config    []byte // JSON-encoded config (matches datatypes.JSON from database)
+	Checksum  string
+	IsActive  bool
+}
+
+// SupportsHookType checks if plugin data supports a specific hook type
+func (pd *PluginData) SupportsHookType(hookType string) bool {
+	// Check primary hook
+	if pd.HookType == hookType {
+		return true
+	}
+	// Check additional hooks
+	for _, ht := range pd.HookTypes {
+		if ht == hookType {
+			return true
+		}
+	}
+	return false
 }
 
 // LoadedPlugin represents a loaded plugin instance
 type LoadedPlugin struct {
 	ID            uint
 	Name          string
-	Slug          string
 	HookType      interfaces.HookType
 	Client        *plugin.Client
 	GRPCClient    pb.PluginServiceClient
 	Config        map[string]interface{}
 	Checksum      string
 	IsHealthy     bool
-	IsGlobal      bool   // True for global plugins (vs per-LLM plugins)
+	IsGlobal      bool                            // True for global plugins (vs per-LLM plugins)
 	BuiltinPlugin interfaces.DataCollectionPlugin // For built-in plugins
 }
 
 // GlobalPlugin represents a global data collection plugin instance
 type GlobalPlugin struct {
-	Config         DataCollectionPluginConfig
-	Client         *plugin.Client
-	GRPCClient     pb.PluginServiceClient
-	LoadedPlugin   *LoadedPlugin
-	IsHealthy      bool
+	Config       DataCollectionPluginConfig
+	Client       *plugin.Client
+	GRPCClient   pb.PluginServiceClient
+	LoadedPlugin *LoadedPlugin
+	IsHealthy    bool
 }
 
 // PluginStatus represents the current status of a plugin
@@ -81,62 +95,65 @@ const (
 
 // PluginHealthStatus tracks the health and readiness of a plugin
 type PluginHealthStatus struct {
-	ID           uint         `json:"id"`
-	Name         string       `json:"name"`
-	Slug         string       `json:"slug"`
-	Command      string       `json:"command"`
-	HookType     string       `json:"hook_type"`
-	Status       PluginStatus `json:"status"`
-	LastAttempt  time.Time    `json:"last_attempt"`
-	ErrorMessage string       `json:"error_message,omitempty"`
-	IsOCI        bool         `json:"is_oci"`
-	IsCached     bool         `json:"is_cached,omitempty"`     // For OCI plugins
-	LoadTime     time.Duration `json:"load_time,omitempty"`    // Time to load/pre-warm
+	ID           uint          `json:"id"`
+	Name         string        `json:"name"`
+	Command      string        `json:"command"`
+	HookType     string        `json:"hook_type"`
+	Status       PluginStatus  `json:"status"`
+	LastAttempt  time.Time     `json:"last_attempt"`
+	ErrorMessage string        `json:"error_message,omitempty"`
+	IsOCI        bool          `json:"is_oci"`
+	IsCached     bool          `json:"is_cached,omitempty"` // For OCI plugins
+	LoadTime     time.Duration `json:"load_time,omitempty"` // Time to load/pre-warm
 }
 
 // PluginManager manages the lifecycle of plugins
 type PluginManager struct {
-	mu                      sync.RWMutex
-	loadedPlugins           map[uint]*LoadedPlugin           // Plugin ID -> loaded plugin
-	llmPluginMap            map[uint][]uint                  // LLM ID -> Plugin IDs (ordered)
-	pluginClients           map[uint]*plugin.Client          // Plugin ID -> go-plugin client
-	reattachConfigs         map[uint]*plugin.ReattachConfig  // For reconnection
-	service                 PluginServiceInterface // Database service
-	handshakeConfig         plugin.HandshakeConfig
-	pluginMap               map[string]plugin.Plugin
+	mu              sync.RWMutex
+	loadedPlugins   map[uint]*LoadedPlugin          // Plugin ID -> loaded plugin
+	llmPluginMap    map[uint][]uint                 // LLM ID -> Plugin IDs (ordered)
+	pluginClients   map[uint]*plugin.Client         // Plugin ID -> go-plugin client
+	reattachConfigs map[uint]*plugin.ReattachConfig // For reconnection
+	service         PluginServiceInterface          // Database service
+	handshakeConfig plugin.HandshakeConfig
+	pluginMap       map[string]plugin.Plugin
 
 	// Global data collection plugins
-	globalDataPlugins       map[string]*GlobalPlugin         // Plugin name -> global plugin
-	dataCollectionHookTypes map[string][]string              // Plugin name -> hook types it handles
+	globalDataPlugins       map[string]*GlobalPlugin // Plugin name -> global plugin
+	dataCollectionHookTypes map[string][]string      // Plugin name -> hook types it handles
 
 	// OCI plugin support
-	ociClient               *ociplugins.OCIPluginClient      // OCI plugin client for fetching
+	ociClient *ociplugins.OCIPluginClient // OCI plugin client for fetching
 
 	// Plugin health tracking
-	pluginHealth            map[uint]*PluginHealthStatus     // Plugin ID -> health status
-	preWarmingInProgress    map[uint]bool                    // Plugin ID -> pre-warming status
+	pluginHealth         map[uint]*PluginHealthStatus // Plugin ID -> health status
+	preWarmingInProgress map[uint]bool                // Plugin ID -> pre-warming status
 
 	// Built-in plugin support
-	edgeClient              interface{}                      // Edge client for built-in plugins (interface to avoid import cycle)
+	edgeClient interface{} // Edge client for built-in plugins (interface to avoid import cycle)
+
+	// Service broker for bidirectional plugin communication
+	managementServer interface{} // MicrogatewayManagementServiceServer (interface to avoid import cycle)
 }
 
 // HandshakeConfig is used to do a basic handshake between
 // a plugin and host. If the handshake fails, a user friendly error is shown.
+// Updated to use unified AI_STUDIO_PLUGIN handshake for polyglot plugin support
 var HandshakeConfig = plugin.HandshakeConfig{
 	ProtocolVersion:  1,
-	MagicCookieKey:   "MICROGATEWAY_PLUGIN",
+	MagicCookieKey:   "AI_STUDIO_PLUGIN",
 	MagicCookieValue: "v1",
 }
 
 // NewPluginManager creates a new plugin manager instance
 func NewPluginManager(pluginService PluginServiceInterface) *PluginManager {
 	return &PluginManager{
-		loadedPlugins:           make(map[uint]*LoadedPlugin),
-		llmPluginMap:            make(map[uint][]uint),
-		pluginClients:           make(map[uint]*plugin.Client),
-		reattachConfigs:         make(map[uint]*plugin.ReattachConfig),
-		service:                 pluginService,
-		handshakeConfig:         HandshakeConfig,
+		loadedPlugins:   make(map[uint]*LoadedPlugin),
+		llmPluginMap:    make(map[uint][]uint),
+		pluginClients:   make(map[uint]*plugin.Client),
+		reattachConfigs: make(map[uint]*plugin.ReattachConfig),
+		service:         pluginService,
+		handshakeConfig: HandshakeConfig,
 		pluginMap: map[string]plugin.Plugin{
 			"plugin": &PluginGRPC{},
 		},
@@ -175,7 +192,7 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		pm.mu.Unlock()
 		// Update health status for already loaded plugin (after releasing lock)
 		pm.updatePluginHealthSafe(pluginID, PluginData{
-			ID: pluginID, Name: existingPlugin.Name, Slug: existingPlugin.Slug,
+			ID: pluginID, Name: existingPlugin.Name,
 			HookType: string(existingPlugin.HookType),
 		}, PluginStatusReady, nil, time.Since(startTime))
 		return existingPlugin, nil
@@ -205,15 +222,14 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 
 	// Double-check if another goroutine loaded it while we were unlocked
 	if existingPlugin, exists := pm.loadedPlugins[pluginID]; exists {
-		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusReady, nil, time.Since(startTime))
+		pm.updatePluginHealth(pluginID, pluginData, PluginStatusReady, nil, time.Since(startTime))
 		return existingPlugin, nil
 	}
 
 	// Create plugin client based on command scheme
 	client, err := pm.createPluginClient(pluginData.Command)
 	if err != nil {
-		pm.mu.Unlock()
-		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to create plugin client: %w", err)
 	}
 
@@ -221,8 +237,7 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	rpcClient, err := pm.connectWithRetry(client, pluginData.Command)
 	if err != nil {
 		client.Kill()
-		pm.mu.Unlock()
-		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
 	}
 
@@ -230,18 +245,22 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	raw, err := rpcClient.Dispense("plugin")
 	if err != nil {
 		client.Kill()
-		pm.mu.Unlock()
-		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to dispense plugin: %w", err)
 	}
 
-	// Cast to gRPC client
-	grpcClient, ok := raw.(pb.PluginServiceClient)
-	if !ok {
+	// Cast to gRPC client - handle both wrapper and direct client
+	var grpcClient pb.PluginServiceClient
+	if wrapper, ok := raw.(*MicrogatewayPluginClient); ok {
+		// New wrapper type that supports service broker
+		grpcClient = wrapper
+	} else if directClient, ok := raw.(pb.PluginServiceClient); ok {
+		// Direct client (backward compatibility)
+		grpcClient = directClient
+	} else {
 		client.Kill()
 		err := fmt.Errorf("plugin does not implement PluginServiceClient interface")
-		pm.mu.Unlock()
-		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, err
 	}
 
@@ -256,9 +275,28 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	}
 
 	// Initialize plugin
+	// Convert config values to strings for gRPC transport
+	// For complex types (arrays, objects), JSON-encode them so plugins can parse them
 	configStrings := make(map[string]string)
 	for k, v := range config {
-		configStrings[k] = fmt.Sprintf("%v", v)
+		switch val := v.(type) {
+		case string:
+			configStrings[k] = val
+		case int, int64, uint, uint64, float64, bool:
+			configStrings[k] = fmt.Sprintf("%v", val)
+		default:
+			// Complex types (arrays, maps) - JSON encode
+			jsonBytes, err := json.Marshal(val)
+			if err != nil {
+				log.Warn().
+					Str("key", k).
+					Err(err).
+					Msg("Failed to JSON encode config value, using string representation")
+				configStrings[k] = fmt.Sprintf("%v", val)
+			} else {
+				configStrings[k] = string(jsonBytes)
+			}
+		}
 	}
 
 	initResp, err := grpcClient.Initialize(context.Background(), &pb.InitRequest{
@@ -266,24 +304,59 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	})
 	if err != nil {
 		client.Kill()
-		pm.mu.Unlock()
-		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to initialize plugin: %w", err)
 	}
 
 	if !initResp.Success {
 		client.Kill()
 		err := fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
-		pm.mu.Unlock()
-		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, err
+	}
+
+	// Setup service broker if management server is available
+	var brokerID uint32
+	if pm.managementServer != nil {
+		// Check if this is a MicrogatewayPluginClient that supports broker setup
+		if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
+			// Use type assertion without checking specific methods - the interface is defined elsewhere
+			// Setup the service broker - this creates bidirectional gRPC channel
+			setupBrokerID, err := clientWrapper.SetupServiceBroker(pm.managementServer)
+			if err != nil {
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Err(err).
+					Msg("Failed to setup service broker for plugin - service API will not be available")
+			} else {
+				brokerID = setupBrokerID
+				log.Info().
+					Uint("plugin_id", pluginID).
+					Uint32("broker_id", brokerID).
+					Msg("✅ Service broker setup complete - plugin can now access host services")
+
+				// Add broker ID to config so plugin can use it
+				configStrings["_service_broker_id"] = fmt.Sprintf("%d", brokerID)
+				configStrings["_plugin_id"] = fmt.Sprintf("%d", pluginID)
+
+				// Send updated config to plugin with broker ID
+				_, err = grpcClient.Initialize(context.Background(), &pb.InitRequest{
+					Config: configStrings,
+				})
+				if err != nil {
+					log.Warn().
+						Uint("plugin_id", pluginID).
+						Err(err).
+						Msg("Failed to reinitialize plugin with broker ID")
+				}
+			}
+		}
 	}
 
 	// Create loaded plugin instance
 	loadedPlugin := &LoadedPlugin{
 		ID:         pluginData.ID,
 		Name:       pluginData.Name,
-		Slug:       pluginData.Slug,
 		HookType:   interfaces.HookType(pluginData.HookType),
 		Client:     client,
 		GRPCClient: grpcClient,
@@ -329,7 +402,7 @@ func (pm *PluginManager) UnloadPlugin(pluginID uint) error {
 	if loadedPlugin.GRPCClient != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		
+
 		_, err := loadedPlugin.GRPCClient.Shutdown(ctx, &pb.ShutdownRequest{
 			TimeoutSeconds: 5,
 		})
@@ -398,14 +471,22 @@ func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookTy
 
 	// Filter by hook type and ensure plugins are loaded
 	for _, pluginData := range pluginsData {
-		if interfaces.HookType(pluginData.HookType) != hookType {
+		// Check if plugin supports this hook type
+		if !pluginData.SupportsHookType(string(hookType)) {
+			log.Debug().
+				Uint("plugin_id", pluginData.ID).
+				Str("plugin_name", pluginData.Name).
+				Str("plugin_hook", pluginData.HookType).
+				Strs("plugin_hooks", pluginData.HookTypes).
+				Str("required_hook", string(hookType)).
+				Msg("Plugin does not support required hook type (expected)")
 			continue
 		}
 
 		pm.mu.RLock()
 		loadedPlugin, exists := pm.loadedPlugins[pluginData.ID]
 		pm.mu.RUnlock()
-		
+
 		if !exists {
 			// Try to load the plugin (this will acquire its own lock)
 			loadedPlugin, err = pm.LoadPlugin(pluginData.ID)
@@ -414,7 +495,7 @@ func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookTy
 					Uint("plugin_id", pluginData.ID).
 					Err(err).
 					Msg("Failed to auto-load plugin")
-				continue
+				return nil, fmt.Errorf("failed to load plugin %d: %w", pluginData.ID, err)
 			}
 		}
 
@@ -422,7 +503,7 @@ func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookTy
 		pm.mu.RLock()
 		isHealthy := loadedPlugin.IsHealthy
 		pm.mu.RUnlock()
-		
+
 		if !isHealthy {
 			log.Warn().
 				Uint("plugin_id", pluginData.ID).
@@ -460,20 +541,20 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			if !ok {
 				return nil, fmt.Errorf("invalid input type for pre-auth hook")
 			}
-			
+
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertPluginRequest(pluginReq, pbCtx)
-			
+
 			resp, err := plugin.GRPCClient.ProcessPreAuth(ctx, pbReq)
 			if err != nil {
 				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
 			}
-			
+
 			if resp.Block {
 				// Plugin wants to block the request
 				return convertPluginResponse(resp), nil
 			}
-			
+
 			if resp.Modified {
 				// Return the plugin response directly so modifications are preserved
 				result = convertPluginResponse(resp)
@@ -484,43 +565,61 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			if !ok {
 				return nil, fmt.Errorf("invalid input type for auth hook")
 			}
-			
+
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertAuthRequest(authReq, pbCtx)
-			
+
 			resp, err := plugin.GRPCClient.Authenticate(ctx, pbReq)
 			if err != nil {
 				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
 			}
-			
+
 			result = convertAuthResponse(resp)
 
 		case interfaces.HookTypePostAuth:
 			enrichedReq, ok := result.(*interfaces.EnrichedRequest)
 			if !ok {
-				return nil, fmt.Errorf("invalid input type for post-auth hook")
+				return nil, fmt.Errorf("invalid input type for post-auth hook: got %T, expected *interfaces.EnrichedRequest", result)
 			}
-			
+
+			log.Info().
+				Str("plugin_name", plugin.Name).
+				Int("input_body_len", len(enrichedReq.PluginRequest.Body)).
+				Msg("🔗 Executing post-auth plugin in chain")
+
 			pbCtx := convertPluginContext(pluginCtx)
 			pbReq := convertEnrichedRequest(enrichedReq, pbCtx)
-			
+
 			resp, err := plugin.GRPCClient.ProcessPostAuth(ctx, pbReq)
 			if err != nil {
 				return nil, fmt.Errorf("plugin %s execution failed: %w", plugin.Name, err)
 			}
-			
+
 			log.Debug().Bool("resp_modified", resp.Modified).Bool("resp_block", resp.Block).Int("body_len", len(resp.Body)).Msg("Post-auth plugin response received")
-			
+
 			if resp.Block {
 				// Plugin wants to block the request
 				return convertPluginResponse(resp), nil
 			}
-			
+
 			if resp.Modified {
-				// Return the plugin response directly so modifications are preserved
-				log.Debug().Bool("resp_modified", resp.Modified).Int("body_len", len(resp.Body)).Msg("Post-auth plugin returned Modified=true, converting response")
-				result = convertPluginResponse(resp)
-				log.Debug().Interface("converted_result", result).Msg("Post-auth plugin response converted")
+				// For post-auth hooks, update the enriched request with modifications
+				// Don't convert to PluginResponse - keep it as EnrichedRequest for the next plugin in the chain
+				log.Info().
+					Str("plugin_name", plugin.Name).
+					Bool("resp_modified", resp.Modified).
+					Int("original_body_len", len(enrichedReq.PluginRequest.Body)).
+					Int("modified_body_len", len(resp.Body)).
+					Msg("🔄 Post-auth plugin modified request, updating for next plugin")
+
+				// Update the request fields with modifications
+				if len(resp.Headers) > 0 {
+					enrichedReq.PluginRequest.Headers = resp.Headers
+				}
+				if len(resp.Body) > 0 {
+					enrichedReq.PluginRequest.Body = resp.Body
+				}
+				// result stays as enrichedReq for the next plugin
 			}
 
 		case interfaces.HookTypeOnResponse:
@@ -582,7 +681,7 @@ func (pm *PluginManager) monitorPluginHealth(pluginID uint) {
 				Uint("plugin_id", pluginID).
 				Str("plugin_name", loadedPlugin.Name).
 				Msg("Attempting automatic plugin restart")
-			
+
 			if restartErr := pm.ReloadPlugin(pluginID); restartErr != nil {
 				log.Error().
 					Uint("plugin_id", pluginID).
@@ -612,7 +711,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 
 	for pluginID, loadedPlugin := range pm.loadedPlugins {
 		shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		
+
 		// Attempt graceful shutdown
 		if loadedPlugin.GRPCClient != nil {
 			_, err := loadedPlugin.GRPCClient.Shutdown(shutdownCtx, &pb.ShutdownRequest{
@@ -622,7 +721,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 				errors = append(errors, fmt.Errorf("failed to shutdown plugin %d: %w", pluginID, err))
 			}
 		}
-		
+
 		cancel()
 
 		// Force kill if still running
@@ -673,7 +772,7 @@ func (pm *PluginManager) SaveReattachConfig(pluginID uint) error {
 	}
 
 	pm.reattachConfigs[pluginID] = reattachConfig
-	
+
 	log.Info().
 		Uint("plugin_id", pluginID).
 		Msg("Reattach config saved for plugin")
@@ -740,6 +839,11 @@ func validatePluginPath(cmdPath string) error {
 
 // isPathInAllowedDirectories checks if the given path is within allowed plugin directories
 func isPathInAllowedDirectories(absPath string) bool {
+	if os.Getenv("MICROGATEWAY_ALLOW_ALL_PLUGIN_PATHS") == "1" {
+		log.Warn().Msg("⚠️ WARNING: MICROGATEWAY_ALLOW_ALL_PLUGIN_PATHS is set - all plugin paths are allowed, disabling security checks")
+		return true
+	}
+
 	for _, allowedDir := range defaultAllowedDirs {
 		allowedAbsDir, err := filepath.Abs(allowedDir)
 		if err != nil {
@@ -1058,7 +1162,6 @@ func (pm *PluginManager) ReattachPlugin(pluginID uint, config *plugin.ReattachCo
 	loadedPlugin := &LoadedPlugin{
 		ID:         pluginData.ID,
 		Name:       pluginData.Name,
-		Slug:       pluginData.Slug,
 		HookType:   interfaces.HookType(pluginData.HookType),
 		Client:     client,
 		GRPCClient: grpcClient,
@@ -1130,17 +1233,18 @@ func (pm *PluginManager) RefreshLLMPluginMapping(llmID uint) error {
 
 	return nil
 }
+
 // LoadGlobalDataCollectionPlugins loads global data collection plugins from configuration
 func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectionPluginConfig) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
-	
+
 	for _, cfg := range configs {
 		if !cfg.Enabled {
 			log.Debug().Str("plugin", cfg.Name).Msg("Skipping disabled plugin")
 			continue
 		}
-		
+
 		// Check if this is the built-in analytics pulse plugin
 		var globalPlugin *GlobalPlugin
 		var err error
@@ -1163,18 +1267,18 @@ func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectio
 				Msg("Failed to load global data collection plugin")
 			continue
 		}
-		
+
 		// Store global plugin
 		pm.globalDataPlugins[cfg.Name] = globalPlugin
 		pm.dataCollectionHookTypes[cfg.Name] = cfg.HookTypes
-		
+
 		log.Info().
 			Str("plugin", cfg.Name).
 			Strs("hook_types", cfg.HookTypes).
 			Bool("replace_database", cfg.ReplaceDatabase).
 			Msg("Loaded global data collection plugin")
 	}
-	
+
 	return nil
 }
 
@@ -1185,28 +1289,28 @@ func (pm *PluginManager) loadGlobalPluginFromConfig(cfg DataCollectionPluginConf
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plugin client for global plugin: %w", err)
 	}
-	
+
 	// Connect via gRPC with timeout and retry for external services
 	rpcClient, err := pm.connectWithRetry(client, cfg.Path)
 	if err != nil {
 		client.Kill()
 		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
 	}
-	
+
 	// Get the plugin client
 	raw, err := rpcClient.Dispense("plugin")
 	if err != nil {
 		client.Kill()
 		return nil, fmt.Errorf("failed to dispense plugin: %w", err)
 	}
-	
+
 	pluginClient := raw.(pb.PluginServiceClient)
-	
+
 	// Initialize the plugin
 	initReq := &pb.InitRequest{
 		Config: make(map[string]string),
 	}
-	
+
 	// Convert config map to string map for protobuf
 	for key, value := range cfg.Config {
 		if str, ok := value.(string); ok {
@@ -1218,21 +1322,21 @@ func (pm *PluginManager) loadGlobalPluginFromConfig(cfg DataCollectionPluginConf
 			}
 		}
 	}
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	initResp, err := pluginClient.Initialize(ctx, initReq)
 	if err != nil {
 		client.Kill()
 		return nil, fmt.Errorf("failed to initialize plugin: %w", err)
 	}
-	
+
 	if !initResp.Success {
 		client.Kill()
 		return nil, fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
 	}
-	
+
 	// Create global plugin instance
 	globalPlugin := &GlobalPlugin{
 		Config:     cfg,
@@ -1249,7 +1353,7 @@ func (pm *PluginManager) loadGlobalPluginFromConfig(cfg DataCollectionPluginConf
 			IsGlobal:   true,
 		},
 	}
-	
+
 	return globalPlugin, nil
 }
 
@@ -1259,6 +1363,14 @@ func (pm *PluginManager) SetEdgeClient(edgeClient interface{}) {
 	defer pm.mu.Unlock()
 	pm.edgeClient = edgeClient
 	log.Info().Msg("Edge client set for plugin manager built-in plugins")
+}
+
+// SetManagementServer sets the management server for service broker setup
+func (pm *PluginManager) SetManagementServer(server interface{}) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.managementServer = server
+	log.Info().Msg("Management server set for plugin manager service broker")
 }
 
 // LoadDeferredBuiltinPlugins loads any built-in plugins that were deferred during initial load
@@ -1306,7 +1418,9 @@ func (pm *PluginManager) loadBuiltinAnalyticsPulsePlugin(cfg DataCollectionPlugi
 
 	// Get gRPC client from edge client
 	var grpcClient configpb.ConfigurationSyncServiceClient
-	if client, ok := pm.edgeClient.(interface{ GetGRPCClient() configpb.ConfigurationSyncServiceClient }); ok {
+	if client, ok := pm.edgeClient.(interface {
+		GetGRPCClient() configpb.ConfigurationSyncServiceClient
+	}); ok {
 		grpcClient = client.GetGRPCClient()
 	} else {
 		return nil, fmt.Errorf("edge client does not provide gRPC client interface")
@@ -1316,7 +1430,7 @@ func (pm *PluginManager) loadBuiltinAnalyticsPulsePlugin(cfg DataCollectionPlugi
 	edgeID := "unknown"
 	edgeNamespace := ""
 
-	if edgeInfo, ok := pm.edgeClient.(interface{
+	if edgeInfo, ok := pm.edgeClient.(interface {
 		GetEdgeID() string
 		GetEdgeNamespace() string
 	}); ok {
@@ -1368,9 +1482,9 @@ func (pm *PluginManager) loadBuiltinAnalyticsPulsePlugin(cfg DataCollectionPlugi
 func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data interface{}) error {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
-	
+
 	executedCount := 0
-	
+
 	// Find plugins that handle this hook type
 	for pluginName, hookTypes := range pm.dataCollectionHookTypes {
 		if !pm.pluginHandlesHookType(hookTypes, hookType) {
@@ -1381,7 +1495,7 @@ func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data inte
 				Msg("Plugin does not handle this hook type - skipping")
 			continue
 		}
-		
+
 		globalPlugin, exists := pm.globalDataPlugins[pluginName]
 		if !exists {
 			log.Warn().Str("plugin", pluginName).Msg("Plugin not found in global plugins map")
@@ -1391,33 +1505,33 @@ func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data inte
 			log.Warn().Str("plugin", pluginName).Msg("Plugin is unhealthy - skipping")
 			continue
 		}
-		
+
 		log.Debug().
 			Str("plugin", pluginName).
 			Str("hook_type", hookType).
 			Msg("Executing data collection plugin")
-		
+
 		// Execute plugin based on hook type
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		err := pm.executeDataCollectionPlugin(ctx, globalPlugin, hookType, data)
 		cancel()
-		
+
 		if err != nil {
 			log.Error().
 				Str("plugin", pluginName).
 				Str("hook_type", hookType).
 				Err(err).
 				Msg("Data collection plugin execution failed")
-			
+
 			// Mark plugin as unhealthy and attempt restart after failures
 			pm.mu.Lock()
 			globalPlugin.IsHealthy = false
 			pm.mu.Unlock()
-			
+
 			log.Warn().
 				Str("plugin", pluginName).
 				Msg("Marking global data collection plugin as unhealthy due to execution failure")
-			
+
 			// Note: Global plugin restart would require reloading from configuration
 			// This is more complex than regular plugin restart and would need
 			// access to the original plugin configuration
@@ -1429,13 +1543,13 @@ func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data inte
 			executedCount++
 		}
 	}
-	
+
 	log.Debug().
 		Str("hook_type", hookType).
 		Int("executed_count", executedCount).
 		Int("total_plugins", len(pm.globalDataPlugins)).
 		Msg("Data collection plugin execution summary")
-	
+
 	return nil
 }
 
@@ -1513,16 +1627,16 @@ func (pm *PluginManager) executeProxyLogPlugin(ctx context.Context, plugin *Glob
 			UserId:    uint32(data.UserID),
 		},
 	}
-	
+
 	resp, err := plugin.GRPCClient.HandleProxyLog(ctx, req)
 	if err != nil {
 		return err
 	}
-	
+
 	if !resp.Success {
 		return fmt.Errorf("plugin execution failed: %s", resp.ErrorMessage)
 	}
-	
+
 	return nil
 }
 
@@ -1537,7 +1651,7 @@ func (pm *PluginManager) executeAnalyticsPlugin(ctx context.Context, plugin *Glo
 
 	// Convert to protobuf request
 	req := &pb.AnalyticsRequest{
-		LlmId:                   uint32(data.LLMID),
+		LlmId:                  uint32(data.LLMID),
 		ModelName:              data.ModelName,
 		Vendor:                 data.Vendor,
 		PromptTokens:           int32(data.PromptTokens),
@@ -1560,16 +1674,16 @@ func (pm *PluginManager) executeAnalyticsPlugin(ctx context.Context, plugin *Glo
 			UserId:    uint32(data.UserID),
 		},
 	}
-	
+
 	resp, err := plugin.GRPCClient.HandleAnalytics(ctx, req)
 	if err != nil {
 		return err
 	}
-	
+
 	if !resp.Success {
 		return fmt.Errorf("plugin execution failed: %s", resp.ErrorMessage)
 	}
-	
+
 	return nil
 }
 
@@ -1600,16 +1714,16 @@ func (pm *PluginManager) executeBudgetUsagePlugin(ctx context.Context, plugin *G
 			AppId:     uint32(data.AppID),
 		},
 	}
-	
+
 	resp, err := plugin.GRPCClient.HandleBudgetUsage(ctx, req)
 	if err != nil {
 		return err
 	}
-	
+
 	if !resp.Success {
 		return fmt.Errorf("plugin execution failed: %s", resp.ErrorMessage)
 	}
-	
+
 	return nil
 }
 
@@ -1627,40 +1741,39 @@ func (pm *PluginManager) pluginHandlesHookType(hookTypes []string, hookType stri
 func (pm *PluginManager) UnloadGlobalPlugins() {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
-	
+
 	for name, plugin := range pm.globalDataPlugins {
 		if plugin.Client != nil {
 			plugin.Client.Kill()
 		}
 		log.Info().Str("plugin", name).Msg("Unloaded global data collection plugin")
 	}
-	
+
 	pm.globalDataPlugins = make(map[string]*GlobalPlugin)
 	pm.dataCollectionHookTypes = make(map[string][]string)
 }
-
 
 // ShouldReplaceDatabaseStorage checks if any plugin is configured to replace database storage for the given hook type
 func (pm *PluginManager) ShouldReplaceDatabaseStorage(hookType string) bool {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
-	
+
 	for pluginName, hookTypes := range pm.dataCollectionHookTypes {
 		if !pm.pluginHandlesHookType(hookTypes, hookType) {
 			continue
 		}
-		
+
 		globalPlugin, exists := pm.globalDataPlugins[pluginName]
 		if !exists || !globalPlugin.IsHealthy {
 			continue
 		}
-		
+
 		// Check if this plugin is configured to replace database storage
 		if globalPlugin.Config.ReplaceDatabase {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -1668,13 +1781,13 @@ func (pm *PluginManager) ShouldReplaceDatabaseStorage(hookType string) bool {
 func (pm *PluginManager) GetGlobalPluginsForHookType(hookType string) []*GlobalPlugin {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
-	
+
 	var plugins []*GlobalPlugin
 	for pluginName, hookTypes := range pm.dataCollectionHookTypes {
 		if !pm.pluginHandlesHookType(hookTypes, hookType) {
 			continue
 		}
-		
+
 		globalPlugin, exists := pm.globalDataPlugins[pluginName]
 		if exists && globalPlugin.IsHealthy {
 			plugins = append(plugins, globalPlugin)
@@ -1863,7 +1976,6 @@ func (pm *PluginManager) updatePluginHealthUnsafe(pluginID uint, pluginData Plug
 	health := &PluginHealthStatus{
 		ID:          pluginID,
 		Name:        pluginData.Name,
-		Slug:        pluginData.Slug,
 		Command:     pluginData.Command,
 		HookType:    pluginData.HookType,
 		Status:      status,
@@ -1929,12 +2041,12 @@ func (pm *PluginManager) GetPluginHealthSummary() map[string]interface{} {
 	defer pm.mu.RUnlock()
 
 	summary := map[string]interface{}{
-		"total_plugins":     len(pm.pluginHealth),
-		"ready_plugins":     0,
-		"loading_plugins":   0,
-		"failed_plugins":    0,
-		"unknown_plugins":   0,
-		"oci_plugins":       0,
+		"total_plugins":      len(pm.pluginHealth),
+		"ready_plugins":      0,
+		"loading_plugins":    0,
+		"failed_plugins":     0,
+		"unknown_plugins":    0,
+		"oci_plugins":        0,
 		"cached_oci_plugins": 0,
 	}
 
@@ -1962,4 +2074,3 @@ func (pm *PluginManager) GetPluginHealthSummary() map[string]interface{} {
 
 	return summary
 }
-

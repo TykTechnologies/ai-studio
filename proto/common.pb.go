@@ -946,17 +946,18 @@ type PluginConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
-	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Command       string                 `protobuf:"bytes,5,opt,name=command,proto3" json:"command,omitempty"`
-	Checksum      string                 `protobuf:"bytes,6,opt,name=checksum,proto3" json:"checksum,omitempty"`
-	Config        string                 `protobuf:"bytes,7,opt,name=config,proto3" json:"config,omitempty"` // JSON string
-	HookType      string                 `protobuf:"bytes,8,opt,name=hook_type,json=hookType,proto3" json:"hook_type,omitempty"`
-	IsActive      bool                   `protobuf:"varint,9,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
-	Namespace     string                 `protobuf:"bytes,10,opt,name=namespace,proto3" json:"namespace,omitempty"`                 // NEW: Namespace for filtering
-	LlmIds        []uint32               `protobuf:"varint,11,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"` // Associated LLM IDs
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Command       string                 `protobuf:"bytes,4,opt,name=command,proto3" json:"command,omitempty"`
+	Checksum      string                 `protobuf:"bytes,5,opt,name=checksum,proto3" json:"checksum,omitempty"`
+	Config        string                 `protobuf:"bytes,6,opt,name=config,proto3" json:"config,omitempty"` // JSON string
+	HookType      string                 `protobuf:"bytes,7,opt,name=hook_type,json=hookType,proto3" json:"hook_type,omitempty"`
+	IsActive      bool                   `protobuf:"varint,8,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	Namespace     string                 `protobuf:"bytes,9,opt,name=namespace,proto3" json:"namespace,omitempty"`                  // NEW: Namespace for filtering
+	LlmIds        []uint32               `protobuf:"varint,10,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"` // Associated LLM IDs
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ServiceScopes []string               `protobuf:"bytes,13,rep,name=service_scopes,json=serviceScopes,proto3" json:"service_scopes,omitempty"` // Service API scopes (for plugins with service access)
+	HookTypes     []string               `protobuf:"bytes,14,rep,name=hook_types,json=hookTypes,proto3" json:"hook_types,omitempty"`             // NEW: All hook types this plugin supports (for hybrid plugins)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1001,13 +1002,6 @@ func (x *PluginConfig) GetId() uint32 {
 func (x *PluginConfig) GetName() string {
 	if x != nil {
 		return x.Name
-	}
-	return ""
-}
-
-func (x *PluginConfig) GetSlug() string {
-	if x != nil {
-		return x.Slug
 	}
 	return ""
 }
@@ -1078,6 +1072,20 @@ func (x *PluginConfig) GetCreatedAt() *timestamppb.Timestamp {
 func (x *PluginConfig) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *PluginConfig) GetServiceScopes() []string {
+	if x != nil {
+		return x.ServiceScopes
+	}
+	return nil
+}
+
+func (x *PluginConfig) GetHookTypes() []string {
+	if x != nil {
+		return x.HookTypes
 	}
 	return nil
 }
@@ -1445,24 +1453,26 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x9d\x03\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xcf\x03\n" +
 	"\fPluginConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04slug\x18\x03 \x01(\tR\x04slug\x12 \n" +
-	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x18\n" +
-	"\acommand\x18\x05 \x01(\tR\acommand\x12\x1a\n" +
-	"\bchecksum\x18\x06 \x01(\tR\bchecksum\x12\x16\n" +
-	"\x06config\x18\a \x01(\tR\x06config\x12\x1b\n" +
-	"\thook_type\x18\b \x01(\tR\bhookType\x12\x1b\n" +
-	"\tis_active\x18\t \x01(\bR\bisActive\x12\x1c\n" +
-	"\tnamespace\x18\n" +
-	" \x01(\tR\tnamespace\x12\x17\n" +
-	"\allm_ids\x18\v \x03(\rR\x06llmIds\x129\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
+	"\acommand\x18\x04 \x01(\tR\acommand\x12\x1a\n" +
+	"\bchecksum\x18\x05 \x01(\tR\bchecksum\x12\x16\n" +
+	"\x06config\x18\x06 \x01(\tR\x06config\x12\x1b\n" +
+	"\thook_type\x18\a \x01(\tR\bhookType\x12\x1b\n" +
+	"\tis_active\x18\b \x01(\bR\bisActive\x12\x1c\n" +
+	"\tnamespace\x18\t \x01(\tR\tnamespace\x12\x17\n" +
+	"\allm_ids\x18\n" +
+	" \x03(\rR\x06llmIds\x129\n" +
 	"\n" +
-	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa2\x03\n" +
+	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12%\n" +
+	"\x0eservice_scopes\x18\r \x03(\tR\rserviceScopes\x12\x1d\n" +
+	"\n" +
+	"hook_types\x18\x0e \x03(\tR\thookTypes\"\xa2\x03\n" +
 	"\x15ConfigurationSnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12+\n" +
 	"\x04llms\x18\x02 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +

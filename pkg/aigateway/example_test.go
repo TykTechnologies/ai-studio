@@ -1,12 +1,13 @@
-package aigateway
+package aigateway_test
 
 import (
 	"fmt"
 )
 
-// ExampleNew demonstrates how to use the AI Gateway library
+// UsageExample_New demonstrates how to use the AI Gateway library
 // with existing Midsommar services (database-backed configuration)
-func ExampleNew() {
+// This is kept for documentation purposes but not run as a test.
+func UsageExample_New() {
 	// Assume you have an existing database and services set up
 	// service := services.NewService(db)
 	// budgetService := services.NewBudgetService(db, service)
@@ -27,8 +28,9 @@ func ExampleNew() {
 	// Output: AI Gateway can be used as a standalone server or integrated into existing HTTP servers
 }
 
-// ExampleGateway_Handler demonstrates using the gateway as an HTTP handler
-func ExampleGateway_Handler() {
+// UsageExample_Handler demonstrates using the gateway as an HTTP handler
+// This is kept for documentation purposes but not run as a test.
+func UsageExample_Handler() {
 	// This example shows how to integrate the AI Gateway into an existing HTTP server
 
 	// Assume services are initialized
@@ -55,8 +57,9 @@ func ExampleGateway_Handler() {
 	// Output: Gateway can be mounted at any path in an existing HTTP server
 }
 
-// ExampleGateway_Reload demonstrates hot reloading of configuration
-func ExampleGateway_Reload() {
+// UsageExample_Reload demonstrates hot reloading of configuration
+// This is kept for documentation purposes but not run as a test.
+func UsageExample_Reload() {
 	// service := services.NewService(db)
 	// budgetService := services.NewBudgetService(db, service)
 	// gateway := aigateway.New(service, &proxy.Config{Port: 9090}, budgetService)

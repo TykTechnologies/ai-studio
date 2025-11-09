@@ -54,6 +54,19 @@ export default defineConfig({
           { text: 'Notifications', link: '/docs/notifications' } // New
           // Removed: apps, model-prices, call-settings (to be merged)
         ]
+      },
+      {
+        text: 'Plugins & Extensions',
+        items: [
+          { text: 'Overview', link: '/docs/plugins-overview' },
+          { text: 'Microgateway Plugins', link: '/docs/plugins-microgateway' },
+          { text: 'AI Studio UI Plugins', link: '/docs/plugins-studio-ui' },
+          { text: 'AI Studio Agent Plugins', link: '/docs/plugins-studio-agent' },
+          { text: 'Manifests & Permissions', link: '/docs/plugins-manifests' },
+          { text: 'Deployment Options', link: '/docs/plugins-deployment' },
+          { text: 'SDK Reference', link: '/docs/plugins-sdk' },
+          { text: 'Service API Reference', link: '/docs/plugins-service-api' }
+        ]
       }
     ],
 

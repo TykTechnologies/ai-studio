@@ -67,3 +67,29 @@ export const getAllLLMs = async () => {
     throw handleApiError(error);
   }
 };
+
+// LLM Plugin Configuration Methods
+
+export const getLLMPluginConfig = async (llmId, pluginId) => {
+  try {
+    const response = await apiClient.get(`/llms/${llmId}/plugins/${pluginId}/config`);
+    return response.data?.data?.attributes?.config_override || {};
+  } catch (error) {
+    if (error.response?.status === 404) {
+      // If association not found, return empty config
+      return {};
+    }
+    throw handleApiError(error);
+  }
+};
+
+export const updateLLMPluginConfig = async (llmId, pluginId, configOverride) => {
+  try {
+    const response = await apiClient.put(`/llms/${llmId}/plugins/${pluginId}/config`, {
+      config_override: configOverride,
+    });
+    return response.data?.data;
+  } catch (error) {
+    throw handleApiError(error);
+  }
+};

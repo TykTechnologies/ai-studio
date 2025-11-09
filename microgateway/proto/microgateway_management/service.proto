@@ -1,0 +1,231 @@
+syntax = "proto3";
+
+package microgateway_management;
+
+option go_package = "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management";
+
+import "google/protobuf/timestamp.proto";
+
+// MicrogatewayManagementService provides microgateway plugins with access to core management operations
+// Plugins must be authorized and have appropriate scopes to access these services
+service MicrogatewayManagementService {
+    // LLM Management Operations (Read-Only)
+    rpc ListLLMs(ListLLMsRequest) returns (ListLLMsResponse);
+    rpc GetLLM(GetLLMRequest) returns (GetLLMResponse);
+
+    // App Management Operations (Read-Only)
+    rpc ListApps(ListAppsRequest) returns (ListAppsResponse);
+    rpc GetApp(GetAppRequest) returns (GetAppResponse);
+
+    // Budget Operations (Read-Only)
+    rpc GetBudgetStatus(GetBudgetStatusRequest) returns (GetBudgetStatusResponse);
+
+    // Model Price Management Operations (Read-Only)
+    rpc ListModelPrices(ListModelPricesRequest) returns (ListModelPricesResponse);
+    rpc GetModelPrice(GetModelPriceRequest) returns (GetModelPriceResponse);
+
+    // Credential Operations (Read-Only - for plugin auth use cases)
+    rpc ValidateCredential(ValidateCredentialRequest) returns (ValidateCredentialResponse);
+
+    // Plugin Key-Value Storage Operations
+    rpc WritePluginKV(WritePluginKVRequest) returns (WritePluginKVResponse);
+    rpc ReadPluginKV(ReadPluginKVRequest) returns (ReadPluginKVResponse);
+    rpc DeletePluginKV(DeletePluginKVRequest) returns (DeletePluginKVResponse);
+}
+
+// Common request context for all operations
+message PluginContext {
+    uint32 plugin_id = 1;      // Authenticated plugin ID
+    string method_scope = 2;   // Required service scope (e.g., "llms.read")
+}
+
+// LLM Management Messages
+
+message ListLLMsRequest {
+    PluginContext context = 1;
+
+    // Filtering options
+    string vendor = 2;
+    optional bool is_active = 3;
+
+    // Pagination
+    int32 page = 4;
+    int32 limit = 5;
+}
+
+message ListLLMsResponse {
+    repeated LLMInfo llms = 1;
+    int64 total_count = 2;
+}
+
+message GetLLMRequest {
+    PluginContext context = 1;
+    uint32 llm_id = 2;
+}
+
+message GetLLMResponse {
+    LLMInfo llm = 1;
+}
+
+message LLMInfo {
+    uint32 id = 1;
+    string name = 2;
+    string vendor = 3;
+    string slug = 4;
+    string endpoint = 5;
+    bool has_api_key = 6; // Don't expose actual key
+    string default_model = 7;
+    repeated string allowed_models = 8;
+    bool is_active = 9;
+    int32 max_tokens = 10;
+    int32 timeout_seconds = 11;
+    int32 retry_count = 12;
+    optional double monthly_budget = 13;
+    int32 rate_limit_rpm = 14;
+    google.protobuf.Timestamp created_at = 15;
+    google.protobuf.Timestamp updated_at = 16;
+    map<string, string> metadata = 17;  // Plugin-stored data
+}
+
+// App Management Messages
+
+message ListAppsRequest {
+    PluginContext context = 1;
+
+    // Filtering options
+    optional bool is_active = 2;
+
+    // Pagination
+    int32 page = 3;
+    int32 limit = 4;
+}
+
+message ListAppsResponse {
+    repeated AppInfo apps = 1;
+    int64 total_count = 2;
+}
+
+message GetAppRequest {
+    PluginContext context = 1;
+    uint32 app_id = 2;
+}
+
+message GetAppResponse {
+    AppInfo app = 1;
+}
+
+message AppInfo {
+    uint32 id = 1;
+    string name = 2;
+    string description = 3;
+    string owner_email = 4;
+    bool is_active = 5;
+    double monthly_budget = 6;
+    int32 budget_reset_day = 7;
+    int32 rate_limit_rpm = 8;
+    repeated string allowed_ips = 9;
+    google.protobuf.Timestamp created_at = 10;
+    google.protobuf.Timestamp updated_at = 11;
+    string metadata = 12; // JSON string
+}
+
+// Budget Messages
+
+message GetBudgetStatusRequest {
+    PluginContext context = 1;
+    uint32 app_id = 2;
+    optional uint32 llm_id = 3; // Optional: get budget for specific LLM
+}
+
+message GetBudgetStatusResponse {
+    uint32 app_id = 1;
+    optional uint32 llm_id = 2;
+    double monthly_budget = 3;
+    double current_usage = 4;
+    double remaining_budget = 5;
+    int64 tokens_used = 6;
+    int32 requests_count = 7;
+    int64 period_start = 8;  // Unix timestamp
+    int64 period_end = 9;    // Unix timestamp
+    bool is_over_budget = 10;
+    double percentage_used = 11;
+}
+
+// Model Price Messages
+
+message ListModelPricesRequest {
+    PluginContext context = 1;
+    string vendor = 2; // Filter by vendor
+}
+
+message ListModelPricesResponse {
+    repeated ModelPriceInfo model_prices = 1;
+}
+
+message GetModelPriceRequest {
+    PluginContext context = 1;
+    string model_name = 2;
+    string vendor = 3;
+}
+
+message GetModelPriceResponse {
+    ModelPriceInfo model_price = 1;
+}
+
+message ModelPriceInfo {
+    uint32 id = 1;
+    string vendor = 2;
+    string model_name = 3;
+    double cpt = 4;           // Cost per token (output)
+    double cpit = 5;          // Cost per input token
+    double cache_write_pt = 6;  // Cache write cost per token
+    double cache_read_pt = 7;   // Cache read cost per token
+    string currency = 8;
+    google.protobuf.Timestamp created_at = 9;
+    google.protobuf.Timestamp updated_at = 10;
+}
+
+// Credential Messages
+
+message ValidateCredentialRequest {
+    PluginContext context = 1;
+    string secret = 2; // Credential secret to validate
+}
+
+message ValidateCredentialResponse {
+    bool valid = 1;
+    uint32 app_id = 2;       // App associated with credential
+    uint32 credential_id = 3;
+    optional int64 expires_at = 4; // Unix timestamp
+}
+
+// Plugin Key-Value Storage Messages
+
+message WritePluginKVRequest {
+    PluginContext context = 1;
+    string key = 2;
+    bytes value = 3;
+    google.protobuf.Timestamp expire_at = 4;  // Optional expiration timestamp (nil = no expiration)
+}
+
+message WritePluginKVResponse {
+    bool created = 1; // true if created, false if updated
+}
+
+message ReadPluginKVRequest {
+    PluginContext context = 1;
+    string key = 2;
+}
+
+message ReadPluginKVResponse {
+    bytes value = 1;
+}
+
+message DeletePluginKVRequest {
+    PluginContext context = 1;
+    string key = 2;
+}
+
+message DeletePluginKVResponse {
+    bool deleted = 1;
+}

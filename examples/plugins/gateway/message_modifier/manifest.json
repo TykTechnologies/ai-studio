@@ -1,0 +1,14 @@
+{
+  "id": "com.tyk.message-modifier",
+  "version": "1.0.0",
+  "name": "Message Modifier",
+  "description": "Modifies request messages before authentication",
+  "capabilities": {
+    "hooks": ["pre_auth"],
+    "primary_hook": "pre_auth"
+  },
+  "permissions": {},
+  "compat": {
+    "min_gateway_version": "1.0.0"
+  }
+}

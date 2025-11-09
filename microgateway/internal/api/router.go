@@ -2,7 +2,10 @@
 package api
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
@@ -11,6 +14,35 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
+
+// RequestIDMiddleware generates a canonical request ID for every request
+// This MUST be the first middleware in the chain to ensure all downstream code uses the same ID
+// The request ID is stored in request context and available to all handlers, middleware, and plugins
+func RequestIDMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Check if request ID already exists (shouldn't, but defensive)
+		if existingID := c.Request.Context().Value("request_id"); existingID != nil {
+			log.Warn().Str("existing_id", existingID.(string)).Msg("⚠️ Request ID already in context - skipping regeneration")
+			c.Next()
+			return
+		}
+
+		// Generate canonical request ID - ignore any client-provided X-Request-ID header for security
+		requestID := fmt.Sprintf("req_%d", time.Now().UnixNano())
+
+		// Store in request context so all middleware/handlers/plugins can access it
+		ctx := context.WithValue(c.Request.Context(), "request_id", requestID)
+		c.Request = c.Request.WithContext(ctx)
+
+		// Set as response header for client observability and distributed tracing
+		c.Header("X-Request-ID", requestID)
+
+		log.Info().Str("request_id", requestID).Str("path", c.Request.URL.Path).Msg("🆔 Generated canonical request ID for request")
+
+		// Continue processing
+		c.Next()
+	}
+}
 
 // RouterConfig holds configuration for the API router
 type RouterConfig struct {
@@ -30,6 +62,10 @@ type RouterConfig struct {
 func SetupRouter(config *RouterConfig) *gin.Engine {
 	// Use gin.Default() which includes logging and recovery middleware
 	router := gin.Default()
+
+	// CRITICAL: Add request ID middleware FIRST (before all other routes)
+	// This ensures ALL requests (gateway, API, health checks) get a canonical request ID
+	router.Use(RequestIDMiddleware())
 
 	// Health endpoints (no auth required)
 	router.GET("/health", handlers.HealthCheck(config.Services))
@@ -182,33 +218,15 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		}
 	}
 
-	// Gateway endpoints - mount the AI Gateway handler with middleware
+	// Gateway endpoints - mount the AI Gateway handler
+	// Plugins are now integrated via hooks in the proxy layer, so router is a simple passthrough
 	if config.Gateway != nil {
 		gateway := router.Group("/")
-		
-		log.Debug().Bool("has_plugin_manager", config.PluginManager != nil).Msg("Router setup - checking plugin manager availability")
-		
-		// Create plugin-aware handlers for LLM endpoints
-		if config.PluginManager != nil {
-			log.Info().Msg("Adding plugin-aware handlers for gateway endpoints")
-			log.Debug().Msg("Plugin manager is available for router setup")
-			pluginMiddlewareConfig := &PluginMiddlewareConfig{
-				PluginManager: config.PluginManager,
-				Services:      config.Services,
-			}
-			
-			// Create plugin-aware LLM handler that bypasses AI Gateway auth when auth plugins are configured
-			gateway.Any("/llm/*path", CreatePluginAwareLLMHandler(config.Gateway.Handler(), pluginMiddlewareConfig))
-			
-			// Tools and datasources don't need plugin processing
-			gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
-			gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
-		} else {
-			// No plugin manager, use standard handlers
-			gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
-			gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
-			gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
-		}
+
+		log.Info().Msg("Mounting AI Gateway handler (plugins integrated via hooks)")
+		gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
+		gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
+		gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
 	}
 
 	// Metrics endpoint if enabled

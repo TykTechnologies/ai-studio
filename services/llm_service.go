@@ -1,10 +1,12 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
@@ -47,8 +49,54 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 		Namespace:        "", // Default to global namespace
 	}
 
+	// Execute "before_create" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeLLM,
+			HookBeforeCreate,
+			llm,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.LLM); ok {
+				llm = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(llm, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := llm.Create(s.DB); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_create" hooks (for notifications, etc.)
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeLLM,
+			HookAfterCreate,
+			llm,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-create hooks failed: %v", err))
+		}
 	}
 
 	return llm, nil
@@ -78,8 +126,54 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 		Namespace:        namespace,
 	}
 
+	// Execute "before_create" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeLLM,
+			HookBeforeCreate,
+			llm,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.LLM); ok {
+				llm = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(llm, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := llm.Create(s.DB); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_create" hooks (for notifications, etc.)
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeLLM,
+			HookAfterCreate,
+			llm,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-create hooks failed: %v", err))
+		}
 	}
 
 	return llm, nil
@@ -119,8 +213,54 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	llm.MonthlyBudget = monthlyBudget
 	llm.BudgetStartDate = budgetStartDate
 
+	// Execute "before_update" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeLLM,
+			HookBeforeUpdate,
+			llm,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.LLM); ok {
+				llm = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(llm, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := llm.Update(s.DB); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_update" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeLLM,
+			HookAfterUpdate,
+			llm,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-update hooks failed: %v", err))
+		}
 	}
 
 	return llm, nil
@@ -217,7 +357,45 @@ func (s *Service) DeleteLLM(id uint) error {
 		return err
 	}
 
-	return llm.Delete(s.DB)
+	// Execute "before_delete" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeLLM,
+			HookBeforeDelete,
+			llm,
+			0, // No user context in this method
+		)
+		if err != nil {
+			return fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+	}
+
+	if err := llm.Delete(s.DB); err != nil {
+		return err
+	}
+
+	// Execute "after_delete" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeLLM,
+			HookAfterDelete,
+			llm,
+			0, // No user context in this method
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-delete hooks failed: %v", err))
+		}
+	}
+
+	return nil
 }
 
 func (s *Service) GetLLMByName(name string) (*models.LLM, error) {

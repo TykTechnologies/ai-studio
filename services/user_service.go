@@ -1,11 +1,13 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
 )
@@ -94,8 +96,54 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		user.ParseGroupAssociations(groups)
 	}
 
+	// Execute "before_create" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeUser,
+			HookBeforeCreate,
+			user,
+			0, // No user context for user creation
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.User); ok {
+				user = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(user, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	if err := user.Create(s.DB); err != nil {
 		return nil, err
+	}
+
+	// Execute "after_create" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeUser,
+			HookAfterCreate,
+			user,
+			uint32(user.ID),
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-create hooks failed: %v", err))
+		}
 	}
 
 	return user, nil
@@ -155,6 +203,37 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 
 	newGroups := user.GetGroupsToUpdate(dto.Groups)
 
+	// Execute "before_update" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeUser,
+			HookBeforeUpdate,
+			user,
+			uint32(user.ID),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return nil, fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
+
+		// Use modified object if hooks modified it
+		if hookResult.ModifiedObject != nil {
+			if modified, ok := hookResult.ModifiedObject.(*models.User); ok {
+				user = modified
+			}
+		}
+
+		// Merge plugin metadata
+		if err := s.HookManager.MergeMetadata(user, hookResult.Metadata); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
+		}
+	}
+
 	tx := s.DB.Begin()
 
 	if err := user.Update(tx); err != nil {
@@ -173,12 +252,46 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 		return nil, err
 	}
 
+	// Execute "after_update" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeUser,
+			HookAfterUpdate,
+			user,
+			uint32(user.ID),
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-update hooks failed: %v", err))
+		}
+	}
+
 	return user, nil
 }
 
 func (s *Service) DeleteUser(user *models.User) error {
 	if user.GetRole() == models.RoleSuperAdmin {
 		return helpers.NewForbiddenError("super admin user cannot be deleted")
+	}
+
+	// Execute "before_delete" hooks
+	if s.HookManager != nil {
+		hookResult, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeUser,
+			HookBeforeDelete,
+			user,
+			uint32(user.ID),
+		)
+		if err != nil {
+			return fmt.Errorf("hook execution failed: %w", err)
+		}
+
+		// Check if operation was rejected
+		if !hookResult.Allowed {
+			return fmt.Errorf("operation rejected by plugin: %s", hookResult.RejectionReason)
+		}
 	}
 
 	tx := s.DB.Begin()
@@ -230,7 +343,26 @@ func (s *Service) DeleteUser(user *models.User) error {
 		return err
 	}
 
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	// Execute "after_delete" hooks
+	if s.HookManager != nil {
+		_, err := s.HookManager.ExecuteHooks(
+			context.Background(),
+			ObjectTypeUser,
+			HookAfterDelete,
+			user,
+			uint32(user.ID),
+		)
+		if err != nil {
+			// Log but don't fail the operation
+			logger.Warn(fmt.Sprintf("After-delete hooks failed: %v", err))
+		}
+	}
+
+	return nil
 }
 
 var (

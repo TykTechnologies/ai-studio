@@ -16,7 +16,6 @@ func TestPluginEndpoints(t *testing.T) {
 	// Test Create Plugin
 	createPluginInput := services.CreatePluginRequest{
 		Name:        "Test Plugin",
-		Slug:        "test-plugin",
 		Description: "A test plugin for unit testing",
 		Command:     "/usr/local/bin/test-plugin",
 		Checksum:    "abc123",
@@ -35,7 +34,6 @@ func TestPluginEndpoints(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &createResponse)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test Plugin", createResponse.Data.Attributes.Name)
-	assert.Equal(t, "test-plugin", createResponse.Data.Attributes.Slug)
 	assert.Equal(t, "post_auth", createResponse.Data.Attributes.HookType)
 	assert.Equal(t, true, createResponse.Data.Attributes.IsActive)
 	assert.Equal(t, "test-namespace", createResponse.Data.Attributes.Namespace)
@@ -52,7 +50,6 @@ func TestPluginEndpoints(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &getResponse)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test Plugin", getResponse.Data.Attributes.Name)
-	assert.Equal(t, "test-plugin", getResponse.Data.Attributes.Slug)
 
 	// Test List Plugins (default - active only)
 	w = performRequest(api.router, "GET", "/api/v1/plugins", nil)
@@ -222,7 +219,6 @@ func TestPluginValidation(t *testing.T) {
 	// Test Create Plugin with invalid hook type
 	createPluginInput = services.CreatePluginRequest{
 		Name:     "Test Plugin",
-		Slug:     "test-plugin",
 		Command:  "/usr/local/bin/test-plugin",
 		HookType: "invalid_hook_type",
 		IsActive: true,
@@ -230,30 +226,6 @@ func TestPluginValidation(t *testing.T) {
 
 	w = performRequest(api.router, "POST", "/api/v1/plugins", createPluginInput)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-
-	// Test Create Plugin with duplicate slug
-	validPluginInput := services.CreatePluginRequest{
-		Name:     "Valid Plugin",
-		Slug:     "unique-plugin",
-		Command:  "/usr/local/bin/valid-plugin",
-		HookType: "pre_auth",
-		IsActive: true,
-	}
-
-	w = performRequest(api.router, "POST", "/api/v1/plugins", validPluginInput)
-	assert.Equal(t, http.StatusCreated, w.Code)
-
-	// Try to create another plugin with the same slug
-	duplicateSlugInput := services.CreatePluginRequest{
-		Name:     "Duplicate Plugin",
-		Slug:     "unique-plugin", // Same slug
-		Command:  "/usr/local/bin/duplicate-plugin",
-		HookType: "post_auth",
-		IsActive: true,
-	}
-
-	w = performRequest(api.router, "POST", "/api/v1/plugins", duplicateSlugInput)
-	assert.Equal(t, http.StatusConflict, w.Code)
 }
 
 func TestPluginPagination(t *testing.T) {
@@ -265,7 +237,6 @@ func TestPluginPagination(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		createPluginInput := services.CreatePluginRequest{
 			Name:        fmt.Sprintf("Test Plugin %d", i),
-			Slug:        fmt.Sprintf("test-plugin-%d", i),
 			Description: fmt.Sprintf("Test plugin number %d", i),
 			Command:     fmt.Sprintf("/usr/local/bin/test-plugin-%d", i),
 			HookType:    "pre_auth",
@@ -325,7 +296,6 @@ func TestPluginNamespaceFiltering(t *testing.T) {
 	// Create plugins in different namespaces
 	globalPlugin := services.CreatePluginRequest{
 		Name:     "Global Plugin",
-		Slug:     "global-plugin",
 		Command:  "/usr/local/bin/global-plugin",
 		HookType: "pre_auth",
 		IsActive: true,
@@ -334,7 +304,6 @@ func TestPluginNamespaceFiltering(t *testing.T) {
 
 	tenantAPlugin := services.CreatePluginRequest{
 		Name:     "Tenant A Plugin",
-		Slug:     "tenant-a-plugin",
 		Command:  "/usr/local/bin/tenant-a-plugin",
 		HookType: "post_auth",
 		IsActive: true,
@@ -343,7 +312,6 @@ func TestPluginNamespaceFiltering(t *testing.T) {
 
 	tenantBPlugin := services.CreatePluginRequest{
 		Name:     "Tenant B Plugin",
-		Slug:     "tenant-b-plugin",
 		Command:  "/usr/local/bin/tenant-b-plugin",
 		HookType: "on_response",
 		IsActive: true,
@@ -439,7 +407,6 @@ func TestPluginFilteringDebug(t *testing.T) {
 	for _, testPlugin := range testPlugins {
 		createRequest := services.CreatePluginRequest{
 			Name:      testPlugin.name,
-			Slug:      testPlugin.slug,
 			Command:   fmt.Sprintf("/usr/local/bin/%s", testPlugin.slug),
 			HookType:  testPlugin.hookType,
 			IsActive:  testPlugin.isActive,
@@ -538,7 +505,6 @@ func TestPluginListingFiltersComprehensive(t *testing.T) {
 	for _, testPlugin := range testPlugins {
 		createRequest := services.CreatePluginRequest{
 			Name:      testPlugin.name,
-			Slug:      testPlugin.slug,
 			Command:   fmt.Sprintf("/usr/local/bin/%s", testPlugin.slug),
 			HookType:  testPlugin.hookType,
 			IsActive:  testPlugin.isActive,
@@ -857,7 +823,6 @@ func TestPluginListingFiltersComprehensive(t *testing.T) {
 		// Create plugin with special characters in namespace
 		specialPlugin := services.CreatePluginRequest{
 			Name:      "Special Characters Plugin",
-			Slug:      "special-chars-plugin",
 			Command:   "/usr/local/bin/special-plugin",
 			HookType:  "pre_auth",
 			IsActive:  true,
@@ -917,7 +882,6 @@ func TestPluginHookTypes(t *testing.T) {
 	for _, hookType := range hookTypes {
 		createPluginInput := services.CreatePluginRequest{
 			Name:     fmt.Sprintf("%s Plugin", hookType),
-			Slug:     fmt.Sprintf("%s-plugin", hookType),
 			Command:  fmt.Sprintf("/usr/local/bin/%s-plugin", hookType),
 			HookType: hookType,
 			IsActive: true,

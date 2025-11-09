@@ -6,14 +6,18 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/rs/zerolog/log"
 )
 
 type CredentialExtractor func(r *http.Request) (string, error)
+
+type PostAuthCallback func(w http.ResponseWriter, r *http.Request, appID uint) bool
 
 type CredentialValidator struct {
 	service    services.ServiceInterface
 	p          *Proxy
 	validators map[string]CredentialExtractor
+	authHooks  *AuthHooks // Hooks for authentication lifecycle
 }
 
 func NewCredentialValidator(service services.ServiceInterface, proxy *Proxy) *CredentialValidator {
@@ -24,12 +28,35 @@ func NewCredentialValidator(service services.ServiceInterface, proxy *Proxy) *Cr
 	}
 }
 
+// SetAuthHooks sets authentication lifecycle hooks
+func (cv *CredentialValidator) SetAuthHooks(hooks *AuthHooks) {
+	cv.authHooks = hooks
+}
+
+// SetPostAuthCallback is deprecated, use SetAuthHooks instead
+// Kept for backward compatibility
+func (cv *CredentialValidator) SetPostAuthCallback(callback PostAuthCallback) {
+	cv.authHooks = &AuthHooks{
+		PostAuth: callback,
+	}
+}
+
 func (cv *CredentialValidator) RegisterValidator(vendor string, validator CredentialExtractor) {
 	cv.validators[strings.ToLower(vendor)] = validator
 }
 
 func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if authentication was already done by a microgateway plugin
+		if pluginAuth := r.Context().Value("plugin_authenticated"); pluginAuth != nil {
+			if authenticated, ok := pluginAuth.(bool); ok && authenticated {
+				// Request already authenticated by microgateway plugin - skip credential validation
+				// The plugin has already set the app context with correct AppID
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
 		pathParts := strings.Split(r.URL.Path, "/")
 		if len(pathParts) < 2 { // Adjusted for paths like "/.well-known/..."
 			// Allow .well-known paths without auth for now, or handle them separately if needed
@@ -41,7 +68,15 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// --- Bearer Token Authentication ---
+		// === HOOK POINT: PRE-AUTH ===
+		// Execute pre-auth hooks BEFORE any authentication logic (for LLM proxy requests)
+		if cv.authHooks != nil && cv.authHooks.PreAuth != nil {
+			if blocked := cv.authHooks.PreAuth(w, r); blocked {
+				return // Pre-auth hook blocked the request
+			}
+		}
+
+		// --- Bearer Token Authentication (includes OAuth for MCP servers) ---
 		authHeader := r.Header.Get("Authorization")
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
@@ -66,11 +101,51 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				ctx = context.WithValue(ctx, "oauthClient", oauthClient)
 				ctx = context.WithValue(ctx, "scope", accessToken.Scope)
 
+				// OAuth flow does NOT trigger auth hooks - MCP server authentication path
+				// This is separate from LLM proxy request authentication
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			// If OAuth token lookup failed, try app secret lookup (for MCP OAuth)
+			// OAuth token lookup failed - continue to check app secret or API key below
+		}
+
+		// If Bearer token but not OAuth, try app secret lookup
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+			// Check if custom auth (auth plugin) should handle validation
+			if cv.authHooks != nil && cv.authHooks.CustomAuth != nil {
+				appID, authenticated, authErr := cv.authHooks.CustomAuth(tokenString, r)
+				if authErr != nil {
+					respondWithError(w, http.StatusInternalServerError, "Authentication error", authErr, false)
+					return
+				}
+
+				if authenticated {
+					// Auth plugin successfully validated
+					app, err := cv.service.GetAppByID(appID)
+					if err != nil {
+						respondWithError(w, http.StatusInternalServerError, "Failed to retrieve app", err, false)
+						return
+					}
+
+					ctx := context.WithValue(r.Context(), "app", app)
+
+					// === HOOK POINT: POST-AUTH (Custom Auth Plugin) ===
+					if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
+						if blocked := cv.authHooks.PostAuth(w, r.WithContext(ctx), appID); blocked {
+							return // Post-auth hook blocked the request
+						}
+					}
+
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				// Auth plugin said not authenticated, fall through to standard validation
+			}
+
+			// Standard Bearer token validation (app secret)
 			cred, err := cv.service.GetCredentialBySecret(tokenString)
 			if err == nil && cred.Active {
 				app, err := cv.service.GetAppByCredentialID(cred.ID)
@@ -110,8 +185,18 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
 					}
-					
+
 					// Not a tool request - continue with LLM request
+					// === HOOK POINT: POST-AUTH (Bearer Token with App Secret) ===
+					if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
+						log.Debug().Uint("app_id", app.ID).Msg("Bearer token auth: Calling post-auth hook")
+						if blocked := cv.authHooks.PostAuth(w, r.WithContext(ctx), app.ID); blocked {
+							log.Debug().Msg("Bearer token auth: Post-auth hook blocked the request")
+							return // Post-auth hook blocked the request
+						}
+						log.Debug().Msg("Bearer token auth: Post-auth hook completed")
+					}
+
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -223,12 +308,70 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			r = r.WithContext(ctx)
 		}
 
+		// === TRY CUSTOM AUTH (Auth Plugin) for API Key ===
+		if cv.authHooks != nil && cv.authHooks.CustomAuth != nil {
+			appID, authenticated, authErr := cv.authHooks.CustomAuth(apiKey, r)
+			if authErr != nil {
+				// Auth plugin error
+				respondWithError(w, http.StatusUnauthorized, "Authentication failed", authErr, true)
+				return
+			}
+
+			if authenticated {
+				// Auth plugin successfully validated
+				app, err := cv.service.GetAppByID(appID)
+				if err != nil {
+					respondWithError(w, http.StatusInternalServerError, "Failed to retrieve app", err, false)
+					return
+				}
+
+				ctx := r.Context()
+				ctx = context.WithValue(ctx, "app", app)
+				r = r.WithContext(ctx)
+
+				// === HOOK POINT: POST-AUTH (Custom Auth Plugin via API Key) ===
+				if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
+					if blocked := cv.authHooks.PostAuth(w, r, appID); blocked {
+						return // Post-auth hook blocked the request
+					}
+				}
+
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Auth plugin returned false - this means authentication failed (no fallback)
+			// The error should have been returned above
+		}
+
+		// === STANDARD API KEY VALIDATION (only if no auth plugin) ===
 		validAPIKey, reqWithCtx := cv.CheckAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug, r)
 		if !validAPIKey {
 			respondWithError(w, http.StatusUnauthorized, "Invalid API key or insufficient permissions.", nil, true) // true for wwwAuth
 			return
 		}
 		r = reqWithCtx
+
+		// === HOOK POINT: POST-AUTH (API Key Authentication) ===
+		if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
+			if app := r.Context().Value("app"); app != nil {
+				// Use interface to avoid circular import with models package
+				if appWithID, ok := app.(interface{ GetID() uint }); ok {
+					appID := appWithID.GetID()
+					log.Debug().Uint("app_id", appID).Msg("Calling post-auth hook with authenticated app_id")
+					if blocked := cv.authHooks.PostAuth(w, r, appID); blocked {
+						log.Debug().Msg("Post-auth hook blocked the request")
+						return // Post-auth hook blocked the request
+					}
+					log.Debug().Msg("Post-auth hook completed successfully")
+				} else {
+					log.Warn().Msg("App in context does not implement GetID() method - cannot extract app_id")
+				}
+			} else {
+				log.Debug().Msg("No app in context for post-auth hook")
+			}
+		} else {
+			log.Debug().Msg("No post-auth hook registered")
+		}
 
 		next.ServeHTTP(w, r)
 	})
@@ -237,14 +380,32 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 // Renamed from CheckCredential to CheckAPICredential to differentiate
 func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug string, r *http.Request) (bool, *http.Request) {
 	cred, err := cv.service.GetCredentialBySecret(apiKey) // API Key is the 'secret'
-	if err != nil || !cred.Active {
+	if err != nil {
+		log.Info().Err(err).Str("api_key_prefix", apiKey[:min(len(apiKey), 8)]).Msg("CheckAPICredential: GetCredentialBySecret failed")
+		return false, r
+	}
+	if !cred.Active {
+		log.Info().Uint("cred_id", cred.ID).Msg("CheckAPICredential: Credential is inactive")
 		return false, r
 	}
 
+	log.Info().
+		Uint("cred_id", cred.ID).
+		Int("cred_id_signed", int(cred.ID)).
+		Str("key_id", cred.KeyID).
+		Msg("CheckAPICredential: Credential found and active")
+
 	app, err := cv.service.GetAppByCredentialID(cred.ID)
 	if err != nil {
+		log.Info().Err(err).Uint("cred_id", cred.ID).Int("cred_id_signed", int(cred.ID)).Msg("CheckAPICredential: GetAppByCredentialID failed")
 		return false, r
 	}
+
+	log.Info().
+		Uint("app_id", app.ID).
+		Str("app_name", app.Name).
+		Int("llm_count", len(app.LLMs)).
+		Msg("CheckAPICredential: Retrieved app for credential")
 
 	ctx := context.WithValue(r.Context(), "app", app)
 	// Note: toolSlug might be already in r.Context() if set before calling this func
@@ -270,13 +431,29 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	if llmSlug != "" {
 		llm, ok := cv.p.GetLLM(llmSlug)
 		if !ok {
+			log.Info().Str("llm_slug", llmSlug).Msg("CheckAPICredential: LLM not found in proxy cache")
 			return false, r
 		}
-		for _, l := range app.LLMs {
+		log.Info().
+			Uint("llm_id", llm.ID).
+			Str("llm_slug", llmSlug).
+			Uint("app_id", app.ID).
+			Int("app_llm_count", len(app.LLMs)).
+			Msg("CheckAPICredential: Checking if app has access to LLM")
+
+		for i, l := range app.LLMs {
+			log.Info().Int("index", i).Uint("app_llm_id", l.ID).Uint("required_llm_id", llm.ID).Msg("CheckAPICredential: Comparing LLM IDs")
 			if l.ID == llm.ID {
+				log.Info().Msg("CheckAPICredential: App has access to LLM - validation PASSED")
 				return true, r
 			}
 		}
+		log.Info().
+			Uint("app_id", app.ID).
+			Uint("required_llm_id", llm.ID).
+			Str("llm_slug", llmSlug).
+			Int("app_llms_count", len(app.LLMs)).
+			Msg("CheckAPICredential: App does not have access to this LLM - validation FAILED")
 		return false, r
 	}
 

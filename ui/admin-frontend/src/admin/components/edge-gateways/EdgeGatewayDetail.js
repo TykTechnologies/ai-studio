@@ -22,10 +22,12 @@ import {
   ArrowBack as BackIcon,
   Refresh as RefreshIcon,
   CloudSync as PushIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import edgeGatewayService from '../../services/edgeGatewayService';
 import PushConfigurationModal from './PushConfigurationModal';
+import RemoveEdgeModal from './RemoveEdgeModal';
 import {
   TitleBox,
   ContentBox,
@@ -42,6 +44,7 @@ const EdgeGatewayDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pushModalOpen, setPushModalOpen] = useState(false);
+  const [removeModalOpen, setRemoveModalOpen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
   const fetchEdgeGateway = async () => {
@@ -72,6 +75,11 @@ const EdgeGatewayDetail = () => {
 
   const handleRefresh = () => {
     fetchEdgeGateway();
+  };
+
+  const handleRemoveSuccess = () => {
+    // Navigate back to the list after successful removal
+    navigate('/admin/edge-gateways');
   };
 
   const getStatusInfo = (edge) => {
@@ -342,10 +350,19 @@ const EdgeGatewayDetail = () => {
           justifyContent="space-between"
           alignItems="center"
         >
-          <Typography variant="caption" color="textSecondary">
-            Last updated: {lastRefresh.toLocaleTimeString()}
-          </Typography>
-          <Box display="flex" gap={2}>
+          <Box>
+            <SecondaryOutlineButton
+              startIcon={<DeleteIcon />}
+              onClick={() => setRemoveModalOpen(true)}
+              color="error"
+            >
+              Remove Entry
+            </SecondaryOutlineButton>
+          </Box>
+          <Box display="flex" gap={2} alignItems="center">
+            <Typography variant="caption" color="textSecondary">
+              Last updated: {lastRefresh.toLocaleTimeString()}
+            </Typography>
             <SecondaryOutlineButton
               startIcon={<RefreshIcon />}
               onClick={handleRefresh}
@@ -368,6 +385,13 @@ const EdgeGatewayDetail = () => {
         open={pushModalOpen}
         onClose={() => setPushModalOpen(false)}
         onSuccess={handleRefresh}
+      />
+
+      <RemoveEdgeModal
+        open={removeModalOpen}
+        onClose={() => setRemoveModalOpen(false)}
+        edge={edgeGateway}
+        onSuccess={handleRemoveSuccess}
       />
     </Box>
   );

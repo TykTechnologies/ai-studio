@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+package plugin;
+
+option go_package = "github.com/TykTechnologies/midsommar/v2/proto";
+
+import "google/protobuf/timestamp.proto";
+
+// ObjectHook service defines the interface for plugins that want to intercept
+// and modify CRUD operations on core AI Studio objects (LLMs, Datasources, Tools, Users).
+service ObjectHookService {
+    // Register which object operations this plugin wants to handle
+    rpc GetObjectHookRegistrations(GetObjectHookRegistrationsRequest) returns (GetObjectHookRegistrationsResponse);
+
+    // Handle a specific object hook invocation
+    rpc HandleObjectHook(ObjectHookRequest) returns (ObjectHookResponse);
+}
+
+// Hook registration messages
+
+message GetObjectHookRegistrationsRequest {
+    // Empty - plugin returns its registrations
+}
+
+message GetObjectHookRegistrationsResponse {
+    repeated ObjectHookRegistration registrations = 1;
+}
+
+message ObjectHookRegistration {
+    string object_type = 1;  // "llm", "datasource", "tool", "user"
+    repeated string hook_types = 2;  // e.g., "before_create", "after_update", "before_delete"
+    int32 priority = 3;  // Execution order (lower = earlier)
+}
+
+// Hook execution messages
+
+message ObjectHookRequest {
+    string hook_type = 1;        // "before_create", "after_create", "before_update", "after_update", "before_delete", "after_delete"
+    string object_type = 2;       // "llm", "datasource", "tool", "user"
+    string operation_id = 3;      // Unique ID for this operation (for correlation)
+    uint32 user_id = 4;           // User performing the operation
+    uint32 plugin_id = 5;         // Plugin being invoked
+
+    // The object being modified/created/deleted
+    oneof object {
+        LLMObject llm = 10;
+        DatasourceObject datasource = 11;
+        ToolObject tool = 12;
+        UserObject user = 13;
+    }
+
+    // Additional context about the operation
+    map<string, string> context = 20;
+    google.protobuf.Timestamp timestamp = 21;
+}
+
+message ObjectHookResponse {
+    bool allow_operation = 1;     // Whether to proceed with operation (for "before_*" hooks)
+    string rejection_reason = 2;   // If not allowed, why (shown to user)
+
+    // Modified object (if plugin wants to transform it)
+    oneof modified_object {
+        LLMObject llm = 10;
+        DatasourceObject datasource = 11;
+        ToolObject tool = 12;
+        UserObject user = 13;
+    }
+
+    // Plugin-specific metadata to store with the object
+    map<string, string> plugin_metadata = 20;
+
+    // Additional response metadata
+    string message = 30;  // Optional message to log
+    bool modified = 31;   // Whether the plugin modified the object
+}
+
+// Object message definitions
+// These represent the serializable state of objects for hook processing
+
+message LLMObject {
+    uint32 id = 1;
+    string name = 2;
+    string api_key = 3;  // Only available in "before_create" and "before_update"
+    string api_endpoint = 4;
+    string default_model = 5;
+    int32 privacy_score = 6;
+    string short_description = 7;
+    string long_description = 8;
+    string logo_url = 9;
+    string vendor = 10;
+    bool active = 11;
+    optional double monthly_budget = 12;
+    google.protobuf.Timestamp budget_start_date = 13;
+    string namespace = 14;
+    repeated string allowed_models = 15;
+    repeated uint32 filter_ids = 16;
+    repeated uint32 plugin_ids = 17;
+    map<string, string> metadata = 18;  // Plugin-stored data
+    google.protobuf.Timestamp created_at = 19;
+    google.protobuf.Timestamp updated_at = 20;
+}
+
+message DatasourceObject {
+    uint32 id = 1;
+    string name = 2;
+    string short_description = 3;
+    string long_description = 4;
+    string icon = 5;
+    string url = 6;
+    int32 privacy_score = 7;
+    uint32 user_id = 8;
+    repeated uint32 tag_ids = 9;
+    string db_conn_string = 10;  // Excluded in some hooks for security
+    string db_source_type = 11;
+    string db_conn_api_key = 12;  // Excluded in some hooks for security
+    string db_name = 13;
+    string embed_vendor = 14;
+    string embed_url = 15;
+    string embed_api_key = 16;  // Excluded in some hooks for security
+    string embed_model = 17;
+    repeated uint32 file_ids = 18;
+    bool active = 19;
+    map<string, string> metadata = 20;  // Plugin-stored data
+    google.protobuf.Timestamp created_at = 21;
+    google.protobuf.Timestamp updated_at = 22;
+}
+
+message ToolObject {
+    uint32 id = 1;
+    string name = 2;
+    string description = 3;
+    string tool_type = 4;
+    string oas_spec = 5;  // May be truncated for large specs
+    string available_operations = 6;
+    int32 privacy_score = 7;
+    string auth_key = 8;  // Excluded in some hooks for security
+    string auth_schema_name = 9;
+    repeated uint32 file_store_ids = 10;
+    repeated uint32 filter_ids = 11;
+    repeated uint32 dependency_ids = 12;
+    repeated uint32 app_ids = 13;
+    map<string, string> metadata = 14;  // Plugin-stored data
+    google.protobuf.Timestamp created_at = 15;
+    google.protobuf.Timestamp updated_at = 16;
+}
+
+message UserObject {
+    uint32 id = 1;
+    string email = 2;
+    string name = 3;
+    string password = 4;  // Excluded in all hooks for security
+    string session_token = 5;  // Excluded in most hooks
+    string reset_token = 6;  // Excluded in most hooks
+    google.protobuf.Timestamp reset_token_expiry = 7;
+    bool email_verified = 8;
+    string verification_token = 9;  // Excluded in most hooks
+    bool is_admin = 10;
+    bool show_portal = 11;
+    bool show_chat = 12;
+    bool access_to_sso_config = 13;
+    bool skip_quick_start = 14;
+    string api_key = 15;  // Excluded in most hooks
+    bool notifications_enabled = 16;
+    repeated uint32 group_ids = 17;
+    map<string, string> metadata = 18;  // Plugin-stored data
+    google.protobuf.Timestamp created_at = 19;
+    google.protobuf.Timestamp updated_at = 20;
+}
+
+// Supported hook types (documentation)
+// - before_create: Called before object is created (can modify or reject)
+// - after_create: Called after object is created (can store metadata)
+// - before_update: Called before object is updated (can modify or reject)
+// - after_update: Called after object is updated (can store metadata)
+// - before_delete: Called before object is deleted (can reject)
+// - after_delete: Called after object is deleted (for cleanup)

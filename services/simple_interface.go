@@ -40,6 +40,7 @@ type ServiceInterface interface {
 	GetOAuthClient(clientID string) (*models.OAuthClient, error)
 
 	// App Management
+	GetAppByID(id uint) (*models.App, error)
 	GetAppByCredentialID(credID uint) (*models.App, error)
 
 	// Tool Management

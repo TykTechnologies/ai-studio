@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
-	pb "github.com/TykTechnologies/midsommar/microgateway/plugins/proto"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 )
 
 // Base gRPC server implementation
@@ -45,6 +46,39 @@ func (s *BaseGRPCServer) Shutdown(ctx context.Context, req *pb.ShutdownRequest) 
 		return &pb.ShutdownResponse{Success: false}, nil
 	}
 	return &pb.ShutdownResponse{Success: true}, nil
+}
+
+func (s *BaseGRPCServer) GetConfigSchema(ctx context.Context, req *pb.GetConfigSchemaRequest) (*pb.GetConfigSchemaResponse, error) {
+	// Check if the plugin implements ConfigSchemaProvider
+	if schemaProvider, ok := s.BaseImpl.(interfaces.ConfigSchemaProvider); ok {
+		schemaBytes, err := schemaProvider.GetConfigSchema()
+		if err != nil {
+			return &pb.GetConfigSchemaResponse{
+				Success:      false,
+				ErrorMessage: err.Error(),
+			}, nil
+		}
+
+		return &pb.GetConfigSchemaResponse{
+			Success:    true,
+			SchemaJson: string(schemaBytes),
+		}, nil
+	}
+
+	// Default implementation returns a basic schema that accepts any configuration
+	defaultSchema := `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Plugin Configuration",
+  "description": "Configuration schema for this plugin (default - plugin does not provide custom schema)",
+  "properties": {},
+  "additionalProperties": true
+}`
+
+	return &pb.GetConfigSchemaResponse{
+		Success:    true,
+		SchemaJson: defaultSchema,
+	}, nil
 }
 
 // Pre-auth plugin gRPC server
@@ -320,4 +354,78 @@ func (s *DataCollectionGRPCServer) HandleBudgetUsage(ctx context.Context, req *p
 // Helper function to convert Unix timestamp to time.Time
 func timeFromUnix(ts int64) time.Time {
 	return time.Unix(ts, 0)
+}
+
+// ConfigProviderGRPC server - Isolated service for configuration schema extraction
+type ConfigProviderGRPC struct {
+	configpb.UnimplementedConfigProviderServiceServer
+	Impl interfaces.BasePlugin
+}
+
+func (s *ConfigProviderGRPC) GetConfigSchema(ctx context.Context, req *configpb.ConfigSchemaRequest) (*configpb.ConfigSchemaResponse, error) {
+	// Check if the plugin implements ConfigSchemaProvider
+	if schemaProvider, ok := s.Impl.(interfaces.ConfigSchemaProvider); ok {
+		schemaBytes, err := schemaProvider.GetConfigSchema()
+		if err != nil {
+			return &configpb.ConfigSchemaResponse{
+				Success:      false,
+				ErrorMessage: err.Error(),
+			}, nil
+		}
+
+		return &configpb.ConfigSchemaResponse{
+			Success:    true,
+			SchemaJson: string(schemaBytes),
+		}, nil
+	}
+
+	// Default implementation returns a basic schema that accepts any configuration
+	defaultSchema := `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Plugin Configuration",
+  "description": "Configuration schema for this plugin (default - plugin does not provide custom schema)",
+  "properties": {},
+  "additionalProperties": true
+}`
+
+	return &configpb.ConfigSchemaResponse{
+		Success:    true,
+		SchemaJson: defaultSchema,
+	}, nil
+}
+
+func (s *ConfigProviderGRPC) Ping(ctx context.Context, req *configpb.ConfigPingRequest) (*configpb.ConfigPingResponse, error) {
+	return &configpb.ConfigPingResponse{
+		Timestamp: req.Timestamp,
+		Healthy:   true,
+	}, nil
+}
+
+func (s *ConfigProviderGRPC) GetManifest(ctx context.Context, req *configpb.GetManifestRequest) (*configpb.GetManifestResponse, error) {
+	// Check if the plugin implements ManifestProvider
+	type ManifestProvider interface {
+		GetManifest() ([]byte, error)
+	}
+
+	if manifestProvider, ok := s.Impl.(ManifestProvider); ok {
+		manifestBytes, err := manifestProvider.GetManifest()
+		if err != nil {
+			return &configpb.GetManifestResponse{
+				Success:      false,
+				ErrorMessage: err.Error(),
+			}, nil
+		}
+
+		return &configpb.GetManifestResponse{
+			Success:      true,
+			ManifestJson: string(manifestBytes),
+		}, nil
+	}
+
+	// Plugin doesn't provide manifest
+	return &configpb.GetManifestResponse{
+		Success:      false,
+		ErrorMessage: "plugin does not implement GetManifest",
+	}, nil
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/google/uuid"
@@ -833,6 +834,14 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedAPIKey = resolvedAPIKey // Fallback to plaintext
 		}
 		
+		// Serialize metadata to JSON string
+		var metadataJSON string
+		if llm.Metadata != nil {
+			if metadataBytes, err := json.Marshal(llm.Metadata); err == nil {
+				metadataJSON = string(metadataBytes)
+			}
+		}
+
 		pbLLM := &pb.LLMConfig{
 			Id:               uint32(llm.ID),
 			Name:             llm.Name,
@@ -847,6 +856,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			IsActive:         llm.Active,
 			MonthlyBudget:    monthlyBudget,
 			RateLimitRpm:     0,    // AI Studio doesn't have this field yet
+			Metadata:         metadataJSON,
 			Namespace:        llm.Namespace,
 			FilterIds:        filterIDs,
 			CreatedAt:        timestamppb.New(llm.CreatedAt),
@@ -884,6 +894,14 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			monthlyBudget = *app.MonthlyBudget
 		}
 		
+		// Serialize metadata to JSON string
+		var metadataJSON string
+		if app.Metadata != nil {
+			if metadataBytes, err := json.Marshal(app.Metadata); err == nil {
+				metadataJSON = string(metadataBytes)
+			}
+		}
+
 		pbApp := &pb.AppConfig{
 			Id:            uint32(app.ID),
 			Name:          app.Name,
@@ -891,6 +909,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			OwnerEmail:    "", // AI Studio doesn't have owner email field yet
 			IsActive:      app.IsActive,
 			MonthlyBudget: monthlyBudget,
+			Metadata:      metadataJSON,
 			Namespace:     app.Namespace,
 			LlmIds:        llmIDs,
 			CreatedAt:     timestamppb.New(app.CreatedAt),
@@ -1001,48 +1020,104 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		Int("found_plugins", len(plugins)).
 		Msg("Plugin query completed")
 
-	// Convert Plugins to protobuf
+	// Convert Plugins to protobuf with merged configurations for each LLM
 	for _, plugin := range plugins {
 		// Use preloaded LLM associations to avoid N+1 queries
 		llmPlugins := llmPluginMap[plugin.ID]
 		// Data is already sorted by order_index from the query
 
-		llmIDs := make([]uint32, len(llmPlugins))
-		for i, lp := range llmPlugins {
-			llmIDs[i] = uint32(lp.LLMID)
-		}
-
 		log.Debug().
 			Uint("plugin_id", plugin.ID).
 			Str("plugin_name", plugin.Name).
 			Str("hook_type", plugin.HookType).
-			Int("llm_count", len(llmIDs)).
+			Int("llm_count", len(llmPlugins)).
 			Msg("Plugin relationships embedded in sync")
-		
-		// Convert config to JSON string
-		var configJSON string
-		if plugin.Config != nil {
-			if configBytes, err := json.Marshal(plugin.Config); err == nil {
-				configJSON = string(configBytes)
+
+		// If plugin has LLM-specific configurations, create one PluginConfig per LLM association
+		// with merged configuration (base + override)
+		if len(llmPlugins) > 0 {
+			for _, llmPlugin := range llmPlugins {
+				// Merge base plugin config with LLM-specific override
+				merged, err := config.MergePluginConfigMaps(plugin.Config, llmPlugin.ConfigOverride)
+				if err != nil {
+					log.Error().Err(err).
+						Uint("plugin_id", plugin.ID).
+						Uint("llm_id", llmPlugin.LLMID).
+						Msg("Failed to merge plugin config, using base config")
+					merged = plugin.Config
+				}
+
+				// Convert merged config to JSON string
+				var mergedConfigJSON string
+				if merged != nil {
+					if configBytes, err := json.Marshal(merged); err == nil {
+						mergedConfigJSON = string(configBytes)
+					}
+				}
+
+				log.Info().
+					Uint("plugin_id", plugin.ID).
+					Str("plugin_name", plugin.Name).
+					Uint("llm_id", llmPlugin.LLMID).
+					Bool("has_override", len(llmPlugin.ConfigOverride) > 0).
+					Str("hook_type", plugin.HookType).
+					Strs("hook_types", plugin.HookTypes).
+					Int("hook_types_count", len(plugin.HookTypes)).
+					Msg("📦 Syncing plugin to edge with hook types")
+
+				pbPlugin := &pb.PluginConfig{
+					Id:           uint32(plugin.ID),
+					Name:         plugin.Name,
+					Description:  plugin.Description,
+					Command:      plugin.Command,
+					Checksum:     plugin.Checksum,
+					Config:       mergedConfigJSON, // Merged configuration for this LLM
+					HookType:     plugin.HookType,
+					HookTypes:    plugin.HookTypes, // NEW: All hook types for hybrid plugins
+					IsActive:     plugin.IsActive,
+					Namespace:    plugin.Namespace,
+					LlmIds:       []uint32{uint32(llmPlugin.LLMID)}, // Only for this specific LLM
+					ServiceScopes: plugin.ServiceScopes, // Service API scopes
+					CreatedAt:    timestamppb.New(plugin.CreatedAt),
+					UpdatedAt:    timestamppb.New(plugin.UpdatedAt),
+				}
+				snapshot.Plugins = append(snapshot.Plugins, pbPlugin)
 			}
+		} else {
+			// Plugin has no LLM associations, use base config only
+			log.Info().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Str("hook_type", plugin.HookType).
+				Strs("hook_types", plugin.HookTypes).
+				Int("hook_types_count", len(plugin.HookTypes)).
+				Msg("📦 Syncing plugin to edge (no LLM associations)")
+
+			var configJSON string
+			if plugin.Config != nil {
+				if configBytes, err := json.Marshal(plugin.Config); err == nil {
+					configJSON = string(configBytes)
+				}
+			}
+
+			pbPlugin := &pb.PluginConfig{
+				Id:           uint32(plugin.ID),
+				Name:         plugin.Name,
+				Description:  plugin.Description,
+				Command:      plugin.Command,
+				Checksum:     plugin.Checksum,
+				Config:       configJSON,
+				HookType:     plugin.HookType,
+				HookTypes:    plugin.HookTypes, // NEW: All hook types for hybrid plugins
+				IsActive:     plugin.IsActive,
+				Namespace:    plugin.Namespace,
+				LlmIds:       []uint32{}, // No LLM associations
+				ServiceScopes: plugin.ServiceScopes, // Service API scopes
+				CreatedAt:    timestamppb.New(plugin.CreatedAt),
+				UpdatedAt:    timestamppb.New(plugin.UpdatedAt),
+			}
+			snapshot.Plugins = append(snapshot.Plugins, pbPlugin)
 		}
-		
-		pbPlugin := &pb.PluginConfig{
-			Id:          uint32(plugin.ID),
-			Name:        plugin.Name,
-			Slug:        plugin.Slug,
-			Description: plugin.Description,
-			Command:     plugin.Command,
-			Checksum:    plugin.Checksum,
-			Config:      configJSON,
-			HookType:    plugin.HookType,
-			IsActive:    plugin.IsActive,
-			Namespace:   plugin.Namespace,
-			LlmIds:      llmIDs,
-			CreatedAt:   timestamppb.New(plugin.CreatedAt),
-			UpdatedAt:   timestamppb.New(plugin.UpdatedAt),
-		}
-		snapshot.Plugins = append(snapshot.Plugins, pbPlugin)
 	}
 
 	log.Info().

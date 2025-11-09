@@ -24,9 +24,13 @@ import {
   ArrowBack as BackIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Star as StarIcon,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import pluginService from '../../services/pluginService';
+import pluginService, { PluginService } from '../../services/pluginService';
+import agentService from '../../services/agentService';
+import { isAgentPlugin } from '../../constants/agentTypes';
 import {
   TitleBox,
   ContentBox,
@@ -38,9 +42,11 @@ import {
 const PluginDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
+
   const [plugin, setPlugin] = useState(null);
+  const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -50,15 +56,34 @@ const PluginDetail = () => {
   const fetchPlugin = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const result = await pluginService.getPlugin(id);
       setPlugin(result);
+
+      // If this is an agent plugin, fetch associated agents
+      if (isAgentPlugin(result)) {
+        fetchAgents();
+      }
     } catch (err) {
       console.error('Error fetching plugin:', err);
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAgents = async () => {
+    setAgentsLoading(true);
+    try {
+      // Fetch agents for this plugin
+      const result = await agentService.listAgents(1, 100);
+      const pluginAgents = result.data.filter(agent => agent.pluginId === parseInt(id));
+      setAgents(pluginAgents);
+    } catch (err) {
+      console.error('Error fetching agents:', err);
+    } finally {
+      setAgentsLoading(false);
     }
   };
 
@@ -75,6 +100,34 @@ const PluginDetail = () => {
         setError(err.message);
       }
     }
+  };
+
+  // Helper functions for hook types
+  const getAllHookTypes = (plugin) => {
+    const hookSet = new Set();
+    if (plugin.hookType) hookSet.add(plugin.hookType);
+    if (plugin.hookTypes) {
+      plugin.hookTypes.forEach(h => hookSet.add(h));
+    }
+    return Array.from(hookSet);
+  };
+
+  const getCapabilityCategory = (plugin) => {
+    const hooks = getAllHookTypes(plugin);
+    const hasGateway = hooks.some(h =>
+      ['pre_auth', 'auth', 'post_auth', 'on_response', 'data_collection'].includes(h)
+    );
+    const hasUI = hooks.includes('studio_ui');
+    const hasAgent = hooks.includes('agent');
+
+    if (hasGateway && hasUI && hasAgent) return 'Full-Stack Plugin';
+    if (hasGateway && hasUI) return 'Gateway + UI';
+    if (hasGateway && hasAgent) return 'Gateway + Agent';
+    if (hasUI && hasAgent) return 'Agent + UI';
+    if (hasGateway) return 'Gateway Plugin';
+    if (hasUI) return 'UI Extension';
+    if (hasAgent) return 'Agent Plugin';
+    return 'Uncategorized';
   };
 
   const formatTimestamp = (timestamp) => {
@@ -163,6 +216,94 @@ const PluginDetail = () => {
           </TableBody>
         </Table>
       </TableContainer>
+    );
+  };
+
+  const renderAgentAssociations = () => {
+    if (agentsLoading) {
+      return (
+        <Box display="flex" justifyContent="center" p={2}>
+          <CircularProgress size={24} />
+        </Box>
+      );
+    }
+
+    if (!agents || agents.length === 0) {
+      return (
+        <Box>
+          <Typography variant="body2" color="textSecondary" mb={2}>
+            No agent configurations using this plugin
+          </Typography>
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={() => navigate('/admin/agents/new')}
+          >
+            Create Agent
+          </Button>
+        </Box>
+      );
+    }
+
+    return (
+      <Box>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Agent Name</TableCell>
+                <TableCell>App</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {agents.map((agent) => (
+                <TableRow key={agent.id}>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight="medium">
+                      {agent.name}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color="textSecondary">
+                      {agent.app?.name || 'Unknown'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={agent.isActive ? 'Active' : 'Inactive'}
+                      size="small"
+                      color={agent.isActive ? 'success' : 'default'}
+                      variant={agent.isActive ? 'filled' : 'outlined'}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      component={Link}
+                      to={`/admin/agents/${agent.id}`}
+                      size="small"
+                      variant="outlined"
+                    >
+                      View Agent
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <Box mt={2}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => navigate('/admin/agents/new')}
+          >
+            Create Another Agent
+          </Button>
+        </Box>
+      </Box>
     );
   };
 
@@ -272,15 +413,6 @@ const PluginDetail = () => {
 
                 <Box mb={2}>
                   <Typography variant="body2" color="textSecondary">
-                    Slug
-                  </Typography>
-                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                    {plugin.slug}
-                  </Typography>
-                </Box>
-
-                <Box mb={2}>
-                  <Typography variant="body2" color="textSecondary">
                     Description
                   </Typography>
                   <Typography variant="body1">
@@ -288,16 +420,50 @@ const PluginDetail = () => {
                   </Typography>
                 </Box>
 
-                <Box mb={2}>
-                  <Typography variant="body2" color="textSecondary">
-                    Hook Type
+                <Box mb={3}>
+                  <Typography variant="h6" gutterBottom>
+                    Capabilities
                   </Typography>
-                  <Chip
-                    label={pluginService.getHookTypeLabel(plugin.hookType)}
-                    size="small"
-                    variant="outlined"
-                    color="primary"
-                  />
+
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary" gutterBottom>
+                      Category
+                    </Typography>
+                    <Chip
+                      label={getCapabilityCategory(plugin)}
+                      color="primary"
+                      sx={{ fontWeight: 'bold' }}
+                    />
+                  </Box>
+
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary" gutterBottom>
+                      Hook Types
+                    </Typography>
+                    <Box display="flex" gap={1} flexWrap="wrap">
+                      {getAllHookTypes(plugin).map(hook => (
+                        <Chip
+                          key={hook}
+                          label={PluginService.HOOK_TYPE_LABELS[hook] || hook}
+                          size="small"
+                          variant={hook === plugin.hookType ? "filled" : "outlined"}
+                          color={hook === plugin.hookType ? "primary" : "default"}
+                          icon={hook === plugin.hookType ? <StarIcon /> : null}
+                        />
+                      ))}
+                    </Box>
+                    {plugin.hookTypesCustomized && (
+                      <Box mt={1}>
+                        <Chip
+                          icon={<WarningIcon />}
+                          label="Customized (differs from manifest)"
+                          size="small"
+                          color="warning"
+                          variant="outlined"
+                        />
+                      </Box>
+                    )}
+                  </Box>
                 </Box>
 
                 <Box mb={2}>
@@ -337,15 +503,6 @@ const PluginDetail = () => {
                     borderRadius: 1
                   }}>
                     {plugin.command}
-                  </Typography>
-                </Box>
-
-                <Box mb={2}>
-                  <Typography variant="body2" color="textSecondary">
-                    Checksum
-                  </Typography>
-                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                    {plugin.checksum || 'Not specified'}
                   </Typography>
                 </Box>
 
@@ -395,6 +552,21 @@ const PluginDetail = () => {
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Agent Associations (only for agent plugins) */}
+          {isAgentPlugin(plugin) && (
+            <Grid item xs={12}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Agent Configurations
+                  </Typography>
+                  <Divider sx={{ mb: 2 }} />
+                  {renderAgentAssociations()}
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
         </Grid>
 
         <Box

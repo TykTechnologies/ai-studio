@@ -108,17 +108,18 @@ message FilterConfig {
 message PluginConfig {
   uint32 id = 1;
   string name = 2;
-  string slug = 3;
-  string description = 4;
-  string command = 5;
-  string checksum = 6;
-  string config = 7; // JSON string
-  string hook_type = 8;
-  bool is_active = 9;
-  string namespace = 10; // NEW: Namespace for filtering
-  repeated uint32 llm_ids = 11; // Associated LLM IDs
-  google.protobuf.Timestamp created_at = 12;
-  google.protobuf.Timestamp updated_at = 13;
+  string description = 3;
+  string command = 4;
+  string checksum = 5;
+  string config = 6; // JSON string
+  string hook_type = 7;
+  bool is_active = 8;
+  string namespace = 9; // NEW: Namespace for filtering
+  repeated uint32 llm_ids = 10; // Associated LLM IDs
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  repeated string service_scopes = 13; // Service API scopes (for plugins with service access)
+  repeated string hook_types = 14; // NEW: All hook types this plugin supports (for hybrid plugins)
 }
 
 // ConfigurationSnapshot represents a complete configuration state

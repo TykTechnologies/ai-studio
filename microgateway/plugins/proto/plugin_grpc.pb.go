@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: plugins/proto/plugin.proto
+// source: plugin.proto
 
 package proto
 
@@ -32,6 +32,12 @@ const (
 	PluginService_HandleProxyLog_FullMethodName       = "/plugin.PluginService/HandleProxyLog"
 	PluginService_HandleAnalytics_FullMethodName      = "/plugin.PluginService/HandleAnalytics"
 	PluginService_HandleBudgetUsage_FullMethodName    = "/plugin.PluginService/HandleBudgetUsage"
+	PluginService_GetAsset_FullMethodName             = "/plugin.PluginService/GetAsset"
+	PluginService_ListAssets_FullMethodName           = "/plugin.PluginService/ListAssets"
+	PluginService_GetManifest_FullMethodName          = "/plugin.PluginService/GetManifest"
+	PluginService_Call_FullMethodName                 = "/plugin.PluginService/Call"
+	PluginService_GetConfigSchema_FullMethodName      = "/plugin.PluginService/GetConfigSchema"
+	PluginService_HandleAgentMessage_FullMethodName   = "/plugin.PluginService/HandleAgentMessage"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -60,6 +66,16 @@ type PluginServiceClient interface {
 	HandleProxyLog(ctx context.Context, in *ProxyLogRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
 	HandleAnalytics(ctx context.Context, in *AnalyticsRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
 	HandleBudgetUsage(ctx context.Context, in *BudgetUsageRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
+	// AI Studio UI Asset serving (for AI Studio plugins only)
+	GetAsset(ctx context.Context, in *GetAssetRequest, opts ...grpc.CallOption) (*GetAssetResponse, error)
+	ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error)
+	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
+	// Generic RPC call method (for AI Studio plugins)
+	Call(ctx context.Context, in *CallRequest, opts ...grpc.CallOption) (*CallResponse, error)
+	// Configuration schema method (for both systems)
+	GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error)
+	// Agent Plugin Methods
+	HandleAgentMessage(ctx context.Context, in *AgentMessageRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentMessageChunk], error)
 }
 
 type pluginServiceClient struct {
@@ -200,6 +216,75 @@ func (c *pluginServiceClient) HandleBudgetUsage(ctx context.Context, in *BudgetU
 	return out, nil
 }
 
+func (c *pluginServiceClient) GetAsset(ctx context.Context, in *GetAssetRequest, opts ...grpc.CallOption) (*GetAssetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAssetResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetAsset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) ListAssets(ctx context.Context, in *ListAssetsRequest, opts ...grpc.CallOption) (*ListAssetsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAssetsResponse)
+	err := c.cc.Invoke(ctx, PluginService_ListAssets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetManifestResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetManifest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) Call(ctx context.Context, in *CallRequest, opts ...grpc.CallOption) (*CallResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CallResponse)
+	err := c.cc.Invoke(ctx, PluginService_Call_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetConfigSchemaResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetConfigSchema_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) HandleAgentMessage(ctx context.Context, in *AgentMessageRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentMessageChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PluginService_ServiceDesc.Streams[0], PluginService_HandleAgentMessage_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AgentMessageRequest, AgentMessageChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PluginService_HandleAgentMessageClient = grpc.ServerStreamingClient[AgentMessageChunk]
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -226,6 +311,16 @@ type PluginServiceServer interface {
 	HandleProxyLog(context.Context, *ProxyLogRequest) (*DataCollectionResponse, error)
 	HandleAnalytics(context.Context, *AnalyticsRequest) (*DataCollectionResponse, error)
 	HandleBudgetUsage(context.Context, *BudgetUsageRequest) (*DataCollectionResponse, error)
+	// AI Studio UI Asset serving (for AI Studio plugins only)
+	GetAsset(context.Context, *GetAssetRequest) (*GetAssetResponse, error)
+	ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error)
+	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
+	// Generic RPC call method (for AI Studio plugins)
+	Call(context.Context, *CallRequest) (*CallResponse, error)
+	// Configuration schema method (for both systems)
+	GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error)
+	// Agent Plugin Methods
+	HandleAgentMessage(*AgentMessageRequest, grpc.ServerStreamingServer[AgentMessageChunk]) error
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -274,6 +369,24 @@ func (UnimplementedPluginServiceServer) HandleAnalytics(context.Context, *Analyt
 }
 func (UnimplementedPluginServiceServer) HandleBudgetUsage(context.Context, *BudgetUsageRequest) (*DataCollectionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HandleBudgetUsage not implemented")
+}
+func (UnimplementedPluginServiceServer) GetAsset(context.Context, *GetAssetRequest) (*GetAssetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAsset not implemented")
+}
+func (UnimplementedPluginServiceServer) ListAssets(context.Context, *ListAssetsRequest) (*ListAssetsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListAssets not implemented")
+}
+func (UnimplementedPluginServiceServer) GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetManifest not implemented")
+}
+func (UnimplementedPluginServiceServer) Call(context.Context, *CallRequest) (*CallResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Call not implemented")
+}
+func (UnimplementedPluginServiceServer) GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetConfigSchema not implemented")
+}
+func (UnimplementedPluginServiceServer) HandleAgentMessage(*AgentMessageRequest, grpc.ServerStreamingServer[AgentMessageChunk]) error {
+	return status.Errorf(codes.Unimplemented, "method HandleAgentMessage not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -530,6 +643,107 @@ func _PluginService_HandleBudgetUsage_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_GetAsset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAssetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetAsset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetAsset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetAsset(ctx, req.(*GetAssetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_ListAssets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAssetsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).ListAssets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_ListAssets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).ListAssets(ctx, req.(*ListAssetsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_GetManifest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetManifestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetManifest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetManifest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetManifest(ctx, req.(*GetManifestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_Call_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CallRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).Call(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_Call_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).Call(ctx, req.(*CallRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_GetConfigSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetConfigSchemaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetConfigSchema(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetConfigSchema_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetConfigSchema(ctx, req.(*GetConfigSchemaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_HandleAgentMessage_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(AgentMessageRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PluginServiceServer).HandleAgentMessage(m, &grpc.GenericServerStream[AgentMessageRequest, AgentMessageChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PluginService_HandleAgentMessageServer = grpc.ServerStreamingServer[AgentMessageChunk]
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -589,7 +803,33 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "HandleBudgetUsage",
 			Handler:    _PluginService_HandleBudgetUsage_Handler,
 		},
+		{
+			MethodName: "GetAsset",
+			Handler:    _PluginService_GetAsset_Handler,
+		},
+		{
+			MethodName: "ListAssets",
+			Handler:    _PluginService_ListAssets_Handler,
+		},
+		{
+			MethodName: "GetManifest",
+			Handler:    _PluginService_GetManifest_Handler,
+		},
+		{
+			MethodName: "Call",
+			Handler:    _PluginService_Call_Handler,
+		},
+		{
+			MethodName: "GetConfigSchema",
+			Handler:    _PluginService_GetConfigSchema_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "plugins/proto/plugin.proto",
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "HandleAgentMessage",
+			Handler:       _PluginService_HandleAgentMessage_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "plugin.proto",
 }

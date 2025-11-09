@@ -30,6 +30,9 @@ type LLM struct {
 	Filters       []*Filter `json:"filters" gorm:"many2many:llm_filters;"`
 	Plugins       []*Plugin `json:"plugins" gorm:"many2many:llm_plugins;"`
 	AllowedModels []string  `json:"allowed_models" gorm:"serializer:json"`
+
+	// Plugin-stored metadata
+	Metadata JSONMap `json:"metadata" gorm:"type:json"`
 }
 
 const (

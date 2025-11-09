@@ -959,7 +959,7 @@ func (nq *NATSQueue) handleNATSMessage(msg *nats.Msg, targetChan interface{}) er
 
 		ch := targetChan.(chan error)
 		select {
-		case ch <- fmt.Errorf(errorStr):
+		case ch <- fmt.Errorf("%s", errorStr):
 		default:
 			slog.Warn("error channel full, dropping error", "session_id", nq.sessionID)
 		}

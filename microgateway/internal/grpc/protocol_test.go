@@ -98,20 +98,20 @@ func TestProtocolMessageSerialization(t *testing.T) {
 			},
 			ProxySummaries: []*pb.ProxyLogSummary{
 				{
-					AppId:               1,
-					UserId:              100,
-					Vendor:              "openai",
-					ResponseCode:        200,
-					RequestCount:        1,
-					TotalRequestBytes:   150,
-					TotalResponseBytes:  300,
-					AvgLatencyMs:        1200,
-					ErrorCount:          0,
-					FirstRequest:        timestamppb.New(past),
-					LastRequest:         timestamppb.New(now),
-					UniqueModels:        []string{"gpt-4"},
-					TotalTokens:         200,
-					TotalCost:           0.008,
+					AppId:              1,
+					UserId:             100,
+					Vendor:             "openai",
+					ResponseCode:       200,
+					RequestCount:       1,
+					TotalRequestBytes:  150,
+					TotalResponseBytes: 300,
+					AvgLatencyMs:       1200,
+					ErrorCount:         0,
+					FirstRequest:       timestamppb.New(past),
+					LastRequest:        timestamppb.New(now),
+					UniqueModels:       []string{"gpt-4"},
+					TotalTokens:        200,
+					TotalCost:          0.008,
 				},
 			},
 			IsCompressed:  true,
@@ -164,42 +164,42 @@ func TestProtocolMessageSerialization(t *testing.T) {
 			SnapshotTime:  timestamppb.Now(),
 			Llms: []*pb.LLMConfig{
 				{
-					Id:              1,
-					Name:            "Production GPT-4",
-					Slug:            "prod-gpt4",
-					Vendor:          "openai",
-					Endpoint:        "https://api.openai.com/v1",
-					DefaultModel:    "gpt-4",
-					MaxTokens:       4096,
-					TimeoutSeconds:  30,
-					RetryCount:      3,
-					IsActive:        true,
-					MonthlyBudget:   1000.0,
-					RateLimitRpm:    60,
-					Namespace:       "production",
-					CreatedAt:       timestamppb.Now(),
-					UpdatedAt:       timestamppb.Now(),
-					AppIds:          []uint32{1, 2, 3},
-					FilterIds:       []uint32{1},
-					PluginIds:       []uint32{1, 2},
+					Id:             1,
+					Name:           "Production GPT-4",
+					Slug:           "prod-gpt4",
+					Vendor:         "openai",
+					Endpoint:       "https://api.openai.com/v1",
+					DefaultModel:   "gpt-4",
+					MaxTokens:      4096,
+					TimeoutSeconds: 30,
+					RetryCount:     3,
+					IsActive:       true,
+					MonthlyBudget:  1000.0,
+					RateLimitRpm:   60,
+					Namespace:      "production",
+					CreatedAt:      timestamppb.Now(),
+					UpdatedAt:      timestamppb.Now(),
+					AppIds:         []uint32{1, 2, 3},
+					FilterIds:      []uint32{1},
+					PluginIds:      []uint32{1, 2},
 				},
 			},
 			Apps: []*pb.AppConfig{
 				{
-					Id:              1,
-					Name:            "Production App",
-					Description:     "Main production application",
-					OwnerEmail:      "admin@example.com",
-					IsActive:        true,
-					MonthlyBudget:   500.0,
-					BudgetResetDay:  1,
-					RateLimitRpm:    120,
-					Namespace:       "production",
-					CreatedAt:       timestamppb.Now(),
-					UpdatedAt:       timestamppb.Now(),
-					LlmIds:          []uint32{1},
-					CredentialIds:   []uint32{1},
-					TokenIds:        []uint32{1},
+					Id:             1,
+					Name:           "Production App",
+					Description:    "Main production application",
+					OwnerEmail:     "admin@example.com",
+					IsActive:       true,
+					MonthlyBudget:  500.0,
+					BudgetResetDay: 1,
+					RateLimitRpm:   120,
+					Namespace:      "production",
+					CreatedAt:      timestamppb.Now(),
+					UpdatedAt:      timestamppb.Now(),
+					LlmIds:         []uint32{1},
+					CredentialIds:  []uint32{1},
+					TokenIds:       []uint32{1},
 				},
 			},
 			Filters: []*pb.FilterConfig{
@@ -220,7 +220,6 @@ func TestProtocolMessageSerialization(t *testing.T) {
 				{
 					Id:          1,
 					Name:        "Analytics Plugin",
-					Slug:        "analytics",
 					Description: "Analytics collection plugin",
 					Command:     "./analytics-plugin",
 					HookType:    "analytics",
@@ -283,7 +282,6 @@ func TestProtocolMessageSerialization(t *testing.T) {
 		assert.Contains(t, filter.Script, "function filter")
 
 		plugin := deserialized.Plugins[0]
-		assert.Equal(t, "analytics", plugin.Slug)
 		assert.Equal(t, "analytics", plugin.HookType)
 
 		price := deserialized.ModelPrices[0]
@@ -302,7 +300,7 @@ func TestLargeMessageHandling(t *testing.T) {
 		for i := 0; i < 1000; i++ {
 			events[i] = &pb.AnalyticsEvent{
 				RequestId:      fmt.Sprintf("req-%d", i),
-				AppId:          uint32(i % 10 + 1), // Cycle through app IDs
+				AppId:          uint32(i%10 + 1), // Cycle through app IDs
 				LlmId:          1,
 				Endpoint:       "/chat/completions",
 				Method:         "POST",
@@ -360,16 +358,16 @@ func TestLargeMessageHandling(t *testing.T) {
 
 		for i := 0; i < 100; i++ {
 			llms[i] = &pb.LLMConfig{
-				Id:            uint32(i + 1),
-				Name:          fmt.Sprintf("LLM %d", i+1),
-				Slug:          fmt.Sprintf("llm-%d", i+1),
-				Vendor:        "openai",
-				Endpoint:      "https://api.openai.com/v1",
-				DefaultModel:  "gpt-4",
-				IsActive:      true,
-				Namespace:     fmt.Sprintf("tenant-%d", i%10),
-				CreatedAt:     timestamppb.Now(),
-				UpdatedAt:     timestamppb.Now(),
+				Id:           uint32(i + 1),
+				Name:         fmt.Sprintf("LLM %d", i+1),
+				Slug:         fmt.Sprintf("llm-%d", i+1),
+				Vendor:       "openai",
+				Endpoint:     "https://api.openai.com/v1",
+				DefaultModel: "gpt-4",
+				IsActive:     true,
+				Namespace:    fmt.Sprintf("tenant-%d", i%10),
+				CreatedAt:    timestamppb.Now(),
+				UpdatedAt:    timestamppb.Now(),
 			}
 		}
 
@@ -520,9 +518,9 @@ func TestMessageValidation_EdgeCases(t *testing.T) {
 				MemoryUsageBytes:  536870912, // 512MB
 				UptimeSeconds:     86400,     // 24 hours
 				CustomMetrics: map[string]float64{
-					"cache_hit_rate":     0.95,
-					"avg_response_time":  150.5,
-					"error_rate":         0.02,
+					"cache_hit_rate":    0.95,
+					"avg_response_time": 150.5,
+					"error_rate":        0.02,
 				},
 			},
 			Timestamp: timestamppb.Now(),
@@ -572,18 +570,18 @@ func TestMessageSizeCalculation(t *testing.T) {
 			EdgeId:         "test",
 			EdgeNamespace:  "namespace",
 			PulseTimestamp: timestamppb.New(now),
-			DataFrom:       timestamppb.New(now.Add(-1*time.Hour)),
+			DataFrom:       timestamppb.New(now.Add(-1 * time.Hour)),
 			DataTo:         timestamppb.New(now),
 			SequenceNumber: 1,
 			AnalyticsEvents: []*pb.AnalyticsEvent{
 				{
-					RequestId:      "req-1",
-					AppId:          1,
-					TotalTokens:    100,
-					Cost:           0.001,
-					Timestamp:      timestamppb.New(now),
-					RequestBody:    strings.Repeat("a", 1000),  // 1KB request
-					ResponseBody:   strings.Repeat("b", 2000),  // 2KB response
+					RequestId:    "req-1",
+					AppId:        1,
+					TotalTokens:  100,
+					Cost:         0.001,
+					Timestamp:    timestamppb.New(now),
+					RequestBody:  strings.Repeat("a", 1000), // 1KB request
+					ResponseBody: strings.Repeat("b", 2000), // 2KB response
 				},
 			},
 			TotalRecords: 1,
