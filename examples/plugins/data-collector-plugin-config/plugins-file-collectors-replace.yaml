@@ -1,0 +1,61 @@
+# Example configuration that REPLACES database storage completely
+# This configuration writes data ONLY to files, not to the database
+# Useful for high-throughput scenarios where you want to minimize database load
+#
+# Usage:
+#   export PLUGINS_CONFIG_PATH=./examples/plugins-file-collectors-replace.yaml
+#   export DATA_OUTPUT_DIR=./data/collected
+#   cd microgateway && ./bin/mgw
+
+version: "1.0"
+
+data_collection_plugins:
+  # Proxy Log Collector - REPLACES database storage
+  - name: "proxy-log-files-only"
+    path: "/Users/martinbuhr/apps/midsommar-clean/examples/plugins/gateway/file_proxy_collector/file_proxy_collector"
+    enabled: true
+    priority: 100
+    replace_database: true  # Skip database, write ONLY to files
+    hook_types:
+      - "proxy_log"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected/proxy_logs}"
+      enabled: true
+
+  # Analytics Collector - REPLACES database storage
+  - name: "analytics-files-only"
+    path: "/Users/martinbuhr/apps/midsommar-clean/examples/plugins/gateway/file_analytics_collector/file_analytics_collector"
+    enabled: true
+    priority: 200
+    replace_database: true  # Skip database, write ONLY to files
+    hook_types:
+      - "analytics"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected/analytics}"
+      enabled: true
+      format: "csv"  # CSV format for easy spreadsheet analysis
+
+  # Budget Collector - REPLACES database storage with aggregation
+  - name: "budget-files-only"
+    path: "/Users/martinbuhr/apps/midsommar-clean/examples/plugins/gateway/file_budget_collector/file_budget_collector"
+    enabled: true
+    priority: 300
+    replace_database: true  # Skip database, write ONLY to files
+    hook_types:
+      - "budget"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected/budget}"
+      enabled: true
+      format: "csv"
+      aggregate_mode: true  # Maintain running totals in budget_aggregate.json
+
+# WARNING: When replace_database is true, data will NOT be stored in the database
+# This means:
+#   - Dashboard analytics won't show this data
+#   - Budget queries from the database will return no results
+#   - You must rely entirely on file-based analysis
+#
+# Use this configuration only if:
+#   - You have external analytics/reporting tools
+#   - You need to minimize database load
+#   - You're running in a high-throughput production scenario

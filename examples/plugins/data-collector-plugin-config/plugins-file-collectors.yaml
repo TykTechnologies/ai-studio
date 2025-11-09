@@ -1,0 +1,83 @@
+# Example configuration for file-based data collection plugins
+# These plugins write analytics, proxy logs, and budget data to files instead of (or in addition to) the database
+#
+# Quick Start:
+# 1. Ensure plugins are built:
+#    cd examples/plugins/gateway/file_proxy_collector && go build -o file_proxy_collector main.go
+#    cd ../file_analytics_collector && go build -o file_analytics_collector main.go
+#    cd ../file_budget_collector && go build -o file_budget_collector main.go
+#
+# 2. Set environment variables:
+#    export PLUGINS_CONFIG_PATH=./examples/plugins-file-collectors.yaml
+#    export DATA_OUTPUT_DIR=./data/collected
+#
+# 3. Start microgateway:
+#    cd microgateway && ./bin/mgw
+#
+# 4. Check output files:
+#    ls -la ./data/collected/*/
+#    tail ./data/collected/proxy_logs/proxy_logs_$(date +%Y-%m-%d).jsonl
+
+version: "1.0"
+
+data_collection_plugins:
+  # Proxy Log Collector - Stores full request/response data
+  # Output: Daily JSONL files with request/response data
+  # File format: proxy_logs_YYYY-MM-DD.jsonl
+  - name: "proxy-log-files"
+    path: "./examples/plugins/gateway/file_proxy_collector/file_proxy_collector"
+    enabled: true
+    priority: 100
+    replace_database: false  # false = supplement database, true = replace it entirely
+    hook_types:
+      - "proxy_log"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected/proxy_logs}"
+      enabled: true
+
+  # Analytics Collector - Stores token usage and cost data
+  # Output: Daily JSONL or CSV files with token counts and costs
+  # File format: analytics_YYYY-MM-DD.jsonl or analytics_YYYY-MM-DD.csv
+  - name: "analytics-files"
+    path: "./examples/plugins/gateway/file_analytics_collector/file_analytics_collector"
+    enabled: true
+    priority: 200
+    replace_database: false  # Supplement database storage
+    hook_types:
+      - "analytics"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected/analytics}"
+      enabled: true
+      format: "jsonl"  # Options: "jsonl" or "csv"
+
+  # Budget Collector - Stores budget usage tracking
+  # Output: Daily CSV/JSONL files + optional aggregate summary
+  # File format: budget_usage_YYYY-MM-DD.csv + budget_aggregate.json
+  - name: "budget-files"
+    path: "./examples/plugins/gateway/file_budget_collector/file_budget_collector"
+    enabled: true
+    priority: 300
+    replace_database: false  # Supplement database storage
+    hook_types:
+      - "budget"
+    config:
+      output_directory: "${DATA_OUTPUT_DIR:-./data/collected/budget}"
+      enabled: true
+      format: "csv"  # Options: "csv" or "jsonl" - CSV is great for spreadsheet analysis
+      aggregate_mode: false  # true = maintain running totals per app/period in budget_aggregate.json
+
+# Additional Configuration Options:
+#
+# replace_database:
+#   - false: Write to files AND database (recommended for testing/observability)
+#   - true: Write ONLY to files, skip database (useful for high-throughput scenarios)
+#
+# priority: Controls execution order (lower numbers run first)
+#
+# format options:
+#   - "jsonl": One JSON object per line, easy to parse with jq, good for log pipelines
+#   - "csv": Standard CSV with headers, easy to import into Excel/Google Sheets
+#
+# aggregate_mode (budget collector only):
+#   - false: Simple daily logs
+#   - true: Also maintains budget_aggregate.json with running totals per app/llm/period
