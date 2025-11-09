@@ -91,3 +91,10 @@ examples/plugins/gateway/request_enricher/request-enricher
 examples/plugins/gateway/response_modifier/response-modifier
 examples/plugins/studio/hook-test-plugin/hook-test-plugin
 examples/plugins/studio/llm-validator/llm-validator
+examples/plugins/data-collectors/file-analytics-collector/file_analytics_collector
+examples/plugins/data-collectors/file-budget-collector/file_budget_collector
+examples/plugins/data-collectors/file-proxy-collector/file_proxy_collector
+examples/plugins/gateway/legacy-collectors/elasticsearch_collector/elasticsearch_collector
+examples/plugins/gateway/legacy-collectors/file_analytics_collector/file_analytics_collector
+examples/plugins/gateway/legacy-collectors/file_budget_collector/file_budget_collector
+examples/plugins/gateway/legacy-collectors/file_proxy_collector/file_proxy_collector

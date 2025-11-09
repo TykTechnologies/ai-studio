@@ -125,6 +125,124 @@ Agent plugin manifests are simpler (no UI):
 }
 ```
 
+### Object Hooks Plugins
+
+Object hooks plugins intercept CRUD operations on platform objects. These plugins use the unified SDK and register hooks programmatically, so the manifest doesn't need special hook configuration.
+
+#### Basic Object Hooks Manifest
+
+```json
+{
+  "id": "com.example.validator",
+  "name": "LLM Validator",
+  "version": "1.0.0",
+  "description": "Validates LLM configurations before saving",
+  "plugin_type": "ai_studio",
+  "permissions": {
+    "services": [
+      "llms.read",
+      "kv.readwrite"
+    ]
+  },
+  "ui": {
+    "slots": []
+  }
+}
+```
+
+**Note**: Object hooks are registered via the `GetObjectHookRegistrations()` method in the plugin code, not in the manifest. The plugin_type is `"ai_studio"` since object hooks are Studio-only.
+
+#### Hook Registration (Code, Not Manifest)
+
+Object hooks are registered programmatically:
+
+```go
+func (p *ValidatorPlugin) GetObjectHookRegistrations() ([]*pb.ObjectHookRegistration, error) {
+    return []*pb.ObjectHookRegistration{
+        {
+            ObjectType: "llm",               // llm, datasource, tool, user
+            HookTypes:  []string{            // before_create, after_create, etc.
+                "before_create",
+                "before_update",
+            },
+            Priority: 10,                    // Lower runs first
+        },
+        {
+            ObjectType: "datasource",
+            HookTypes:  []string{"before_create"},
+            Priority:   5,                   // Runs before priority 10
+        },
+    }, nil
+}
+```
+
+**Supported Objects**:
+- `llm` - LLM provider configurations
+- `datasource` - Data source connections
+- `tool` - External tool definitions
+- `user` - User accounts
+
+**Supported Hook Types** (per object):
+- `before_create` - Before object creation (can block)
+- `after_create` - After object creation (notification only)
+- `before_update` - Before object update (can block)
+- `after_update` - After object update (notification only)
+- `before_delete` - Before object deletion (can block)
+- `after_delete` - After object deletion (notification only)
+
+**Priority**: Lower numbers run first (e.g., priority 5 runs before priority 10). Use priority to control hook execution order when multiple plugins register hooks for the same object/event.
+
+#### Multi-Capability with Hooks
+
+Object hooks plugins can combine hooks with UI:
+
+```json
+{
+  "id": "com.example.approval-system",
+  "name": "Approval System",
+  "version": "1.0.0",
+  "description": "Requires approval for datasource creation",
+  "plugin_type": "ai_studio",
+  "permissions": {
+    "services": [
+      "datasources.read",
+      "kv.readwrite"
+    ]
+  },
+  "ui": {
+    "slots": [
+      {
+        "slot": "sidebar.section",
+        "label": "Approvals",
+        "items": [
+          {
+            "type": "route",
+            "path": "/admin/approvals",
+            "title": "Pending Approvals",
+            "mount": {
+              "kind": "webc",
+              "tag": "approval-dashboard",
+              "entry": "/ui/webc/approvals.js"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "rpc": {
+    "basePath": "/plugin/com.example.approval-system/rpc"
+  }
+}
+```
+
+This plugin would:
+1. Register `before_create` hooks for datasources (via code)
+2. Block creation and add to pending approvals
+3. Provide UI dashboard to approve/reject
+4. Use RPC methods for approval actions
+
+See `examples/plugins/studio/llm-validator/` and `examples/plugins/studio/hook-test-plugin/` for complete examples.
+
 ## Service Scopes Reference
 
 ### LLM Scopes

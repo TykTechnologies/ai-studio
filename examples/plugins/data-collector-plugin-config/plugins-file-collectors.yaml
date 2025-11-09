@@ -1,14 +1,14 @@
-# Example configuration for file-based data collection plugins
+# Example configuration for file-based data collection plugins (Unified SDK)
 # These plugins write analytics, proxy logs, and budget data to files instead of (or in addition to) the database
 #
 # Quick Start:
 # 1. Ensure plugins are built:
-#    cd examples/plugins/gateway/file_proxy_collector && go build -o file_proxy_collector main.go
-#    cd ../file_analytics_collector && go build -o file_analytics_collector main.go
-#    cd ../file_budget_collector && go build -o file_budget_collector main.go
+#    cd examples/plugins/unified/data-collectors/file-proxy-collector && go build -o file_proxy_collector
+#    cd ../file-analytics-collector && go build -o file_analytics_collector
+#    cd ../file-budget-collector && go build -o file_budget_collector
 #
 # 2. Set environment variables:
-#    export PLUGINS_CONFIG_PATH=./examples/plugins-file-collectors.yaml
+#    export PLUGINS_CONFIG_PATH=./examples/plugins/data-collector-plugin-config/plugins-file-collectors.yaml
 #    export DATA_OUTPUT_DIR=./data/collected
 #
 # 3. Start microgateway:
@@ -25,7 +25,7 @@ data_collection_plugins:
   # Output: Daily JSONL files with request/response data
   # File format: proxy_logs_YYYY-MM-DD.jsonl
   - name: "proxy-log-files"
-    path: "./examples/plugins/gateway/file_proxy_collector/file_proxy_collector"
+    path: "./examples/plugins/data-collectors/file-proxy-collector/file_proxy_collector"
     enabled: true
     priority: 100
     replace_database: false  # false = supplement database, true = replace it entirely
@@ -33,13 +33,13 @@ data_collection_plugins:
       - "proxy_log"
     config:
       output_directory: "${DATA_OUTPUT_DIR:-./data/collected/proxy_logs}"
-      enabled: true
+      enabled: "true"
 
   # Analytics Collector - Stores token usage and cost data
   # Output: Daily JSONL or CSV files with token counts and costs
   # File format: analytics_YYYY-MM-DD.jsonl or analytics_YYYY-MM-DD.csv
   - name: "analytics-files"
-    path: "./examples/plugins/gateway/file_analytics_collector/file_analytics_collector"
+    path: "./examples/plugins/data-collectors/file-analytics-collector/file_analytics_collector"
     enabled: true
     priority: 200
     replace_database: false  # Supplement database storage
@@ -47,14 +47,14 @@ data_collection_plugins:
       - "analytics"
     config:
       output_directory: "${DATA_OUTPUT_DIR:-./data/collected/analytics}"
-      enabled: true
+      enabled: "true"
       format: "jsonl"  # Options: "jsonl" or "csv"
 
   # Budget Collector - Stores budget usage tracking
   # Output: Daily CSV/JSONL files + optional aggregate summary
   # File format: budget_usage_YYYY-MM-DD.csv + budget_aggregate.json
   - name: "budget-files"
-    path: "./examples/plugins/gateway/file_budget_collector/file_budget_collector"
+    path: "./examples/plugins/data-collectors/file-budget-collector/file_budget_collector"
     enabled: true
     priority: 300
     replace_database: false  # Supplement database storage
@@ -62,9 +62,9 @@ data_collection_plugins:
       - "budget"
     config:
       output_directory: "${DATA_OUTPUT_DIR:-./data/collected/budget}"
-      enabled: true
+      enabled: "true"
       format: "csv"  # Options: "csv" or "jsonl" - CSV is great for spreadsheet analysis
-      aggregate_mode: false  # true = maintain running totals per app/period in budget_aggregate.json
+      aggregate_mode: "false"  # true = maintain running totals per app/period in budget_aggregate.json
 
 # Additional Configuration Options:
 #

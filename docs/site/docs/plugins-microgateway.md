@@ -1,12 +1,17 @@
 # Microgateway Plugins Guide
 
-Microgateway plugins provide middleware hooks in the LLM proxy request/response pipeline. Use them for custom authentication, request/response transformation, content filtering, and data collection to external systems.
+Microgateway plugins provide middleware hooks in the LLM proxy request/response pipeline using the **Unified Plugin SDK**. Use them for custom authentication, request/response transformation, content filtering, and data collection to external systems.
 
-## Hook Types
+All Microgateway plugins now use `pkg/plugin_sdk`, which automatically detects the Gateway runtime and provides access to universal services (KV storage, logging) and Gateway-specific services (app management, budget status).
 
-Microgateway plugins implement one of five hook types:
+## Plugin Capabilities
 
-### 1. Pre-Auth Hook (`pre_auth`)
+Microgateway plugins implement one or more of these capability interfaces:
+
+### 1. PreAuthHandler
+
+**Interface**: `PreAuthHandler`
+**Method**: `HandlePreAuth(ctx Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error)`
 
 Executes **before** authentication. Use for:
 - Request validation and early rejection
@@ -14,9 +19,12 @@ Executes **before** authentication. Use for:
 - Header modification
 - Logging and auditing
 
-**Example**: Message modifier that adds prefixes/suffixes to requests
+**Working Example**: [`examples/plugins/gateway/request_enricher/`](../../../examples/plugins/gateway/request_enricher/)
 
-### 2. Auth Hook (`auth`)
+### 2. AuthHandler
+
+**Interface**: `AuthHandler`
+**Method**: `HandleAuth(ctx Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error)`
 
 **Replaces** default token authentication. Use for:
 - Custom authentication schemes (OAuth, JWT, API keys)
@@ -24,29 +32,47 @@ Executes **before** authentication. Use for:
 - Multi-factor authentication
 - Custom authorization logic
 
-**Example**: Custom token validator, LDAP authentication
+**Note**: Unified SDK provides credential validation via `ctx.Services.Gateway().ValidateCredential()`
 
-### 3. Post-Auth Hook (`post_auth`)
+### 3. PostAuthHandler
 
-Executes **after** authentication. Use for:
+**Interface**: `PostAuthHandler`
+**Method**: `HandlePostAuth(ctx Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error)`
+
+Executes **after** authentication. Most common capability for gateway plugins. Use for:
 - Enriching requests with user-specific data
 - Per-user request transformation
 - Access control enforcement
 - Usage quota checks
 
-**Example**: User-specific rate limiting, request enrichment
+**Working Example**: [`examples/plugins/gateway/request_enricher/`](../../../examples/plugins/gateway/request_enricher/)
 
-### 4. Response Hook (`on_response`)
+### 4. ResponseHandler
 
-Modifies LLM responses before returning to client. Use for:
+**Interface**: `ResponseHandler`
+**Methods**:
+- `OnBeforeWriteHeaders(ctx Context, req *pb.ResponseWriteRequest) (*pb.ResponseWriteResponse, error)`
+- `OnBeforeWrite(ctx Context, req *pb.ResponseWriteRequest) (*pb.ResponseWriteResponse, error)`
+
+Modifies LLM responses before returning to client. Two-phase processing:
+- **OnBeforeWriteHeaders**: Modify response headers
+- **OnBeforeWrite**: Modify response body
+
+Use for:
 - Response filtering and content moderation
 - Response transformation and formatting
 - Injecting additional metadata
 - Response validation
 
-**Example**: PII redaction, response formatting
+**Working Example**: [`examples/plugins/gateway/response_modifier/`](../../../examples/plugins/gateway/response_modifier/)
 
-### 5. Data Collection Hook (`data_collection`)
+### 5. DataCollector
+
+**Interface**: `DataCollector`
+**Methods**:
+- `HandleProxyLog(ctx Context, log *pb.ProxyLogData) error`
+- `HandleAnalytics(ctx Context, analytics *pb.AnalyticsData) error`
+- `HandleBudgetUsage(ctx Context, usage *pb.BudgetUsageData) error`
 
 Intercepts data before database storage. Use for:
 - Exporting proxy logs to external systems
@@ -54,7 +80,11 @@ Intercepts data before database storage. Use for:
 - Custom budget tracking
 - Real-time monitoring and alerting
 
-**Example**: Elasticsearch collector, ClickHouse exporter, Kafka producer
+**Working Examples**:
+- [`examples/plugins/unified/data-collectors/file-analytics-collector/`](../../../examples/plugins/unified/data-collectors/file-analytics-collector/) (unified SDK)
+- [`examples/plugins/unified/data-collectors/file-budget-collector/`](../../../examples/plugins/unified/data-collectors/file-budget-collector/) (unified SDK)
+- [`examples/plugins/unified/data-collectors/file-proxy-collector/`](../../../examples/plugins/unified/data-collectors/file-proxy-collector/) (unified SDK)
+- [`examples/plugins/gateway/elasticsearch_collector/`](../../../examples/plugins/gateway/elasticsearch_collector/)
 
 ## Quick Start
 
@@ -62,194 +92,188 @@ Intercepts data before database storage. Use for:
 
 ```bash
 # Create plugin directory
-mkdir my-plugin && cd my-plugin
+mkdir my-gateway-plugin && cd my-gateway-plugin
 
 # Initialize Go module
-go mod init github.com/myorg/my-plugin
+go mod init github.com/myorg/my-gateway-plugin
 
-# Add dependencies
-go get github.com/TykTechnologies/midsommar/microgateway/plugins/sdk
+# Add unified SDK dependency
+go get github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk
 ```
 
-### 2. Implement Plugin Interface
+### 2. Implement Plugin Structure
 
-Every microgateway plugin must implement the `BasePlugin` interface:
+Use the unified SDK with `BasePlugin` convenience struct:
 
 ```go
 package main
 
 import (
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+    pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
-type MyPlugin struct {
-    config map[string]interface{}
+type MyGatewayPlugin struct {
+    plugin_sdk.BasePlugin
+    apiKey string
+}
+
+func NewMyGatewayPlugin() *MyGatewayPlugin {
+    return &MyGatewayPlugin{
+        BasePlugin: plugin_sdk.NewBasePlugin(
+            "my-gateway-plugin",
+            "1.0.0",
+            "Custom gateway middleware",
+        ),
+    }
 }
 
 // Initialize is called when plugin starts
-func (p *MyPlugin) Initialize(config map[string]interface{}) error {
-    p.config = config
+func (p *MyGatewayPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    // Parse configuration
+    p.apiKey = config["api_key"]
+
+    ctx.Services.Logger().Info("Plugin initialized",
+        "runtime", ctx.Runtime,
+    )
+
     return nil
 }
 
-// GetHookType returns the hook type
-func (p *MyPlugin) GetHookType() sdk.HookType {
-    return sdk.HookTypePreAuth // or Auth, PostAuth, OnResponse, DataCollection
-}
-
-// GetName returns plugin name
-func (p *MyPlugin) GetName() string {
-    return "my-plugin"
-}
-
-// GetVersion returns plugin version
-func (p *MyPlugin) GetVersion() string {
-    return "1.0.0"
-}
-
 // Shutdown performs cleanup
-func (p *MyPlugin) Shutdown() error {
+func (p *MyGatewayPlugin) Shutdown() error {
     return nil
 }
 
 func main() {
-    plugin := &MyPlugin{}
-    sdk.ServePlugin(plugin) // Blocks until shutdown
+    plugin_sdk.Serve(NewMyGatewayPlugin())
 }
 ```
 
-### 3. Implement Hook-Specific Interface
+### 3. Implement Capability Interfaces
 
-Depending on your hook type, implement the corresponding interface:
+Implement one or more capability interfaces based on your needs:
 
-#### PreAuthPlugin
+#### PostAuthHandler (Most Common)
 
 ```go
-func (p *MyPlugin) ProcessPreAuth(ctx context.Context,
-    req *sdk.PluginRequest,
-    pluginCtx *sdk.PluginContext) (*sdk.PluginResponse, error) {
+// Implement PostAuthHandler interface
+func (p *MyGatewayPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    // Log request
+    ctx.Services.Logger().Info("Processing request",
+        "app_id", ctx.AppID,
+        "user_id", ctx.UserID,
+        "path", req.Path,
+    )
 
-    // Modify request or reject
-    return &sdk.PluginResponse{
+    // Enrich request with custom header
+    if req.Headers == nil {
+        req.Headers = make(map[string]string)
+    }
+    req.Headers["X-Custom-Header"] = "gateway-plugin"
+    req.Headers["X-App-ID"] = fmt.Sprintf("%d", ctx.AppID)
+
+    return &pb.PluginResponse{
         Modified: true,
-        Headers: map[string]string{
-            "X-Plugin-Processed": "true",
-        },
-        Body:  req.Body,
-        Block: false, // Set to true to reject request
+        Request:  req,
     }, nil
 }
 ```
 
-#### AuthPlugin
+#### PreAuthHandler
 
 ```go
-func (p *MyPlugin) Authenticate(ctx context.Context,
-    req *sdk.AuthRequest,
-    pluginCtx *sdk.PluginContext) (*sdk.AuthResponse, error) {
-
-    // Validate credentials
-    if req.Credential == "valid-token" {
-        return &sdk.AuthResponse{
-            Authenticated: true,
-            UserID:        "user-123",
-            AppID:         "app-456",
-            Claims: map[string]string{
-                "role": "admin",
-            },
+// Implement PreAuthHandler interface
+func (p *MyGatewayPlugin) HandlePreAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    // Validate request early
+    if req.Method != "POST" {
+        return &pb.PluginResponse{
+            Block:        true,
+            ErrorMessage: "Only POST requests allowed",
         }, nil
     }
 
-    return &sdk.AuthResponse{
-        Authenticated: false,
-        ErrorMessage:  "Invalid credentials",
-    }, nil
-}
+    // Check budget before processing
+    if ctx.Runtime == plugin_sdk.RuntimeGateway {
+        status, err := ctx.Services.Gateway().GetBudgetStatus(ctx, ctx.AppID)
+        if err == nil {
+            budgetResp := status.(*gwmgmt.GetBudgetStatusResponse)
+            if budgetResp.RemainingBudget <= 0 {
+                return &pb.PluginResponse{
+                    Block:        true,
+                    ErrorMessage: "Budget exceeded",
+                }, nil
+            }
+        }
+    }
 
-func (p *MyPlugin) ValidateToken(ctx context.Context,
-    token string,
-    pluginCtx *sdk.PluginContext) (*sdk.AuthResponse, error) {
-    // Token validation logic
-    return &sdk.AuthResponse{
-        Authenticated: true,
-        UserID:        "user-123",
-    }, nil
+    return &pb.PluginResponse{Modified: false}, nil
 }
 ```
 
-#### PostAuthPlugin
+#### ResponseHandler
 
 ```go
-func (p *MyPlugin) ProcessPostAuth(ctx context.Context,
-    req *sdk.EnrichedRequest,
-    pluginCtx *sdk.PluginContext) (*sdk.PluginResponse, error) {
+// Implement ResponseHandler interface
+func (p *MyGatewayPlugin) OnBeforeWriteHeaders(ctx plugin_sdk.Context, req *pb.ResponseWriteRequest) (*pb.ResponseWriteResponse, error) {
+    // Add custom response headers
+    if req.Headers == nil {
+        req.Headers = make(map[string]string)
+    }
+    req.Headers["X-Processed-By"] = "gateway-plugin"
+    req.Headers["X-Request-ID"] = req.RequestId
 
-    // Access authenticated user info
-    userID := req.UserID
-    appID := req.AppID
-
-    // Enrich or modify request
-    return &sdk.PluginResponse{
+    return &pb.ResponseWriteResponse{
         Modified: true,
-        Body:     enrichedBody,
+        Headers:  req.Headers,
+    }, nil
+}
+
+func (p *MyGatewayPlugin) OnBeforeWrite(ctx plugin_sdk.Context, req *pb.ResponseWriteRequest) (*pb.ResponseWriteResponse, error) {
+    // Modify response body if needed
+    modifiedBody := transformResponse(req.Body)
+
+    return &pb.ResponseWriteResponse{
+        Modified: true,
+        Body:     modifiedBody,
     }, nil
 }
 ```
 
-#### ResponsePlugin
+#### DataCollector
 
 ```go
-func (p *MyPlugin) ProcessResponse(ctx context.Context,
-    req *sdk.ResponseData,
-    pluginCtx *sdk.PluginContext) (*sdk.PluginResponse, error) {
+// Implement DataCollector interface
+func (p *MyGatewayPlugin) HandleProxyLog(ctx plugin_sdk.Context, log *pb.ProxyLogData) error {
+    // Export to external system
+    ctx.Services.Logger().Debug("Proxy log received",
+        "app_id", log.AppId,
+        "vendor", log.Vendor,
+        "status", log.ResponseCode,
+    )
 
-    // Modify response
-    modifiedBody := filterContent(req.ResponseBody)
-
-    return &sdk.PluginResponse{
-        Modified:   true,
-        Body:       modifiedBody,
-        StatusCode: req.StatusCode,
-        Headers:    req.Headers,
-    }, nil
-}
-```
-
-#### DataCollectionPlugin
-
-```go
-func (p *MyPlugin) HandleProxyLog(ctx context.Context,
-    req *sdk.ProxyLogData,
-    pluginCtx *sdk.PluginContext) (*sdk.DataCollectionResponse, error) {
-
-    // Send to external system
-    err := p.sendToElasticsearch(req)
-    return &sdk.DataCollectionResponse{
-        Success: err == nil,
-        Handled: true, // Set false to also store in database
-    }, nil
+    return p.sendToElasticsearch(ctx, log)
 }
 
-func (p *MyPlugin) HandleAnalytics(ctx context.Context,
-    req *sdk.AnalyticsData,
-    pluginCtx *sdk.PluginContext) (*sdk.DataCollectionResponse, error) {
+func (p *MyGatewayPlugin) HandleAnalytics(ctx plugin_sdk.Context, analytics *pb.AnalyticsData) error {
+    // Process analytics
+    ctx.Services.Logger().Debug("Analytics received",
+        "llm_id", analytics.LlmId,
+        "tokens", analytics.TotalTokens,
+        "cost", analytics.Cost,
+    )
 
-    // Process analytics data
-    return &sdk.DataCollectionResponse{
-        Success: true,
-        Handled: true,
-    }, nil
+    return p.sendAnalytics(ctx, analytics)
 }
 
-func (p *MyPlugin) HandleBudgetUsage(ctx context.Context,
-    req *sdk.BudgetUsageData,
-    pluginCtx *sdk.PluginContext) (*sdk.DataCollectionResponse, error) {
-
+func (p *MyGatewayPlugin) HandleBudgetUsage(ctx plugin_sdk.Context, usage *pb.BudgetUsageData) error {
     // Track budget usage
-    return &sdk.DataCollectionResponse{
-        Success: true,
-        Handled: true,
-    }, nil
+    ctx.Services.Logger().Debug("Budget usage",
+        "app_id", usage.AppId,
+        "cost", usage.Cost,
+    )
+
+    return p.trackBudget(ctx, usage)
 }
 ```
 
@@ -741,8 +765,66 @@ curl -X POST http://localhost:3000/api/v1/llms/1/proxy/v1/chat/completions \
 - Monitor external service latency
 - Review resource usage (CPU, memory)
 
+## Gateway Services
+
+Gateway plugins have access to Gateway-specific services via `ctx.Services.Gateway()`:
+
+```go
+if ctx.Runtime == plugin_sdk.RuntimeGateway {
+    // Get app configuration
+    app, err := ctx.Services.Gateway().GetApp(ctx, ctx.AppID)
+
+    // Check budget status
+    status, err := ctx.Services.Gateway().GetBudgetStatus(ctx, ctx.AppID)
+
+    // Validate credentials
+    valid, err := ctx.Services.Gateway().ValidateCredential(ctx, token)
+
+    // Get LLM configuration
+    llm, err := ctx.Services.Gateway().GetLLM(ctx, llmID)
+}
+```
+
+See [Service API Reference](plugins-service-api.md) for complete Gateway Services documentation.
+
+## Working with Both Runtimes
+
+Plugins using the unified SDK can work in both Gateway and Studio:
+
+```go
+func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    // Universal services (always available)
+    ctx.Services.Logger().Info("Processing request")
+    data, _ := ctx.Services.KV().Read(ctx, "config")
+
+    // Runtime-specific logic
+    if ctx.Runtime == plugin_sdk.RuntimeGateway {
+        // Gateway-specific code
+        app, _ := ctx.Services.Gateway().GetApp(ctx, ctx.AppID)
+    } else if ctx.Runtime == plugin_sdk.RuntimeStudio {
+        // Studio-specific code
+        llms, _ := ctx.Services.Studio().ListLLMs(ctx, 1, 10)
+    }
+
+    return &pb.PluginResponse{Modified: false}, nil
+}
+```
+
+## Migration from Old SDK
+
+If you have existing plugins using the old Microgateway SDK (`microgateway/plugins/sdk`), see the [Migration Guide](plugins-migration-guide.md) for step-by-step upgrade instructions.
+
+**Key changes:**
+- Import path: `pkg/plugin_sdk` instead of `microgateway/plugins/sdk`
+- Serving: `plugin_sdk.Serve()` instead of `sdk.ServePlugin()`
+- Context-based services instead of direct API calls
+- Unified interface names (e.g., `HandlePostAuth` instead of `ProcessPostAuth`)
+
 ## Next Steps
 
-- [Plugin Deployment Options]([plugins-deployment](https://docs.claude.com/en/docs/plugins-deployment))
-- [SDK Reference]([plugins-sdk](https://docs.claude.com/en/docs/plugins-sdk))
-- [Plugin Overview]([plugins-overview](https://docs.claude.com/en/docs/plugins-overview))
+- **[Plugin SDK Reference](plugins-sdk.md)** - Complete SDK documentation
+- **[Service API Reference](plugins-service-api.md)** - Gateway Services API
+- **[Plugin Examples](plugins-examples.md)** - Browse working examples
+- **[Plugin Deployment](plugins-deployment.md)** - Deployment options
+- **[Migration Guide](plugins-migration-guide.md)** - Upgrade from old SDK
+- **[Plugin Overview](plugins-overview.md)** - All plugin types

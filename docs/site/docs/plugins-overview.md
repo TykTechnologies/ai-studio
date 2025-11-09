@@ -1,29 +1,58 @@
 # Plugin System Overview
 
-Tyk AI Studio's plugin system enables powerful extensibility across the entire platform through three distinct plugin types. Built on [HashiCorp's go-plugin](https://github.com/hashicorp/go-plugin) framework, plugins run as isolated processes with gRPC communication, providing security and fault tolerance.
+Tyk AI Studio's plugin system enables powerful extensibility across the entire platform through a **Unified Plugin SDK**. Built on [HashiCorp's go-plugin](https://github.com/hashicorp/go-plugin) framework, plugins run as isolated processes with gRPC communication, providing security and fault tolerance.
 
-## Plugin Types at a Glance
+## Unified Plugin SDK
 
-| Feature | Microgateway Plugins | AI Studio UI Plugins | AI Studio Agent Plugins |
-|---------|---------------------|---------------------|------------------------|
-| **Purpose** | Proxy middleware & data collection | Dashboard UI extensions | Conversational agents |
-| **Hook Points** | 5 request/response hooks | UI slots & routes | Agent message handling |
-| **Technology** | Go interfaces | WebComponents + gRPC | Streaming gRPC |
-| **Service API** | None | Full access | Full access |
-| **Use Cases** | Auth, filtering, analytics | Custom dashboards, admin tools | Chat-based AI agents |
-| **SDK** | `microgateway/plugins/sdk` | `pkg/ai_studio_sdk` | `pkg/ai_studio_sdk` |
+All plugins now use a single SDK (`pkg/plugin_sdk`) that works seamlessly in both AI Studio and Microgateway contexts. The SDK automatically detects the runtime environment and provides appropriate capabilities.
 
-## Microgateway Plugins
+### Key Features
 
-Microgateway plugins provide middleware hooks in the LLM proxy request/response pipeline. These plugins enable custom authentication, request modification, response filtering, and data collection.
+- **Single Import**: One SDK works everywhere
+- **10 Plugin Capabilities**: Mix and match to build exactly what you need
+- **Runtime Detection**: Automatic AI Studio vs Microgateway detection
+- **Service API Access**: Built-in KV storage, logging, and management APIs
+- **Type-Safe**: Clean Go interfaces, no manual proto handling
 
-### Hook Types
+## Plugin Capabilities
 
-1. **pre_auth**: Execute before authentication
-2. **auth**: Custom authentication logic
-3. **post_auth**: Execute after authentication
-4. **on_response**: Modify LLM responses
-5. **data_collection**: Collect proxy logs, analytics, and budget data
+Plugins implement one or more of these 10 capabilities:
+
+| Capability | Where It Works | Purpose | Common Use Cases |
+|------------|----------------|---------|------------------|
+| **Pre-Auth** | Studio + Gateway | Process before authentication | IP filtering, request validation |
+| **Auth** | Studio + Gateway | Custom authentication | OAuth, API keys, JWT validation |
+| **Post-Auth** | Studio + Gateway | Process after authentication | Request enrichment, policy enforcement |
+| **Response** | Studio + Gateway | Modify responses | Content filtering, header injection |
+| **Data Collection** | Studio + Gateway | Collect telemetry | Export to Elasticsearch, ClickHouse |
+| **Object Hooks** | Studio only | Intercept CRUD operations | Validation, approval workflows |
+| **Agent** | Studio only | Conversational AI | Chat-based agents, LLM wrapping |
+| **UI Provider** | Studio only | Dashboard extensions | Custom dashboards, admin tools |
+| **Config Provider** | Studio + Gateway | Provide JSON Schema config | Dynamic configuration |
+| **Manifest Provider** | Gateway only | Plugin manifest | Gateway-only plugins |
+
+### Multi-Capability Plugins
+
+A single plugin can implement multiple capabilities. For example, a rate limiter might:
+- Implement **Post-Auth** to check limits before request
+- Implement **Response** to update counters after response
+- Implement **UI Provider** to show rate limit dashboard
+
+## Plugin Types Overview
+
+While all plugins use the unified SDK, they generally fall into three categories based on their primary use case:
+
+## 1. Microgateway Plugins
+
+Microgateway plugins provide middleware hooks in the LLM proxy request/response pipeline using the unified SDK.
+
+### Common Capabilities
+
+- **PreAuthHandler**: Execute before authentication
+- **AuthHandler**: Custom authentication logic
+- **PostAuthHandler**: Execute after authentication (most common)
+- **ResponseHandler**: Modify LLM responses
+- **DataCollector**: Collect proxy logs, analytics, and budget data
 
 ### Common Use Cases
 
@@ -34,45 +63,52 @@ Microgateway plugins provide middleware hooks in the LLM proxy request/response 
 - Custom rate limiting logic
 - Request enrichment with metadata
 
-### Example: Custom Authentication
+### Example: Request Enrichment
 
 ```go
-type CustomAuthPlugin struct {
-    validToken string
+import "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+
+type EnrichmentPlugin struct {
+    plugin_sdk.BasePlugin
 }
 
-func (p *CustomAuthPlugin) GetHookType() sdk.HookType {
-    return sdk.HookTypeAuth
-}
-
-func (p *CustomAuthPlugin) Authenticate(ctx context.Context, req *sdk.AuthRequest,
-    pluginCtx *sdk.PluginContext) (*sdk.AuthResponse, error) {
-
-    if req.Credential == p.validToken {
-        return &sdk.AuthResponse{
-            Authenticated: true,
-            UserID:        "plugin-user",
-            AppID:         "plugin-app",
-        }, nil
+func NewEnrichmentPlugin() *EnrichmentPlugin {
+    return &EnrichmentPlugin{
+        BasePlugin: plugin_sdk.NewBasePlugin(
+            "request-enricher",
+            "1.0.0",
+            "Enriches requests with metadata",
+        ),
     }
+}
 
-    return &sdk.AuthResponse{
-        Authenticated: false,
-        ErrorMessage:  "Invalid credentials",
+// Implement PostAuthHandler capability
+func (p *EnrichmentPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    // Add custom metadata
+    req.Headers["X-Request-ID"] = generateID()
+    req.Headers["X-App-Name"] = ctx.AppName
+
+    ctx.Services.Logger().Info("Request enriched",
+        "app_id", ctx.AppID,
+        "request_id", req.Headers["X-Request-ID"],
+    )
+
+    return &pb.PluginResponse{
+        Modified: true,
+        Request:  req,
     }, nil
 }
 
 func main() {
-    plugin := &CustomAuthPlugin{validToken: "secret"}
-    sdk.ServePlugin(plugin)
+    plugin_sdk.Serve(NewEnrichmentPlugin())
 }
 ```
 
-[Learn more →]([plugins-microgateway](https://docs.claude.com/en/docs/plugins-microgateway))
+[Learn more →](plugins-microgateway.md)
 
-## AI Studio UI Plugins
+## 2. AI Studio UI Plugins
 
-AI Studio UI plugins extend the dashboard with custom WebComponents, adding new pages, sidebars, and interactive features to the admin interface.
+AI Studio UI plugins extend the dashboard with custom WebComponents, adding new pages, sidebars, and interactive features to the admin interface. These also use the unified SDK and can combine UI capabilities with middleware hooks.
 
 ### Capabilities
 
@@ -112,11 +148,11 @@ AI Studio UI plugins extend the dashboard with custom WebComponents, adding new 
 }
 ```
 
-[Learn more →]([plugins-studio-ui](https://docs.claude.com/en/docs/plugins-studio-ui))
+[Learn more →](plugins-studio-ui.md)
 
-## AI Studio Agent Plugins
+## 3. AI Studio Agent Plugins
 
-Agent plugins enable conversational AI experiences in the Chat Interface. These plugins can wrap LLMs, add custom logic, integrate external services, and create sophisticated multi-turn conversations.
+Agent plugins enable conversational AI experiences in the Chat Interface using the unified SDK. These plugins can wrap LLMs, add custom logic, integrate external services, and create sophisticated multi-turn conversations.
 
 ### Capabilities
 
@@ -129,17 +165,32 @@ Agent plugins enable conversational AI experiences in the Chat Interface. These 
 ### Example: Echo Agent
 
 ```go
+import "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+
 type EchoAgentPlugin struct {
-    serviceAPI mgmt.AIStudioManagementServiceClient
-    prefix     string
-    suffix     string
+    plugin_sdk.BasePlugin
+    prefix string
+    suffix string
 }
 
+func NewEchoAgentPlugin() *EchoAgentPlugin {
+    return &EchoAgentPlugin{
+        BasePlugin: plugin_sdk.NewBasePlugin(
+            "echo-agent",
+            "1.0.0",
+            "Wraps LLM responses with prefix/suffix",
+        ),
+        prefix: "[AGENT] ",
+        suffix: " [/AGENT]",
+    }
+}
+
+// Implement AgentPlugin capability
 func (p *EchoAgentPlugin) HandleAgentMessage(
     req *pb.AgentMessageRequest,
     stream pb.PluginService_HandleAgentMessageServer) error {
 
-    // Call LLM via SDK
+    // Call LLM via Service API
     llmStream, err := ai_studio_sdk.CallLLM(
         stream.Context(),
         req.AvailableLlms[0].Id,
@@ -148,7 +199,7 @@ func (p *EchoAgentPlugin) HandleAgentMessage(
         0.7, 1000, nil, false,
     )
 
-    // Stream wrapped response
+    // Receive and wrap response
     var llmContent string
     for {
         resp, err := llmStream.Recv()
@@ -158,17 +209,16 @@ func (p *EchoAgentPlugin) HandleAgentMessage(
         llmContent += resp.Content
     }
 
-    wrappedContent := fmt.Sprintf("%s %s %s", p.prefix, llmContent, p.suffix)
+    wrappedContent := fmt.Sprintf("%s%s%s", p.prefix, llmContent, p.suffix)
 
+    // Stream back to user
     stream.Send(&pb.AgentMessageChunk{
         Type:    pb.AgentMessageChunk_CONTENT,
         Content: wrappedContent,
-        IsFinal: false,
     })
 
     stream.Send(&pb.AgentMessageChunk{
         Type:    pb.AgentMessageChunk_DONE,
-        Content: "completed",
         IsFinal: true,
     })
 
@@ -176,12 +226,92 @@ func (p *EchoAgentPlugin) HandleAgentMessage(
 }
 
 func main() {
-    plugin := &EchoAgentPlugin{}
-    ai_studio_sdk.ServeAgentPlugin(plugin)
+    plugin_sdk.Serve(NewEchoAgentPlugin())
 }
 ```
 
-[Learn more →]([plugins-studio-agent](https://docs.claude.com/en/docs/plugins-studio-agent))
+[Learn more →](plugins-studio-agent.md)
+
+## 4. Object Hooks Plugins
+
+**Object Hooks** are a powerful AI Studio-only capability that allows plugins to intercept and control CRUD operations on key objects before they reach the database. This is particularly useful for validation, approval workflows, and policy enforcement.
+
+### Supported Objects
+
+Object hooks work with four core object types:
+- **llm**: LLM provider configurations
+- **datasource**: Data source connections
+- **tool**: External tool definitions
+- **user**: User accounts
+
+### Hook Types
+
+Each object supports six lifecycle hooks:
+- **before_create**: Validate/modify before creation (can block)
+- **after_create**: Notification after creation
+- **before_update**: Validate/modify before update (can block)
+- **after_update**: Notification after update
+- **before_delete**: Prevent deletion if needed (can block)
+- **after_delete**: Cleanup after deletion
+
+### Common Use Cases
+
+- **Validation**: Enforce HTTPS endpoints, naming conventions, privacy scores
+- **Approval Workflows**: Require manager approval for datasource creation
+- **Policy Enforcement**: Block vendors, check compliance requirements
+- **External Integration**: Sync with LDAP, ticketing systems, CMDBs
+- **Audit Trails**: Log all changes with detailed metadata
+- **Auto-Enrichment**: Add default values, tags, or metadata
+
+### Example: LLM Validator
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+
+type LLMValidatorPlugin struct {
+    plugin_sdk.BasePlugin
+}
+
+// Register hooks
+func (p *LLMValidatorPlugin) GetObjectHookRegistrations() ([]*pb.ObjectHookRegistration, error) {
+    return []*pb.ObjectHookRegistration{
+        {
+            ObjectType: "llm",
+            HookTypes:  []string{"before_create", "before_update"},
+            Priority:   10, // Lower runs first
+        },
+    }, nil
+}
+
+// Handle hook invocation
+func (p *LLMValidatorPlugin) HandleObjectHook(ctx plugin_sdk.Context, req *pb.ObjectHookRequest) (*pb.ObjectHookResponse, error) {
+    var llm LLM
+    json.Unmarshal([]byte(req.ObjectJson), &llm)
+
+    // Enforce HTTPS
+    if !strings.HasPrefix(llm.APIEndpoint, "https://") {
+        return &pb.ObjectHookResponse{
+            AllowOperation:  false,
+            RejectionReason: "API endpoint must use HTTPS",
+        }, nil
+    }
+
+    // Allow with validation metadata
+    return &pb.ObjectHookResponse{
+        AllowOperation: true,
+        PluginMetadata: map[string]string{
+            "validated_by": "llm-validator",
+            "validated_at": time.Now().Format(time.RFC3339),
+        },
+    }, nil
+}
+
+func main() {
+    plugin_sdk.Serve(NewLLMValidatorPlugin())
+}
+```
+
+[Learn more →](plugins-object-hooks.md)
 
 ## Plugin Architecture
 
@@ -308,20 +438,33 @@ Permissions are validated when plugins call the Service API. The platform enforc
 
 ### SDK Installation
 
-```go
-import (
-    // Microgateway plugins
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+All plugins use the unified SDK:
 
-    // AI Studio plugins
-    "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
-)
+```bash
+go get github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk
 ```
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+
+type MyPlugin struct {
+    plugin_sdk.BasePlugin
+}
+
+func main() {
+    plugin_sdk.Serve(NewMyPlugin())
+}
+```
+
+**Note**: If you have existing plugins using the old SDKs (`microgateway/plugins/sdk` or `pkg/ai_studio_sdk`), see the [Migration Guide](plugins-migration-guide.md) for upgrade instructions.
 
 ## Next Steps
 
-- [Microgateway Plugins Guide]([plugins-microgateway](https://docs.claude.com/en/docs/plugins-microgateway))
-- [AI Studio UI Plugins Guide]([plugins-studio-ui](https://docs.claude.com/en/docs/plugins-studio-ui))
-- [AI Studio Agent Plugins Guide]([plugins-studio-agent](https://docs.claude.com/en/docs/plugins-studio-agent))
-- [SDK Reference]([plugins-sdk](https://docs.claude.com/en/docs/plugins-sdk))
-- [Service API Reference]([plugins-service-api](https://docs.claude.com/en/docs/plugins-service-api))
+- **[Plugin SDK Reference](plugins-sdk.md)** - Complete SDK documentation
+- **[Object Hooks Guide](plugins-object-hooks.md)** - Intercept CRUD operations
+- **[Microgateway Plugins Guide](plugins-microgateway.md)** - Gateway-specific patterns
+- **[AI Studio UI Plugins Guide](plugins-studio-ui.md)** - Build plugin UIs
+- **[AI Studio Agent Plugins Guide](plugins-studio-agent.md)** - Build conversational agents
+- **[Service API Reference](plugins-service-api.md)** - Complete API documentation
+- **[Plugin Examples](plugins-examples.md)** - Browse working examples
+- **[Migration Guide](plugins-migration-guide.md)** - Upgrade from old SDKs

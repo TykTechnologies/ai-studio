@@ -1,17 +1,113 @@
 # AI Studio Agent Plugins Guide
 
-AI Studio Agent plugins enable conversational AI experiences in the Chat Interface. Build custom agents that wrap LLMs, add specialized logic, integrate external services, and create sophisticated multi-turn conversations with streaming responses.
+AI Studio Agent plugins enable conversational AI experiences in the Chat Interface using the **Unified Plugin SDK**. Build custom agents that wrap LLMs, add specialized logic, integrate external services, and create sophisticated multi-turn conversations with streaming responses.
+
+Agent plugins use the same `pkg/plugin_sdk` as other plugin types, automatically detecting the Studio runtime and providing access to Studio Services (LLM calls, tool execution, datasource queries).
 
 ## Overview
 
 Agent plugins enable you to:
 
 - **Stream Responses**: Real-time server-streaming for interactive conversations
-- **Call LLMs**: Access managed LLMs via SDK with automatic authentication
+- **Call LLMs**: Access managed LLMs via Context Services or direct SDK calls
 - **Execute Tools**: Run registered tools and integrate external services
 - **Query Datasources**: Access configured datasources for RAG and context
 - **Maintain Context**: Access full conversation history
 - **Custom Configuration**: Per-agent config with JSON schema validation
+- **Universal Services**: KV storage and logging via Context.Services
+
+## Unified SDK Integration
+
+Agent plugins use the **Unified Plugin SDK** (`pkg/plugin_sdk`), just like all other plugin types. Key patterns:
+
+### Import and Structure
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+
+type MyAgentPlugin struct {
+    plugin_sdk.BasePlugin
+}
+
+func NewMyAgentPlugin() *MyAgentPlugin {
+    return &MyAgentPlugin{
+        BasePlugin: plugin_sdk.NewBasePlugin(
+            "my-agent", "1.0.0", "Description",
+        ),
+    }
+}
+```
+
+### Lifecycle Methods
+
+```go
+// Initialize - called when plugin starts
+func (p *MyAgentPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    // Extract broker ID for Service API calls
+    if brokerIDStr, ok := config["_service_broker_id"]; ok {
+        var brokerID uint32
+        fmt.Sscanf(brokerIDStr, "%d", &brokerID)
+        ai_studio_sdk.SetServiceBrokerID(brokerID)
+    }
+    return nil
+}
+
+// Shutdown - called when plugin stops
+func (p *MyAgentPlugin) Shutdown(ctx plugin_sdk.Context) error {
+    return nil
+}
+```
+
+### Agent Capability
+
+Implement the `AgentPlugin` capability:
+
+```go
+// HandleAgentMessage processes incoming messages and streams responses
+func (p *MyAgentPlugin) HandleAgentMessage(
+    req *pb.AgentMessageRequest,
+    stream pb.PluginService_HandleAgentMessageServer) error {
+
+    // Stream chunks to user
+    stream.Send(&pb.AgentMessageChunk{
+        Type:    pb.AgentMessageChunk_CONTENT,
+        Content: "Hello!",
+        IsFinal: false,
+    })
+
+    stream.Send(&pb.AgentMessageChunk{
+        Type:    pb.AgentMessageChunk_DONE,
+        IsFinal: true,
+    })
+
+    return nil
+}
+```
+
+### Serving the Plugin
+
+```go
+func main() {
+    plugin_sdk.Serve(NewMyAgentPlugin())
+}
+```
+
+### Service API Access
+
+Agent plugins can call LLMs, execute tools, and query datasources via the `ai_studio_sdk` helper functions (requires broker ID):
+
+```go
+// Call LLM
+llmStream, err := ai_studio_sdk.CallLLM(
+    ctx, llmID, model, messages, temperature, maxTokens, tools, stream,
+)
+
+// Execute tool
+result, err := ai_studio_sdk.ExecuteTool(ctx, toolID, operation, params)
+
+// Query datasource
+result, err := ai_studio_sdk.QueryDatasource(ctx, dsID, query)
+```
 
 ## Quick Start
 
@@ -64,6 +160,7 @@ import (
     "log"
 
     "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
     pb "github.com/TykTechnologies/midsommar/v2/proto"
     mgmt "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 )
@@ -75,23 +172,43 @@ var manifestFile []byte
 var configSchemaFile []byte
 
 type MyAgent struct {
-    serviceAPI mgmt.AIStudioManagementServiceClient
-    pluginID   uint32
+    plugin_sdk.BasePlugin
 }
 
-// OnInitialize is called when plugin starts
-func (p *MyAgent) OnInitialize(
-    serviceAPI mgmt.AIStudioManagementServiceClient,
-    pluginID uint32) error {
+func NewMyAgent() *MyAgent {
+    return &MyAgent{
+        BasePlugin: plugin_sdk.NewBasePlugin(
+            "my-agent",
+            "1.0.0",
+            "Custom conversational agent",
+        ),
+    }
+}
 
-    log.Printf("My Agent initializing with plugin ID %d", pluginID)
-    p.serviceAPI = serviceAPI
-    p.pluginID = pluginID
+// Initialize is called when plugin starts
+func (p *MyAgent) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    log.Printf("My Agent initializing")
+
+    // Extract broker ID for Service API access
+    brokerIDStr := ""
+    if id, ok := config["_service_broker_id"]; ok {
+        brokerIDStr = id
+    } else if id, ok := config["service_broker_id"]; ok {
+        brokerIDStr = id
+    }
+
+    if brokerIDStr != "" {
+        var brokerID uint32
+        fmt.Sscanf(brokerIDStr, "%d", &brokerID)
+        ai_studio_sdk.SetServiceBrokerID(brokerID)
+        log.Printf("My Agent: Set broker ID %d for Service API", brokerID)
+    }
+
     return nil
 }
 
-// OnShutdown is called when plugin stops
-func (p *MyAgent) OnShutdown() error {
+// Shutdown is called when plugin stops
+func (p *MyAgent) Shutdown(ctx plugin_sdk.Context) error {
     log.Printf("My Agent shutting down")
     return nil
 }
@@ -218,8 +335,7 @@ func buildMessages(history []*pb.AgentConversationMessage, userMessage string) [
 
 func main() {
     log.Printf("Starting My Agent")
-    agent := &MyAgent{}
-    ai_studio_sdk.ServeAgentPlugin(agent)
+    plugin_sdk.Serve(NewMyAgent())
 }
 ```
 
@@ -430,6 +546,7 @@ import (
     "log"
 
     "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
     pb "github.com/TykTechnologies/midsommar/v2/proto"
     mgmt "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 )
@@ -441,8 +558,7 @@ var manifestFile []byte
 var configSchemaFile []byte
 
 type EchoAgentPlugin struct {
-    serviceAPI      mgmt.AIStudioManagementServiceClient
-    pluginID        uint32
+    plugin_sdk.BasePlugin
     prefix          string
     suffix          string
     includeMetadata bool
@@ -454,24 +570,42 @@ type Config struct {
     IncludeMetadata bool   `json:"include_metadata"`
 }
 
-func (p *EchoAgentPlugin) OnInitialize(
-    serviceAPI mgmt.AIStudioManagementServiceClient,
-    pluginID uint32) error {
+func NewEchoAgentPlugin() *EchoAgentPlugin {
+    return &EchoAgentPlugin{
+        BasePlugin: plugin_sdk.NewBasePlugin(
+            "echo-agent",
+            "1.0.0",
+            "Wraps LLM responses with prefix/suffix",
+        ),
+        prefix:          "<<",
+        suffix:          ">>",
+        includeMetadata: false,
+    }
+}
 
-    log.Printf("EchoAgent: Initialize called with plugin ID %d", pluginID)
-    p.serviceAPI = serviceAPI
-    p.pluginID = pluginID
+func (p *EchoAgentPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    log.Printf("EchoAgent: Initialize called")
 
-    // Set defaults
-    p.prefix = "<<"
-    p.suffix = ">>"
-    p.includeMetadata = false
+    // Extract broker ID for Service API access
+    brokerIDStr := ""
+    if id, ok := config["_service_broker_id"]; ok {
+        brokerIDStr = id
+    } else if id, ok := config["service_broker_id"]; ok {
+        brokerIDStr = id
+    }
+
+    if brokerIDStr != "" {
+        var brokerID uint32
+        fmt.Sscanf(brokerIDStr, "%d", &brokerID)
+        ai_studio_sdk.SetServiceBrokerID(brokerID)
+        log.Printf("EchoAgent: Set broker ID %d for Service API", brokerID)
+    }
 
     log.Println("✅ EchoAgent: Initialized successfully")
     return nil
 }
 
-func (p *EchoAgentPlugin) OnShutdown() error {
+func (p *EchoAgentPlugin) Shutdown(ctx plugin_sdk.Context) error {
     log.Println("EchoAgent: Shutdown called")
     return nil
 }
@@ -668,8 +802,7 @@ func (p *EchoAgentPlugin) callLLM(
 
 func main() {
     log.Printf("🤖 Starting Echo Agent Plugin")
-    agent := &EchoAgentPlugin{}
-    ai_studio_sdk.ServeAgentPlugin(agent)
+    plugin_sdk.Serve(NewEchoAgentPlugin())
 }
 ```
 

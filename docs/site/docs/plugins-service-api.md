@@ -1,67 +1,228 @@
 # Service API Reference
 
-The Service API provides 100+ gRPC operations for AI Studio plugins to interact with the platform. Access is controlled via permission scopes declared in the plugin manifest.
+The Service API provides rich management capabilities for plugins to interact with the platform. Access is available through the **Unified Plugin SDK** via the `Context.Services` interface.
 
 ## Overview
 
-The Service API is available to:
-- **AI Studio UI Plugins**: Full access to manage platform resources
-- **AI Studio Agent Plugins**: Access to LLMs, tools, datasources for conversational AI
-- **Microgateway Plugins**: No Service API access (stateless middleware)
+Service API access is available to all plugins using the unified SDK (`pkg/plugin_sdk`), with different capabilities depending on the runtime:
 
-## Authentication
+### Universal Services (Both Runtimes)
+- **KV Storage**: Key-value storage (PostgreSQL in Studio, local DB in Gateway)
+- **Logger**: Structured logging
 
-Service API calls are authenticated via plugin context and broker ID:
+### Runtime-Specific Services
+- **Gateway Services**: App management, LLM info, budget status, credential validation
+- **Studio Services**: Full management API (LLMs, tools, apps, filters, tags, CallLLM)
+
+## Access Pattern
+
+All services are accessed through the `Context.Services` interface provided to your plugin handlers:
 
 ```go
-// Automatically handled by SDK
-llmsResp, err := ai_studio_sdk.ListLLMs(ctx, 1, 10)
+func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    // Universal services
+    ctx.Services.Logger().Info("Processing request", "app_id", ctx.AppID)
+    data, err := ctx.Services.KV().Read(ctx, "my-key")
+
+    // Runtime-specific services
+    if ctx.Runtime == plugin_sdk.RuntimeStudio {
+        llms, err := ctx.Services.Studio().ListLLMs(ctx, 1, 10)
+    } else if ctx.Runtime == plugin_sdk.RuntimeGateway {
+        app, err := ctx.Services.Gateway().GetApp(ctx, ctx.AppID)
+    }
+
+    return &pb.PluginResponse{Modified: false}, nil
+}
 ```
 
-The SDK manages authentication via the gRPC broker pattern. Ensure your plugin declares required scopes in its manifest.
+## Initialization
 
-## LLM Operations
+For Service API access, plugins must extract the broker ID during initialization:
+
+```go
+func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    // Extract broker ID for Service API access
+    brokerIDStr := ""
+    if id, ok := config["_service_broker_id"]; ok {
+        brokerIDStr = id
+    } else if id, ok := config["service_broker_id"]; ok {
+        brokerIDStr = id
+    }
+
+    if brokerIDStr != "" {
+        var brokerID uint32
+        fmt.Sscanf(brokerIDStr, "%d", &brokerID)
+        ai_studio_sdk.SetServiceBrokerID(brokerID)
+    }
+
+    return nil
+}
+```
+
+## Universal Services
+
+These services are available in both Studio and Gateway runtimes.
+
+### KV Storage
+
+Key-value storage for plugin data:
+- **Studio**: PostgreSQL-backed, shared across hosts, durable
+- **Gateway**: Local database, per-instance, ephemeral
+
+#### Write Data
+
+```go
+err := ctx.Services.KV().Write(ctx, "my-key", []byte("value"))
+```
+
+Returns error if write fails.
+
+Example:
+```go
+settings := map[string]interface{}{
+    "enabled": true,
+    "rate_limit": 100,
+}
+
+data, _ := json.Marshal(settings)
+err := ctx.Services.KV().Write(ctx, "settings", data)
+if err != nil {
+    ctx.Services.Logger().Error("Failed to write settings", "error", err)
+}
+```
+
+#### Read Data
+
+```go
+data, err := ctx.Services.KV().Read(ctx, "my-key")
+```
+
+Returns error if key doesn't exist.
+
+Example:
+```go
+data, err := ctx.Services.KV().Read(ctx, "settings")
+if err != nil {
+    ctx.Services.Logger().Warn("Settings not found", "error", err)
+    // Use defaults
+}
+
+var settings map[string]interface{}
+json.Unmarshal(data, &settings)
+```
+
+#### Delete Data
+
+```go
+err := ctx.Services.KV().Delete(ctx, "my-key")
+```
+
+Example:
+```go
+err := ctx.Services.KV().Delete(ctx, "cache:user:123")
+if err != nil {
+    ctx.Services.Logger().Error("Failed to delete cache", "error", err)
+}
+```
+
+#### List Keys
+
+```go
+keys, err := ctx.Services.KV().List(ctx, "prefix")
+```
+
+Example:
+```go
+keys, err := ctx.Services.KV().List(ctx, "cache:")
+if err != nil {
+    return err
+}
+
+for _, key := range keys {
+    ctx.Services.Logger().Debug("Found key", "key", key)
+}
+```
+
+### Logger
+
+Structured logging with key-value pairs:
+
+```go
+ctx.Services.Logger().Info("Message", "key", "value")
+ctx.Services.Logger().Warn("Warning", "error", err)
+ctx.Services.Logger().Error("Error", "details", details)
+ctx.Services.Logger().Debug("Debug info", "data", data)
+```
+
+Example:
+```go
+func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    ctx.Services.Logger().Info("Request received",
+        "app_id", ctx.AppID,
+        "user_id", ctx.UserID,
+        "path", req.Path,
+        "method", req.Method,
+    )
+
+    // Process request...
+
+    ctx.Services.Logger().Info("Request processed",
+        "app_id", ctx.AppID,
+        "duration_ms", time.Since(startTime).Milliseconds(),
+    )
+
+    return &pb.PluginResponse{Modified: false}, nil
+}
+```
+
+## Studio Services
+
+Available when `ctx.Runtime == plugin_sdk.RuntimeStudio`.
+
+### LLM Operations
 
 Requires: `llms.read`, `llms.write`, or `llms.proxy` scope
 
-### List LLMs
+#### List LLMs
 
 ```go
-func ListLLMs(ctx context.Context, page, limit int32) (*mgmtpb.ListLLMsResponse, error)
+llms, err := ctx.Services.Studio().ListLLMs(ctx, page, limit)
 ```
 
-Example:
+**Alternative** (direct SDK call):
 ```go
 llmsResp, err := ai_studio_sdk.ListLLMs(ctx, 1, 10)
-if err != nil {
-    return err
-}
-
-for _, llm := range llmsResp.Llms {
-    log.Printf("LLM: %s - %s %s", llm.Name, llm.Vendor, llm.DefaultModel)
-}
-```
-
-Response fields:
-- `Llms`: Array of LLM objects
-- `TotalCount`: Total number of LLMs
-- `Page`: Current page
-- `Limit`: Page size
-
-### Get LLM by ID
-
-```go
-func GetLLM(ctx context.Context, llmID uint32) (*mgmtpb.LLM, error)
 ```
 
 Example:
 ```go
-llm, err := ai_studio_sdk.GetLLM(ctx, 1)
-if err != nil {
-    return err
-}
+if ctx.Runtime == plugin_sdk.RuntimeStudio {
+    llms, err := ctx.Services.Studio().ListLLMs(ctx, 1, 10)
+    if err != nil {
+        return err
+    }
 
-log.Printf("LLM %s uses %s %s", llm.Name, llm.Vendor, llm.DefaultModel)
+    // Type assert the response
+    llmsResp := llms.(*studiomgmt.ListLLMsResponse)
+    for _, llm := range llmsResp.Llms {
+        ctx.Services.Logger().Info("LLM found",
+            "name", llm.Name,
+            "vendor", llm.Vendor,
+            "model", llm.DefaultModel,
+        )
+    }
+}
+```
+
+#### Get LLM
+
+```go
+llm, err := ctx.Services.Studio().GetLLM(ctx, llmID)
+```
+
+**Alternative** (direct SDK call):
+```go
+llm, err := ai_studio_sdk.GetLLM(ctx, 1)
 ```
 
 ### Call LLM (Streaming)
@@ -146,7 +307,120 @@ if err != nil {
 log.Printf("Total LLMs: %d", count)
 ```
 
-## Tool Operations
+**Note**: For complete Studio Services documentation including Tools, Apps, Plugins, Datasources, and Filters, see the examples in the working plugins at `examples/plugins/studio/service-api-test/`.
+
+## Gateway Services
+
+Available when `ctx.Runtime == plugin_sdk.RuntimeGateway`.
+
+Gateway Services provide read-only access to essential gateway information.
+
+### Get App
+
+```go
+app, err := ctx.Services.Gateway().GetApp(ctx, appID)
+```
+
+Returns app configuration. Type assert to `*gwmgmt.GetAppResponse`.
+
+Example:
+```go
+if ctx.Runtime == plugin_sdk.RuntimeGateway {
+    app, err := ctx.Services.Gateway().GetApp(ctx, ctx.AppID)
+    if err != nil {
+        ctx.Services.Logger().Error("Failed to get app", "error", err)
+        return &pb.PluginResponse{Modified: false}, nil
+    }
+
+    appResp := app.(*gwmgmt.GetAppResponse)
+    ctx.Services.Logger().Info("Processing request for app",
+        "app_name", appResp.Name,
+        "llm_count", len(appResp.Llms),
+    )
+}
+```
+
+### List Apps
+
+```go
+apps, err := ctx.Services.Gateway().ListApps(ctx)
+```
+
+Returns all apps accessible to the gateway. Type assert to `*gwmgmt.ListAppsResponse`.
+
+### Get LLM
+
+```go
+llm, err := ctx.Services.Gateway().GetLLM(ctx, llmID)
+```
+
+Returns LLM configuration. Type assert to `*gwmgmt.GetLLMResponse`.
+
+### List LLMs
+
+```go
+llms, err := ctx.Services.Gateway().ListLLMs(ctx)
+```
+
+Returns all LLMs configured for the gateway. Type assert to `*gwmgmt.ListLLMsResponse`.
+
+### Get Budget Status
+
+```go
+status, err := ctx.Services.Gateway().GetBudgetStatus(ctx, appID)
+```
+
+Returns current budget status for an app. Type assert to `*gwmgmt.GetBudgetStatusResponse`.
+
+Example:
+```go
+if ctx.Runtime == plugin_sdk.RuntimeGateway {
+    status, err := ctx.Services.Gateway().GetBudgetStatus(ctx, ctx.AppID)
+    if err != nil {
+        ctx.Services.Logger().Error("Failed to get budget", "error", err)
+        return &pb.PluginResponse{Modified: false}, nil
+    }
+
+    budgetResp := status.(*gwmgmt.GetBudgetStatusResponse)
+    if budgetResp.RemainingBudget <= 0 {
+        return &pb.PluginResponse{
+            Block:        true,
+            ErrorMessage: "Budget exceeded",
+        }, nil
+    }
+}
+```
+
+### Get Model Price
+
+```go
+price, err := ctx.Services.Gateway().GetModelPrice(ctx, vendor, model)
+```
+
+Returns pricing information for a model. Type assert to `*gwmgmt.GetModelPriceResponse`.
+
+### Validate Credential
+
+```go
+valid, err := ctx.Services.Gateway().ValidateCredential(ctx, token)
+```
+
+Validates a credential token. Type assert to `*gwmgmt.ValidateCredentialResponse`.
+
+Example:
+```go
+if ctx.Runtime == plugin_sdk.RuntimeGateway {
+    valid, err := ctx.Services.Gateway().ValidateCredential(ctx, req.Headers["Authorization"])
+    if err != nil || !valid.(*gwmgmt.ValidateCredentialResponse).Valid {
+        return &pb.PluginResponse{
+            Block:        true,
+            ErrorMessage: "Invalid credentials",
+        }, nil
+    }
+}
+```
+
+## Tool Operations (Studio Only)
 
 Requires: `tools.read`, `tools.write`, or `tools.execute` scope
 
@@ -588,9 +862,29 @@ llmsResp, err := ai_studio_sdk.ListLLMs(ctx, 1, 10)
 | ReadPluginKV, ListPluginKVKeys | `kv.read` |
 | WritePluginKV, DeletePluginKV | `kv.readwrite` |
 
+## Best Practices Summary
+
+1. **Runtime Detection**: Always check `ctx.Runtime` before calling runtime-specific services
+2. **Type Assertions**: Gateway and Studio services return `interface{}`, type assert to correct response types
+3. **Error Handling**: Always check errors from Service API calls
+4. **Logging**: Use `ctx.Services.Logger()` for consistent structured logging
+5. **KV Storage**: Understand storage differences between Studio (durable) and Gateway (ephemeral)
+6. **Broker ID**: Extract and set broker ID during plugin initialization for Service API access
+7. **Context Timeouts**: Use context timeouts for external calls
+8. **Caching**: Cache frequently accessed data in KV storage to reduce API calls
+
+## Complete Examples
+
+For complete working examples of Service API usage:
+- **Studio**: `examples/plugins/studio/service-api-test/` - Comprehensive Studio Services testing
+- **Gateway**: `examples/plugins/gateway/gateway-service-test/` - Gateway Services examples
+- **Rate Limiter**: `examples/plugins/studio/llm-rate-limiter-multiphase/` - Multi-capability plugin with KV storage
+
 ## Next Steps
 
-- [Plugin Manifests & Permissions]([plugins-manifests](https://docs.claude.com/en/docs/plugins-manifests))
-- [SDK Reference]([plugins-sdk](https://docs.claude.com/en/docs/plugins-sdk))
-- [AI Studio UI Plugins Guide]([plugins-studio-ui](https://docs.claude.com/en/docs/plugins-studio-ui))
-- [AI Studio Agent Plugins Guide]([plugins-studio-agent](https://docs.claude.com/en/docs/plugins-studio-agent))
+- **[Plugin SDK Reference](plugins-sdk.md)** - Core SDK documentation
+- **[Plugin Manifests & Permissions](plugins-manifests.md)** - Declare service permissions
+- **[AI Studio UI Plugins Guide](plugins-studio-ui.md)** - Build plugin UIs
+- **[AI Studio Agent Plugins Guide](plugins-studio-agent.md)** - Build conversational agents
+- **[Microgateway Plugins Guide](plugins-microgateway.md)** - Gateway-specific patterns
+- **[Plugin Examples](plugins-examples.md)** - Browse all working examples

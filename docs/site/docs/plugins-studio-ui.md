@@ -1,6 +1,6 @@
 # AI Studio UI Plugins Guide
 
-AI Studio UI plugins extend the dashboard with custom interfaces using WebComponents. Build rich admin panels, custom dashboards, monitoring tools, and specialized management interfaces that integrate seamlessly with the AI Studio platform.
+AI Studio UI plugins extend the dashboard with custom interfaces using WebComponents. Build rich admin panels, custom dashboards, monitoring tools, and specialized management interfaces that integrate seamlessly with the AI Studio platform using the **Unified Plugin SDK**.
 
 ## Overview
 
@@ -12,6 +12,52 @@ UI plugins enable you to:
 - **Call Service APIs**: Access LLMs, tools, datasources, analytics, and more
 - **Store Plugin Data**: Use built-in key-value storage
 - **Define RPC Methods**: Create custom backend endpoints
+- **Multi-Capability**: Combine UI with middleware hooks (PostAuth, Response, Object Hooks, etc.)
+
+## Unified SDK Integration
+
+UI plugins use the **Unified Plugin SDK** (`pkg/plugin_sdk`) and can combine UI capabilities with other plugin capabilities like PostAuth, Response, or Object Hooks.
+
+### Key Features
+
+- **BasePlugin**: Convenience struct for lifecycle management
+- **UIProvider**: Capability for serving UI assets and RPC methods
+- **Context Services**: Access KV storage, logging, and Studio Services
+- **Multi-Capability**: Implement multiple interfaces in one plugin
+- **Broker Connection**: Automatic Service API access for UI interactions
+
+### Example: Multi-Capability Plugin
+
+A single plugin can provide both UI and middleware functionality:
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+
+type MyUIPlugin struct {
+    plugin_sdk.BasePlugin
+}
+
+// Implement UIProvider capability
+func (p *MyUIPlugin) GetAsset(assetPath string) ([]byte, string, error) {
+    // Serve UI assets
+}
+
+func (p *MyUIPlugin) HandleCall(method string, payload []byte) ([]byte, error) {
+    // Handle RPC calls from UI
+}
+
+// Implement PostAuthHandler capability (optional)
+func (p *MyUIPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    // Process requests
+}
+
+// Implement ObjectHooks capability (optional)
+func (p *MyUIPlugin) GetObjectHookRegistrations() ([]*pb.ObjectHookRegistration, error) {
+    // Register hooks
+}
+```
+
+**Example**: `examples/plugins/studio/llm-rate-limiter-multiphase/` combines UIProvider + PostAuth + Response in one plugin.
 
 ##Quick Start
 
@@ -89,33 +135,55 @@ import (
     "context"
     "embed"
     "encoding/json"
+    "fmt"
     "log"
 
     "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
-    mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+    pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
 //go:embed ui assets plugin.manifest.json
 var embeddedAssets embed.FS
 
 type MyPlugin struct {
-    serviceAPI mgmtpb.AIStudioManagementServiceClient
-    pluginID   uint32
+    plugin_sdk.BasePlugin
 }
 
-// OnInitialize is called when plugin starts
-func (p *MyPlugin) OnInitialize(
-    serviceAPI mgmtpb.AIStudioManagementServiceClient,
-    pluginID uint32) error {
+func NewMyPlugin() *MyPlugin {
+    return &MyPlugin{
+        BasePlugin: plugin_sdk.NewBasePlugin(
+            "my-ui-plugin",
+            "1.0.0",
+            "Custom UI plugin with dashboard",
+        ),
+    }
+}
 
+// Initialize is called when plugin starts
+func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
     log.Printf("My Plugin initializing")
-    p.serviceAPI = serviceAPI
-    p.pluginID = pluginID
+
+    // Extract broker ID for Service API access
+    brokerIDStr := ""
+    if id, ok := config["_service_broker_id"]; ok {
+        brokerIDStr = id
+    } else if id, ok := config["service_broker_id"]; ok {
+        brokerIDStr = id
+    }
+
+    if brokerIDStr != "" {
+        var brokerID uint32
+        fmt.Sscanf(brokerIDStr, "%d", &brokerID)
+        ai_studio_sdk.SetServiceBrokerID(brokerID)
+        log.Printf("Set broker ID %d for Service API", brokerID)
+    }
+
     return nil
 }
 
-// OnShutdown is called when plugin stops
-func (p *MyPlugin) OnShutdown() error {
+// Shutdown is called when plugin stops
+func (p *MyPlugin) Shutdown(ctx plugin_sdk.Context) error {
     log.Printf("My Plugin shutting down")
     return nil
 }
@@ -209,8 +277,7 @@ func detectMimeType(path string) string {
 
 func main() {
     log.Printf("Starting My Plugin")
-    plugin := &MyPlugin{}
-    ai_studio_sdk.ServePlugin(plugin)
+    plugin_sdk.Serve(NewMyPlugin())
 }
 ```
 
@@ -472,6 +539,189 @@ usage, err := ai_studio_sdk.GetUsageStats(ctx, startTime, endTime, filters)
 // Get cost analytics
 costs, err := ai_studio_sdk.GetCostAnalytics(ctx, startTime, endTime)
 ```
+
+## Multi-Capability Patterns
+
+UI plugins using the unified SDK can implement multiple capabilities in a single plugin, combining dashboard UI with request/response processing, object validation, or other hooks.
+
+### Combining UI + PostAuth
+
+Create a plugin that both displays data and processes requests:
+
+```go
+type RateLimiterPlugin struct {
+    plugin_sdk.BasePlugin
+    limits map[uint32]int // app_id -> limit
+}
+
+// UIProvider capability - serve dashboard
+func (p *RateLimiterPlugin) GetAsset(assetPath string) ([]byte, string, error) {
+    return embeddedAssets.ReadFile(assetPath)
+}
+
+func (p *RateLimiterPlugin) HandleCall(method string, payload []byte) ([]byte, error) {
+    switch method {
+    case "get_limits":
+        return json.Marshal(p.limits)
+    case "set_limit":
+        var req struct {
+            AppID uint32 `json:"app_id"`
+            Limit int    `json:"limit"`
+        }
+        json.Unmarshal(payload, &req)
+        p.limits[req.AppID] = req.Limit
+        return json.Marshal(map[string]string{"status": "ok"})
+    }
+    return nil, fmt.Errorf("unknown method")
+}
+
+// PostAuthHandler capability - enforce limits
+func (p *RateLimiterPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    // Check rate limit from state
+    limit, exists := p.limits[ctx.AppID]
+    if !exists {
+        limit = 100 // default
+    }
+
+    // Check current count from KV
+    key := fmt.Sprintf("rate:%d", ctx.AppID)
+    data, _ := ctx.Services.KV().Read(ctx, key)
+    count := 0
+    if data != nil {
+        json.Unmarshal(data, &count)
+    }
+
+    if count >= limit {
+        return &pb.PluginResponse{
+            Block:        true,
+            ErrorMessage: "Rate limit exceeded",
+        }, nil
+    }
+
+    // Increment counter
+    count++
+    countData, _ := json.Marshal(count)
+    ctx.Services.KV().Write(ctx, key, countData)
+
+    return &pb.PluginResponse{Modified: false}, nil
+}
+```
+
+### Combining UI + Object Hooks
+
+Create a plugin that validates objects and provides an approval dashboard:
+
+```go
+type ApprovalPlugin struct {
+    plugin_sdk.BasePlugin
+    pendingApprovals []PendingApproval
+}
+
+type PendingApproval struct {
+    ID         string
+    ObjectType string
+    ObjectJSON string
+    Status     string
+}
+
+// UIProvider - approval dashboard
+func (p *ApprovalPlugin) HandleCall(method string, payload []byte) ([]byte, error) {
+    switch method {
+    case "list_pending":
+        return json.Marshal(p.pendingApprovals)
+    case "approve":
+        var req struct{ ID string }
+        json.Unmarshal(payload, &req)
+        // Approve and remove from pending
+        return json.Marshal(map[string]string{"status": "approved"})
+    case "reject":
+        var req struct{ ID string }
+        json.Unmarshal(payload, &req)
+        // Reject and remove from pending
+        return json.Marshal(map[string]string{"status": "rejected"})
+    }
+    return nil, fmt.Errorf("unknown method")
+}
+
+// ObjectHooks capability - require approval
+func (p *ApprovalPlugin) GetObjectHookRegistrations() ([]*pb.ObjectHookRegistration, error) {
+    return []*pb.ObjectHookRegistration{
+        {
+            ObjectType: "datasource",
+            HookTypes:  []string{"before_create"},
+            Priority:   10,
+        },
+    }, nil
+}
+
+func (p *ApprovalPlugin) HandleObjectHook(ctx plugin_sdk.Context, req *pb.ObjectHookRequest) (*pb.ObjectHookResponse, error) {
+    // Add to pending approvals
+    approval := PendingApproval{
+        ID:         generateID(),
+        ObjectType: req.ObjectType,
+        ObjectJSON: req.ObjectJson,
+        Status:     "pending",
+    }
+    p.pendingApprovals = append(p.pendingApprovals, approval)
+
+    // Store in KV for persistence
+    data, _ := json.Marshal(p.pendingApprovals)
+    ctx.Services.KV().Write(ctx, "pending_approvals", data)
+
+    // Block operation until manual approval
+    return &pb.ObjectHookResponse{
+        AllowOperation:  false,
+        RejectionReason: "Pending manual approval",
+    }, nil
+}
+```
+
+### Combining UI + Response
+
+Monitor and modify responses with a dashboard:
+
+```go
+type ResponseMonitorPlugin struct {
+    plugin_sdk.BasePlugin
+    stats ResponseStats
+}
+
+// UIProvider - monitoring dashboard
+func (p *ResponseMonitorPlugin) HandleCall(method string, payload []byte) ([]byte, error) {
+    if method == "get_stats" {
+        return json.Marshal(p.stats)
+    }
+    return nil, fmt.Errorf("unknown method")
+}
+
+// ResponseHandler capability - track responses
+func (p *ResponseMonitorPlugin) OnBeforeWrite(ctx plugin_sdk.Context, req *pb.ResponseWriteRequest) (*pb.ResponseWriteResponse, error) {
+    // Track response statistics
+    p.stats.TotalResponses++
+    p.stats.TotalTokens += req.Tokens
+
+    // Store in KV
+    data, _ := json.Marshal(p.stats)
+    ctx.Services.KV().Write(ctx, "response_stats", data)
+
+    return &pb.ResponseWriteResponse{Modified: false}, nil
+}
+```
+
+### Benefits of Multi-Capability Plugins
+
+1. **Unified State**: Share data structures between UI and middleware
+2. **Single Deployment**: One plugin provides multiple features
+3. **Consistent Configuration**: Single manifest, config, and initialization
+4. **Simplified Management**: Deploy, update, and monitor as one unit
+5. **Rich Dashboards**: Display real-time data from middleware hooks
+
+### Working Example
+
+See `examples/plugins/studio/llm-rate-limiter-multiphase/` for a complete multi-capability plugin that implements:
+- **PostAuth**: Check rate limits before requests
+- **Response**: Update counters after responses
+- **UI Provider**: Dashboard showing rate limit status
 
 ## Complete Example: Rate Limiting Dashboard
 
