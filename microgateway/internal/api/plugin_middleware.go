@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -18,15 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
-
-// PluginManagerInterface defines the interface we need from the plugin manager
-// This avoids circular imports between api and plugins packages
-type PluginManagerInterface interface {
-	ExecutePluginChain(llmID uint, hookType string, input interface{}, pluginCtx interface{}) (interface{}, error)
-	GetPluginsForLLM(llmID uint, hookType string) (interface{}, error)
-	IsPluginLoaded(pluginID uint) bool
-	RefreshLLMPluginMapping(llmID uint) error
-}
 
 // PluginMiddlewareConfig holds configuration for plugin middleware
 type PluginMiddlewareConfig struct {
@@ -583,9 +573,4 @@ func createBasicPluginRequest(c *gin.Context, pluginCtx map[string]interface{}) 
 		"remote_addr": c.ClientIP(),
 		"context":     pluginCtx,
 	}
-}
-
-
-func generateRequestID() string {
-	return "req_" + strconv.FormatInt(time.Now().UnixNano(), 36)
 }
