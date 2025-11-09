@@ -24,11 +24,12 @@ func TestManifestScopeExtraction(t *testing.T) {
 				PrimaryHook: "post_auth",
 			},
 			Permissions: struct {
-				KV       []string `json:"kv"`
-				RPC      []string `json:"rpc"`
-				Routes   []string `json:"routes"`
-				UI       []string `json:"ui"`
-				Services []string `json:"services"`
+				KV          []string `json:"kv"`
+				RPC         []string `json:"rpc"`
+				Routes      []string `json:"routes"`
+				UI          []string `json:"ui"`
+				Services    []string `json:"services"`
+				ObjectHooks []string `json:"object_hooks"`
 			}{
 				KV:       []string{"read", "write"},
 				RPC:      []string{"call"},
@@ -60,11 +61,12 @@ func TestManifestScopeExtraction(t *testing.T) {
 				PrimaryHook: "studio_ui",
 			},
 			Permissions: struct {
-				KV       []string `json:"kv"`
-				RPC      []string `json:"rpc"`
-				Routes   []string `json:"routes"`
-				UI       []string `json:"ui"`
-				Services []string `json:"services"`
+				KV          []string `json:"kv"`
+				RPC         []string `json:"rpc"`
+				Routes      []string `json:"routes"`
+				UI          []string `json:"ui"`
+				Services    []string `json:"services"`
+				ObjectHooks []string `json:"object_hooks"`
 			}{
 				UI:       []string{"sidebar.register"},
 				Services: []string{}, // Empty services
@@ -87,11 +89,12 @@ func TestManifestScopeExtraction(t *testing.T) {
 				PrimaryHook: "post_auth",
 			},
 			Permissions: struct {
-				KV       []string `json:"kv"`
-				RPC      []string `json:"rpc"`
-				Routes   []string `json:"routes"`
-				UI       []string `json:"ui"`
-				Services []string `json:"services"`
+				KV          []string `json:"kv"`
+				RPC         []string `json:"rpc"`
+				Routes      []string `json:"routes"`
+				UI          []string `json:"ui"`
+				Services    []string `json:"services"`
+				ObjectHooks []string `json:"object_hooks"`
 			}{
 				Services: []string{"plugins.read"},
 			},
@@ -110,11 +113,12 @@ func TestManifestScopeExtraction(t *testing.T) {
 				PrimaryHook: "post_auth",
 			},
 			Permissions: struct {
-				KV       []string `json:"kv"`
-				RPC      []string `json:"rpc"`
-				Routes   []string `json:"routes"`
-				UI       []string `json:"ui"`
-				Services []string `json:"services"`
+				KV          []string `json:"kv"`
+				RPC         []string `json:"rpc"`
+				Routes      []string `json:"routes"`
+				UI          []string `json:"ui"`
+				Services    []string `json:"services"`
+				ObjectHooks []string `json:"object_hooks"`
 			}{
 				Services: []string{"analytics.read"},
 			},
@@ -128,11 +132,12 @@ func TestManifestScopeExtraction(t *testing.T) {
 		invalidManifest := &models.PluginManifest{
 			// Missing ID, Version, Name
 			Permissions: struct {
-				KV       []string `json:"kv"`
-				RPC      []string `json:"rpc"`
-				Routes   []string `json:"routes"`
-				UI       []string `json:"ui"`
-				Services []string `json:"services"`
+				KV          []string `json:"kv"`
+				RPC         []string `json:"rpc"`
+				Routes      []string `json:"routes"`
+				UI          []string `json:"ui"`
+				Services    []string `json:"services"`
+				ObjectHooks []string `json:"object_hooks"`
 			}{
 				Services: []string{"analytics.read"},
 			},
@@ -272,11 +277,12 @@ func TestPluginManifestJSONSerialization(t *testing.T) {
 				PrimaryHook: "studio_ui",
 			},
 			Permissions: struct {
-				KV       []string `json:"kv"`
-				RPC      []string `json:"rpc"`
-				Routes   []string `json:"routes"`
-				UI       []string `json:"ui"`
-				Services []string `json:"services"`
+				KV          []string `json:"kv"`
+				RPC         []string `json:"rpc"`
+				Routes      []string `json:"routes"`
+				UI          []string `json:"ui"`
+				Services    []string `json:"services"`
+				ObjectHooks []string `json:"object_hooks"`
 			}{
 				Services: []string{"analytics.read", "plugins.config"},
 				UI:       []string{"sidebar.register"},
