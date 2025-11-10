@@ -713,6 +713,193 @@ func (users Users) toEmails() []string {
 	return emails
 }
 
+func TestUser_GetAccessibleDataSources(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create a user
+	user := &User{Email: "test@example.com", Password: "password"}
+	err := user.Create(db)
+	assert.NoError(t, err)
+
+	// Create groups
+	group1 := &Group{Name: "Group 1"}
+	err = group1.Create(db)
+	assert.NoError(t, err)
+
+	group2 := &Group{Name: "Group 2"}
+	err = group2.Create(db)
+	assert.NoError(t, err)
+
+	// Create data catalogues
+	dataCatalogue1 := &DataCatalogue{Name: "Data Catalogue 1"}
+	err = dataCatalogue1.Create(db)
+	assert.NoError(t, err)
+
+	dataCatalogue2 := &DataCatalogue{Name: "Data Catalogue 2"}
+	err = dataCatalogue2.Create(db)
+	assert.NoError(t, err)
+
+	// Create datasources with metadata (to test JSON column handling)
+	datasource1 := &Datasource{
+		Name:   "Datasource 1",
+		Active: true,
+		Metadata: JSONMap{
+			"key1": "value1",
+			"key2": 123,
+		},
+	}
+	err = datasource1.Create(db)
+	assert.NoError(t, err)
+
+	datasource2 := &Datasource{
+		Name:   "Datasource 2",
+		Active: true,
+		Metadata: JSONMap{
+			"key3": "value3",
+		},
+	}
+	err = datasource2.Create(db)
+	assert.NoError(t, err)
+
+	datasource3 := &Datasource{
+		Name:   "Datasource 3 (Inactive)",
+		Active: false,
+		Metadata: JSONMap{
+			"key4": "value4",
+		},
+	}
+	err = datasource3.Create(db)
+	assert.NoError(t, err)
+
+	// Add user to groups
+	err = group1.AddUser(db, user)
+	assert.NoError(t, err)
+	err = group2.AddUser(db, user)
+	assert.NoError(t, err)
+
+	// Add data catalogues to groups
+	err = group1.AddDataCatalogue(db, dataCatalogue1)
+	assert.NoError(t, err)
+	err = group2.AddDataCatalogue(db, dataCatalogue2)
+	assert.NoError(t, err)
+
+	// Add datasources to data catalogues
+	err = dataCatalogue1.AddDatasource(db, datasource1)
+	assert.NoError(t, err)
+	err = dataCatalogue2.AddDatasource(db, datasource2)
+	assert.NoError(t, err)
+	err = dataCatalogue2.AddDatasource(db, datasource3) // Inactive datasource
+	assert.NoError(t, err)
+
+	// Test: Get accessible datasources
+	accessibleDataSources, err := user.GetAccessibleDataSources(db)
+	assert.NoError(t, err)
+	assert.Len(t, accessibleDataSources, 2) // Should only get active datasources
+
+	// Verify the correct datasources were returned
+	names := []string{accessibleDataSources[0].Name, accessibleDataSources[1].Name}
+	assert.Contains(t, names, "Datasource 1")
+	assert.Contains(t, names, "Datasource 2")
+	assert.NotContains(t, names, "Datasource 3 (Inactive)")
+
+	// Verify metadata was loaded correctly
+	for _, ds := range accessibleDataSources {
+		assert.NotNil(t, ds.Metadata)
+		if ds.Name == "Datasource 1" {
+			assert.Equal(t, "value1", ds.Metadata["key1"])
+			assert.Equal(t, float64(123), ds.Metadata["key2"]) // JSON numbers become float64
+		}
+	}
+}
+
+func TestUser_GetAccessibleTools(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create a user
+	user := &User{Email: "test@example.com", Password: "password"}
+	err := user.Create(db)
+	assert.NoError(t, err)
+
+	// Create groups
+	group1 := &Group{Name: "Group 1"}
+	err = group1.Create(db)
+	assert.NoError(t, err)
+
+	group2 := &Group{Name: "Group 2"}
+	err = group2.Create(db)
+	assert.NoError(t, err)
+
+	// Create tool catalogues
+	toolCatalogue1 := &ToolCatalogue{Name: "Tool Catalogue 1"}
+	err = toolCatalogue1.Create(db)
+	assert.NoError(t, err)
+
+	toolCatalogue2 := &ToolCatalogue{Name: "Tool Catalogue 2"}
+	err = toolCatalogue2.Create(db)
+	assert.NoError(t, err)
+
+	// Create tools with metadata (to test JSON column handling)
+	tool1 := &Tool{
+		Name:        "Tool 1",
+		Description: "Test tool 1",
+		ToolType:    ToolTypeREST,
+		Metadata: JSONMap{
+			"api_version": "v1",
+			"timeout":     30,
+		},
+	}
+	err = tool1.Create(db)
+	assert.NoError(t, err)
+
+	tool2 := &Tool{
+		Name:        "Tool 2",
+		Description: "Test tool 2",
+		ToolType:    ToolTypeREST,
+		Metadata: JSONMap{
+			"api_version": "v2",
+		},
+	}
+	err = tool2.Create(db)
+	assert.NoError(t, err)
+
+	// Add user to groups
+	err = group1.AddUser(db, user)
+	assert.NoError(t, err)
+	err = group2.AddUser(db, user)
+	assert.NoError(t, err)
+
+	// Add tool catalogues to groups
+	err = group1.AddToolCatalogue(db, toolCatalogue1)
+	assert.NoError(t, err)
+	err = group2.AddToolCatalogue(db, toolCatalogue2)
+	assert.NoError(t, err)
+
+	// Add tools to tool catalogues
+	err = toolCatalogue1.AddTool(db, tool1)
+	assert.NoError(t, err)
+	err = toolCatalogue2.AddTool(db, tool2)
+	assert.NoError(t, err)
+
+	// Test: Get accessible tools
+	accessibleTools, err := user.GetAccessibleTools(db)
+	assert.NoError(t, err)
+	assert.Len(t, accessibleTools, 2)
+
+	// Verify the correct tools were returned
+	names := []string{accessibleTools[0].Name, accessibleTools[1].Name}
+	assert.Contains(t, names, "Tool 1")
+	assert.Contains(t, names, "Tool 2")
+
+	// Verify metadata was loaded correctly
+	for _, tool := range accessibleTools {
+		assert.NotNil(t, tool.Metadata)
+		if tool.Name == "Tool 1" {
+			assert.Equal(t, "v1", tool.Metadata["api_version"])
+			assert.Equal(t, float64(30), tool.Metadata["timeout"])
+		}
+	}
+}
+
 func TestUsers_QueryUsers(t *testing.T) {
 	db := setupTestDB(t)
 

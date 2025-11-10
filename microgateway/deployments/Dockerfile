@@ -9,12 +9,18 @@ RUN apk add --no-cache git make ca-certificates tzdata gcc musl-dev sqlite-dev
 # Set working directory
 WORKDIR /build
 
-# Copy go mod files first for better caching
+# Copy parent project go.mod first (for the replace directive)
 COPY go.mod go.sum ./
-RUN go mod download
+COPY microgateway/go.mod microgateway/go.sum ./microgateway/
 
-# Copy source code
+# Copy all source code needed for the replace directive
 COPY . .
+
+# Change to microgateway directory
+WORKDIR /build/microgateway
+
+# Download dependencies (now the replace directive can find the parent)
+RUN go mod download
 
 # Build arguments for version information
 ARG VERSION=dev
@@ -55,11 +61,8 @@ RUN addgroup -g 1000 gateway && \
 WORKDIR /app
 
 # Copy binaries from builder
-COPY --from=builder /build/microgateway .
-COPY --from=builder /build/mgw .
-
-# Copy configuration examples if they exist
-COPY --from=builder /build/configs/ ./configs/ 2>/dev/null || true
+COPY --from=builder /build/microgateway/microgateway ./
+COPY --from=builder /build/microgateway/mgw ./
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/data /app/logs /app/plugins && \

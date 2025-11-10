@@ -154,12 +154,12 @@ func (u *User) GetAccessibleToolCatalogues(db *gorm.DB) ([]ToolCatalogue, error)
 
 func (u *User) GetAccessibleDataSources(db *gorm.DB) ([]Datasource, error) {
 	var dataSources []Datasource
-	err := db.Select("DISTINCT ON (datasources.id) datasources.*").
-		Joins("JOIN data_catalogue_data_sources ON data_catalogue_data_sources.datasource_id = datasources.id").
+	err := db.Joins("JOIN data_catalogue_data_sources ON data_catalogue_data_sources.datasource_id = datasources.id").
 		Joins("JOIN data_catalogues ON data_catalogues.id = data_catalogue_data_sources.data_catalogue_id").
 		Joins("JOIN group_datacatalogues ON group_datacatalogues.data_catalogue_id = data_catalogues.id").
 		Joins("JOIN user_groups ON user_groups.group_id = group_datacatalogues.group_id").
 		Where("user_groups.user_id = ? AND datasources.active = ?", u.ID, true).
+		Group("datasources.id").
 		Find(&dataSources).Error
 	return dataSources, err
 }
@@ -178,13 +178,13 @@ func (u *User) GetAccessibleLLMs(db *gorm.DB) ([]LLM, error) {
 
 func (u *User) GetAccessibleTools(db *gorm.DB) ([]Tool, error) {
 	var tools []Tool
-	err := db.Select("DISTINCT ON (tools.id) tools.*").
-		Table("tools").
+	err := db.Table("tools").
 		Joins("JOIN tool_catalogue_tools ON tool_catalogue_tools.tool_id = tools.id").
 		Joins("JOIN tool_catalogues ON tool_catalogues.id = tool_catalogue_tools.tool_catalogue_id").
 		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
 		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
 		Where("user_groups.user_id = ?", u.ID).
+		Group("tools.id").
 		Find(&tools).Error
 	return tools, err
 }
