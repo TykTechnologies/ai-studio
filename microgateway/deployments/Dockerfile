@@ -26,17 +26,16 @@ RUN go mod download
 ARG VERSION=dev
 ARG BUILD_HASH=unknown
 ARG BUILD_TIME=unknown
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
 
 # Build both microgateway server and CLI with optimized flags
-RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+# Note: Not setting GOOS/GOARCH explicitly - Docker Buildx will use native arch for each platform
+RUN CGO_ENABLED=1 go build \
     -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildHash=${BUILD_HASH} -X main.BuildTime=${BUILD_TIME}" \
     -trimpath \
     -o microgateway \
     ./cmd/microgateway
 
-RUN CGO_ENABLED=1 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+RUN CGO_ENABLED=1 go build \
     -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildHash=${BUILD_HASH} -X main.BuildTime=${BUILD_TIME}" \
     -trimpath \
     -o mgw \
