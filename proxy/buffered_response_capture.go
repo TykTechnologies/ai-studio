@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"net/http"
 )
@@ -97,6 +98,12 @@ func (rc *bufferedResponseCapture) WriteToClient() {
 	// Apply headers to the actual response writer
 	for k, v := range rc.header {
 		rc.ResponseWriter.Header()[k] = v
+	}
+
+	// CRITICAL: Set Content-Length explicitly for HTTP/2 compatibility
+	// HTTP/2 requires explicit content length for proper framing
+	if rc.buffer.Len() > 0 {
+		rc.ResponseWriter.Header().Set("Content-Length", fmt.Sprintf("%d", rc.buffer.Len()))
 	}
 
 	// Write status code

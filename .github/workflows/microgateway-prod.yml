@@ -77,7 +77,7 @@ jobs:
         with:
           context: .
           file: ./microgateway/deployments/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -96,7 +96,7 @@ jobs:
           echo "- **Version:** ${{ steps.build_info.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Hash:** ${{ steps.build_info.outputs.build_hash }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Time:** ${{ steps.build_info.outputs.build_time }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Platforms:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platforms:** linux/amd64" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Container Images" >> $GITHUB_STEP_SUMMARY
           echo "The following images have been built and pushed:" >> $GITHUB_STEP_SUMMARY
