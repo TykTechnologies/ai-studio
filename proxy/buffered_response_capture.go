@@ -12,18 +12,20 @@ import (
 // This version buffers everything until Flush() is called
 type bufferedResponseCapture struct {
 	http.ResponseWriter
-	statusCode int
-	buffer     *bytes.Buffer
-	header     http.Header
-	written    bool
+	statusCode      int
+	buffer          *bytes.Buffer
+	header          http.Header
+	written         bool
+	gzipDecompressed bool // Track if we've already decompressed gzip
 }
 
 func newBufferedResponseCapture(w http.ResponseWriter) *bufferedResponseCapture {
 	return &bufferedResponseCapture{
-		ResponseWriter: w,
-		buffer:         &bytes.Buffer{},
-		header:         make(http.Header),
-		written:        false,
+		ResponseWriter:   w,
+		buffer:           &bytes.Buffer{},
+		header:           make(http.Header),
+		written:          false,
+		gzipDecompressed: false,
 	}
 }
 
@@ -37,27 +39,24 @@ func (rc *bufferedResponseCapture) WriteHeader(statusCode int) {
 }
 
 func (rc *bufferedResponseCapture) Write(b []byte) (int, error) {
+	// Just buffer the data as-is, don't try to decompress yet
+	// Decompression happens in WriteToClient() when the full response is available
 	rc.buffer.Write(b)
-	if rc.Header().Get("Content-Encoding") == "gzip" {
-		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
-		if err != nil {
-			return 0, err
-		}
-		defer reader.Close()
-		decompressed, err := io.ReadAll(reader)
-		if err != nil {
-			return 0, err
-		}
-		rc.buffer = bytes.NewBuffer(decompressed)
-		// CRITICAL: Remove Content-Encoding header since we've decompressed the data
-		// The client should receive uncompressed data, not compressed data with gzip header
-		rc.header.Del("Content-Encoding")
-	}
-	// Don't write to client immediately - buffer for hooks to process
 	return len(b), nil
 }
 
 func (rc *bufferedResponseCapture) CapturedBody() []byte {
+	// Decompress gzip content if present for analytics
+	if !rc.gzipDecompressed && rc.header.Get("Content-Encoding") == "gzip" && rc.buffer.Len() > 0 {
+		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
+		if err == nil {
+			decompressed, err := io.ReadAll(reader)
+			reader.Close()
+			if err == nil {
+				return decompressed
+			}
+		}
+	}
 	return rc.buffer.Bytes()
 }
 
@@ -105,6 +104,21 @@ func (rc *bufferedResponseCapture) Flush() {
 func (rc *bufferedResponseCapture) WriteToClient() {
 	if rc.written {
 		return // Already written
+	}
+
+	// Decompress gzip content if present and not already decompressed
+	if !rc.gzipDecompressed && rc.header.Get("Content-Encoding") == "gzip" && rc.buffer.Len() > 0 {
+		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
+		if err == nil {
+			decompressed, err := io.ReadAll(reader)
+			reader.Close()
+			if err == nil {
+				rc.buffer = bytes.NewBuffer(decompressed)
+				// Remove Content-Encoding header since we've decompressed the data
+				rc.header.Del("Content-Encoding")
+				rc.gzipDecompressed = true
+			}
+		}
 	}
 
 	bufLen := rc.buffer.Len()
