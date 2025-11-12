@@ -93,21 +93,28 @@ func (rc *bufferedResponseCapture) WriteToClient() {
 	if rc.written {
 		return // Already written
 	}
-	
+
 	// Apply headers to the actual response writer
 	for k, v := range rc.header {
 		rc.ResponseWriter.Header()[k] = v
 	}
-	
+
 	// Write status code
 	if rc.statusCode != 0 {
 		rc.ResponseWriter.WriteHeader(rc.statusCode)
 	}
-	
+
 	// Write body
 	if rc.buffer.Len() > 0 {
 		rc.ResponseWriter.Write(rc.buffer.Bytes())
 	}
-	
+
+	// CRITICAL: Flush to ensure response is sent through Gin/HTTP2/proxies
+	// Without this, Gin's wrapped ResponseWriter may not commit the response
+	// especially critical for HTTP/2 connections through tunnels like Cloudflare
+	if f, ok := rc.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+
 	rc.written = true
 }

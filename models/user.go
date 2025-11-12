@@ -171,7 +171,7 @@ func (u *User) GetAccessibleLLMs(db *gorm.DB) ([]LLM, error) {
 		Joins("JOIN group_catalogues ON group_catalogues.catalogue_id = catalogues.id").
 		Joins("JOIN user_groups ON user_groups.group_id = group_catalogues.group_id").
 		Where("user_groups.user_id = ? AND llms.active = ?", u.ID, true).
-		Distinct().
+		Group("llms.id").
 		Find(&llms).Error
 	return llms, err
 }
