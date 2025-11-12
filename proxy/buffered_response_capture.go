@@ -49,6 +49,9 @@ func (rc *bufferedResponseCapture) Write(b []byte) (int, error) {
 			return 0, err
 		}
 		rc.buffer = bytes.NewBuffer(decompressed)
+		// CRITICAL: Remove Content-Encoding header since we've decompressed the data
+		// The client should receive uncompressed data, not compressed data with gzip header
+		rc.header.Del("Content-Encoding")
 	}
 	// Don't write to client immediately - buffer for hooks to process
 	return len(b), nil
@@ -89,21 +92,40 @@ func (rc *bufferedResponseCapture) ModifyStatusCode(statusCode int) {
 	rc.statusCode = statusCode
 }
 
+// Flush implements http.Flusher interface
+// This is called by httputil.ReverseProxy during response copy
+// We don't actually flush during buffering, just satisfy the interface
+func (rc *bufferedResponseCapture) Flush() {
+	// During buffering phase, we don't flush to the underlying writer
+	// This prevents the reverse proxy from panicking when it tries to flush
+	// The actual flush happens in WriteToClient()
+}
+
 // WriteToClient writes the buffered response to the client (call this after hooks modify the data)
 func (rc *bufferedResponseCapture) WriteToClient() {
 	if rc.written {
 		return // Already written
 	}
 
-	// Apply headers to the actual response writer
-	for k, v := range rc.header {
-		rc.ResponseWriter.Header()[k] = v
+	bufLen := rc.buffer.Len()
+
+	// CRITICAL: Set Content-Length FIRST, before applying other headers
+	// HTTP/2 requires explicit content length for proper framing
+	if bufLen > 0 {
+		rc.ResponseWriter.Header().Set("Content-Length", fmt.Sprintf("%d", bufLen))
 	}
 
-	// CRITICAL: Set Content-Length explicitly for HTTP/2 compatibility
-	// HTTP/2 requires explicit content length for proper framing
-	if rc.buffer.Len() > 0 {
-		rc.ResponseWriter.Header().Set("Content-Length", fmt.Sprintf("%d", rc.buffer.Len()))
+	// Apply headers to the actual response writer (skip Content-Length as we just set it)
+	for k, values := range rc.header {
+		// Skip Content-Length as we've already set it correctly based on buffer size
+		if k == "Content-Length" {
+			continue
+		}
+		// Delete existing values and set new ones
+		rc.ResponseWriter.Header().Del(k)
+		for _, v := range values {
+			rc.ResponseWriter.Header().Add(k, v)
+		}
 	}
 
 	// Write status code
@@ -112,7 +134,7 @@ func (rc *bufferedResponseCapture) WriteToClient() {
 	}
 
 	// Write body
-	if rc.buffer.Len() > 0 {
+	if bufLen > 0 {
 		rc.ResponseWriter.Write(rc.buffer.Bytes())
 	}
 
