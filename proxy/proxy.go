@@ -14,7 +14,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -254,6 +253,11 @@ func (p *Proxy) createHandler() http.Handler {
 	r.HandleFunc("/.well-known/oauth-protected-resource", p.handleOAuthProtectedResourceMetadata).Methods("GET", "OPTIONS")
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleLLMRequest)))
 	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleStreamingLLMRequest)))
+	// Unified endpoint that automatically detects streaming vs non-streaming based on request
+	r.HandleFunc("/llm/call/{llmSlug}/{rest:.*}", p.handleUnifiedLLMRequest).Methods("POST").Handler(
+		p.streamDetectionMiddleware(
+			p.modelValidationMiddleware(
+				http.HandlerFunc(p.handleUnifiedLLMRequest))))
 
 	// OpenAI-compatible translation endpoints
 	r.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
@@ -708,8 +712,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Strip the gateway prefix and use the remaining path directly (consistent with REST handler)
 	upstreamPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
-	upstreamURL.Path = path.Join(upstreamURL.Path, upstreamPath)
+	upstreamURL.Path = upstreamPath
 	upstreamURL.RawQuery = r.URL.RawQuery
 
 	// Use r.Body directly as CopyRequestBody has already replaced it with a readable one.
@@ -772,6 +777,41 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	if !isErr {
 		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now())
+	}
+}
+
+// handleUnifiedLLMRequest is a unified handler that automatically routes to either
+// handleLLMRequest (REST) or handleStreamingLLMRequest (streaming) based on the
+// streaming intent detected by streamDetectionMiddleware
+func (p *Proxy) handleUnifiedLLMRequest(w http.ResponseWriter, r *http.Request) {
+	// Get streaming decision from context (set by streamDetectionMiddleware)
+	isStreaming, ok := r.Context().Value("is_streaming_request").(bool)
+	if !ok {
+		// This should never happen if middleware is properly configured
+		slog.Error("Streaming detection context missing in unified handler")
+		respondWithError(w, http.StatusInternalServerError, "Internal routing error", nil, false)
+		return
+	}
+
+	// Rewrite the URL path from /llm/call/{slug}/... to /llm/rest/{slug}/... or /llm/stream/{slug}/...
+	// This allows the existing handlers to correctly strip the prefix when forwarding to vendors
+	vars := mux.Vars(r)
+	llmSlug := vars["llmSlug"]
+
+	// Clone the request to avoid modifying the original
+	r = r.Clone(r.Context())
+
+	originalPath := r.URL.Path
+	if isStreaming {
+		// Rewrite path from /llm/call/{slug}/... to /llm/stream/{slug}/...
+		r.URL.Path = strings.Replace(r.URL.Path, fmt.Sprintf("/llm/call/%s", llmSlug), fmt.Sprintf("/llm/stream/%s", llmSlug), 1)
+		slog.Debug("Unified handler routing to streaming", "original_path", originalPath, "rewritten_path", r.URL.Path, "llm_slug", llmSlug)
+		p.handleStreamingLLMRequest(w, r)
+	} else {
+		// Rewrite path from /llm/call/{slug}/... to /llm/rest/{slug}/...
+		r.URL.Path = strings.Replace(r.URL.Path, fmt.Sprintf("/llm/call/%s", llmSlug), fmt.Sprintf("/llm/rest/%s", llmSlug), 1)
+		slog.Debug("Unified handler routing to REST", "original_path", originalPath, "rewritten_path", r.URL.Path, "llm_slug", llmSlug)
+		p.handleLLMRequest(w, r)
 	}
 }
 
