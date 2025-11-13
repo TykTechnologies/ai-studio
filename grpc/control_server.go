@@ -589,21 +589,23 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 
 			// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
 			chatRecords[i] = &models.LLMChatRecord{
-				LLMID:           uint(event.LlmId),
-				AppID:           uint(event.AppId),
-				Name:            modelName, // Use actual model name from request
-				Vendor:          vendor,
-				TotalTokens:     int(event.TotalTokens),
-				PromptTokens:    int(event.RequestTokens),
-				ResponseTokens:  int(event.ResponseTokens),
-				Cost:            event.Cost * 10000, // Convert to cents for AI Studio format
-				Currency:        "USD",
-				TimeStamp:       event.Timestamp.AsTime(),
-				InteractionType: models.ProxyInteraction, // Mark as proxy interaction
-				UserID:          0, // Edge doesn't track individual users
-				ChatID:          "", // Not applicable for proxy
-				Choices:         1, // Default
-				ToolCalls:       0, // Default for proxy
+				LLMID:                  uint(event.LlmId),
+				AppID:                  uint(event.AppId),
+				Name:                   modelName, // Use actual model name from request
+				Vendor:                 vendor,
+				TotalTokens:            int(event.TotalTokens),
+				PromptTokens:           int(event.RequestTokens),
+				ResponseTokens:         int(event.ResponseTokens),
+				CacheWritePromptTokens: int(event.CacheWritePromptTokens),
+				CacheReadPromptTokens:  int(event.CacheReadPromptTokens),
+				Cost:                   event.Cost * 10000, // Convert to cents for AI Studio format
+				Currency:               "USD",
+				TimeStamp:              event.Timestamp.AsTime(),
+				InteractionType:        models.ProxyInteraction, // Mark as proxy interaction
+				UserID:                 0, // Edge doesn't track individual users
+				ChatID:                 "", // Not applicable for proxy
+				Choices:                1, // Default
+				ToolCalls:              0, // Default for proxy
 			}
 
 			log.Debug().

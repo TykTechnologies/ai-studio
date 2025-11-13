@@ -256,6 +256,10 @@ message AnalyticsEvent {
   // Optional request/response data (controlled by include_request_response_data flag)
   string request_body = 18;       // Request body (if include_request_response_data = true)
   string response_body = 19;      // Response body (if include_request_response_data = true)
+
+  // Cache token tracking (for prompt caching features like Anthropic's)
+  uint32 cache_write_prompt_tokens = 20;  // Cache creation/write tokens
+  uint32 cache_read_prompt_tokens = 21;   // Cache read tokens
 }
 
 // Budget usage event for pulse batching

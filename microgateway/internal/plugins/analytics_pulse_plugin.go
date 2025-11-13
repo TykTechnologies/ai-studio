@@ -258,19 +258,21 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 
 	// Convert to database analytics event format for buffering
 	event := database.AnalyticsEvent{
-		RequestID:      req.RequestID,
-		AppID:          req.AppID,
-		LLMID:          &req.LLMID,
-		Endpoint:       fmt.Sprintf("/%s", req.Vendor),
-		Method:         "POST",
-		StatusCode:     200, // Default success
-		RequestTokens:  req.PromptTokens,
-		ResponseTokens: req.ResponseTokens,
-		TotalTokens:    req.TotalTokens,
-		Cost:           req.Cost,
-		LatencyMs:      0, // Not available
-		ErrorMessage:   "",
-		CreatedAt:      req.Timestamp,
+		RequestID:              req.RequestID,
+		AppID:                  req.AppID,
+		LLMID:                  &req.LLMID,
+		Endpoint:               fmt.Sprintf("/%s", req.Vendor),
+		Method:                 "POST",
+		StatusCode:             200, // Default success
+		RequestTokens:          req.PromptTokens,
+		ResponseTokens:         req.ResponseTokens,
+		TotalTokens:            req.TotalTokens,
+		CacheWritePromptTokens: req.CacheWritePromptTokens,
+		CacheReadPromptTokens:  req.CacheReadPromptTokens,
+		Cost:                   req.Cost,
+		LatencyMs:              0, // Not available
+		ErrorMessage:           "",
+		CreatedAt:              req.Timestamp,
 	}
 
 	// Store metadata for pulse transmission
@@ -472,25 +474,27 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 		}
 
 		analyticsEvents = append(analyticsEvents, &pb.AnalyticsEvent{
-			RequestId:          event.RequestID,
-			AppId:              uint32(event.AppID),
-			LlmId:              llmID,
-			Endpoint:           event.Endpoint,
-			Method:             event.Method,
-			StatusCode:         int32(event.StatusCode),
-			RequestTokens:      uint32(event.RequestTokens),
-			ResponseTokens:     uint32(event.ResponseTokens),
-			TotalTokens:        uint32(event.TotalTokens),
-			Cost:               event.Cost,
-			LatencyMs:          uint32(event.LatencyMs),
-			Timestamp:          timestamppb.New(event.CreatedAt),
-			ErrorMessage:       event.ErrorMessage,
-			RequestSizeBytes:   uint32(len(event.RequestBody)),
-			ResponseSizeBytes:  uint32(len(event.ResponseBody)),
-			ModelName:          eventMetadata.ModelName,
-			Vendor:             eventMetadata.Vendor,
-			RequestBody:        requestBody,
-			ResponseBody:       responseBody,
+			RequestId:               event.RequestID,
+			AppId:                   uint32(event.AppID),
+			LlmId:                   llmID,
+			Endpoint:                event.Endpoint,
+			Method:                  event.Method,
+			StatusCode:              int32(event.StatusCode),
+			RequestTokens:           uint32(event.RequestTokens),
+			ResponseTokens:          uint32(event.ResponseTokens),
+			TotalTokens:             uint32(event.TotalTokens),
+			CacheWritePromptTokens:  uint32(event.CacheWritePromptTokens),
+			CacheReadPromptTokens:   uint32(event.CacheReadPromptTokens),
+			Cost:                    event.Cost,
+			LatencyMs:               uint32(event.LatencyMs),
+			Timestamp:               timestamppb.New(event.CreatedAt),
+			ErrorMessage:            event.ErrorMessage,
+			RequestSizeBytes:        uint32(len(event.RequestBody)),
+			ResponseSizeBytes:       uint32(len(event.ResponseBody)),
+			ModelName:               eventMetadata.ModelName,
+			Vendor:                  eventMetadata.Vendor,
+			RequestBody:             requestBody,
+			ResponseBody:            responseBody,
 		})
 	}
 

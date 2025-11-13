@@ -162,13 +162,15 @@ type AnalyticsEvent struct {
 	Endpoint       string
 	Method         string
 	StatusCode     int
-	RequestTokens  int
-	ResponseTokens int
-	TotalTokens    int
-	Cost           float64
-	LatencyMs      int
-	ErrorMessage   string
-	Metadata       datatypes.JSON `gorm:"type:json"`
+	RequestTokens          int
+	ResponseTokens         int
+	TotalTokens            int
+	CacheWritePromptTokens int // Cache creation/write tokens (e.g., Anthropic prompt caching)
+	CacheReadPromptTokens  int // Cache read tokens (e.g., Anthropic prompt caching)
+	Cost                   float64
+	LatencyMs              int
+	ErrorMessage           string
+	Metadata               datatypes.JSON `gorm:"type:json"`
 	
 	// Detailed payload storage (configurable)
 	RequestBody    string         `gorm:"type:text"` // Store request payload

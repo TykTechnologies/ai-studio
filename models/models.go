@@ -46,6 +46,7 @@ func InitModels(db *gorm.DB) error {
 		&MarketplaceIndex{},       // Marketplace index metadata
 		&InstalledPluginVersion{}, // Installed plugin version tracking
 		&MarketplaceConfig{},      // Marketplace configuration
+		&BrandingSettings{},       // UI branding customization
 	); err != nil {
 		return err
 	}

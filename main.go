@@ -87,6 +87,15 @@ func main() {
 		logger.FatalErr("Failed to initialize models", err)
 	}
 
+	// Initialize branding storage directory
+	brandingStoragePath := services.GetBrandingStoragePath()
+	_, err = services.NewBrandingFileStorage(brandingStoragePath)
+	if err != nil {
+		logger.Warnf("Failed to initialize branding storage: %v", err)
+	} else {
+		logger.Infof("Branding storage initialized at: %s", brandingStoragePath)
+	}
+
 	// Create a new service instance with OCI support if configured
 	var ociConfig *ociplugins.OCIConfig
 	if appConf.OCIPlugins.IsEnabled() {

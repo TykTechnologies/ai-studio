@@ -13,13 +13,13 @@ import Typography from "@mui/material/Typography";
 import SuccessBanner from "./admin/components/common/SuccessBanner";
 
 // Configurations and utilities
-import { loadConfig } from "./config";
+import { loadConfig, getConfig } from "./config";
 import { reinitializeApiClient } from "./admin/utils/apiClient";
 import { reinitializePubClient } from "./admin/utils/pubClient";
 import pubClient from "./admin/utils/pubClient";
 
 // Themes
-import adminTheme from "./admin/theme";
+import { generateTheme } from "./admin/theme";
 
 // Pages (add OAuthConsentPage)
 import OAuthConsentPage from "./portal/pages/OAuthConsentPage";
@@ -76,6 +76,8 @@ function App() {
   const [error, setError] = useState(null);
   const [entitlements, setEntitlements] = useState(null);
   const [showSuccessBanner, setShowSuccessBanner] = useState(true);
+  const [theme, setTheme] = useState(generateTheme()); // Dynamic theme
+  const [customCSS, setCustomCSS] = useState(''); // Custom CSS
 
   const handleCloseBanner = () => {
     setShowSuccessBanner(false);
@@ -87,6 +89,35 @@ function App() {
         await loadConfig();
         reinitializeApiClient();
         reinitializePubClient();
+
+        // Apply branding configuration
+        const config = getConfig();
+        if (config.branding) {
+          // Generate dynamic theme with custom colors
+          const brandedTheme = generateTheme(config.branding);
+          setTheme(brandedTheme);
+
+          // Set custom CSS if provided
+          if (config.branding.custom_css) {
+            setCustomCSS(config.branding.custom_css);
+          }
+
+          // Update document title if custom app title is set
+          if (config.branding.app_title) {
+            document.title = config.branding.app_title;
+          }
+
+          // Update favicon if custom favicon is available
+          if (config.branding.has_custom_favicon) {
+            const faviconLink = document.querySelector("link[rel='icon']") || document.createElement('link');
+            faviconLink.rel = 'icon';
+            faviconLink.href = '/api/v1/branding/favicon';
+            if (!document.querySelector("link[rel='icon']")) {
+              document.head.appendChild(faviconLink);
+            }
+          }
+        }
+
         setConfigLoaded(true);
 
         // Skip auth check for password reset and forgot password routes
@@ -173,8 +204,12 @@ function App() {
   return (
     <Router>
       <NotificationProvider>
-        <ThemeProvider theme={adminTheme}>
+        <ThemeProvider theme={theme}>
           <CssBaseline />
+          {/* Inject custom CSS if provided */}
+          {customCSS && (
+            <style dangerouslySetInnerHTML={{ __html: customCSS }} />
+          )}
           <Routes>
             {/* Public Routes */}
             <Route

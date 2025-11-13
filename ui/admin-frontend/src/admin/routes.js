@@ -72,12 +72,14 @@ import AgentDetail from "./components/agents/AgentDetail";
 import AgentForm from "./components/agents/AgentForm";
 
 import Marketplace from "./components/marketplace/Marketplace";
+import BrandingSettings from "./pages/BrandingSettings";
 
 const mainAdminRoutes = (
   <>
     <Route index element={<Overview />} />
     <Route path="dash" element={<Dashboard />} />
     <Route path="dashboard" element={<Dashboard />} />
+    <Route path="branding" element={<BrandingSettings />} />
     <Route path="users" element={<Users />} />
     <Route path="users/:id" element={<UserDetails />} />
     <Route path="users/:id/chat-log/:sessionId" element={<UserMessageLog />} />

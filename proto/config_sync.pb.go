@@ -1725,10 +1725,13 @@ type AnalyticsEvent struct {
 	ModelName string `protobuf:"bytes,16,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"` // Actual model name from request (e.g., "claude-sonnet-4-20250514")
 	Vendor    string `protobuf:"bytes,17,opt,name=vendor,proto3" json:"vendor,omitempty"`                        // Vendor name (e.g., "anthropic", "openai")
 	// Optional request/response data (controlled by include_request_response_data flag)
-	RequestBody   string `protobuf:"bytes,18,opt,name=request_body,json=requestBody,proto3" json:"request_body,omitempty"`    // Request body (if include_request_response_data = true)
-	ResponseBody  string `protobuf:"bytes,19,opt,name=response_body,json=responseBody,proto3" json:"response_body,omitempty"` // Response body (if include_request_response_data = true)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RequestBody  string `protobuf:"bytes,18,opt,name=request_body,json=requestBody,proto3" json:"request_body,omitempty"`    // Request body (if include_request_response_data = true)
+	ResponseBody string `protobuf:"bytes,19,opt,name=response_body,json=responseBody,proto3" json:"response_body,omitempty"` // Response body (if include_request_response_data = true)
+	// Cache token tracking (for prompt caching features like Anthropic's)
+	CacheWritePromptTokens uint32 `protobuf:"varint,20,opt,name=cache_write_prompt_tokens,json=cacheWritePromptTokens,proto3" json:"cache_write_prompt_tokens,omitempty"` // Cache creation/write tokens
+	CacheReadPromptTokens  uint32 `protobuf:"varint,21,opt,name=cache_read_prompt_tokens,json=cacheReadPromptTokens,proto3" json:"cache_read_prompt_tokens,omitempty"`    // Cache read tokens
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *AnalyticsEvent) Reset() {
@@ -1892,6 +1895,20 @@ func (x *AnalyticsEvent) GetResponseBody() string {
 		return x.ResponseBody
 	}
 	return ""
+}
+
+func (x *AnalyticsEvent) GetCacheWritePromptTokens() uint32 {
+	if x != nil {
+		return x.CacheWritePromptTokens
+	}
+	return 0
+}
+
+func (x *AnalyticsEvent) GetCacheReadPromptTokens() uint32 {
+	if x != nil {
+		return x.CacheReadPromptTokens
+	}
+	return 0
 }
 
 // Budget usage event for pulse batching
@@ -2299,7 +2316,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\x94\x05\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\x88\x06\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -2324,7 +2341,9 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"model_name\x18\x10 \x01(\tR\tmodelName\x12\x16\n" +
 	"\x06vendor\x18\x11 \x01(\tR\x06vendor\x12!\n" +
 	"\frequest_body\x18\x12 \x01(\tR\vrequestBody\x12#\n" +
-	"\rresponse_body\x18\x13 \x01(\tR\fresponseBody\"\xa2\x03\n" +
+	"\rresponse_body\x18\x13 \x01(\tR\fresponseBody\x129\n" +
+	"\x19cache_write_prompt_tokens\x18\x14 \x01(\rR\x16cacheWritePromptTokens\x127\n" +
+	"\x18cache_read_prompt_tokens\x18\x15 \x01(\rR\x15cacheReadPromptTokens\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +

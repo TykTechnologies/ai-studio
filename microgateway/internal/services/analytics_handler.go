@@ -94,19 +94,21 @@ func (h *MicrogatewaAnalyticsHandler) processChatRecordsBatchSync(records []*mod
 	events := make([]*database.AnalyticsEvent, len(records))
 	for i, record := range records {
 		event := &database.AnalyticsEvent{
-			RequestID:      fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
-			AppID:          record.AppID,
-			LLMID:          &record.LLMID,
-			Endpoint:       "/v1/chat/completions", // Default endpoint for chat interactions
-			Method:         "POST",
-			StatusCode:     200, // Assume success for chat records
-			RequestTokens:  record.PromptTokens,
-			ResponseTokens: record.ResponseTokens,
-			TotalTokens:    record.TotalTokens,
-			Cost:           record.Cost,
-			LatencyMs:      record.TotalTimeMS,
-			ErrorMessage:   "",
-			CreatedAt:      record.TimeStamp,
+			RequestID:              fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
+			AppID:                  record.AppID,
+			LLMID:                  &record.LLMID,
+			Endpoint:               "/v1/chat/completions", // Default endpoint for chat interactions
+			Method:                 "POST",
+			StatusCode:             200, // Assume success for chat records
+			RequestTokens:          record.PromptTokens,
+			ResponseTokens:         record.ResponseTokens,
+			TotalTokens:            record.TotalTokens,
+			CacheWritePromptTokens: record.CacheWritePromptTokens,
+			CacheReadPromptTokens:  record.CacheReadPromptTokens,
+			Cost:                   record.Cost,
+			LatencyMs:              record.TotalTimeMS,
+			ErrorMessage:           "",
+			CreatedAt:              record.TimeStamp,
 		}
 		events[i] = event
 	}
@@ -143,19 +145,21 @@ func (h *MicrogatewaAnalyticsHandler) processProxyLogsBatchSync(logs []*models.P
 		}
 
 		event := &database.AnalyticsEvent{
-			RequestID:      fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
-			AppID:          proxyLog.AppID,
-			LLMID:          llmIDPtr,
-			Endpoint:       h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
-			Method:         "POST",
-			StatusCode:     proxyLog.ResponseCode,
-			RequestTokens:  tokens.PromptTokens,
-			ResponseTokens: tokens.ResponseTokens,
-			TotalTokens:    tokens.TotalTokens,
-			Cost:           cost,
-			LatencyMs:      0, // Not available in proxy log
-			ErrorMessage:   "",
-			CreatedAt:      proxyLog.TimeStamp,
+			RequestID:              fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
+			AppID:                  proxyLog.AppID,
+			LLMID:                  llmIDPtr,
+			Endpoint:               h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
+			Method:                 "POST",
+			StatusCode:             proxyLog.ResponseCode,
+			RequestTokens:          tokens.PromptTokens,
+			ResponseTokens:         tokens.ResponseTokens,
+			TotalTokens:            tokens.TotalTokens,
+			CacheWritePromptTokens: tokens.CacheWriteTokens,
+			CacheReadPromptTokens:  tokens.CacheReadTokens,
+			Cost:                   cost,
+			LatencyMs:              0, // Not available in proxy log
+			ErrorMessage:           "",
+			CreatedAt:              proxyLog.TimeStamp,
 		}
 
 		// Add request/response bodies if configured
@@ -308,20 +312,22 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 
 	// Create analytics event directly from proxy log
 	event := &database.AnalyticsEvent{
-		RequestID:      fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
-		AppID:          proxyLog.AppID,
-		LLMID:          llmIDPtr,
-		CredentialID:   nil, // Not used in token-only system
-		Endpoint:       h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
-		Method:         "POST",
-		StatusCode:     proxyLog.ResponseCode,
-		RequestTokens:  tokens.PromptTokens,
-		ResponseTokens: tokens.ResponseTokens,
-		TotalTokens:    tokens.TotalTokens,
-		Cost:           cost,
-		LatencyMs:      0, // Not available in proxy log
-		ErrorMessage:   "",
-		CreatedAt:      proxyLog.TimeStamp,
+		RequestID:              fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
+		AppID:                  proxyLog.AppID,
+		LLMID:                  llmIDPtr,
+		CredentialID:           nil, // Not used in token-only system
+		Endpoint:               h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
+		Method:                 "POST",
+		StatusCode:             proxyLog.ResponseCode,
+		RequestTokens:          tokens.PromptTokens,
+		ResponseTokens:         tokens.ResponseTokens,
+		TotalTokens:            tokens.TotalTokens,
+		CacheWritePromptTokens: tokens.CacheWriteTokens,
+		CacheReadPromptTokens:  tokens.CacheReadTokens,
+		Cost:                   cost,
+		LatencyMs:              0, // Not available in proxy log
+		ErrorMessage:           "",
+		CreatedAt:              proxyLog.TimeStamp,
 	}
 
 	// Add request/response bodies if configured

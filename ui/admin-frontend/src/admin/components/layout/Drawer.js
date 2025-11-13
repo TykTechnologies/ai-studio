@@ -96,6 +96,7 @@ const Drawer = () => {
           : []),
         { id: 'filters', text: 'Filters & Middleware', path: '/admin/filters' },
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets' },
+        { id: 'branding', text: 'Branding', path: '/admin/branding' },
       ],
     },
     ...(features.feature_gateway &&

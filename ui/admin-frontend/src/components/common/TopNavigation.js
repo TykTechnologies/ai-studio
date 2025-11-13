@@ -74,8 +74,12 @@ const TopNavigation = ({
         <NavigationContainer>
           <LogoContainer>
             <Logo
-              src="/logos/tyk-portal-logo.png"
+              src="/api/v1/branding/logo"
               alt="Logo"
+              onError={(e) => {
+                // Fallback to default logo if custom logo fails to load
+                e.target.src = "/logos/tyk-portal-logo.png";
+              }}
             />
           </LogoContainer>
           <TabsContainer>

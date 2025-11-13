@@ -757,6 +757,17 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/secrets/:id", a.deleteSecret)
 	v1.GET("/secrets", a.listSecrets)
 
+	// Branding routes
+	// Public endpoints (for frontend config loading and asset serving)
+	public.GET("/api/v1/branding/settings", a.getBrandingSettings)
+	public.GET("/api/v1/branding/logo", a.serveLogo)
+	public.GET("/api/v1/branding/favicon", a.serveFavicon)
+	// Admin-only endpoints (for customization)
+	v1.PUT("/branding/settings", a.updateBrandingSettings)
+	v1.POST("/branding/logo", a.uploadLogo)
+	v1.POST("/branding/favicon", a.uploadFavicon)
+	v1.POST("/branding/reset", a.resetBranding)
+
 	// Edge Management routes (Hub-and-Spoke)
 	v1.GET("/edges", a.listEdges)
 	v1.GET("/edges/:edge_id", a.getEdge)
@@ -845,12 +856,28 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		suMode = config.Get().DefaultSignupMode
 	}
 
+	// Get branding settings
+	var brandingConfig *BrandingConfig
+	brandingSettings, err := a.service.GetBrandingSettings()
+	if err == nil {
+		brandingConfig = &BrandingConfig{
+			AppTitle:         brandingSettings.AppTitle,
+			PrimaryColor:     brandingSettings.PrimaryColor,
+			SecondaryColor:   brandingSettings.SecondaryColor,
+			BackgroundColor:  brandingSettings.BackgroundColor,
+			CustomCSS:        brandingSettings.CustomCSS,
+			HasCustomLogo:    brandingSettings.HasCustomLogo(),
+			HasCustomFavicon: brandingSettings.HasCustomFavicon(),
+		}
+	}
+
 	config := FrontendConfig{
 		APIBaseURL:        apiBaseURL,
 		ProxyURL:          config.Get().ProxyURL,
 		DefaultSignUpMode: suMode,
 		TIBEnabled:        a.config.TIBEnabled,
 		DocsLinks:         config.Get().DocsLinks,
+		Branding:          brandingConfig,
 	}
 
 	c.JSON(http.StatusOK, config)

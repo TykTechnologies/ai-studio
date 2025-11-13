@@ -1,6 +1,24 @@
 import { createTheme } from "@mui/material/styles";
 
-const theme = createTheme({
+// Default branding colors (Tyk branding)
+const DEFAULT_PRIMARY_COLOR = "#23E2C2";
+const DEFAULT_SECONDARY_COLOR = "#343452";
+const DEFAULT_BACKGROUND_COLOR = "#FFFFFF";
+
+/**
+ * Generate a dynamic theme based on branding configuration
+ * @param {Object} brandingConfig - Optional branding configuration from backend
+ * @param {string} brandingConfig.primary_color - Primary brand color
+ * @param {string} brandingConfig.secondary_color - Secondary brand color
+ * @param {string} brandingConfig.background_color - Background color
+ * @returns {Object} MUI theme object
+ */
+export const generateTheme = (brandingConfig = {}) => {
+  const primaryColor = brandingConfig?.primary_color || DEFAULT_PRIMARY_COLOR;
+  const secondaryColor = brandingConfig?.secondary_color || DEFAULT_SECONDARY_COLOR;
+  const backgroundColor = brandingConfig?.background_color || DEFAULT_BACKGROUND_COLOR;
+
+  return createTheme({
   typography: {
     fontFamily: ["Inter-Regular", "sans-serif"].join(","),
     fontOpticalSizing: "auto",
@@ -95,14 +113,14 @@ const theme = createTheme({
   palette: {
     mode: "light",
     primary: {
-      main: "#23E2C2",
+      main: primaryColor,
       light: "#82F5D8", // Light teal for hover
     },
     secondary: {
-      main: "#21ecba",
+      main: secondaryColor,
     },
     background: {
-      default: "#FFFFFF",
+      default: backgroundColor,
       defaultSubdued:'#E6E6EA', 
       neutralDefault: '#F0F0F3',
       secondaryExtraLight: '#f8f8f9',
@@ -354,6 +372,9 @@ const theme = createTheme({
       }
     },
   },
-});
+  });
+};
 
+// Export default theme with default branding
+const theme = generateTheme();
 export default theme;

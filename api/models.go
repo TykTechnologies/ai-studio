@@ -984,6 +984,18 @@ type FrontendConfig struct {
 	DefaultSignUpMode string            `json:"defaultSignUpMode"`
 	TIBEnabled        bool              `json:"tibEnabled"`
 	DocsLinks         map[string]string `json:"docsLinks"`
+	Branding          *BrandingConfig   `json:"branding,omitempty"`
+}
+
+// BrandingConfig holds branding customization settings for the frontend
+type BrandingConfig struct {
+	AppTitle         string `json:"app_title"`
+	PrimaryColor     string `json:"primary_color"`
+	SecondaryColor   string `json:"secondary_color"`
+	BackgroundColor  string `json:"background_color"`
+	CustomCSS        string `json:"custom_css"`
+	HasCustomLogo    bool   `json:"has_custom_logo"`
+	HasCustomFavicon bool   `json:"has_custom_favicon"`
 }
 
 // FileStoreInput represents the input for filestore-related operations
