@@ -3,7 +3,7 @@ name: SentinelOne CNS Scan
 on:
   pull_request:
     types: [ opened, reopened, synchronize ]
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   s1_scanner:
