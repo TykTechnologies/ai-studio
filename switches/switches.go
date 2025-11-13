@@ -2,10 +2,14 @@
 package switches
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	anthropicVendor "github.com/TykTechnologies/midsommar/v2/vendors/anthropic"
@@ -106,4 +110,110 @@ func SetVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 	}
 
 	return v().ProxySetAuthHeader(r, llm)
+}
+
+// DetectStreamingIntent inspects the request to determine if it's a streaming request
+// based on vendor-specific patterns (body fields, URL parameters, path patterns, etc.)
+func DetectStreamingIntent(vendor models.Vendor, r *http.Request) (bool, error) {
+	switch vendor {
+	case models.GOOGLEAI, models.VERTEX:
+		// Google AI/Vertex uses URL path pattern for streaming detection
+		// Path contains ":streamGenerateContent" for streaming requests
+		if containsCaseInsensitive(r.URL.Path, ":streamgeneratecontent") {
+			return true, nil
+		}
+		// Also check for alt=sse query parameter (alternative streaming indicator)
+		if r.URL.Query().Get("alt") == "sse" {
+			return true, nil
+		}
+		return false, nil
+
+	case models.OPENAI, models.OLLAMA:
+		// OpenAI and Ollama use the "stream" field in request body
+		return detectStreamFromBody(r, func(data []byte) (bool, error) {
+			var req struct {
+				Stream bool `json:"stream"`
+			}
+			if err := unmarshalJSON(data, &req); err != nil {
+				return false, err
+			}
+			return req.Stream, nil
+		})
+
+	case models.ANTHROPIC:
+		// Anthropic uses the "stream" field in request body
+		return detectStreamFromBody(r, func(data []byte) (bool, error) {
+			var req struct {
+				Stream bool `json:"stream"`
+			}
+			if err := unmarshalJSON(data, &req); err != nil {
+				return false, err
+			}
+			return req.Stream, nil
+		})
+
+	case models.HUGGINGFACE:
+		// HuggingFace uses the "stream" field in request body
+		return detectStreamFromBody(r, func(data []byte) (bool, error) {
+			var req struct {
+				Stream bool `json:"stream"`
+			}
+			if err := unmarshalJSON(data, &req); err != nil {
+				return false, err
+			}
+			return req.Stream, nil
+		})
+
+	case models.MOCK_VENDOR:
+		// Mock vendor can check body for stream field as a default behavior
+		return detectStreamFromBody(r, func(data []byte) (bool, error) {
+			var req struct {
+				Stream bool `json:"stream"`
+			}
+			if err := unmarshalJSON(data, &req); err != nil {
+				// For mock vendor, if we can't parse, default to false
+				return false, nil
+			}
+			return req.Stream, nil
+		})
+
+	default:
+		return false, fmt.Errorf("unsupported vendor for streaming detection: %s", vendor)
+	}
+}
+
+// Helper functions for stream detection
+
+// detectStreamFromBody reads the request body, applies the detection function, and restores the body
+func detectStreamFromBody(r *http.Request, detector func([]byte) (bool, error)) (bool, error) {
+	// Read the body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return false, fmt.Errorf("failed to read request body: %w", err)
+	}
+
+	// Restore the body for downstream handlers
+	r.Body.Close()
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	// Apply the detector function
+	return detector(body)
+}
+
+// unmarshalJSON is a helper to unmarshal JSON with better error handling
+func unmarshalJSON(data []byte, v any) error {
+	if len(data) == 0 {
+		return fmt.Errorf("empty request body")
+	}
+
+	if err := json.Unmarshal(data, v); err != nil {
+		return fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return nil
+}
+
+// containsCaseInsensitive checks if a string contains a substring (case-insensitive)
+func containsCaseInsensitive(s, substr string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

@@ -18,6 +18,9 @@ import {
   Card,
   CardContent,
   Tooltip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -25,6 +28,7 @@ import DescriptionIcon from "@mui/icons-material/Description";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { getConfig } from "../../config";
 import { DangerButton, SecondaryLinkButton } from "../../admin/styles/sharedStyles";
 import pubClient from "../../admin/utils/pubClient";
@@ -583,7 +587,7 @@ const AppDetailView = () => {
                 {llm.attributes.short_description}
               </Typography>
 
-              {/* SDK-Specific Endpoints Section */}
+              {/* Primary Unified Endpoint Section */}
               <Typography
                 variant="subtitle1"
                 sx={{
@@ -592,118 +596,65 @@ const AppDetailView = () => {
                   mb: 1,
                 }}
               >
-                SDK-Specific Endpoints
+                Recommended Endpoint
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                Use the following URLs in your app, using the appropriate vendor
-                SDK or API Specs to interact with the LLMs.
+                Use this unified endpoint that automatically handles both streaming and non-streaming requests based on your request parameters. Works with any vendor SDK or API.
               </Typography>
 
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <FieldLabel sx={{ minWidth: "100px" }}>REST API:</FieldLabel>
-                  <Box>
-                    <Tooltip title="This endpoint proxies directly upstream to the vendor using your settings, use the vendor's API or SDK for access">
-                      <HelpOutlineIcon
-                        sx={{ color: "text.secondary", mr: 1 }}
-                      />
-                    </Tooltip>
-                  </Box>
-                  <Box
-                    sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
-                  >
-                    <Typography
-                      variant="body2"
-                      component="code"
-                      sx={{
-                        fontFamily: "monospace",
-                        bgcolor: "background.paper",
-                        p: 1,
-                        borderRadius: 1,
-                        flexGrow: 1,
-                      }}
-                    >
-                      {generateEndpointUrl("/llm/rest/", llm.attributes.name)}
-                    </Typography>
-                    <IconButton
-                      onClick={() =>
-                        copyToClipboard(
-                          generateEndpointUrl(
-                            "/llm/rest/",
-                            llm.attributes.name,
-                          ),
-                        )
-                      }
-                      size="small"
-                    >
-                      <ContentCopyIcon />
-                    </IconButton>
-                  </Box>
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <FieldLabel sx={{ minWidth: "100px" }}>UNIFIED:</FieldLabel>
+                <Box>
+                  <Tooltip title="This endpoint automatically detects streaming vs non-streaming requests and routes them appropriately. Use with your vendor's native SDK or API.">
+                    <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                  </Tooltip>
                 </Box>
-
-                <Box sx={{ display: "flex", alignItems: "center" }}>
-                  <FieldLabel sx={{ minWidth: "100px" }}>
-                    STREAM API:
-                  </FieldLabel>
-                  <Box>
-                    <Tooltip title="This endpoint proxies directly upstream to the vendor's streaming API using your settings, use the vendor's API or SDK for access, not all vendors support streaming proxy">
-                      <HelpOutlineIcon
-                        sx={{ color: "text.secondary", mr: 1 }}
-                      />
-                    </Tooltip>
-                  </Box>
-                  <Box
-                    sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                <Box
+                  sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                >
+                  <Typography
+                    variant="body2"
+                    component="code"
+                    sx={{
+                      fontFamily: "monospace",
+                      bgcolor: "background.paper",
+                      p: 1,
+                      borderRadius: 1,
+                      flexGrow: 1,
+                    }}
                   >
-                    <Typography
-                      variant="body2"
-                      component="code"
-                      sx={{
-                        fontFamily: "monospace",
-                        bgcolor: "background.paper",
-                        p: 1,
-                        borderRadius: 1,
-                        flexGrow: 1,
-                      }}
-                    >
-                      {generateEndpointUrl("/llm/stream/", llm.attributes.name)}
-                    </Typography>
-                    <IconButton
-                      onClick={() =>
-                        copyToClipboard(
-                          generateEndpointUrl(
-                            "/llm/stream/",
-                            llm.attributes.name,
-                          ),
-                        )
-                      }
-                      size="small"
-                    >
-                      <ContentCopyIcon />
-                    </IconButton>
-                  </Box>
+                    {generateEndpointUrl("/llm/call/", llm.attributes.name)}
+                  </Typography>
+                  <IconButton
+                    onClick={() =>
+                      copyToClipboard(
+                        generateEndpointUrl("/llm/call/", llm.attributes.name),
+                      )
+                    }
+                    size="small"
+                  >
+                    <ContentCopyIcon />
+                  </IconButton>
                 </Box>
               </Box>
 
-              {/* Unified Endpoint Section */}
+              {/* OpenAI Compatible Endpoint Section */}
               <Typography
                 variant="subtitle1"
                 sx={{
                   fontWeight: "bold",
-                  mt: 3,
+                  mt: 2,
                   mb: 1,
                 }}
               >
-                Open API Compatible Endpoint
+                OpenAI-Compatible Endpoint
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                The Unified Endpoint is an OpenAI-compatible endpoint that
-                translates your API calls into vendor-compatible ones to the
-                vendor. This endpoint currently does not support Streams.
+                Use this endpoint with OpenAI SDKs and tools. It translates OpenAI-format requests to your configured vendor's API.
               </Typography>
 
               <Box sx={{ display: "flex", alignItems: "center" }}>
-                <FieldLabel sx={{ minWidth: "100px" }}>UNIFIED API:</FieldLabel>
+                <FieldLabel sx={{ minWidth: "100px" }}>OpenAI API:</FieldLabel>
                 <Box>
                   <Tooltip title="This endpoint exposes an OpenAI-compatible API but translates your requests to the upstream vendor (using the default model defined by the admin)">
                     <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
@@ -737,6 +688,122 @@ const AppDetailView = () => {
                   </IconButton>
                 </Box>
               </Box>
+
+              {/* Legacy Endpoints - Collapsible */}
+              <Accordion
+                sx={{
+                  mt: 3,
+                  boxShadow: 'none',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  '&:before': { display: 'none' }
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    bgcolor: 'background.default',
+                    '& .MuiAccordionSummary-content': {
+                      alignItems: 'center'
+                    }
+                  }}
+                >
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Legacy Endpoints (Advanced)
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    These endpoints require you to manually specify whether your request is streaming or non-streaming. Use the unified endpoint above instead for automatic routing.
+                  </Typography>
+
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <FieldLabel sx={{ minWidth: "100px" }}>REST API:</FieldLabel>
+                      <Box>
+                        <Tooltip title="This endpoint proxies directly upstream to the vendor using your settings for non-streaming requests only">
+                          <HelpOutlineIcon
+                            sx={{ color: "text.secondary", mr: 1 }}
+                          />
+                        </Tooltip>
+                      </Box>
+                      <Box
+                        sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                      >
+                        <Typography
+                          variant="body2"
+                          component="code"
+                          sx={{
+                            fontFamily: "monospace",
+                            bgcolor: "background.paper",
+                            p: 1,
+                            borderRadius: 1,
+                            flexGrow: 1,
+                          }}
+                        >
+                          {generateEndpointUrl("/llm/rest/", llm.attributes.name)}
+                        </Typography>
+                        <IconButton
+                          onClick={() =>
+                            copyToClipboard(
+                              generateEndpointUrl(
+                                "/llm/rest/",
+                                llm.attributes.name,
+                              ),
+                            )
+                          }
+                          size="small"
+                        >
+                          <ContentCopyIcon />
+                        </IconButton>
+                      </Box>
+                    </Box>
+
+                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <FieldLabel sx={{ minWidth: "100px" }}>
+                        STREAM API:
+                      </FieldLabel>
+                      <Box>
+                        <Tooltip title="This endpoint proxies directly upstream to the vendor's streaming API for streaming requests only">
+                          <HelpOutlineIcon
+                            sx={{ color: "text.secondary", mr: 1 }}
+                          />
+                        </Tooltip>
+                      </Box>
+                      <Box
+                        sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                      >
+                        <Typography
+                          variant="body2"
+                          component="code"
+                          sx={{
+                            fontFamily: "monospace",
+                            bgcolor: "background.paper",
+                            p: 1,
+                            borderRadius: 1,
+                            flexGrow: 1,
+                          }}
+                        >
+                          {generateEndpointUrl("/llm/stream/", llm.attributes.name)}
+                        </Typography>
+                        <IconButton
+                          onClick={() =>
+                            copyToClipboard(
+                              generateEndpointUrl(
+                                "/llm/stream/",
+                                llm.attributes.name,
+                              ),
+                            )
+                          }
+                          size="small"
+                        >
+                          <ContentCopyIcon />
+                        </IconButton>
+                      </Box>
+                    </Box>
+                  </Box>
+                </AccordionDetails>
+              </Accordion>
             </CardContent>
           </Card>
         ))}
