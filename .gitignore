@@ -25,6 +25,22 @@ coverage.html
 node_modules
 docs/site/package-lock.json
 *.key
+
+# Enterprise submodule - ignore contents but git will track the submodule reference
+/enterprise/*
+
+# Keep submodule config and git reference visible
+!/.gitmodules
+!/enterprise
+
+# Prevent accidental enterprise commits
+*-ent-*
+*-ENT-*
+*.enterprise
+/bin/*-ent
+/bin/midsommar-ent*
+/bin/mgw-ent*
+/microgateway/bin/*-ent*
 examples/file-based-demo/file-based-demo
 examples/file-based-demo/demo
 examples/file-based-demo/analytics/*.json

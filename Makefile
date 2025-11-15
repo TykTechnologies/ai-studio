@@ -4,6 +4,19 @@
 ADMIN_FRONTEND_DIR := ui/admin-frontend
 FORCE_BUILD := false
 
+# Detect if enterprise submodule exists and is initialized
+ENTERPRISE_EXISTS := $(shell test -f enterprise/.git && echo "yes" || echo "no")
+
+ifeq ($(ENTERPRISE_EXISTS),yes)
+    BUILD_TAGS := -tags enterprise
+    EDITION := ent
+    $(info 🏢 Building Enterprise Edition)
+else
+    BUILD_TAGS :=
+    EDITION := ce
+    $(info 🌍 Building Community Edition)
+endif
+
 # Default target
 all: build
 
@@ -16,14 +29,22 @@ build-frontend:
 
 # Build Go binaries for all architectures
 build-binaries:
-	GOOS=linux GOARCH=amd64 go build -o midsommar-amd64
-	GOOS=linux GOARCH=arm64 go build -o midsommar-arm64
-	chmod +x midsommar-*
+	@echo "Building Midsommar $(EDITION) edition..."
+	GOOS=linux GOARCH=amd64 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)-amd64
+	GOOS=linux GOARCH=arm64 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)-arm64
+	@echo "Building Microgateway $(EDITION) edition..."
+	cd microgateway && GOOS=linux GOARCH=amd64 go build $(BUILD_TAGS) -o ../bin/mgw-$(EDITION)-amd64 ./cmd/microgateway
+	cd microgateway && GOOS=linux GOARCH=arm64 go build $(BUILD_TAGS) -o ../bin/mgw-$(EDITION)-arm64 ./cmd/microgateway
+	chmod +x bin/*
+	@echo "✅ Built: bin/midsommar-$(EDITION)-* and bin/mgw-$(EDITION)-*"
 
 # Build for local development (single architecture)
 build-local:
+	@echo "Building $(EDITION) edition for local development..."
 	cd $(ADMIN_FRONTEND_DIR) && npm run build
-	go build -o midsommar
+	go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)
+	cd microgateway && go build $(BUILD_TAGS) -o ../bin/mgw-$(EDITION) ./cmd/microgateway
+	@echo "✅ Built: bin/midsommar-$(EDITION) and bin/mgw-$(EDITION)"
 
 # Build all plugins
 plugins:
@@ -65,7 +86,8 @@ plugins:
 
 # Test target
 test:
-	go test ./...
+	go test $(BUILD_TAGS) ./...
+	cd microgateway && go test $(BUILD_TAGS) ./...
 
 # Performance testing targets
 perf-test:
@@ -125,7 +147,9 @@ perf-clean:
 # Clean target
 clean:
 	rm -f midsommar*
+	rm -rf bin/
 	rm -rf $(ADMIN_FRONTEND_DIR)/build
+	cd microgateway && rm -rf bin/ dist/
 
 # Development targets
 start-dev: stop-dev
@@ -173,4 +197,57 @@ build-docker-extras:
 	cd extra/reranker && \
 	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/reranker_cpu:latest --push -f dockerfile.cpu .
 
-.PHONY: all build build-frontend build-binaries build-local plugins test clean start-dev stop-dev perf-test perf-profile perf-baseline perf-compare perf-report perf-clean
+# Enterprise Edition specific targets
+.PHONY: build-enterprise
+build-enterprise:
+	@if [ ! -f enterprise/.git ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized."; \
+		echo ""; \
+		echo "To build Enterprise Edition:"; \
+		echo "  1. Ensure you have access to the private repository"; \
+		echo "  2. Run: make init-enterprise"; \
+		echo ""; \
+		echo "For enterprise access: contact enterprise@tyk.io"; \
+		exit 1; \
+	fi
+	$(MAKE) build BUILD_TAGS="-tags enterprise" EDITION=ent
+
+.PHONY: init-enterprise
+init-enterprise:
+	@echo "🔐 Initializing enterprise submodule..."
+	@git submodule init
+	@git submodule update --remote
+	@if [ -f enterprise/.git ]; then \
+		echo "✅ Enterprise edition initialized successfully"; \
+		echo "Run 'make build' to build enterprise edition"; \
+	else \
+		echo "❌ Failed to initialize enterprise submodule"; \
+		echo "You may not have access to the private repository"; \
+		echo "For enterprise access: contact enterprise@tyk.io"; \
+		exit 1; \
+	fi
+
+.PHONY: update-enterprise
+update-enterprise:
+	@if [ ! -f enterprise/.git ]; then \
+		echo "❌ Enterprise submodule not initialized"; \
+		echo "Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "Updating enterprise submodule..."
+	@git submodule update --remote enterprise
+	@git add enterprise
+	@echo "✅ Enterprise submodule updated"
+	@echo "Commit the change: git commit -m 'Update enterprise submodule'"
+
+.PHONY: show-edition
+show-edition:
+	@echo "Current edition: $(EDITION)"
+	@if [ "$(ENTERPRISE_EXISTS)" = "yes" ]; then \
+		echo "Enterprise commit:"; \
+		cd enterprise && git log -1 --oneline; \
+	else \
+		echo "Enterprise submodule: not initialized"; \
+	fi
+
+.PHONY: all build build-frontend build-binaries build-local plugins test clean start-dev stop-dev perf-test perf-profile perf-baseline perf-compare perf-report perf-clean build-enterprise init-enterprise update-enterprise show-edition
