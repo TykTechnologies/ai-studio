@@ -120,14 +120,8 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 			apps.PUT("/:id/llms", handlers.UpdateAppLLMs(config.Services))
 		}
 
-		// Budget management
-		budgets := protected.Group("/budgets")
-		{
-			budgets.GET("", handlers.ListBudgets(config.Services))
-			budgets.GET("/:appId/usage", handlers.GetBudgetUsage(config.Services))
-			budgets.PUT("/:appId", handlers.UpdateBudget(config.Services))
-			budgets.GET("/:appId/history", handlers.GetBudgetHistory(config.Services))
-		}
+		// Budget management (Enterprise only)
+		registerBudgetRoutes(protected, config)
 
 		// Token management
 		tokens := protected.Group("/tokens")

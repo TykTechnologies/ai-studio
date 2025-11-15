@@ -1,3 +1,6 @@
+//go:build enterprise
+// +build enterprise
+
 // internal/services/budget_service.go
 package services
 
