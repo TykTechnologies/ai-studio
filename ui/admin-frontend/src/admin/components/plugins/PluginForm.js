@@ -293,18 +293,18 @@ const PluginForm = ({ mode = 'create' }) => {
     }
 
     try {
-      // Prepare submission data with hook types
+      // Prepare submission data with hook types (camelCase for service layer)
       const submissionData = {
         name: formData.name,
         description: formData.description,
         command: formData.command,
-        hook_type: formData.hookType,
-        hook_types: formData.hookTypes.length > 0 ? formData.hookTypes : [formData.hookType],
-        hook_types_customized: formData.hookTypesCustomized,
+        hookType: formData.hookType,
+        hookTypes: formData.hookTypes.length > 0 ? formData.hookTypes : [formData.hookType],
+        hookTypesCustomized: formData.hookTypesCustomized,
         config: formData.config,
-        is_active: formData.isActive,
+        isActive: formData.isActive,
         namespace: formData.namespace,
-        oci_reference: formData.ociReference,
+        ociReference: formData.ociReference,
       };
 
       if (isEdit) {

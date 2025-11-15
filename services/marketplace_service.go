@@ -334,14 +334,15 @@ func (s *MarketplaceService) InstallFromMarketplace(ctx context.Context, req *ma
 
 	// Create plugin in database
 	plugin := &models.Plugin{
-		Name:        pluginName,
-		Description: marketplacePlugin.Description,
-		Command:     ociRef,
+		Name:         pluginName,
+		Description:  marketplacePlugin.Description,
+		Command:      ociRef,
 		OCIReference: ociRef,
-		HookType:    marketplacePlugin.PrimaryHook,
-		Config:      req.Config,
-		IsActive:    true,
-		Namespace:   req.Namespace,
+		HookType:     marketplacePlugin.PrimaryHook,
+		HookTypes:    marketplacePlugin.Hooks, // Set all hook types from marketplace
+		Config:       req.Config,
+		IsActive:     true,
+		Namespace:    req.Namespace,
 	}
 
 	// Set service scopes from marketplace manifest

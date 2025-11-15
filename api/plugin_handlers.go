@@ -432,6 +432,7 @@ func (a *API) updatePlugin(c *gin.Context) {
 		return
 	}
 
+	// Try to parse as plain UpdatePluginRequest (current UI behavior for PATCH)
 	var req services.UpdatePluginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -590,6 +591,47 @@ func (a *API) deletePlugin(c *gin.Context) {
 		return
 	}
 
+	// Get plugin details before deletion to check if it needs cleanup
+	plugin, err := a.service.PluginService.GetPlugin(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Plugin not found"}},
+		})
+		return
+	}
+
+	// Stop the plugin process if it's an AI Studio plugin (UI, Agent, or Object Hooks)
+	if plugin.SupportsHookType(models.HookTypeStudioUI) ||
+	   plugin.SupportsHookType(models.HookTypeAgent) ||
+	   plugin.SupportsHookType(models.HookTypeObjectHooks) {
+		if a.service.AIStudioPluginManager != nil {
+			if a.service.AIStudioPluginManager.IsPluginLoaded(plugin.ID) {
+				log.Printf("Stopping plugin process before deletion: %s (ID: %d)", plugin.Name, plugin.ID)
+
+				// Unload the plugin (this stops the process)
+				if unloadErr := a.service.AIStudioPluginManager.UnloadPlugin(plugin.ID); unloadErr != nil {
+					log.Printf("Warning: Failed to stop plugin process during deletion: %v", unloadErr)
+					// Continue with deletion even if unload fails
+				} else {
+					log.Printf("✅ Successfully stopped plugin process: %s", plugin.Name)
+				}
+
+				// Clean up UI registry entries
+				if a.service.PluginManifestService != nil {
+					if unloadUIErr := a.service.PluginManifestService.UnloadPluginUI(plugin.ID); unloadUIErr != nil {
+						log.Printf("Warning: Failed to clean up UI registry during deletion: %v", unloadUIErr)
+					} else {
+						log.Printf("✅ Cleaned up UI registry for deleted plugin: %s", plugin.Name)
+					}
+				}
+			}
+		}
+	}
+
+	// Now delete the plugin from the database
 	if err := a.service.PluginService.DeletePlugin(uint(id)); err != nil {
 		if err.Error() == "plugin not found: "+strconv.FormatUint(id, 10) {
 			c.JSON(http.StatusNotFound, ErrorResponse{
@@ -600,7 +642,7 @@ func (a *API) deletePlugin(c *gin.Context) {
 			})
 			return
 		}
-		
+
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -610,6 +652,7 @@ func (a *API) deletePlugin(c *gin.Context) {
 		return
 	}
 
+	log.Printf("✅ Plugin deleted successfully: %s (ID: %d)", plugin.Name, plugin.ID)
 	c.Status(http.StatusNoContent)
 }
 

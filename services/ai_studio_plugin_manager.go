@@ -511,6 +511,30 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 			return
 		}
 
+		// Auto-populate hook_types from manifest if empty (fixes marketplace plugins missing hook_types)
+		if len(pluginForUI.HookTypes) == 0 && manifest.Capabilities != nil && len(manifest.Capabilities.Hooks) > 0 {
+			pluginForUI.HookTypes = manifest.Capabilities.Hooks
+			if pluginForUI.HookType == "" && manifest.Capabilities.PrimaryHook != "" {
+				pluginForUI.HookType = manifest.Capabilities.PrimaryHook
+			}
+
+			if updateErr := m.db.Model(&pluginForUI).Updates(map[string]interface{}{
+				"hook_type":  pluginForUI.HookType,
+				"hook_types": pluginForUI.HookTypes,
+			}).Error; updateErr != nil {
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Err(updateErr).
+					Msg("Failed to update plugin hook types from manifest")
+			} else {
+				log.Info().
+					Uint("plugin_id", pluginID).
+					Str("plugin_name", pluginForUI.Name).
+					Strs("hooks", pluginForUI.HookTypes).
+					Msg("✅ Auto-populated hook types from manifest")
+			}
+		}
+
 		// Register UI automatically if manifest service is available
 		if m.manifestService != nil {
 			if registerErr := m.manifestService.RegisterPluginUI(&pluginForUI, manifest); registerErr != nil {
@@ -1106,6 +1130,7 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 
 	var loadErrors []string
 	loadedCount := 0
+	skippedCount := 0
 
 	for _, plugin := range plugins {
 		// Check if plugin supports studio_ui, agent, or object_hooks
@@ -1113,16 +1138,46 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 		supportsAgent := plugin.SupportsHookType(models.HookTypeAgent)
 		supportsObjectHooks := plugin.SupportsHookType(models.HookTypeObjectHooks)
 
-		if !supportsUI && !supportsAgent && !supportsObjectHooks {
+		// Skip if we know it's a gateway-only plugin
+		hasGatewayOnly := false
+		allHooks := plugin.GetAllHookTypes()
+		if len(allHooks) > 0 {
+			gatewayCount := 0
+			for _, hook := range allHooks {
+				if hook == models.HookTypePreAuth || hook == models.HookTypeAuth ||
+					hook == models.HookTypePostAuth || hook == models.HookTypeOnResponse ||
+					hook == models.HookTypeDataCollection {
+					gatewayCount++
+				}
+			}
+			hasGatewayOnly = gatewayCount == len(allHooks) && gatewayCount > 0
+		}
+
+		if hasGatewayOnly {
 			log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
-				Strs("hooks", plugin.GetAllHookTypes()).
-				Msg("Plugin does not support UI, Agent, or Object Hooks, skipping")
+				Strs("hooks", allHooks).
+				Msg("Gateway-only plugin, skipping AI Studio loading")
+			skippedCount++
 			continue
 		}
 
-		// Attempt to load
+		// If hook_types is empty or contains AI Studio hooks, try loading
+		// This handles marketplace plugins that may not have hook_types populated yet
+		shouldLoad := supportsUI || supportsAgent || supportsObjectHooks || len(plugin.HookTypes) == 0
+
+		if !shouldLoad {
+			log.Debug().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Strs("hooks", allHooks).
+				Msg("Plugin does not support UI, Agent, or Object Hooks, skipping")
+			skippedCount++
+			continue
+		}
+
+		// Attempt to load - manifest will be fetched and hook_types auto-populated if needed
 		_, err := m.LoadPlugin(plugin.ID)
 		if err != nil {
 			log.Error().
@@ -1143,6 +1198,7 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 
 	log.Info().
 		Int("loaded", loadedCount).
+		Int("skipped", skippedCount).
 		Int("failed", len(loadErrors)).
 		Msg("Completed AI Studio plugin loading")
 

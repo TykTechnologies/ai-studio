@@ -169,17 +169,20 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 		return
 	}
 
-	// Update plugin with hook types from manifest (if not already set)
+	// Update plugin with hook types from manifest (if not already customized)
 	shouldUpdatePlugin := false
 
-	if plugin.HookType == "" || plugin.HookType == "pending" {
+	// Always set hook_types if empty or if hook_types_customized is false
+	// This ensures that hook types from the manifest are saved during initial setup
+	if len(plugin.HookTypes) == 0 || !plugin.HookTypesCustomized {
+		oldHookType := plugin.HookType
 		plugin.HookType = primaryHook
 		plugin.HookTypes = hookTypes
 		plugin.HookTypesCustomized = false
 		shouldUpdatePlugin = true
 		log.Info().
 			Uint("plugin_id", uint(id)).
-			Str("old_hook_type", plugin.HookType).
+			Str("old_hook_type", oldHookType).
 			Str("new_primary_hook", primaryHook).
 			Strs("new_hook_types", hookTypes).
 			Msg("Setting hook types from manifest")

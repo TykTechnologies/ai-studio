@@ -272,23 +272,25 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 
 		// Convert to analytics plugin format
 		analyticsData := &interfaces.AnalyticsData{
-			LLMID:          llmID,
-			ModelName:      model,
-			Vendor:         proxyLog.Vendor,
-			PromptTokens:   tokens.PromptTokens,
-			ResponseTokens: tokens.ResponseTokens,
-			TotalTokens:    tokens.TotalTokens,
-			Cost:           cost,
-			Currency:       "USD",
-			AppID:          proxyLog.AppID,
-			UserID:         proxyLog.UserID,
-			Timestamp:      proxyLog.TimeStamp,
-			ToolCalls:      0, // Could be parsed from request if needed
-			Choices:        1, // Default to 1 choice
-			RequestID:      fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
+			LLMID:                  llmID,
+			ModelName:              model,
+			Vendor:                 proxyLog.Vendor,
+			PromptTokens:           tokens.PromptTokens,
+			ResponseTokens:         tokens.ResponseTokens,
+			TotalTokens:            tokens.TotalTokens,
+			CacheWritePromptTokens: tokens.CacheWriteTokens,
+			CacheReadPromptTokens:  tokens.CacheReadTokens,
+			Cost:                   cost,
+			Currency:               "USD",
+			AppID:                  proxyLog.AppID,
+			UserID:                 proxyLog.UserID,
+			Timestamp:              proxyLog.TimeStamp,
+			ToolCalls:              0, // Could be parsed from request if needed
+			Choices:                1, // Default to 1 choice
+			RequestID:              fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
 			// Include request/response data for pulse plugins
-			RequestBody:    proxyLog.RequestBody,
-			ResponseBody:   proxyLog.ResponseBody,
+			RequestBody:            proxyLog.RequestBody,
+			ResponseBody:           proxyLog.ResponseBody,
 		}
 		
 		// Execute analytics plugins

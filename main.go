@@ -2,7 +2,9 @@ package main
 
 import (
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 
 	"gorm.io/driver/postgres"
 
@@ -276,21 +278,63 @@ func main() {
 		go docsServer.Start()
 	}
 
+	// Setup signal handling for graceful shutdown
+	shutdownCtx, stop := signal.NotifyContext(context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	var apiServer *api.API
 	if !appConf.ProxyOnly {
 		// Create a new API instance
-		api := api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, nil) // true to disable CORS for development
+		apiServer = api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, nil)
 
-		// listEmbeddedFiles(staticFiles)
-		// Run the API
-		listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
-		logger.Infof("Server listening on %s", listenOn)
-		if err := api.Run(listenOn, appConf.CertFile, appConf.KeyFile); err != nil {
-			logger.FatalErr("Failed to run server", err)
+		// Start server in goroutine
+		serverErrors := make(chan error, 1)
+		go func() {
+			listenOn := fmt.Sprintf(":%s", appConf.ServerPort)
+			logger.Infof("Server listening on %s", listenOn)
+			if err := apiServer.Run(listenOn, appConf.CertFile, appConf.KeyFile); err != nil {
+				serverErrors <- fmt.Errorf("server error: %w", err)
+			}
+		}()
+
+		// Wait for shutdown signal or server error
+		select {
+		case err := <-serverErrors:
+			logger.Errorf("Server error occurred: %v", err)
+			stop()
+		case <-shutdownCtx.Done():
+			logger.Info("Shutdown signal received")
 		}
 	} else {
-		// wait for Ctrl+C
-		select {}
+		// Proxy-only mode: wait for shutdown signal
+		logger.Info("Running in proxy-only mode, waiting for shutdown signal...")
+		<-shutdownCtx.Done()
+		logger.Info("Shutdown signal received")
 	}
+
+	// Graceful shutdown sequence
+	logger.Info("Starting graceful shutdown...")
+
+	shutdownTimeout := 30 * time.Second
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	// Shutdown API server if running
+	if apiServer != nil {
+		if err := apiServer.Shutdown(cleanupCtx); err != nil {
+			logger.Errorf("Error during API shutdown: %v", err)
+		}
+	}
+
+	// Cleanup services
+	if err := service.Cleanup(); err != nil {
+		logger.Errorf("Error during service cleanup: %v", err)
+	}
+
+	logger.Info("Application stopped gracefully")
 }
 
 func listEmbeddedFiles(fsys embed.FS) error {

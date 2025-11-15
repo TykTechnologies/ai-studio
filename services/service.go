@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -156,4 +157,76 @@ func (s *Service) GetPluginClient(pluginID uint) (pb.PluginServiceClient, error)
 	}
 
 	return loadedPlugin.GRPCClient, nil
+}
+
+// Cleanup performs graceful cleanup of all services
+func (s *Service) Cleanup() error {
+	logger.Info("Starting service cleanup...")
+
+	var errors []error
+
+	// Shutdown plugin manager first (most critical)
+	if s.AIStudioPluginManager != nil {
+		logger.Info("Shutting down AI Studio plugin manager...")
+		if err := s.AIStudioPluginManager.Shutdown(); err != nil {
+			logger.Errorf("Failed to shutdown plugin manager: %v", err)
+			errors = append(errors, fmt.Errorf("plugin manager shutdown: %w", err))
+		} else {
+			logger.Info("Plugin manager shutdown completed")
+		}
+	}
+
+	// Stop marketplace service if running
+	if s.MarketplaceService != nil {
+		logger.Info("Stopping marketplace service...")
+		// MarketplaceService.Stop() would need context - it's already managed via defer cancel() in main.go
+		// No explicit stop needed as context cancellation handles it
+		logger.Info("Marketplace service will be stopped via context cancellation")
+	}
+
+	// Cleanup hook registry
+	if s.HookRegistry != nil {
+		logger.Info("Cleaning up hook registry...")
+		// Hook registry cleanup if needed
+		// Currently no explicit cleanup required
+	}
+
+	// Close database connections
+	if s.DB != nil {
+		logger.Info("Closing database connections...")
+		sqlDB, err := s.DB.DB()
+		if err == nil {
+			if err := sqlDB.Close(); err != nil {
+				logger.Errorf("Failed to close database: %v", err)
+				errors = append(errors, fmt.Errorf("database close: %w", err))
+			} else {
+				logger.Info("Database connections closed")
+			}
+		}
+	}
+
+	logger.Info("Service cleanup completed")
+
+	if len(errors) > 0 {
+		return fmt.Errorf("errors during cleanup: %v", errors)
+	}
+	return nil
+}
+
+// CleanupWithContext performs graceful cleanup with a timeout context
+func (s *Service) CleanupWithContext(ctx context.Context) error {
+	// Create a channel to signal completion
+	done := make(chan error, 1)
+
+	go func() {
+		done <- s.Cleanup()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		logger.Warn("Service cleanup timeout exceeded")
+		return fmt.Errorf("cleanup timeout: %w", ctx.Err())
+	}
 }

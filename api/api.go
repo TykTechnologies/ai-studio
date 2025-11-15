@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"embed"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
@@ -61,6 +63,7 @@ func (w *bodyLogWriter) Write(b []byte) (int, error) {
 type API struct {
 	service             *services.Service
 	router              *gin.Engine
+	server              *http.Server
 	config              *auth.Config
 	disableCORS         bool
 	auth                *auth.AuthService
@@ -195,11 +198,33 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 }
 
 func (a *API) Run(addr string, certFile string, keyFile string) error {
-	if certFile != "" && keyFile != "" {
-		return a.router.RunTLS(addr, certFile, keyFile)
+	// Create http.Server for graceful shutdown support
+	a.server = &http.Server{
+		Addr:    addr,
+		Handler: a.router,
 	}
 
-	return a.router.Run(addr)
+	if certFile != "" && keyFile != "" {
+		return a.server.ListenAndServeTLS(certFile, keyFile)
+	}
+
+	return a.server.ListenAndServe()
+}
+
+// Shutdown gracefully shuts down the API server
+func (a *API) Shutdown(ctx context.Context) error {
+	if a.server == nil {
+		return nil
+	}
+
+	logger.Info("Shutting down API server...")
+
+	if err := a.server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("API server shutdown failed: %w", err)
+	}
+
+	logger.Info("API server stopped successfully")
+	return nil
 }
 
 // Helper function to create a sub-filesystem
