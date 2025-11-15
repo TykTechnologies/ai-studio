@@ -22,7 +22,7 @@ func setupBenchmarkProxy(b *testing.B) (*Proxy, *framework.BenchmarkDB, *framewo
 
 	// Create services
 	service := services.NewService(benchDB.GetDB())
-	budgetService := services.NewBudgetService(benchDB.DB, nil)
+	budgetService := budget.NewService(benchDB.DB, nil)
 
 	// Create mock LLM server
 	mockServer := framework.NewMockLLMServer()

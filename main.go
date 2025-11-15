@@ -27,8 +27,10 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/startup"
+
 	"github.com/go-mail/mail"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -203,7 +205,7 @@ func main() {
 	ctx, stopRec := context.WithCancel(context.Background())
 	defer stopRec()
 	analytics.StartRecording(ctx, db)
-	budgetService := services.NewBudgetService(db, notificationService)
+	budgetService := budget.NewService(db, notificationService)
 
 	// Initialize and start telemetry
 	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, "v2.0-hub-spoke")

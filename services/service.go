@@ -8,12 +8,13 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"gorm.io/gorm"
 )
 
 type Service struct {
 	DB                     *gorm.DB
-	Budget                 *BudgetService
+	Budget                 budget.Service
 	NotificationService    *NotificationService
 	// Hub-and-Spoke Services
 	EdgeService            *EdgeService
@@ -35,7 +36,7 @@ func NewService(db *gorm.DB) *Service {
 func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	secrets.SetDBRef(db)
 	notificationService := NewNotificationService(db, "", "", 0, "", "", nil) // SMTP will be configured when needed
-	budgetService := NewBudgetService(db, notificationService)
+	budgetSvc := budget.NewService(db, notificationService)
 
 	// Initialize hub-and-spoke services
 	edgeService := NewEdgeService(db)
@@ -116,7 +117,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	service := &Service{
 		DB:                    db,
 		NotificationService:   notificationService,
-		Budget:                budgetService,
+		Budget:                budgetSvc,
 		EdgeService:           edgeService,
 		NamespaceService:      namespaceService,
 		PluginService:         pluginService,

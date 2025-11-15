@@ -134,7 +134,7 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 	if s, ok := service.(*services.Service); ok && s.Budget != nil {
 		s.Budget.AnalyzeBudgetUsage(app, llm)
 	} else if budgetService, ok := service.(interface {
-		GetBudgetService() *services.BudgetService
+		GetBudgetService() services.BudgetService
 	}); ok {
 		if bs := budgetService.GetBudgetService(); bs != nil {
 			bs.AnalyzeBudgetUsage(app, llm)

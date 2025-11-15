@@ -28,7 +28,7 @@ func TestSecretReferenceInAuthHeader(t *testing.T) {
 	// Initialize services
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	// Initialize secrets
 	secrets.SetDBRef(db)

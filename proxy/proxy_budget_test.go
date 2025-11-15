@@ -27,7 +27,7 @@ func TestBudgetCheck(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 
 	// Clear the budget service cache before starting

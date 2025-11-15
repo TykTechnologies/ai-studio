@@ -169,7 +169,7 @@ func TestProxySetup(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	config := &Config{Port: 8080}
 	p := NewProxy(service, config, budgetService)
@@ -182,7 +182,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 
 	var wg sync.WaitGroup
@@ -204,7 +204,7 @@ func TestHandleToolRequest_ValidGET(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc) // Added budgetService
+	budgetService := budget.NewService(db, notificationSvc) // Added budgetService
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "test@example.com",
@@ -321,7 +321,7 @@ func TestHandleToolRequest_ValidPOST(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "testpost@example.com",
@@ -432,7 +432,7 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "testinvalidbody@example.com",
@@ -667,7 +667,7 @@ func TestHandleToolRequest_ToolNotFound(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	// First create a tool to create a valid credential
 	mockHttpServer, mockTeardown := newMockServer(t, &mockServerConfig{})
@@ -753,7 +753,7 @@ func TestHandleToolRequest_OperationNotFound(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "testopnotfound@example.com",
@@ -850,7 +850,7 @@ func TestHandleToolRequest_BackendServerError(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "testuser-servererror",

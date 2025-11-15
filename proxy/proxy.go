@@ -143,7 +143,7 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 
 // NewProxy creates a new Proxy instance using the existing concrete services.
 // This is the legacy constructor that maintains backward compatibility.
-func NewProxy(service *services.Service, cfg *Config, budgetService *services.BudgetService) *Proxy {
+func NewProxy(service *services.Service, cfg *Config, budgetService services.BudgetServiceInterface) *Proxy {
 	// Use the new unified interface constructor
 	return New(service, budgetService, cfg)
 }

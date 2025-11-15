@@ -70,6 +70,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/TykTechnologies/gojsonschema v0.0.0-20170222154038-dcb3e4bb7990 // indirect
 	github.com/TykTechnologies/graphql-go-tools v1.6.2-0.20240705065952-ae6008677a48 // indirect
+	github.com/TykTechnologies/midsommar/v2/enterprise v0.0.0 // indirect
 	github.com/TykTechnologies/murmur3 v0.0.0-20230310161213-aad17efd5632 // indirect
 	github.com/TykTechnologies/opentelemetry v0.0.21 // indirect
 	github.com/TykTechnologies/storage v1.2.2 // indirect
@@ -257,3 +258,5 @@ replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-2
 replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.34.0
 
 replace github.com/TykTechnologies/midsommar/microgateway => ./microgateway
+
+replace github.com/TykTechnologies/midsommar/v2/enterprise => ./enterprise

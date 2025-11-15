@@ -29,7 +29,7 @@ func TestNotify(t *testing.T) {
 		service := &services.Service{
 			DB:                  db,
 			NotificationService: notificationService,
-			Budget:              services.NewBudgetService(db, notificationService),
+			Budget:              budget.NewService(db, notificationService),
 		}
 
 		// Create admin users with different notification settings
@@ -128,7 +128,7 @@ func TestNotify(t *testing.T) {
 		service := &services.Service{
 			DB:                  db,
 			NotificationService: notificationService,
-			Budget:              services.NewBudgetService(db, notificationService),
+			Budget:              budget.NewService(db, notificationService),
 		}
 
 		// Create admin users with different notification settings

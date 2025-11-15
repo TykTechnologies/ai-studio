@@ -24,7 +24,7 @@ func setupLoadTestProxy(b *testing.B) (*proxy.Proxy, *framework.BenchmarkDB, *fr
 
 	// Create services
 	service := services.NewService(benchDB.GetDB())
-	budgetService := services.NewBudgetService(benchDB.DB, nil)
+	budgetService := budget.NewService(benchDB.DB, nil)
 
 	// Initialize analytics
 	ctx := context.Background()
