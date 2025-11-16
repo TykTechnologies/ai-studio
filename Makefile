@@ -27,14 +27,18 @@ build: build-frontend build-binaries
 build-frontend:
 	cd $(ADMIN_FRONTEND_DIR) && npm run build
 
-# Build Go binaries for all architectures
+# Build Go binaries for all architectures (linux amd64 and darwin amd64)
 build-binaries:
 	@echo "Building Midsommar $(EDITION) edition..."
-	GOOS=linux GOARCH=amd64 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)-amd64
-	GOOS=linux GOARCH=arm64 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)-arm64
+	GOOS=linux GOARCH=amd64 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)-linux-amd64
+	GOOS=darwin GOARCH=amd64 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)-darwin-amd64
 	@echo "Building Microgateway $(EDITION) edition..."
-	cd microgateway && GOOS=linux GOARCH=amd64 go build $(BUILD_TAGS) -o ../bin/mgw-$(EDITION)-amd64 ./cmd/microgateway
-	cd microgateway && GOOS=linux GOARCH=arm64 go build $(BUILD_TAGS) -o ../bin/mgw-$(EDITION)-arm64 ./cmd/microgateway
+	@mkdir -p bin
+	cd microgateway && $(MAKE) build
+	cp microgateway/dist/microgateway-$(EDITION) bin/mgw-$(EDITION)-linux-amd64
+	# Build darwin version of microgateway
+	cd microgateway && GOOS=darwin GOARCH=amd64 $(MAKE) GOOS=darwin GOARCH=amd64 build
+	cp microgateway/dist/microgateway-$(EDITION) bin/mgw-$(EDITION)-darwin-amd64
 	chmod +x bin/*
 	@echo "✅ Built: bin/midsommar-$(EDITION)-* and bin/mgw-$(EDITION)-*"
 
@@ -43,8 +47,51 @@ build-local:
 	@echo "Building $(EDITION) edition for local development..."
 	cd $(ADMIN_FRONTEND_DIR) && npm run build
 	go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)
-	cd microgateway && go build $(BUILD_TAGS) -o ../bin/mgw-$(EDITION) ./cmd/microgateway
+	@mkdir -p bin
+	cd microgateway && $(MAKE) build
+	cp microgateway/dist/microgateway-$(EDITION) bin/mgw-$(EDITION)
 	@echo "✅ Built: bin/midsommar-$(EDITION) and bin/mgw-$(EDITION)"
+
+# Force build Community Edition (ignore enterprise submodule)
+build-community:
+	@echo "🌍 Force building Community Edition..."
+	cd $(ADMIN_FRONTEND_DIR) && npm run build
+	@echo "Building Midsommar CE..."
+	GOOS=linux GOARCH=amd64 go build -o bin/midsommar-ce-linux-amd64
+	GOOS=darwin GOARCH=amd64 go build -o bin/midsommar-ce-darwin-amd64
+	@echo "Building Microgateway CE..."
+	@mkdir -p bin
+	cd microgateway && $(MAKE) build-community
+	cp microgateway/dist/microgateway-ce bin/mgw-ce-linux-amd64
+	cd microgateway && GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') -X main.BuildHash=$$(git rev-parse HEAD 2>/dev/null || echo 'unknown') -X main.BuildTime=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/microgateway-ce-darwin ./cmd/microgateway
+	cp microgateway/dist/microgateway-ce-darwin bin/mgw-ce-darwin-amd64
+	chmod +x bin/*
+	@echo "✅ Built Community Edition: bin/midsommar-ce-* and bin/mgw-ce-*"
+
+# Force build Enterprise Edition (require enterprise submodule)
+build-enterprise:
+	@if [ ! -f enterprise/.git ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized."; \
+		echo ""; \
+		echo "To build Enterprise Edition:"; \
+		echo "  1. make init-enterprise"; \
+		echo ""; \
+		echo "For enterprise access: contact enterprise@tyk.io"; \
+		exit 1; \
+	fi
+	@echo "🏢 Force building Enterprise Edition..."
+	cd $(ADMIN_FRONTEND_DIR) && npm run build
+	@echo "Building Midsommar ENT..."
+	GOOS=linux GOARCH=amd64 go build -tags enterprise -o bin/midsommar-ent-linux-amd64
+	GOOS=darwin GOARCH=amd64 go build -tags enterprise -o bin/midsommar-ent-darwin-amd64
+	@echo "Building Microgateway ENT..."
+	@mkdir -p bin
+	cd microgateway && $(MAKE) build-enterprise
+	cp microgateway/dist/microgateway-ent bin/mgw-ent-linux-amd64
+	cd microgateway && GOOS=darwin GOARCH=amd64 go build -tags enterprise -ldflags "-X main.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') -X main.BuildHash=$$(git rev-parse HEAD 2>/dev/null || echo 'unknown') -X main.BuildTime=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/microgateway-ent-darwin ./cmd/microgateway
+	cp microgateway/dist/microgateway-ent-darwin bin/mgw-ent-darwin-amd64
+	chmod +x bin/*
+	@echo "✅ Built Enterprise Edition: bin/midsommar-ent-* and bin/mgw-ent-*"
 
 # Build all plugins
 plugins:
@@ -250,4 +297,4 @@ show-edition:
 		echo "Enterprise submodule: not initialized"; \
 	fi
 
-.PHONY: all build build-frontend build-binaries build-local plugins test clean start-dev stop-dev perf-test perf-profile perf-baseline perf-compare perf-report perf-clean build-enterprise init-enterprise update-enterprise show-edition
+.PHONY: all build build-frontend build-binaries build-local build-community build-enterprise plugins test clean start-dev stop-dev perf-test perf-profile perf-baseline perf-compare perf-report perf-clean init-enterprise update-enterprise show-edition

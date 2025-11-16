@@ -37,7 +37,7 @@ docs/site/package-lock.json
 *-ent-*
 *-ENT-*
 *.enterprise
-/bin/*-ent
+/bin
 /bin/midsommar-ent*
 /bin/mgw-ent*
 /microgateway/bin/*-ent*

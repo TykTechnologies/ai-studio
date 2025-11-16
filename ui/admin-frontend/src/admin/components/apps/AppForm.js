@@ -17,10 +17,12 @@ import {
   Switch,
   FormControlLabel,
   InputAdornment,
+  Tooltip,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
   SecondaryLinkButton,
   TitleBox,
@@ -29,6 +31,7 @@ import {
   StyledAccordion,
 } from "../../styles/sharedStyles";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import { useEdition } from "../../context/EditionContext";
 
 const AppForm = () => {
   const [app, setApp] = useState({
@@ -58,6 +61,7 @@ const AppForm = () => {
   });
   const navigate = useNavigate();
   const { id } = useParams();
+  const { isEnterprise } = useEdition(); // Get edition info
 
   const fetchCredential = useCallback(async (credentialId) => {
     try {
@@ -386,37 +390,62 @@ const AppForm = () => {
             <Grid item xs={12}>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Monthly Budget"
-                    name="monthly_budget"
-                    type="number"
-                    inputProps={{
-                      step: "0.01",
-                      min: "0"
-                    }}
-                    value={app.monthly_budget || ''}
-                    onChange={handleBudgetChange}
-                    InputProps={{
-                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                    }}
-                    helperText="Leave empty for no budget limit"
-                  />
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      label="Monthly Budget"
+                      name="monthly_budget"
+                      type="number"
+                      inputProps={{
+                        step: "0.01",
+                        min: "0"
+                      }}
+                      value={app.monthly_budget || ''}
+                      onChange={handleBudgetChange}
+                      disabled={!isEnterprise}
+                      sx={{ opacity: isEnterprise ? 1 : 0.6 }}
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                      }}
+                      helperText={isEnterprise ? "Leave empty for no budget limit" : "Budget enforcement is an Enterprise feature"}
+                    />
+                    {!isEnterprise && (
+                      <Tooltip
+                        title="Budget enforcement is an Enterprise feature"
+                        arrow
+                        placement="right"
+                      >
+                        <InfoOutlinedIcon sx={{ color: "text.secondary", cursor: "help" }} />
+                      </Tooltip>
+                    )}
+                  </Box>
                 </Grid>
                 <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Budget Start Date"
-                    name="budget_start_date"
-                    type="date"
-                    value={app.budget_start_date ? app.budget_start_date.split('T')[0] : ''}
-                    onChange={handleBudgetStartDateChange}
-                    disabled={!app.monthly_budget}
-                    InputLabelProps={{
-                      shrink: true,
-                    }}
-                    helperText="Budget cycle start date"
-                  />
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      label="Budget Start Date"
+                      name="budget_start_date"
+                      type="date"
+                      value={app.budget_start_date ? app.budget_start_date.split('T')[0] : ''}
+                      onChange={handleBudgetStartDateChange}
+                      disabled={!isEnterprise || !app.monthly_budget}
+                      sx={{ opacity: isEnterprise ? 1 : 0.6 }}
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                      helperText={isEnterprise ? "Budget cycle start date" : "Budget enforcement is an Enterprise feature"}
+                    />
+                    {!isEnterprise && (
+                      <Tooltip
+                        title="Budget enforcement is an Enterprise feature"
+                        arrow
+                        placement="right"
+                      >
+                        <InfoOutlinedIcon sx={{ color: "text.secondary", cursor: "help" }} />
+                      </Tooltip>
+                    )}
+                  </Box>
                 </Grid>
               </Grid>
             </Grid>

@@ -14,9 +14,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+const appVersion = "v1.0" // Imported from version.go
 
 // @Summary Get system feature set
 // @Description Returns the current system feature set from licensing
@@ -37,8 +40,16 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 		featureSet["docs_url"] = cfg.DocsURL
 	}
 
+	// Determine edition
+	edition := "community"
+	if budget.IsEnterpriseAvailable() {
+		edition = "enterprise"
+	}
+
 	response := gin.H{
 		"features": featureSet,
+		"edition":  edition,
+		"version":  appVersion,
 	}
 
 	// No license expiry to check anymore
