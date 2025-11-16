@@ -8,6 +8,19 @@ BUILD_HASH=$(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS=-ldflags "-X main.Version=${VERSION} -X main.BuildHash=${BUILD_HASH} -X main.BuildTime=${BUILD_TIME}"
 
+# Detect if enterprise submodule exists (check parent directory)
+ENTERPRISE_EXISTS := $(shell test -f ../enterprise/.git && echo "yes" || echo "no")
+
+ifeq ($(ENTERPRISE_EXISTS),yes)
+    BUILD_TAGS := -tags enterprise
+    EDITION := ent
+    $(info 🏢 Building Enterprise Edition)
+else
+    BUILD_TAGS :=
+    EDITION := ce
+    $(info 🌍 Building Community Edition)
+endif
+
 # Go parameters
 GOCMD=go
 GOBUILD=$(GOCMD) build
@@ -21,17 +34,55 @@ CMD_DIR=./cmd/microgateway
 CLI_CMD_DIR=./cmd/mgw
 DIST_DIR=./dist
 
-.PHONY: all build build-cli build-both build-all build-cli-all clean test coverage lint help deps tidy docker-build docker-compose-up
+# Enterprise Edition specific targets
+.PHONY: build-enterprise
+build-enterprise: ## Force build Enterprise Edition
+	@if [ ! -f ../enterprise/.git ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized."; \
+		echo ""; \
+		echo "To build Enterprise Edition:"; \
+		echo "  1. cd .. && make init-enterprise"; \
+		echo ""; \
+		echo "For enterprise access: contact enterprise@tyk.io"; \
+		exit 1; \
+	fi
+	@mkdir -p $(DIST_DIR)
+	@echo "Building microgateway ENT (forced)..."
+	$(GOBUILD) -tags enterprise $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-ent $(CMD_DIR)
+	@echo "✅ Built: $(DIST_DIR)/$(BINARY_NAME)-ent"
+
+.PHONY: build-community
+build-community: ## Force build Community Edition
+	@mkdir -p $(DIST_DIR)
+	@echo "Building microgateway CE (forced)..."
+	$(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-ce $(CMD_DIR)
+	@echo "✅ Built: $(DIST_DIR)/$(BINARY_NAME)-ce"
+
+.PHONY: show-edition
+show-edition: ## Show current edition
+	@echo "Current edition: $(EDITION)"
+	@if [ "$(ENTERPRISE_EXISTS)" = "yes" ]; then \
+		echo "Enterprise submodule: initialized"; \
+		cd ../enterprise && git log -1 --oneline; \
+	else \
+		echo "Enterprise submodule: not initialized"; \
+	fi
+
+.PHONY: all build build-cli build-both build-all build-cli-all clean test coverage lint help deps tidy docker-build docker-compose-up build-enterprise build-community show-edition
 
 all: test build ## Run tests and build
 
-build: ## Build the microgateway binary
+build: ## Build the microgateway binary (auto-detects edition)
 	@mkdir -p $(DIST_DIR)
-	$(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME) $(CMD_DIR)
+	@echo "Building microgateway $(EDITION)..."
+	$(GOBUILD) $(BUILD_TAGS) $(LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-$(EDITION) $(CMD_DIR)
+	@echo "✅ Built: $(DIST_DIR)/$(BINARY_NAME)-$(EDITION)"
 
-build-cli: ## Build the CLI binary
+build-cli: ## Build the CLI binary (auto-detects edition)
 	@mkdir -p $(DIST_DIR)
-	$(GOBUILD) $(LDFLAGS) -o $(DIST_DIR)/$(CLI_BINARY_NAME) $(CLI_CMD_DIR)
+	@echo "Building mgw CLI $(EDITION)..."
+	$(GOBUILD) $(BUILD_TAGS) $(LDFLAGS) -o $(DIST_DIR)/$(CLI_BINARY_NAME)-$(EDITION) $(CLI_CMD_DIR)
+	@echo "✅ Built: $(DIST_DIR)/$(CLI_BINARY_NAME)-$(EDITION)"
 
 build-both: build build-cli ## Build both server and CLI binaries
 
@@ -53,8 +104,8 @@ clean: ## Clean build artifacts
 	$(GOCLEAN)
 	rm -rf $(DIST_DIR)
 
-test: ## Run tests
-	$(GOTEST) -v -race -coverprofile=coverage.out ./...
+test: ## Run tests (auto-detects edition)
+	$(GOTEST) $(BUILD_TAGS) -v -race -coverprofile=coverage.out ./...
 
 test-unit: ## Run unit tests
 	$(GOTEST) -v -short ./...
