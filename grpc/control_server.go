@@ -904,18 +904,25 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 		}
 
+		// Format budget start date if available
+		budgetStartDate := ""
+		if app.BudgetStartDate != nil {
+			budgetStartDate = app.BudgetStartDate.Format(time.RFC3339)
+		}
+
 		pbApp := &pb.AppConfig{
-			Id:            uint32(app.ID),
-			Name:          app.Name,
-			Description:   app.Description,
-			OwnerEmail:    "", // AI Studio doesn't have owner email field yet
-			IsActive:      app.IsActive,
-			MonthlyBudget: monthlyBudget,
-			Metadata:      metadataJSON,
-			Namespace:     app.Namespace,
-			LlmIds:        llmIDs,
-			CreatedAt:     timestamppb.New(app.CreatedAt),
-			UpdatedAt:     timestamppb.New(app.UpdatedAt),
+			Id:              uint32(app.ID),
+			Name:            app.Name,
+			Description:     app.Description,
+			OwnerEmail:      "", // AI Studio doesn't have owner email field yet
+			IsActive:        app.IsActive,
+			MonthlyBudget:   monthlyBudget,
+			BudgetStartDate: budgetStartDate,
+			Metadata:        metadataJSON,
+			Namespace:       app.Namespace,
+			LlmIds:          llmIDs,
+			CreatedAt:       timestamppb.New(app.CreatedAt),
+			UpdatedAt:       timestamppb.New(app.UpdatedAt),
 		}
 		snapshot.Apps = append(snapshot.Apps, pbApp)
 	}

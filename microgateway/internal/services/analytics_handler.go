@@ -26,6 +26,7 @@ type MicrogatewaAnalyticsHandler struct {
 	pendingEvents map[string]uint // Map request ID to event ID for matching
 	mu            sync.RWMutex
 	pluginManager *plugins.PluginManager // For global data collection plugins
+	budgetService BudgetServiceInterface // For recording budget usage
 	// Batch processing channels for async non-blocking batch operations
 	chatRecordBatchChan chan []*models.LLMChatRecord
 	proxyLogBatchChan   chan []*models.ProxyLog
@@ -36,7 +37,7 @@ type MicrogatewaAnalyticsHandler struct {
 }
 
 // NewMicrogatewaAnalyticsHandler creates a new analytics handler for the microgateway
-func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.AnalyticsConfig, pluginManager *plugins.PluginManager) *MicrogatewaAnalyticsHandler {
+func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.AnalyticsConfig, pluginManager *plugins.PluginManager, budgetService BudgetServiceInterface) *MicrogatewaAnalyticsHandler {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	batchBufferSize := 100 // Default batch channel buffer size
@@ -52,6 +53,7 @@ func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.Analyti
 		config:        analyticsConfig,
 		pendingEvents: make(map[string]uint),
 		pluginManager: pluginManager,
+		budgetService: budgetService,
 		chatRecordBatchChan: make(chan []*models.LLMChatRecord, batchBufferSize),
 		proxyLogBatchChan:   make(chan []*models.ProxyLog, batchBufferSize),
 		ctx:                 ctx,
@@ -353,6 +355,30 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 			Int("total_tokens", event.TotalTokens).
 			Float64("cost", event.Cost).
 			Msg("Analytics event created successfully from proxy log")
+	}
+
+	// Record budget usage if budget service is available and cost > 0
+	if h.budgetService != nil && cost > 0 {
+		if err := h.budgetService.RecordUsage(
+			proxyLog.AppID,
+			llmIDPtr,
+			int64(tokens.TotalTokens),
+			cost,
+			int64(tokens.PromptTokens),
+			int64(tokens.ResponseTokens),
+		); err != nil {
+			log.Warn().Err(err).
+				Uint("app_id", proxyLog.AppID).
+				Float64("cost", cost).
+				Msg("Failed to record budget usage")
+			// Don't fail analytics recording if budget recording fails
+		} else {
+			log.Debug().
+				Uint("app_id", proxyLog.AppID).
+				Float64("cost", cost).
+				Int("total_tokens", tokens.TotalTokens).
+				Msg("Budget usage recorded successfully")
+		}
 	}
 }
 
