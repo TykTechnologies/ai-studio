@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/grpc"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/licensing"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
@@ -102,6 +103,18 @@ func main() {
 	if err := database.IsHealthy(db); err != nil {
 		log.Fatal().Err(err).Msg("Database health check failed")
 	}
+
+	// Initialize and start licensing service (ENT: validates license, CE: no-op)
+	licensingConfig := licensing.Config{
+		LicenseKey:          os.Getenv("TYK_AI_LICENSE"),
+		ValidityCheckPeriod: 24 * time.Hour, // Re-validate every 24 hours
+	}
+	licensingService := licensing.NewService(licensingConfig)
+	if err := licensingService.Start(); err != nil {
+		log.Fatal().Err(err).Msg("License validation failed")
+	}
+	defer licensingService.Stop()
+	log.Info().Msg("Licensing service initialized")
 
 	// Initialize edge client FIRST if in edge mode (before creating services)
 	var edgeClient *grpc.SimpleEdgeClient

@@ -81,6 +81,14 @@ type AppConf struct {
 	GRPCTLSKeyPath     string
 	GRPCAuthToken      string
 	GRPCNextAuthToken  string
+
+	// Licensing Configuration (Enterprise Edition)
+	LicenseKey              string
+	LicenseTelemetryPeriod  time.Duration
+	LicenseDisableTelemetry bool
+	LicenseTelemetryURL     string
+	LicenseValidityPeriod   time.Duration
+	LicenseTelemetryConcurrency int
 }
 
 // QueueConfig holds configuration for message queues
@@ -293,7 +301,29 @@ func getConfigFromEnv() *AppConf {
 		cfgLog.Info("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
 	}
 
-	// Licensing has been removed - TYK_AI_LICENSE no longer required
+	// Licensing configuration (Enterprise Edition)
+	conf.LicenseKey = os.Getenv("TYK_AI_LICENSE")
+
+	// License telemetry configuration
+	conf.LicenseTelemetryURL = os.Getenv("LICENSE_TELEMETRY_URL")
+	if conf.LicenseTelemetryURL == "" {
+		conf.LicenseTelemetryURL = "https://telemetry.tyk.technology/api/track"
+	}
+
+	conf.LicenseTelemetryPeriod = parseDurationWithDefault("LICENSE_TELEMETRY_PERIOD", 1*time.Hour)
+	conf.LicenseValidityPeriod = parseDurationWithDefault("LICENSE_VALIDITY_CHECK_PERIOD", 24*time.Hour)
+
+	conf.LicenseDisableTelemetry = os.Getenv("LICENSE_DISABLE_TELEMETRY") == "true"
+
+	telemetryConcurrency := os.Getenv("LICENSE_TELEMETRY_CONCURRENCY")
+	if telemetryConcurrency != "" {
+		if concurrency, err := strconv.Atoi(telemetryConcurrency); err == nil {
+			conf.LicenseTelemetryConcurrency = concurrency
+		}
+	}
+	if conf.LicenseTelemetryConcurrency == 0 {
+		conf.LicenseTelemetryConcurrency = 20 // Default
+	}
 
 	// Telemetry configuration - enabled by default, can be disabled by setting TELEMETRY_ENABLED=false
 	telemetryEnabledStr := os.Getenv("TELEMETRY_ENABLED")
@@ -722,4 +752,20 @@ func Get() *AppConf {
 // This is primarily for testing purposes to ensure test isolation
 func ResetGlobalConfig() {
 	globalConfig = nil
+}
+
+// parseDurationWithDefault parses a duration from an environment variable with a default fallback
+func parseDurationWithDefault(envVar string, defaultDuration time.Duration) time.Duration {
+	value := os.Getenv(envVar)
+	if value == "" {
+		return defaultDuration
+	}
+
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		cfgLog.Warnf("Invalid duration for %s: %s, using default %s", envVar, value, defaultDuration)
+		return defaultDuration
+	}
+
+	return duration
 }

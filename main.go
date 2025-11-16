@@ -28,6 +28,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/startup"
 
@@ -90,6 +91,22 @@ func main() {
 	if err != nil {
 		logger.FatalErr("Failed to initialize models", err)
 	}
+
+	// Initialize and start licensing service (ENT: validates license, starts periodic checks)
+	licensingConfig := licensing.Config{
+		LicenseKey:              appConf.LicenseKey,
+		TelemetryURL:            appConf.LicenseTelemetryURL,
+		TelemetryPeriod:         appConf.LicenseTelemetryPeriod,
+		TelemetryDisabled:       appConf.LicenseDisableTelemetry,
+		ValidityCheckPeriod:     appConf.LicenseValidityPeriod,
+		TelemetryConcurrency:    appConf.LicenseTelemetryConcurrency,
+	}
+	licensingService := licensing.NewService(licensingConfig, db)
+	if err := licensingService.Start(); err != nil {
+		logger.FatalErr("Failed to start licensing service", err)
+	}
+	defer licensingService.Stop()
+	logger.Info("Licensing service initialized")
 
 	// Initialize branding storage directory
 	brandingStoragePath := services.GetBrandingStoragePath()
@@ -290,7 +307,7 @@ func main() {
 	var apiServer *api.API
 	if !appConf.ProxyOnly {
 		// Create a new API instance
-		apiServer = api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, nil)
+		apiServer = api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, licensingService)
 
 		// Start server in goroutine
 		serverErrors := make(chan error, 1)

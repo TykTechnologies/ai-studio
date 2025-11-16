@@ -24,6 +24,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
@@ -72,9 +73,10 @@ type API struct {
 	providers           *providers.Registry
 	setupChatRoutesFunc func(*gin.RouterGroup)
 	ssoService          *services.SSOService
+	licensingService    licensing.Service
 }
 
-func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, _ interface{}) *API {
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
 	gin.SetMode(gin.ReleaseMode)
 
 	// Initialize provider registry
@@ -129,14 +131,20 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	}
 
 	api := &API{
-		service:     service,
-		router:      router,
-		disableCORS: disableCORS,
-		auth:        authService,
-		config:      config,
-		proxy:       proxy,
-		staticFiles: staticFiles,
-		providers:   providerRegistry,
+		service:          service,
+		router:           router,
+		disableCORS:      disableCORS,
+		auth:             authService,
+		config:           config,
+		proxy:            proxy,
+		staticFiles:      staticFiles,
+		providers:        providerRegistry,
+		licensingService: licensingService,
+	}
+
+	// Add telemetry middleware (ENT: tracks API actions, CE: no-op)
+	if licensingService != nil {
+		router.Use(licensingService.TelemetryMiddleware())
 	}
 
 	if config.TIBEnabled {
