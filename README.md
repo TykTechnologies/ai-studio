@@ -12,6 +12,8 @@
 
 Tyk AI Studio is an open source platform that addresses the critical challenges organizations face when adopting AI: shadow AI usage, compliance requirements, security concerns, and spiraling costs. Built for developers and platform teams, it provides structured AI management through governance, monitoring, and unified access controls.
 
+> **📦 Available in two editions**: [Community Edition](#community-edition) (open source) and [Enterprise Edition](#enterprise-edition) (advanced features). See [edition comparison](#edition-comparison) below.
+
 ## Why Tyk AI Studio?
 
 AI adoption brings significant challenges that require structured solutions:
@@ -120,6 +122,45 @@ cp .env.example .env
 ```
 
 **⚠️ Important**: If you try to run `go build` without first building the frontend, you'll get an error about empty directories because the Go application embeds the frontend build assets. Always build the frontend first!
+
+## Edition Comparison
+
+Tyk AI Studio is available in two editions:
+
+| Feature | Community Edition | Enterprise Edition |
+|---------|------------------|-------------------|
+| **LLM Proxy Gateway** | ✅ | ✅ |
+| **Chat Interface** | ✅ | ✅ |
+| **Tool Integration** | ✅ | ✅ |
+| **User Management & RBAC** | ✅ | ✅ |
+| **Hub-and-Spoke Deployment** | ✅ | ✅ |
+| **Cost Tracking & Analytics** | ✅ | ✅ |
+| **Plugin System** | ✅ | ✅ |
+| **Budget Management** | ❌ | ✅ |
+| **Budget Enforcement** | ❌ | ✅ |
+| **Budget Alerts** | ❌ | ✅ |
+| **Advanced SSO (SAML, OIDC)** | ❌ | ✅ |
+| **Advanced RBAC** | ❌ | ✅ |
+| **Audit Logging** | ❌ | ✅ |
+| **Priority Support** | ❌ | ✅ |
+
+### Community Edition
+Free and open source. Perfect for:
+- Development and testing
+- Small teams
+- Cost visibility without enforcement
+- Learning AI management
+
+### Enterprise Edition
+Advanced features for production. Ideal for:
+- Production deployments
+- Cost control and governance
+- Compliance requirements
+- Enterprise SSO integration
+
+**[Learn more about Enterprise Edition →](mailto:enterprise@tyk.io)**
+
+For detailed framework documentation, see [ENTERPRISE_FRAMEWORK.md](ENTERPRISE_FRAMEWORK.md)
 
 ## Quick Start
 
