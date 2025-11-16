@@ -25,6 +25,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
+	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
@@ -72,7 +73,7 @@ type API struct {
 	staticFiles         embed.FS
 	providers           *providers.Registry
 	setupChatRoutesFunc func(*gin.RouterGroup)
-	ssoService          *services.SSOService
+	ssoService          sso.Service
 	licensingService    licensing.Service
 }
 
@@ -147,20 +148,21 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		router.Use(licensingService.TelemetryMiddleware())
 	}
 
-	if config.TIBEnabled {
-		logLevel := "info"
+	// Initialize SSO service (ENT: full TIB functionality, CE: stub returning enterprise errors)
+	logLevel := "info"
+	if config.TestMode {
+		logLevel = "debug"
+	}
 
-		if config.TestMode {
-			logLevel = "debug"
+	ssoConfig := &sso.Config{
+		APISecret: config.TIBAPISecret,
+		LogLevel:  logLevel,
+	}
+	api.ssoService = sso.NewService(ssoConfig, router, config.DB, service.NotificationService)
+	if sso.IsEnterpriseAvailable() {
+		if err := api.ssoService.InitInternalTIB(); err != nil {
+			log.Fatalf("Failed to initialize SSO service: %v", err)
 		}
-
-		ssoConfig := &services.Config{
-			APISecret: config.TIBAPISecret,
-			LogLevel:  logLevel,
-		}
-		api.ssoService = services.NewSSOService(ssoConfig, router, config.DB, service.NotificationService)
-
-		api.ssoService.InitInternalTIB()
 	}
 
 	api.setupChatRoutesFunc = api.SetupChatRoutes
@@ -814,30 +816,28 @@ func (a *API) setupRoutes() {
 	v1.POST("/namespaces/:namespace/reload", a.triggerNamespaceReload)
 	v1.GET("/namespaces/:namespace/edges", a.getNamespaceEdges)
 
-	// SSO routes
-	if a.config.TIBEnabled {
-		public.GET("/auth/:id/:provider", a.handleTIBAuth)
-		public.POST("/auth/:id/:provider", a.handleTIBAuth)
-		public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
-		public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
-		public.GET("/auth/:id/saml/metadata", a.handleSAMLMetadata)
-		public.POST("/auth/:id/saml/metadata", a.handleSAMLMetadata)
-		public.GET("/sso", a.handleSSO)
-		public.GET("/login-sso-profile", a.getLoginPageProfile)
+	// SSO routes (ENT: full functionality, CE: returns 402 Payment Required)
+	public.GET("/auth/:id/:provider", a.handleTIBAuth)
+	public.POST("/auth/:id/:provider", a.handleTIBAuth)
+	public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+	public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+	public.GET("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+	public.POST("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+	public.GET("/sso", a.handleSSO)
+	public.GET("/login-sso-profile", a.getLoginPageProfile)
 
-		apiGroup := public.Group("/api")
-		apiGroup.Use(a.SSOAuthMiddleware())
-		apiGroup.POST("/sso", a.handleNonceRequest)
+	apiGroup := public.Group("/api")
+	apiGroup.Use(a.SSOAuthMiddleware())
+	apiGroup.POST("/sso", a.handleNonceRequest)
 
-		profiles := v1.Group("/sso-profiles")
-		profiles.Use(a.auth.SSOOnly())
-		profiles.POST("", a.createProfile)
-		profiles.GET("", a.listProfiles)
-		profiles.GET("/:profile_id", a.getProfile)
-		profiles.PUT("/:profile_id", a.updateProfile)
-		profiles.DELETE("/:profile_id", a.deleteProfile)
-		profiles.POST("/:profile_id/use-in-login-page", a.setProfileUseInLoginPage)
-	}
+	profiles := v1.Group("/sso-profiles")
+	profiles.Use(a.auth.SSOOnly())
+	profiles.POST("", a.createProfile)
+	profiles.GET("", a.listProfiles)
+	profiles.GET("/:profile_id", a.getProfile)
+	profiles.PUT("/:profile_id", a.updateProfile)
+	profiles.DELETE("/:profile_id", a.deleteProfile)
+	profiles.POST("/:profile_id/use-in-login-page", a.setProfileUseInLoginPage)
 
 	// Always enable chat features
 	if a.setupChatRoutesFunc != nil {
@@ -908,7 +908,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		APIBaseURL:        apiBaseURL,
 		ProxyURL:          config.Get().ProxyURL,
 		DefaultSignUpMode: suMode,
-		TIBEnabled:        a.config.TIBEnabled,
+		TIBEnabled:        sso.IsEnterpriseAvailable(),
 		DocsLinks:         config.Get().DocsLinks,
 		Branding:          brandingConfig,
 	}

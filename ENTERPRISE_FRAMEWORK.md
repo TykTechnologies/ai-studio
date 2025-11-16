@@ -295,7 +295,7 @@ func TestBudgetEnforcement(t *testing.T) {
 **Not Included:**
 - ❌ Budget enforcement
 - ❌ Budget alerts and notifications
-- ❌ Advanced SSO (SAML, OIDC)
+- ❌ SSO (SAML, OIDC, LDAP, Social)
 - ❌ Advanced RBAC
 - ❌ Audit logging
 
@@ -305,7 +305,10 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Budget management and enforcement
 - ✅ Budget alerts (80%, 100% thresholds)
 - ✅ Budget forecasting
-- ✅ Advanced SSO integration
+- ✅ SSO integration (SAML, OIDC, LDAP, Social)
+- ✅ Multi-provider SSO support
+- ✅ User provisioning via SSO
+- ✅ Group mapping from IdP
 - ✅ Advanced RBAC
 - ✅ Audit logging
 - ✅ Priority support
@@ -340,6 +343,61 @@ func TestBudgetEnforcement(t *testing.T) {
 - Interface: `internal/services/interfaces.go` (BudgetServiceInterface)
 - CE Stub: `internal/services/budget_community.go` (no enforcement)
 - ENT Impl: `internal/services/budget_service.go` (build tag: `//go:build enterprise`)
+
+## SSO Feature Specifics
+
+### How SSO Works
+
+**Community Edition:**
+- ❌ **SSO Authentication**: No SSO support
+- ❌ **Profile Management**: Cannot configure SSO providers
+- ❌ **User Provisioning**: No automatic user creation via SSO
+- 🔒 **API Endpoints**: Return 402 Payment Required
+- 🔒 **Admin UI**: SSO configuration pages hidden
+
+**Enterprise Edition:**
+- ✅ **Everything in CE**, plus:
+- ✅ **Multiple Protocols**: OIDC, SAML 2.0, LDAP, Social (Google, GitHub, etc.)
+- ✅ **Multi-Provider**: Configure multiple SSO providers simultaneously
+- ✅ **User Provisioning**: Automatic user creation on first SSO login
+- ✅ **Group Mapping**: Map IdP groups to Tyk AI Studio groups
+- ✅ **Profile Management**: Full CRUD via Admin UI and API
+- ✅ **Login Page Integration**: SSO button appears when profile configured
+
+### Implementation Details
+
+**Main App (Midsommar):**
+- Interface: `services/sso/interface.go` - SSO service interface
+- Types: `services/sso/types.go` - Shared types (Config, Nonce, etc.)
+- Factory: `services/sso/factory.go` - Factory pattern
+- CE Stub: `services/sso/community.go` - Returns enterprise-only errors
+- ENT Impl: `enterprise/features/sso/service.go` - Full TIB integration
+
+**API Handlers:**
+- CE Handlers: `api/sso_handlers_community.go` (build tag: `!enterprise`)
+- ENT Handlers: `api/sso_handlers_enterprise.go` (build tag: `enterprise`)
+- Profile Handlers (CE): `api/profile_handlers_community.go` (402 responses)
+- Profile Handlers (ENT): `api/profile_handlers_enterprise.go` (full CRUD)
+
+**Database Models (Public):**
+- `models/tib_profiles.go` - SSO profile configurations
+- `models/tib_kv_store.go` - Nonce token storage
+- `models/tib_backend_store.go` - TIB backend integration
+- Models remain in public repo for upgrade path compatibility
+
+**Frontend:**
+- Login Page: `ui/admin-frontend/src/portal/pages/Login.js`
+  - SSO button gated by `tibEnabled` from `/auth/config`
+  - Shows when ENT and profile configured
+- Admin UI: `ui/admin-frontend/src/admin/pages/SSOProfiles.js`
+  - Routes conditionally rendered based on `ShowSSOConfig` permission
+  - Full profile management (CRUD, set default, etc.)
+
+**Supported Providers:**
+- **OIDC**: Standard OAuth 2.0 / OpenID Connect flows
+- **SAML 2.0**: SP-initiated and IdP-initiated, metadata endpoint
+- **LDAP**: Direct LDAP server integration with custom filters
+- **Social**: OAuth-based (Google, GitHub, custom providers)
 
 ## Enterprise Submodule Workflow
 

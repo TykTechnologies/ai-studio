@@ -70,6 +70,14 @@ func NewUnauthorizedError(message string) ErrorResponse {
 	}
 }
 
+func NewPaymentRequiredError(message string) ErrorResponse {
+	return ErrorResponse{
+		StatusCode: http.StatusPaymentRequired,
+		Title:      "Payment Required",
+		Message:    message,
+	}
+}
+
 func KeyValueOrZero(dat map[string]any, key string) int {
 	if val, ok := dat[key]; ok {
 		val, ok := val.(int)

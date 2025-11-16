@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -402,7 +403,7 @@ func (a *API) handleMe(c *gin.Context) {
 
 	response.Attributes.UIOptions.ShowChat = u.ShowChat
 	response.Attributes.UIOptions.ShowPortal = u.ShowPortal
-	response.Attributes.UIOptions.ShowSSOConfig = u.IsAdmin && u.AccessToSSOConfig
+	response.Attributes.UIOptions.ShowSSOConfig = u.IsAdmin && u.AccessToSSOConfig && sso.IsEnterpriseAvailable()
 	response.Attributes.UIOptions.SkipQuickStart = u.SkipQuickStart
 	response.Attributes.Entitlements.Catalogues = serializeCatalogues(entitlements.Catalogues)
 	response.Attributes.Entitlements.DataCatalogues = serializeDataCatalogues(entitlements.DataCatalogues)

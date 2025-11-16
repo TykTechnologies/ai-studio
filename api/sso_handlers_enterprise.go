@@ -1,10 +1,13 @@
+//go:build enterprise
+// +build enterprise
+
 package api
 
 import (
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
-	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	tykerrors "github.com/TykTechnologies/tyk-identity-broker/error"
 
 	"github.com/gin-gonic/gin"
@@ -183,13 +186,13 @@ func (a *API) SSOAuthMiddleware() gin.HandlerFunc {
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body services.NonceTokenRequest true "Nonce token request"
-// @Success 200 {object} services.NonceTokenResponse
+// @Param request body sso.NonceTokenRequest true "Nonce token request"
+// @Success 200 {object} sso.NonceTokenResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/sso [post]
 func (a *API) handleNonceRequest(c *gin.Context) {
-	var nonceRequest services.NonceTokenRequest
+	var nonceRequest sso.NonceTokenRequest
 	if err := c.ShouldBindJSON(&nonceRequest); err != nil {
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Malformed request body"))
 		return
@@ -206,7 +209,7 @@ func (a *API) handleNonceRequest(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, services.NonceTokenResponse{
+	c.JSON(http.StatusOK, sso.NonceTokenResponse{
 		Status:  "ok",
 		Message: "Nonce token created",
 		Meta:    nonceToken,
