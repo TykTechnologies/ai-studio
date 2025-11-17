@@ -1703,35 +1703,43 @@ func (x *AnalyticsPulseConfig) GetExcludedVendors() []string {
 }
 
 // Individual analytics event for pulse batching
+// Aligned with LLMChatRecord from AI Studio for analytics parity
 type AnalyticsEvent struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	RequestId      string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`                 // Unique request identifier
-	AppId          uint32                 `protobuf:"varint,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`                            // Application ID
-	LlmId          uint32                 `protobuf:"varint,3,opt,name=llm_id,json=llmId,proto3" json:"llm_id,omitempty"`                            // LLM ID (optional)
-	Endpoint       string                 `protobuf:"bytes,4,opt,name=endpoint,proto3" json:"endpoint,omitempty"`                                    // API endpoint called
-	Method         string                 `protobuf:"bytes,5,opt,name=method,proto3" json:"method,omitempty"`                                        // HTTP method
-	StatusCode     int32                  `protobuf:"varint,6,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"`             // Response status code
-	RequestTokens  uint32                 `protobuf:"varint,7,opt,name=request_tokens,json=requestTokens,proto3" json:"request_tokens,omitempty"`    // Input tokens consumed
-	ResponseTokens uint32                 `protobuf:"varint,8,opt,name=response_tokens,json=responseTokens,proto3" json:"response_tokens,omitempty"` // Output tokens generated
-	TotalTokens    uint32                 `protobuf:"varint,9,opt,name=total_tokens,json=totalTokens,proto3" json:"total_tokens,omitempty"`          // Total tokens used
-	Cost           float64                `protobuf:"fixed64,10,opt,name=cost,proto3" json:"cost,omitempty"`                                         // Cost in dollars (4 decimal precision)
-	LatencyMs      uint32                 `protobuf:"varint,11,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`               // Request latency in milliseconds
-	Timestamp      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                 // When the event occurred
-	ErrorMessage   string                 `protobuf:"bytes,13,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`       // Error message if failed (optional)
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	RequestId  string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`     // Unique request identifier
+	AppId      uint32                 `protobuf:"varint,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`                // Application ID
+	LlmId      uint32                 `protobuf:"varint,3,opt,name=llm_id,json=llmId,proto3" json:"llm_id,omitempty"`                // LLM ID (optional)
+	UserId     uint32                 `protobuf:"varint,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`             // User ID who made the request
+	Endpoint   string                 `protobuf:"bytes,5,opt,name=endpoint,proto3" json:"endpoint,omitempty"`                        // API endpoint called
+	Method     string                 `protobuf:"bytes,6,opt,name=method,proto3" json:"method,omitempty"`                            // HTTP method
+	StatusCode int32                  `protobuf:"varint,7,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"` // Response status code
+	// Fields matching LLMChatRecord for parity
+	ModelName       string `protobuf:"bytes,8,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`                    // Model name (e.g., "gpt-4", "claude-3-opus")
+	Vendor          string `protobuf:"bytes,9,opt,name=vendor,proto3" json:"vendor,omitempty"`                                           // Vendor name (e.g., "anthropic", "openai")
+	InteractionType string `protobuf:"bytes,10,opt,name=interaction_type,json=interactionType,proto3" json:"interaction_type,omitempty"` // "chat" or "proxy"
+	Choices         uint32 `protobuf:"varint,11,opt,name=choices,proto3" json:"choices,omitempty"`                                       // Number of choices in response
+	ToolCalls       uint32 `protobuf:"varint,12,opt,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`                  // Number of tool calls made
+	ChatId          string `protobuf:"bytes,13,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`                            // Chat session identifier
+	Currency        string `protobuf:"bytes,14,opt,name=currency,proto3" json:"currency,omitempty"`                                      // Currency for cost (e.g., "USD")
+	// Token tracking (matching LLMChatRecord naming)
+	RequestTokens          uint32 `protobuf:"varint,15,opt,name=request_tokens,json=requestTokens,proto3" json:"request_tokens,omitempty"`                                // Input tokens consumed (prompt_tokens)
+	ResponseTokens         uint32 `protobuf:"varint,16,opt,name=response_tokens,json=responseTokens,proto3" json:"response_tokens,omitempty"`                             // Output tokens generated (response_tokens)
+	TotalTokens            uint32 `protobuf:"varint,17,opt,name=total_tokens,json=totalTokens,proto3" json:"total_tokens,omitempty"`                                      // Total tokens used
+	CacheWritePromptTokens uint32 `protobuf:"varint,18,opt,name=cache_write_prompt_tokens,json=cacheWritePromptTokens,proto3" json:"cache_write_prompt_tokens,omitempty"` // Cache creation/write tokens
+	CacheReadPromptTokens  uint32 `protobuf:"varint,19,opt,name=cache_read_prompt_tokens,json=cacheReadPromptTokens,proto3" json:"cache_read_prompt_tokens,omitempty"`    // Cache read tokens
+	// Cost and timing
+	Cost         float64                `protobuf:"fixed64,20,opt,name=cost,proto3" json:"cost,omitempty"`                                   // Cost in dollars (4 decimal precision)
+	LatencyMs    uint32                 `protobuf:"varint,21,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`         // Request latency in milliseconds (total_time_ms)
+	Timestamp    *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                           // When the event occurred
+	ErrorMessage string                 `protobuf:"bytes,23,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Error message if failed (optional)
 	// Optional request/response size summary (not full payloads)
-	RequestSizeBytes  uint32 `protobuf:"varint,14,opt,name=request_size_bytes,json=requestSizeBytes,proto3" json:"request_size_bytes,omitempty"`    // Size of request body
-	ResponseSizeBytes uint32 `protobuf:"varint,15,opt,name=response_size_bytes,json=responseSizeBytes,proto3" json:"response_size_bytes,omitempty"` // Size of response body
-	// Model information (NEW)
-	ModelName string `protobuf:"bytes,16,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"` // Actual model name from request (e.g., "claude-sonnet-4-20250514")
-	Vendor    string `protobuf:"bytes,17,opt,name=vendor,proto3" json:"vendor,omitempty"`                        // Vendor name (e.g., "anthropic", "openai")
+	RequestSizeBytes  uint32 `protobuf:"varint,24,opt,name=request_size_bytes,json=requestSizeBytes,proto3" json:"request_size_bytes,omitempty"`    // Size of request body
+	ResponseSizeBytes uint32 `protobuf:"varint,25,opt,name=response_size_bytes,json=responseSizeBytes,proto3" json:"response_size_bytes,omitempty"` // Size of response body
 	// Optional request/response data (controlled by include_request_response_data flag)
-	RequestBody  string `protobuf:"bytes,18,opt,name=request_body,json=requestBody,proto3" json:"request_body,omitempty"`    // Request body (if include_request_response_data = true)
-	ResponseBody string `protobuf:"bytes,19,opt,name=response_body,json=responseBody,proto3" json:"response_body,omitempty"` // Response body (if include_request_response_data = true)
-	// Cache token tracking (for prompt caching features like Anthropic's)
-	CacheWritePromptTokens uint32 `protobuf:"varint,20,opt,name=cache_write_prompt_tokens,json=cacheWritePromptTokens,proto3" json:"cache_write_prompt_tokens,omitempty"` // Cache creation/write tokens
-	CacheReadPromptTokens  uint32 `protobuf:"varint,21,opt,name=cache_read_prompt_tokens,json=cacheReadPromptTokens,proto3" json:"cache_read_prompt_tokens,omitempty"`    // Cache read tokens
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	RequestBody   string `protobuf:"bytes,26,opt,name=request_body,json=requestBody,proto3" json:"request_body,omitempty"`    // Request body (if include_request_response_data = true)
+	ResponseBody  string `protobuf:"bytes,27,opt,name=response_body,json=responseBody,proto3" json:"response_body,omitempty"` // Response body (if include_request_response_data = true)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AnalyticsEvent) Reset() {
@@ -1785,6 +1793,13 @@ func (x *AnalyticsEvent) GetLlmId() uint32 {
 	return 0
 }
 
+func (x *AnalyticsEvent) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
 func (x *AnalyticsEvent) GetEndpoint() string {
 	if x != nil {
 		return x.Endpoint
@@ -1806,6 +1821,55 @@ func (x *AnalyticsEvent) GetStatusCode() int32 {
 	return 0
 }
 
+func (x *AnalyticsEvent) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetInteractionType() string {
+	if x != nil {
+		return x.InteractionType
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetChoices() uint32 {
+	if x != nil {
+		return x.Choices
+	}
+	return 0
+}
+
+func (x *AnalyticsEvent) GetToolCalls() uint32 {
+	if x != nil {
+		return x.ToolCalls
+	}
+	return 0
+}
+
+func (x *AnalyticsEvent) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
 func (x *AnalyticsEvent) GetRequestTokens() uint32 {
 	if x != nil {
 		return x.RequestTokens
@@ -1823,6 +1887,20 @@ func (x *AnalyticsEvent) GetResponseTokens() uint32 {
 func (x *AnalyticsEvent) GetTotalTokens() uint32 {
 	if x != nil {
 		return x.TotalTokens
+	}
+	return 0
+}
+
+func (x *AnalyticsEvent) GetCacheWritePromptTokens() uint32 {
+	if x != nil {
+		return x.CacheWritePromptTokens
+	}
+	return 0
+}
+
+func (x *AnalyticsEvent) GetCacheReadPromptTokens() uint32 {
+	if x != nil {
+		return x.CacheReadPromptTokens
 	}
 	return 0
 }
@@ -1869,20 +1947,6 @@ func (x *AnalyticsEvent) GetResponseSizeBytes() uint32 {
 	return 0
 }
 
-func (x *AnalyticsEvent) GetModelName() string {
-	if x != nil {
-		return x.ModelName
-	}
-	return ""
-}
-
-func (x *AnalyticsEvent) GetVendor() string {
-	if x != nil {
-		return x.Vendor
-	}
-	return ""
-}
-
 func (x *AnalyticsEvent) GetRequestBody() string {
 	if x != nil {
 		return x.RequestBody
@@ -1895,20 +1959,6 @@ func (x *AnalyticsEvent) GetResponseBody() string {
 		return x.ResponseBody
 	}
 	return ""
-}
-
-func (x *AnalyticsEvent) GetCacheWritePromptTokens() uint32 {
-	if x != nil {
-		return x.CacheWritePromptTokens
-	}
-	return 0
-}
-
-func (x *AnalyticsEvent) GetCacheReadPromptTokens() uint32 {
-	if x != nil {
-		return x.CacheReadPromptTokens
-	}
-	return 0
 }
 
 // Budget usage event for pulse batching
@@ -2316,34 +2366,41 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\x88\x06\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xba\a\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\rR\x05appId\x12\x15\n" +
-	"\x06llm_id\x18\x03 \x01(\rR\x05llmId\x12\x1a\n" +
-	"\bendpoint\x18\x04 \x01(\tR\bendpoint\x12\x16\n" +
-	"\x06method\x18\x05 \x01(\tR\x06method\x12\x1f\n" +
-	"\vstatus_code\x18\x06 \x01(\x05R\n" +
-	"statusCode\x12%\n" +
-	"\x0erequest_tokens\x18\a \x01(\rR\rrequestTokens\x12'\n" +
-	"\x0fresponse_tokens\x18\b \x01(\rR\x0eresponseTokens\x12!\n" +
-	"\ftotal_tokens\x18\t \x01(\rR\vtotalTokens\x12\x12\n" +
-	"\x04cost\x18\n" +
-	" \x01(\x01R\x04cost\x12\x1d\n" +
+	"\x06llm_id\x18\x03 \x01(\rR\x05llmId\x12\x17\n" +
+	"\auser_id\x18\x04 \x01(\rR\x06userId\x12\x1a\n" +
+	"\bendpoint\x18\x05 \x01(\tR\bendpoint\x12\x16\n" +
+	"\x06method\x18\x06 \x01(\tR\x06method\x12\x1f\n" +
+	"\vstatus_code\x18\a \x01(\x05R\n" +
+	"statusCode\x12\x1d\n" +
 	"\n" +
-	"latency_ms\x18\v \x01(\rR\tlatencyMs\x128\n" +
-	"\ttimestamp\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12#\n" +
-	"\rerror_message\x18\r \x01(\tR\ferrorMessage\x12,\n" +
-	"\x12request_size_bytes\x18\x0e \x01(\rR\x10requestSizeBytes\x12.\n" +
-	"\x13response_size_bytes\x18\x0f \x01(\rR\x11responseSizeBytes\x12\x1d\n" +
+	"model_name\x18\b \x01(\tR\tmodelName\x12\x16\n" +
+	"\x06vendor\x18\t \x01(\tR\x06vendor\x12)\n" +
+	"\x10interaction_type\x18\n" +
+	" \x01(\tR\x0finteractionType\x12\x18\n" +
+	"\achoices\x18\v \x01(\rR\achoices\x12\x1d\n" +
 	"\n" +
-	"model_name\x18\x10 \x01(\tR\tmodelName\x12\x16\n" +
-	"\x06vendor\x18\x11 \x01(\tR\x06vendor\x12!\n" +
-	"\frequest_body\x18\x12 \x01(\tR\vrequestBody\x12#\n" +
-	"\rresponse_body\x18\x13 \x01(\tR\fresponseBody\x129\n" +
-	"\x19cache_write_prompt_tokens\x18\x14 \x01(\rR\x16cacheWritePromptTokens\x127\n" +
-	"\x18cache_read_prompt_tokens\x18\x15 \x01(\rR\x15cacheReadPromptTokens\"\xa2\x03\n" +
+	"tool_calls\x18\f \x01(\rR\ttoolCalls\x12\x17\n" +
+	"\achat_id\x18\r \x01(\tR\x06chatId\x12\x1a\n" +
+	"\bcurrency\x18\x0e \x01(\tR\bcurrency\x12%\n" +
+	"\x0erequest_tokens\x18\x0f \x01(\rR\rrequestTokens\x12'\n" +
+	"\x0fresponse_tokens\x18\x10 \x01(\rR\x0eresponseTokens\x12!\n" +
+	"\ftotal_tokens\x18\x11 \x01(\rR\vtotalTokens\x129\n" +
+	"\x19cache_write_prompt_tokens\x18\x12 \x01(\rR\x16cacheWritePromptTokens\x127\n" +
+	"\x18cache_read_prompt_tokens\x18\x13 \x01(\rR\x15cacheReadPromptTokens\x12\x12\n" +
+	"\x04cost\x18\x14 \x01(\x01R\x04cost\x12\x1d\n" +
+	"\n" +
+	"latency_ms\x18\x15 \x01(\rR\tlatencyMs\x128\n" +
+	"\ttimestamp\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12#\n" +
+	"\rerror_message\x18\x17 \x01(\tR\ferrorMessage\x12,\n" +
+	"\x12request_size_bytes\x18\x18 \x01(\rR\x10requestSizeBytes\x12.\n" +
+	"\x13response_size_bytes\x18\x19 \x01(\rR\x11responseSizeBytes\x12!\n" +
+	"\frequest_body\x18\x1a \x01(\tR\vrequestBody\x12#\n" +
+	"\rresponse_body\x18\x1b \x01(\tR\fresponseBody\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +

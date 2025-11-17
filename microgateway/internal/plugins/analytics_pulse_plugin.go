@@ -261,17 +261,35 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		RequestID:              req.RequestID,
 		AppID:                  req.AppID,
 		LLMID:                  &req.LLMID,
+
+		// Fields matching LLMChatRecord for parity
+		UserID:                 req.UserID,
+		Name:                   req.ModelName,
+		Vendor:                 req.Vendor,
+		InteractionType:        "proxy",
+		Choices:                int(req.Choices),
+		ToolCalls:              int(req.ToolCalls),
+		ChatID:                 "",
+		Currency:               req.Currency,
+
+		// Request/Response details
 		Endpoint:               fmt.Sprintf("/%s", req.Vendor),
 		Method:                 "POST",
 		StatusCode:             200, // Default success
-		RequestTokens:          req.PromptTokens,
+
+		// Token tracking (using new field names)
+		PromptTokens:           req.PromptTokens,
 		ResponseTokens:         req.ResponseTokens,
 		TotalTokens:            req.TotalTokens,
 		CacheWritePromptTokens: req.CacheWritePromptTokens,
 		CacheReadPromptTokens:  req.CacheReadPromptTokens,
+
+		// Cost and timing
 		Cost:                   req.Cost,
-		LatencyMs:              0, // Not available
+		TotalTimeMS:            0, // Not available
+
 		ErrorMessage:           "",
+		TimeStamp:              req.Timestamp,
 		CreatedAt:              req.Timestamp,
 	}
 
@@ -477,22 +495,35 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 			RequestId:               event.RequestID,
 			AppId:                   uint32(event.AppID),
 			LlmId:                   llmID,
+			UserId:                  uint32(event.UserID),
 			Endpoint:                event.Endpoint,
 			Method:                  event.Method,
 			StatusCode:              int32(event.StatusCode),
-			RequestTokens:           uint32(event.RequestTokens),
+
+			// Fields matching LLMChatRecord for parity
+			ModelName:               event.Name,
+			Vendor:                  event.Vendor,
+			InteractionType:         event.InteractionType,
+			Choices:                 uint32(event.Choices),
+			ToolCalls:               uint32(event.ToolCalls),
+			ChatId:                  event.ChatID,
+			Currency:                event.Currency,
+
+			// Token tracking (using field names from new schema)
+			RequestTokens:           uint32(event.PromptTokens),
 			ResponseTokens:          uint32(event.ResponseTokens),
 			TotalTokens:             uint32(event.TotalTokens),
 			CacheWritePromptTokens:  uint32(event.CacheWritePromptTokens),
 			CacheReadPromptTokens:   uint32(event.CacheReadPromptTokens),
+
+			// Cost and timing
 			Cost:                    event.Cost,
-			LatencyMs:               uint32(event.LatencyMs),
-			Timestamp:               timestamppb.New(event.CreatedAt),
+			LatencyMs:               uint32(event.TotalTimeMS),
+
+			Timestamp:               timestamppb.New(event.TimeStamp),
 			ErrorMessage:            event.ErrorMessage,
 			RequestSizeBytes:        uint32(len(event.RequestBody)),
 			ResponseSizeBytes:       uint32(len(event.ResponseBody)),
-			ModelName:               eventMetadata.ModelName,
-			Vendor:                  eventMetadata.Vendor,
 			RequestBody:             requestBody,
 			ResponseBody:            responseBody,
 		})

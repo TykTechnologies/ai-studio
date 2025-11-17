@@ -150,6 +150,7 @@ type BudgetUsage struct {
 }
 
 // AnalyticsEvent for request/response tracking
+// Aligned with LLMChatRecord from main AI Studio for analytics parity
 type AnalyticsEvent struct {
 	ID             uint           `gorm:"primaryKey"`
 	RequestID      string         `gorm:"uniqueIndex;not null"`
@@ -159,23 +160,43 @@ type AnalyticsEvent struct {
 	LLM            *LLM           `gorm:"foreignKey:LLMID"`
 	CredentialID   *uint
 	Credential     *Credential    `gorm:"foreignKey:CredentialID"`
+
+	// Fields matching LLMChatRecord for parity
+	UserID              uint   `gorm:"index:idx_analytics_user"`      // User who made the request
+	Name                string                                        // Model name (e.g., "gpt-4", "claude-3-opus")
+	Vendor              string                                        // LLM vendor (e.g., "openai", "anthropic")
+	InteractionType     string `gorm:"type:string;default:'proxy'"`  // "chat" or "proxy"
+	Choices             int                                           // Number of choices in response
+	ToolCalls           int                                           // Number of tool calls made
+	ChatID              string                                        // Chat session identifier
+	Currency            string `gorm:"default:USD"`                  // Currency for cost
+
+	// Request/Response details
 	Endpoint       string
 	Method         string
 	StatusCode     int
-	RequestTokens          int
-	ResponseTokens         int
+
+	// Token tracking (matching LLMChatRecord naming)
+	PromptTokens           int     // Input tokens (matches LLMChatRecord)
+	ResponseTokens         int     // Output tokens (matches LLMChatRecord)
 	TotalTokens            int
-	CacheWritePromptTokens int // Cache creation/write tokens (e.g., Anthropic prompt caching)
-	CacheReadPromptTokens  int // Cache read tokens (e.g., Anthropic prompt caching)
+	CacheWritePromptTokens int     // Cache creation/write tokens (e.g., Anthropic prompt caching)
+	CacheReadPromptTokens  int     // Cache read tokens (e.g., Anthropic prompt caching)
+
+	// Cost and timing
 	Cost                   float64
-	LatencyMs              int
+	TotalTimeMS            int     // Request latency in milliseconds (matches LLMChatRecord)
+
+	// Error tracking
 	ErrorMessage           string
 	Metadata               datatypes.JSON `gorm:"type:json"`
-	
+
 	// Detailed payload storage (configurable)
 	RequestBody    string         `gorm:"type:text"` // Store request payload
 	ResponseBody   string         `gorm:"type:text"` // Store response payload
-	
+
+	// Timestamps
+	TimeStamp      time.Time      `gorm:"index:idx_analytics_timestamp"` // Match LLMChatRecord field name
 	CreatedAt      time.Time      `gorm:"index:idx_analytics_app"`
 }
 

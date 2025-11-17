@@ -230,36 +230,46 @@ message AnalyticsPulseConfig {
 }
 
 // Individual analytics event for pulse batching
+// Aligned with LLMChatRecord from AI Studio for analytics parity
 message AnalyticsEvent {
   string request_id = 1;          // Unique request identifier
   uint32 app_id = 2;              // Application ID
   uint32 llm_id = 3;              // LLM ID (optional)
-  string endpoint = 4;            // API endpoint called
-  string method = 5;              // HTTP method
-  int32 status_code = 6;          // Response status code
-  uint32 request_tokens = 7;      // Input tokens consumed
-  uint32 response_tokens = 8;     // Output tokens generated
-  uint32 total_tokens = 9;        // Total tokens used
-  double cost = 10;               // Cost in dollars (4 decimal precision)
-  uint32 latency_ms = 11;         // Request latency in milliseconds
-  google.protobuf.Timestamp timestamp = 12; // When the event occurred
-  string error_message = 13;      // Error message if failed (optional)
+  uint32 user_id = 4;             // User ID who made the request
+  string endpoint = 5;            // API endpoint called
+  string method = 6;              // HTTP method
+  int32 status_code = 7;          // Response status code
+
+  // Fields matching LLMChatRecord for parity
+  string model_name = 8;          // Model name (e.g., "gpt-4", "claude-3-opus")
+  string vendor = 9;              // Vendor name (e.g., "anthropic", "openai")
+  string interaction_type = 10;   // "chat" or "proxy"
+  uint32 choices = 11;            // Number of choices in response
+  uint32 tool_calls = 12;         // Number of tool calls made
+  string chat_id = 13;            // Chat session identifier
+  string currency = 14;           // Currency for cost (e.g., "USD")
+
+  // Token tracking (matching LLMChatRecord naming)
+  uint32 request_tokens = 15;     // Input tokens consumed (prompt_tokens)
+  uint32 response_tokens = 16;    // Output tokens generated (response_tokens)
+  uint32 total_tokens = 17;       // Total tokens used
+  uint32 cache_write_prompt_tokens = 18;  // Cache creation/write tokens
+  uint32 cache_read_prompt_tokens = 19;   // Cache read tokens
+
+  // Cost and timing
+  double cost = 20;               // Cost in dollars (4 decimal precision)
+  uint32 latency_ms = 21;         // Request latency in milliseconds (total_time_ms)
+
+  google.protobuf.Timestamp timestamp = 22; // When the event occurred
+  string error_message = 23;      // Error message if failed (optional)
 
   // Optional request/response size summary (not full payloads)
-  uint32 request_size_bytes = 14; // Size of request body
-  uint32 response_size_bytes = 15; // Size of response body
-
-  // Model information (NEW)
-  string model_name = 16;         // Actual model name from request (e.g., "claude-sonnet-4-20250514")
-  string vendor = 17;             // Vendor name (e.g., "anthropic", "openai")
+  uint32 request_size_bytes = 24; // Size of request body
+  uint32 response_size_bytes = 25; // Size of response body
 
   // Optional request/response data (controlled by include_request_response_data flag)
-  string request_body = 18;       // Request body (if include_request_response_data = true)
-  string response_body = 19;      // Response body (if include_request_response_data = true)
-
-  // Cache token tracking (for prompt caching features like Anthropic's)
-  uint32 cache_write_prompt_tokens = 20;  // Cache creation/write tokens
-  uint32 cache_read_prompt_tokens = 21;   // Cache read tokens
+  string request_body = 26;       // Request body (if include_request_response_data = true)
+  string response_body = 27;      // Response body (if include_request_response_data = true)
 }
 
 // Budget usage event for pulse batching

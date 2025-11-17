@@ -207,22 +207,43 @@ type BudgetUsage struct {
 }
 
 // AnalyticsEvent represents an analytics event
+// Aligned with LLMChatRecord from AI Studio for analytics parity
 type AnalyticsEvent struct {
 	ID             uint
 	RequestID      string
 	AppID          uint
 	LLMID          *uint
 	CredentialID   *uint
+
+	// Fields matching LLMChatRecord for parity
+	UserID              uint
+	Name                string
+	Vendor              string
+	InteractionType     string
+	Choices             int
+	ToolCalls           int
+	ChatID              string
+	Currency            string
+
+	// Request/Response details
 	Endpoint       string
 	Method         string
 	StatusCode     int
-	RequestTokens  int
-	ResponseTokens int
-	TotalTokens    int
-	Cost           float64
-	LatencyMs      int
+
+	// Token tracking (matching LLMChatRecord naming)
+	PromptTokens           int
+	ResponseTokens         int
+	TotalTokens            int
+	CacheWritePromptTokens int
+	CacheReadPromptTokens  int
+
+	// Cost and timing
+	Cost                   float64
+	TotalTimeMS            int
+
 	ErrorMessage   string
 	Metadata       map[string]interface{}
+	TimeStamp      time.Time
 	CreatedAt      time.Time
 }
 

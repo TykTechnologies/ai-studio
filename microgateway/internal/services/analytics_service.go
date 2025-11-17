@@ -74,15 +74,35 @@ func (s *DatabaseAnalyticsService) GetEvents(appID uint, page, limit int) ([]Ana
 			AppID:          event.AppID,
 			LLMID:          event.LLMID,
 			CredentialID:   event.CredentialID,
+
+			// Fields matching LLMChatRecord for parity
+			UserID:                 event.UserID,
+			Name:                   event.Name,
+			Vendor:                 event.Vendor,
+			InteractionType:        event.InteractionType,
+			Choices:                event.Choices,
+			ToolCalls:              event.ToolCalls,
+			ChatID:                 event.ChatID,
+			Currency:               event.Currency,
+
+			// Request/Response details
 			Endpoint:       event.Endpoint,
 			Method:         event.Method,
 			StatusCode:     event.StatusCode,
-			RequestTokens:  event.RequestTokens,
-			ResponseTokens: event.ResponseTokens,
-			TotalTokens:    event.TotalTokens,
-			Cost:           event.Cost,
-			LatencyMs:      event.LatencyMs,
+
+			// Token tracking
+			PromptTokens:           event.PromptTokens,
+			ResponseTokens:         event.ResponseTokens,
+			TotalTokens:            event.TotalTokens,
+			CacheWritePromptTokens: event.CacheWritePromptTokens,
+			CacheReadPromptTokens:  event.CacheReadPromptTokens,
+
+			// Cost and timing
+			Cost:                   event.Cost,
+			TotalTimeMS:            event.TotalTimeMS,
+
 			ErrorMessage:   event.ErrorMessage,
+			TimeStamp:      event.TimeStamp,
 			CreatedAt:      event.CreatedAt,
 		}
 	}

@@ -99,17 +99,35 @@ func (h *MicrogatewaAnalyticsHandler) processChatRecordsBatchSync(records []*mod
 			RequestID:              fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
 			AppID:                  record.AppID,
 			LLMID:                  &record.LLMID,
-			Endpoint:               "/v1/chat/completions", // Default endpoint for chat interactions
+
+			// Fields matching LLMChatRecord for parity
+			UserID:                 record.UserID,
+			Name:                   record.Name,
+			Vendor:                 record.Vendor,
+			InteractionType:        string(record.InteractionType),
+			Choices:                record.Choices,
+			ToolCalls:              record.ToolCalls,
+			ChatID:                 record.ChatID,
+			Currency:               record.Currency,
+
+			// Request/Response details
+			Endpoint:               "/v1/chat/completions",
 			Method:                 "POST",
-			StatusCode:             200, // Assume success for chat records
-			RequestTokens:          record.PromptTokens,
+			StatusCode:             200, // Determined from success of chat interaction
+
+			// Token tracking
+			PromptTokens:           record.PromptTokens,
 			ResponseTokens:         record.ResponseTokens,
 			TotalTokens:            record.TotalTokens,
 			CacheWritePromptTokens: record.CacheWritePromptTokens,
 			CacheReadPromptTokens:  record.CacheReadPromptTokens,
+
+			// Cost and timing
 			Cost:                   record.Cost,
-			LatencyMs:              record.TotalTimeMS,
+			TotalTimeMS:            record.TotalTimeMS,
+
 			ErrorMessage:           "",
+			TimeStamp:              record.TimeStamp,
 			CreatedAt:              record.TimeStamp,
 		}
 		events[i] = event
@@ -138,8 +156,10 @@ func (h *MicrogatewaAnalyticsHandler) processProxyLogsBatchSync(logs []*models.P
 		// Parse token usage and cost from response body if available
 		tokens := h.parseTokensFromResponse(proxyLog.ResponseBody)
 		model := h.extractModelFromRequest(proxyLog.RequestBody)
-		cost := h.parseCostFromResponse(proxyLog.ResponseBody, proxyLog.Vendor, model)
+		cost, currency := h.parseCostFromResponse(proxyLog.ResponseBody, proxyLog.Vendor, model)
 		llmID := h.findLLMIDByVendorAndModel(proxyLog.Vendor, model)
+		choices := h.extractChoicesFromResponse(proxyLog.ResponseBody)
+		toolCalls := h.extractToolCallsFromResponse(proxyLog.ResponseBody)
 
 		var llmIDPtr *uint
 		if llmID > 0 {
@@ -150,17 +170,35 @@ func (h *MicrogatewaAnalyticsHandler) processProxyLogsBatchSync(logs []*models.P
 			RequestID:              fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
 			AppID:                  proxyLog.AppID,
 			LLMID:                  llmIDPtr,
+
+			// Fields matching LLMChatRecord for parity
+			UserID:                 proxyLog.UserID,
+			Name:                   model,
+			Vendor:                 proxyLog.Vendor,
+			InteractionType:        "proxy", // All microgateway traffic is proxy type
+			Choices:                choices,
+			ToolCalls:              toolCalls,
+			ChatID:                 "", // Not available in proxy logs
+			Currency:               currency,
+
+			// Request/Response details
 			Endpoint:               h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
 			Method:                 "POST",
 			StatusCode:             proxyLog.ResponseCode,
-			RequestTokens:          tokens.PromptTokens,
+
+			// Token tracking
+			PromptTokens:           tokens.PromptTokens,
 			ResponseTokens:         tokens.ResponseTokens,
 			TotalTokens:            tokens.TotalTokens,
 			CacheWritePromptTokens: tokens.CacheWriteTokens,
 			CacheReadPromptTokens:  tokens.CacheReadTokens,
+
+			// Cost and timing
 			Cost:                   cost,
-			LatencyMs:              0, // Not available in proxy log
+			TotalTimeMS:            0, // TODO: Need to capture timing from proxy layer
+
 			ErrorMessage:           "",
+			TimeStamp:              proxyLog.TimeStamp,
 			CreatedAt:              proxyLog.TimeStamp,
 		}
 
@@ -262,11 +300,13 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 
 	// Parse token usage and cost from response body if available
 	tokens := h.parseTokensFromResponse(proxyLog.ResponseBody)
-	
+
 	// Extract model name from request body for accurate pricing
 	model := h.extractModelFromRequest(proxyLog.RequestBody)
-	cost := h.parseCostFromResponse(proxyLog.ResponseBody, proxyLog.Vendor, model)
-	
+	cost, currency := h.parseCostFromResponse(proxyLog.ResponseBody, proxyLog.Vendor, model)
+	choices := h.extractChoicesFromResponse(proxyLog.ResponseBody)
+	toolCalls := h.extractToolCallsFromResponse(proxyLog.ResponseBody)
+
 	// Execute analytics data collection plugins
 	if h.pluginManager != nil {
 		// Extract LLM ID from vendor and model information
@@ -283,30 +323,30 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 			CacheWritePromptTokens: tokens.CacheWriteTokens,
 			CacheReadPromptTokens:  tokens.CacheReadTokens,
 			Cost:                   cost,
-			Currency:               "USD",
+			Currency:               currency,
 			AppID:                  proxyLog.AppID,
 			UserID:                 proxyLog.UserID,
 			Timestamp:              proxyLog.TimeStamp,
-			ToolCalls:              0, // Could be parsed from request if needed
-			Choices:                1, // Default to 1 choice
+			ToolCalls:              toolCalls,
+			Choices:                choices,
 			RequestID:              fmt.Sprintf("proxy_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.UnixNano()),
 			// Include request/response data for pulse plugins
 			RequestBody:            proxyLog.RequestBody,
 			ResponseBody:           proxyLog.ResponseBody,
 		}
-		
+
 		// Execute analytics plugins
 		if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
 			log.Error().Err(err).Msg("Failed to execute analytics data collection plugins")
 		}
-		
+
 		// Check if any plugins are configured to replace database storage for analytics
 		if h.pluginManager.ShouldReplaceDatabaseStorage("analytics") {
 			log.Debug().Msg("Analytics database storage replaced by plugin - skipping database write")
 			return
 		}
 	}
-	
+
 	// Extract LLM ID for analytics event
 	llmID := h.findLLMIDByVendorAndModel(proxyLog.Vendor, model)
 	var llmIDPtr *uint
@@ -320,17 +360,35 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 		AppID:                  proxyLog.AppID,
 		LLMID:                  llmIDPtr,
 		CredentialID:           nil, // Not used in token-only system
+
+		// Fields matching LLMChatRecord for parity
+		UserID:                 proxyLog.UserID,
+		Name:                   model,
+		Vendor:                 proxyLog.Vendor,
+		InteractionType:        "proxy", // All microgateway traffic is proxy type
+		Choices:                choices,
+		ToolCalls:              toolCalls,
+		ChatID:                 "", // Not available in proxy logs
+		Currency:               currency,
+
+		// Request/Response details
 		Endpoint:               h.extractEndpointFromVendor(proxyLog.Vendor, proxyLog.AppID),
 		Method:                 "POST",
 		StatusCode:             proxyLog.ResponseCode,
-		RequestTokens:          tokens.PromptTokens,
+
+		// Token tracking
+		PromptTokens:           tokens.PromptTokens,
 		ResponseTokens:         tokens.ResponseTokens,
 		TotalTokens:            tokens.TotalTokens,
 		CacheWritePromptTokens: tokens.CacheWriteTokens,
 		CacheReadPromptTokens:  tokens.CacheReadTokens,
+
+		// Cost and timing
 		Cost:                   cost,
-		LatencyMs:              0, // Not available in proxy log
+		TotalTimeMS:            0, // TODO: Need to capture timing from proxy layer
+
 		ErrorMessage:           "",
+		TimeStamp:              proxyLog.TimeStamp,
 		CreatedAt:              proxyLog.TimeStamp,
 	}
 
@@ -440,34 +498,18 @@ func (h *MicrogatewaAnalyticsHandler) findEventForMatching(proxyLog *models.Prox
 
 // RecordToolCall implements the midsommar analytics interface
 // Records tool usage analytics
+// Note: Tool calls in microgateway context are typically tracked within LLM responses
+// This standalone method is for AI Studio compatibility
 func (h *MicrogatewaAnalyticsHandler) RecordToolCall(name string, timestamp time.Time, execTimeMs int, toolID uint) {
 	log.Debug().
 		Str("tool_name", name).
 		Uint("tool_id", toolID).
 		Int("exec_time_ms", execTimeMs).
-		Msg("Recording tool call analytics")
+		Msg("Recording standalone tool call analytics (AI Studio compatibility)")
 
-	// Create analytics event for tool call
-	event := &database.AnalyticsEvent{
-		RequestID:     fmt.Sprintf("tool_%d_%d", toolID, timestamp.UnixNano()),
-		AppID:         1, // Default to admin app for tool calls
-		LLMID:         nil,
-		CredentialID:  nil,
-		Endpoint:      fmt.Sprintf("/tools/%s", name),
-		Method:        "POST",
-		StatusCode:    200,
-		RequestTokens: 0,
-		ResponseTokens: 0,
-		TotalTokens:   0,
-		Cost:          0,
-		LatencyMs:     execTimeMs,
-		ErrorMessage:  "",
-		CreatedAt:     timestamp,
-	}
-
-	if err := h.db.Create(event).Error; err != nil {
-		log.Error().Err(err).Msg("Failed to record tool analytics event")
-	}
+	// Note: In microgateway, tool calls are tracked as part of LLM analytics
+	// This method is here for AI Studio interface compatibility
+	// Standalone tool call tracking may not be applicable in proxy-only mode
 }
 
 // RecordChatRecordsBatch implements batch recording for microgateway analytics
@@ -572,33 +614,39 @@ func (h *MicrogatewaAnalyticsHandler) parseTokensFromResponse(responseBody strin
 }
 
 // parseCostFromResponse calculates cost using actual database pricing or defaults
-func (h *MicrogatewaAnalyticsHandler) parseCostFromResponse(responseBody, vendor, model string) float64 {
+// Returns cost and currency
+func (h *MicrogatewaAnalyticsHandler) parseCostFromResponse(responseBody, vendor, model string) (float64, string) {
 	tokens := h.parseTokensFromResponse(responseBody)
-	
+
 	// Try to get actual pricing from database
 	var price database.ModelPrice
 	err := h.db.Where("model_name = ? AND vendor = ?", model, vendor).
 		Order("created_at DESC").
 		First(&price).Error
-	
+
 	if err != nil {
 		// Use default pricing if not found (per-token rates)
 		const defaultCPIT = 3.0 / 1000000   // $3.00 per million input tokens
 		const defaultCPT = 15.0 / 1000000   // $15.00 per million output tokens
-		
+
 		promptCost := float64(tokens.PromptTokens) * defaultCPIT
 		responseCost := float64(tokens.ResponseTokens) * defaultCPT
-		
-		return promptCost + responseCost
+
+		return promptCost + responseCost, "USD"
 	}
-	
+
 	// Use actual database pricing (stored as per-token rates)
 	promptCost := float64(tokens.PromptTokens) * price.CPIT
 	responseCost := float64(tokens.ResponseTokens) * price.CPT
 	cacheWriteCost := float64(tokens.CacheWriteTokens) * price.CacheWritePT
 	cacheReadCost := float64(tokens.CacheReadTokens) * price.CacheReadPT
-	
-	return promptCost + responseCost + cacheWriteCost + cacheReadCost
+
+	currency := price.Currency
+	if currency == "" {
+		currency = "USD"
+	}
+
+	return promptCost + responseCost + cacheWriteCost + cacheReadCost, currency
 }
 
 // extractModelFromRequest parses the model name from request JSON
@@ -618,6 +666,72 @@ func (h *MicrogatewaAnalyticsHandler) extractModelFromRequest(requestBody string
 	}
 
 	return "unknown"
+}
+
+// extractChoicesFromResponse parses the number of choices from response JSON
+func (h *MicrogatewaAnalyticsHandler) extractChoicesFromResponse(responseBody string) int {
+	if responseBody == "" {
+		return 1 // Default to 1 choice
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal([]byte(responseBody), &response); err != nil {
+		log.Debug().Err(err).Msg("Failed to parse response body for choices extraction")
+		return 1
+	}
+
+	// OpenAI format: "choices" array
+	if choices, ok := response["choices"].([]interface{}); ok {
+		return len(choices)
+	}
+
+	// Anthropic format: single content response
+	if _, ok := response["content"]; ok {
+		return 1
+	}
+
+	return 1
+}
+
+// extractToolCallsFromResponse parses the number of tool calls from response JSON
+func (h *MicrogatewaAnalyticsHandler) extractToolCallsFromResponse(responseBody string) int {
+	if responseBody == "" {
+		return 0
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal([]byte(responseBody), &response); err != nil {
+		log.Debug().Err(err).Msg("Failed to parse response body for tool calls extraction")
+		return 0
+	}
+
+	toolCallCount := 0
+
+	// OpenAI format: choices[].message.tool_calls
+	if choices, ok := response["choices"].([]interface{}); ok {
+		for _, choice := range choices {
+			if choiceMap, ok := choice.(map[string]interface{}); ok {
+				if message, ok := choiceMap["message"].(map[string]interface{}); ok {
+					if toolCalls, ok := message["tool_calls"].([]interface{}); ok {
+						toolCallCount += len(toolCalls)
+					}
+				}
+			}
+		}
+	}
+
+	// Anthropic format: content[].type == "tool_use"
+	if content, ok := response["content"].([]interface{}); ok {
+		for _, item := range content {
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				if itemType, ok := itemMap["type"].(string); ok && itemType == "tool_use" {
+					toolCallCount++
+				}
+			}
+		}
+	}
+
+	return toolCallCount
 }
 
 // extractEndpointFromVendor creates the actual endpoint path by looking up LLM configuration
