@@ -983,6 +983,7 @@ type FrontendConfig struct {
 	ProxyURL          string            `json:"proxyURL"`
 	DefaultSignUpMode string            `json:"defaultSignUpMode"`
 	TIBEnabled        bool              `json:"tibEnabled"`
+	IsEnterprise      bool              `json:"is_enterprise"`
 	DocsLinks         map[string]string `json:"docsLinks"`
 	Branding          *BrandingConfig   `json:"branding,omitempty"`
 }

@@ -775,7 +775,7 @@ func (a *API) setupRoutes() {
 	marketplaceAdmin := v1.Group("/admin/marketplaces")
 	marketplaceAdmin.Use(a.auth.AdminOnly())
 	{
-		adminHandlers := NewMarketplaceAdminHandlers(a.marketplaceManagementService)
+		adminHandlers := NewMarketplaceAdminHandlers(a.marketplaceManagementService, a.service.MarketplaceService)
 		marketplaceAdmin.POST("", adminHandlers.AddMarketplace)
 		marketplaceAdmin.GET("", adminHandlers.ListMarketplaces)
 		marketplaceAdmin.GET("/:id", adminHandlers.GetMarketplace)
@@ -948,6 +948,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		ProxyURL:          config.Get().ProxyURL,
 		DefaultSignUpMode: suMode,
 		TIBEnabled:        sso.IsEnterpriseAvailable(),
+		IsEnterprise:      sso.IsEnterpriseAvailable(), // Use SSO as proxy for enterprise detection
 		DocsLinks:         config.Get().DocsLinks,
 		Branding:          brandingConfig,
 	}

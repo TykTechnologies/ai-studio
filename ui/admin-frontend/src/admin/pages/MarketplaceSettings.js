@@ -3,7 +3,6 @@ import {
   Box,
   Typography,
   Button,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -22,6 +21,7 @@ import {
   Alert,
   CircularProgress,
   Tooltip,
+  Snackbar,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -34,7 +34,18 @@ import {
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import marketplaceManagementService from '../services/marketplaceManagementService';
-import { useSnackbar } from 'notistack';
+import {
+  TitleBox,
+  ContentBox,
+  PrimaryButton,
+  DangerButton,
+  StyledPaper,
+  StyledTableCell,
+  StyledTableHeaderCell,
+  StyledTableRow,
+  StyledDialogTitle,
+  StyledDialogContent,
+} from '../styles/sharedStyles';
 
 const MarketplaceSettings = () => {
   const [marketplaces, setMarketplaces] = useState([]);
@@ -45,7 +56,11 @@ const MarketplaceSettings = () => {
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const { enqueueSnackbar } = useSnackbar();
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   useEffect(() => {
     loadMarketplaces();
@@ -61,12 +76,17 @@ const MarketplaceSettings = () => {
 
       // Check if this is a 403 (Community Edition)
       if (error.response?.status === 403) {
-        enqueueSnackbar('Multiple marketplace management requires Enterprise Edition', {
-          variant: 'warning',
-          autoHideDuration: 6000,
+        setSnackbar({
+          open: true,
+          message: 'Multiple marketplace management requires Enterprise Edition',
+          severity: 'warning',
         });
       } else {
-        enqueueSnackbar('Failed to load marketplaces', { variant: 'error' });
+        setSnackbar({
+          open: true,
+          message: 'Failed to load marketplaces',
+          severity: 'error',
+        });
       }
     } finally {
       setLoading(false);
@@ -76,7 +96,11 @@ const MarketplaceSettings = () => {
   const handleAddMarketplace = async () => {
     try {
       await marketplaceManagementService.addMarketplace(newMarketplaceURL, setAsDefault);
-      enqueueSnackbar('Marketplace added successfully', { variant: 'success' });
+      setSnackbar({
+        open: true,
+        message: 'Marketplace added successfully',
+        severity: 'success',
+      });
       setDialogOpen(false);
       setNewMarketplaceURL('');
       setSetAsDefault(false);
@@ -85,13 +109,21 @@ const MarketplaceSettings = () => {
     } catch (error) {
       console.error('Failed to add marketplace:', error);
       const errorMessage = error.response?.data?.errors?.[0]?.detail || 'Failed to add marketplace';
-      enqueueSnackbar(errorMessage, { variant: 'error' });
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: 'error',
+      });
     }
   };
 
   const handleValidateURL = async () => {
     if (!newMarketplaceURL.trim()) {
-      enqueueSnackbar('Please enter a marketplace URL', { variant: 'warning' });
+      setSnackbar({
+        open: true,
+        message: 'Please enter a marketplace URL',
+        severity: 'warning',
+      });
       return;
     }
 
@@ -101,14 +133,26 @@ const MarketplaceSettings = () => {
       setValidationResult(result);
 
       if (result.valid) {
-        enqueueSnackbar(`Valid marketplace with ${result.plugin_count} plugins`, { variant: 'success' });
+        setSnackbar({
+          open: true,
+          message: `Valid marketplace with ${result.plugin_count} plugins`,
+          severity: 'success',
+        });
       } else {
-        enqueueSnackbar(result.error_message || 'Invalid marketplace URL', { variant: 'error' });
+        setSnackbar({
+          open: true,
+          message: result.error_message || 'Invalid marketplace URL',
+          severity: 'error',
+        });
       }
     } catch (error) {
       console.error('Failed to validate URL:', error);
       setValidationResult({ valid: false, error_message: 'Validation failed' });
-      enqueueSnackbar('Failed to validate marketplace URL', { variant: 'error' });
+      setSnackbar({
+        open: true,
+        message: 'Failed to validate marketplace URL',
+        severity: 'error',
+      });
     } finally {
       setValidating(false);
     }
@@ -117,47 +161,86 @@ const MarketplaceSettings = () => {
   const handleRemoveMarketplace = async (id) => {
     try {
       await marketplaceManagementService.removeMarketplace(id);
-      enqueueSnackbar('Marketplace removed successfully', { variant: 'success' });
+      setSnackbar({
+        open: true,
+        message: 'Marketplace removed successfully',
+        severity: 'success',
+      });
       setConfirmDeleteId(null);
       loadMarketplaces();
     } catch (error) {
       console.error('Failed to remove marketplace:', error);
       const errorMessage = error.response?.data?.errors?.[0]?.detail || 'Failed to remove marketplace';
-      enqueueSnackbar(errorMessage, { variant: 'error' });
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: 'error',
+      });
     }
   };
 
   const handleSetDefault = async (id) => {
     try {
       await marketplaceManagementService.setDefaultMarketplace(id);
-      enqueueSnackbar('Default marketplace updated', { variant: 'success' });
+      setSnackbar({
+        open: true,
+        message: 'Default marketplace updated',
+        severity: 'success',
+      });
       loadMarketplaces();
     } catch (error) {
       console.error('Failed to set default marketplace:', error);
-      enqueueSnackbar('Failed to set default marketplace', { variant: 'error' });
+      setSnackbar({
+        open: true,
+        message: 'Failed to set default marketplace',
+        severity: 'error',
+      });
     }
   };
 
   const handleToggleActive = async (id, currentActive) => {
     try {
       await marketplaceManagementService.toggleMarketplace(id, !currentActive);
-      enqueueSnackbar(`Marketplace ${!currentActive ? 'activated' : 'deactivated'}`, { variant: 'success' });
+      setSnackbar({
+        open: true,
+        message: `Marketplace ${!currentActive ? 'activated' : 'deactivated'}`,
+        severity: 'success',
+      });
       loadMarketplaces();
     } catch (error) {
       console.error('Failed to toggle marketplace:', error);
       const errorMessage = error.response?.data?.errors?.[0]?.detail || 'Failed to update marketplace';
-      enqueueSnackbar(errorMessage, { variant: 'error' });
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: 'error',
+      });
     }
   };
 
   const handleSyncMarketplace = async (id) => {
     try {
       await marketplaceManagementService.syncMarketplace(id);
-      enqueueSnackbar('Marketplace sync requested', { variant: 'info' });
+      setSnackbar({
+        open: true,
+        message: 'Marketplace sync requested',
+        severity: 'info',
+      });
     } catch (error) {
       console.error('Failed to sync marketplace:', error);
-      enqueueSnackbar('Failed to trigger sync', { variant: 'error' });
+      setSnackbar({
+        open: true,
+        message: 'Failed to trigger sync',
+        severity: 'error',
+      });
     }
+  };
+
+  const handleCloseSnackbar = (event, reason) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackbar({ ...snackbar, open: false });
   };
 
   const getSyncStatusIcon = (status) => {
@@ -187,128 +270,127 @@ const MarketplaceSettings = () => {
   }
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Marketplace Sources</Typography>
-        <Button
+    <Box sx={{ p: 0 }}>
+      <TitleBox top="64px">
+        <Typography variant="headingXLarge">Marketplace Sources</Typography>
+        <PrimaryButton
           variant="contained"
-          color="primary"
           startIcon={<AddIcon />}
           onClick={() => setDialogOpen(true)}
         >
           Add Marketplace
-        </Button>
-      </Box>
+        </PrimaryButton>
+      </TitleBox>
 
-      <Alert severity="info" sx={{ mb: 3 }}>
-        <Typography variant="body2">
-          <strong>Enterprise Feature:</strong> Manage multiple plugin marketplace sources. The default marketplace is the official Tyk AI Studio marketplace.
-        </Typography>
-      </Alert>
-
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Source URL</TableCell>
-              <TableCell align="center">Status</TableCell>
-              <TableCell align="center">Default</TableCell>
-              <TableCell align="center">Active</TableCell>
-              <TableCell align="right">Plugins</TableCell>
-              <TableCell align="right">Last Synced</TableCell>
-              <TableCell align="center">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {marketplaces.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} align="center">
-                  <Typography variant="body2" color="textSecondary">
-                    No marketplaces configured
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              marketplaces.map((marketplace) => (
-                <TableRow key={marketplace.ID}>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                      {marketplace.source_url}
-                    </Typography>
-                    {marketplace.sync_error && (
-                      <Typography variant="caption" color="error">
-                        Error: {marketplace.sync_error}
+      <Box sx={{ p: 3 }}>
+        <ContentBox>
+          <TableContainer component={StyledPaper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <StyledTableHeaderCell>Source URL</StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="center">Status</StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="center">Default</StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="center">Active</StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="right">Plugins</StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="right">Last Synced</StyledTableHeaderCell>
+                  <StyledTableHeaderCell align="center">Actions</StyledTableHeaderCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {marketplaces.length === 0 ? (
+                  <StyledTableRow>
+                    <StyledTableCell colSpan={7} align="center">
+                      <Typography variant="body2" color="textSecondary">
+                        No marketplaces configured
                       </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Tooltip title={marketplace.sync_status || 'Unknown'}>
-                      {getSyncStatusIcon(marketplace.sync_status)}
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell align="center">
-                    <IconButton
-                      size="small"
-                      onClick={() => !marketplace.is_default && handleSetDefault(marketplace.ID)}
-                      disabled={marketplace.is_default}
-                    >
-                      {marketplace.is_default ? (
-                        <StarIcon color="primary" />
-                      ) : (
-                        <StarBorderIcon />
-                      )}
-                    </IconButton>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Switch
-                      checked={marketplace.is_active}
-                      onChange={() => handleToggleActive(marketplace.ID, marketplace.is_active)}
-                      disabled={marketplace.is_default} // Cannot deactivate default
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    {marketplace.plugin_count || 0}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="caption">
-                      {formatDate(marketplace.last_synced)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Tooltip title="Sync Now">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleSyncMarketplace(marketplace.ID)}
-                        disabled={!marketplace.is_active}
-                      >
-                        <SyncIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Remove">
-                      <span>
+                    </StyledTableCell>
+                  </StyledTableRow>
+                ) : (
+                  marketplaces.map((marketplace) => (
+                    <StyledTableRow key={marketplace.id}>
+                      <StyledTableCell>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                          {marketplace.source_url}
+                        </Typography>
+                        {marketplace.sync_error && (
+                          <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
+                            Error: {marketplace.sync_error}
+                          </Typography>
+                        )}
+                      </StyledTableCell>
+                      <StyledTableCell align="center">
+                        <Tooltip title={marketplace.sync_status || 'Unknown'}>
+                          <Box>{getSyncStatusIcon(marketplace.sync_status)}</Box>
+                        </Tooltip>
+                      </StyledTableCell>
+                      <StyledTableCell align="center">
                         <IconButton
                           size="small"
-                          onClick={() => setConfirmDeleteId(marketplace.ID)}
-                          disabled={marketplace.is_default} // Cannot remove default
-                          color="error"
+                          onClick={() => !marketplace.is_default && handleSetDefault(marketplace.id)}
+                          disabled={marketplace.is_default}
                         >
-                          <DeleteIcon />
+                          {marketplace.is_default ? (
+                            <StarIcon color="primary" />
+                          ) : (
+                            <StarBorderIcon />
+                          )}
                         </IconButton>
-                      </span>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                      </StyledTableCell>
+                      <StyledTableCell align="center">
+                        <Switch
+                          checked={marketplace.is_active}
+                          onChange={() => handleToggleActive(marketplace.id, marketplace.is_active)}
+                          disabled={marketplace.is_default}
+                          size="small"
+                        />
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
+                        {marketplace.plugin_count || 0}
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
+                        <Typography variant="caption">
+                          {formatDate(marketplace.last_synced)}
+                        </Typography>
+                      </StyledTableCell>
+                      <StyledTableCell align="center">
+                        <Tooltip title="Sync Now">
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleSyncMarketplace(marketplace.id)}
+                              disabled={!marketplace.is_active}
+                            >
+                              <SyncIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title="Remove">
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => setConfirmDeleteId(marketplace.id)}
+                              disabled={marketplace.is_default}
+                              color="error"
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </StyledTableCell>
+                    </StyledTableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </ContentBox>
+      </Box>
 
       {/* Add Marketplace Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Add Marketplace Source</DialogTitle>
-        <DialogContent>
+        <StyledDialogTitle>Add Marketplace Source</StyledDialogTitle>
+        <StyledDialogContent>
           <TextField
             autoFocus
             margin="dense"
@@ -319,7 +401,7 @@ const MarketplaceSettings = () => {
             value={newMarketplaceURL}
             onChange={(e) => {
               setNewMarketplaceURL(e.target.value);
-              setValidationResult(null); // Clear validation when URL changes
+              setValidationResult(null);
             }}
             placeholder="https://example.com/index.yaml"
             helperText="URL to the marketplace index.yaml file"
@@ -362,7 +444,7 @@ const MarketplaceSettings = () => {
             label="Set as default marketplace"
             sx={{ mt: 2 }}
           />
-        </DialogContent>
+        </StyledDialogContent>
         <DialogActions>
           <Button onClick={() => {
             setDialogOpen(false);
@@ -372,36 +454,45 @@ const MarketplaceSettings = () => {
           }}>
             Cancel
           </Button>
-          <Button
+          <PrimaryButton
             onClick={handleAddMarketplace}
-            variant="contained"
-            color="primary"
             disabled={!newMarketplaceURL.trim() || (validationResult && !validationResult.valid)}
           >
             Add Marketplace
-          </Button>
+          </PrimaryButton>
         </DialogActions>
       </Dialog>
 
       {/* Confirm Delete Dialog */}
       <Dialog open={confirmDeleteId !== null} onClose={() => setConfirmDeleteId(null)}>
-        <DialogTitle>Confirm Remove</DialogTitle>
-        <DialogContent>
+        <StyledDialogTitle>Confirm Remove</StyledDialogTitle>
+        <StyledDialogContent>
           <Typography>
             Are you sure you want to remove this marketplace? Plugins from this source will remain installed but updates will no longer be available.
           </Typography>
-        </DialogContent>
+        </StyledDialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
-          <Button
+          <DangerButton
             onClick={() => handleRemoveMarketplace(confirmDeleteId)}
-            color="error"
             variant="contained"
           >
             Remove
-          </Button>
+          </DangerButton>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

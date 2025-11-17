@@ -412,7 +412,7 @@ func getConfigFromEnv() *AppConf {
 
 	conf.MarketplaceIndexURL = os.Getenv("MARKETPLACE_INDEX_URL")
 	if conf.MarketplaceIndexURL == "" {
-		conf.MarketplaceIndexURL = "https://raw.githubusercontent.com/lonelycode/tyk-ai-studio-plugins/main/index.yaml"
+		conf.MarketplaceIndexURL = "https://raw.githubusercontent.com/TykTechnologies/tyk-ai-studio-plugins-ce/main/index.yaml"
 	}
 
 	conf.MarketplaceSyncInterval = 1 * time.Hour // Default: sync every hour

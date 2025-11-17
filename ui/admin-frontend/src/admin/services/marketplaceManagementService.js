@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || '';
+import apiClient from '../utils/apiClient';
 
 /**
  * Marketplace Management Service
@@ -12,9 +10,7 @@ class MarketplaceManagementService {
    * @returns {Promise<Array>} List of marketplace indexes
    */
   async listMarketplaces() {
-    const response = await axios.get(`${API_BASE_URL}/api/v1/admin/marketplaces`, {
-      withCredentials: true,
-    });
+    const response = await apiClient.get('/admin/marketplaces');
     return response.data.data;
   }
 
@@ -24,9 +20,7 @@ class MarketplaceManagementService {
    * @returns {Promise<Object>} Marketplace details
    */
   async getMarketplace(id) {
-    const response = await axios.get(`${API_BASE_URL}/api/v1/admin/marketplaces/${id}`, {
-      withCredentials: true,
-    });
+    const response = await apiClient.get(`/admin/marketplaces/${id}`);
     return response.data.data;
   }
 
@@ -37,11 +31,10 @@ class MarketplaceManagementService {
    * @returns {Promise<Object>} Created marketplace
    */
   async addMarketplace(url, isDefault = false) {
-    const response = await axios.post(
-      `${API_BASE_URL}/api/v1/admin/marketplaces`,
-      { url, is_default: isDefault },
-      { withCredentials: true }
-    );
+    const response = await apiClient.post('/admin/marketplaces', {
+      url,
+      is_default: isDefault,
+    });
     return response.data.data;
   }
 
@@ -54,11 +47,7 @@ class MarketplaceManagementService {
    * @returns {Promise<Object>} Response message
    */
   async updateMarketplace(id, updates) {
-    const response = await axios.put(
-      `${API_BASE_URL}/api/v1/admin/marketplaces/${id}`,
-      updates,
-      { withCredentials: true }
-    );
+    const response = await apiClient.put(`/admin/marketplaces/${id}`, updates);
     return response.data;
   }
 
@@ -68,9 +57,7 @@ class MarketplaceManagementService {
    * @returns {Promise<Object>} Response message
    */
   async removeMarketplace(id) {
-    const response = await axios.delete(`${API_BASE_URL}/api/v1/admin/marketplaces/${id}`, {
-      withCredentials: true,
-    });
+    const response = await apiClient.delete(`/admin/marketplaces/${id}`);
     return response.data;
   }
 
@@ -80,11 +67,7 @@ class MarketplaceManagementService {
    * @returns {Promise<Object>} Validation result
    */
   async validateMarketplaceURL(url) {
-    const response = await axios.post(
-      `${API_BASE_URL}/api/v1/admin/marketplaces/validate`,
-      { url },
-      { withCredentials: true }
-    );
+    const response = await apiClient.post('/admin/marketplaces/validate', { url });
     return response.data.data;
   }
 
@@ -94,11 +77,7 @@ class MarketplaceManagementService {
    * @returns {Promise<Object>} Response message
    */
   async syncMarketplace(id) {
-    const response = await axios.post(
-      `${API_BASE_URL}/api/v1/admin/marketplaces/${id}/sync`,
-      {},
-      { withCredentials: true }
-    );
+    const response = await apiClient.post(`/admin/marketplaces/${id}/sync`, {});
     return response.data;
   }
 

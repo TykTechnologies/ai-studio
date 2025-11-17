@@ -104,14 +104,21 @@ func (s *MarketplaceService) SyncAll(ctx context.Context) error {
 	if len(indexes) == 0 && s.defaultIndexURL != "" {
 		log.Info().Str("url", s.defaultIndexURL).Msg("Creating default marketplace index")
 		defaultIndex := &models.MarketplaceIndex{
-			SourceURL: s.defaultIndexURL,
-			IsDefault: true,
-			IsActive:  true,
+			SourceURL:    s.defaultIndexURL,
+			IsDefault:    true,
+			IsActive:     true,
+			SyncStatus:   "pending",
+			APIVersion:   "",
+			PluginCount:  0,
+			LastSynced:   time.Time{},
+			LastModified: time.Time{},
+			ETag:         "",
 		}
 		if err := s.db.Create(defaultIndex).Error; err != nil {
 			return fmt.Errorf("failed to create default index: %w", err)
 		}
 		indexes = append(indexes, defaultIndex)
+		log.Info().Uint("id", defaultIndex.ID).Msg("Default marketplace index created")
 	}
 
 	// Sync each index
@@ -149,6 +156,9 @@ func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.Marketpl
 	s.db.Save(idx)
 
 	// Fetch index with conditional request
+	// For first-time sync (no ETag), always fetch and process
+	isFirstSync := idx.ETag == ""
+
 	index, metadata, modified, err := s.fetcher.FetchIndexConditional(
 		ctx,
 		idx.SourceURL,
@@ -163,8 +173,8 @@ func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.Marketpl
 		return fmt.Errorf("failed to fetch index: %w", err)
 	}
 
-	// Not modified - still update last synced time
-	if !modified {
+	// Not modified - still update last synced time (unless it's the first sync)
+	if !modified && !isFirstSync {
 		idx.SyncStatus = "success"
 		idx.LastSynced = time.Now()
 		idx.SyncError = ""

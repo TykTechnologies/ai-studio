@@ -12,12 +12,16 @@ import (
 // MarketplaceAdminHandlers handles marketplace management API endpoints
 // Community Edition: Returns 403 Forbidden for all management operations
 type MarketplaceAdminHandlers struct {
-	service interface{} // unused in CE, but accepted for API compatibility
+	service            interface{} // unused in CE, but accepted for API compatibility
+	marketplaceService interface{} // unused in CE, but accepted for API compatibility
 }
 
 // NewMarketplaceAdminHandlers creates marketplace admin handlers for Community Edition
-func NewMarketplaceAdminHandlers(service interface{}) *MarketplaceAdminHandlers {
-	return &MarketplaceAdminHandlers{service: service}
+func NewMarketplaceAdminHandlers(service interface{}, marketplaceService interface{}) *MarketplaceAdminHandlers {
+	return &MarketplaceAdminHandlers{
+		service:            service,
+		marketplaceService: marketplaceService,
+	}
 }
 
 // enterpriseOnlyResponse returns a consistent 403 response for CE

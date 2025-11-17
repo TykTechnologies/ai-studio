@@ -4,9 +4,11 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/marketplace_management"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -14,13 +16,15 @@ import (
 
 // MarketplaceAdminHandlers handles marketplace management API endpoints for Enterprise Edition
 type MarketplaceAdminHandlers struct {
-	service marketplace_management.Service
+	service            marketplace_management.Service
+	marketplaceService interface{} // *services.MarketplaceService for sync operations
 }
 
 // NewMarketplaceAdminHandlers creates marketplace admin handlers for Enterprise Edition
-func NewMarketplaceAdminHandlers(service marketplace_management.Service) *MarketplaceAdminHandlers {
+func NewMarketplaceAdminHandlers(service marketplace_management.Service, marketplaceService interface{}) *MarketplaceAdminHandlers {
 	return &MarketplaceAdminHandlers{
-		service: service,
+		service:            service,
+		marketplaceService: marketplaceService,
 	}
 }
 
@@ -263,8 +267,8 @@ func (h *MarketplaceAdminHandlers) SyncMarketplace(c *gin.Context) {
 		return
 	}
 
-	// Verify marketplace exists
-	_, err = h.service.GetMarketplace(uint(id))
+	// Get marketplace to verify it exists
+	marketplace, err := h.service.GetMarketplace(uint(id))
 	if err != nil {
 		status := http.StatusInternalServerError
 		if err == marketplace_management.ErrMarketplaceNotFound {
@@ -280,10 +284,30 @@ func (h *MarketplaceAdminHandlers) SyncMarketplace(c *gin.Context) {
 		return
 	}
 
-	// Note: Actual sync is handled by MarketplaceService.SyncAll() in background
-	// This endpoint just validates the marketplace exists and returns success
-	// The marketplace service will sync it on the next scheduled run
+	// Trigger sync for this specific marketplace if MarketplaceService is available
+	if h.marketplaceService != nil {
+		if ms, ok := h.marketplaceService.(interface {
+			SyncIndex(ctx context.Context, idx *models.MarketplaceIndex) error
+		}); ok {
+			// Run sync in background
+			go func() {
+				ctx := context.Background()
+				if err := ms.SyncIndex(ctx, marketplace); err != nil {
+					log.Error().Err(err).Uint("id", marketplace.ID).Msg("Manual marketplace sync failed")
+				} else {
+					log.Info().Uint("id", marketplace.ID).Msg("Manual marketplace sync completed successfully")
+				}
+			}()
 
+			c.JSON(http.StatusAccepted, gin.H{
+				"message": "Marketplace sync initiated",
+				"status":  "in_progress",
+			})
+			return
+		}
+	}
+
+	// Fallback: just return accepted without actual sync
 	c.JSON(http.StatusAccepted, gin.H{
 		"message": "Marketplace sync requested - will be synchronized on next scheduled run",
 	})
