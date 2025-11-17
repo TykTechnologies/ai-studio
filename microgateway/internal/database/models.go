@@ -75,6 +75,7 @@ type App struct {
 	Name            string         `gorm:"not null" json:"name"`
 	Description     string         `json:"description"`
 	OwnerEmail      string         `gorm:"index" json:"owner_email"`
+	UserID          uint           `json:"user_id"` // Owner user ID (synced from control plane for analytics)
 	IsActive        bool           `gorm:"default:true;index" json:"is_active"`
 	MonthlyBudget   float64        `json:"monthly_budget"`
 	BudgetStartDate *time.Time     `json:"budget_start_date"`
@@ -82,7 +83,7 @@ type App struct {
 	RateLimitRPM    int            `json:"rate_limit_rpm"`
 	AllowedIPs      datatypes.JSON `gorm:"type:json" json:"allowed_ips"`
 	Metadata        datatypes.JSON `gorm:"type:json" json:"metadata"`
-	
+
 	// Hub-and-Spoke Configuration
 	Namespace       string         `gorm:"default:'';index:idx_app_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
 

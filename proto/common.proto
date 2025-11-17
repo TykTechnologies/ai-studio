@@ -51,13 +51,14 @@ message AppConfig {
   string allowed_ips = 10; // JSON string
   string metadata = 11; // JSON string
   string namespace = 12; // Namespace for filtering
+  uint32 user_id = 13; // Owner user ID (synced from control plane for analytics)
   google.protobuf.Timestamp created_at = 14;
   google.protobuf.Timestamp updated_at = 15;
-  
+
   // Embedded relationship data (from join tables) - THE CRITICAL MISSING PIECE
   repeated uint32 llm_ids = 16;        // From app_llms join table - FOR LLM ACCESS VALIDATION
   repeated uint32 credential_ids = 17; // From credentials table
-  repeated uint32 token_ids = 18;      // From api_tokens table  
+  repeated uint32 token_ids = 18;      // From api_tokens table
 }
 
 // TokenConfig represents an API token configuration

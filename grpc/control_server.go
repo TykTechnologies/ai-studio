@@ -538,8 +538,9 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		Valid:     true,
 		AppId:     uint32(app.ID),
 		AppName:   app.Name,
-		Scopes:    []string{}, // AI Studio doesn't use scopes like microgateway
-		ExpiresAt: nil,        // AI Studio credentials don't expire
+		UserId:    uint32(app.UserID), // Owner user ID for analytics tracking
+		Scopes:    []string{},          // AI Studio doesn't use scopes like microgateway
+		ExpiresAt: nil,                 // AI Studio credentials don't expire
 	}, nil
 }
 
@@ -579,7 +580,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			// Create ProxyLog for request/response tracking
 			proxyLogs[i] = &models.ProxyLog{
 				AppID:        uint(event.AppId),
-				UserID:       0, // Edge doesn't track individual users
+				UserID:       uint(event.UserId), // User ID synced from edge (via config sync)
 				Vendor:       vendor,
 				RequestBody:  event.RequestBody,  // Now included from pulse if configured
 				ResponseBody: event.ResponseBody, // Now included from pulse if configured
@@ -602,7 +603,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				Currency:               "USD",
 				TimeStamp:              event.Timestamp.AsTime(),
 				InteractionType:        models.ProxyInteraction, // Mark as proxy interaction
-				UserID:                 0, // Edge doesn't track individual users
+				UserID:                 uint(event.UserId), // User ID synced from edge (via config sync)
 				ChatID:                 "", // Not applicable for proxy
 				Choices:                1, // Default
 				ToolCalls:              0, // Default for proxy
@@ -889,13 +890,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		for i, llm := range app.LLMs {
 			llmIDs[i] = uint32(llm.ID)
 		}
-		
+
 		// Handle optional monthly budget
 		var monthlyBudget float64
 		if app.MonthlyBudget != nil {
 			monthlyBudget = *app.MonthlyBudget
 		}
-		
+
 		// Serialize metadata to JSON string
 		var metadataJSON string
 		if app.Metadata != nil {
@@ -913,6 +914,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			MonthlyBudget: monthlyBudget,
 			Metadata:      metadataJSON,
 			Namespace:     app.Namespace,
+			UserId:        uint32(app.UserID), // Owner user ID for analytics tracking
 			LlmIds:        llmIDs,
 			CreatedAt:     timestamppb.New(app.CreatedAt),
 			UpdatedAt:     timestamppb.New(app.UpdatedAt),

@@ -415,6 +415,7 @@ type AppConfig struct {
 	AllowedIps      string                 `protobuf:"bytes,10,opt,name=allowed_ips,json=allowedIps,proto3" json:"allowed_ips,omitempty"` // JSON string
 	Metadata        string                 `protobuf:"bytes,11,opt,name=metadata,proto3" json:"metadata,omitempty"`                       // JSON string
 	Namespace       string                 `protobuf:"bytes,12,opt,name=namespace,proto3" json:"namespace,omitempty"`                     // Namespace for filtering
+	UserId          uint32                 `protobuf:"varint,13,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`            // Owner user ID (synced from control plane for analytics)
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// Embedded relationship data (from join tables) - THE CRITICAL MISSING PIECE
@@ -537,6 +538,13 @@ func (x *AppConfig) GetNamespace() string {
 		return x.Namespace
 	}
 	return ""
+}
+
+func (x *AppConfig) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
 }
 
 func (x *AppConfig) GetCreatedAt() *timestamppb.Timestamp {
@@ -1382,7 +1390,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"filter_ids\x18\x16 \x03(\rR\tfilterIds\x12\x1d\n" +
 	"\n" +
-	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\"\xe0\x04\n" +
+	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\"\xf9\x04\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1398,7 +1406,8 @@ const file_proto_common_proto_rawDesc = "" +
 	" \x01(\tR\n" +
 	"allowedIps\x12\x1a\n" +
 	"\bmetadata\x18\v \x01(\tR\bmetadata\x12\x1c\n" +
-	"\tnamespace\x18\f \x01(\tR\tnamespace\x129\n" +
+	"\tnamespace\x18\f \x01(\tR\tnamespace\x12\x17\n" +
+	"\auser_id\x18\r \x01(\rR\x06userId\x129\n" +
 	"\n" +
 	"created_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +

@@ -829,12 +829,13 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		llms[i] = a.convertDatabaseLLMToModel(&dbLLM)
 	}
 	
-	log.Debug().
+	log.Info().
 		Uint("app_id", dbApp.ID).
 		Str("app_name", dbApp.Name).
+		Uint("user_id", dbApp.UserID).
 		Int("llm_count", len(llms)).
-		Msg("Converting database app to model with LLM associations")
-		
+		Msg("Converting database app to model with UserID for analytics")
+
 	// Log each LLM for debugging
 	for _, llm := range llms {
 		log.Debug().
@@ -843,15 +844,22 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 			Str("llm_name", llm.Name).
 			Msg("App has access to LLM")
 	}
-	
-	return models.App{
+
+	modelApp := models.App{
 		ID:              dbApp.ID,
 		Name:            dbApp.Name,
 		Description:     dbApp.Description,
-		UserID:          1, // Default user ID for microgateway
+		UserID:          dbApp.UserID, // Owner user ID (synced from control plane for analytics)
 		CredentialID:    dbApp.ID, // Use app ID as credential reference
 		MonthlyBudget:   &dbApp.MonthlyBudget,
 		BudgetStartDate: dbApp.BudgetStartDate,
 		LLMs:            llms, // Include LLM associations for access control
 	}
+
+	log.Info().
+		Uint("app_id", modelApp.ID).
+		Uint("user_id", modelApp.UserID).
+		Msg("Created models.App with UserID for analytics tracking")
+
+	return modelApp
 }
