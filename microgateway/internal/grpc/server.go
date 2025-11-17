@@ -768,20 +768,40 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 
 	// Process analytics events by storing them in local microgateway database
 	for _, event := range req.AnalyticsEvents {
-		// Create analytics event record
+		// Create analytics event record (matching LLMChatRecord schema)
 		analyticsEvent := &database.AnalyticsEvent{
-			RequestID:      event.RequestId,
-			AppID:          uint(event.AppId),
-			Endpoint:       event.Endpoint,
-			Method:         event.Method,
-			StatusCode:     int(event.StatusCode),
-			RequestTokens:  int(event.RequestTokens),
-			ResponseTokens: int(event.ResponseTokens),
-			TotalTokens:    int(event.TotalTokens),
-			Cost:           event.Cost,
-			LatencyMs:      int(event.LatencyMs),
-			ErrorMessage:   event.ErrorMessage,
-			CreatedAt:      event.Timestamp.AsTime(),
+			RequestID:              event.RequestId,
+			AppID:                  uint(event.AppId),
+
+			// Fields matching LLMChatRecord for parity
+			UserID:                 uint(event.UserId),
+			Name:                   event.ModelName,
+			Vendor:                 event.Vendor,
+			InteractionType:        event.InteractionType,
+			Choices:                int(event.Choices),
+			ToolCalls:              int(event.ToolCalls),
+			ChatID:                 event.ChatId,
+			Currency:               event.Currency,
+
+			// Request/Response details
+			Endpoint:               event.Endpoint,
+			Method:                 event.Method,
+			StatusCode:             int(event.StatusCode),
+
+			// Token tracking (using new field names)
+			PromptTokens:           int(event.RequestTokens),
+			ResponseTokens:         int(event.ResponseTokens),
+			TotalTokens:            int(event.TotalTokens),
+			CacheWritePromptTokens: int(event.CacheWritePromptTokens),
+			CacheReadPromptTokens:  int(event.CacheReadPromptTokens),
+
+			// Cost and timing
+			Cost:                   event.Cost,
+			TotalTimeMS:            int(event.LatencyMs),
+
+			ErrorMessage:           event.ErrorMessage,
+			TimeStamp:              event.Timestamp.AsTime(),
+			CreatedAt:              event.Timestamp.AsTime(),
 		}
 
 		// Set LLM ID if provided
