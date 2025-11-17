@@ -237,16 +237,143 @@ func (h *MicrogatewaAnalyticsHandler) Stop() {
 }
 
 // RecordChatRecord implements the midsommar analytics interface
-// This is for AI Studio chat features - for microgateway, we use RecordProxyLog exclusively
+// Merges ChatRecord data into existing ProxyLog event (deduplication) or creates standalone event
 func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
-	log.Debug().
+	log.Info().
 		Uint("app_id", record.AppID).
 		Uint("llm_id", record.LLMID).
 		Str("model", record.Name).
-		Msg("RecordChatRecord called - this is for AI Studio chat, not microgateway proxy")
-	
-	// For microgateway, we handle all analytics via RecordProxyLog
-	// This method is here for interface compatibility but not used
+		Str("interaction_type", string(record.InteractionType)).
+		Int("total_tokens", record.TotalTokens).
+		Msg("Recording chat record analytics - attempting merge with proxy log event")
+
+	// Try to find matching ProxyLog event created ~microseconds ago
+	matchKey := fmt.Sprintf("pending_%d_%d", record.AppID, record.TimeStamp.Unix())
+	existingEventID, found := h.findEventForMerge(matchKey)
+
+	if found {
+		// MERGE: Update existing event with ChatRecord data (richer token/cost info)
+		log.Info().
+			Uint("existing_event_id", existingEventID).
+			Str("match_key", matchKey).
+			Msg("Found matching proxy log event - merging chat record data")
+
+		// Update the existing event with enriched data from ChatRecord
+		updates := map[string]interface{}{
+			"name":                     record.Name,      // More accurate model name
+			"choices":                  record.Choices,   // Actual choice count
+			"tool_calls":               record.ToolCalls, // Actual tool call count
+			"chat_id":                  record.ChatID,
+			"total_time_ms":            record.TotalTimeMS, // Actual latency
+			// Note: Keep cost from ProxyLog parsing, as it's already calculated correctly
+			// ChatRecord cost is in different unit (cents * 10000)
+		}
+
+		if err := h.db.Model(&database.AnalyticsEvent{}).Where("id = ?", existingEventID).Updates(updates).Error; err != nil {
+			log.Error().Err(err).Uint("event_id", existingEventID).Msg("Failed to merge chat record into existing event")
+		} else {
+			log.Info().
+				Uint("event_id", existingEventID).
+				Str("model", record.Name).
+				Int("choices", record.Choices).
+				Int("tool_calls", record.ToolCalls).
+				Msg("Successfully merged chat record into proxy log event")
+		}
+
+		// Note: Plugins were already executed when ProxyLog was recorded
+		// The pulse plugin will pick up the merged event automatically
+		log.Debug().Msg("Chat record merged - pulse plugin will transmit the enriched event")
+
+		return // Done - event already exists and was updated
+	}
+
+	// NO MATCH: This is a standalone chat interaction (not via proxy)
+	// Create new analytics event from ChatRecord only
+	log.Info().
+		Str("match_key", matchKey).
+		Msg("No matching proxy log found - creating standalone chat analytics event")
+
+	// Execute analytics data collection plugins
+	if h.pluginManager != nil {
+		analyticsData := &interfaces.AnalyticsData{
+			LLMID:                  record.LLMID,
+			ModelName:              record.Name,
+			Vendor:                 record.Vendor,
+			PromptTokens:           record.PromptTokens,
+			ResponseTokens:         record.ResponseTokens,
+			TotalTokens:            record.TotalTokens,
+			CacheWritePromptTokens: record.CacheWritePromptTokens,
+			CacheReadPromptTokens:  record.CacheReadPromptTokens,
+			Cost:                   record.Cost,
+			Currency:               record.Currency,
+			AppID:                  record.AppID,
+			UserID:                 record.UserID,
+			Timestamp:              record.TimeStamp,
+			ToolCalls:              record.ToolCalls,
+			Choices:                record.Choices,
+			RequestID:              fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
+		}
+
+		// Execute analytics plugins
+		if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
+			log.Error().Err(err).Msg("Failed to execute analytics data collection plugins for chat record")
+		}
+
+		// Check if any plugins are configured to replace database storage for analytics
+		if h.pluginManager.ShouldReplaceDatabaseStorage("analytics") {
+			log.Debug().Msg("Analytics database storage replaced by plugin - skipping database write for chat record")
+			return
+		}
+	}
+
+	// Create analytics event from chat record (standalone chat interaction)
+	event := &database.AnalyticsEvent{
+		RequestID:              fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
+		AppID:                  record.AppID,
+		LLMID:                  &record.LLMID,
+
+		// Fields matching LLMChatRecord for parity
+		UserID:                 record.UserID,
+		Name:                   record.Name,
+		Vendor:                 record.Vendor,
+		InteractionType:        string(record.InteractionType),
+		Choices:                record.Choices,
+		ToolCalls:              record.ToolCalls,
+		ChatID:                 record.ChatID,
+		Currency:               record.Currency,
+
+		// Request/Response details
+		Endpoint:               "/v1/chat/completions",
+		Method:                 "POST",
+		StatusCode:             200, // Determined from success of chat interaction
+
+		// Token tracking
+		PromptTokens:           record.PromptTokens,
+		ResponseTokens:         record.ResponseTokens,
+		TotalTokens:            record.TotalTokens,
+		CacheWritePromptTokens: record.CacheWritePromptTokens,
+		CacheReadPromptTokens:  record.CacheReadPromptTokens,
+
+		// Cost and timing
+		Cost:                   record.Cost,
+		TotalTimeMS:            record.TotalTimeMS,
+
+		ErrorMessage:           "",
+		TimeStamp:              record.TimeStamp,
+		CreatedAt:              record.TimeStamp,
+	}
+
+	// Write to database
+	if err := h.db.Create(event).Error; err != nil {
+		log.Error().Err(err).Msg("Failed to create standalone chat analytics event")
+	} else {
+		log.Info().
+			Uint("event_id", event.ID).
+			Str("request_id", event.RequestID).
+			Int("total_tokens", event.TotalTokens).
+			Float64("cost", event.Cost).
+			Msg("Standalone chat analytics event created (no proxy log match)")
+	}
 }
 
 // RecordChatLogEntry implements the midsommar analytics interface
@@ -260,8 +387,9 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatLogEntry(entry *models.LLMChatLo
 	// For now, we'll just log this - could store in analytics event metadata if needed
 }
 
-// RecordProxyLog implements the midsommar analytics interface  
+// RecordProxyLog implements the midsommar analytics interface
 // Creates analytics events directly from AI Gateway proxy logs
+// This is called FIRST for each request, creating a pending event that may be enriched by RecordChatRecord
 func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) {
 	log.Info().
 		Uint("app_id", proxyLog.AppID).
@@ -271,7 +399,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 		Time("proxy_timestamp", proxyLog.TimeStamp).
 		Int("request_body_size", len(proxyLog.RequestBody)).
 		Int("response_body_size", len(proxyLog.ResponseBody)).
-		Msg("Processing proxy log - executing data collection plugins")
+		Msg("Processing proxy log - creating pending analytics event")
 
 	// Execute data collection plugins for proxy logs
 	if h.pluginManager != nil {
@@ -401,16 +529,19 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 		log.Debug().Int("response_size", len(event.ResponseBody)).Msg("Storing response body")
 	}
 
-	// Create the analytics event
+	// Create the analytics event and store for potential merge with ChatRecord
 	if err := h.db.Create(event).Error; err != nil {
 		log.Error().Err(err).Msg("Failed to create analytics event from proxy log")
 	} else {
+		// Store event ID for matching with incoming ChatRecord (uses AppID+Timestamp key)
+		h.storeEventForMatching(fmt.Sprintf("pending_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.Unix()), event.ID)
+
 		log.Info().
 			Uint("event_id", event.ID).
 			Str("request_id", event.RequestID).
 			Int("total_tokens", event.TotalTokens).
 			Float64("cost", event.Cost).
-			Msg("Analytics event created successfully from proxy log")
+			Msg("Analytics event created from proxy log (pending merge with chat record)")
 	}
 }
 
@@ -427,20 +558,38 @@ func (h *MicrogatewaAnalyticsHandler) truncateBody(body string, maxSize int) str
 	return body[:maxSize] + "... [truncated]"
 }
 
-// storeEventForMatching stores an event ID for later matching with proxy log
-func (h *MicrogatewaAnalyticsHandler) storeEventForMatching(requestID string, eventID uint) {
+// storeEventForMatching stores an event ID for later matching with chat record
+func (h *MicrogatewaAnalyticsHandler) storeEventForMatching(matchKey string, eventID uint) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.pendingEvents[requestID] = eventID
-	
-	// Clean up old entries (older than 1 minute)
+	h.pendingEvents[matchKey] = eventID
+
+	// Clean up old entries (older than 10 seconds)
 	// This prevents memory leaks from unmatched events
 	go func() {
-		time.Sleep(60 * time.Second)
+		time.Sleep(10 * time.Second)
 		h.mu.Lock()
-		delete(h.pendingEvents, requestID)
+		delete(h.pendingEvents, matchKey)
 		h.mu.Unlock()
 	}()
+}
+
+// findEventForMerge finds a pending event ID for merging chat record data
+func (h *MicrogatewaAnalyticsHandler) findEventForMerge(matchKey string) (uint, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	eventID, exists := h.pendingEvents[matchKey]
+	if exists {
+		// Remove from pending map after finding (one-time merge)
+		go func() {
+			h.mu.Lock()
+			delete(h.pendingEvents, matchKey)
+			h.mu.Unlock()
+		}()
+	}
+
+	return eventID, exists
 }
 
 // findEventForMatching finds an event ID by request pattern matching

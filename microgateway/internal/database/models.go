@@ -119,14 +119,14 @@ type AppLLM struct {
 // ModelPrice represents LLM model pricing information (full AI Gateway interface)
 type ModelPrice struct {
 	gorm.Model
-	Vendor       string  `gorm:"not null"`
-	ModelName    string  `gorm:"not null"`
+	ModelName    string  `gorm:"not null;uniqueIndex:idx_model_vendor"` // Model name with composite unique index
+	Vendor       string  `gorm:"not null;uniqueIndex:idx_model_vendor"` // Vendor with composite unique index
 	CPT          float64 `gorm:"not null"`     // Cost per token (completion/output)
-	CPIT         float64 `gorm:"not null"`     // Cost per input token (prompt)  
+	CPIT         float64 `gorm:"not null"`     // Cost per input token (prompt)
 	CacheWritePT float64 `gorm:"default:0"`   // Cost per cache write token
 	CacheReadPT  float64 `gorm:"default:0"`   // Cost per cache read token
 	Currency     string  `gorm:"default:USD"`
-	
+
 	// Hub-and-Spoke Configuration
 	Namespace    string  `gorm:"default:'';index:idx_model_price_namespace"` // Empty = global, specific = filtered to edge
 }
