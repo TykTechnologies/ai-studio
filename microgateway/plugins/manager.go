@@ -181,6 +181,16 @@ func NewPluginManagerWithOCI(pluginService PluginServiceInterface, ociConfig *oc
 	return pm, nil
 }
 
+// SetSecurityService sets the enterprise security service for OCI signature verification
+func (pm *PluginManager) SetSecurityService(securityService ociplugins.SecurityService) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	if pm.ociClient != nil {
+		pm.ociClient.SetSecurityService(securityService)
+	}
+}
+
 // LoadPlugin loads a plugin by ID
 func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	startTime := time.Now()

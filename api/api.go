@@ -20,11 +20,13 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -63,18 +65,19 @@ func (w *bodyLogWriter) Write(b []byte) (int, error) {
 // @name Authorization
 
 type API struct {
-	service             *services.Service
-	router              *gin.Engine
-	server              *http.Server
-	config              *auth.Config
-	disableCORS         bool
-	auth                *auth.AuthService
-	proxy               *proxy.Proxy
-	staticFiles         embed.FS
-	providers           *providers.Registry
-	setupChatRoutesFunc func(*gin.RouterGroup)
-	ssoService          sso.Service
-	licensingService    licensing.Service
+	service               *services.Service
+	router                *gin.Engine
+	server                *http.Server
+	config                *auth.Config
+	disableCORS           bool
+	auth                  *auth.AuthService
+	proxy                 *proxy.Proxy
+	staticFiles           embed.FS
+	providers             *providers.Registry
+	setupChatRoutesFunc   func(*gin.RouterGroup)
+	ssoService            sso.Service
+	licensingService      licensing.Service
+	pluginSecurityService plugin_security.Service
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
@@ -164,6 +167,22 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 			log.Fatalf("Failed to initialize SSO service: %v", err)
 		}
 	}
+
+	// Initialize Plugin Security service (ENT: full security enforcement, CE: stub allowing all operations)
+	var ociLibConfig *ociplugins.OCIConfig
+	if config.OCIConfig != nil {
+		// Convert config.OCIConfig (interface{}) to *ociplugins.OCIConfig
+		// This is set in main.go from appConf.OCIPlugins.ToOCILibConfig()
+		if ociCfg, ok := config.OCIConfig.(*ociplugins.OCIConfig); ok {
+			ociLibConfig = ociCfg
+		}
+	}
+
+	pluginSecurityConfig := &plugin_security.Config{
+		OCIConfig:                  ociLibConfig,
+		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+	}
+	api.pluginSecurityService = plugin_security.NewService(pluginSecurityConfig)
 
 	api.setupChatRoutesFunc = api.SetupChatRoutes
 

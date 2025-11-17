@@ -214,6 +214,7 @@ func main() {
 		AllowedRegisterDomains: appConf.FilterSignupDomains,
 		TIBEnabled:             appConf.TIBEnabled,
 		TIBAPISecret:           appConf.TIBAPISecret,
+		OCIConfig:              appConf.OCIPlugins.ToOCILibConfig(), // OCI config for plugin security
 	}
 
 	authService := auth.NewAuthService(config, mailService, service, notificationService)

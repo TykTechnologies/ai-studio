@@ -4,12 +4,15 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -36,9 +39,10 @@ type ServiceContainer struct {
 
 	// Utilities
 	Crypto CryptoServiceInterface
-	
+
 	// Plugin management
-	PluginManager *plugins.PluginManager
+	PluginManager         *plugins.PluginManager
+	PluginSecurityService plugin_security.Service
 }
 
 // NewServiceContainer creates a new service container with essential dependencies only
@@ -57,6 +61,16 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	tokenService := NewTokenService(authProvider)
 	filterService := NewFilterService(db, repo)
 	pluginService := NewPluginService(db, repo)
+
+	// Initialize Plugin Security service (ENT: full security enforcement, CE: stub allowing all operations)
+	var ociLibConfig *ociplugins.OCIConfig
+	if cfg.OCIPlugins.CacheDir != "" {
+		ociLibConfig = cfg.OCIPlugins.ToOCIConfig()
+	}
+	pluginSecurityService := plugin_security.NewService(&plugin_security.Config{
+		OCIConfig:                  ociLibConfig,
+		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+	})
 
 	// Create plugin service adapter to break circular dependency
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
@@ -84,7 +98,10 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 		pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
 		log.Info().Msg("OCI plugin support disabled - using standard plugin manager")
 	}
-	
+
+	// Set enterprise security service on plugin manager for OCI signature verification
+	pluginManager.SetSecurityService(pluginSecurityService)
+
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
 		log.Info().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins in service container...")
@@ -150,8 +167,9 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 		AuthProvider: authProvider,
 		Crypto:       crypto,
-		
-		PluginManager: pluginManager,
+
+		PluginManager:         pluginManager,
+		PluginSecurityService: pluginSecurityService,
 	}, nil
 }
 

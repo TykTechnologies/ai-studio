@@ -12,12 +12,21 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// SecurityService defines the interface for signature verification
+// This allows the OCI client to use enterprise security features when available
+type SecurityService interface {
+	VerifySignature(ctx context.Context, ref *OCIReference, pubKeyID string) error
+	VerifyBundle(ctx context.Context, ref *OCIReference, issuer, subject string) error
+	VerifyWithPolicy(ctx context.Context, ref *OCIReference, policyPath string) error
+}
+
 // OCIPluginClient handles OCI-based plugin operations
 type OCIPluginClient struct {
-	config    *OCIConfig
-	storage   *ContentStorage
-	fetcher   *ORASFetcher
-	verifier  *SignatureVerifier
+	config          *OCIConfig
+	storage         *ContentStorage
+	fetcher         *ORASFetcher
+	verifier        *SignatureVerifier  // Deprecated: use securityService instead
+	securityService SecurityService     // Enterprise security service (optional)
 
 	// Background processing
 	gcCancel  context.CancelFunc
@@ -66,6 +75,13 @@ func NewOCIPluginClient(config *OCIConfig) (*OCIPluginClient, error) {
 	return client, nil
 }
 
+// SetSecurityService sets the enterprise security service for signature verification
+// If not set, falls back to the built-in verifier (CE mode)
+func (c *OCIPluginClient) SetSecurityService(service SecurityService) {
+	c.securityService = service
+	log.Debug().Msg("Enterprise security service configured for OCI plugin client")
+}
+
 // FetchPlugin fetches a plugin by OCI reference, verifies it, and returns local information
 func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*LocalPlugin, error) {
 	startTime := time.Now()
@@ -103,7 +119,18 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 
 	// Verify signature if required
 	if c.config.RequireSignature {
-		if err := c.verifier.Verify(ctx, ref, params.PublicKey); err != nil {
+		var err error
+
+		// Use enterprise security service if available, otherwise fall back to built-in verifier
+		if c.securityService != nil {
+			log.Debug().Msg("Using enterprise security service for signature verification")
+			err = c.securityService.VerifySignature(ctx, ref, params.PublicKey)
+		} else {
+			log.Debug().Msg("Using built-in verifier for signature verification (CE mode)")
+			err = c.verifier.Verify(ctx, ref, params.PublicKey)
+		}
+
+		if err != nil {
 			return nil, &ErrSignatureVerificationFailed{
 				Reference: ref.FullReference(),
 				Reason:    err.Error(),

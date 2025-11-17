@@ -290,12 +290,16 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Basic RBAC
 - ✅ Hub-and-spoke deployment
 - ✅ Cost tracking and analytics
-- ✅ Plugin system
+- ✅ Plugin system (basic security)
+- ✅ Plugin path whitelisting
+- ✅ Plugin checksum validation
 
 **Not Included:**
 - ❌ Budget enforcement
 - ❌ Budget alerts and notifications
 - ❌ SSO (SAML, OIDC, LDAP, Social)
+- ❌ Plugin GRPC host whitelisting
+- ❌ Plugin OCI signature verification
 - ❌ Advanced RBAC
 - ❌ Audit logging
 
@@ -309,6 +313,8 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Multi-provider SSO support
 - ✅ User provisioning via SSO
 - ✅ Group mapping from IdP
+- ✅ Plugin GRPC host whitelisting (network security)
+- ✅ Plugin OCI signature verification (supply chain security)
 - ✅ Advanced RBAC
 - ✅ Audit logging
 - ✅ Priority support
@@ -398,6 +404,75 @@ func TestBudgetEnforcement(t *testing.T) {
 - **SAML 2.0**: SP-initiated and IdP-initiated, metadata endpoint
 - **LDAP**: Direct LDAP server integration with custom filters
 - **Social**: OAuth-based (Google, GitHub, custom providers)
+
+## Plugin Security Feature Specifics
+
+### How Plugin Security Works
+
+**Community Edition:**
+- ✅ **Path Whitelisting**: Validates plugin paths against allowed directories
+- ✅ **Checksum Validation**: SHA256 hash verification of plugin files
+- ❌ **GRPC Host Whitelisting**: No internal network protection (allows all hosts)
+- ❌ **OCI Signature Verification**: No Cosign verification (skips signatures)
+- ⚠️  **Reduced Security**: Logs warnings about missing enterprise features
+
+**Enterprise Edition:**
+- ✅ **Everything in CE**, plus:
+- ✅ **GRPC Host Whitelisting**: Blocks plugins from targeting internal IPs (10.x, 192.168.x, 127.x, ::1, etc.)
+- ✅ **OCI Signature Verification**: Cosign-based manifest signature checking
+- ✅ **Keyless Signing**: Support for OIDC-based keyless verification
+- ✅ **Policy-Based Verification**: Custom policy file support
+- ✅ **Multiple Public Keys**: Support for multiple signing keys (numbered, named, file-based)
+- 🔒 **Network Security**: Protection against SSRF attacks via malicious plugins
+- 🔒 **Supply Chain Security**: Ensures plugins come from trusted sources
+
+### Implementation Details
+
+**Main App (Midsommar):**
+- Interface: [services/plugin_security/interface.go](../services/plugin_security/interface.go) - Security service interface
+- Types: [services/plugin_security/types.go](../services/plugin_security/types.go) - Shared types
+- Errors: [services/plugin_security/errors.go](../services/plugin_security/errors.go) - Security errors
+- Factory: [services/plugin_security/factory.go](../services/plugin_security/factory.go) - Factory pattern
+- CE Stub: [services/plugin_security/community.go](../services/plugin_security/community.go) - No-op security (logs warnings)
+- ENT Impl: `enterprise/features/plugin_security/service.go` - Full security enforcement
+
+**Microgateway:**
+- Uses same interface from `services/plugin_security/`
+- Initialized in `internal/services/container.go`
+- Applied via `internal/api/handlers/validation.go`
+
+**Enterprise Components:**
+- GRPC Validator: `enterprise/features/plugin_security/grpc_validator.go`
+  - Internal IP detection (CIDR-based)
+  - IPv4 and IPv6 support
+  - Localhost pattern matching
+- Signature Verifier: `enterprise/features/plugin_security/signature_verifier.go`
+  - Cosign CLI integration
+  - Public key resolution (numbered, named, file-based)
+  - Temporary PEM file handling
+  - Bundle and policy verification
+
+**OCI Client Integration:**
+- Client: [pkg/ociplugins/client.go](../pkg/ociplugins/client.go)
+  - `SetSecurityService()` method for ENT integration
+  - Falls back to built-in verifier in CE mode
+  - Uses enterprise service when available in ENT mode
+
+**API Integration:**
+- AI Studio: [api/validation.go](../api/validation.go) - Uses security service for GRPC validation
+- Microgateway: `microgateway/internal/api/handlers/validation.go` - Same pattern
+
+**Security Checks:**
+
+| Security Feature | CE Behavior | ENT Behavior |
+|-----------------|-------------|--------------|
+| Path Whitelisting | ✅ Enforced | ✅ Enforced |
+| Checksum Validation | ✅ Enforced | ✅ Enforced |
+| GRPC Host Whitelisting | ⚠️ Bypassed (logs warning) | 🔒 Enforced (blocks internal IPs) |
+| OCI Signature Verification | ⚠️ Skipped (logs warning) | 🔒 Enforced (Cosign verification) |
+
+**Development Bypass:**
+- `ALLOW_INTERNAL_NETWORK_ACCESS=true` - Bypasses GRPC host whitelisting in ENT (development only)
 
 ## Enterprise Submodule Workflow
 
