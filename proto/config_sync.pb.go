@@ -1118,6 +1118,7 @@ type TokenValidationResponse struct {
 	Scopes        []string               `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`                                 // Token scopes if valid
 	ErrorMessage  string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Error message if invalid
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`          // Token expiration
+	UserId        uint32                 `protobuf:"varint,7,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                  // Owner user ID for analytics tracking
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1192,6 +1193,13 @@ func (x *TokenValidationResponse) GetExpiresAt() *timestamppb.Timestamp {
 		return x.ExpiresAt
 	}
 	return nil
+}
+
+func (x *TokenValidationResponse) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
 }
 
 // Distributed configuration reload messages (NEW)
@@ -2312,7 +2320,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x16TokenValidationRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
 	"\aedge_id\x18\x02 \x01(\tR\x06edgeId\x12%\n" +
-	"\x0eedge_namespace\x18\x03 \x01(\tR\redgeNamespace\"\xd9\x01\n" +
+	"\x0eedge_namespace\x18\x03 \x01(\tR\redgeNamespace\"\xf2\x01\n" +
 	"\x17TokenValidationResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\rR\x05appId\x12\x19\n" +
@@ -2320,7 +2328,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12#\n" +
 	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\x129\n" +
 	"\n" +
-	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\x98\x02\n" +
+	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x17\n" +
+	"\auser_id\x18\a \x01(\rR\x06userId\"\x98\x02\n" +
 	"\x1aConfigurationReloadRequest\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12)\n" +
 	"\x10target_namespace\x18\x02 \x01(\tR\x0ftargetNamespace\x12!\n" +

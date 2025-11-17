@@ -185,7 +185,7 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 	log.Info().Int("count", len(apps)).Msg("Syncing Apps to local SQLite")
 
 	for _, pbApp := range apps {
-		// Insert main App record  
+		// Insert main App record
 		app := &database.App{
 			Model: gorm.Model{
 				ID:        uint(pbApp.Id),
@@ -195,6 +195,7 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 			Name:            pbApp.Name,
 			Description:     pbApp.Description,
 			OwnerEmail:      pbApp.OwnerEmail,
+			UserID:          uint(pbApp.UserId), // Owner user ID (synced from control plane for analytics)
 			IsActive:        pbApp.IsActive,
 			MonthlyBudget:   pbApp.MonthlyBudget,
 			BudgetResetDay:  int(pbApp.BudgetResetDay),

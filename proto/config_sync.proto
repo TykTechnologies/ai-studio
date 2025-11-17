@@ -149,6 +149,7 @@ message TokenValidationResponse {
   repeated string scopes = 4; // Token scopes if valid
   string error_message = 5; // Error message if invalid
   google.protobuf.Timestamp expires_at = 6; // Token expiration
+  uint32 user_id = 7;       // Owner user ID for analytics tracking
 }
 
 // Distributed configuration reload messages (NEW)

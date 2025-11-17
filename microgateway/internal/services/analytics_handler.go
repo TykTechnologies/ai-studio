@@ -502,20 +502,13 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 		TimeStamp:    proxyLog.TimeStamp,
 		CreatedAt:    proxyLog.TimeStamp,
 
+		// Store request/response bodies immediately (if configured)
+		RequestBody:  h.truncateBodyIfConfigured(proxyLog.RequestBody),
+		ResponseBody: h.truncateBodyIfConfigured(proxyLog.ResponseBody),
+
 		// NO PARSED DATA - will come from ChatRecord merge:
 		// PromptTokens, ResponseTokens, Cost, Model, Choices, ToolCalls, etc.
 		// All set to zero/empty until ChatRecord enriches this event
-	}
-
-	// Add request/response bodies if configured
-	if h.config.StoreRequestBodies {
-		event.RequestBody = h.truncateBody(proxyLog.RequestBody, h.config.MaxBodySize)
-		log.Debug().Int("request_size", len(event.RequestBody)).Msg("Storing request body")
-	}
-
-	if h.config.StoreResponseBodies {
-		event.ResponseBody = h.truncateBody(proxyLog.ResponseBody, h.config.MaxBodySize)
-		log.Debug().Int("response_size", len(event.ResponseBody)).Msg("Storing response body")
 	}
 
 	// Create the analytics event and store for potential merge with ChatRecord
@@ -541,12 +534,26 @@ func (h *MicrogatewaAnalyticsHandler) truncateBody(body string, maxSize int) str
 	if maxSize <= 0 {
 		return "" // Disabled
 	}
-	
+
 	if len(body) <= maxSize {
 		return body
 	}
-	
+
 	return body[:maxSize] + "... [truncated]"
+}
+
+// truncateBodyIfConfigured truncates body if storage is enabled in config
+func (h *MicrogatewaAnalyticsHandler) truncateBodyIfConfigured(body string) string {
+	if h.config == nil {
+		return body // No config, store as-is
+	}
+
+	// Check if we should store bodies (both flags should be true by default)
+	if h.config.MaxBodySize <= 0 {
+		return "" // Disabled
+	}
+
+	return h.truncateBody(body, h.config.MaxBodySize)
 }
 
 // storeEventForMatching stores an event ID for later matching with chat record
