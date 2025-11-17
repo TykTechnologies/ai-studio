@@ -293,6 +293,7 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Plugin system (basic security)
 - ✅ Plugin path whitelisting
 - ✅ Plugin checksum validation
+- ✅ Single marketplace (Tyk official)
 
 **Not Included:**
 - ❌ Budget enforcement
@@ -300,6 +301,8 @@ func TestBudgetEnforcement(t *testing.T) {
 - ❌ SSO (SAML, OIDC, LDAP, Social)
 - ❌ Plugin GRPC host whitelisting
 - ❌ Plugin OCI signature verification
+- ❌ Multiple marketplace sources
+- ❌ Custom marketplace management
 - ❌ Advanced RBAC
 - ❌ Audit logging
 
@@ -315,6 +318,10 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Group mapping from IdP
 - ✅ Plugin GRPC host whitelisting (network security)
 - ✅ Plugin OCI signature verification (supply chain security)
+- ✅ Multiple marketplace sources
+- ✅ Custom marketplace management UI
+- ✅ Marketplace URL validation
+- ✅ Per-marketplace sync control
 - ✅ Advanced RBAC
 - ✅ Audit logging
 - ✅ Priority support
@@ -473,6 +480,100 @@ func TestBudgetEnforcement(t *testing.T) {
 
 **Development Bypass:**
 - `ALLOW_INTERNAL_NETWORK_ACCESS=true` - Bypasses GRPC host whitelisting in ENT (development only)
+
+## Marketplace Management Feature Specifics
+
+### How Marketplace Management Works
+
+**Community Edition:**
+- ✅ **Single Marketplace**: Access to official Tyk AI Studio plugin marketplace
+- ✅ **Automatic Sync**: Hourly synchronization of plugin catalog
+- ✅ **Plugin Browse & Install**: Full access to marketplace plugins
+- ✅ **Update Checking**: Automatic update notifications for installed plugins
+- ❌ **Custom Marketplaces**: Cannot add additional marketplace sources
+- ❌ **Marketplace Management UI**: No admin interface for marketplace configuration
+- ⚠️  **Limited Flexibility**: Restricted to single official marketplace
+
+**Enterprise Edition:**
+- ✅ **Everything in CE**, plus:
+- ✅ **Multiple Marketplaces**: Configure multiple custom marketplace sources
+- ✅ **Marketplace Management UI**: Full admin interface for marketplace CRUD operations
+- ✅ **URL Validation**: Pre-flight validation of marketplace URLs before adding
+- ✅ **Per-Marketplace Control**: Individual activation/deactivation of marketplaces
+- ✅ **Default Marketplace**: Set any marketplace as the default
+- ✅ **Source Tracking**: Plugins show which marketplace they came from
+- 🔒 **Flexibility**: Support for internal/private plugin marketplaces
+- 🔒 **Governance**: Control which plugin sources are available to users
+
+### Implementation Details
+
+**Service Layer:**
+- Interface: `services/marketplace_management/interface.go` - Management interface
+- Types: `services/marketplace_management/types.go` - ValidationResult, MarketplaceUpdate
+- Errors: `services/marketplace_management/errors.go` - Management errors
+- Factory: `services/marketplace_management/factory.go` - Factory pattern
+- CE Stub: `services/marketplace_management/community.go` - Returns enterprise-only errors
+- ENT Impl: `enterprise/features/marketplace_management/service.go` - Full CRUD operations
+
+**API Endpoints:**
+- CE Handlers: `api/marketplace_admin_handlers_community.go` (build tag: `!enterprise`) - 403 responses
+- ENT Handlers: `api/marketplace_admin_handlers_enterprise.go` (build tag: `enterprise`) - Full CRUD
+- Routes: `/api/v1/admin/marketplaces/*` (admin-only)
+
+**Database Models (Public):**
+- `models/marketplace.go` - MarketplaceIndex, MarketplacePlugin tables
+- `MarketplaceIndex.IsDefault` - Marks the default marketplace
+- `MarketplaceIndex.IsActive` - Controls sync activation
+- `MarketplacePlugin.SyncedFromURL` - Tracks plugin source
+
+**Management Operations:**
+
+| Operation | CE Behavior | ENT Behavior |
+|-----------|-------------|--------------|
+| Add Marketplace | ❌ 403 Forbidden | ✅ Full validation & creation |
+| Remove Marketplace | ❌ 403 Forbidden | ✅ Deletion (except default) |
+| Set Default | ❌ 403 Forbidden | ✅ Changes default marketplace |
+| Activate/Deactivate | ❌ 403 Forbidden | ✅ Toggles sync status |
+| List Marketplaces | ✅ Shows default only | ✅ Shows all marketplaces |
+| Validate URL | ❌ 403 Forbidden | ✅ Pre-flight validation |
+
+**Configuration:**
+- `MARKETPLACE_INDEX_URL` - Default marketplace URL (both CE & ENT)
+- `MARKETPLACE_SYNC_INTERVAL` - Sync frequency (default: 1 hour)
+- `MARKETPLACE_ENABLED` - Enable/disable marketplace feature
+
+**Admin API Endpoints (ENT Only):**
+```
+POST   /api/v1/admin/marketplaces          # Add new marketplace
+GET    /api/v1/admin/marketplaces          # List all marketplaces
+GET    /api/v1/admin/marketplaces/:id      # Get specific marketplace
+PUT    /api/v1/admin/marketplaces/:id      # Update marketplace properties
+DELETE /api/v1/admin/marketplaces/:id      # Remove marketplace
+POST   /api/v1/admin/marketplaces/validate # Validate URL before adding
+POST   /api/v1/admin/marketplaces/:id/sync # Trigger manual sync
+```
+
+**Frontend Integration (ENT Only):**
+- Admin UI: `ui/admin-frontend/src/admin/pages/MarketplaceSettings.js`
+  - List all configured marketplaces
+  - Add/remove marketplace sources
+  - Set default marketplace
+  - Activate/deactivate marketplaces
+  - View sync status and plugin counts
+- Navigation: Conditional menu item based on enterprise availability
+- Plugin Cards: Show source marketplace indicator
+
+**Security & Validation:**
+- URL validation (HTTPS required for production)
+- Accessibility check before adding
+- Index format validation (index.yaml structure)
+- Cannot remove default Tyk marketplace
+- Cannot deactivate default marketplace
+- Admin-only access to management endpoints
+
+**Upgrade Path:**
+- CE → ENT: Existing marketplace continues to work, can add more
+- ENT → CE: Extra marketplaces remain in database (read-only, cannot manage)
 
 ## Enterprise Submodule Workflow
 

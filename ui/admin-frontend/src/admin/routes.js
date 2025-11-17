@@ -72,6 +72,7 @@ import AgentDetail from "./components/agents/AgentDetail";
 import AgentForm from "./components/agents/AgentForm";
 
 import Marketplace from "./components/marketplace/Marketplace";
+import MarketplaceSettings from "./pages/MarketplaceSettings";
 import BrandingSettings from "./pages/BrandingSettings";
 
 const mainAdminRoutes = (
@@ -104,6 +105,7 @@ const mainAdminRoutes = (
     <Route path="plugins/*" element={<PluginsPage />} />
 
     <Route path="marketplace" element={<Marketplace />} />
+    <Route path="marketplace-settings" element={<MarketplaceSettings />} />
 
     <Route path="model-prices" element={<ModelPriceList />} />
     <Route path="model-prices/:id" element={<ModelPriceDetail />} />

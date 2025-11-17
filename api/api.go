@@ -26,6 +26,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
+	"github.com/TykTechnologies/midsommar/v2/services/marketplace_management"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-contrib/cors"
@@ -65,19 +66,20 @@ func (w *bodyLogWriter) Write(b []byte) (int, error) {
 // @name Authorization
 
 type API struct {
-	service               *services.Service
-	router                *gin.Engine
-	server                *http.Server
-	config                *auth.Config
-	disableCORS           bool
-	auth                  *auth.AuthService
-	proxy                 *proxy.Proxy
-	staticFiles           embed.FS
-	providers             *providers.Registry
-	setupChatRoutesFunc   func(*gin.RouterGroup)
-	ssoService            sso.Service
-	licensingService      licensing.Service
-	pluginSecurityService plugin_security.Service
+	service                       *services.Service
+	router                        *gin.Engine
+	server                        *http.Server
+	config                        *auth.Config
+	disableCORS                   bool
+	auth                          *auth.AuthService
+	proxy                         *proxy.Proxy
+	staticFiles                   embed.FS
+	providers                     *providers.Registry
+	setupChatRoutesFunc           func(*gin.RouterGroup)
+	ssoService                    sso.Service
+	licensingService              licensing.Service
+	pluginSecurityService         plugin_security.Service
+	marketplaceManagementService  marketplace_management.Service
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
@@ -183,6 +185,9 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
 	}
 	api.pluginSecurityService = plugin_security.NewService(pluginSecurityConfig)
+
+	// Initialize Marketplace Management service (ENT: full CRUD, CE: enterprise-only errors)
+	api.marketplaceManagementService = marketplace_management.NewService(config.DB)
 
 	api.setupChatRoutesFunc = api.SetupChatRoutes
 
@@ -763,6 +768,21 @@ func (a *API) setupRoutes() {
 		v1.GET("/marketplace/categories", marketplaceHandlers.GetCategories)
 		v1.GET("/marketplace/publishers", marketplaceHandlers.GetPublishers)
 		v1.GET("/marketplace/stats", marketplaceHandlers.GetStats)
+	}
+
+	// Marketplace Admin routes (ENT: full management, CE: 403 responses)
+	// Admin-only endpoints for managing multiple marketplace sources
+	marketplaceAdmin := v1.Group("/admin/marketplaces")
+	marketplaceAdmin.Use(a.auth.AdminOnly())
+	{
+		adminHandlers := NewMarketplaceAdminHandlers(a.marketplaceManagementService)
+		marketplaceAdmin.POST("", adminHandlers.AddMarketplace)
+		marketplaceAdmin.GET("", adminHandlers.ListMarketplaces)
+		marketplaceAdmin.GET("/:id", adminHandlers.GetMarketplace)
+		marketplaceAdmin.PUT("/:id", adminHandlers.UpdateMarketplace)
+		marketplaceAdmin.DELETE("/:id", adminHandlers.RemoveMarketplace)
+		marketplaceAdmin.POST("/validate", adminHandlers.ValidateMarketplaceURL)
+		marketplaceAdmin.POST("/:id/sync", adminHandlers.SyncMarketplace)
 	}
 
 	// Chat History Record routes

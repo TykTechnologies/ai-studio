@@ -58,6 +58,9 @@ const Drawer = () => {
       subItems: [
         { id: 'marketplace', text: 'Marketplace', path: '/admin/marketplace' },
         { id: 'plugin-list', text: 'Installed Plugins', path: '/admin/plugins' },
+        ...(config?.is_enterprise
+          ? [{ id: 'marketplace-settings', text: 'Marketplace Sources', path: '/admin/marketplace-settings' }]
+          : []),
       ],
     },
     {
