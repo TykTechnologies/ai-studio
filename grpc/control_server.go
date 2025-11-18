@@ -612,7 +612,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				ResponseTokens:         int(event.ResponseTokens),
 				CacheWritePromptTokens: int(event.CacheWritePromptTokens),
 				CacheReadPromptTokens:  int(event.CacheReadPromptTokens),
-				Cost:                   event.Cost * 10000, // Convert to cents for AI Studio format
+				Cost:                   event.Cost, // Already in AI Studio format (dollars * 10000)
 				Currency:               "USD",
 				TimeStamp:              event.Timestamp.AsTime(),
 				InteractionType:        models.ProxyInteraction, // Mark as proxy interaction
