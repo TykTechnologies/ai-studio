@@ -84,9 +84,10 @@ const (
 
 // Common feature names
 const (
-	FeaturePortal             = "feature_portal"
-	FeatureChat               = "feature_chat"
-	FeatureGateway            = "feature_gateway"
-	FeatureTrack              = "track"                     // Telemetry enabled
-	FeatureHubSpokeMultiTenant = "hub_spoke_multi_tenant" // Multi-tenant namespace support (ENT)
+	FeaturePortal              = "feature_portal"
+	FeatureChat                = "feature_chat"
+	FeatureGateway             = "feature_gateway"
+	FeatureTrack               = "track"                     // Telemetry enabled
+	FeatureHubSpokeMultiTenant = "hub_spoke_multi_tenant"    // Multi-tenant namespace support (ENT)
+	FeatureGroups              = "feature_groups"            // Group-based access control (ENT)
 )

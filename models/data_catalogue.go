@@ -2,6 +2,8 @@ package models
 
 import "gorm.io/gorm"
 
+const DefaultDataCatalogueName = "Default"
+
 type DataCatalogue struct {
 	gorm.Model
 	ID               uint         `json:"id" gorm:"primaryKey"`
@@ -107,4 +109,24 @@ func (dc *DataCatalogues) GetByDatasource(db *gorm.DB, datasourceID uint) error 
 		Joins("JOIN data_catalogue_data_sources ON data_catalogue_data_sources.data_catalogue_id = data_catalogues.id").
 		Where("data_catalogue_data_sources.datasource_id = ?", datasourceID).
 		Find(dc).Error
+}
+
+// GetOrCreateDefaultDataCatalogue finds or creates the Default data catalogue by name
+// This is safe for databases where auto-increment has been reset or cleared
+func GetOrCreateDefaultDataCatalogue(db *gorm.DB) (*DataCatalogue, error) {
+	var catalogue DataCatalogue
+	err := db.Where("name = ?", DefaultDataCatalogueName).First(&catalogue).Error
+
+	if err == gorm.ErrRecordNotFound {
+		// Create Default data catalogue
+		catalogue = DataCatalogue{Name: DefaultDataCatalogueName}
+		err = db.Create(&catalogue).Error
+	}
+
+	return &catalogue, err
+}
+
+// IsDefault checks if this data catalogue is the default data catalogue
+func (dc *DataCatalogue) IsDefault() bool {
+	return dc.Name == DefaultDataCatalogueName
 }

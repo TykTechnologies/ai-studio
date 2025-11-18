@@ -89,9 +89,9 @@ const Drawer = () => {
       icon: <Icon name="shield" />,
       subItems: [
         { id: 'users', text: 'Users', path: '/admin/users' },
-        ...(!features.feature_gateway ||
+        ...(features.feature_groups && (!features.feature_gateway ||
         features.feature_portal ||
-        features.feature_chat
+        features.feature_chat)
           ? [{ id: 'groups', text: 'Teams', path: '/admin/groups' }]
           : []),
         ...(uiOptions?.show_sso_config && config?.tibEnabled
@@ -141,7 +141,7 @@ const Drawer = () => {
           },
         ]
       : []),
-    ...((features.feature_portal || features.feature_chat)
+    ...(features.feature_groups && (features.feature_portal || features.feature_chat)
       ? [
           {
             id: 'catalogs',

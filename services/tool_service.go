@@ -62,6 +62,12 @@ func (s *Service) CreateTool(name, description, toolType string, oasSpec string,
 		return nil, err
 	}
 
+	// Auto-assign to Default tool catalogue if not in any catalogue
+	if err := s.ensureToolInDefaultCatalogue(tool); err != nil {
+		// Log but don't fail - this is a convenience feature
+		logger.Warn(fmt.Sprintf("Failed to add tool to default catalogue: %v", err))
+	}
+
 	// Execute "after_create" hooks
 	if s.HookManager != nil {
 		_, err := s.HookManager.ExecuteHooks(
@@ -782,4 +788,30 @@ func (s *Service) GetToolOperationDetails(toolID uint) ([]ToolOperationDetail, e
 	}
 
 	return details, nil
+}
+
+// ensureToolInDefaultCatalogue adds a tool to the Default tool catalogue if it's not in any catalogue
+func (s *Service) ensureToolInDefaultCatalogue(tool *models.Tool) error {
+	// Check if tool is in any catalogue
+	count := s.DB.Model(tool).Association("ToolCatalogues").Count()
+
+	if count == 0 {
+		// Get or create default tool catalogue
+		defaultCatalogue, err := models.GetOrCreateDefaultToolCatalogue(s.DB)
+		if err != nil {
+			logger.Errorf("Failed to get default tool catalogue: %v", err)
+			return fmt.Errorf("failed to get default tool catalogue: %w", err)
+		}
+
+		// Add tool to default catalogue
+		if err := s.DB.Model(defaultCatalogue).Association("Tools").Append(tool); err != nil {
+			logger.Errorf("Failed to append tool to default catalogue: %v", err)
+			return fmt.Errorf("failed to add tool to default catalogue: %w", err)
+		}
+
+	} else {
+		logger.Infof("Tool '%s' already in %d catalogue(s), skipping auto-assignment", tool.Name, count)
+	}
+
+	return nil
 }

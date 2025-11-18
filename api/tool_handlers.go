@@ -70,24 +70,33 @@ func (a *API) createTool(c *gin.Context) {
 		}
 	}
 
-	// Create the tool
-	tool := &models.Tool{
-		Name:           input.Data.Attributes.Name,
-		Description:    input.Data.Attributes.Description,
-		ToolType:       input.Data.Attributes.ToolType,
-		OASSpec:        input.Data.Attributes.OASSpec,
-		PrivacyScore:   input.Data.Attributes.PrivacyScore,
-		AuthSchemaName: input.Data.Attributes.AuthSchemaName,
-		AuthKey:        input.Data.Attributes.AuthKey,
+	// Create the tool via service layer (includes auto-assignment to Default catalogue)
+	tool, err := a.service.CreateTool(
+		input.Data.Attributes.Name,
+		input.Data.Attributes.Description,
+		input.Data.Attributes.ToolType,
+		input.Data.Attributes.OASSpec,
+		input.Data.Attributes.PrivacyScore,
+		input.Data.Attributes.AuthSchemaName,
+		input.Data.Attributes.AuthKey,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
 	}
 
-	// Add operations
+	// Add operations (after tool is created and has an ID)
 	for _, op := range input.Data.Attributes.Operations {
 		tool.AddOperation(op)
 	}
 
-	// Save to database
-	if err := tool.Create(a.config.DB); err != nil {
+	// Update tool with operations
+	if err := tool.Update(a.config.DB); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

@@ -10,12 +10,14 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
+	"github.com/TykTechnologies/midsommar/v2/services/group_access"
 	"gorm.io/gorm"
 )
 
 type Service struct {
 	DB                     *gorm.DB
 	Budget                 budget.Service
+	GroupAccessService     group_access.Service
 	NotificationService    *NotificationService
 	// Hub-and-Spoke Services
 	EdgeService            *EdgeService
@@ -39,6 +41,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	secrets.SetDBRef(db)
 	notificationService := NewNotificationService(db, "", "", 0, "", "", nil) // SMTP will be configured when needed
 	budgetSvc := budget.NewService(db, notificationService)
+	groupAccessSvc := group_access.NewService(db)
 
 	// Initialize hub-and-spoke services
 	edgeService := NewEdgeService(db)
@@ -121,6 +124,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		DB:                    db,
 		NotificationService:   notificationService,
 		Budget:                budgetSvc,
+		GroupAccessService:    groupAccessSvc,
 		EdgeService:           edgeService,
 		NamespaceService:      namespaceService,
 		EdgeManagementService: edgeManagementService,

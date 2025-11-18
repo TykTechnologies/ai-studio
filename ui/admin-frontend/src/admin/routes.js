@@ -87,11 +87,6 @@ const mainAdminRoutes = (
     <Route path="users/edit/:id" element={<UserForm />} />
     <Route path="users/new" element={<UserForm />} />
 
-    <Route path="groups" element={<Groups />} />
-    <Route path="groups/:id" element={<GroupDetail />} />
-    <Route path="groups/edit/:id" element={<GroupForm />} />
-    <Route path="groups/new" element={<GroupForm />} />
-
     <Route path="llms" element={<LLMList />} />
     <Route path="llms/:id" element={<LLMDetails />} />
     <Route path="llms/edit/:id" element={<LLMForm />} />
@@ -121,19 +116,6 @@ const mainAdminRoutes = (
     <Route path="tools/:id" element={<ToolDetails />} />
     <Route path="tools/edit/:id" element={<ToolForm />} />
     <Route path="tools/new" element={<ToolForm />} />
-
-    <Route path="catalogs/llms" element={<CatalogueList />} />
-    <Route path="catalogs/llms/:id" element={<CatalogueDetails />} />
-    <Route path="catalogs/llms/edit/:id" element={<CatalogueForm />} />
-    <Route path="catalogs/llms/new" element={<CatalogueForm />} />
-    <Route path="catalogs/data" element={<DataCatalogList />} />
-    <Route path="catalogs/data/:id" element={<DataCatalogDetail />} />
-    <Route path="catalogs/data/edit/:id" element={<DataCatalogForm />} />
-    <Route path="catalogs/data/new" element={<DataCatalogForm />} />
-    <Route path="catalogs/tools" element={<ToolCatalogueList />} />
-    <Route path="catalogs/tools/:id" element={<ToolCatalogueDetails />} />
-    <Route path="catalogs/tools/edit/:id" element={<ToolCatalogueForm />} />
-    <Route path="catalogs/tools/new" element={<ToolCatalogueForm />} />
 
     <Route path="filters" element={<FilterList />} />
     <Route path="filters/:id" element={<FilterDetails />} />
@@ -174,5 +156,33 @@ const ssoRoutes = (
   </>
 );
 
-export { mainAdminRoutes, ssoRoutes };
+// Group routes that will be conditionally rendered based on features.feature_groups (ENT only)
+const groupRoutes = (
+  <>
+    <Route path="groups" element={<Groups />} />
+    <Route path="groups/:id" element={<GroupDetail />} />
+    <Route path="groups/edit/:id" element={<GroupForm />} />
+    <Route path="groups/new" element={<GroupForm />} />
+  </>
+);
+
+// Catalog routes that will be conditionally rendered based on features.feature_groups (ENT only)
+const catalogRoutes = (
+  <>
+    <Route path="catalogs/llms" element={<CatalogueList />} />
+    <Route path="catalogs/llms/:id" element={<CatalogueDetails />} />
+    <Route path="catalogs/llms/edit/:id" element={<CatalogueForm />} />
+    <Route path="catalogs/llms/new" element={<CatalogueForm />} />
+    <Route path="catalogs/data" element={<DataCatalogList />} />
+    <Route path="catalogs/data/:id" element={<DataCatalogDetail />} />
+    <Route path="catalogs/data/edit/:id" element={<DataCatalogForm />} />
+    <Route path="catalogs/data/new" element={<DataCatalogForm />} />
+    <Route path="catalogs/tools" element={<ToolCatalogueList />} />
+    <Route path="catalogs/tools/:id" element={<ToolCatalogueDetails />} />
+    <Route path="catalogs/tools/edit/:id" element={<ToolCatalogueForm />} />
+    <Route path="catalogs/tools/new" element={<ToolCatalogueForm />} />
+  </>
+);
+
+export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes };
 export default mainAdminRoutes;

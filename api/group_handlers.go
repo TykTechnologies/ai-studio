@@ -1,3 +1,6 @@
+//go:build enterprise
+// +build enterprise
+
 package api
 
 import (
@@ -141,6 +144,22 @@ func (a *API) deleteGroup(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: "Invalid group ID"}},
 		})
+		return
+	}
+
+	// Prevent deletion of Default group
+	group, err := a.service.GetGroupByID(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			helpers.SendErrorResponse(c, helpers.NewNotFoundError("Group not found"))
+			return
+		}
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		return
+	}
+
+	if group.IsDefault() {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Cannot delete the Default group"))
 		return
 	}
 
@@ -454,13 +473,7 @@ func serializeGroup(group *models.Group) GroupResponse {
 	return response
 }
 
-func serializeGroups(groups models.Groups) []GroupResponse {
-	result := make([]GroupResponse, len(groups))
-	for i, group := range groups {
-		result[i] = serializeGroup(&group)
-	}
-	return result
-}
+// serializeGroups is now in common_serializers.go (available in both CE and ENT)
 
 // Add these new handler functions to the existing file
 
@@ -1023,14 +1036,7 @@ func (a *API) updateGroupCatalogues(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
-// Helper function to serialize ToolCatalogues
-func serializeToolCatalogues(toolCatalogues models.ToolCatalogues, db *gorm.DB) []ToolCatalogueResponse {
-	result := make([]ToolCatalogueResponse, len(toolCatalogues))
-	for i, tc := range toolCatalogues {
-		result[i] = serializeToolCatalogue(&tc, db)
-	}
-	return result
-}
+// serializeToolCatalogues is now in common_serializers.go (available in both CE and ENT)
 
 // Helper function to serialize a single ToolCatalogue
 func serializeToolCatalogue(tc *models.ToolCatalogue, db *gorm.DB) ToolCatalogueResponse {

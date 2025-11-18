@@ -2,7 +2,10 @@ package models
 
 import "gorm.io/gorm"
 
-const DefaultGroupID uint = 1
+const (
+	DefaultGroupID   uint   = 1 // Deprecated: Use name-based lookup instead
+	DefaultGroupName string = "Default"
+)
 
 type Group struct {
 	gorm.Model
@@ -395,4 +398,24 @@ func ValidateGroupsExist(db *gorm.DB, groupIDs []uint) (bool, error) {
 	}
 
 	return true, nil
+}
+
+// GetOrCreateDefaultGroup finds or creates the Default group by name
+// This is safe for databases where auto-increment has been reset or cleared
+func GetOrCreateDefaultGroup(db *gorm.DB) (*Group, error) {
+	var group Group
+	err := db.Where("name = ?", DefaultGroupName).First(&group).Error
+
+	if err == gorm.ErrRecordNotFound {
+		// Create Default group
+		group = Group{Name: DefaultGroupName}
+		err = db.Create(&group).Error
+	}
+
+	return &group, err
+}
+
+// IsDefault checks if this group is the default group
+func (g *Group) IsDefault() bool {
+	return g.Name == DefaultGroupName
 }

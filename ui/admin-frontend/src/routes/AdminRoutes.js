@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
-import { mainAdminRoutes, ssoRoutes } from "../admin/routes";
+import { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes } from "../admin/routes";
 import { usePluginRoutes } from "../admin/components/plugins/DynamicPluginRoute";
+import useSystemFeatures from "../admin/hooks/useSystemFeatures";
 
 // Plugin route handler component
 const PluginRouteHandler = () => {
@@ -87,6 +88,7 @@ const PluginRouteHandler = () => {
 
 const AdminRoutes = ({ uiOptions }) => {
   const { routes: pluginRoutes, isLoading: pluginRoutesLoading } = usePluginRoutes();
+  const { features } = useSystemFeatures();
 
   console.log(`DEBUG ADMIN ROUTES: Rendering with ${pluginRoutes.length} plugin routes:`, pluginRoutes);
 
@@ -99,6 +101,8 @@ const AdminRoutes = ({ uiOptions }) => {
     <Routes>
       {mainAdminRoutes}
       {uiOptions?.show_sso_config && ssoRoutes}
+      {features.feature_groups && groupRoutes}
+      {features.feature_groups && catalogRoutes}
 
       {/* Dynamically registered plugin routes */}
       {pluginRoutes.map((route) => {

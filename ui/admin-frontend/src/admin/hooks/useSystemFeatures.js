@@ -9,6 +9,7 @@ const useSystemFeatures = (skipInitialFetch = false) => {
     feature_chat: false,
     feature_gateway: false,
     hub_spoke_multi_tenant: false, // Enterprise-only multi-tenant namespace support
+    feature_groups: false, // Enterprise-only group-based access control
   });
   const [loading, setLoading] = useState(!skipInitialFetch);
   const [error, setError] = useState(null);

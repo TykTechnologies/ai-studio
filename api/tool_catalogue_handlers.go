@@ -1,3 +1,6 @@
+//go:build enterprise
+// +build enterprise
+
 package api
 
 import (
@@ -200,6 +203,22 @@ func (a *API) deleteToolCatalogue(c *gin.Context) {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{"Bad Request", "Invalid ID format"}}})
+		return
+	}
+
+	// Prevent deletion of Default tool catalogue
+	toolCatalogue, err := a.service.GetToolCatalogueByID(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			helpers.SendErrorResponse(c, helpers.NewNotFoundError("Tool catalogue not found"))
+			return
+		}
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		return
+	}
+
+	if toolCatalogue.IsDefault() {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Cannot delete the Default tool catalogue"))
 		return
 	}
 

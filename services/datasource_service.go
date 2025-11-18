@@ -68,6 +68,12 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 		return nil, err
 	}
 
+	// Auto-assign to Default data catalogue if not in any catalogue
+	if err := s.ensureDatasourceInDefaultCatalogue(datasource); err != nil {
+		// Log but don't fail - this is a convenience feature
+		logger.Warn(fmt.Sprintf("Failed to add datasource to default catalogue: %v", err))
+	}
+
 	// Execute "after_create" hooks
 	if s.HookManager != nil {
 		_, err := s.HookManager.ExecuteHooks(
@@ -369,6 +375,29 @@ func (s *Service) RemoveFileFromDatasource(dsID uint, fileStoreID uint) error {
 	}
 
 	return ds.RemoveFileStore(s.DB, fileStore)
+}
+
+// ensureDatasourceInDefaultCatalogue adds a datasource to the Default data catalogue if it's not in any catalogue
+func (s *Service) ensureDatasourceInDefaultCatalogue(datasource *models.Datasource) error {
+	// Check if datasource is in any catalogue
+	count := s.DB.Model(datasource).Association("DataCatalogues").Count()
+
+	if count == 0 {
+		// Get or create default data catalogue
+		defaultCatalogue, err := models.GetOrCreateDefaultDataCatalogue(s.DB)
+		if err != nil {
+			return fmt.Errorf("failed to get default data catalogue: %w", err)
+		}
+
+		// Add datasource to default catalogue
+		if err := s.DB.Model(defaultCatalogue).Association("Datasources").Append(datasource); err != nil {
+			return fmt.Errorf("failed to add datasource to default catalogue: %w", err)
+		}
+
+		logger.Infof("Auto-assigned datasource '%s' (ID: %d) to Default data catalogue", datasource.Name, datasource.ID)
+	}
+
+	return nil
 }
 
 // TODO:

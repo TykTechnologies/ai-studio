@@ -26,15 +26,15 @@ type UserDTO struct {
 }
 
 func (s *Service) addDefaultGroupIfNotExists(groups []uint) ([]uint, error) {
-	if !slices.Contains(groups, models.DefaultGroupID) {
-		exists, err := models.DefaultGroupExists(s.DB)
-		if err != nil {
-			return groups, err
-		}
+	// Get or create default group by name (safe for any DB state)
+	defaultGroup, err := models.GetOrCreateDefaultGroup(s.DB)
+	if err != nil {
+		return groups, err
+	}
 
-		if exists {
-			groups = append(groups, models.DefaultGroupID)
-		}
+	// Check if user already has default group
+	if !slices.Contains(groups, defaultGroup.ID) {
+		groups = append(groups, defaultGroup.ID)
 	}
 
 	return groups, nil
@@ -463,6 +463,8 @@ func (ue *UserEntitlements) HasToolAccess(toolID uint) bool {
 }
 
 // GetUserEntitlements retrieves all entitlements for a given user
+// CE: Returns all catalogues (no filtering)
+// ENT: Returns catalogues filtered by user's group memberships
 func (s *Service) GetUserEntitlements(userID uint) (*UserEntitlements, error) {
 	// Get user
 	user, err := s.GetUserByID(userID)
@@ -470,66 +472,20 @@ func (s *Service) GetUserEntitlements(userID uint) (*UserEntitlements, error) {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// Get user's groups
-	groups, err := s.GetGroupsByUserID(userID)
+	// Delegate to GroupAccessService (handles CE/ENT split)
+	baseEntitlements, err := s.GroupAccessService.GetUserEntitlements(userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user groups: %w", err)
+		return nil, fmt.Errorf("failed to get entitlements: %w", err)
 	}
 
-	// Use maps to ensure uniqueness
-	catalogues := make(map[uint]models.Catalogue)
-	dataCatalogues := make(map[uint]models.DataCatalogue)
-	toolCatalogues := make(map[uint]models.ToolCatalogue)
-	chats := make(map[uint]models.Chat)
-
-	for _, group := range groups {
-		// Get catalogues for this group
-		groupCatalogues, err := s.GetGroupCatalogues(group.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get group catalogues: %w", err)
-		}
-		for _, catalogue := range groupCatalogues {
-			catalogues[catalogue.ID] = catalogue
-		}
-
-		// Get data catalogues for this group
-		groupDataCatalogues, err := s.GetGroupDataCatalogues(group.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get group data catalogues: %w", err)
-		}
-		for _, dataCatalogue := range groupDataCatalogues {
-			dataCatalogues[dataCatalogue.ID] = dataCatalogue
-		}
-
-		// Get tool catalogues for this group
-		groupToolCatalogues, _, _, err := s.GetGroupToolCatalogues(group.ID, 1, 1, true)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get group tool catalogues: %w", err)
-		}
-		for _, toolCatalogue := range groupToolCatalogues {
-			toolCatalogues[toolCatalogue.ID] = toolCatalogue
-		}
-
-		// Get chats for this group
-		groupChats, err := s.GetChatsByGroupID(group.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get group chats: %w", err)
-		}
-		for _, chat := range groupChats {
-			chats[chat.ID] = chat
-		}
-	}
-
-	// Convert maps to slices
-	entitlements := &UserEntitlements{
+	// Convert to UserEntitlements (includes user object)
+	return &UserEntitlements{
 		User:           user,
-		Catalogues:     mapToSlice(catalogues),
-		DataCatalogues: mapToSlice(dataCatalogues),
-		ToolCatalogues: mapToSlice(toolCatalogues),
-		Chats:          mapToSlice(chats),
-	}
-
-	return entitlements, nil
+		Catalogues:     baseEntitlements.Catalogues,
+		DataCatalogues: baseEntitlements.DataCatalogues,
+		ToolCatalogues: baseEntitlements.ToolCatalogues,
+		Chats:          baseEntitlements.Chats,
+	}, nil
 }
 
 // Helper function to convert map to slice

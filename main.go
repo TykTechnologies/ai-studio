@@ -92,6 +92,11 @@ func main() {
 		logger.FatalErr("Failed to initialize models", err)
 	}
 
+	// Ensure default group and catalogues exist and are linked
+	if err := ensureDefaults(db); err != nil {
+		logger.FatalErr("Failed to ensure default group and catalogues", err)
+	}
+
 	// Initialize and start licensing service (ENT: validates license, starts periodic checks)
 	licensingConfig := licensing.Config{
 		LicenseKey:              appConf.LicenseKey,
@@ -355,6 +360,82 @@ func main() {
 	}
 
 	logger.Info("Application stopped gracefully")
+}
+
+// ensureDefaults ensures default group and catalogues exist and are linked
+func ensureDefaults(db *gorm.DB) error {
+	logger.Info("Ensuring default group and catalogues exist...")
+
+	// Get or create Default group
+	defaultGroup, err := models.GetOrCreateDefaultGroup(db)
+	if err != nil {
+		return fmt.Errorf("failed to ensure default group: %w", err)
+	}
+	logger.Infof("Default group ensured (ID: %d, Name: %s)", defaultGroup.ID, defaultGroup.Name)
+
+	// Get or create Default LLM catalogue
+	defaultCatalogue, err := models.GetOrCreateDefaultCatalogue(db)
+	if err != nil {
+		return fmt.Errorf("failed to ensure default catalogue: %w", err)
+	}
+	logger.Infof("Default LLM catalogue ensured (ID: %d, Name: %s)", defaultCatalogue.ID, defaultCatalogue.Name)
+
+	// Get or create Default data catalogue
+	defaultDataCatalogue, err := models.GetOrCreateDefaultDataCatalogue(db)
+	if err != nil {
+		return fmt.Errorf("failed to ensure default data catalogue: %w", err)
+	}
+	logger.Infof("Default data catalogue ensured (ID: %d, Name: %s)", defaultDataCatalogue.ID, defaultDataCatalogue.Name)
+
+	// Get or create Default tool catalogue
+	defaultToolCatalogue, err := models.GetOrCreateDefaultToolCatalogue(db)
+	if err != nil {
+		return fmt.Errorf("failed to ensure default tool catalogue: %w", err)
+	}
+	logger.Infof("Default tool catalogue ensured (ID: %d, Name: %s)", defaultToolCatalogue.ID, defaultToolCatalogue.Name)
+
+	// Link catalogues to default group if not already linked
+	if err := linkCatalogueToGroup(db, defaultGroup, defaultCatalogue); err != nil {
+		return fmt.Errorf("failed to link LLM catalogue to default group: %w", err)
+	}
+
+	if err := linkDataCatalogueToGroup(db, defaultGroup, defaultDataCatalogue); err != nil {
+		return fmt.Errorf("failed to link data catalogue to default group: %w", err)
+	}
+
+	if err := linkToolCatalogueToGroup(db, defaultGroup, defaultToolCatalogue); err != nil {
+		return fmt.Errorf("failed to link tool catalogue to default group: %w", err)
+	}
+
+	logger.Info("Default group and catalogues successfully initialized and linked")
+	return nil
+}
+
+// linkCatalogueToGroup links an LLM catalogue to a group if not already linked
+func linkCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *models.Catalogue) error {
+	count := db.Model(group).Where("catalogue_id = ?", catalogue.ID).Association("Catalogues").Count()
+	if count == 0 {
+		return db.Model(group).Association("Catalogues").Append(catalogue)
+	}
+	return nil
+}
+
+// linkDataCatalogueToGroup links a data catalogue to a group if not already linked
+func linkDataCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *models.DataCatalogue) error {
+	count := db.Model(group).Where("data_catalogue_id = ?", catalogue.ID).Association("DataCatalogues").Count()
+	if count == 0 {
+		return db.Model(group).Association("DataCatalogues").Append(catalogue)
+	}
+	return nil
+}
+
+// linkToolCatalogueToGroup links a tool catalogue to a group if not already linked
+func linkToolCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *models.ToolCatalogue) error {
+	count := db.Model(group).Where("tool_catalogue_id = ?", catalogue.ID).Association("ToolCatalogues").Count()
+	if count == 0 {
+		return db.Model(group).Association("ToolCatalogues").Append(catalogue)
+	}
+	return nil
 }
 
 func listEmbeddedFiles(fsys embed.FS) error {

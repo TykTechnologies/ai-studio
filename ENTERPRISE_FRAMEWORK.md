@@ -287,7 +287,8 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Chat interface
 - ✅ Tool integration
 - ✅ User management
-- ✅ Basic RBAC
+- ✅ Single "Default" group (all users assigned automatically)
+- ✅ Default catalogues (all resources visible to all users)
 - ✅ Hub-and-spoke deployment (single "default" namespace)
 - ✅ Edge gateway management
 - ✅ Configuration synchronization
@@ -303,11 +304,13 @@ func TestBudgetEnforcement(t *testing.T) {
 - ❌ SSO (SAML, OIDC, LDAP, Social)
 - ❌ Multi-tenant namespaces
 - ❌ Namespace-based operations
+- ❌ Group-based access control
+- ❌ Catalog management
+- ❌ Resource filtering by user groups
 - ❌ Plugin GRPC host whitelisting
 - ❌ Plugin OCI signature verification
 - ❌ Multiple marketplace sources
 - ❌ Custom marketplace management
-- ❌ Advanced RBAC
 - ❌ Audit logging
 
 ### Enterprise Edition (ENT)
@@ -324,13 +327,17 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Namespace-based filtering and operations
 - ✅ Per-namespace configuration isolation
 - ✅ Namespace management UI
+- ✅ Group-based access control (unlimited groups)
+- ✅ Catalog management (LLM, Data, Tool catalogues)
+- ✅ Resource filtering by user group membership
+- ✅ Catalog-based resource segregation
+- ✅ Group management UI
 - ✅ Plugin GRPC host whitelisting (network security)
 - ✅ Plugin OCI signature verification (supply chain security)
 - ✅ Multiple marketplace sources
 - ✅ Custom marketplace management UI
 - ✅ Marketplace URL validation
 - ✅ Per-marketplace sync control
-- ✅ Advanced RBAC
 - ✅ Audit logging
 - ✅ Priority support
 
@@ -662,6 +669,142 @@ ENT: Edge (namespace: "custom") → Control Plane → Accepted as "custom"
 **Upgrade Path:**
 - CE → ENT: All edges remain in "default", can now create additional namespaces
 - ENT → CE: Edges keep their namespaces in DB but all forced to "default" at runtime
+
+## Group-Based Access Control Feature Specifics
+
+### How Group-Based Access Control Works
+
+**Community Edition:**
+- ✅ **Single Default Group**: All users automatically assigned to "Default" group
+- ✅ **Default Catalogues**: Three default catalogues (LLM, Data, Tool) created and linked to Default group
+- ✅ **Auto-Assignment**: New LLMs, datasources, and tools automatically added to Default catalogues
+- ✅ **No Filtering**: All users can see all resources (no access restrictions)
+- ❌ **Group Management**: Cannot create, edit, or delete groups (402 Payment Required)
+- ❌ **Catalog Management**: Cannot create, edit, or delete catalogues (402 Payment Required)
+- ❌ **Resource Segregation**: All resources visible to all users
+- 🔒 **UI Hidden**: Group and catalog management pages hidden from admin UI
+
+**Enterprise Edition:**
+- ✅ **Everything in CE**, plus:
+- ✅ **Unlimited Groups**: Create and manage multiple user groups
+- ✅ **Unlimited Catalogues**: Create and manage multiple catalogues of each type
+- ✅ **Group-Based Filtering**: Users see only resources in their group's catalogues
+- ✅ **Catalog Assignment**: Assign catalogues to groups for fine-grained access control
+- ✅ **Multi-Group Users**: Users can be members of multiple groups (access union)
+- ✅ **Group Management UI**: Full admin interface for group CRUD operations
+- ✅ **Catalog Management UI**: Full admin interface for catalogue CRUD operations
+- ✅ **Resource Segregation**: Isolate LLMs, datasources, tools, and chats by group
+- ✅ **Admin Portal Filtering**: Even admins see only their group's resources in Portal/Chat views
+- 🔒 **Default Protection**: Cannot delete "Default" group or catalogues
+
+### Implementation Details
+
+**Service Layer:**
+- Interface: `services/group_access/interface.go` - Access control interface
+- Factory: `services/group_access/factory_community.go` (build tag: `!enterprise`) - Returns CE stub
+- Factory: `services/group_access/factory_enterprise.go` (build tag: `enterprise`) - Returns ENT impl
+- CE Stub: `services/group_access/community.go` - Returns all resources (no filtering)
+- ENT Impl: `enterprise/features/group_access/service.go` - Full filtering via groups
+
+**API Endpoints:**
+- Group Handlers CE: `api/group_handlers_community.go` (build tag: `!enterprise`) - 402 responses
+- Group Handlers ENT: `api/group_handlers.go` (build tag: `enterprise`) - Full CRUD
+- Catalogue Handlers CE: `api/catalogue_handlers_community.go` (build tag: `!enterprise`) - 402 responses
+- Catalogue Handlers ENT: `api/catalogue_handlers.go` (build tag: `enterprise`) - Full CRUD
+- Data Catalogue Handlers CE: `api/data_catalogue_handlers_community.go` (build tag: `!enterprise`) - 402 responses
+- Data Catalogue Handlers ENT: `api/data_catalogue_handlers.go` (build tag: `enterprise`) - Full CRUD
+- Tool Catalogue Handlers CE: `api/tool_catalogue_handlers_community.go` (build tag: `!enterprise`) - 402 responses
+- Tool Catalogue Handlers ENT: `api/tool_catalogue_handlers.go` (build tag: `enterprise`) - Full CRUD
+
+**Database Models (Public):**
+- `models/group.go` - Group model with `GetOrCreateDefaultGroup()`, `IsDefault()`
+- `models/catalogue.go` - LLM catalogue with `GetOrCreateDefaultCatalogue()`, `IsDefault()`
+- `models/data_catalogue.go` - Data catalogue with `GetOrCreateDefaultDataCatalogue()`, `IsDefault()`
+- `models/tool_catalogue.go` - Tool catalogue with `GetOrCreateDefaultToolCatalogue()`, `IsDefault()`
+- Models remain in public repo for upgrade path compatibility
+
+**User Entitlements:**
+- Endpoint: `/auth/me` returns user's accessible resources
+- CE: Returns all catalogues, all chats (no filtering)
+- ENT: Returns catalogues filtered by user's group memberships
+- Structure: `{catalogues: [], data_catalogues: [], tool_catalogues: [], chats: []}`
+
+**Access Control Flow:**
+```
+User → /auth/me → GetUserEntitlements()
+                        ↓
+                  GroupAccessService
+                        ↓
+                  CE: Return all catalogues
+                  ENT: Query via user's groups
+                        ↓
+                  Portal/Chat UI uses entitlements
+```
+
+**Frontend:**
+- Feature Flag: `feature_groups` from `/common/system` endpoint
+- Routes: `admin/routes.js` exports `groupRoutes` and `catalogRoutes` conditionally
+- Rendering: `routes/AdminRoutes.js` includes routes only if `features.feature_groups`
+- Navigation: `components/layout/Drawer.js` hides "Teams" and "Catalogs" menu items in CE
+- Portal/Chat: Uses entitlements from `/auth/me`, no changes needed (automatically adapts)
+
+**Auto-Assignment to Default Catalogues:**
+- LLMs: `services/llm_service.go` → `ensureLLMInDefaultCatalogue()`
+- Datasources: `services/datasource_service.go` → `ensureDatasourceInDefaultCatalogue()`
+- Tools: `services/tool_service.go` → `ensureToolInDefaultCatalogue()`
+- Behavior: If resource not in any catalogue, automatically add to Default catalogue
+- Benefits both editions: CE gets all resources in Default, ENT gets better UX
+
+**Name-Based Default Resolution:**
+- All default entities resolved by name ("Default") instead of hardcoded ID=1
+- Safe for databases with cleared tables or non-sequential auto-increment
+- Functions: `GetOrCreateDefaultGroup()`, `GetOrCreateDefaultCatalogue()`, etc.
+- Prevents deletion: `IsDefault()` method checks prevent deletion of default entities
+
+**Access Control Chain:**
+```
+CE:  User → Default Group → Default Catalogues → All Resources
+ENT: User → Groups (1+) → Catalogues (filtered) → Resources (filtered)
+```
+
+**Portal/Chat Behavior:**
+- **Admin UI** (`/admin/*`): Admins see and manage ALL resources (no filtering)
+- **Portal UI** (`/portal/*`): ALL users (including admins) filtered by their group's catalogues
+- **Chat UI** (`/chat/*`): ALL users (including admins) filtered by their group's catalogues
+
+**API Endpoints:**
+
+| Endpoint | CE Behavior | ENT Behavior |
+|----------|-------------|--------------|
+| `GET /auth/me` | ✅ Returns all catalogues | ✅ Returns filtered catalogues |
+| `GET /api/v1/groups` | ❌ 402 Payment Required | ✅ List all groups |
+| `POST /api/v1/groups` | ❌ 402 Payment Required | ✅ Create group |
+| `DELETE /api/v1/groups/:id` | ❌ 402 Payment Required | ✅ Delete (except "Default") |
+| `GET /api/v1/catalogues` | ❌ 402 Payment Required | ✅ List all LLM catalogues |
+| `POST /api/v1/catalogues` | ❌ 402 Payment Required | ✅ Create LLM catalogue |
+| `DELETE /api/v1/catalogues/:id` | ❌ 402 Payment Required | ✅ Delete (except "Default") |
+| `GET /api/v1/data-catalogues` | ❌ 402 Payment Required | ✅ List all data catalogues |
+| `GET /api/v1/tool-catalogues` | ❌ 402 Payment Required | ✅ List all tool catalogues |
+| `GET /common/catalogues/:id/llms` | ✅ Works (no access check) | ✅ Works (access check via groups) |
+| `GET /common/data-catalogues/:id/datasources` | ✅ Works (no access check) | ✅ Works (access check via groups) |
+| `GET /common/tool-catalogues/:id/tools` | ✅ Works (no access check) | ✅ Works (access check via groups) |
+
+**Startup Initialization:**
+- `main.go` calls `ensureDefaults()` after database migration
+- Creates "Default" group if not exists
+- Creates "Default" catalogues (LLM, Data, Tool) if not exist
+- Links all default catalogues to default group
+- All new users automatically added to "Default" group
+
+**Key Design Decision:**
+- User model access helpers (`GetAccessibleCatalogues()`, etc.) work for both editions
+- CE: All users in Default group, all resources in Default catalogues → JOINs return everything
+- ENT: Users in various groups, resources in various catalogues → JOINs return filtered results
+- Same code, different data structure = clean separation!
+
+**Upgrade Path:**
+- CE → ENT: All users remain in Default group, all resources in Default catalogues, can now create more
+- ENT → CE: Groups/catalogues remain in database, filtering disabled, all users see all resources
 
 ## Enterprise Submodule Workflow
 
