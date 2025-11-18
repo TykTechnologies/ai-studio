@@ -258,7 +258,7 @@ message AnalyticsEvent {
   uint32 cache_read_prompt_tokens = 19;   // Cache read tokens
 
   // Cost and timing
-  double cost = 20;               // Cost in dollars (4 decimal precision)
+  double cost = 20;               // Cost as cents (dollars * 10000, providing 4 decimal precision)
   uint32 latency_ms = 21;         // Request latency in milliseconds (total_time_ms)
 
   google.protobuf.Timestamp timestamp = 22; // When the event occurred
@@ -278,7 +278,7 @@ message BudgetUsageEvent {
   uint32 app_id = 1;              // Application ID
   uint32 llm_id = 2;              // LLM ID (optional, 0 if not specific)
   int64 tokens_used = 3;          // Tokens consumed in this event
-  double cost = 4;                // Cost in dollars
+  double cost = 4;                // Cost as cents (dollars * 10000, providing 4 decimal precision)
   int64 prompt_tokens = 5;        // Prompt tokens used
   int64 completion_tokens = 6;    // Completion tokens used
   uint32 requests_count = 7;      // Number of requests in this usage event
@@ -304,5 +304,5 @@ message ProxyLogSummary {
   // Request pattern summary
   repeated string unique_models = 12; // List of unique model names called
   uint32 total_tokens = 13;       // Total tokens across all requests
-  double total_cost = 14;         // Total cost across all requests
+  double total_cost = 14;         // Total cost as cents (dollars * 10000, providing 4 decimal precision)
 }
