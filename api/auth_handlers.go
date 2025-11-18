@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -36,6 +37,9 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet["feature_portal"] = true
 	featureSet["feature_chat"] = true
 	featureSet["feature_gateway"] = true
+
+	// Enterprise-only features
+	featureSet["hub_spoke_multi_tenant"] = edge_management.IsEnterpriseAvailable()
 
 	if cfg := config.Get(); cfg != nil {
 		featureSet["docs_url"] = cfg.DocsURL

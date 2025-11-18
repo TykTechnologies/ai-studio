@@ -846,6 +846,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/edges", a.listEdges)
 	v1.GET("/edges/:edge_id", a.getEdge)
 	v1.POST("/edges/:edge_id/reload", a.triggerEdgeReload)
+	v1.POST("/edges/reload-all", a.reloadAllEdges) // CE: works (single namespace), ENT: works (all namespaces)
 	v1.GET("/edges/reload-operations", a.listReloadOperations)
 	v1.GET("/reload-operations/:operation_id/status", a.getReloadOperationStatus)
 	v1.DELETE("/edges/:edge_id", a.deleteEdge)

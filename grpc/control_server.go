@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -62,6 +63,9 @@ type ControlServer struct {
 	edgeConnections      map[string]*EdgeInstanceConnection
 	edgeMutex            sync.RWMutex
 	maxConcurrentStreams int // Maximum number of concurrent gRPC streams
+
+	// Edge management service (CE: forces "default", ENT: multi-tenant)
+	edgeManagementService edge_management.Service
 
 	// gRPC server
 	grpcServer *grpc.Server
@@ -113,10 +117,11 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 	log.Info().Msg("🔒 MICROGATEWAY_ENCRYPTION_KEY configured correctly")
 
 	server := &ControlServer{
-		config:               cfg,
-		db:                   db,
-		edgeConnections:      make(map[string]*EdgeInstanceConnection),
-		maxConcurrentStreams: maxStreams,
+		config:                cfg,
+		db:                    db,
+		edgeConnections:       make(map[string]*EdgeInstanceConnection),
+		maxConcurrentStreams:  maxStreams,
+		edgeManagementService: edge_management.NewService(db),
 	}
 
 	// Initialize AI Studio's analytics system for processing edge pulse data
@@ -206,9 +211,15 @@ func (s *ControlServer) Stop() {
 
 // RegisterEdge handles edge instance registration
 func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrationRequest) (*pb.EdgeRegistrationResponse, error) {
+	// Normalize namespace through edge management service
+	// CE: Always returns "default" (silent enforcement)
+	// ENT: Returns requested namespace or "default" if empty
+	namespace := s.edgeManagementService.GetNamespaceForEdge(req.EdgeNamespace)
+
 	log.Info().
 		Str("edge_id", req.EdgeId).
-		Str("namespace", req.EdgeNamespace).
+		Str("requested_namespace", req.EdgeNamespace).
+		Str("assigned_namespace", namespace).
 		Str("version", req.Version).
 		Msg("AI Studio control server: edge registration request")
 
@@ -226,7 +237,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		// Create new edge instance
 		edgeInstance = models.EdgeInstance{
 			EdgeID:    req.EdgeId,
-			Namespace: req.EdgeNamespace,
+			Namespace: namespace, // Use normalized namespace
 			Version:   req.Version,
 			BuildHash: req.BuildHash,
 			Status:    models.EdgeStatusRegistered,
@@ -265,8 +276,8 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		}
 	}
 
-	// Get initial configuration
-	initialConfig, err := s.getConfigurationSnapshot(req.EdgeNamespace)
+	// Get initial configuration using normalized namespace
+	initialConfig, err := s.getConfigurationSnapshot(namespace)
 	if err != nil {
 		log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to get initial configuration")
 		initialConfig = &pb.ConfigurationSnapshot{
