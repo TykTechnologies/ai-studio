@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	OpenAICompletionsEndpoint = "/v1/chat/completions"
-	OpenAIEmbeddingsEndpoint  = "/v1/embeddings"
+	OpenAICompletionsEndpoint      = "/v1/chat/completions"
+	OpenAIEmbeddingsEndpoint       = "/v1/embeddings"
+	AzureOpenAICompletionsEndpoint = "/chat/completions"
 )
 
 type OpenAI struct{}
@@ -89,7 +90,8 @@ func (v *OpenAI) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode in
 	var response models.ITokenResponse
 	// embedding replies have the same usage section
 	if strings.Contains(strings.ToLower(r.URL.Path), OpenAICompletionsEndpoint) ||
-		strings.Contains(strings.ToLower(r.URL.Path), OpenAIEmbeddingsEndpoint) {
+		strings.Contains(strings.ToLower(r.URL.Path), OpenAIEmbeddingsEndpoint) ||
+		strings.Contains(strings.ToLower(r.URL.Path), AzureOpenAICompletionsEndpoint) {
 
 		response = &responses.OpenAIResponse{}
 		err := json.Unmarshal(body, response)
