@@ -450,11 +450,11 @@ func TestRepository_AnalyticsEvent_Operations(t *testing.T) {
 		Endpoint:       "/chat/completions",
 		Method:         "POST",
 		StatusCode:     200,
-		RequestTokens:  100,
+		PromptTokens:   100,
 		ResponseTokens: 150,
 		TotalTokens:    250,
 		Cost:           0.005,
-		LatencyMs:      250,
+		TotalTimeMS:    250,
 	}
 
 	t.Run("CreateAnalyticsEvent", func(t *testing.T) {

@@ -89,10 +89,19 @@ func TestDataCatalogueService(t *testing.T) {
 	assert.Len(t, fetchedDataCatalogue.Datasources, 0)
 
 	// Test GetAllDataCatalogues
+	// Note: Creating a datasource without specifying a catalogue will auto-create a "Default" catalogue
 	allDataCatalogues, _, _, err := service.GetAllDataCatalogues(10, 1, true)
 	assert.NoError(t, err)
-	assert.Len(t, allDataCatalogues, 1)
-	assert.Equal(t, dataCatalogue.ID, allDataCatalogues[0].ID)
+	assert.Len(t, allDataCatalogues, 2) // Test catalogue + Default catalogue
+	// Find our test catalogue in the results
+	var found bool
+	for _, dc := range allDataCatalogues {
+		if dc.ID == dataCatalogue.ID {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Test catalogue should be in results")
 
 	// Test SearchDataCatalogues
 	searchedDataCatalogues, err := service.SearchDataCatalogues("Updated")
@@ -109,12 +118,22 @@ func TestDataCatalogueService(t *testing.T) {
 	assert.Equal(t, dataCatalogue.ID, dataCataloguesByTag[0].ID)
 
 	// Test GetDataCataloguesByDatasource
+	// Note: Datasource was already auto-assigned to "Default" catalogue when created
+	// Adding it to our test catalogue means it's now in 2 catalogues
 	err = service.AddDatasourceToDataCatalogue(dataCatalogue.ID, datasource.ID)
 	assert.NoError(t, err)
 	dataCataloguesByDatasource, err := service.GetDataCataloguesByDatasource(datasource.ID)
 	assert.NoError(t, err)
-	assert.Len(t, dataCataloguesByDatasource, 1)
-	assert.Equal(t, dataCatalogue.ID, dataCataloguesByDatasource[0].ID)
+	assert.Len(t, dataCataloguesByDatasource, 2) // Default catalogue + test catalogue
+	// Verify our test catalogue is in the results
+	found = false
+	for _, dc := range dataCataloguesByDatasource {
+		if dc.ID == dataCatalogue.ID {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Test catalogue should be in datasource's catalogues")
 
 	// Test DeleteDataCatalogue
 	err = service.DeleteDataCatalogue(dataCatalogue.ID)
@@ -180,13 +199,32 @@ func TestDataCatalogueService_MultipleDataCataloguesScenario(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test GetDataCataloguesByDatasource
+	// Note: Datasources are auto-assigned to "Default" catalogue when created
+	// Then manually added to specific catalogues, so they're in multiple catalogues
 	dataCataloguesDs1, err := service.GetDataCataloguesByDatasource(ds1.ID)
 	assert.NoError(t, err)
-	assert.Len(t, dataCataloguesDs1, 2)
-	assert.ElementsMatch(t, []uint{dc1.ID, dc2.ID}, []uint{dataCataloguesDs1[0].ID, dataCataloguesDs1[1].ID})
+	assert.Len(t, dataCataloguesDs1, 3) // Default + dc1 + dc2
+	// Verify dc1 and dc2 are in the results
+	var hasDc1, hasDc2 bool
+	for _, dc := range dataCataloguesDs1 {
+		if dc.ID == dc1.ID {
+			hasDc1 = true
+		}
+		if dc.ID == dc2.ID {
+			hasDc2 = true
+		}
+	}
+	assert.True(t, hasDc1 && hasDc2, "ds1 should be in both dc1 and dc2")
 
 	dataCataloguesDs2, err := service.GetDataCataloguesByDatasource(ds2.ID)
 	assert.NoError(t, err)
-	assert.Len(t, dataCataloguesDs2, 1)
-	assert.Equal(t, dc2.ID, dataCataloguesDs2[0].ID)
+	assert.Len(t, dataCataloguesDs2, 2) // Default + dc2
+	// Verify dc2 is in the results
+	var hasDc2Only bool
+	for _, dc := range dataCataloguesDs2 {
+		if dc.ID == dc2.ID {
+			hasDc2Only = true
+		}
+	}
+	assert.True(t, hasDc2Only, "ds2 should be in dc2")
 }

@@ -77,7 +77,6 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
@@ -212,10 +211,12 @@ require (
 )
 
 require (
-	github.com/TykTechnologies/midsommar/v2 v2.0.0-00010101000000-000000000000
+	github.com/TykTechnologies/midsommar/v2 v2.0.0
+	github.com/TykTechnologies/midsommar/v2/enterprise v0.0.0
 	github.com/caarlos0/env/v9 v9.0.0
 	github.com/d5/tengo/v2 v2.17.0
 	github.com/gin-gonic/gin v1.10.1
+	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/uuid v1.6.0
 	github.com/gosimple/slug v1.15.0
 	github.com/hashicorp/go-plugin v1.7.0

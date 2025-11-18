@@ -931,16 +931,18 @@ func (a *API) handleGetConfig(c *gin.Context) {
 
 	// Get branding settings
 	var brandingConfig *BrandingConfig
-	brandingSettings, err := a.service.GetBrandingSettings()
-	if err == nil {
-		brandingConfig = &BrandingConfig{
-			AppTitle:         brandingSettings.AppTitle,
-			PrimaryColor:     brandingSettings.PrimaryColor,
-			SecondaryColor:   brandingSettings.SecondaryColor,
-			BackgroundColor:  brandingSettings.BackgroundColor,
-			CustomCSS:        brandingSettings.CustomCSS,
-			HasCustomLogo:    brandingSettings.HasCustomLogo(),
-			HasCustomFavicon: brandingSettings.HasCustomFavicon(),
+	if a.service != nil {
+		brandingSettings, err := a.service.GetBrandingSettings()
+		if err == nil {
+			brandingConfig = &BrandingConfig{
+				AppTitle:         brandingSettings.AppTitle,
+				PrimaryColor:     brandingSettings.PrimaryColor,
+				SecondaryColor:   brandingSettings.SecondaryColor,
+				BackgroundColor:  brandingSettings.BackgroundColor,
+				CustomCSS:        brandingSettings.CustomCSS,
+				HasCustomLogo:    brandingSettings.HasCustomLogo(),
+				HasCustomFavicon: brandingSettings.HasCustomFavicon(),
+			}
 		}
 	}
 

@@ -8,9 +8,67 @@ This document describes the testing strategy for handling Community Edition (CE)
 
 The codebase uses a factory pattern with `init()` functions to register enterprise implementations. This creates import cycle issues when tests try to import enterprise packages to trigger factory registration.
 
-## Solution: Build-Tagged Test Files
+## Solution 1: TestMain with Enterprise Feature Imports (Recommended)
 
-Use separate test files with build tags for CE and ENT versions of tests that depend on services.
+The preferred approach is to use a `TestMain` function in an enterprise-tagged file to import all enterprise features before tests run. This registers the factories via their `init()` functions.
+
+### Pattern
+
+**Enterprise TestMain File** (`testmain_enterprise_test.go`):
+```go
+//go:build enterprise
+// +build enterprise
+
+package mypackage
+
+import (
+    "os"
+    "testing"
+
+    // Import enterprise features to register factories before tests run
+    _ "github.com/TykTechnologies/midsommar/v2/enterprise/features/budget"
+    _ "github.com/TykTechnologies/midsommar/v2/enterprise/features/edge_management"
+    _ "github.com/TykTechnologies/midsommar/v2/enterprise/features/group_access"
+    _ "github.com/TykTechnologies/midsommar/v2/enterprise/features/licensing"
+    _ "github.com/TykTechnologies/midsommar/v2/enterprise/features/marketplace_management"
+    _ "github.com/TykTechnologies/midsommar/v2/enterprise/features/plugin_security"
+    _ "github.com/TykTechnologies/midsommar/v2/enterprise/features/sso"
+)
+
+func TestMain(m *testing.M) {
+    // Enterprise factories are now registered via init()
+    os.Exit(m.Run())
+}
+```
+
+**Key Points**:
+- The file MUST have `//go:build enterprise` tag so it only compiles in enterprise builds
+- Use blank imports (`_`) to trigger init() functions without using the packages
+- Import ALL enterprise features that the package's tests might need
+- The TestMain function runs BEFORE any tests, ensuring factories are registered
+- In CE builds, this file doesn't compile, and tests use CE factory stubs
+
+**Note on Import Cycles**: Some packages (like `services/`) cannot import `budget` due to circular dependencies. Exclude those imports and add a comment explaining why.
+
+### When to Use TestMain Pattern
+
+Use this approach when:
+- ✅ Multiple tests in the package create services
+- ✅ You want to avoid duplicating test code
+- ✅ Tests work in CE with limited functionality (using stub implementations)
+- ✅ No import cycles exist with enterprise features
+
+### Examples of TestMain Pattern
+
+See these files for working examples:
+- [`auth/testmain_enterprise_test.go`](auth/testmain_enterprise_test.go) - Auth package
+- [`services/testmain_enterprise_test.go`](services/testmain_enterprise_test.go) - Services package (excludes budget)
+- [`api/testmain_enterprise_test.go`](api/testmain_enterprise_test.go) - API package
+- [`proxy/testmain_enterprise_test.go`](proxy/testmain_enterprise_test.go) - Proxy package
+
+## Solution 2: Build-Tagged Test Files (Alternative)
+
+Use separate test files with build tags for CE and ENT versions of tests that depend on services. This approach is useful when TestMain isn't sufficient or when you want completely different test implementations.
 
 ### Pattern
 
@@ -58,19 +116,25 @@ func TestFeatureCommunity(t *testing.T) {
 - [`services/chat_service_enterprise_test.go`](services/chat_service_enterprise_test.go) - Full chat tests
 - [`services/chat_service_community_test.go`](services/chat_service_community_test.go) - CE placeholder
 
-## When to Use This Pattern
+## When to Use Each Pattern
 
-Use build-tagged test files when:
+### Use TestMain Pattern (Solution 1) When:
+1. ✅ Multiple tests in package create `services.NewService(db)`
+2. ✅ Tests should work in both CE and EE (with different behavior)
+3. ✅ No enterprise-specific test logic needed
+4. ✅ Package has no import cycles with enterprise features
 
-1. ✅ Test creates `services.NewService(db)` or `services.NewServiceWithOCI()`
-2. ✅ Test depends on group access, budget, or other enterprise services
-3. ✅ Test fails with "factory not registered" errors in ENT mode
+### Use Build-Tagged Test Files (Solution 2) When:
+1. ✅ Tests need completely different implementations for CE vs EE
+2. ✅ Enterprise tests require features not available in CE
+3. ✅ TestMain approach creates import cycles
+4. ✅ Only a few tests need service creation
 
-Do NOT use this pattern when:
-
+### Use Neither Pattern When:
 1. ❌ Test only uses models directly (no service layer)
 2. ❌ Test uses HTTP handlers without service creation
 3. ❌ Test is pure unit test with no database
+4. ❌ Test doesn't call `services.NewService()` or related factory methods
 
 ## Running Tests
 

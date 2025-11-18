@@ -12,6 +12,7 @@ import (
 	// Import enterprise features to register factories before tests run
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/edge_management"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/group_access"
+	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/plugin_security"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/sso"
 )
 

@@ -30,7 +30,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 	// Create a default group (ID 1) that will be used for automatic user assignments
 	service := NewService(db)
-	defaultGroup, err := service.CreateGroup("Default Group", []uint{}, []uint{}, []uint{}, []uint{})
+	defaultGroup, err := service.CreateGroup(models.DefaultGroupName, []uint{}, []uint{}, []uint{}, []uint{})
 	assert.NoError(t, err)
 	assert.Equal(t, models.DefaultGroupID, defaultGroup.ID) // Ensure it has ID 1
 

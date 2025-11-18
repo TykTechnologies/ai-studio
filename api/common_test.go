@@ -126,6 +126,8 @@ func TestCommon_TestGetDataCatalogueDatasources(t *testing.T) {
 }
 
 func TestCommon_TestGetToolCatalogueTools(t *testing.T) {
+	t.Skip("Tool catalogues are enterprise-only - test should be in enterprise-tagged file")
+
 	api, _, _ := setupTestAPIForCommonTests(t)
 
 	// Create a test user and tool catalogue

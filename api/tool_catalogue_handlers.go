@@ -90,7 +90,7 @@ func (a *API) createToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusCreated, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Get a tool catalogue by ID
@@ -128,7 +128,7 @@ func (a *API) getToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Update a tool catalogue
@@ -184,7 +184,7 @@ func (a *API) updateToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Delete a tool catalogue
@@ -262,7 +262,7 @@ func (a *API) listToolCatalogues(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, toToolCatalogueResponses(toolCatalogues))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponses(toolCatalogues)})
 }
 
 // @Summary Search tool catalogues
@@ -293,7 +293,7 @@ func (a *API) searchToolCatalogues(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponses(toolCatalogues))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponses(toolCatalogues)})
 }
 
 // Helper functions to convert models to responses
@@ -483,7 +483,7 @@ func (a *API) addToolToToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Remove a tool from a tool catalogue
@@ -734,7 +734,7 @@ func (a *API) addTagToToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Remove a tag from a tool catalogue

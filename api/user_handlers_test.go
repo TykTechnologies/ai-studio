@@ -116,10 +116,11 @@ func TestUserEndpoints(t *testing.T) {
 
 	userID := response["data"].ID
 	// Verify user has the correct groups assigned
+	// Note: Users are auto-assigned to "Default" group if they don't have one
 	id, _ := strconv.ParseUint(userID, 10, 64)
 	createdUser, err := api.service.GetUserByID(uint(id), "Groups")
 	assert.NoError(t, err)
-	assert.Len(t, createdUser.Groups, 2)
+	assert.Len(t, createdUser.Groups, 3) // 2 requested groups + Default group
 	// Test attempting to create a user with a non-existent group
 	nonExistentGroupID := uint(9999) // Using a high number that's unlikely to exist
 	createUserWithBadGroupInput := UserInput{

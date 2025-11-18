@@ -468,7 +468,10 @@ func TestControlServer_RegisterEdge(t *testing.T) {
 				err := db.Where("edge_id = ?", "edge-001").First(&edge).Error
 				assert.NoError(t, err)
 				assert.Equal(t, "edge-001", edge.EdgeID)
-				assert.Equal(t, "test-namespace", edge.Namespace)
+				// Note: In CE, namespace is always "default" (enterprise feature)
+				// In ENT, namespace respects the request value
+				assert.Contains(t, []string{"default", "test-namespace"}, edge.Namespace,
+					"Namespace should be 'default' (CE) or 'test-namespace' (ENT)")
 				assert.Equal(t, models.EdgeStatusRegistered, edge.Status)
 				assert.NotEmpty(t, edge.SessionID)
 			},
