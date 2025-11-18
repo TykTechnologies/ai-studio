@@ -183,7 +183,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	privacyScore int, shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time) (*models.LLM, error) {
+	budgetStartDate *time.Time, namespace string) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -212,6 +212,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	llm.AllowedModels = allowedModels
 	llm.MonthlyBudget = monthlyBudget
 	llm.BudgetStartDate = budgetStartDate
+	llm.Namespace = namespace
 
 	// Execute "before_update" hooks
 	if s.HookManager != nil {

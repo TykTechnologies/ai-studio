@@ -258,6 +258,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		}
 	} else {
 		// Update existing edge instance
+		edgeInstance.Namespace = namespace // Update to normalized namespace (CE: forces "default")
 		edgeInstance.Version = req.Version
 		edgeInstance.BuildHash = req.BuildHash
 		edgeInstance.Status = models.EdgeStatusRegistered
@@ -341,10 +342,13 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 				// Handle registration in stream
 				if edgeConnection == nil {
 					edgeID = m.Registration.EdgeId
+					// Normalize namespace (CE: forces "default", ENT: accepts as-is)
+					normalizedNamespace := s.edgeManagementService.GetNamespaceForEdge(m.Registration.EdgeNamespace)
+
 					s.edgeMutex.Lock()
 					edgeConnection = &EdgeInstanceConnection{
 						EdgeID:        m.Registration.EdgeId,
-						Namespace:     m.Registration.EdgeNamespace,
+						Namespace:     normalizedNamespace, // Use normalized namespace for in-memory connection
 						Status:        "connected",
 						Version:       m.Registration.Version,
 						Stream:        stream,

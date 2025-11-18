@@ -92,12 +92,12 @@ class EdgeGatewayService {
 
   async triggerConfigurationReload(namespace, targetType = 'namespace') {
     try {
-      const endpoint = targetType === 'namespace' 
+      const endpoint = targetType === 'namespace'
         ? `/namespaces/${namespace}/reload`
         : `/edges/${namespace}/reload`; // namespace is actually edge ID in this case
-      
+
       const response = await apiClient.post(endpoint);
-      
+
       if (response.data?.data) {
         const operation = response.data.data;
         return {
@@ -107,11 +107,31 @@ class EdgeGatewayService {
           message: operation.attributes.message,
         };
       }
-      
+
       return null;
     } catch (error) {
       console.error('Error triggering configuration reload:', error);
       throw new Error(error.response?.data?.message || 'Failed to trigger configuration reload');
+    }
+  }
+
+  async reloadAllEdges() {
+    try {
+      const response = await apiClient.post('/edges/reload-all');
+
+      if (response.data?.data) {
+        const operation = response.data.data;
+        return {
+          operationId: operation.attributes.operation_id,
+          status: operation.attributes.status,
+          message: operation.attributes.message,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error triggering global reload:', error);
+      throw new Error(error.response?.data?.message || 'Failed to trigger global reload');
     }
   }
 

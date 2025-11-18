@@ -204,6 +204,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.AllowedModels,
 		input.Data.Attributes.MonthlyBudget,
 		parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
+		input.Data.Attributes.Namespace,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{

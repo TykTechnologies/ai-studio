@@ -21,11 +21,14 @@ import {
 import { CloudSync as PushIcon } from '@mui/icons-material';
 import edgeGatewayService from '../../services/edgeGatewayService';
 import useNamespaces from '../../hooks/useNamespaces';
+import useSystemFeatures from '../../hooks/useSystemFeatures';
 
 const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
   const { getAvailableNamespaces } = useNamespaces();
-  
-  const [targetType, setTargetType] = useState('namespace'); // 'namespace' or 'all'
+  const { features } = useSystemFeatures();
+
+  // CE: Default to 'all' since namespace selection is enterprise-only
+  const [targetType, setTargetType] = useState(features.hub_spoke_multi_tenant ? 'namespace' : 'all');
   const [selectedNamespace, setSelectedNamespace] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -35,7 +38,7 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
 
   const handleClose = () => {
     if (!loading) {
-      setTargetType('namespace');
+      setTargetType(features.hub_spoke_multi_tenant ? 'namespace' : 'all');
       setSelectedNamespace('');
       setError(null);
       setSuccess(null);
@@ -50,37 +53,28 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
 
     try {
       let result;
-      
+
       if (targetType === 'all') {
-        // Push to all namespaces - we'll need to iterate through available namespaces
-        const pushPromises = availableNamespaces.map(namespace => 
-          edgeGatewayService.triggerConfigurationReload(
-            namespace.name === 'global' ? 'global' : namespace.name,
-            'namespace'
-          )
-        );
-        
-        const results = await Promise.allSettled(pushPromises);
-        const successful = results.filter(r => r.status === 'fulfilled').length;
-        const failed = results.filter(r => r.status === 'rejected').length;
-        
-        if (failed > 0) {
-          setError(`Configuration push completed with errors: ${successful} successful, ${failed} failed`);
-        } else {
-          setSuccess(`Configuration successfully pushed to all ${successful} namespaces`);
-        }
+        // CE/ENT: Use global reload-all endpoint
+        result = await edgeGatewayService.reloadAllEdges();
+
+        const message = features.hub_spoke_multi_tenant
+          ? `Configuration successfully pushed to all namespaces. Operation ID: ${result.operationId}`
+          : `Configuration successfully pushed to all edge gateways. Operation ID: ${result.operationId}`;
+
+        setSuccess(message);
       } else {
-        // Push to specific namespace
+        // ENT only: Push to specific namespace
         if (!selectedNamespace) {
           setError('Please select a namespace');
           return;
         }
-        
+
         result = await edgeGatewayService.triggerConfigurationReload(
           selectedNamespace === 'global' ? 'global' : selectedNamespace,
           'namespace'
         );
-        
+
         setSuccess(`Configuration push initiated for ${selectedNamespace} namespace. Operation ID: ${result.operationId}`);
       }
 
@@ -112,48 +106,57 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
           with the current configuration from the control server.
         </Typography>
 
-        <FormControl component="fieldset" fullWidth sx={{ mb: 3 }}>
-          <FormLabel component="legend">Target</FormLabel>
-          <RadioGroup
-            value={targetType}
-            onChange={(e) => setTargetType(e.target.value)}
-          >
-            <FormControlLabel
-              value="namespace"
-              control={<Radio />}
-              label="Specific Namespace"
-            />
-            <FormControlLabel
-              value="all"
-              control={<Radio />}
-              label="All Namespaces"
-            />
-          </RadioGroup>
-        </FormControl>
+        {/* CE: Hide namespace selection, ENT: Show radio buttons */}
+        {features.hub_spoke_multi_tenant ? (
+          <>
+            <FormControl component="fieldset" fullWidth sx={{ mb: 3 }}>
+              <FormLabel component="legend">Target</FormLabel>
+              <RadioGroup
+                value={targetType}
+                onChange={(e) => setTargetType(e.target.value)}
+              >
+                <FormControlLabel
+                  value="namespace"
+                  control={<Radio />}
+                  label="Specific Namespace"
+                />
+                <FormControlLabel
+                  value="all"
+                  control={<Radio />}
+                  label="All Namespaces"
+                />
+              </RadioGroup>
+            </FormControl>
 
-        {targetType === 'namespace' && (
-          <FormControl fullWidth required sx={{ mb: 3 }}>
-            <InputLabel>Select Namespace</InputLabel>
-            <Select
-              value={selectedNamespace}
-              label="Select Namespace"
-              onChange={(e) => setSelectedNamespace(e.target.value)}
-            >
-              <MenuItem value="global">Global ({availableNamespaces.find(ns => ns.name === 'global')?.edgeCount || 0} edges)</MenuItem>
-              {availableNamespaces
-                .filter(ns => ns.name !== 'global')
-                .map((namespace) => (
-                <MenuItem key={namespace.name} value={namespace.name}>
-                  {namespace.name} ({namespace.edgeCount} edges)
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
+            {targetType === 'namespace' && (
+              <FormControl fullWidth required sx={{ mb: 3 }}>
+                <InputLabel>Select Namespace</InputLabel>
+                <Select
+                  value={selectedNamespace}
+                  label="Select Namespace"
+                  onChange={(e) => setSelectedNamespace(e.target.value)}
+                >
+                  <MenuItem value="global">Global ({availableNamespaces.find(ns => ns.name === 'global')?.edgeCount || 0} edges)</MenuItem>
+                  {availableNamespaces
+                    .filter(ns => ns.name !== 'global')
+                    .map((namespace) => (
+                    <MenuItem key={namespace.name} value={namespace.name}>
+                      {namespace.name} ({namespace.edgeCount} edges)
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
 
-        {targetType === 'all' && (
+            {targetType === 'all' && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                This will push configuration to all {availableNamespaces.length} namespaces with active edges.
+              </Alert>
+            )}
+          </>
+        ) : (
           <Alert severity="info" sx={{ mb: 2 }}>
-            This will push configuration to all {availableNamespaces.length} namespaces with active edges.
+            This will push configuration to all edge gateways.
           </Alert>
         )}
 

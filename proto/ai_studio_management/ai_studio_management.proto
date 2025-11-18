@@ -263,6 +263,7 @@ message UpdateLLMRequest {
     string default_model = 11;
     repeated string allowed_models = 12;
     optional double monthly_budget = 13;
+    string namespace = 14; // Enterprise: Multi-tenant namespace support
 }
 
 message UpdateLLMResponse {

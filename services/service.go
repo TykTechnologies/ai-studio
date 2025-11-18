@@ -9,6 +9,7 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"gorm.io/gorm"
 )
 
@@ -19,6 +20,7 @@ type Service struct {
 	// Hub-and-Spoke Services
 	EdgeService            *EdgeService
 	NamespaceService       *NamespaceService
+	EdgeManagementService  edge_management.Service
 	PluginService          *PluginService
 	PluginManifestService  *PluginManifestService
 	AIStudioPluginManager  *AIStudioPluginManager
@@ -41,6 +43,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	// Initialize hub-and-spoke services
 	edgeService := NewEdgeService(db)
 	namespaceService := NewNamespaceService(db, edgeService)
+	edgeManagementService := edge_management.NewService(db)
 
 	// Initialize plugin services with OCI support
 	var pluginService *PluginService
@@ -120,6 +123,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		Budget:                budgetSvc,
 		EdgeService:           edgeService,
 		NamespaceService:      namespaceService,
+		EdgeManagementService: edgeManagementService,
 		PluginService:         pluginService,
 		PluginManifestService: pluginManifestService,
 		AIStudioPluginManager: aiStudioPluginManager,

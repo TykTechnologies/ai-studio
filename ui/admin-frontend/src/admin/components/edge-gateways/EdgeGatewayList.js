@@ -25,6 +25,7 @@ import {
   DialogActions,
   Menu,
   Snackbar,
+  Link,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -36,6 +37,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import edgeGatewayService from '../../services/edgeGatewayService';
 import useNamespaces from '../../hooks/useNamespaces';
+import useSystemFeatures from '../../hooks/useSystemFeatures';
 import PushConfigurationModal from './PushConfigurationModal';
 import RemoveEdgeModal from './RemoveEdgeModal';
 import {
@@ -52,6 +54,7 @@ import {
 const EdgeGatewayList = () => {
   const navigate = useNavigate();
   const { getAvailableNamespaces } = useNamespaces();
+  const { features } = useSystemFeatures();
   
   const [edgeGateways, setEdgeGateways] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -181,25 +184,37 @@ const EdgeGatewayList = () => {
       </TitleBox>
 
       <Box sx={{ p: 3 }}>
-        {/* Namespace Filter */}
-        <Box mb={3}>
-          <FormControl size="small" style={{ minWidth: 200 }}>
-            <InputLabel>Filter by Namespace</InputLabel>
-            <Select
-              value={selectedNamespace}
-              label="Filter by Namespace"
-              onChange={handleNamespaceChange}
-            >
-              <MenuItem value="">All Namespaces</MenuItem>
-              <MenuItem value="global">Global</MenuItem>
-              {availableNamespaces.map((namespace) => (
-                <MenuItem key={namespace.name} value={namespace.name}>
-                  {namespace.name} ({namespace.edgeCount} edges)
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
+        {/* Namespace Filter - Enterprise Edition only */}
+        {features.hub_spoke_multi_tenant && (
+          <Box mb={3}>
+            <FormControl size="small" style={{ minWidth: 200 }}>
+              <InputLabel>Filter by Namespace</InputLabel>
+              <Select
+                value={selectedNamespace}
+                label="Filter by Namespace"
+                onChange={handleNamespaceChange}
+              >
+                <MenuItem value="">All Namespaces</MenuItem>
+                <MenuItem value="global">Global</MenuItem>
+                {availableNamespaces.map((namespace) => (
+                  <MenuItem key={namespace.name} value={namespace.name}>
+                    {namespace.name} ({namespace.edgeCount} edges)
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        )}
+
+        {/* Community Edition - Show info banner */}
+        {!features.hub_spoke_multi_tenant && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Multi-tenant namespace support is available in Enterprise Edition.{' '}
+            <Link href="https://tyk.io/enterprise" target="_blank" rel="noopener">
+              Learn more
+            </Link>
+          </Alert>
+        )}
 
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -217,7 +232,9 @@ const EdgeGatewayList = () => {
               <TableHead>
                 <TableRow>
                   <StyledTableHeaderCell>Edge ID</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Namespace</StyledTableHeaderCell>
+                  {features.hub_spoke_multi_tenant && (
+                    <StyledTableHeaderCell>Namespace</StyledTableHeaderCell>
+                  )}
                   <StyledTableHeaderCell>Status</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Version</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Last Heartbeat</StyledTableHeaderCell>
@@ -228,9 +245,9 @@ const EdgeGatewayList = () => {
               <TableBody>
                 {edgeGateways.length === 0 ? (
                   <TableRow>
-                    <StyledTableCell colSpan={7} align="center">
+                    <StyledTableCell colSpan={features.hub_spoke_multi_tenant ? 7 : 6} align="center">
                       <Typography variant="body2" color="textSecondary" py={4}>
-                        {selectedNamespace 
+                        {selectedNamespace
                           ? `No edge gateways found in ${selectedNamespace} namespace`
                           : 'No edge gateways found'
                         }
@@ -239,8 +256,8 @@ const EdgeGatewayList = () => {
                   </TableRow>
                 ) : (
                   edgeGateways.map((edge) => (
-                    <StyledTableRow 
-                      key={edge.id} 
+                    <StyledTableRow
+                      key={edge.id}
                       onClick={() => handleViewDetail(edge.edgeId)}
                       sx={{ cursor: "pointer" }}
                     >
@@ -249,14 +266,16 @@ const EdgeGatewayList = () => {
                           {edge.edgeId}
                         </Typography>
                       </StyledTableCell>
-                      <StyledTableCell>
-                        <Chip
-                          label={edge.namespace}
-                          size="small"
-                          variant="outlined"
-                          color={edge.namespace === 'global' ? 'default' : 'primary'}
-                        />
-                      </StyledTableCell>
+                      {features.hub_spoke_multi_tenant && (
+                        <StyledTableCell>
+                          <Chip
+                            label={edge.namespace}
+                            size="small"
+                            variant="outlined"
+                            color={edge.namespace === 'global' ? 'default' : 'primary'}
+                          />
+                        </StyledTableCell>
+                      )}
                       <StyledTableCell>
                         {getStatusChip(edge)}
                       </StyledTableCell>

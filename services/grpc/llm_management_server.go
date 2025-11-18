@@ -228,6 +228,12 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 		return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
 	}
 
+	// Determine namespace: use from request if provided, otherwise preserve existing
+	namespace := req.GetNamespace()
+	if namespace == "" {
+		namespace = existingLLM.Namespace
+	}
+
 	// Call existing service method with preserved vendor
 	llm, err := s.service.UpdateLLM(
 		uint(llmID),
@@ -244,7 +250,8 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 		req.GetDefaultModel(),
 		req.GetAllowedModels(),
 		req.MonthlyBudget,
-		nil, // BudgetStartDate
+		nil,       // BudgetStartDate
+		namespace, // Support namespace updates via gRPC
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

@@ -288,7 +288,9 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Tool integration
 - ✅ User management
 - ✅ Basic RBAC
-- ✅ Hub-and-spoke deployment
+- ✅ Hub-and-spoke deployment (single "default" namespace)
+- ✅ Edge gateway management
+- ✅ Configuration synchronization
 - ✅ Cost tracking and analytics
 - ✅ Plugin system (basic security)
 - ✅ Plugin path whitelisting
@@ -299,6 +301,8 @@ func TestBudgetEnforcement(t *testing.T) {
 - ❌ Budget enforcement
 - ❌ Budget alerts and notifications
 - ❌ SSO (SAML, OIDC, LDAP, Social)
+- ❌ Multi-tenant namespaces
+- ❌ Namespace-based operations
 - ❌ Plugin GRPC host whitelisting
 - ❌ Plugin OCI signature verification
 - ❌ Multiple marketplace sources
@@ -316,6 +320,10 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Multi-provider SSO support
 - ✅ User provisioning via SSO
 - ✅ Group mapping from IdP
+- ✅ Multi-tenant namespaces (unlimited)
+- ✅ Namespace-based filtering and operations
+- ✅ Per-namespace configuration isolation
+- ✅ Namespace management UI
 - ✅ Plugin GRPC host whitelisting (network security)
 - ✅ Plugin OCI signature verification (supply chain security)
 - ✅ Multiple marketplace sources
@@ -574,6 +582,86 @@ POST   /api/v1/admin/marketplaces/:id/sync # Trigger manual sync
 **Upgrade Path:**
 - CE → ENT: Existing marketplace continues to work, can add more
 - ENT → CE: Extra marketplaces remain in database (read-only, cannot manage)
+
+## Hub-and-Spoke Multi-Tenant Feature Specifics
+
+### How Hub-and-Spoke Works
+
+**Community Edition:**
+- ✅ **Hub-and-Spoke Architecture**: Full support for edge gateway deployment
+- ✅ **Edge Registration**: Microgateways can register with control plane
+- ✅ **Configuration Synchronization**: Real-time config push to all edges
+- ✅ **Global Reload**: Single button to reload all edge gateways
+- ✅ **Individual Edge Reload**: Reload specific edge instances
+- ✅ **Edge Management UI**: View and manage connected edge gateways
+- ✅ **Single Namespace**: All edges in "default" namespace (silent enforcement)
+- ❌ **Multi-Tenant Namespaces**: Cannot create additional namespaces
+- ❌ **Namespace Selector**: Hidden in UI
+- ❌ **Namespace Management APIs**: Return 402 Payment Required
+- ❌ **Per-Namespace Operations**: No namespace-based filtering or reloading
+
+**Enterprise Edition:**
+- ✅ **Everything in CE**, plus:
+- ✅ **Multi-Tenant Namespaces**: Unlimited custom namespaces
+- ✅ **Namespace Selector**: Visible in edge gateway UI
+- ✅ **Namespace-Based Filtering**: View edges by namespace
+- ✅ **Per-Namespace Reload**: Reload all edges in specific namespace
+- ✅ **Namespace Statistics API**: Edge count and health per namespace
+- ✅ **Complete Isolation**: Full namespace-based configuration isolation
+
+### Implementation Details
+
+**Control Plane (AI Studio):**
+- Service: `services/edge_management/community.go` (CE: forces "default")
+- Service: `enterprise/features/edge_management/service.go` (ENT: accepts all)
+- gRPC: `grpc/control_server.go` uses EdgeManagementService
+- API CE: `api/edge_handlers_community.go` (no namespace field, 402 for namespace APIs)
+- API ENT: `api/edge_handlers_enterprise.go` (full namespace support)
+
+**Edge Gateway (Microgateway):**
+- Config: `EDGE_NAMESPACE` environment variable
+- CE control plane: Silently overrides to "default" (no warning logs)
+- ENT control plane: Accepts namespace as-is
+
+**Frontend:**
+- Feature flag: `hub_spoke_multi_tenant` from `/common/system` endpoint
+- CE: Namespace selector hidden, namespace column removed from table
+- ENT: Full namespace selector and per-namespace operations visible
+
+**API Endpoints:**
+
+| Endpoint | CE Behavior | ENT Behavior |
+|----------|-------------|--------------|
+| `GET /api/v1/edges` | ✅ Works (no namespace field) | ✅ Works (includes namespace field, accepts ?namespace= filter) |
+| `GET /api/v1/edges/:id` | ✅ Works (no namespace field) | ✅ Works (includes namespace field) |
+| `POST /api/v1/edges/:id/reload` | ✅ Works | ✅ Works |
+| `POST /api/v1/edges/reload-all` | ✅ Works (reloads all edges) | ✅ Works (reloads all namespaces) |
+| `DELETE /api/v1/edges/:id` | ✅ Works | ✅ Works |
+| `GET /api/v1/namespaces` | ❌ 402 Payment Required | ✅ List all namespaces |
+| `GET /api/v1/namespaces/:ns/stats` | ❌ 402 Payment Required | ✅ Get namespace stats |
+| `POST /api/v1/namespaces/:ns/reload` | ❌ 402 Payment Required | ✅ Reload specific namespace |
+| `GET /api/v1/namespaces/:ns/edges` | ❌ 402 Payment Required | ✅ Get edges in namespace |
+
+**Architecture Pattern:**
+```
+CE:  Edge (namespace: "custom") → Control Plane → Silently forced to "default"
+ENT: Edge (namespace: "custom") → Control Plane → Accepted as "custom"
+```
+
+**Database Schema:**
+- `edge_instances.namespace` - Namespace field (indexed)
+- `apps.namespace` - App namespace for routing
+- `llms.namespace` - LLM namespace for routing
+- Query pattern: `WHERE (namespace = '' OR namespace = ?)` - global + tenant-specific
+
+**Key Design Decision:**
+- No warning logs in CE when forcing namespace to "default"
+- Silent enforcement provides clean user experience
+- Backend handles normalization transparently
+
+**Upgrade Path:**
+- CE → ENT: All edges remain in "default", can now create additional namespaces
+- ENT → CE: Edges keep their namespaces in DB but all forced to "default" at runtime
 
 ## Enterprise Submodule Workflow
 

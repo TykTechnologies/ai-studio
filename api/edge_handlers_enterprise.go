@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -331,6 +332,58 @@ func (a *API) deleteEdge(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// @Summary Reload all edge gateways
+// @Description Trigger a configuration reload for all edge gateways across all namespaces
+// @Tags edges
+// @Accept json
+// @Produce json
+// @Success 202 {object} map[string]interface{}
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/edges/reload-all [post]
+// @Security BearerAuth
+func (a *API) reloadAllEdges(c *gin.Context) {
+	// ENT: Reload all edges across all namespaces
+
+	// Get current user for audit trail
+	user, exists := c.Get("user")
+	initiatedBy := "unknown"
+	if exists {
+		if u, ok := user.(*models.User); ok {
+			initiatedBy = u.Email
+		}
+	}
+
+	// Get all namespaces
+	namespaces, err := a.service.EdgeManagementService.ListNamespaces()
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to list namespaces: "+err.Error()))
+		return
+	}
+
+	// Trigger reload for each namespace
+	operations := make([]gin.H, 0)
+	for _, namespace := range namespaces {
+		operation, err := a.service.NamespaceService.TriggerNamespaceReload(namespace, initiatedBy)
+		if err != nil {
+			// Log error but continue with other namespaces
+			continue
+		}
+		operations = append(operations, gin.H{
+			"operation_id": operation.OperationID,
+			"namespace":    namespace,
+			"status":       operation.Status,
+		})
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"data": gin.H{
+			"message":          "Global reload triggered for all namespaces",
+			"operations_count": len(operations),
+			"operations":       operations,
+		},
+	})
 }
 
 // serializeEdge converts an EdgeInstance model to API response format

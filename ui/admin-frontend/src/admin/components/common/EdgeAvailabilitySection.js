@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import NamespaceSelector from './NamespaceSelector';
+import useSystemFeatures from '../../hooks/useSystemFeatures';
 
 const EdgeAvailabilitySection = ({
   value = [],
@@ -21,10 +22,16 @@ const EdgeAvailabilitySection = ({
   ...props
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const { features } = useSystemFeatures();
 
   const handleExpansionChange = (event, isExpanded) => {
     setExpanded(isExpanded);
   };
+
+  // Hide entire section in Community Edition
+  if (!features.hub_spoke_multi_tenant) {
+    return null;
+  }
 
   return (
     <Accordion 

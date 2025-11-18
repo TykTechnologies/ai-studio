@@ -137,7 +137,7 @@ func (a *API) getEdge(c *gin.Context) {
 	}
 
 	// Serialize WITHOUT namespace field
-	response := serializeEdge(edge)
+	response := serializeEdgeWithHealth(edge)
 	c.JSON(http.StatusOK, response)
 }
 
@@ -161,17 +161,36 @@ func (a *API) triggerEdgeReload(c *gin.Context) {
 		return
 	}
 
-	// Trigger reload via control server
-	err := a.controlServer.TriggerReload([]string{edgeID})
+	// Get current user for audit trail
+	user, exists := c.Get("user")
+	initiatedBy := "unknown"
+	if exists {
+		if u, ok := user.(*models.User); ok {
+			initiatedBy = u.Email
+		}
+	}
+
+	// Trigger reload via namespace service
+	operation, err := a.service.NamespaceService.TriggerEdgeReload(edgeID, initiatedBy)
 	if err != nil {
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to trigger reload: "+err.Error()))
+		if err.Error() == "edge not found: failed to get edge: record not found" {
+			helpers.SendErrorResponse(c, helpers.NewNotFoundError("Edge instance not found"))
+			return
+		}
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"message": "Configuration reload triggered",
-		"edge_id": edgeID,
+	c.JSON(http.StatusAccepted, gin.H{
+		"data": gin.H{
+			"type": "reload-operations",
+			"id":   operation.OperationID,
+			"attributes": gin.H{
+				"operation_id": operation.OperationID,
+				"status":       operation.Status,
+				"message":      operation.Message,
+			},
+		},
 	})
 }
 
@@ -216,37 +235,50 @@ func (a *API) deleteEdge(c *gin.Context) {
 // @Tags edges
 // @Accept json
 // @Produce json
-// @Param page query int false "Page number" default(1)
-// @Param limit query int false "Items per page" default(20)
 // @Success 200 {object} map[string]interface{}
-// @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/reload-operations [get]
 // @Security BearerAuth
 func (a *API) listReloadOperations(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 || limit > 100 {
-		limit = 20
-	}
-
-	operations, totalCount, err := a.service.EdgeService.ListReloadOperations(page, limit)
-	if err != nil {
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+	// Get reload coordinator from namespace service
+	if a.service.NamespaceService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Namespace service not available",
+		})
 		return
 	}
 
+	reloadCoordinator := a.service.NamespaceService.GetReloadCoordinator()
+	if reloadCoordinator == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"data":    []interface{}{},
+			"message": "Reload coordinator not available (standalone mode)",
+		})
+		return
+	}
+
+	// Get active operations from reload coordinator
+	operations := reloadCoordinator.ListActiveOperations()
+
+	// Convert to API response format
+	data := make([]gin.H, len(operations))
+	for i, op := range operations {
+		data[i] = gin.H{
+			"type": "reload-operations",
+			"id":   op.OperationID,
+			"attributes": gin.H{
+				"operation_id": op.OperationID,
+				"target_edges": op.TargetEdges,
+				"initiated_by": op.InitiatedBy,
+				"initiated_at": op.InitiatedAt,
+				"status":       op.Status,
+				"progress":     op.Progress,
+				"message":      op.Message,
+			},
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"data": operations,
-		"meta": gin.H{
-			"total_count": totalCount,
-			"total_pages": (totalCount + int64(limit) - 1) / int64(limit),
-			"page_size":   limit,
-			"page_number": page,
-		},
+		"data": data,
 	})
 }
 
@@ -255,93 +287,39 @@ func (a *API) listReloadOperations(c *gin.Context) {
 // @Tags edges
 // @Accept json
 // @Produce json
-// @Success 200 {object} map[string]interface{}
+// @Success 202 {object} map[string]interface{}
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/edges/reload-all [post]
 // @Security BearerAuth
 func (a *API) reloadAllEdges(c *gin.Context) {
-	// CE: This works - reloads all edges (all in "default" namespace anyway)
-	err := a.controlServer.TriggerGlobalReload()
+	// CE: Reload all edges in "default" namespace (all edges are in default anyway)
+
+	// Get current user for audit trail
+	user, exists := c.Get("user")
+	initiatedBy := "unknown"
+	if exists {
+		if u, ok := user.(*models.User); ok {
+			initiatedBy = u.Email
+		}
+	}
+
+	// Trigger namespace reload for "default" (in CE, all edges are in default)
+	operation, err := a.service.NamespaceService.TriggerNamespaceReload("default", initiatedBy)
 	if err != nil {
 		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to trigger global reload: "+err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"message": "Global reload triggered for all edge gateways",
-	})
-}
-
-// Namespace management endpoints - CE: Returns 402 Payment Required
-
-// @Summary List namespaces
-// @Description List all namespaces (Enterprise Edition only)
-// @Tags edges
-// @Accept json
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Failure 402 {object} ErrorResponse
-// @Router /api/v1/namespaces [get]
-// @Security BearerAuth
-func (a *API) listNamespaces(c *gin.Context) {
-	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Multi-tenant namespaces require Enterprise Edition"))
-}
-
-// @Summary Reload namespace
-// @Description Trigger reload for all edges in a namespace (Enterprise Edition only)
-// @Tags edges
-// @Accept json
-// @Produce json
-// @Param namespace path string true "Namespace name"
-// @Success 200 {object} map[string]interface{}
-// @Failure 402 {object} ErrorResponse
-// @Router /api/v1/namespaces/{namespace}/reload [post]
-// @Security BearerAuth
-func (a *API) triggerNamespaceReload(c *gin.Context) {
-	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Namespace-based reload requires Enterprise Edition"))
-}
-
-// @Summary Get namespace edges
-// @Description Get all edges in a namespace (Enterprise Edition only)
-// @Tags edges
-// @Accept json
-// @Produce json
-// @Param namespace path string true "Namespace name"
-// @Success 200 {object} map[string]interface{}
-// @Failure 402 {object} ErrorResponse
-// @Router /api/v1/namespaces/{namespace}/edges [get]
-// @Security BearerAuth
-func (a *API) getNamespaceEdges(c *gin.Context) {
-	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Multi-tenant namespaces require Enterprise Edition"))
-}
-
-// @Summary Get reload operation status
-// @Description Get status of a specific reload operation
-// @Tags edges
-// @Accept json
-// @Produce json
-// @Param operation_id path string true "Operation ID"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /api/v1/reload-operations/{operation_id}/status [get]
-// @Security BearerAuth
-func (a *API) getReloadOperationStatus(c *gin.Context) {
-	operationID := c.Param("operation_id")
-
-	status, err := a.service.EdgeService.GetReloadOperationStatus(operationID)
-	if err != nil {
-		if err.Error() == "operation not found" {
-			helpers.SendErrorResponse(c, helpers.NewNotFoundError("Reload operation not found"))
-			return
-		}
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": status,
+	c.JSON(http.StatusAccepted, gin.H{
+		"data": gin.H{
+			"type": "reload-operations",
+			"id":   operation.OperationID,
+			"attributes": gin.H{
+				"operation_id": operation.OperationID,
+				"status":       operation.Status,
+				"message":      "Global reload triggered for all edge gateways",
+			},
+		},
 	})
 }
 
@@ -403,15 +381,4 @@ func serializeEdgeWithHealth(edge *services.EdgeInstanceWithHealth) EdgeResponse
 			UpdatedAt:     edge.EdgeInstance.UpdatedAt,
 		},
 	}
-}
-
-// validateEdgeID validates the edge_id parameter
-func validateEdgeID(edgeID string) error {
-	if edgeID == "" {
-		return helpers.NewBadRequestError("edge_id parameter is required")
-	}
-	if len(edgeID) > 255 {
-		return helpers.NewBadRequestError("edge_id parameter is too long (max 255 characters)")
-	}
-	return nil
 }
