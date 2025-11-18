@@ -855,7 +855,7 @@ func TestLLMService(t *testing.T) {
 
 	// Test UpdateLLM
 	updatedLLM, err := service.UpdateLLM(llm.ID, "UpdatedLLM", "updated-api-key", "https://updated-api.test.com", 80,
-		"Updated short", "Updated long", "https://updated-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+		"Updated short", "Updated long", "https://updated-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "")
 	assert.NoError(t, err)
 	assert.Equal(t, "UpdatedLLM", updatedLLM.Name)
 	assert.Equal(t, "updated-api-key", updatedLLM.APIKey)
@@ -1424,21 +1424,21 @@ func TestSmartAPIKeyUpdateLogic(t *testing.T) {
 		// Test 1: Update with [redacted] should preserve existing key
 		updatedLLM1, err := service.UpdateLLM(llm.ID, "Test LLM", "[redacted]", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
-			"gpt-4", []string{}, nil, nil)
+			"gpt-4", []string{}, nil, nil, "")
 		assert.NoError(t, err)
 		assert.Equal(t, "initial-api-key", updatedLLM1.APIKey, "API key should be preserved when [redacted] is sent")
 
 		// Test 2: Update with empty string should clear the key
 		updatedLLM2, err := service.UpdateLLM(llm.ID, "Test LLM", "", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
-			"gpt-4", []string{}, nil, nil)
+			"gpt-4", []string{}, nil, nil, "")
 		assert.NoError(t, err)
 		assert.Equal(t, "", updatedLLM2.APIKey, "API key should be cleared when empty string is sent")
 
 		// Test 3: Update with new key should update the key
 		updatedLLM3, err := service.UpdateLLM(llm.ID, "Test LLM", "new-api-key", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
-			"gpt-4", []string{}, nil, nil)
+			"gpt-4", []string{}, nil, nil, "")
 		assert.NoError(t, err)
 		assert.Equal(t, "new-api-key", updatedLLM3.APIKey, "API key should be updated when new value is sent")
 	})

@@ -12,6 +12,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/performance/framework"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 // setupBenchmarkProxy creates a proxy with test data for benchmarking

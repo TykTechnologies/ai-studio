@@ -3,6 +3,8 @@ package api
 import (
 	"os"
 	"testing"
+
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
 func TestValidatePluginCommand(t *testing.T) {
@@ -14,6 +16,11 @@ func TestValidatePluginCommand(t *testing.T) {
 		if originalValue != "" {
 			os.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", originalValue)
 		}
+	})
+
+	// Create plugin security service for validation
+	securityService := plugin_security.NewService(&plugin_security.Config{
+		AllowInternalNetworkAccess: false,
 	})
 
 	testCases := []struct {
@@ -227,7 +234,7 @@ func TestValidatePluginCommand(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validatePluginCommand(tc.command)
+			err := validatePluginCommand(tc.command, securityService)
 
 			if tc.shouldError {
 				if err == nil {
@@ -362,8 +369,13 @@ func TestValidatePluginCommand_InternalNetworkBypass(t *testing.T) {
 				os.Unsetenv("ALLOW_INTERNAL_NETWORK_ACCESS")
 			}
 
+			// Create plugin security service with appropriate config
+			securityService := plugin_security.NewService(&plugin_security.Config{
+				AllowInternalNetworkAccess: tc.envValue == "true",
+			})
+
 			// Test validation
-			err := validatePluginCommand(tc.command)
+			err := validatePluginCommand(tc.command, securityService)
 
 			if tc.shouldError && err == nil {
 				t.Errorf("expected error for command %s, but got none", tc.command)

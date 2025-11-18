@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 func TestSecretReferenceInAuthHeader(t *testing.T) {

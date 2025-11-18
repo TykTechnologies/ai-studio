@@ -1,3 +1,6 @@
+// go:build enterprise
+// +build enterprise
+
 package api
 
 import (
@@ -7,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,12 +29,14 @@ func setupSSOTestService(t *testing.T) (*API, *gin.Engine, *gorm.DB) {
 	require.Equal(t, uint(1), defaultGroup.ID) // Default group should have ID 1
 
 	// Setup config and SSO service
-	config := &services.Config{
+	config := &sso.Config{
 		APISecret: "test-secret",
 		LogLevel:  "info",
 	}
-	ssoService := services.NewSSOService(config, gin.New(), db, nil)
-	ssoService.InitInternalTIB()
+	ssoService := sso.NewService(config, gin.New(), db, nil)
+	if err := ssoService.InitInternalTIB(); err != nil {
+		t.Fatalf("Failed to initialize SSO service: %v", err)
+	}
 	api.ssoService = ssoService
 	api.config.TIBAPISecret = config.APISecret
 	api.config.TIBEnabled = true // Enable TIB for tests
@@ -45,8 +50,8 @@ func TestHandleNonceRequest(t *testing.T) {
 	r.POST("/api/sso", api.handleNonceRequest)
 
 	t.Run("Valid request", func(t *testing.T) {
-		request := services.NonceTokenRequest{
-			ForSection:   services.DashboardSection,
+		request := sso.NonceTokenRequest{
+			ForSection:   "dashboard",
 			EmailAddress: "test@example.com",
 		}
 
@@ -54,7 +59,7 @@ func TestHandleNonceRequest(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 
-		var response services.NonceTokenResponse
+		var response sso.NonceTokenResponse
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		require.NoError(t, err)
 		assert.Equal(t, "ok", response.Status)
@@ -68,7 +73,7 @@ func TestHandleNonceRequest(t *testing.T) {
 	})
 
 	t.Run("Invalid section", func(t *testing.T) {
-		request := services.NonceTokenRequest{
+		request := sso.NonceTokenRequest{
 			ForSection:   "invalid",
 			EmailAddress: "test@example.com",
 		}
@@ -94,8 +99,8 @@ func TestHandleSSO(t *testing.T) {
 
 	t.Run("Valid nonce token", func(t *testing.T) {
 		// First create a nonce token
-		request := services.NonceTokenRequest{
-			ForSection:   services.DashboardSection,
+		request := sso.NonceTokenRequest{
+			ForSection:   "dashboard",
 			EmailAddress: "test@example.com",
 			DisplayName:  "Test User",
 			GroupID:      "1",

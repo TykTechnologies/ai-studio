@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 func TestAnalyzeResponse(t *testing.T) {

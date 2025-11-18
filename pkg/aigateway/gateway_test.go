@@ -5,6 +5,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 // TestGatewayInterface ensures that our gateway implementation satisfies the interface
@@ -24,7 +25,7 @@ func TestNew(t *testing.T) {
 	// Mock services would go here in a real test
 	// For now, we just test that the function signature works
 	var service *services.Service
-	var budgetService *services.BudgetService
+	var budgetService budget.Service
 	config := &proxy.Config{Port: 9090}
 
 	// This would panic without real services, so we test the function exists
@@ -33,8 +34,8 @@ func TestNew(t *testing.T) {
 	}
 
 	gateway := New(
-		service,       // directly use services.Service (implements unified ServiceInterface)
-		budgetService, // directly use services.BudgetService (implements unified BudgetServiceInterface)
+		service,       // directly use services.Service
+		budgetService, // budget.Service interface
 		&Config{Port: config.Port},
 	)
 	if gateway == nil {

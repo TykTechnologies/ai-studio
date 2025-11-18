@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/performance/framework"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 // setupBenchmarkGateway creates an AI Gateway with test data for benchmarking

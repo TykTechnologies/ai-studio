@@ -1,3 +1,6 @@
+//go:build enterprise
+// +build enterprise
+
 package api
 
 import (
@@ -8,7 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,13 +90,15 @@ func setupProfileTestService(t *testing.T) (*API, *gin.Engine, *gorm.DB) {
 		TestMode:            true,
 	}
 
-	ssoConfig := &services.Config{
+	ssoConfig := &sso.Config{
 		APISecret: "test-secret",
 		LogLevel:  "info",
 	}
 
-	ssoService := services.NewSSOService(ssoConfig, gin.New(), db, nil)
-	ssoService.InitInternalTIB()
+	ssoService := sso.NewService(ssoConfig, gin.New(), db, nil)
+	if err := ssoService.InitInternalTIB(); err != nil {
+		t.Fatalf("Failed to initialize SSO service: %v", err)
+	}
 	api.ssoService = ssoService
 	api.config = authConfig
 	api.config.TIBAPISecret = ssoConfig.APISecret
