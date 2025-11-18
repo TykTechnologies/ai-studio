@@ -40,12 +40,6 @@ func performRequest(r http.Handler, method, path string, body interface{}) *http
 	return w
 }
 
-func TestMain(m *testing.M) {
-	gin.SetMode(gin.TestMode)
-
-	os.Exit(m.Run())
-}
-
 func TestHandleGetConfig(t *testing.T) {
 	// Save original env var and restore it after the test
 	originalSiteURL := os.Getenv("SITE_URL")

@@ -1,14 +1,14 @@
 //go:build enterprise
 // +build enterprise
 
-package grpc
+package proxy
 
 import (
 	"os"
 	"testing"
 
 	// Import enterprise features to register factories before tests run
-	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/edge_management"
+	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/group_access"
 )
 

@@ -1,7 +1,7 @@
 //go:build enterprise
 // +build enterprise
 
-package grpc
+package chat_session
 
 import (
 	"os"

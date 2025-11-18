@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/performance/framework"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 // setupLoadTestProxy creates a proxy for load testing

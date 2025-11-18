@@ -4,16 +4,11 @@
 package api
 
 import (
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 
-	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestToolCatalogueEndpoints(t *testing.T) {
