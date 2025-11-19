@@ -417,9 +417,10 @@ func TestCountAssociationsForLLM(t *testing.T) {
 	plugin2 := createTestPluginForLLM(t, db, "count-plugin2")
 
 	lp1 := &LLMPlugin{LLMID: llm.ID, PluginID: plugin1.ID, IsActive: true}
-	lp2 := &LLMPlugin{LLMID: llm.ID, PluginID: plugin2.ID, IsActive: false}
+	lp2 := &LLMPlugin{LLMID: llm.ID, PluginID: plugin2.ID, IsActive: true}
 	lp1.Create(db)
 	lp2.Create(db)
+	lp2.Deactivate(db) // Deactivate after creation
 
 	t.Run("Count active associations for LLM", func(t *testing.T) {
 		count, err := CountAssociationsForLLM(db, llm.ID)

@@ -17,81 +17,201 @@ else
     $(info 🌍 Building Community Edition)
 endif
 
+# Build flags for production (optimized, stripped)
+PROD_LDFLAGS := -ldflags="-w -s" -trimpath
+
 # Default target
+.DEFAULT_GOAL := help
 all: build
 
-# Build target
-build: build-frontend build-binaries
+# Help target
+help:
+	@echo "Tyk AI Studio Build Targets"
+	@echo ""
+	@echo "Current edition: $(EDITION)"
+	@echo ""
+	@echo "Development (single platform, fast):"
+	@echo "  make build-native       - Build for current platform with CGO (auto-detect edition)"
+	@echo "  make build-native-ce    - Build CE for current platform with CGO"
+	@echo "  make build-native-ent   - Build ENT for current platform with CGO"
+	@echo "  make build-local        - Alias for build-native (backward compatible)"
+	@echo ""
+	@echo "Production (multi-platform, optimized, CGO-enabled):"
+	@echo "  make build-prod         - Build all platforms with CGO (auto-detect edition)"
+	@echo "  make build-prod-ce      - Build CE for all platforms with CGO"
+	@echo "  make build-prod-ent     - Build ENT for all platforms with CGO"
+	@echo ""
+	@echo "Platform-specific (CGO-enabled):"
+	@echo "  make build-linux-amd64  - Linux AMD64 with CGO"
+	@echo "  make build-linux-arm64  - Linux ARM64 with CGO (requires cross-compiler)"
+	@echo "  make build-darwin-amd64 - Darwin AMD64 with CGO"
+	@echo "  make build-darwin-arm64 - Darwin ARM64 with CGO"
+	@echo ""
+	@echo "Other targets:"
+	@echo "  make plugins            - Build all plugins"
+	@echo "  make test               - Run tests"
+	@echo "  make clean              - Clean build artifacts"
+	@echo "  make show-edition       - Show current edition info"
+	@echo ""
+
+# Build target (default to production multi-platform builds)
+build: build-prod
 
 # Build frontend
 build-frontend:
 	cd $(ADMIN_FRONTEND_DIR) && npm run build
 
-# Build Go binaries for all architectures (linux amd64 and darwin amd64)
-build-binaries:
-	@echo "Building Midsommar $(EDITION) edition..."
-	GOOS=linux GOARCH=amd64 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)-linux-amd64
-	GOOS=darwin GOARCH=amd64 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)-darwin-amd64
-	@echo "Building Microgateway $(EDITION) edition..."
-	@mkdir -p bin
-	cd microgateway && $(MAKE) build
-	cp microgateway/dist/microgateway-$(EDITION) bin/mgw-$(EDITION)-linux-amd64
-	# Build darwin version of microgateway
-	cd microgateway && GOOS=darwin GOARCH=amd64 $(MAKE) GOOS=darwin GOARCH=amd64 build
-	cp microgateway/dist/microgateway-$(EDITION) bin/mgw-$(EDITION)-darwin-amd64
-	chmod +x bin/*
-	@echo "✅ Built: bin/midsommar-$(EDITION)-* and bin/mgw-$(EDITION)-*"
+# ============================================================================
+# Development Builds (single platform, fast, CGO enabled)
+# ============================================================================
 
-# Build for local development (single architecture)
-build-local:
-	@echo "Building $(EDITION) edition for local development..."
-	cd $(ADMIN_FRONTEND_DIR) && npm run build
-	go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)
+# Build for native platform (auto-detect edition)
+build-native: build-frontend
+	@echo "🔨 Building $(EDITION) for native platform with CGO..."
 	@mkdir -p bin
+	CGO_ENABLED=1 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)
 	cd microgateway && $(MAKE) build
 	cp microgateway/dist/microgateway-$(EDITION) bin/mgw-$(EDITION)
-	@echo "✅ Built: bin/midsommar-$(EDITION) and bin/mgw-$(EDITION)"
-
-# Force build Community Edition (ignore enterprise submodule)
-build-community:
-	@echo "🌍 Force building Community Edition..."
-	cd $(ADMIN_FRONTEND_DIR) && npm run build
-	@echo "Building Midsommar CE..."
-	GOOS=linux GOARCH=amd64 go build -o bin/midsommar-ce-linux-amd64
-	GOOS=darwin GOARCH=amd64 go build -o bin/midsommar-ce-darwin-amd64
-	@echo "Building Microgateway CE..."
-	@mkdir -p bin
-	cd microgateway && $(MAKE) build-community
-	cp microgateway/dist/microgateway-ce bin/mgw-ce-linux-amd64
-	cd microgateway && GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') -X main.BuildHash=$$(git rev-parse HEAD 2>/dev/null || echo 'unknown') -X main.BuildTime=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/microgateway-ce-darwin ./cmd/microgateway
-	cp microgateway/dist/microgateway-ce-darwin bin/mgw-ce-darwin-amd64
 	chmod +x bin/*
-	@echo "✅ Built Community Edition: bin/midsommar-ce-* and bin/mgw-ce-*"
+	@echo "✅ Native build complete: bin/midsommar-$(EDITION) and bin/mgw-$(EDITION)"
 
-# Force build Enterprise Edition (require enterprise submodule)
-build-enterprise:
+# Build CE for native platform
+build-native-ce: build-frontend
+	@echo "🔨 Building CE for native platform with CGO..."
+	@mkdir -p bin
+	CGO_ENABLED=1 go build -o bin/midsommar-ce
+	cd microgateway && $(MAKE) build-community
+	cp microgateway/dist/microgateway-ce bin/mgw-ce
+	chmod +x bin/*
+	@echo "✅ Native CE build complete"
+
+# Build ENT for native platform
+build-native-ent: build-frontend
 	@if [ ! -f enterprise/.git ]; then \
 		echo "❌ ERROR: Enterprise submodule not initialized."; \
-		echo ""; \
-		echo "To build Enterprise Edition:"; \
-		echo "  1. make init-enterprise"; \
-		echo ""; \
-		echo "For enterprise access: contact enterprise@tyk.io"; \
+		echo "Run: make init-enterprise"; \
 		exit 1; \
 	fi
-	@echo "🏢 Force building Enterprise Edition..."
-	cd $(ADMIN_FRONTEND_DIR) && npm run build
-	@echo "Building Midsommar ENT..."
-	GOOS=linux GOARCH=amd64 go build -tags enterprise -o bin/midsommar-ent-linux-amd64
-	GOOS=darwin GOARCH=amd64 go build -tags enterprise -o bin/midsommar-ent-darwin-amd64
-	@echo "Building Microgateway ENT..."
+	@echo "🔨 Building ENT for native platform with CGO..."
 	@mkdir -p bin
+	CGO_ENABLED=1 go build -tags enterprise -o bin/midsommar-ent
 	cd microgateway && $(MAKE) build-enterprise
-	cp microgateway/dist/microgateway-ent bin/mgw-ent-linux-amd64
-	cd microgateway && GOOS=darwin GOARCH=amd64 go build -tags enterprise -ldflags "-X main.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo 'dev') -X main.BuildHash=$$(git rev-parse HEAD 2>/dev/null || echo 'unknown') -X main.BuildTime=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o dist/microgateway-ent-darwin ./cmd/microgateway
-	cp microgateway/dist/microgateway-ent-darwin bin/mgw-ent-darwin-amd64
+	cp microgateway/dist/microgateway-ent bin/mgw-ent
 	chmod +x bin/*
-	@echo "✅ Built Enterprise Edition: bin/midsommar-ent-* and bin/mgw-ent-*"
+	@echo "✅ Native ENT build complete"
+
+# ============================================================================
+# Production Builds (multi-platform, optimized, CGO enabled)
+# ============================================================================
+
+# Build production artifacts for all platforms (auto-detect edition)
+build-prod: build-frontend
+	@echo "🏗️  Building production $(EDITION) artifacts..."
+	@mkdir -p bin
+	$(MAKE) build-linux-amd64 EDITION=$(EDITION) BUILD_TAGS="$(BUILD_TAGS)"
+	$(MAKE) build-linux-arm64 EDITION=$(EDITION) BUILD_TAGS="$(BUILD_TAGS)"
+	$(MAKE) build-darwin-amd64 EDITION=$(EDITION) BUILD_TAGS="$(BUILD_TAGS)"
+	$(MAKE) build-darwin-arm64 EDITION=$(EDITION) BUILD_TAGS="$(BUILD_TAGS)"
+	cd microgateway && $(MAKE) build-prod EDITION=$(EDITION)
+	cp microgateway/dist/microgateway-$(EDITION)-linux-amd64 bin/mgw-$(EDITION)-linux-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-$(EDITION)-linux-arm64 bin/mgw-$(EDITION)-linux-arm64 2>/dev/null || true
+	cp microgateway/dist/microgateway-$(EDITION)-darwin-amd64 bin/mgw-$(EDITION)-darwin-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-$(EDITION)-darwin-arm64 bin/mgw-$(EDITION)-darwin-arm64 2>/dev/null || true
+	chmod +x bin/* 2>/dev/null || true
+	@echo "✅ Production build complete"
+
+# Build production CE for all platforms
+build-prod-ce: build-frontend
+	@echo "🏗️  Building production CE artifacts..."
+	@mkdir -p bin
+	$(MAKE) build-linux-amd64 EDITION=ce BUILD_TAGS=""
+	$(MAKE) build-linux-arm64 EDITION=ce BUILD_TAGS=""
+	$(MAKE) build-darwin-amd64 EDITION=ce BUILD_TAGS=""
+	$(MAKE) build-darwin-arm64 EDITION=ce BUILD_TAGS=""
+	cd microgateway && $(MAKE) build-prod-ce
+	cp microgateway/dist/microgateway-ce-linux-amd64 bin/mgw-ce-linux-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ce-linux-arm64 bin/mgw-ce-linux-arm64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ce-darwin-amd64 bin/mgw-ce-darwin-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ce-darwin-arm64 bin/mgw-ce-darwin-arm64 2>/dev/null || true
+	chmod +x bin/* 2>/dev/null || true
+	@echo "✅ Production CE build complete"
+
+# Build production ENT for all platforms
+build-prod-ent: build-frontend
+	@if [ ! -f enterprise/.git ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized."; \
+		echo "Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "🏗️  Building production ENT artifacts..."
+	@mkdir -p bin
+	$(MAKE) build-linux-amd64 EDITION=ent BUILD_TAGS="-tags enterprise"
+	$(MAKE) build-linux-arm64 EDITION=ent BUILD_TAGS="-tags enterprise"
+	$(MAKE) build-darwin-amd64 EDITION=ent BUILD_TAGS="-tags enterprise"
+	$(MAKE) build-darwin-arm64 EDITION=ent BUILD_TAGS="-tags enterprise"
+	cd microgateway && $(MAKE) build-prod-ent
+	cp microgateway/dist/microgateway-ent-linux-amd64 bin/mgw-ent-linux-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ent-linux-arm64 bin/mgw-ent-linux-arm64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ent-darwin-amd64 bin/mgw-ent-darwin-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ent-darwin-arm64 bin/mgw-ent-darwin-arm64 2>/dev/null || true
+	chmod +x bin/* 2>/dev/null || true
+	@echo "✅ Production ENT build complete"
+
+# ============================================================================
+# Platform-Specific Builds (CGO enabled)
+# ============================================================================
+
+# Linux AMD64 with CGO
+build-linux-amd64:
+	@echo "Building midsommar $(EDITION) for linux/amd64 with CGO..."
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-linux-amd64
+
+# Linux ARM64 with CGO (requires cross-compiler)
+build-linux-arm64:
+	@echo "Building midsommar $(EDITION) for linux/arm64 with CGO..."
+	@if ! which aarch64-linux-gnu-gcc > /dev/null 2>&1; then \
+		echo "⚠️  Warning: aarch64-linux-gnu-gcc not found"; \
+		echo "   Install: sudo apt-get install gcc-aarch64-linux-gnu (Ubuntu/Debian)"; \
+		echo "   Or: brew install FiloSottile/musl-cross/musl-cross (macOS)"; \
+		echo "   Attempting build anyway..."; \
+	fi
+	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
+	CC=aarch64-linux-gnu-gcc \
+	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-linux-arm64
+
+# Darwin AMD64 with CGO
+build-darwin-amd64:
+	@echo "Building midsommar $(EDITION) for darwin/amd64 with CGO..."
+	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
+	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-darwin-amd64
+
+# Darwin ARM64 with CGO
+build-darwin-arm64:
+	@echo "Building midsommar $(EDITION) for darwin/arm64 with CGO..."
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
+	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-darwin-arm64
+
+# ============================================================================
+# Backward Compatibility Targets
+# ============================================================================
+
+# Build for local development (alias for build-native)
+build-local: build-native
+
+# Legacy build-community (now uses explicit CGO builds)
+build-community: build-prod-ce
+	@echo "Note: build-community now builds production artifacts with CGO"
+	@echo "For quick local builds, use: make build-native-ce"
+
+# Legacy build-enterprise (now uses explicit CGO builds)
+build-enterprise: build-prod-ent
+	@echo "Note: build-enterprise now builds production artifacts with CGO"
+	@echo "For quick local builds, use: make build-native-ent"
 
 # Build all plugins
 plugins:
@@ -244,20 +364,9 @@ build-docker-extras:
 	cd extra/reranker && \
 	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/reranker_cpu:latest --push -f dockerfile.cpu .
 
-# Enterprise Edition specific targets
-.PHONY: build-enterprise
-build-enterprise:
-	@if [ ! -f enterprise/.git ]; then \
-		echo "❌ ERROR: Enterprise submodule not initialized."; \
-		echo ""; \
-		echo "To build Enterprise Edition:"; \
-		echo "  1. Ensure you have access to the private repository"; \
-		echo "  2. Run: make init-enterprise"; \
-		echo ""; \
-		echo "For enterprise access: contact enterprise@tyk.io"; \
-		exit 1; \
-	fi
-	$(MAKE) build BUILD_TAGS="-tags enterprise" EDITION=ent
+# ============================================================================
+# Enterprise Submodule Management
+# ============================================================================
 
 .PHONY: init-enterprise
 init-enterprise:
@@ -297,4 +406,11 @@ show-edition:
 		echo "Enterprise submodule: not initialized"; \
 	fi
 
-.PHONY: all build build-frontend build-binaries build-local build-community build-enterprise plugins test clean start-dev stop-dev perf-test perf-profile perf-baseline perf-compare perf-report perf-clean init-enterprise update-enterprise show-edition
+.PHONY: all build help build-frontend \
+	build-native build-native-ce build-native-ent \
+	build-prod build-prod-ce build-prod-ent \
+	build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 \
+	build-local build-community build-enterprise \
+	plugins test clean start-dev stop-dev \
+	perf-test perf-profile perf-baseline perf-compare perf-report perf-clean \
+	init-enterprise update-enterprise show-edition
