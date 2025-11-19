@@ -4,7 +4,7 @@ name: SentinelOne CNS Scan
 on:  # yamllint disable-line rule:truthy
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
-    branches: [master]
+    branches: [main]
 
 jobs:
   s1_scanner:
