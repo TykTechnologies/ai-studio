@@ -114,3 +114,4 @@ examples/plugins/gateway/legacy-collectors/elasticsearch_collector/elasticsearch
 examples/plugins/gateway/legacy-collectors/file_analytics_collector/file_analytics_collector
 examples/plugins/gateway/legacy-collectors/file_budget_collector/file_budget_collector
 examples/plugins/gateway/legacy-collectors/file_proxy_collector/file_proxy_collector
+*.out
