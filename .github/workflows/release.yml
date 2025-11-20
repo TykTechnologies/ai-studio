@@ -46,10 +46,10 @@ jobs:
       fail-fast: false
       matrix:
         golang_cross:
-          - 1.23-bullseye
+          - 1.24-bullseye
         include:
           -
-            golang_cross: 1.23-bullseye
+            golang_cross: 1.24-bullseye
             goreleaser: "ci/goreleaser/goreleaser.yml"
             cgo: 1
             rpmvers: "el/7 el/8 el/9 amazon/2 amazon/2023"
@@ -180,7 +180,7 @@ jobs:
           labels: "org.opencontainers.image.title=tyk-ai-studio  (distroless) \norg.opencontainers.image.description=Tyk AI Studio\norg.opencontainers.image.vendor=tyk.io\norg.opencontainers.image.version=${{ github.ref_name }}\n"
       -
         name: push image to prod
-        if: ${{ matrix.golang_cross == '1.23-bullseye' }}
+        if: ${{ matrix.golang_cross == '1.24-bullseye' }}
         uses: docker/build-push-action@v6
         with:
           context: "midsommar/dist"
@@ -196,7 +196,7 @@ jobs:
       -
         name: save deb
         uses: actions/upload-artifact@v4
-        if: ${{ matrix.golang_cross == '1.23-bullseye' }}
+        if: ${{ matrix.golang_cross == '1.24-bullseye' }}
         with:
           name: deb
           retention-days: 1
@@ -207,7 +207,7 @@ jobs:
       -
         name: save rpm
         uses: actions/upload-artifact@v4
-        if: ${{ matrix.golang_cross == '1.23-bullseye' }}
+        if: ${{ matrix.golang_cross == '1.24-bullseye' }}
         with:
           name: rpm
           retention-days: 1
