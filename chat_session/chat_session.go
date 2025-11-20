@@ -586,6 +586,8 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 	for i, _ := range refs {
 		content, ok := cs.GetFileReference(refs[i])
 		if ok {
+			currentContent := content
+
 			for i2, _ := range cs.filters {
 				sr := scripting.NewScriptRunner(cs.filters[i2].Script)
 				if sr == nil {
@@ -593,11 +595,46 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 					continue
 				}
 
-				if err := sr.RunFilter(content, cs.service); err != nil {
-					return fmt.Sprintf("filter denied content in %s", refs[i]), false
+				// Create MessageContent for file content (user role)
+				messages := []llms.MessageContent{
+					{
+						Role:  llms.ChatMessageTypeHuman,
+						Parts: []llms.ContentPart{llms.TextPart(currentContent)},
+					},
+				}
+
+				scriptInput := &scripting.ScriptInput{
+					RawInput:   currentContent,
+					Messages:   messages,
+					VendorName: string(cs.chatRef.LLM.Vendor),
+					ModelName:  cs.chatRef.LLMSettings.ModelName,
+					Context: map[string]interface{}{
+						"session_id": cs.ID(),
+						"user_id":    cs.userID,
+						"chat_id":    cs.chatRef.ID,
+						"file_ref":   refs[i],
+					},
+					IsChat: true,
+				}
+
+				output, err := sr.RunScript(scriptInput, cs.service)
+				if err != nil {
+					return fmt.Sprintf("filter error in %s: %v", refs[i], err), false
+				}
+
+				if output.Block {
+					msg := output.Message
+					if msg == "" {
+						msg = "content blocked by policy"
+					}
+					return fmt.Sprintf("filter denied content in %s: %s", refs[i], msg), false
+				}
+
+				// Apply modifications for next filter
+				if output.Payload != "" && output.Payload != currentContent {
+					currentContent = output.Payload
 				}
 			}
-
 		}
 	}
 
@@ -1272,19 +1309,61 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				fmt.Println("===============================================")
 			}
 
+			currentResponse := asStr
+
 			for i, _ := range toolDef.Filters {
 				filter := toolDef.Filters[i]
 				sr := scripting.NewScriptRunner(filter.Script)
 				cs.sendStatus(fmt.Sprintf("Running governance filter: `%s`", filter.Name))
-				filtered, err := sr.RunMiddleware(asStr, cs.service)
+
+				// Create MessageContent for tool response
+				messages := []llms.MessageContent{
+					{
+						Role:  llms.ChatMessageTypeTool,
+						Parts: []llms.ContentPart{llms.TextPart(currentResponse)},
+					},
+				}
+
+				scriptInput := &scripting.ScriptInput{
+					RawInput:   currentResponse,
+					Messages:   messages,
+					VendorName: string(cs.chatRef.LLM.Vendor),
+					ModelName:  cs.chatRef.LLMSettings.ModelName,
+					Context: map[string]interface{}{
+						"session_id": cs.ID(),
+						"user_id":    cs.userID,
+						"tool_name":  toolDef.Name,
+						"tool_id":    toolDef.ID,
+						"call_id":    t.ID,
+					},
+					IsChat: true,
+				}
+
+				output, err := sr.RunScript(scriptInput, cs.service)
 				if err != nil {
-					errMsg := fmt.Sprintf("error running governance filter: %v", err)
+					errMsg := fmt.Sprintf("filter error: %v", err)
 					cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
 					continue
 				}
 
-				asStr = filtered
+				// Check if tool response should be blocked (NEW capability)
+				if output.Block {
+					msg := output.Message
+					if msg == "" {
+						msg = "tool response blocked by policy"
+					}
+					errMsg := fmt.Sprintf("blocked by filter '%s': %s", filter.Name, msg)
+					cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+					continue
+				}
+
+				// Apply modifications for next filter
+				if output.Payload != "" && output.Payload != currentResponse {
+					currentResponse = output.Payload
+				}
 			}
+
+			asStr = currentResponse
 
 			toolResp := llms.ToolCallResponse{
 				ToolCallID: t.ID,

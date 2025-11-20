@@ -23,3 +23,13 @@ func (sr *ScriptRunner) RunMiddleware(payload string, serviceRef services.Servic
 func RunFilter(sourceCode string, payload string, svcRef services.ServiceInterface) error {
 	return nil // Always allow in CE
 }
+
+// RunScript always passes through in CE (enterprise feature)
+func (sr *ScriptRunner) RunScript(input *ScriptInput, serviceRef services.ServiceInterface) (*ScriptOutput, error) {
+	slog.Warn("⚠️ CE: Script execution skipped (enterprise feature)")
+	return &ScriptOutput{
+		Block:   false,
+		Payload: input.RawInput, // Pass through unchanged
+		Message: "",
+	}, nil
+}

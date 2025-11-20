@@ -2,7 +2,12 @@ package scripting
 
 import (
 	"testing"
+
+	"github.com/tmc/langchaingo/llms"
 )
+
+// Type alias for convenience in tests
+type MessageContent = llms.MessageContent
 
 func TestRunFilter(t *testing.T) {
 	tests := []struct {
@@ -140,6 +145,242 @@ func TestScriptRunnerConcurrency(t *testing.T) {
 // 	fmt.Println("===================================================================")
 
 // }
+
+func TestRunScript(t *testing.T) {
+	tests := []struct {
+		name          string
+		sourceCode    string
+		input         *ScriptInput
+		wantBlock     bool
+		wantPayload   string
+		wantMessage   string
+		wantErr       bool
+		errMsg        string
+	}{
+		{
+			name: "pass through - no blocking, no modification",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: input.raw_input,
+					message: ""
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"test": "data"}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			},
+			wantBlock:   false,
+			wantPayload: `{"test": "data"}`,
+			wantMessage: "",
+			wantErr:     false,
+		},
+		{
+			name: "block request",
+			sourceCode: `
+				output := {
+					block: true,
+					payload: "",
+					message: "Blocked by policy"
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"prompt": "restricted"}`,
+				Messages:   []MessageContent{},
+				VendorName: "anthropic",
+				ModelName:  "claude-3",
+			},
+			wantBlock:   true,
+			wantPayload: "",
+			wantMessage: "Blocked by policy",
+			wantErr:     false,
+		},
+		{
+			name: "modify payload",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: "[REDACTED]",
+					message: "Content redacted"
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"prompt": "secret info"}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			},
+			wantBlock:   false,
+			wantPayload: "[REDACTED]",
+			wantMessage: "Content redacted",
+			wantErr:     false,
+		},
+		{
+			name: "access vendor and model metadata",
+			sourceCode: `
+				// Block if not using OpenAI gpt-4
+				should_block := input.vendor_name != "openai" || input.model_name != "gpt-4"
+
+				output := {
+					block: should_block,
+					payload: input.raw_input,
+					message: should_block ? "Only OpenAI GPT-4 allowed" : ""
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"test": "data"}`,
+				Messages:   []MessageContent{},
+				VendorName: "anthropic",
+				ModelName:  "claude-3",
+			},
+			wantBlock:   true,
+			wantPayload: `{"test": "data"}`,
+			wantMessage: "Only OpenAI GPT-4 allowed",
+			wantErr:     false,
+		},
+		{
+			name: "access context metadata",
+			sourceCode: `
+				// Block if app_id is missing
+				has_app_id := false
+				if input.context && input.context.app_id {
+					has_app_id = true
+				}
+
+				output := {
+					block: !has_app_id,
+					payload: input.raw_input,
+					message: has_app_id ? "" : "Missing app_id"
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"test": "data"}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+				Context: map[string]interface{}{
+					"app_id": 123,
+					"user_id": 456,
+				},
+			},
+			wantBlock:   false,
+			wantPayload: `{"test": "data"}`,
+			wantMessage: "",
+			wantErr:     false,
+		},
+		{
+			name: "missing output variable",
+			sourceCode: `
+				// Script doesn't set output
+				dummy := "test"
+			`,
+			input: &ScriptInput{
+				RawInput: `{"test": "data"}`,
+			},
+			wantErr: true,
+			errMsg:  "script must set 'output' variable",
+		},
+		{
+			name: "invalid output format",
+			sourceCode: `
+				// Output is not a map
+				output := "invalid"
+			`,
+			input: &ScriptInput{
+				RawInput: `{"test": "data"}`,
+			},
+			wantErr: true,
+			errMsg:  "output must be a map",
+		},
+		{
+			name: "syntax error",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: input.raw_input
+					// missing closing brace
+			`,
+			input: &ScriptInput{
+				RawInput: `{"test": "data"}`,
+			},
+			wantErr: true,
+			errMsg:  "compilation error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := NewScriptRunner([]byte(tt.sourceCode))
+			output, err := runner.RunScript(tt.input, nil)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("RunScript() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if tt.wantErr {
+				if err != nil && tt.errMsg != "" {
+					if got := err.Error(); !contains(got, tt.errMsg) {
+						t.Errorf("RunScript() error message = %v, want substring %v", got, tt.errMsg)
+					}
+				}
+				return
+			}
+
+			if output.Block != tt.wantBlock {
+				t.Errorf("RunScript() Block = %v, want %v", output.Block, tt.wantBlock)
+			}
+
+			if output.Payload != tt.wantPayload {
+				t.Errorf("RunScript() Payload = %v, want %v", output.Payload, tt.wantPayload)
+			}
+
+			if output.Message != tt.wantMessage {
+				t.Errorf("RunScript() Message = %v, want %v", output.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
+func TestRunScriptConcurrency(t *testing.T) {
+	sourceCode := `
+		output := {
+			block: false,
+			payload: input.raw_input,
+			message: ""
+		}
+	`
+
+	runner := NewScriptRunner([]byte(sourceCode))
+	concurrentRuns := 100
+
+	done := make(chan bool)
+	for i := 0; i < concurrentRuns; i++ {
+		go func() {
+			input := &ScriptInput{
+				RawInput:   `{"test": "data"}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			}
+			_, err := runner.RunScript(input, nil)
+			if err != nil {
+				t.Errorf("Concurrent RunScript() error = %v", err)
+			}
+			done <- true
+		}()
+	}
+
+	for i := 0; i < concurrentRuns; i++ {
+		<-done
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && s[:len(substr)] == substr
+}
 
 var test_data = `
 {"expand":"schema,names","startAt":0,"maxResults":50,"total":7,"issues":[{"expand":"operations,versionedRepresentations,editmeta,changelog,renderedFields","id":"45156","self":"https://tyktech.atlassian.net/rest/api/3/issue/45156","key":"TD-3482","fields":{"summary":"Allow 'Artnight' to rollback to v5.5.0","created":"2024-11-13T20:27:56.526+0000","status":{"self":"https://tyktech.atlassian.net/rest/api/3/status/10005","description":"","iconUrl":"https://tyktech.atlassian.net/","name":"Done","id":"10005","statusCategory":{"self":"https://tyktech.atlassian.net/rest/api/3/statuscategory/3","id":3,"key":"done","colorName":"green","name":"Done"}}}},{"expand":"operations,versionedRepresentations,editmeta,changelog,renderedFields","id":"45155","self":"https://tyktech.atlassian.net/rest/api/3/issue/45155","key":"TD-3481","fields":{"summary":"Create runbook for bulk custom domain add","created":"2024-11-13T19:31:41.972+0000","status":{"self":"https://tyktech.atlassian.net/rest/api/3/status/10003","description":"","iconUrl":"https://tyktech.atlassian.net/","name":"New","id":"10003","statusCategory":{"self":"https://tyktech.atlassian.net/rest/api/3/statuscategory/2","id":2,"key":"new","colorName":"blue-gray","name":"To Do"}}}},{"expand":"operations,versionedRepresentations,editmeta,changelog,renderedFields","id":"45154","self":"https://tyktech.atlassian.net/rest/api/3/issue/45154","key":"TT-13567","fields":{"summary":"[Docs] Review & update developer portal integration for streams","created":"2024-11-13T17:24:21.690+0000","status":{"self":"https://tyktech.atlassian.net/rest/api/3/status/1","description":"The issue is open and ready for the assignee to start work on it.","iconUrl":"https://tyktech.atlassian.net/images/icons/statuses/open.png","name":"Open","id":"1","statusCategory":{"self":"https://tyktech.atlassian.net/rest/api/3/statuscategory/2","id":2,"key":"new","colorName":"blue-gray","name":"To Do"}}}},{"expand":"operations,versionedRepresentations,editmeta,changelog,renderedFields","id":"45153","self":"https://tyktech.atlassian.net/rest/api/3/issue/45153","key":"TD-3480","fields":{"summary":"FiscalNote ","created":"2024-11-13T17:23:33.246+0000","status":{"self":"https://tyktech.atlassian.net/rest/api/3/status/3","description":"This issue is being actively worked on at the moment by the assignee.","iconUrl":"https://tyktech.atlassian.net/images/icons/statuses/inprogress.png","name":"In Progress","id":"3","statusCategory":{"self":"https://tyktech.atlassian.net/rest/api/3/statuscategory/4","id":4,"key":"indeterminate","colorName":"yellow","name":"In Progress"}}}},{"expand":"operations,versionedRepresentations,editmeta,changelog,renderedFields","id":"45151","self":"https://tyktech.atlassian.net/rest/api/3/issue/45151","key":"TT-13566","fields":{"summary":"Make upstream auth oauth password client secret not required in oas schema","created":"2024-11-13T15:03:48.591+0000","status":{"self":"https://tyktech.atlassian.net/rest/api/3/status/10037","description":"","iconUrl":"https://tyktech.atlassian.net/images/icons/statuses/generic.png","name":"In Dev","id":"10037","statusCategory":{"self":"https://tyktech.atlassian.net/rest/api/3/statuscategory/4","id":4,"key":"indeterminate","colorName":"yellow","name":"In Progress"}}}},{"expand":"operations,versionedRepresentations,editmeta,changelog,renderedFields","id":"45149","self":"https://tyktech.atlassian.net/rest/api/3/issue/45149","key":"TD-3479","fields":{"summary":"Liip/SBB Limits","created":"2024-11-13T13:43:55.347+0000","status":{"self":"https://tyktech.atlassian.net/rest/api/3/status/3","description":"This issue is being actively worked on at the moment by the assignee.","iconUrl":"https://tyktech.atlassian.net/images/icons/statuses/inprogress.png","name":"In Progress","id":"3","statusCategory":{"self":"https://tyktech.atlassian.net/rest/api/3/statuscategory/4","id":4,"key":"indeterminate","colorName":"yellow","name":"In Progress"}}}},{"expand":"operations,versionedRepresentations,editmeta,changelog,renderedFields","id":"45148","self":"https://tyktech.atlassian.net/rest/api/3/issue/45148","key":"TT-13565","fields":{"summary":"Disable \"Hybrid data plane configuration\" option inside Type drop down if Control Plane is not deployed","created":"2024-11-13T13:15:05.346+0000","status":{"self":"https://tyktech.atlassian.net/rest/api/3/status/1","description":"The issue is open and ready for the assignee to start work on it.","iconUrl":"https://tyktech.atlassian.net/images/icons/statuses/open.png","name":"Open","id":"1","statusCategory":{"self":"https://tyktech.atlassian.net/rest/api/3/statuscategory/2","id":2,"key":"new","colorName":"blue-gray","name":"To Do"}}}}]}

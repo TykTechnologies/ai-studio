@@ -34,6 +34,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/pb33f/libopenapi"
+	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/schema"
 )
 
@@ -80,22 +81,23 @@ type MCPServerCache struct {
 }
 
 type Proxy struct {
-	gatewayService      services.ServiceInterface
-	budgetService       services.BudgetServiceInterface
-	server              *http.Server
-	llms                map[string]*models.LLM
-	datasources         map[string]*models.Datasource
-	mu                  sync.RWMutex
-	config              *Config
-	credValidator       *CredentialValidator
-	modelValidator      *ModelValidator
-	filters             []*models.Filter
-	authService         *auth.AuthService
-	mcpServers          map[string]*MCPServerCache
-	mcpServersMu        sync.RWMutex
-	openAPICache        map[string]*OpenAPICache
-	openAPICacheMu      sync.RWMutex
-	responseHookManager ResponseHookManager // REST-only response hooks
+	gatewayService          services.ServiceInterface
+	budgetService           services.BudgetServiceInterface
+	server                  *http.Server
+	llms                    map[string]*models.LLM
+	datasources             map[string]*models.Datasource
+	mu                      sync.RWMutex
+	config                  *Config
+	credValidator           *CredentialValidator
+	modelValidator          *ModelValidator
+	messageExtractorRegistry *MessageExtractorRegistry
+	filters                 []*models.Filter
+	authService             *auth.AuthService
+	mcpServers              map[string]*MCPServerCache
+	mcpServersMu            sync.RWMutex
+	openAPICache            map[string]*OpenAPICache
+	openAPICacheMu          sync.RWMutex
+	responseHookManager     ResponseHookManager // REST-only response hooks
 }
 
 type Config struct {
@@ -137,6 +139,15 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	modelVal.RegisterExtractor(strings.ToLower(string(models.OLLAMA)), OpenAIModelExtractor)
 	modelVal.RegisterExtractor(strings.ToLower(string(models.MOCK_VENDOR)), OpenAIModelExtractor)
 	p.modelValidator = modelVal
+
+	// Initialize message extractor registry for filter scripts
+	messageExtractorRegistry := NewMessageExtractorRegistry()
+	messageExtractorRegistry.Register(&OpenAIMessageExtractor{})
+	messageExtractorRegistry.Register(&AnthropicMessageExtractor{})
+	messageExtractorRegistry.Register(&GoogleAIMessageExtractor{})
+	messageExtractorRegistry.Register(&VertexMessageExtractor{})
+	messageExtractorRegistry.Register(&OllamaMessageExtractor{})
+	p.messageExtractorRegistry = messageExtractorRegistry
 
 	return p
 }
@@ -838,15 +849,69 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	if err != nil {
 		return err
 	}
+
+	// Extract model from context (set by modelValidationMiddleware)
+	modelName, _ := r.Context().Value("model_name").(string)
+
+	// Extract messages using the message extractor registry
+	messages, err := p.messageExtractorRegistry.Extract(string(llm.Vendor), r, bodyBytes)
+	if err != nil {
+		slog.Warn("Failed to extract messages for filter", "vendor", llm.Vendor, "error", err)
+		messages = []llms.MessageContent{} // Continue with empty messages
+	}
+
+	// Get app from context if available
+	var appID uint
+	if app, ok := r.Context().Value("app").(*models.App); ok {
+		appID = app.ID
+	}
+
+	// Build script input with rich context
+	scriptInput := &scripting.ScriptInput{
+		RawInput:   string(bodyBytes),
+		Messages:   messages,
+		VendorName: string(llm.Vendor),
+		ModelName:  modelName,
+		Context: map[string]interface{}{
+			"llm_id":     llm.ID,
+			"app_id":     appID,
+			"request_id": r.Header.Get("X-Request-ID"),
+		},
+		IsChat: false,
+	}
+
+	// Run filters in chain
 	for _, filter := range llm.Filters {
 		runner := scripting.NewScriptRunner(filter.Script)
-		// Note: Filter scripts need to be updated to work with interface
-		// For now, passing nil to avoid compilation errors
-		err := runner.RunFilter(string(bodyBytes), nil)
+		output, err := runner.RunScript(scriptInput, nil)
 		if err != nil {
-			return fmt.Errorf("Policy error: %s", filter.Name)
+			return fmt.Errorf("script error in filter '%s': %v", filter.Name, err)
+		}
+
+		// Check if request should be blocked
+		if output.Block {
+			msg := output.Message
+			if msg == "" {
+				msg = "blocked by policy"
+			}
+			return fmt.Errorf("Policy error: %s - %s", filter.Name, msg)
+		}
+
+		// Apply modifications to the request body for next filter
+		if output.Payload != "" && output.Payload != scriptInput.RawInput {
+			scriptInput.RawInput = output.Payload
+			bodyBytes = []byte(output.Payload)
+
+			// Re-extract messages from modified payload for next filter
+			if newMessages, err := p.messageExtractorRegistry.Extract(string(llm.Vendor), r, bodyBytes); err == nil {
+				scriptInput.Messages = newMessages
+			}
 		}
 	}
+
+	// Update request body with final modified payload
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	r.ContentLength = int64(len(bodyBytes))
 
 	v, ok := switches.VendorMap[llm.Vendor]
 	if !ok {
