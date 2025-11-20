@@ -43,7 +43,7 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet["hub_spoke_multi_tenant"] = edge_management.IsEnterpriseAvailable()
 	featureSet["feature_groups"] = group_access.IsFilteringEnabled()
 
-	if cfg := config.Get(); cfg != nil {
+	if cfg := config.Get(""); cfg != nil {
 		featureSet["docs_url"] = cfg.DocsURL
 	}
 
@@ -683,7 +683,7 @@ func (a *API) handleOAuthAuthorize(c *gin.Context) {
 		return
 	}
 
-	appConf := config.Get()
+	appConf := config.Get("")
 	consentPageBaseURL, err_parse_site_url := url.Parse(appConf.SiteURL)
 	if err_parse_site_url != nil {
 		log.Printf("Error parsing SiteURL '%s' for consent redirect: %v", appConf.SiteURL, err_parse_site_url)
@@ -1232,7 +1232,7 @@ func (a *API) handleOAuthMetadata(c *gin.Context) {
 		return
 	}
 
-	appConf := config.Get()
+	appConf := config.Get("")
 	baseURL, err := url.Parse(appConf.AuthServerURL)
 	if err != nil {
 		log.Printf("Error parsing AuthServerURL '%s': %v", appConf.AuthServerURL, err)

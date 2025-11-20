@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"os/signal"
 	"strconv"
@@ -48,8 +49,12 @@ func printWelcome() {
 func main() {
 	printWelcome()
 
+	// Parse command-line flags
+	envFile := flag.String("env", "", "Path to environment file (default: .env in current directory)")
+	flag.Parse()
+
 	// Get configuration first to initialize logger with correct level
-	appConf := config.Get()
+	appConf := config.Get(*envFile)
 
 	// Initialize logger with configured level
 	logger.Init(appConf.LogLevel)

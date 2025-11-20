@@ -97,7 +97,9 @@ const Drawer = () => {
         ...(uiOptions?.show_sso_config && config?.tibEnabled
           ? [{ id: 'sso-profiles', text: 'Identity providers', path: '/admin/sso-profiles' }]
           : []),
-        { id: 'filters', text: 'Filters & Middleware', path: '/admin/filters' },
+        ...(config?.is_enterprise
+          ? [{ id: 'filters', text: 'Filters & Middleware', path: '/admin/filters' }]
+          : []),
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets' },
         { id: 'branding', text: 'Branding', path: '/admin/branding' },
       ],

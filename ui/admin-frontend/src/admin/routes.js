@@ -117,11 +117,6 @@ const mainAdminRoutes = (
     <Route path="tools/edit/:id" element={<ToolForm />} />
     <Route path="tools/new" element={<ToolForm />} />
 
-    <Route path="filters" element={<FilterList />} />
-    <Route path="filters/:id" element={<FilterDetails />} />
-    <Route path="filters/edit/:id" element={<FilterForm />} />
-    <Route path="filters/new" element={<FilterForm />} />
-
     <Route path="apps" element={<AppList />} />
     <Route path="apps/:id" element={<AppDetails />} />
     <Route path="apps/edit/:id" element={<AppForm />} />
@@ -143,6 +138,11 @@ const mainAdminRoutes = (
     <Route path="secrets/:id" element={<SecretDetails />} />
     <Route path="secrets/edit/:id" element={<SecretForm />} />
     <Route path="secrets/new" element={<SecretForm />} />
+
+    <Route path="filters" element={<FilterList />} />
+    <Route path="filters/:id" element={<FilterDetails />} />
+    <Route path="filters/edit/:id" element={<FilterForm />} />
+    <Route path="filters/new" element={<FilterForm />} />
   </>
 );
 

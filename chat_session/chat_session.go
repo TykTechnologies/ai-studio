@@ -712,7 +712,7 @@ func extractEmbeddedToolCalls(content string) (string, []llms.ToolCall) {
 }
 
 func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
-	if config.Get().EchoConversation {
+	if config.Get("").EchoConversation {
 		handleEcho("LLM", w.Response)
 	}
 	resp := w.Response
@@ -841,7 +841,7 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		}
 	}
 
-	if config.Get().EchoConversation {
+	if config.Get("").EchoConversation {
 		type ComboObj struct {
 			Message *models.UserMessage
 			Docs    []schema.Document
@@ -1235,14 +1235,14 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 			cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
 			cs.sendStatus(fmt.Sprintf("Parameters: `%s`", t.FunctionCall.Arguments))
-			if config.Get().EchoConversation {
+			if config.Get("").EchoConversation {
 				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
 				slog.Info("[TOOL-CALL]", "[PARAMS]", t.FunctionCall.Arguments)
 			}
 
 			resp, err := uc.CallOperation(t.FunctionCall.Name, args.Parameters, args.Body, args.Headers)
 			if err != nil {
-				if config.Get().EchoConversation {
+				if config.Get("").EchoConversation {
 					slog.Info("[TOOL-CALL]", "[ERROR]", err)
 				}
 
@@ -1265,7 +1265,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 			t1 := time.Now()
 
-			if config.Get().EchoConversation {
+			if config.Get("").EchoConversation {
 				fmt.Println("===============================================")
 				slog.Info("[TOOL CALL]", "[FUNCTION]", t.FunctionCall.Name)
 				fmt.Println(asStr)
@@ -1293,7 +1293,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			}
 
 			cs.sendStatus(fmt.Sprintf("Function `%s()` returned: `%d` bytes", t.FunctionCall.Name, len(asStr)))
-			if config.Get().EchoConversation && len(toolDef.Filters) > 0 {
+			if config.Get("").EchoConversation && len(toolDef.Filters) > 0 {
 				slog.Info("[TOOL-CALL]", "[FILTERED]", t.FunctionCall.Name)
 				fmt.Println("===============================================")
 				fmt.Println(asStr)

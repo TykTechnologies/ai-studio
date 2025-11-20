@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -20,6 +21,15 @@ import (
 // @Failure 500 {object} ErrorResponse
 // @Router /filters [post]
 func (a *API) createFilter(c *gin.Context) {
+	// Check if enterprise features are enabled
+	if !config.IsEnterprise() {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Enterprise Feature", "Filter scripting is an Enterprise feature. Visit https://tyk.io/enterprise for more information."}}})
+		return
+	}
+
 	var input FilterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
@@ -101,6 +111,15 @@ func (a *API) getFilter(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /filters/{id} [patch]
 func (a *API) updateFilter(c *gin.Context) {
+	// Check if enterprise features are enabled
+	if !config.IsEnterprise() {
+		c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Enterprise Feature", "Filter scripting is an Enterprise feature. Visit https://tyk.io/enterprise for more information."}}})
+		return
+	}
+
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {

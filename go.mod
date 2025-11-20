@@ -7,6 +7,7 @@ toolchain go1.24.7
 require (
 	dario.cat/mergo v1.0.2
 	github.com/TykTechnologies/midsommar/microgateway v0.0.0
+	github.com/TykTechnologies/midsommar/v2/enterprise v0.0.0
 	github.com/TykTechnologies/tyk-identity-broker v1.7.0
 	github.com/d5/tengo/v2 v2.17.0
 	github.com/dslipak/pdf v0.0.2
@@ -70,7 +71,6 @@ require (
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/TykTechnologies/gojsonschema v0.0.0-20170222154038-dcb3e4bb7990 // indirect
 	github.com/TykTechnologies/graphql-go-tools v1.6.2-0.20240705065952-ae6008677a48 // indirect
-	github.com/TykTechnologies/midsommar/v2/enterprise v0.0.0 // indirect
 	github.com/TykTechnologies/murmur3 v0.0.0-20230310161213-aad17efd5632 // indirect
 	github.com/TykTechnologies/opentelemetry v0.0.21 // indirect
 	github.com/TykTechnologies/storage v1.2.2 // indirect

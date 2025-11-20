@@ -925,8 +925,8 @@ func (a *API) handleGetConfig(c *gin.Context) {
 	apiBaseURL := fmt.Sprintf("%s://%s", scheme, host)
 
 	suMode := "both"
-	if config.Get().DefaultSignupMode != "" {
-		suMode = config.Get().DefaultSignupMode
+	if config.Get("").DefaultSignupMode != "" {
+		suMode = config.Get("").DefaultSignupMode
 	}
 
 	// Get branding settings
@@ -946,15 +946,15 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		}
 	}
 
-	config := FrontendConfig{
+	cfg := FrontendConfig{
 		APIBaseURL:        apiBaseURL,
-		ProxyURL:          config.Get().ProxyURL,
+		ProxyURL:          config.Get("").ProxyURL,
 		DefaultSignUpMode: suMode,
 		TIBEnabled:        sso.IsEnterpriseAvailable(),
-		IsEnterprise:      sso.IsEnterpriseAvailable(), // Use SSO as proxy for enterprise detection
-		DocsLinks:         config.Get().DocsLinks,
+		IsEnterprise:      config.IsEnterprise(), // Detect enterprise edition via build tags
+		DocsLinks:         config.Get("").DocsLinks,
 		Branding:          brandingConfig,
 	}
 
-	c.JSON(http.StatusOK, config)
+	c.JSON(http.StatusOK, cfg)
 }

@@ -171,10 +171,25 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 			return fmt.Errorf("failed to insert LLM %d: %w", pbLLM.Id, err)
 		}
 
+		// Create llm_filters join table entries for this LLM
+		for i, filterID := range pbLLM.FilterIds {
+			llmFilter := map[string]interface{}{
+				"llm_id":      pbLLM.Id,
+				"filter_id":   filterID,
+				"is_active":   true,
+				"order_index": i,
+				"created_at":  time.Now(),
+			}
+			if err := tx.Table("llm_filters").Create(llmFilter).Error; err != nil {
+				return fmt.Errorf("failed to create llm_filter for LLM %d, Filter %d: %w", pbLLM.Id, filterID, err)
+			}
+		}
+
 		log.Debug().
 			Uint32("llm_id", pbLLM.Id).
 			Str("llm_slug", pbLLM.Slug).
-			Msg("LLM synced to SQLite")
+			Int("filter_count", len(pbLLM.FilterIds)).
+			Msg("LLM synced to SQLite with filters")
 	}
 
 	return nil

@@ -2,14 +2,11 @@
 package services
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	"github.com/d5/tengo/v2"
-	"github.com/d5/tengo/v2/stdlib"
 	"gorm.io/gorm"
 )
 
@@ -244,60 +241,6 @@ func (s *FilterService) ExecuteFilter(filterID uint, payload map[string]interfac
 	return payload, nil
 }
 
-// executeFilterScript executes a filter script using Tengo
-func (s *FilterService) executeFilterScript(filter *database.Filter, payload map[string]interface{}) (bool, error) {
-	// Convert payload to JSON string for script processing
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal payload: %w", err)
-	}
-	payloadString := string(payloadBytes)
-
-	// Create Tengo script
-	script := tengo.NewScript([]byte(filter.Script))
-	
-	// Add standard library modules
-	script.SetImports(stdlib.GetModuleMap(stdlib.AllModuleNames()...))
-
-	// Add payload variable
-	if err := script.Add("payload", payloadString); err != nil {
-		return false, fmt.Errorf("failed to add payload variable: %w", err)
-	}
-
-	// Compile script
-	compiled, err := script.Compile()
-	if err != nil {
-		return false, fmt.Errorf("script compilation failed: %w", err)
-	}
-
-	// Run script
-	if err := compiled.Run(); err != nil {
-		return false, fmt.Errorf("script execution failed: %w", err)
-	}
-
-	// Get result variable
-	resultVar := compiled.Get("result")
-	if resultVar == nil {
-		return false, fmt.Errorf("script must set a 'result' variable")
-	}
-
-	// Get the actual value and check if it's truthy
-	resultValue := resultVar.Value()
-	if resultBool, ok := resultValue.(bool); ok {
-		return resultBool, nil
-	}
-	
-	// For other types, treat as truthy if not zero/nil/false
-	switch v := resultValue.(type) {
-	case int64:
-		return v != 0, nil
-	case string:
-		return v != "", nil
-	case nil:
-		return false, nil
-	default:
-		return true, nil // Default to true for unknown types
-	}
-}
-
-// Script validation removed - AI Gateway handles Tengo script execution and validation at runtime
+// executeFilterScript is implemented in edition-specific files (filter_service_ce.go and filter_service_ent.go)
+// CE: Always returns true (filters disabled)
+// ENT: Executes Tengo script and returns result

@@ -240,7 +240,7 @@ func (a *JSONMapAccessor) GetSlice(key string) []interface{} {
 }
 
 func ValidateEmailDomain(email string) error {
-	appConfig := config.Get()
+	appConfig := config.Get("")
 
 	if len(appConfig.FilterSignupDomains) == 0 {
 		return nil

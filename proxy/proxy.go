@@ -289,7 +289,7 @@ func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *h
 		return
 	}
 
-	appConf := config.Get()
+	appConf := config.Get("")
 	if appConf == nil {
 		respondWithError(w, http.StatusInternalServerError, "Server configuration not loaded", nil, false)
 		return
@@ -373,7 +373,7 @@ func respondWithError(w http.ResponseWriter, status int, message string, err err
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if status == http.StatusUnauthorized && wwwAuthenticate {
-		appConf := config.Get()
+		appConf := config.Get("")
 		metadataURL := appConf.ProxyOAuthMetadataURL
 		if metadataURL != "" {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer realm=\"MCPResources\", resource_metadata_uri=\"%s\"", metadataURL))
@@ -395,7 +395,7 @@ func respondWithOAIError(w http.ResponseWriter, status int, message string, err 
 	response := OAIErrorResponse{Error: apiError}
 	w.Header().Set("Content-Type", "application/json")
 	if status == http.StatusUnauthorized && wwwAuthenticate {
-		appConf := config.Get()
+		appConf := config.Get("")
 		metadataURL := appConf.ProxyOAuthMetadataURL
 		if metadataURL != "" {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer realm=\"MCPResources\", resource_metadata_uri=\"%s\"", metadataURL))

@@ -152,20 +152,32 @@ func (d DocsLinks) ReadFromFile(fileName string) {
 
 var globalConfig *AppConf
 
-func getConfigFromEnv() *AppConf {
+func getConfigFromEnv(envFile string) *AppConf {
 	conf := &AppConf{}
 
-	// Try to load .env file first
-	if envMap, err := godotenv.Read(".env"); err == nil {
-		cfgLog.Info("Successfully loaded .env file (environment variables will take precedence if set)")
-		// Set environment variables from .env file if they're not already set
+	// Determine which env file to load
+	envFilePath := ".env" // Default
+	if envFile != "" {
+		envFilePath = envFile
+	}
+
+	// Try to load env file first
+	if envMap, err := godotenv.Read(envFilePath); err == nil {
+		cfgLog.Infof("Successfully loaded %s (environment variables will take precedence if set)", envFilePath)
+		// Set environment variables from env file if they're not already set
 		for key, value := range envMap {
 			if os.Getenv(key) == "" {
 				os.Setenv(key, value)
 			}
 		}
 	} else {
-		cfgLog.Info("No .env file found or error loading it - this is expected when running in containers. Will use environment variables.")
+		if envFile != "" {
+			// User explicitly specified a file that doesn't exist - this is an error
+			cfgLog.Warnf("Warning: Could not load specified environment file %s: %v", envFilePath, err)
+		} else {
+			// Default .env doesn't exist - this is expected in containers
+			cfgLog.Info("No .env file found or error loading it - this is expected when running in containers. Will use environment variables.")
+		}
 	}
 
 	conf.SMTPServer = os.Getenv("SMTP_SERVER")
@@ -741,9 +753,9 @@ func getOCIConfig() OCIConfig {
 	return config
 }
 
-func Get() *AppConf {
+func Get(envFile string) *AppConf {
 	if globalConfig == nil {
-		globalConfig = getConfigFromEnv()
+		globalConfig = getConfigFromEnv(envFile)
 	}
 	return globalConfig
 }
