@@ -7,32 +7,15 @@ on:
 
 env:
   GOPRIVATE: github.com/TykTechnologies
-  
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
 
+jobs:
+  # Build frontend once and share across all editions
+  build-frontend:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.23.2"
-          cache-dependency-path: go.sum
-
-      # Improved Go dependency caching
-      - name: Go Cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -50,33 +33,83 @@ jobs:
           PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
           echo "Checking build output..."
           ls -la build
-          echo "Checking static directory..."
-          ls -la build/static
-          echo "Checking index.html..."
-          cat build/index.html | head -n 5
           echo "Verifying static files..."
-          find build -type f
+          find build -type f | head -20
           cd ../..
+
+      - name: Upload Frontend Build
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: ui/admin-frontend/build/
+          retention-days: 1
+
+  # Build Community Edition binaries
+  build-ce-binaries:
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.24"
+          cache-dependency-path: go.sum
+
+      - name: Download Frontend Build
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: ui/admin-frontend/build/
 
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc libsqlite3-dev
 
-      - name: Build Go Binaries
+      - name: Build CE Binaries
         run: |
-          git clone https://github.com/lonelycode/langchaingo.git /tmp/langchaingo
-          echo "Verifying UI build directory"
-          if [ ! -d "ui/admin-frontend/build" ]; then
-            echo "UI build directory not found"
-            exit 1
-          fi
-          echo "Building ARM64 binary"
-          CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 CGO_ENABLED=1 go build -o tyk-ai-studio-arm64
-          chmod +x tyk-ai-studio-arm64
-          echo "Building AMD64 binary"
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o tyk-ai-studio-amd64
-          chmod +x tyk-ai-studio-amd64
+          echo "Building CE binaries with CGO enabled..."
+          echo "Building AMD64 binary..."
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-w -s" -trimpath \
+            -o tyk-ai-studio-ce-amd64
+
+          echo "Building ARM64 binary..."
+          CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc \
+            go build -ldflags="-w -s" -trimpath \
+            -o tyk-ai-studio-ce-arm64
+
+          chmod +x tyk-ai-studio-ce-*
+          ls -lh tyk-ai-studio-ce-*
+
+      - name: Upload CE Binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: ce-binaries
+          path: tyk-ai-studio-ce-*
+          retention-days: 1
+
+  # Build Community Edition Docker image
+  build-ce-image:
+    needs: [build-frontend, build-ce-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Frontend Build
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: ui/admin-frontend/build/
+
+      - name: Download CE Binaries
+        uses: actions/download-artifact@v3
+        with:
+          name: ce-binaries
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -90,22 +123,133 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and Push Image
+      - name: Build and Push CE Images
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: tykio/midsommar:latest
+          tags: |
+            tykio/tyk-ai-studio:latest
+            tykio/midsommar:latest
+          build-args: |
+            EDITION=ce
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Build and Push Image
+  # Build Enterprise Edition binaries
+  build-ent-binaries:
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+          token: ${{ secrets.ORG_GH_TOKEN }}
+
+      - name: Configure Git for Enterprise Access
+        run: |
+          git config --global url."https://${{ secrets.ORG_GH_TOKEN }}@github.com".insteadOf "https://github.com"
+
+      - name: Initialize Enterprise Submodule
+        run: |
+          git submodule update --init --recursive
+          if [ ! -f enterprise/.git ]; then
+            echo "❌ ERROR: Enterprise submodule not initialized"
+            exit 1
+          fi
+          echo "✅ Enterprise submodule initialized"
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.24"
+          cache-dependency-path: go.sum
+
+      - name: Download Frontend Build
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: ui/admin-frontend/build/
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc libsqlite3-dev
+
+      - name: Build ENT Binaries
+        run: |
+          echo "Building ENT binaries with CGO enabled and enterprise tags..."
+          echo "Building AMD64 binary..."
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+            go build -tags enterprise -ldflags="-w -s" -trimpath \
+            -o tyk-ai-studio-ent-amd64
+
+          echo "Building ARM64 binary..."
+          CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc \
+            go build -tags enterprise -ldflags="-w -s" -trimpath \
+            -o tyk-ai-studio-ent-arm64
+
+          chmod +x tyk-ai-studio-ent-*
+          ls -lh tyk-ai-studio-ent-*
+
+      - name: Upload ENT Binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: ent-binaries
+          path: tyk-ai-studio-ent-*
+          retention-days: 1
+
+  # Build Enterprise Edition Docker image
+  build-ent-image:
+    needs: [build-frontend, build-ent-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Frontend Build
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: ui/admin-frontend/build/
+
+      - name: Download ENT Binaries
+        uses: actions/download-artifact@v3
+        with:
+          name: ent-binaries
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push ENT Images
         uses: docker/build-push-action@v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: tykio/tyk-ai-studio:latest
+          tags: |
+            tykio/tyk-ai-studio-enterprise:latest
+            tykio/midsommar-enterprise:latest
+          build-args: |
+            EDITION=ent
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
+  # Deploy CE image to production server
+  deploy-ce:
+    needs: build-ce-image
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to Remote Server
         env:
           SSH_USER: ${{ secrets.SSH_USER }}
