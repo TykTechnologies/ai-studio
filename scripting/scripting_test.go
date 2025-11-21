@@ -833,6 +833,151 @@ func TestHelperFunctions(t *testing.T) {
 	}
 }
 
+// TestToolResponseFilters tests filters applied to tool responses
+func TestToolResponseFilters(t *testing.T) {
+	tests := []struct {
+		name         string
+		sourceCode   string
+		input        *ScriptInput
+		wantBlock    bool
+		wantMessage  string
+		checkPayload func(t *testing.T, payload string)
+	}{
+		{
+			name: "tool response - simple blocking",
+			sourceCode: `
+				text := import("text")
+
+				// Block if tool response contains error
+				should_block := false
+				if len(input.messages) > 0 {
+					content := input.messages[0].content
+					if text.contains(content, "error") {
+						should_block = true
+					}
+				}
+
+				output := {
+					block: should_block,
+					payload: input.raw_input,
+					message: should_block ? "Tool returned error" : ""
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"error": "API call failed"}`,
+				Messages: []MessageContent{
+					{
+						Role:  llms.ChatMessageTypeTool,
+						Parts: []llms.ContentPart{llms.TextPart(`{"error": "API call failed"}`)},
+					},
+				},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+				IsChat:     true,
+			},
+			wantBlock:   true,
+			wantMessage: "Tool returned error",
+		},
+		{
+			name: "tool response - simple payload modification",
+			sourceCode: `
+				text := import("text")
+
+				// Redact email from tool response (plain string manipulation)
+				modified_content := input.raw_input
+				if len(input.messages) > 0 {
+					content := input.messages[0].content
+					modified_content = text.replace(content, "@", "[AT]", -1)
+				}
+
+				output := {
+					block: false,
+					payload: modified_content,
+					message: ""
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   "Contact support@example.com for help",
+				Messages: []MessageContent{
+					{
+						Role:  llms.ChatMessageTypeTool,
+						Parts: []llms.ContentPart{llms.TextPart("Contact support@example.com for help")},
+					},
+				},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+				IsChat:     true,
+			},
+			wantBlock: false,
+			checkPayload: func(t *testing.T, payload string) {
+				if !contains(payload, "support[AT]example.com") {
+					t.Errorf("Expected email to be redacted, got: %s", payload)
+				}
+			},
+		},
+		{
+			name: "tool response - access context metadata",
+			sourceCode: `
+				// Block based on tool name
+				tool_name := ""
+				if input.context && input.context.tool_name {
+					tool_name = input.context.tool_name
+				}
+
+				should_block := tool_name == "restricted_tool"
+
+				output := {
+					block: should_block,
+					payload: input.raw_input,
+					message: should_block ? "Tool is restricted" : ""
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   "Some tool output",
+				Messages: []MessageContent{
+					{
+						Role:  llms.ChatMessageTypeTool,
+						Parts: []llms.ContentPart{llms.TextPart("Some tool output")},
+					},
+				},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+				IsChat:     true,
+				Context: map[string]interface{}{
+					"tool_name": "allowed_tool",
+					"tool_id":   int64(123),
+				},
+			},
+			wantBlock:   false,
+			wantMessage: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := NewScriptRunner([]byte(tt.sourceCode))
+			output, err := runner.RunScript(tt.input, nil)
+
+			if err != nil {
+				t.Errorf("RunScript() unexpected error = %v", err)
+				return
+			}
+
+			if output.Block != tt.wantBlock {
+				t.Errorf("RunScript() Block = %v, want %v", output.Block, tt.wantBlock)
+			}
+
+			if output.Message != tt.wantMessage {
+				t.Errorf("RunScript() Message = %v, want %v", output.Message, tt.wantMessage)
+			}
+
+			if tt.checkPayload != nil {
+				tt.checkPayload(t, output.Payload)
+			}
+		})
+	}
+}
+
 func contains(s, substr string) bool {
 	// Simple substring check
 	for i := 0; i <= len(s)-len(substr); i++ {

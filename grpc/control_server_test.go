@@ -799,6 +799,13 @@ func TestControlServer_getConfigurationSnapshot(t *testing.T) {
 	}
 	db.Create(&filter)
 
+	// Associate filter with first LLM via llm_filters join table
+	err := db.Table("llm_filters").Create(map[string]interface{}{
+		"llm_id":    llms[0].ID,
+		"filter_id": filter.ID,
+	}).Error
+	require.NoError(t, err)
+
 	// Create test model price
 	modelPrice := models.ModelPrice{
 		Vendor:      "openai",
@@ -826,12 +833,18 @@ func TestControlServer_getConfigurationSnapshot(t *testing.T) {
 				assert.Len(t, snapshot.ModelPrices, 1)
 
 				// Verify LLM data
-				for _, llmConfig := range snapshot.Llms {
+				for i, llmConfig := range snapshot.Llms {
 					assert.NotEmpty(t, llmConfig.Name)
 					assert.NotEmpty(t, llmConfig.Vendor)
 					assert.NotEmpty(t, llmConfig.Endpoint)
 					assert.True(t, llmConfig.IsActive)
 					assert.Equal(t, namespace, llmConfig.Namespace)
+
+					// First LLM should have filter association
+					if i == 0 {
+						assert.NotEmpty(t, llmConfig.FilterIds, "First LLM should have filter associations")
+						assert.Contains(t, llmConfig.FilterIds, uint32(filter.ID), "First LLM should be associated with the test filter")
+					}
 				}
 
 				// Verify App data
@@ -840,6 +853,15 @@ func TestControlServer_getConfigurationSnapshot(t *testing.T) {
 					assert.True(t, appConfig.IsActive)
 					assert.Equal(t, namespace, appConfig.Namespace)
 					assert.NotEmpty(t, appConfig.LlmIds)
+				}
+
+				// Verify Filter data includes LLM associations
+				for _, filterConfig := range snapshot.Filters {
+					assert.NotEmpty(t, filterConfig.Name)
+					assert.Equal(t, namespace, filterConfig.Namespace)
+					// Filter should have LlmIds populated (from llm_filters join table)
+					assert.NotEmpty(t, filterConfig.LlmIds, "Filter should have LLM associations from llm_filters join table")
+					assert.Contains(t, filterConfig.LlmIds, uint32(llms[0].ID), "Filter should be associated with first LLM")
 				}
 			},
 			expectErr: false,

@@ -959,8 +959,35 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		return nil, fmt.Errorf("failed to get Filters: %w", err)
 	}
 
+	// Query llm_filters join table to get LLM associations for each filter
+	var llmFilterAssociations []struct {
+		FilterID uint
+		LLMID    uint
+	}
+	llmFilterQuery := s.db.Table("llm_filters").
+		Select("llm_filters.filter_id, llm_filters.llm_id").
+		Joins("JOIN llms ON llms.id = llm_filters.llm_id").
+		Where("llms.active = ?", true)
+
+	if namespace == "" {
+		llmFilterQuery = llmFilterQuery.Where("llms.namespace = ''")
+	} else {
+		llmFilterQuery = llmFilterQuery.Where("(llms.namespace = '' OR llms.namespace = ?)", namespace)
+	}
+
+	if err := llmFilterQuery.Find(&llmFilterAssociations).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to query llm_filters associations for filters")
+	}
+
+	// Build map of filter_id -> []llm_id for efficient lookup
+	filterLLMMap := make(map[uint][]uint32)
+	for _, assoc := range llmFilterAssociations {
+		filterLLMMap[assoc.FilterID] = append(filterLLMMap[assoc.FilterID], uint32(assoc.LLMID))
+	}
+
 	// Convert Filters to protobuf
 	for _, filter := range filters {
+		llmIDs := filterLLMMap[filter.ID]
 		pbFilter := &pb.FilterConfig{
 			Id:          uint32(filter.ID),
 			Name:        filter.Name,
@@ -969,10 +996,17 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			IsActive:    true, // AI Studio Filter model doesn't have IsActive field yet
 			OrderIndex:  0,    // AI Studio doesn't have OrderIndex field yet
 			Namespace:   filter.Namespace,
+			LlmIds:      llmIDs, // Populated from llm_filters join table
 			CreatedAt:   timestamppb.New(filter.CreatedAt),
 			UpdatedAt:   timestamppb.New(filter.UpdatedAt),
 		}
 		snapshot.Filters = append(snapshot.Filters, pbFilter)
+
+		log.Debug().
+			Uint("filter_id", filter.ID).
+			Str("filter_name", filter.Name).
+			Int("llm_count", len(llmIDs)).
+			Msg("Filter synced with LLM associations")
 	}
 
 	// Get ModelPrices for namespace

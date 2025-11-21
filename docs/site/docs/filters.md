@@ -38,9 +38,10 @@ Filters in Midsommar provide comprehensive request/response processing with both
    - Filters can both inspect AND modify in a single script.
    - Example: Redact emails from user messages, but block if SSN is detected.
 
-**Key Capability**: Filters now support message modification across all three contexts:
+**Key Capability**: Filters now support message modification across all four contexts:
 - ✅ LLM Proxy Requests (before reaching LLM)
-- ✅ Chat Session Messages (during chat preprocessing)
+- ✅ Chat Session Messages (before RAG search and LLM)
+- ✅ File Content (before RAG indexing)
 - ✅ Tool Responses (after tool execution)
 
 ---
@@ -587,15 +588,142 @@ output := {
 
 ---
 
+---
+
+## Tool Response Filters
+
+Filters can also be applied to tool responses (e.g., API calls, database queries). Tool responses are **plain strings**, not JSON-structured messages, so they require simpler handling.
+
+### **Example 1: Block Tool Responses Containing Errors**
+
+```tengo
+text := import("text")
+
+// Access tool response from messages array
+tool_output := ""
+if len(input.messages) > 0 {
+    tool_output = input.messages[0].content
+}
+
+// Block if response indicates an error
+should_block := text.contains(tool_output, "error") || text.contains(tool_output, "failed")
+
+output := {
+    block: should_block,
+    payload: input.raw_input,
+    message: should_block ? "Tool returned error response" : ""
+}
+```
+
+### **Example 2: Redact PII from Tool Responses**
+
+```tengo
+text := import("text")
+
+// Tool responses are plain strings - use direct string manipulation
+modified := input.raw_input
+
+// Get tool content
+if len(input.messages) > 0 {
+    content := input.messages[0].content
+
+    // Redact email addresses
+    modified = text.re_replace("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", content, "[EMAIL]")
+
+    // Redact phone numbers
+    modified = text.re_replace("\\(?\\d{3}\\)?[\\s.-]?\\d{3}[\\s.-]?\\d{4}", modified, "[PHONE]")
+}
+
+output := {
+    block: false,
+    payload: modified,
+    message: "PII redacted from tool response"
+}
+```
+
+### **Example 3: Filter Based on Tool Name**
+
+```tengo
+// Access tool metadata from context
+tool_name := ""
+if input.context && input.context.tool_name {
+    tool_name = input.context.tool_name
+}
+
+// Only allow specific tools to return data
+allowed_tools := ["weather_api", "stock_prices"]
+is_allowed := false
+
+for allowed in allowed_tools {
+    if tool_name == allowed {
+        is_allowed = true
+        break
+    }
+}
+
+output := {
+    block: !is_allowed,
+    payload: input.raw_input,
+    message: is_allowed ? "" : "Tool '" + tool_name + "' is not allowed"
+}
+```
+
+**Note**: The `tyk.redact_pattern()` helper is designed for LLM message structures (JSON format) and will not work with tool responses. For tool responses, use direct string manipulation with the `text` module as shown above.
+
+---
+
+---
+
+## Filter Execution Order in Chat Sessions
+
+When a user sends a message in a chat session, filters are executed at multiple points in the pipeline:
+
+### **1. User Message Filters** (Before RAG)
+**When**: After preprocessing, before RAG vector search
+**Purpose**: Redact PII from user messages before they're used for vector similarity search
+**Context**: `input.messages[0].role == "user"`
+
+```tengo
+text := import("text")
+
+// Redact before RAG search
+modified := text.replace(input.messages[0].content, "@", "[EMAIL]", -1)
+
+output := {
+    block: false,
+    payload: modified,
+    message: ""
+}
+```
+
+**Impact**: The filtered/modified message is used for:
+- ✅ RAG vector similarity search
+- ✅ Subsequent LLM processing
+- ✅ Chat history storage
+
+### **2. File Content Filters** (Before RAG)
+**When**: When files are attached to messages
+**Purpose**: Filter sensitive content from uploaded files before indexing
+**Context**: `input.context.file_ref` contains the file reference
+
+### **3. Tool Response Filters** (After Tool Execution)
+**When**: After a tool returns data, before sending to LLM
+**Purpose**: Filter sensitive data from external API responses
+**Context**: `input.messages[0].role == "tool"`, `input.context.tool_name` available
+
+---
+
 ## Best Practices
 
 1. **Always define `output`** - Scripts must set the output variable
-2. **Use helpers for simple redaction** - `redact_pattern` handles vendor differences
-3. **Use messages array for complex modifications** - Gives you full control
-4. **Provide clear block messages** - Help users understand policy violations
-5. **Test across vendors** - OpenAI, Anthropic, and Google AI have different formats
-6. **Check message roles** - Different logic for system, user, and assistant messages
-7. **Handle edge cases** - Empty arrays, missing fields, etc.
+2. **Use `tyk.redact_pattern` for LLM messages** - Handles vendor differences automatically
+3. **Use `text` module for tool responses** - Direct string manipulation
+4. **Use messages array for complex LLM modifications** - Gives you full control
+5. **Provide clear block messages** - Help users understand policy violations
+6. **Test across vendors** - OpenAI, Anthropic, and Google AI have different formats
+7. **Check message roles** - Different logic for system, user, assistant, and tool messages
+8. **Handle edge cases** - Empty arrays, missing fields, etc.
+9. **Consider RAG impact** - Filters run before RAG, so redactions affect vector search
 
 ---
 

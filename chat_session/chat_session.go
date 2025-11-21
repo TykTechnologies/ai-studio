@@ -112,18 +112,9 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		filters:       withFilters,
 	}
 
-	// filter setup
-	preProcessors := []func(*models.UserMessage) error{}
-	for i, _ := range withFilters {
-		sr := scripting.NewScriptRunner(withFilters[i].Script)
-		asFunc := func(m *models.UserMessage) error {
-			return sr.RunFilter(m.Payload, cs.service)
-		}
-
-		preProcessors = append(preProcessors, asFunc)
-	}
-
-	cs.preProcessors = preProcessors
+	// Filter setup moved to message processing loop (before RAG)
+	// Filters now use the unified RunScript API with rich context
+	cs.preProcessors = []func(*models.UserMessage) error{}
 
 	return cs, nil
 }
@@ -336,13 +327,75 @@ func (cs *ChatSession) Start() error {
 					continue
 				}
 
+				// Run chat filters on user message before RAG search
+				filteredMessage := msg.Payload
+				filterBlocked := false
+
+				slog.Info("Chat filters check", "filter_count", len(cs.filters))
+
+				for _, filter := range cs.filters {
+					slog.Info("Running chat filter", "filter_name", filter.Name)
+					sr := scripting.NewScriptRunner(filter.Script)
+
+					// Create MessageContent for user message
+					messages := []llms.MessageContent{
+						{
+							Role:  llms.ChatMessageTypeHuman,
+							Parts: []llms.ContentPart{llms.TextPart(filteredMessage)},
+						},
+					}
+
+					scriptInput := &scripting.ScriptInput{
+						RawInput:   filteredMessage,
+						Messages:   messages,
+						VendorName: string(cs.chatRef.LLM.Vendor),
+						ModelName:  cs.chatRef.LLMSettings.ModelName,
+						Context: map[string]interface{}{
+							"session_id": cs.ID(),
+							"user_id":    int64(cs.userID),
+							"chat_id":    int64(cs.chatRef.ID),
+						},
+						IsChat: true,
+					}
+
+					output, err := sr.RunScript(scriptInput, cs.service)
+					if err != nil {
+						cs.sendError(fmt.Errorf("filter error: %v", err))
+						filterBlocked = true
+						break
+					}
+
+					if output.Block {
+						blockMsg := output.Message
+						if blockMsg == "" {
+							blockMsg = "content blocked by policy"
+						}
+						cs.sendError(fmt.Errorf("blocked by filter '%s': %s", filter.Name, blockMsg))
+						filterBlocked = true
+						break
+					}
+
+					// Apply modifications for next filter and RAG search
+					if output.Payload != "" && output.Payload != filteredMessage {
+						filteredMessage = output.Payload
+					}
+				}
+
+				// Skip RAG and LLM if filter blocked the message
+				if filterBlocked {
+					continue
+				}
+
+				// Update message payload with filtered content for RAG
+				msg.Payload = filteredMessage
+
 				// handle RAG
 				n := cs.chatRef.RagResultsPerSource
 				if n == 0 {
 					n = 10
 				}
 				ds := dataSession.NewDataSession(cs.datasources)
-				docs, err := ds.Search(msg.Payload, 10) //TODO this should be configurable in the future
+				docs, err := ds.Search(filteredMessage, 10) //TODO this should be configurable in the future
 				if err != nil {
 					cs.sendError(fmt.Errorf("error searching datasources: %v", err))
 					continue

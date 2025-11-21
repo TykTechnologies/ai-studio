@@ -288,6 +288,7 @@ func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) e
 		}
 
 		// Recreate llm_filters join table relationships
+		// Use FirstOrCreate to avoid duplicate key violations since LLMs may have already created these entries
 		for _, llmID := range pbFilter.LlmIds {
 			llmFilter := &database.LLMFilter{
 				LLMID:      uint(llmID),
@@ -296,7 +297,9 @@ func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) e
 				OrderIndex: int(pbFilter.OrderIndex),
 			}
 
-			if err := tx.Create(llmFilter).Error; err != nil {
+			// Use FirstOrCreate to handle cases where the relationship was already created by LLM sync
+			if err := tx.Where("llm_id = ? AND filter_id = ?", llmID, pbFilter.Id).
+				FirstOrCreate(llmFilter).Error; err != nil {
 				return fmt.Errorf("failed to create llm_filter relationship (llm=%d, filter=%d): %w", llmID, pbFilter.Id, err)
 			}
 		}
