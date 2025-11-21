@@ -621,6 +621,21 @@ type FilterResponse struct {
 	} `json:"attributes"`
 }
 
+// FilterTestInput represents the input for testing a filter script
+// @Description Filter test input model
+type FilterTestInput struct {
+	Script string                 `json:"script" binding:"required"`
+	Input  map[string]interface{} `json:"input" binding:"required"`
+}
+
+// FilterTestOutput represents the output of a filter test execution
+// @Description Filter test output model
+type FilterTestOutput struct {
+	Success bool                   `json:"success"`
+	Output  map[string]interface{} `json:"output,omitempty"`
+	Error   string                 `json:"error,omitempty"`
+}
+
 // ChatHistoryRecordInput represents the input for chat history record-related operations
 // @Description Chat History Record input model
 type ChatHistoryRecordInput struct {

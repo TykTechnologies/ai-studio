@@ -6,17 +6,17 @@ import (
 
 // ScriptInput provides rich context to scripts including messages, metadata, and vendor info
 type ScriptInput struct {
-	RawInput      string                  // Full request/response JSON body
-	Messages      []llms.MessageContent   // Normalized messages via extractors
-	VendorName    string                  // LLM vendor (e.g., "openai", "anthropic")
-	ModelName     string                  // Model being called (e.g., "gpt-4")
-	Context       map[string]interface{}  // Additional metadata (app_id, user_id, etc.)
-	IsChat        bool                    // True if this is a chat session context
-	IsResponse    bool                    // True if this is response-side filtering
-	IsChunk       bool                    // True if this is a streaming chunk
-	ChunkIndex    int                     // Current chunk number (for streaming)
-	CurrentBuffer string                  // Accumulated response text (for streaming)
-	StatusCode    int                     // HTTP status code from LLM
+	RawInput      string                  `json:"raw_input"`      // Full request/response JSON body
+	Messages      []llms.MessageContent   `json:"messages"`       // Normalized messages via extractors
+	VendorName    string                  `json:"vendor_name"`    // LLM vendor (e.g., "openai", "anthropic")
+	ModelName     string                  `json:"model_name"`     // Model being called (e.g., "gpt-4")
+	Context       map[string]interface{}  `json:"context"`        // Additional metadata (app_id, user_id, etc.)
+	IsChat        bool                    `json:"is_chat"`        // True if this is a chat session context
+	IsResponse    bool                    `json:"is_response"`    // True if this is response-side filtering
+	IsChunk       bool                    `json:"is_chunk"`       // True if this is a streaming chunk
+	ChunkIndex    int                     `json:"chunk_index"`    // Current chunk number (for streaming)
+	CurrentBuffer string                  `json:"current_buffer"` // Accumulated response text (for streaming)
+	StatusCode    int                     `json:"status_code"`    // HTTP status code from LLM
 }
 
 // ScriptOutput represents the result of script execution

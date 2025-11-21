@@ -98,7 +98,7 @@ const Drawer = () => {
           ? [{ id: 'sso-profiles', text: 'Identity providers', path: '/admin/sso-profiles' }]
           : []),
         ...(config?.is_enterprise
-          ? [{ id: 'filters', text: 'Filters & Middleware', path: '/admin/filters' }]
+          ? [{ id: 'filters', text: 'Filters', path: '/admin/filters' }]
           : []),
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets' },
         { id: 'branding', text: 'Branding', path: '/admin/branding' },

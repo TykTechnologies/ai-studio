@@ -700,6 +700,7 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/filters/:id", a.updateFilter)
 	v1.DELETE("/filters/:id", a.deleteFilter)
 	v1.GET("/filters", a.listFilters)
+	v1.POST("/filters/test", a.testFilter)
 
 	// Plugin routes
 	v1.POST("/plugins", a.createPlugin)

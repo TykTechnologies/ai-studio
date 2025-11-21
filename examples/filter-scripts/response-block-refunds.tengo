@@ -16,8 +16,10 @@ forbidden_patterns := [
 
 // For streaming, check the accumulated buffer (contains all text so far)
 // For non-streaming, check the full response
-check_text := input.current_buffer
-if !input.is_chunk {
+check_text := ""
+if input.is_chunk {
+    check_text = input.current_buffer
+} else {
     check_text = input.raw_input
 }
 

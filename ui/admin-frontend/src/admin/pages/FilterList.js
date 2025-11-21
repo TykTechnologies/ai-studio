@@ -155,7 +155,7 @@ const FilterList = memo(() => {
     return (
       <>
         <TitleBox top="64px">
-          <Typography variant="headingXLarge">Filters & Middleware</Typography>
+          <Typography variant="headingXLarge">Filters</Typography>
         </TitleBox>
         <ContentBox>
           <EnterpriseFeatureBadge

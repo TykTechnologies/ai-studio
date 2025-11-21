@@ -20,6 +20,13 @@ import {
   PrimaryButton,
 } from "../../styles/sharedStyles";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import Editor from "react-simple-code-editor";
+import { highlight, languages } from "prismjs/components/prism-core";
+import "prismjs/components/prism-clike";
+import "prismjs/components/prism-javascript";
+import "prismjs/themes/prism-tomorrow.css";
+import ScriptTemplateSelector from "./ScriptTemplateSelector";
+import ScriptTestPanel from "./ScriptTestPanel";
 
 const FilterForm = () => {
   const [filter, setFilter] = useState({
@@ -78,6 +85,14 @@ const FilterForm = () => {
     // Convert array to comma-delimited string, or empty string for global
     const namespaceString = Array.isArray(namespaces) ? namespaces.join(', ') : namespaces;
     setFilter({ ...filter, namespace: namespaceString });
+  };
+
+  const handleTemplateSelect = (templateScript) => {
+    setFilter({ ...filter, script: templateScript });
+  };
+
+  const handleScriptChange = (code) => {
+    setFilter({ ...filter, script: code });
   };
 
   const validateForm = () => {
@@ -197,17 +212,50 @@ const FilterForm = () => {
               </Box>
             </Grid>
             <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Script"
-                name="script"
-                value={filter.script}
-                onChange={handleChange}
-                error={!!errors.script}
-                helperText={errors.script}
-                required
-                multiline
-                rows={10}
+              <ScriptTemplateSelector
+                onTemplateSelect={handleTemplateSelect}
+                currentScript={filter.script}
+                filterType={filter.response_filter ? "response" : "request"}
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <Typography variant="subtitle2" gutterBottom>
+                Script *
+              </Typography>
+              <Box
+                sx={{
+                  border: errors.script ? "1px solid #d32f2f" : "1px solid #444",
+                  borderRadius: "4px",
+                  minHeight: "400px",
+                  "& textarea": {
+                    outline: "none !important",
+                  },
+                }}
+              >
+                <Editor
+                  value={filter.script}
+                  onValueChange={handleScriptChange}
+                  highlight={(code) => highlight(code, languages.js, "javascript")}
+                  padding={10}
+                  style={{
+                    fontFamily: '"Fira code", "Fira Mono", "Monaco", monospace',
+                    fontSize: 14,
+                    backgroundColor: "#2d2d2d",
+                    color: "#ccc",
+                    minHeight: "400px",
+                  }}
+                />
+              </Box>
+              {errors.script && (
+                <FormHelperText error>{errors.script}</FormHelperText>
+              )}
+            </Grid>
+
+            <Grid item xs={12}>
+              <ScriptTestPanel
+                script={filter.script}
+                filterType={filter.response_filter ? "response" : "request"}
               />
             </Grid>
           </Grid>
