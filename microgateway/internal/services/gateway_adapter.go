@@ -738,10 +738,12 @@ func (a *GatewayServiceAdapter) GetAllFilters(pageSize int, pageNumber int, all 
 	modelFilters := make([]models.Filter, len(dbFilters))
 	for i, dbFilter := range dbFilters {
 		modelFilters[i] = models.Filter{
-			ID:          dbFilter.ID,
-			Name:        dbFilter.Name,
-			Description: dbFilter.Description,
-			Script:      []byte(dbFilter.Script),
+			ID:             dbFilter.ID,
+			Name:           dbFilter.Name,
+			Description:    dbFilter.Description,
+			Script:         []byte(dbFilter.Script),
+			ResponseFilter: dbFilter.ResponseFilter,
+			Namespace:      dbFilter.Namespace,
 		}
 	}
 
@@ -771,10 +773,12 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 	filters := make([]*models.Filter, len(dbLLM.Filters))
 	for i, dbFilter := range dbLLM.Filters {
 		filters[i] = &models.Filter{
-			ID:          dbFilter.ID,
-			Name:        dbFilter.Name,
-			Description: dbFilter.Description,
-			Script:      []byte(dbFilter.Script),
+			ID:             dbFilter.ID,
+			Name:           dbFilter.Name,
+			Description:    dbFilter.Description,
+			Script:         []byte(dbFilter.Script),
+			ResponseFilter: dbFilter.ResponseFilter,
+			Namespace:      dbFilter.Namespace,
 		}
 	}
 

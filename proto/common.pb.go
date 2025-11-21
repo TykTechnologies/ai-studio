@@ -834,19 +834,20 @@ func (x *ModelPriceConfig) GetUpdatedAt() *timestamppb.Timestamp {
 
 // FilterConfig represents a filter configuration
 type FilterConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Script        string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
-	IsActive      bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
-	OrderIndex    int32                  `protobuf:"varint,6,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
-	Namespace     string                 `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`                 // NEW: Namespace for filtering
-	LlmIds        []uint32               `protobuf:"varint,8,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"` // Associated LLM IDs
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description    string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Script         string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
+	IsActive       bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	OrderIndex     int32                  `protobuf:"varint,6,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	Namespace      string                 `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`                 // NEW: Namespace for filtering
+	LlmIds         []uint32               `protobuf:"varint,8,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"` // Associated LLM IDs
+	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ResponseFilter bool                   `protobuf:"varint,11,opt,name=response_filter,json=responseFilter,proto3" json:"response_filter,omitempty"` // true = response filter, false = request filter
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *FilterConfig) Reset() {
@@ -947,6 +948,13 @@ func (x *FilterConfig) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *FilterConfig) GetResponseFilter() bool {
+	if x != nil {
+		return x.ResponseFilter
+	}
+	return false
 }
 
 // PluginConfig represents a plugin configuration
@@ -1447,7 +1455,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xd7\x02\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x80\x03\n" +
 	"\fFilterConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1462,7 +1470,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xcf\x03\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
+	"\x0fresponse_filter\x18\v \x01(\bR\x0eresponseFilter\"\xcf\x03\n" +
 	"\fPluginConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +

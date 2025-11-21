@@ -203,18 +203,19 @@ type AnalyticsEvent struct {
 
 // Filter represents a filter script
 type Filter struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
-	Name        string    `gorm:"not null" json:"name"`
-	Description string    `json:"description"`
-	Script      string    `gorm:"not null;type:text" json:"script"`
-	IsActive    bool      `gorm:"default:true" json:"is_active"`
-	OrderIndex  int       `gorm:"default:0" json:"order_index"`
-	
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	Name           string    `gorm:"not null" json:"name"`
+	Description    string    `json:"description"`
+	Script         string    `gorm:"not null;type:text" json:"script"`
+	ResponseFilter bool      `gorm:"default:false" json:"response_filter"` // true = response filter, false = request filter
+	IsActive       bool      `gorm:"default:true" json:"is_active"`
+	OrderIndex     int       `gorm:"default:0" json:"order_index"`
+
 	// Hub-and-Spoke Configuration
-	Namespace   string    `gorm:"default:'';index:idx_filter_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
+	Namespace      string    `gorm:"default:'';index:idx_filter_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
 
 	// Relationships
 	LLMs []LLM `gorm:"many2many:llm_filters;" json:"llms,omitempty"`

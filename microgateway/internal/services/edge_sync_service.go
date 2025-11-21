@@ -272,15 +272,16 @@ func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) e
 
 	for _, pbFilter := range filters {
 		filter := &database.Filter{
-			ID:          uint(pbFilter.Id),
-			Name:        pbFilter.Name,
-			Description: pbFilter.Description,
-			Script:      pbFilter.Script,
-			IsActive:    pbFilter.IsActive,
-			OrderIndex:  int(pbFilter.OrderIndex),
-			Namespace:   pbFilter.Namespace,
-			CreatedAt:   pbFilter.CreatedAt.AsTime(),
-			UpdatedAt:   pbFilter.UpdatedAt.AsTime(),
+			ID:             uint(pbFilter.Id),
+			Name:           pbFilter.Name,
+			Description:    pbFilter.Description,
+			Script:         pbFilter.Script,
+			ResponseFilter: pbFilter.ResponseFilter,
+			IsActive:       pbFilter.IsActive,
+			OrderIndex:     int(pbFilter.OrderIndex),
+			Namespace:      pbFilter.Namespace,
+			CreatedAt:      pbFilter.CreatedAt.AsTime(),
+			UpdatedAt:      pbFilter.UpdatedAt.AsTime(),
 		}
 
 		if err := tx.Create(filter).Error; err != nil {

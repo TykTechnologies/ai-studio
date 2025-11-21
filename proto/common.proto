@@ -103,6 +103,7 @@ message FilterConfig {
   repeated uint32 llm_ids = 8; // Associated LLM IDs
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
+  bool response_filter = 11; // true = response filter, false = request filter
 }
 
 // PluginConfig represents a plugin configuration

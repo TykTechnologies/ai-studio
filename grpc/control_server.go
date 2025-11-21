@@ -989,16 +989,17 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	for _, filter := range filters {
 		llmIDs := filterLLMMap[filter.ID]
 		pbFilter := &pb.FilterConfig{
-			Id:          uint32(filter.ID),
-			Name:        filter.Name,
-			Description: filter.Description,
-			Script:      string(filter.Script),
-			IsActive:    true, // AI Studio Filter model doesn't have IsActive field yet
-			OrderIndex:  0,    // AI Studio doesn't have OrderIndex field yet
-			Namespace:   filter.Namespace,
-			LlmIds:      llmIDs, // Populated from llm_filters join table
-			CreatedAt:   timestamppb.New(filter.CreatedAt),
-			UpdatedAt:   timestamppb.New(filter.UpdatedAt),
+			Id:             uint32(filter.ID),
+			Name:           filter.Name,
+			Description:    filter.Description,
+			Script:         string(filter.Script),
+			ResponseFilter: filter.ResponseFilter,
+			IsActive:       true, // AI Studio Filter model doesn't have IsActive field yet
+			OrderIndex:     0,    // AI Studio doesn't have OrderIndex field yet
+			Namespace:      filter.Namespace,
+			LlmIds:         llmIDs, // Populated from llm_filters join table
+			CreatedAt:      timestamppb.New(filter.CreatedAt),
+			UpdatedAt:      timestamppb.New(filter.UpdatedAt),
 		}
 		snapshot.Filters = append(snapshot.Filters, pbFilter)
 
