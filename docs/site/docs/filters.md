@@ -38,11 +38,15 @@ Filters in Midsommar provide comprehensive request/response processing with both
    - Filters can both inspect AND modify in a single script.
    - Example: Redact emails from user messages, but block if SSN is detected.
 
-**Key Capability**: Filters now support message modification across all four contexts:
-- ✅ LLM Proxy Requests (before reaching LLM)
-- ✅ Chat Session Messages (before RAG search and LLM)
-- ✅ File Content (before RAG indexing)
-- ✅ Tool Responses (after tool execution)
+**Key Capabilities**:
+- ✅ **Request Filters**: Modify/block requests before reaching LLM
+  - LLM Proxy Requests (before reaching LLM)
+  - Chat Session Messages (before RAG search and LLM)
+  - File Content (before RAG indexing)
+  - Tool Responses (after tool execution)
+- ✅ **Response Filters**: Block LLM responses based on content
+  - LLM Proxy Responses (REST and streaming)
+  - Chat Session Responses (regular and streaming)
 
 ---
 
@@ -760,6 +764,228 @@ output := {
     message: ""         // Optional message
 }
 ```
+
+---
+
+## Response Filters
+
+**Response Filters** enable administrators to block LLM responses based on content analysis, providing governance controls on what LLMs can say to end users.
+
+### Key Characteristics
+
+1. **Block-Only**: Response filters can only block responses, not modify them
+2. **Works on LLM Responses**: Applied to LLM responses only (not tool responses)
+3. **Streaming Support**: Execute per-chunk during streaming with access to accumulated buffer
+4. **Script-Controlled**: Filter scripts decide when to evaluate based on buffer length
+
+### Configuration
+
+Enable response filtering by checking **"Is this a Response Filter?"** when creating or editing a filter in the admin UI.
+
+### Script API for Response Filters
+
+Response filters use the same `ScriptInput`/`ScriptOutput` structure as request filters, with additional response-specific fields:
+
+**Input Object (Non-Streaming):**
+```tengo
+input := {
+    raw_input: "The LLM's complete response text",
+    is_response: true,
+    is_chunk: false,
+    vendor_name: "openai",
+    model_name: "gpt-4",
+    is_chat: true,  // or false for proxy
+    context: {
+        llm_id: 123,
+        session_id: "abc-123",  // Only in chat context
+        user_id: 789,
+        chat_id: 456,
+        status_code: 200
+    }
+}
+```
+
+**Input Object (Streaming):**
+```tengo
+input := {
+    raw_input: "current chunk text",
+    is_response: true,
+    is_chunk: true,
+    chunk_index: 5,
+    current_buffer: "accumulated response text so far",
+    vendor_name: "openai",
+    model_name: "gpt-4",
+    is_chat: false,
+    context: {
+        llm_id: 123,
+        app_id: 456
+    }
+}
+```
+
+**Output Object:**
+```tengo
+output := {
+    block: false,   // Set true to block/interrupt response
+    message: ""     // Block reason (shown to user)
+}
+```
+
+**Note**: The `payload` and `messages` fields in output are **ignored** for response filters.
+
+### Example 1: Block Refund Promises (Works for Streaming and Non-Streaming)
+
+```tengo
+text := import("text")
+
+// Get response text - use buffer for streaming
+response_text := input.is_chunk ? input.current_buffer : input.raw_input
+
+// Default output
+output := {
+    block: false,
+    message: ""
+}
+
+// For streaming: only evaluate once we have enough context
+if !input.is_chunk || len(response_text) >= 100 {
+    // Check for forbidden patterns
+    forbidden := ["will refund", "issue a refund", "provide a refund", "get a refund"]
+    should_block := false
+
+    for pattern in forbidden {
+        if text.contains(text.to_lower(response_text), pattern) {
+            should_block = true
+            break
+        }
+    }
+
+    output = {
+        block: should_block,
+        message: should_block ? "Response blocked: Cannot promise refunds to customers" : ""
+    }
+}
+```
+
+### Example 2: Block Harmful Content (Streaming with Buffer Check)
+
+```tengo
+text := import("text")
+
+// Get response text (streaming-aware)
+response_text := input.is_chunk ? input.current_buffer : input.raw_input
+
+// Default output
+output := {
+    block: false,
+    message: ""
+}
+
+// For streaming: script controls when to evaluate based on buffer length
+// Wait until we have enough context before checking
+if !input.is_chunk || len(response_text) >= 150 {
+    // Check for harmful instruction patterns
+    harmful := [
+        "instructions for making",
+        "how to build a weapon",
+        "steps to create explosives"
+    ]
+
+    is_harmful := false
+    for pattern in harmful {
+        if text.contains(text.to_lower(response_text), pattern) {
+            is_harmful = true
+            break
+        }
+    }
+
+    output = {
+        block: is_harmful,
+        message: is_harmful ? "Response blocked: Potentially harmful content detected" : ""
+    }
+}
+```
+
+### Example 3: Combined with LLM Analysis
+
+Use another LLM to analyze the response for policy violations:
+
+```tengo
+tyk := import("tyk")
+text := import("text")
+
+// Get response text
+response_text := input.is_chunk ? input.current_buffer : input.raw_input
+
+// Default output
+output := {
+    block: false,
+    message: ""
+}
+
+// For streaming: only evaluate once buffer is large enough
+if !input.is_chunk || len(response_text) >= 200 {
+    // Use fast LLM to check for policy violations
+    settings := {
+        model_name: "gpt-3.5-turbo",
+        temperature: 0.0,
+        max_tokens: 5,
+        system_prompt: "You are a content policy checker. Answer only 'yes' or 'no'."
+    }
+
+    check_prompt := "Does this response promise a refund or commit to a specific action?: " + response_text
+    result := tyk.llm(1, settings, check_prompt)
+
+    should_block := text.contains(text.to_lower(result), "yes")
+
+    output = {
+        block: should_block,
+        message: should_block ? "Response blocked: LLM policy violation detected" : ""
+    }
+}
+```
+
+### Response Filter Execution
+
+**Proxy (REST)**:
+- Executes after response hooks (if any)
+- Full response available in `input.raw_input`
+- If blocked: Error returned to client instead of response
+
+**Proxy (Streaming)**:
+- Executes on every chunk
+- Access to both `raw_input` (current chunk) and `current_buffer` (accumulated text)
+- If blocked: Streaming stops, error sent to client
+
+**Chat (Non-Streaming)**:
+- Executes before adding to chat history
+- If blocked: Error published to queue instead of response
+
+**Chat (Streaming)**:
+- Executes on every chunk before publishing to queue
+- If blocked: Error published, streaming callback returns error to stop further chunks
+
+### Best Practices for Response Filters
+
+1. **Buffer Management** (Streaming): Script controls evaluation timing based on `len(current_buffer)`
+2. **Performance**: Keep filter logic lightweight (executes per-chunk in streaming)
+3. **Clear Messages**: Provide helpful block messages for users
+4. **Fail Open**: Filters fail open on script errors (response allowed through)
+5. **LLM-Only**: Response filters only work on LLM responses, not tool responses
+6. **Block-Only**: Cannot modify responses, only block them
+
+### When to Use Response Filters vs Request Filters
+
+**Use Request Filters When:**
+- Preventing sensitive data from reaching the LLM
+- Redacting PII before LLM processing
+- Enforcing input policies
+
+**Use Response Filters When:**
+- Preventing LLMs from making commitments (refunds, promises)
+- Blocking harmful or inappropriate LLM outputs
+- Enforcing corporate communication policies
+- Detecting policy violations in LLM responses
 
 ---
 

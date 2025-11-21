@@ -201,6 +201,7 @@ const FilterList = memo(() => {
                       Name
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Type</StyledTableHeaderCell>
                     <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
@@ -213,6 +214,9 @@ const FilterList = memo(() => {
                     >
                       <StyledTableCell>{filter.attributes.name}</StyledTableCell>
                       <StyledTableCell>{filter.attributes.description}</StyledTableCell>
+                      <StyledTableCell>
+                        {filter.attributes.response_filter ? "Response" : "Request"}
+                      </StyledTableCell>
                       <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, filter)}

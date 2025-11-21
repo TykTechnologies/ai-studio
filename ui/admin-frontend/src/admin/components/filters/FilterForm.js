@@ -7,6 +7,9 @@ import {
   Grid,
   Snackbar,
   Alert,
+  FormControlLabel,
+  Checkbox,
+  FormHelperText,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -23,6 +26,7 @@ const FilterForm = () => {
     name: "",
     description: "",
     script: "",
+    response_filter: false, // Response filter checkbox
     namespace: "", // Added for edge availability
   });
   const [errors, setErrors] = useState({});
@@ -47,6 +51,7 @@ const FilterForm = () => {
       setFilter({
         ...filterData,
         script: atob(filterData.script), // Decode base64
+        response_filter: filterData.response_filter || false, // Response filter flag
         namespace: filterData.namespace || "",
       });
     } catch (error) {
@@ -62,6 +67,11 @@ const FilterForm = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFilter({ ...filter, [name]: value });
+  };
+
+  const handleCheckboxChange = (e) => {
+    const { name, checked } = e.target;
+    setFilter({ ...filter, [name]: checked });
   };
 
   const handleNamespaceChange = (namespaces) => {
@@ -168,6 +178,23 @@ const FilterForm = () => {
                 multiline
                 rows={3}
               />
+            </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ mb: 2 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={filter.response_filter || false}
+                      onChange={handleCheckboxChange}
+                      name="response_filter"
+                    />
+                  }
+                  label="Is this a Response Filter?"
+                />
+                <FormHelperText sx={{ ml: 4, mt: 0 }}>
+                  Response filters run on LLM responses only (not tools). They can only block responses, not modify them. Streaming responses will be interrupted if blocked.
+                </FormHelperText>
+              </Box>
             </Grid>
             <Grid item xs={12}>
               <TextField

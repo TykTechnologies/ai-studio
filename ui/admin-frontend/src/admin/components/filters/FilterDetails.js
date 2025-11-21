@@ -76,6 +76,14 @@ const FilterDetails = () => {
           <Grid item xs={9}>
             <FieldValue>{filter.attributes.description}</FieldValue>
           </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Type:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>
+              {filter.attributes.response_filter ? "Response Filter" : "Request Filter"}
+            </FieldValue>
+          </Grid>
         </Grid>
 
         <Divider sx={{ my: 3 }} />

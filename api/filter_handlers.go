@@ -47,7 +47,13 @@ func (a *API) createFilter(c *gin.Context) {
 		return
 	}
 
-	filter, err := a.service.CreateFilter(input.Data.Attributes.Name, input.Data.Attributes.Description, input.Data.Attributes.Script)
+	filter, err := a.service.CreateFilter(
+		input.Data.Attributes.Name,
+		input.Data.Attributes.Description,
+		input.Data.Attributes.Script,
+		input.Data.Attributes.ResponseFilter,
+		input.Data.Attributes.Namespace,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -138,7 +144,14 @@ func (a *API) updateFilter(c *gin.Context) {
 		return
 	}
 
-	filter, err := a.service.UpdateFilter(uint(id), input.Data.Attributes.Name, input.Data.Attributes.Description, input.Data.Attributes.Script)
+	filter, err := a.service.UpdateFilter(
+		uint(id),
+		input.Data.Attributes.Name,
+		input.Data.Attributes.Description,
+		input.Data.Attributes.Script,
+		input.Data.Attributes.ResponseFilter,
+		input.Data.Attributes.Namespace,
+	)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
@@ -218,13 +231,17 @@ func toFilterResponse(filter *models.Filter) FilterResponse {
 		Type: "filter",
 		ID:   strconv.FormatUint(uint64(filter.ID), 10),
 		Attributes: struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			Script      []byte `json:"script"`
+			Name           string `json:"name"`
+			Description    string `json:"description"`
+			Script         []byte `json:"script"`
+			ResponseFilter bool   `json:"response_filter"`
+			Namespace      string `json:"namespace"`
 		}{
-			Name:        filter.Name,
-			Description: filter.Description,
-			Script:      filter.Script,
+			Name:           filter.Name,
+			Description:    filter.Description,
+			Script:         filter.Script,
+			ResponseFilter: filter.ResponseFilter,
+			Namespace:      filter.Namespace,
 		},
 	}
 }

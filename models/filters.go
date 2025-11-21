@@ -4,12 +4,13 @@ import "gorm.io/gorm"
 
 type Filter struct {
 	gorm.Model
-	ID          uint   `json:"id" gorm:"primaryKey"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Script      []byte `json:"script"`
+	ID             uint   `json:"id" gorm:"primaryKey"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Script         []byte `json:"script"`
+	ResponseFilter bool   `json:"response_filter" gorm:"default:false"` // true = response filter, false = request filter
 	// Hub-and-Spoke Configuration
-	Namespace   string `json:"namespace" gorm:"default:'';index:idx_filter_namespace"`
+	Namespace      string `json:"namespace" gorm:"default:'';index:idx_filter_namespace"`
 }
 
 func NewFilter() *Filter {

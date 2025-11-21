@@ -1,0 +1,53 @@
+// Response Filter: Block Refund Promises
+// This filter prevents LLMs from promising refunds to customers
+
+text := import("text")
+
+// Forbidden refund-related patterns
+forbidden_patterns := [
+    "will refund",
+    "issue a refund",
+    "provide a refund",
+    "get a refund",
+    "refund you",
+    "send you a refund",
+    "process your refund"
+]
+
+// For streaming, check the accumulated buffer (contains all text so far)
+// For non-streaming, check the full response
+check_text := input.current_buffer
+if !input.is_chunk {
+    check_text = input.raw_input
+}
+
+// Initialize output at top level (required by Tengo)
+output := {
+    block: false,
+    message: ""
+}
+
+// For streaming: wait for at least 100 characters before checking
+// This prevents false negatives when patterns span chunks
+min_buffer_length := 100
+
+// Only check if we have enough context
+if !input.is_chunk || len(check_text) >= min_buffer_length {
+    // We have enough text - check for forbidden patterns
+    should_block := false
+    matched_pattern := ""
+
+    for pattern in forbidden_patterns {
+        if text.contains(text.to_lower(check_text), pattern) {
+            should_block = true
+            matched_pattern = pattern
+            break
+        }
+    }
+
+    // Update output (use = not :=)
+    output = {
+        block: should_block,
+        message: should_block ? "Response blocked: Contains forbidden phrase '" + matched_pattern + "'" : ""
+    }
+}

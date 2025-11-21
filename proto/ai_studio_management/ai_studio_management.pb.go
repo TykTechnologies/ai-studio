@@ -8798,13 +8798,15 @@ func (x *GetFilterResponse) GetFilter() *FilterInfo {
 }
 
 type CreateFilterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Script        string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"` // Filter script content
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Context        *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description    string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Script         string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`                                        // Filter script content
+	ResponseFilter bool                   `protobuf:"varint,5,opt,name=response_filter,json=responseFilter,proto3" json:"response_filter,omitempty"` // true = response filter, false = request filter
+	Namespace      string                 `protobuf:"bytes,6,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreateFilterRequest) Reset() {
@@ -8865,6 +8867,20 @@ func (x *CreateFilterRequest) GetScript() string {
 	return ""
 }
 
+func (x *CreateFilterRequest) GetResponseFilter() bool {
+	if x != nil {
+		return x.ResponseFilter
+	}
+	return false
+}
+
+func (x *CreateFilterRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
 type CreateFilterResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filter        *FilterInfo            `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
@@ -8910,14 +8926,16 @@ func (x *CreateFilterResponse) GetFilter() *FilterInfo {
 }
 
 type UpdateFilterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	FilterId      uint32                 `protobuf:"varint,2,opt,name=filter_id,json=filterId,proto3" json:"filter_id,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Script        string                 `protobuf:"bytes,5,opt,name=script,proto3" json:"script,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Context        *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	FilterId       uint32                 `protobuf:"varint,2,opt,name=filter_id,json=filterId,proto3" json:"filter_id,omitempty"`
+	Name           string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description    string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Script         string                 `protobuf:"bytes,5,opt,name=script,proto3" json:"script,omitempty"`
+	ResponseFilter bool                   `protobuf:"varint,6,opt,name=response_filter,json=responseFilter,proto3" json:"response_filter,omitempty"` // true = response filter, false = request filter
+	Namespace      string                 `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *UpdateFilterRequest) Reset() {
@@ -8981,6 +8999,20 @@ func (x *UpdateFilterRequest) GetDescription() string {
 func (x *UpdateFilterRequest) GetScript() string {
 	if x != nil {
 		return x.Script
+	}
+	return ""
+}
+
+func (x *UpdateFilterRequest) GetResponseFilter() bool {
+	if x != nil {
+		return x.ResponseFilter
+	}
+	return false
+}
+
+func (x *UpdateFilterRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -9134,19 +9166,20 @@ func (x *DeleteFilterResponse) GetMessage() string {
 }
 
 type FilterInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Script        string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"` // Filter script (truncated for security)
-	IsActive      bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
-	OrderIndex    int32                  `protobuf:"varint,6,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
-	Namespace     string                 `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	LlmIds        []uint32               `protobuf:"varint,8,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description    string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Script         string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"` // Filter script (truncated for security)
+	IsActive       bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	OrderIndex     int32                  `protobuf:"varint,6,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	Namespace      string                 `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	LlmIds         []uint32               `protobuf:"varint,8,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`
+	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ResponseFilter bool                   `protobuf:"varint,11,opt,name=response_filter,json=responseFilter,proto3" json:"response_filter,omitempty"` // true = response filter, false = request filter
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *FilterInfo) Reset() {
@@ -9247,6 +9280,13 @@ func (x *FilterInfo) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *FilterInfo) GetResponseFilter() bool {
+	if x != nil {
+		return x.ResponseFilter
+	}
+	return false
 }
 
 type GetAvailableLLMDriversRequest struct {
@@ -11581,20 +11621,24 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1b\n" +
 	"\tfilter_id\x18\x02 \x01(\rR\bfilterId\"M\n" +
 	"\x11GetFilterResponse\x128\n" +
-	"\x06filter\x18\x01 \x01(\v2 .ai_studio_management.FilterInfoR\x06filter\"\xa2\x01\n" +
+	"\x06filter\x18\x01 \x01(\v2 .ai_studio_management.FilterInfoR\x06filter\"\xe9\x01\n" +
 	"\x13CreateFilterRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x16\n" +
-	"\x06script\x18\x04 \x01(\tR\x06script\"P\n" +
+	"\x06script\x18\x04 \x01(\tR\x06script\x12'\n" +
+	"\x0fresponse_filter\x18\x05 \x01(\bR\x0eresponseFilter\x12\x1c\n" +
+	"\tnamespace\x18\x06 \x01(\tR\tnamespace\"P\n" +
 	"\x14CreateFilterResponse\x128\n" +
-	"\x06filter\x18\x01 \x01(\v2 .ai_studio_management.FilterInfoR\x06filter\"\xbf\x01\n" +
+	"\x06filter\x18\x01 \x01(\v2 .ai_studio_management.FilterInfoR\x06filter\"\x86\x02\n" +
 	"\x13UpdateFilterRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1b\n" +
 	"\tfilter_id\x18\x02 \x01(\rR\bfilterId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x16\n" +
-	"\x06script\x18\x05 \x01(\tR\x06script\"P\n" +
+	"\x06script\x18\x05 \x01(\tR\x06script\x12'\n" +
+	"\x0fresponse_filter\x18\x06 \x01(\bR\x0eresponseFilter\x12\x1c\n" +
+	"\tnamespace\x18\a \x01(\tR\tnamespace\"P\n" +
 	"\x14UpdateFilterResponse\x128\n" +
 	"\x06filter\x18\x01 \x01(\v2 .ai_studio_management.FilterInfoR\x06filter\"q\n" +
 	"\x13DeleteFilterRequest\x12=\n" +
@@ -11602,7 +11646,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\tfilter_id\x18\x02 \x01(\rR\bfilterId\"J\n" +
 	"\x14DeleteFilterResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xd5\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xfe\x02\n" +
 	"\n" +
 	"FilterInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
@@ -11618,7 +11662,8 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"^\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
+	"\x0fresponse_filter\x18\v \x01(\bR\x0eresponseFilter\"^\n" +
 	"\x1dGetAvailableLLMDriversRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\"b\n" +
 	"\x1eGetAvailableLLMDriversResponse\x12@\n" +

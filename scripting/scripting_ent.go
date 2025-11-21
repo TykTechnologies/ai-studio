@@ -13,12 +13,17 @@ func (sr *ScriptRunner) RunScript(input *ScriptInput, serviceRef services.Servic
 
 	// Convert base ScriptInput to enterprise ScriptInput
 	entInput := &ent_scripting.ScriptInput{
-		RawInput:   input.RawInput,
-		Messages:   input.Messages,
-		VendorName: input.VendorName,
-		ModelName:  input.ModelName,
-		Context:    input.Context,
-		IsChat:     input.IsChat,
+		RawInput:      input.RawInput,
+		Messages:      input.Messages,
+		VendorName:    input.VendorName,
+		ModelName:     input.ModelName,
+		Context:       input.Context,
+		IsChat:        input.IsChat,
+		IsResponse:    input.IsResponse,
+		IsChunk:       input.IsChunk,
+		ChunkIndex:    input.ChunkIndex,
+		CurrentBuffer: input.CurrentBuffer,
+		StatusCode:    input.StatusCode,
 	}
 
 	// Call enterprise RunScript

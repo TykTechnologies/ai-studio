@@ -45,22 +45,25 @@ type LLMDriver interface {
 }
 
 type ChatSession struct {
-	id            string
-	chatRef       *models.Chat
-	chatHistory   *GormChatMessageHistory
-	input         chan *models.UserMessage
-	queue         MessageQueue // NEW: Replaces llmResponses, outputMessages, outputStream, errors
-	stop          chan struct{}
-	preProcessors []func(*models.UserMessage) error
-	caller        llms.Model
-	mode          ChatMode
-	datasources   map[uint]*models.Datasource
-	tools         map[string]models.Tool
-	db            *gorm.DB
-	service       *services.Service
-	userID        uint
-	files         map[string]string
-	filters       []*models.Filter
+	id                  string
+	chatRef             *models.Chat
+	chatHistory         *GormChatMessageHistory
+	input               chan *models.UserMessage
+	queue               MessageQueue // NEW: Replaces llmResponses, outputMessages, outputStream, errors
+	stop                chan struct{}
+	preProcessors       []func(*models.UserMessage) error
+	caller              llms.Model
+	mode                ChatMode
+	datasources         map[uint]*models.Datasource
+	tools               map[string]models.Tool
+	db                  *gorm.DB
+	service             *services.Service
+	userID              uint
+	files               map[string]string
+	filters             []*models.Filter
+	streamBuffer        string // Accumulated response text for streaming response filters
+	streamChunkIndex    int    // Current chunk index for streaming response filters
+	streamFilterBlocked bool   // Indicates if streaming was blocked by a filter
 }
 
 type ChatResponse struct {
@@ -327,14 +330,22 @@ func (cs *ChatSession) Start() error {
 					continue
 				}
 
-				// Run chat filters on user message before RAG search
+				// Run chat REQUEST filters on user message before RAG search (exclude response filters)
 				filteredMessage := msg.Payload
 				filterBlocked := false
 
-				slog.Info("Chat filters check", "filter_count", len(cs.filters))
-
+				// Filter to only request filters (ResponseFilter = false)
+				requestFilters := []*models.Filter{}
 				for _, filter := range cs.filters {
-					slog.Info("Running chat filter", "filter_name", filter.Name)
+					if !filter.ResponseFilter {
+						requestFilters = append(requestFilters, filter)
+					}
+				}
+
+				slog.Info("Chat request filters check", "filter_count", len(requestFilters))
+
+				for _, filter := range requestFilters {
+					slog.Info("Running chat request filter", "filter_name", filter.Name)
 					sr := scripting.NewScriptRunner(filter.Script)
 
 					// Create MessageContent for user message
@@ -838,6 +849,31 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	ctx := context.Background()
 
 	if content != "" {
+		// Execute response filters before adding to history and sending to user
+		blocked, blockMsg, filterErr := ExecuteResponseFilters(
+			cs.filters,
+			cs.service,
+			content,
+			string(cs.chatRef.LLM.Vendor),
+			cs.chatRef.LLMSettings.ModelName,
+			false, // isStreaming (non-streaming response)
+			false, // isChunk
+			0,     // chunkIndex
+			"",    // currentBuffer (not used for non-streaming)
+			cs.id,
+			cs.userID,
+			cs.chatRef.ID,
+		)
+		if filterErr != nil {
+			slog.Error("chat response filter execution error", "error", filterErr)
+			// Fail open on error - allow response through
+		} else if blocked {
+			// Response blocked by filter - send error to user instead
+			slog.Info("chat response blocked by filter", "message", blockMsg)
+			cs.sendError(fmt.Errorf("Response blocked: %s", blockMsg))
+			return nil
+		}
+
 		// For regular messages without tool calls
 		err := cs.chatHistory.AddAIMessage(ctx, content)
 		if err != nil {
@@ -893,6 +929,12 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 
 		// Check token length and get LLM response based on updated history
 		history = cs.PreflightTokenLengthCheck(history)
+
+		// Reset streaming buffer/index for new request
+		cs.streamBuffer = ""
+		cs.streamChunkIndex = 0
+		cs.streamFilterBlocked = false
+
 		resp, err := cs.caller.GenerateContent(ctx, history, currentOpts...)
 		if err != nil {
 			cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
@@ -953,6 +995,11 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 
 	// need to make sure we stay in content window
 	messages = cs.PreflightTokenLengthCheck(messages)
+
+	// Reset streaming buffer/index for new request
+	cs.streamBuffer = ""
+	cs.streamChunkIndex = 0
+	cs.streamFilterBlocked = false
 
 	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
 	if err != nil {
@@ -1446,7 +1493,52 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 	// Try to parse as JSON to check if it's a final message
 	var msg llms.MessageContent
 	if err := json.Unmarshal(chunk, &msg); err != nil {
-		// Not JSON, send as stream chunk via queue
+		// Not JSON, this is a streaming chunk
+		chunkText := string(chunk)
+
+		// Accumulate in buffer for response filters
+		cs.streamBuffer += chunkText
+		currentChunkIndex := cs.streamChunkIndex
+		cs.streamChunkIndex++
+
+		// Execute response filters on each chunk (if configured)
+		blocked, blockMsg, filterErr := ExecuteResponseFilters(
+			cs.filters,
+			cs.service,
+			chunkText,
+			string(cs.chatRef.LLM.Vendor),
+			cs.chatRef.LLMSettings.ModelName,
+			true,              // isStreaming
+			true,              // isChunk
+			currentChunkIndex, // chunkIndex
+			cs.streamBuffer,   // currentBuffer (accumulated so far)
+			cs.id,
+			cs.userID,
+			cs.chatRef.ID,
+		)
+
+		if filterErr != nil {
+			slog.Error("chat streaming filter execution error", "error", filterErr, "chunk_index", currentChunkIndex)
+			// Fail open on error - continue streaming
+		} else if blocked {
+			// Response blocked mid-stream - send error and mark as blocked
+			slog.Info("chat streaming response blocked by filter", "message", blockMsg, "chunk_index", currentChunkIndex)
+			cs.streamFilterBlocked = true
+
+			// Send error message to user
+			streamCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
+			defer cancel()
+
+			errorMsg := fmt.Sprintf("Response blocked: %s", blockMsg)
+			if queueErr := cs.queue.PublishStream(streamCtx, []byte(errorMsg)); queueErr != nil {
+				return fmt.Errorf("error publishing block message: %v", queueErr)
+			}
+
+			// Stop accepting further chunks
+			return fmt.Errorf("streaming blocked by filter: %s", blockMsg)
+		}
+
+		// Filter passed - send chunk to queue
 		streamCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 		defer cancel()
 

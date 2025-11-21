@@ -1,0 +1,46 @@
+// Response Filter: LLM-Based Policy Check
+// This filter uses another LLM to analyze responses for policy violations
+
+tyk := import("tyk")
+text := import("text")
+
+// Get response text
+response_text := input.is_chunk ? input.current_buffer : input.raw_input
+
+// For streaming: only evaluate once buffer reaches minimum size
+// This prevents making LLM calls on every tiny chunk
+min_buffer_size := 200
+
+// Default output
+output := {
+    block: false,
+    message: ""
+}
+
+// Only evaluate if we have enough context (for non-streaming or streaming with sufficient buffer)
+if !input.is_chunk || len(response_text) >= min_buffer_size {
+    // Use a fast, cheap LLM to check for policy violations
+    // Configure the LLM call with minimal tokens for fast response
+    settings := {
+        model_name: "gpt-3.5-turbo",
+        temperature: 0.0,
+        max_tokens: 10,
+        system_prompt: "You are a content policy checker. Respond ONLY with 'yes' or 'no'."
+    }
+
+    // Craft a policy check prompt
+    policy_check_prompt := `Does this text promise a refund, commit to a specific action, or violate customer service policies?
+
+Text: ` + response_text
+
+    // Call the policy checker LLM (LLM ID 1 - adjust as needed)
+    policy_result := tyk.llm(1, settings, policy_check_prompt)
+
+    // Check if LLM detected a violation
+    violates_policy := text.contains(text.to_lower(policy_result), "yes")
+
+    output = {
+        block: violates_policy,
+        message: violates_policy ? "Response blocked: LLM detected policy violation" : ""
+    }
+}

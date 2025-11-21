@@ -1060,6 +1060,8 @@ message CreateFilterRequest {
     string name = 2;
     string description = 3;
     string script = 4; // Filter script content
+    bool response_filter = 5; // true = response filter, false = request filter
+    string namespace = 6;
 }
 
 message CreateFilterResponse {
@@ -1072,6 +1074,8 @@ message UpdateFilterRequest {
     string name = 3;
     string description = 4;
     string script = 5;
+    bool response_filter = 6; // true = response filter, false = request filter
+    string namespace = 7;
 }
 
 message UpdateFilterResponse {
@@ -1099,6 +1103,7 @@ message FilterInfo {
     repeated uint32 llm_ids = 8;
     google.protobuf.Timestamp created_at = 9;
     google.protobuf.Timestamp updated_at = 10;
+    bool response_filter = 11; // true = response filter, false = request filter
 }
 
 // Vendor Information Messages

@@ -598,9 +598,11 @@ type FilterInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			Script      []byte `json:"script"`
+			Name           string `json:"name"`
+			Description    string `json:"description"`
+			Script         []byte `json:"script"`
+			ResponseFilter bool   `json:"response_filter"`
+			Namespace      string `json:"namespace"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -611,9 +613,11 @@ type FilterResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Script      []byte `json:"script"`
+		Name           string `json:"name"`
+		Description    string `json:"description"`
+		Script         []byte `json:"script"`
+		ResponseFilter bool   `json:"response_filter"`
+		Namespace      string `json:"namespace"`
 	} `json:"attributes"`
 }
 

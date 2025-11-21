@@ -459,14 +459,44 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	httpProxy := &httputil.ReverseProxy{Director: proxyDirector} // Renamed variable
 
-	// Use buffered response capture only if hooks are actually configured
-	if p.responseHookManager != nil && p.hasResponseHooks() {
+	// Check if we need to buffer the response (for hooks or response filters)
+	hasResponseFilters := p.hasResponseFilters(llm)
+	needsBuffering := (p.responseHookManager != nil && p.hasResponseHooks()) || hasResponseFilters
+
+	if needsBuffering {
 		bufferedCapture := newBufferedResponseCapture(w)
 		httpProxy.ServeHTTP(bufferedCapture, r)
 
 		// Execute REST-only response hooks (hooks modify the buffered response in-place)
-		if err := p.executeBufferedResponseHooks(bufferedCapture, llm, app, r); err != nil {
-			log.Printf("Response hook execution failed: %v", err)
+		if p.responseHookManager != nil && p.hasResponseHooks() {
+			if err := p.executeBufferedResponseHooks(bufferedCapture, llm, app, r); err != nil {
+				log.Printf("Response hook execution failed: %v", err)
+			}
+		}
+
+		// Execute response filters (block-only, after hooks)
+		if hasResponseFilters {
+			blocked, blockMsg, err := ExecuteResponseFilters(
+				llm,
+				p.gatewayService,
+				bufferedCapture.buffer.Bytes(),
+				bufferedCapture.statusCode,
+				false, // isStreaming
+				false, // isChunk
+				0,     // chunkIndex
+				"",    // currentBuffer (not used for non-streaming)
+				r,
+			)
+			if err != nil {
+				log.Printf("Response filter execution failed: %v", err)
+				// Fail open on error - allow response through
+			} else if blocked {
+				// Response was blocked by filter - return error instead
+				respondWithError(w, http.StatusBadRequest, blockMsg, nil, false)
+				// Still analyze for logging purposes
+				go p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
+				return
+			}
 		}
 
 		// AI Gateway proxy writes the final (potentially modified) response to client
@@ -563,6 +593,16 @@ func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, l
 func (p *Proxy) hasResponseHooks() bool {
 	if manager, ok := p.responseHookManager.(*DefaultResponseHookManager); ok {
 		return manager.HasHooks()
+	}
+	return false
+}
+
+// hasResponseFilters checks if the LLM has any response filters configured
+func (p *Proxy) hasResponseFilters(llm *models.LLM) bool {
+	for _, filter := range llm.Filters {
+		if filter.ResponseFilter {
+			return true
+		}
 	}
 	return false
 }
@@ -748,9 +788,13 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	var fullResponse bytes.Buffer
+	var textBuffer strings.Builder // Accumulate extracted text for response filters
 	buffer := make([]byte, 1024)
 	var responses [][]byte
 	isErr := false
+	chunkIndex := 0
+	hasResponseFilters := p.hasResponseFilters(llm)
+
 	for {
 		n, readErr := resp.Body.Read(buffer)
 		if n > 0 {
@@ -758,6 +802,45 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			copy(chunk, buffer[:n])
 			responses = append(responses, chunk)
 			fullResponse.Write(chunk)
+
+			// Execute response filters on each chunk (if configured)
+			if hasResponseFilters {
+				// Extract text from this chunk and add to text buffer
+				chunkText := switches.ExtractStreamingChunkText(llm.Vendor, chunk)
+				if chunkText != "" {
+					textBuffer.WriteString(chunkText)
+				}
+
+				blocked, blockMsg, filterErr := ExecuteResponseFilters(
+					llm,
+					p.gatewayService,
+					chunk,
+					resp.StatusCode,
+					true,                   // isStreaming
+					true,                   // isChunk
+					chunkIndex,             // chunkIndex
+					textBuffer.String(),    // currentBuffer (accumulated EXTRACTED TEXT)
+					r,
+				)
+				if filterErr != nil {
+					log.Printf("Response filter execution error on chunk %d: %v", chunkIndex, filterErr)
+					// Fail open on error - continue streaming
+				} else if blocked {
+					// Response blocked mid-stream - send error chunk and stop
+					log.Printf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
+					errorChunk := []byte(fmt.Sprintf(`{"error":"Response blocked by filter: %s"}`, blockMsg))
+					w.Write(errorChunk)
+					if f, ok := w.(http.Flusher); ok {
+						f.Flush()
+					}
+					isErr = true
+					// Analyze partial response
+					go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now())
+					return
+				}
+			}
+
+			// Filter passed or no filters - write chunk to client
 			if _, werr := w.Write(chunk); werr != nil {
 				isErr = true
 				break
@@ -765,6 +848,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
+			chunkIndex++
 		}
 		if readErr == io.EOF {
 			break
@@ -868,8 +952,13 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 		IsChat: false,
 	}
 
-	// Run filters in chain
+	// Run REQUEST filters in chain (exclude response filters)
 	for _, filter := range llm.Filters {
+		// Skip response filters - they only execute on responses
+		if filter.ResponseFilter {
+			continue
+		}
+
 		runner := scripting.NewScriptRunner(filter.Script)
 		output, err := runner.RunScript(scriptInput, p.gatewayService)
 		if err != nil {
