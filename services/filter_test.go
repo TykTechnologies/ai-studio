@@ -1,3 +1,5 @@
+//go:build enterprise
+
 package services
 
 import (
@@ -24,7 +26,7 @@ func TestFilterService(t *testing.T) {
 	service := NewService(db)
 
 	// Test CreateFilter
-	filter, err := service.CreateFilter("Test Filter", "Test Description", []byte("test script"))
+	filter, err := service.CreateFilter("Test Filter", "Test Description", []byte("test script"), false, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, filter)
 	assert.NotZero(t, filter.ID)
@@ -41,7 +43,7 @@ func TestFilterService(t *testing.T) {
 	assert.Equal(t, filter.Script, fetchedFilter.Script)
 
 	// Test UpdateFilter
-	updatedFilter, err := service.UpdateFilter(filter.ID, "Updated Filter", "Updated Description", []byte("updated script"))
+	updatedFilter, err := service.UpdateFilter(filter.ID, "Updated Filter", "Updated Description", []byte("updated script"), false, "")
 	assert.NoError(t, err)
 	assert.Equal(t, filter.ID, updatedFilter.ID)
 	assert.Equal(t, "Updated Filter", updatedFilter.Name)
@@ -77,7 +79,7 @@ func TestFilterServiceErrorCases(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test UpdateFilter with non-existent ID
-	_, err = service.UpdateFilter(9999, "Non-existent", "Description", []byte("script"))
+	_, err = service.UpdateFilter(9999, "Non-existent", "Description", []byte("script"), false, "")
 	assert.Error(t, err)
 
 	// Test DeleteFilter with non-existent ID
@@ -94,9 +96,9 @@ func TestFilterService_MultipleFilters(t *testing.T) {
 	service := NewService(db)
 
 	// Create multiple filters
-	filter1, _ := service.CreateFilter("Filter 1", "Description 1", []byte("script 1"))
-	filter2, _ := service.CreateFilter("Filter 2", "Description 2", []byte("script 2"))
-	filter3, _ := service.CreateFilter("Filter 3", "Description 3", []byte("script 3"))
+	filter1, _ := service.CreateFilter("Filter 1", "Description 1", []byte("script 1"), false, "")
+	filter2, _ := service.CreateFilter("Filter 2", "Description 2", []byte("script 2"), false, "")
+	filter3, _ := service.CreateFilter("Filter 3", "Description 3", []byte("script 3"), false, "")
 
 	// Test GetAllFilters
 	allFilters, _, _, err := service.GetAllFilters(10, 1, true)
@@ -105,9 +107,9 @@ func TestFilterService_MultipleFilters(t *testing.T) {
 	assert.ElementsMatch(t, []uint{filter1.ID, filter2.ID, filter3.ID}, []uint{allFilters[0].ID, allFilters[1].ID, allFilters[2].ID})
 
 	// Test updating multiple filters
-	_, err = service.UpdateFilter(filter1.ID, "Updated Filter 1", "Updated Description 1", []byte("updated script 1"))
+	_, err = service.UpdateFilter(filter1.ID, "Updated Filter 1", "Updated Description 1", []byte("updated script 1"), false, "")
 	assert.NoError(t, err)
-	_, err = service.UpdateFilter(filter2.ID, "Updated Filter 2", "Updated Description 2", []byte("updated script 2"))
+	_, err = service.UpdateFilter(filter2.ID, "Updated Filter 2", "Updated Description 2", []byte("updated script 2"), false, "")
 	assert.NoError(t, err)
 
 	// Verify updates

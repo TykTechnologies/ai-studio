@@ -1502,20 +1502,27 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 		cs.streamChunkIndex++
 
 		// Execute response filters on each chunk (if configured)
-		blocked, blockMsg, filterErr := ExecuteResponseFilters(
-			cs.filters,
-			cs.service,
-			chunkText,
-			string(cs.chatRef.LLM.Vendor),
-			cs.chatRef.LLMSettings.ModelName,
-			true,              // isStreaming
-			true,              // isChunk
-			currentChunkIndex, // chunkIndex
-			cs.streamBuffer,   // currentBuffer (accumulated so far)
-			cs.id,
-			cs.userID,
-			cs.chatRef.ID,
-		)
+		// Only run filters if chatRef and LLM are properly initialized
+		var blocked bool
+		var blockMsg string
+		var filterErr error
+
+		if cs.chatRef != nil && cs.chatRef.LLM != nil && cs.chatRef.LLMSettings != nil {
+			blocked, blockMsg, filterErr = ExecuteResponseFilters(
+				cs.filters,
+				cs.service,
+				chunkText,
+				string(cs.chatRef.LLM.Vendor),
+				cs.chatRef.LLMSettings.ModelName,
+				true,              // isStreaming
+				true,              // isChunk
+				currentChunkIndex, // chunkIndex
+				cs.streamBuffer,   // currentBuffer (accumulated so far)
+				cs.id,
+				cs.userID,
+				cs.chatRef.ID,
+			)
+		}
 
 		if filterErr != nil {
 			slog.Error("chat streaming filter execution error", "error", filterErr, "chunk_index", currentChunkIndex)
