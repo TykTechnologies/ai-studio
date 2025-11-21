@@ -525,7 +525,11 @@ result := tyk.makeHTTPRequest(method, url, headers, body)
 // Returns: {status: 200, response: "..."}
 
 // Call other LLMs for analysis/enrichment
-response := tyk.llm(llm_id, llm_settings_id, prompt)
+response := tyk.llm(llm_id, settings_object, prompt)
+// Parameters:
+//   - llm_id: ID of the managed LLM to use
+//   - settings_object: Map with model settings (model_name, temperature, max_tokens, etc.)
+//   - prompt: The prompt text to send
 // Returns: LLM response as string
 ```
 
@@ -543,8 +547,16 @@ for msg in input.messages {
 }
 
 // Use another LLM to detect PII
-pii_check_prompt := "Does this text contain PII? Answer only yes or no: " + user_msg
-pii_result := tyk.llm(1, 1, pii_check_prompt)
+// Define settings for the LLM call
+settings := {
+    model_name: "gpt-3.5-turbo",
+    temperature: 0.0,
+    max_tokens: 10,
+    system_prompt: "You are a PII detection assistant. Answer only 'yes' or 'no'."
+}
+
+pii_check_prompt := "Does this text contain PII?: " + user_msg
+pii_result := tyk.llm(1, settings, pii_check_prompt)
 
 output := {
     block: pii_result == "yes",

@@ -292,9 +292,8 @@ func (p *Proxy) createHandler() http.Handler {
 	// Middleware chain (innermost to outermost):
 	// 1. requestIDMiddleware - Generate canonical request ID (MUST BE FIRST)
 	// 2. credValidator.Middleware - Authenticate requests
-	// 3. outboundRequestMiddleware - Prepare outbound requests
-	// 4. cloudflareHeadersMiddleware - Add Cloudflare headers
-	return p.cloudflareHeadersMiddleware(p.outboundRequestMiddleware(p.credValidator.Middleware(r)))
+	// 3. cloudflareHeadersMiddleware - Add Cloudflare headers
+	return p.cloudflareHeadersMiddleware(p.credValidator.Middleware(r))
 }
 
 func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
@@ -356,27 +355,6 @@ func (p *Proxy) AddFilter(filter *models.Filter) {
 	p.filters = append(p.filters, filter)
 }
 
-func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err, false)
-			return
-		}
-		r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		for _, filter := range p.filters {
-			runner := scripting.NewScriptRunner(filter.Script)
-			// Note: For now, we'll pass nil since the scripting doesn't depend on the service interface methods
-			// This should be refactored if the scripting needs access to data
-			if err := runner.RunFilter(string(bodyBytes), nil); err != nil {
-				respondWithError(w, http.StatusForbidden, fmt.Sprintf("Policy error: %s", filter.Name), nil, false)
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
 func (p *Proxy) cloudflareHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Connection", "keep-alive")
@@ -893,7 +871,7 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	// Run filters in chain
 	for _, filter := range llm.Filters {
 		runner := scripting.NewScriptRunner(filter.Script)
-		output, err := runner.RunScript(scriptInput, nil)
+		output, err := runner.RunScript(scriptInput, p.gatewayService)
 		if err != nil {
 			return fmt.Errorf("script error in filter '%s': %v", filter.Name, err)
 		}
