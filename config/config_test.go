@@ -22,7 +22,7 @@ func TestConfigWithoutEnvFile(t *testing.T) {
 	os.Setenv("DATABASE_URL", "test.db")
 
 	// Get config
-	conf := Get()
+	conf := Get("")
 
 	// Verify environment variables are read correctly
 	if conf.ServerPort != "9090" {
@@ -64,7 +64,7 @@ func TestConfigWithEnvFile(t *testing.T) {
 	}
 
 	// Get config - this will load the .env file internally
-	conf := Get()
+	conf := Get("")
 
 	// Verify .env file values are read correctly
 	if conf.ServerPort != "8888" {
@@ -105,7 +105,7 @@ func TestConfigEnvOverridesFile(t *testing.T) {
 	globalConfig = nil
 
 	// Get config
-	conf := Get()
+	conf := Get("")
 
 	// Verify environment variable takes precedence over .env file
 	if conf.ServerPort != "7777" {

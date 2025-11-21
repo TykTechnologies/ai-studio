@@ -16,7 +16,8 @@ type ScriptInput struct {
 
 // ScriptOutput represents the result of script execution
 type ScriptOutput struct {
-	Block   bool   // If true, stops the request/response chain
-	Payload string // Modified content (empty = no modification)
-	Message string // Optional blocking reason or log message
+	Block    bool                     // If true, stops the request/response chain
+	Payload  string                   // Modified content (empty = no modification)
+	Messages []map[string]interface{} // Modified messages array (alternative to Payload)
+	Message  string                   // Optional blocking reason or log message
 }

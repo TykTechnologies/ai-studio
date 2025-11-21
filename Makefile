@@ -3,6 +3,7 @@
 # Variables
 ADMIN_FRONTEND_DIR := ui/admin-frontend
 FORCE_BUILD := false
+SKIP_FRONTEND := false
 
 # Detect if enterprise submodule exists and is initialized
 ENTERPRISE_EXISTS := $(shell test -f enterprise/.git && echo "yes" || echo "no")
@@ -36,6 +37,10 @@ help:
 	@echo "  make build-native-ent   - Build ENT for current platform with CGO"
 	@echo "  make build-local        - Alias for build-native (backward compatible)"
 	@echo ""
+	@echo "Development flags:"
+	@echo "  SKIP_FRONTEND=true      - Skip frontend build (for faster iteration)"
+	@echo "  Example: make build-native-ce SKIP_FRONTEND=true"
+	@echo ""
 	@echo "Production (multi-platform, optimized, CGO-enabled):"
 	@echo "  make build-prod         - Build all platforms with CGO (auto-detect edition)"
 	@echo "  make build-prod-ce      - Build CE for all platforms with CGO"
@@ -57,9 +62,14 @@ help:
 # Build target (default to production multi-platform builds)
 build: build-prod
 
-# Build frontend
+# Build frontend (can be skipped with SKIP_FRONTEND=true)
 build-frontend:
+ifeq ($(SKIP_FRONTEND),true)
+	@echo "⏭️  Skipping frontend build (SKIP_FRONTEND=true)"
+else
+	@echo "🔨 Building frontend..."
 	cd $(ADMIN_FRONTEND_DIR) && npm run build
+endif
 
 # ============================================================================
 # Development Builds (single platform, fast, CGO enabled)

@@ -565,20 +565,20 @@ func TestHandleOAuthProtectedResourceMetadata(t *testing.T) {
 	handler := http.HandlerFunc(p.handleOAuthProtectedResourceMetadata)
 
 	// Backup and defer restore of original config values
-	originalAuthServerURL := config.Get().AuthServerURL
-	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
-	originalProxyURL := config.Get().ProxyURL
+	originalAuthServerURL := config.Get("").AuthServerURL
+	originalProxyOAuthMetaURL := config.Get("").ProxyOAuthMetadataURL
+	originalProxyURL := config.Get("").ProxyURL
 
 	defer func() {
-		config.Get().AuthServerURL = originalAuthServerURL
-		config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL
-		config.Get().ProxyURL = originalProxyURL
+		config.Get("").AuthServerURL = originalAuthServerURL
+		config.Get("").ProxyOAuthMetadataURL = originalProxyOAuthMetaURL
+		config.Get("").ProxyURL = originalProxyURL
 	}()
 
 	// Set test config values
-	config.Get().AuthServerURL = "http://auth.example.com"
-	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
-	config.Get().ProxyURL = "http://proxy.example.com"
+	config.Get("").AuthServerURL = "http://auth.example.com"
+	config.Get("").ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
+	config.Get("").ProxyURL = "http://proxy.example.com"
 
 	req := httptest.NewRequest("GET", "/.well-known/oauth-protected-resource", nil)
 	rr := httptest.NewRecorder()
@@ -613,10 +613,10 @@ func TestRespondWithError_WWWAuthenticate(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	// Backup and defer restore
-	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
-	defer func() { config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
+	originalProxyOAuthMetaURL := config.Get("").ProxyOAuthMetadataURL
+	defer func() { config.Get("").ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
 
-	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
+	config.Get("").ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
 
 	respondWithError(rr, http.StatusUnauthorized, "test auth error", nil, true)
 
@@ -640,10 +640,10 @@ func TestRespondWithError_WWWAuthenticate(t *testing.T) {
 func TestRespondWithOAIError_WWWAuthenticate(t *testing.T) {
 	rr := httptest.NewRecorder()
 
-	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
-	defer func() { config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
+	originalProxyOAuthMetaURL := config.Get("").ProxyOAuthMetadataURL
+	defer func() { config.Get("").ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
 
-	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/oai/.well-known/oauth-protected-resource"
+	config.Get("").ProxyOAuthMetadataURL = "http://proxy.example.com/oai/.well-known/oauth-protected-resource"
 
 	respondWithOAIError(rr, http.StatusUnauthorized, "test oai auth error", nil, true)
 

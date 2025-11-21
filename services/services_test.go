@@ -117,7 +117,7 @@ func TestUserService(t *testing.T) {
 
 	t.Run("Email format validation", func(t *testing.T) {
 		// Temporarily configure FilterSignupDomains to enable email validation
-		appConfig := config.Get()
+		appConfig := config.Get("")
 		originalDomains := appConfig.FilterSignupDomains
 		appConfig.FilterSignupDomains = []string{"example.com"}            // Only allow example.com
 		defer func() { appConfig.FilterSignupDomains = originalDomains }() // Restore original config

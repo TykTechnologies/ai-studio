@@ -610,8 +610,8 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 					ModelName:  cs.chatRef.LLMSettings.ModelName,
 					Context: map[string]interface{}{
 						"session_id": cs.ID(),
-						"user_id":    cs.userID,
-						"chat_id":    cs.chatRef.ID,
+						"user_id":    int64(cs.userID),      // Convert uint to int64 for Tengo
+						"chat_id":    int64(cs.chatRef.ID),  // Convert uint to int64 for Tengo
 						"file_ref":   refs[i],
 					},
 					IsChat: true,
@@ -1331,9 +1331,9 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 					ModelName:  cs.chatRef.LLMSettings.ModelName,
 					Context: map[string]interface{}{
 						"session_id": cs.ID(),
-						"user_id":    cs.userID,
+						"user_id":    int64(cs.userID),   // Convert uint to int64 for Tengo
 						"tool_name":  toolDef.Name,
-						"tool_id":    toolDef.ID,
+						"tool_id":    int64(toolDef.ID),  // Convert uint to int64 for Tengo
 						"call_id":    t.ID,
 					},
 					IsChat: true,

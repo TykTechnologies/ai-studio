@@ -1,0 +1,17 @@
+// Email Redaction Filter
+// This script redacts email addresses from all messages using regex
+
+tyk := import("tyk")
+
+// Redact email addresses with a comprehensive regex pattern
+modified_payload := tyk.redact_pattern(
+    input,
+    "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+    "[EMAIL_REDACTED]"
+)
+
+output := {
+    block: false,
+    payload: modified_payload,
+    message: ""
+}

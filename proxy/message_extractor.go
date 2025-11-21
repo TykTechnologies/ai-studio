@@ -73,7 +73,7 @@ func (e *AnthropicMessageExtractor) VendorName() string {
 // ExtractMessages parses Anthropic's format (separate system field + messages array)
 func (e *AnthropicMessageExtractor) ExtractMessages(r *http.Request, body []byte) ([]llms.MessageContent, error) {
 	var req struct {
-		System   string `json:"system"`
+		System   interface{} `json:"system"` // string or array of content blocks
 		Messages []struct {
 			Role    string      `json:"role"`
 			Content interface{} `json:"content"` // string or array of content blocks
@@ -87,11 +87,14 @@ func (e *AnthropicMessageExtractor) ExtractMessages(r *http.Request, body []byte
 	messages := []llms.MessageContent{}
 
 	// Add system message first if present
-	if req.System != "" {
-		messages = append(messages, llms.MessageContent{
-			Role:  llms.ChatMessageTypeSystem,
-			Parts: []llms.ContentPart{llms.TextPart(req.System)},
-		})
+	if req.System != nil {
+		systemText := e.extractContent(req.System)
+		if systemText != "" {
+			messages = append(messages, llms.MessageContent{
+				Role:  llms.ChatMessageTypeSystem,
+				Parts: []llms.ContentPart{llms.TextPart(systemText)},
+			})
+		}
 	}
 
 	// Convert messages array

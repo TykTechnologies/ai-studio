@@ -88,10 +88,11 @@ type Proxy struct {
 	datasources             map[string]*models.Datasource
 	mu                      sync.RWMutex
 	config                  *Config
-	credValidator           *CredentialValidator
-	modelValidator          *ModelValidator
-	messageExtractorRegistry *MessageExtractorRegistry
-	filters                 []*models.Filter
+	credValidator              *CredentialValidator
+	modelValidator             *ModelValidator
+	messageExtractorRegistry   *MessageExtractorRegistry
+	messageReconstructorRegistry *MessageReconstructorRegistry
+	filters                    []*models.Filter
 	authService             *auth.AuthService
 	mcpServers              map[string]*MCPServerCache
 	mcpServersMu            sync.RWMutex
@@ -148,6 +149,15 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	messageExtractorRegistry.Register(&VertexMessageExtractor{})
 	messageExtractorRegistry.Register(&OllamaMessageExtractor{})
 	p.messageExtractorRegistry = messageExtractorRegistry
+
+	// Initialize message reconstructor registry for message modification
+	messageReconstructorRegistry := NewMessageReconstructorRegistry()
+	messageReconstructorRegistry.Register(&OpenAIMessageReconstructor{})
+	messageReconstructorRegistry.Register(&AnthropicMessageReconstructor{})
+	messageReconstructorRegistry.Register(&GoogleAIMessageReconstructor{})
+	messageReconstructorRegistry.Register(&VertexMessageReconstructor{})
+	messageReconstructorRegistry.Register(&OllamaMessageReconstructor{})
+	p.messageReconstructorRegistry = messageReconstructorRegistry
 
 	return p
 }
@@ -873,8 +883,8 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 		VendorName: string(llm.Vendor),
 		ModelName:  modelName,
 		Context: map[string]interface{}{
-			"llm_id":     llm.ID,
-			"app_id":     appID,
+			"llm_id":     int64(llm.ID),    // Convert uint to int64 for Tengo
+			"app_id":     int64(appID),      // Convert uint to int64 for Tengo
 			"request_id": r.Header.Get("X-Request-ID"),
 		},
 		IsChat: false,
@@ -898,7 +908,21 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 		}
 
 		// Apply modifications to the request body for next filter
-		if output.Payload != "" && output.Payload != scriptInput.RawInput {
+		// Prefer Messages array if provided, otherwise use Payload
+		if len(output.Messages) > 0 {
+			// Use message reconstructor to rebuild vendor-specific JSON
+			reconstructed, err := p.messageReconstructorRegistry.Reconstruct(string(llm.Vendor), output.Messages, bodyBytes)
+			if err != nil {
+				return fmt.Errorf("failed to reconstruct request in filter '%s': %v", filter.Name, err)
+			}
+			scriptInput.RawInput = string(reconstructed)
+			bodyBytes = reconstructed
+
+			// Re-extract messages from reconstructed payload for next filter
+			if newMessages, err := p.messageExtractorRegistry.Extract(string(llm.Vendor), r, bodyBytes); err == nil {
+				scriptInput.Messages = newMessages
+			}
+		} else if output.Payload != "" && output.Payload != scriptInput.RawInput {
 			scriptInput.RawInput = output.Payload
 			bodyBytes = []byte(output.Payload)
 

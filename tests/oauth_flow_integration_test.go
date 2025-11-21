@@ -134,10 +134,10 @@ func setupIntegrationTestEnv(t *testing.T) (*http.Client, string, string) {
 	}
 
 	// Override config URLs to point to test servers
-	config.Get().SiteURL = dashboardServer.URL       // For consent redirects
-	config.Get().AuthServerURL = dashboardServer.URL // For metadata
-	config.Get().ProxyURL = proxyServer.URL          // For metadata resource field
-	config.Get().ProxyOAuthMetadataURL = proxyServer.URL + "/.well-known/oauth-protected-resource"
+	config.Get("").SiteURL = dashboardServer.URL       // For consent redirects
+	config.Get("").AuthServerURL = dashboardServer.URL // For metadata
+	config.Get("").ProxyURL = proxyServer.URL          // For metadata resource field
+	config.Get("").ProxyOAuthMetadataURL = proxyServer.URL + "/.well-known/oauth-protected-resource"
 
 	return httpClient, dashboardServer.URL, proxyServer.URL
 }
@@ -276,7 +276,7 @@ func TestFullAuthorizationCodeFlowAndProxyAccess(t *testing.T) {
 	require.Equal(t, http.StatusFound, authResp.StatusCode, "Expected redirect to consent page")
 	consentPageURL, err := authResp.Location()
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(consentPageURL.String(), config.Get().SiteURL+"/oauth/consent"), "Should redirect to consent page on configured SiteURL")
+	require.True(t, strings.HasPrefix(consentPageURL.String(), config.Get("").SiteURL+"/oauth/consent"), "Should redirect to consent page on configured SiteURL")
 	authRequestID := consentPageURL.Query().Get("auth_req_id")
 	require.NotEmpty(t, authRequestID)
 
