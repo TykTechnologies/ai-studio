@@ -55,6 +55,10 @@ const (
 	AIStudioManagementService_DeleteDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/DeleteDatasource"
 	AIStudioManagementService_SearchDatasources_FullMethodName           = "/ai_studio_management.AIStudioManagementService/SearchDatasources"
 	AIStudioManagementService_ProcessDatasourceEmbeddings_FullMethodName = "/ai_studio_management.AIStudioManagementService/ProcessDatasourceEmbeddings"
+	AIStudioManagementService_GenerateEmbedding_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GenerateEmbedding"
+	AIStudioManagementService_StoreDocuments_FullMethodName              = "/ai_studio_management.AIStudioManagementService/StoreDocuments"
+	AIStudioManagementService_ProcessAndStoreDocuments_FullMethodName    = "/ai_studio_management.AIStudioManagementService/ProcessAndStoreDocuments"
+	AIStudioManagementService_QueryDatasourceByVector_FullMethodName     = "/ai_studio_management.AIStudioManagementService/QueryDatasourceByVector"
 	AIStudioManagementService_ListDataCatalogues_FullMethodName          = "/ai_studio_management.AIStudioManagementService/ListDataCatalogues"
 	AIStudioManagementService_GetDataCatalogue_FullMethodName            = "/ai_studio_management.AIStudioManagementService/GetDataCatalogue"
 	AIStudioManagementService_CreateDataCatalogue_FullMethodName         = "/ai_studio_management.AIStudioManagementService/CreateDataCatalogue"
@@ -138,6 +142,11 @@ type AIStudioManagementServiceClient interface {
 	DeleteDatasource(ctx context.Context, in *DeleteDatasourceRequest, opts ...grpc.CallOption) (*DeleteDatasourceResponse, error)
 	SearchDatasources(ctx context.Context, in *SearchDatasourcesRequest, opts ...grpc.CallOption) (*SearchDatasourcesResponse, error)
 	ProcessDatasourceEmbeddings(ctx context.Context, in *ProcessEmbeddingsRequest, opts ...grpc.CallOption) (*ProcessEmbeddingsResponse, error)
+	// RAG/Embedding Operations for Plugins
+	GenerateEmbedding(ctx context.Context, in *GenerateEmbeddingRequest, opts ...grpc.CallOption) (*GenerateEmbeddingResponse, error)
+	StoreDocuments(ctx context.Context, in *StoreDocumentsRequest, opts ...grpc.CallOption) (*StoreDocumentsResponse, error)
+	ProcessAndStoreDocuments(ctx context.Context, in *ProcessAndStoreRequest, opts ...grpc.CallOption) (*ProcessAndStoreResponse, error)
+	QueryDatasourceByVector(ctx context.Context, in *QueryByVectorRequest, opts ...grpc.CallOption) (*QueryDatasourceResponse, error)
 	// Data Catalogues Management Operations (Phase 1.2)
 	ListDataCatalogues(ctx context.Context, in *ListDataCataloguesRequest, opts ...grpc.CallOption) (*ListDataCataloguesResponse, error)
 	GetDataCatalogue(ctx context.Context, in *GetDataCatalogueRequest, opts ...grpc.CallOption) (*GetDataCatalogueResponse, error)
@@ -546,6 +555,46 @@ func (c *aIStudioManagementServiceClient) ProcessDatasourceEmbeddings(ctx contex
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) GenerateEmbedding(ctx context.Context, in *GenerateEmbeddingRequest, opts ...grpc.CallOption) (*GenerateEmbeddingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GenerateEmbeddingResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GenerateEmbedding_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) StoreDocuments(ctx context.Context, in *StoreDocumentsRequest, opts ...grpc.CallOption) (*StoreDocumentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StoreDocumentsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_StoreDocuments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ProcessAndStoreDocuments(ctx context.Context, in *ProcessAndStoreRequest, opts ...grpc.CallOption) (*ProcessAndStoreResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProcessAndStoreResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ProcessAndStoreDocuments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) QueryDatasourceByVector(ctx context.Context, in *QueryByVectorRequest, opts ...grpc.CallOption) (*QueryDatasourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryDatasourceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_QueryDatasourceByVector_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *aIStudioManagementServiceClient) ListDataCatalogues(ctx context.Context, in *ListDataCataloguesRequest, opts ...grpc.CallOption) (*ListDataCataloguesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListDataCataloguesResponse)
@@ -915,6 +964,11 @@ type AIStudioManagementServiceServer interface {
 	DeleteDatasource(context.Context, *DeleteDatasourceRequest) (*DeleteDatasourceResponse, error)
 	SearchDatasources(context.Context, *SearchDatasourcesRequest) (*SearchDatasourcesResponse, error)
 	ProcessDatasourceEmbeddings(context.Context, *ProcessEmbeddingsRequest) (*ProcessEmbeddingsResponse, error)
+	// RAG/Embedding Operations for Plugins
+	GenerateEmbedding(context.Context, *GenerateEmbeddingRequest) (*GenerateEmbeddingResponse, error)
+	StoreDocuments(context.Context, *StoreDocumentsRequest) (*StoreDocumentsResponse, error)
+	ProcessAndStoreDocuments(context.Context, *ProcessAndStoreRequest) (*ProcessAndStoreResponse, error)
+	QueryDatasourceByVector(context.Context, *QueryByVectorRequest) (*QueryDatasourceResponse, error)
 	// Data Catalogues Management Operations (Phase 1.2)
 	ListDataCatalogues(context.Context, *ListDataCataloguesRequest) (*ListDataCataloguesResponse, error)
 	GetDataCatalogue(context.Context, *GetDataCatalogueRequest) (*GetDataCatalogueResponse, error)
@@ -1070,6 +1124,18 @@ func (UnimplementedAIStudioManagementServiceServer) SearchDatasources(context.Co
 }
 func (UnimplementedAIStudioManagementServiceServer) ProcessDatasourceEmbeddings(context.Context, *ProcessEmbeddingsRequest) (*ProcessEmbeddingsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ProcessDatasourceEmbeddings not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GenerateEmbedding(context.Context, *GenerateEmbeddingRequest) (*GenerateEmbeddingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GenerateEmbedding not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) StoreDocuments(context.Context, *StoreDocumentsRequest) (*StoreDocumentsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StoreDocuments not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ProcessAndStoreDocuments(context.Context, *ProcessAndStoreRequest) (*ProcessAndStoreResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProcessAndStoreDocuments not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) QueryDatasourceByVector(context.Context, *QueryByVectorRequest) (*QueryDatasourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryDatasourceByVector not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) ListDataCatalogues(context.Context, *ListDataCataloguesRequest) (*ListDataCataloguesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDataCatalogues not implemented")
@@ -1834,6 +1900,78 @@ func _AIStudioManagementService_ProcessDatasourceEmbeddings_Handler(srv interfac
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_GenerateEmbedding_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GenerateEmbeddingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GenerateEmbedding(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GenerateEmbedding_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GenerateEmbedding(ctx, req.(*GenerateEmbeddingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_StoreDocuments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StoreDocumentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).StoreDocuments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_StoreDocuments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).StoreDocuments(ctx, req.(*StoreDocumentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ProcessAndStoreDocuments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProcessAndStoreRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ProcessAndStoreDocuments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ProcessAndStoreDocuments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ProcessAndStoreDocuments(ctx, req.(*ProcessAndStoreRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_QueryDatasourceByVector_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryByVectorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).QueryDatasourceByVector(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_QueryDatasourceByVector_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).QueryDatasourceByVector(ctx, req.(*QueryByVectorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AIStudioManagementService_ListDataCatalogues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListDataCataloguesRequest)
 	if err := dec(in); err != nil {
@@ -2535,6 +2673,22 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ProcessDatasourceEmbeddings",
 			Handler:    _AIStudioManagementService_ProcessDatasourceEmbeddings_Handler,
+		},
+		{
+			MethodName: "GenerateEmbedding",
+			Handler:    _AIStudioManagementService_GenerateEmbedding_Handler,
+		},
+		{
+			MethodName: "StoreDocuments",
+			Handler:    _AIStudioManagementService_StoreDocuments_Handler,
+		},
+		{
+			MethodName: "ProcessAndStoreDocuments",
+			Handler:    _AIStudioManagementService_ProcessAndStoreDocuments_Handler,
+		},
+		{
+			MethodName: "QueryDatasourceByVector",
+			Handler:    _AIStudioManagementService_QueryDatasourceByVector_Handler,
 		},
 		{
 			MethodName: "ListDataCatalogues",

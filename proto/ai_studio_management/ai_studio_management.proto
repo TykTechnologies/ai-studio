@@ -59,6 +59,12 @@ service AIStudioManagementService {
     rpc SearchDatasources(SearchDatasourcesRequest) returns (SearchDatasourcesResponse);
     rpc ProcessDatasourceEmbeddings(ProcessEmbeddingsRequest) returns (ProcessEmbeddingsResponse);
 
+    // RAG/Embedding Operations for Plugins
+    rpc GenerateEmbedding(GenerateEmbeddingRequest) returns (GenerateEmbeddingResponse);
+    rpc StoreDocuments(StoreDocumentsRequest) returns (StoreDocumentsResponse);
+    rpc ProcessAndStoreDocuments(ProcessAndStoreRequest) returns (ProcessAndStoreResponse);
+    rpc QueryDatasourceByVector(QueryByVectorRequest) returns (QueryDatasourceResponse);
+
     // Data Catalogues Management Operations (Phase 1.2)
     rpc ListDataCatalogues(ListDataCataloguesRequest) returns (ListDataCataloguesResponse);
     rpc GetDataCatalogue(GetDataCatalogueRequest) returns (GetDataCatalogueResponse);
@@ -686,6 +692,73 @@ message ProcessEmbeddingsResponse {
     string message = 2;
     string job_id = 3; // For tracking async processing
 }
+
+// === RAG/Embedding Operation Messages ===
+
+// GenerateEmbedding - Generate embeddings for text without storing
+message GenerateEmbeddingRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;    // Use this datasource's embedder configuration
+    repeated string texts = 3;    // Texts to generate embeddings for
+}
+
+message GenerateEmbeddingResponse {
+    bool success = 1;
+    repeated EmbeddingVector vectors = 2;
+    string error_message = 3;
+}
+
+message EmbeddingVector {
+    repeated float values = 1;    // The embedding vector
+}
+
+// StoreDocuments - Store pre-vectorized documents in vector store
+message StoreDocumentsRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    repeated DocumentWithEmbedding documents = 3;
+}
+
+message DocumentWithEmbedding {
+    string content = 1;
+    repeated float embedding = 2;
+    map<string, string> metadata = 3;
+}
+
+message StoreDocumentsResponse {
+    bool success = 1;
+    int32 stored_count = 2;
+    string error_message = 3;
+}
+
+// ProcessAndStoreDocuments - Generate embeddings and store in one step
+message ProcessAndStoreRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    repeated DocumentChunk chunks = 3;
+}
+
+message DocumentChunk {
+    string content = 1;
+    map<string, string> metadata = 2;
+}
+
+message ProcessAndStoreResponse {
+    bool success = 1;
+    int32 processed_count = 2;
+    string error_message = 3;
+}
+
+// QueryDatasourceByVector - Query with pre-computed embedding vector
+message QueryByVectorRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    repeated float embedding = 3;
+    int32 max_results = 4;
+    double similarity_threshold = 5;
+}
+
+// Note: QueryDatasourceResponse is reused from the existing QueryDatasource RPC
 
 message DatasourceInfo {
     uint32 id = 1;

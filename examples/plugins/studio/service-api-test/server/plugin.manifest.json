@@ -20,6 +20,8 @@
       "tools.write",
       "datasources.read",
       "datasources.write",
+      "datasources.query",
+      "datasources.embeddings",
       "tags.read",
       "tags.write",
       "filters.read",

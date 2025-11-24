@@ -154,6 +154,12 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/SearchDatasources":     models.ServiceScopeDatasourcesRead,
 		"/ai_studio_management.AIStudioManagementService/ProcessDatasourceEmbeddings": models.ServiceScopeDatasourcesEmbeddings,
 
+		// RAG/Embedding operations
+		"/ai_studio_management.AIStudioManagementService/GenerateEmbedding":          models.ServiceScopeDatasourcesEmbeddings,
+		"/ai_studio_management.AIStudioManagementService/StoreDocuments":             models.ServiceScopeDatasourcesEmbeddings,
+		"/ai_studio_management.AIStudioManagementService/ProcessAndStoreDocuments":   models.ServiceScopeDatasourcesEmbeddings,
+		"/ai_studio_management.AIStudioManagementService/QueryDatasourceByVector":    models.ServiceScopeDatasourcesQuery,
+
 		// Data catalogues management methods
 		"/ai_studio_management.AIStudioManagementService/ListDataCatalogues":   models.ServiceScopeDataCataloguesRead,
 		"/ai_studio_management.AIStudioManagementService/GetDataCatalogue":     models.ServiceScopeDataCataloguesRead,

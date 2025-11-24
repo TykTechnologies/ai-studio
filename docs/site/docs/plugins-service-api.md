@@ -861,6 +861,367 @@ llmsResp, err := ai_studio_sdk.ListLLMs(ctx, 1, 10)
 | ListPlugins, GetPlugin | `plugins.read` |
 | ReadPluginKV, ListPluginKVKeys | `kv.read` |
 | WritePluginKV, DeletePluginKV | `kv.readwrite` |
+| ListDatasources, GetDatasource | `datasources.read` |
+| CreateDatasource, UpdateDatasource, DeleteDatasource | `datasources.write` |
+| GenerateEmbedding, StoreDocuments, ProcessAndStoreDocuments | `datasources.embeddings` |
+| QueryDatasource, QueryDatasourceByVector | `datasources.query` |
+
+## RAG & Embedding Services
+
+AI Studio provides comprehensive RAG (Retrieval-Augmented Generation) capabilities through the Service API, enabling plugins to build custom document ingestion and semantic search workflows.
+
+### Overview
+
+The RAG Service APIs allow plugins to:
+- Generate embeddings using configured embedders (OpenAI, Ollama, Vertex, etc.)
+- Store pre-computed embeddings with custom chunking strategies
+- Query vector stores with semantic search
+- Build complex ingestion plugins (GitHub, Confluence, custom document processors)
+
+**Key Benefit**: Plugins have **full control** over chunking, embedding generation, and storage - no forced workflows.
+
+### Core RAG APIs
+
+#### GenerateEmbedding
+
+Generate embeddings for text chunks without storing them.
+
+```go
+resp, err := ai_studio_sdk.GenerateEmbedding(ctx, datasourceID, []string{
+    "First chunk of text",
+    "Second chunk of text",
+    "Third chunk of text",
+})
+
+if err != nil || !resp.Success {
+    return err
+}
+
+// resp.Vectors contains the embedding vectors
+for i, vector := range resp.Vectors {
+    fmt.Printf("Chunk %d embedding dimensions: %d\n", i, len(vector.Values))
+}
+```
+
+**Required Scope**: `datasources.embeddings`
+
+**Use Case**: Custom chunking workflows where you generate embeddings first, then decide what to store.
+
+#### StoreDocuments
+
+Store pre-computed embeddings in the vector store without regenerating them.
+
+```go
+documents := make([]*mgmtpb.DocumentWithEmbedding, len(chunks))
+for i, chunk := range chunks {
+    documents[i] = &mgmtpb.DocumentWithEmbedding{
+        Content:   chunk,
+        Embedding: preComputedEmbeddings[i],
+        Metadata: map[string]string{
+            "source":      "github",
+            "repo":        "my-repo",
+            "file":        "README.md",
+            "chunk_index": fmt.Sprintf("%d", i),
+        },
+    }
+}
+
+resp, err := ai_studio_sdk.StoreDocuments(ctx, datasourceID, documents)
+if err != nil || !resp.Success {
+    return err
+}
+
+fmt.Printf("Stored %d documents\n", resp.StoredCount)
+```
+
+**Required Scope**: `datasources.embeddings`
+
+**Use Case**: Complete control over embeddings - use custom models, external services, or cached embeddings.
+
+**Supported Vector Stores**:
+- ✅ Pinecone
+- ✅ PGVector
+- ✅ Chroma (v0.2.5+)
+- ✅ Weaviate
+- ⚠️ Qdrant (requires SDK installation)
+- ⚠️ Redis (requires RediSearch configuration)
+
+#### ProcessAndStoreDocuments
+
+Convenience method that generates embeddings and stores in one step.
+
+```go
+chunks := make([]*mgmtpb.DocumentChunk, len(texts))
+for i, text := range texts {
+    chunks[i] = &mgmtpb.DocumentChunk{
+        Content: text,
+        Metadata: map[string]string{
+            "source": "api",
+            "index":  fmt.Sprintf("%d", i),
+        },
+    }
+}
+
+resp, err := ai_studio_sdk.ProcessAndStoreDocuments(ctx, datasourceID, chunks)
+if err != nil || !resp.Success {
+    return err
+}
+
+fmt.Printf("Processed %d documents\n", resp.ProcessedCount)
+```
+
+**Required Scope**: `datasources.embeddings`
+
+**Use Case**: Simplified workflow when you don't need to inspect or cache embeddings.
+
+#### QueryDatasource
+
+Semantic search using a text query (embedding generated automatically).
+
+```go
+resp, err := ai_studio_sdk.QueryDatasource(ctx, datasourceID,
+    "How do I configure RAG in AI Studio?",
+    10,   // maxResults
+    0.75, // similarityThreshold
+)
+
+if err != nil || !resp.Success {
+    return err
+}
+
+for _, result := range resp.Results {
+    fmt.Printf("Score: %.2f | Content: %s\n",
+        result.SimilarityScore,
+        result.Content)
+    // Access metadata
+    for k, v := range result.Metadata {
+        fmt.Printf("  %s: %s\n", k, v)
+    }
+}
+```
+
+**Required Scope**: `datasources.query`
+
+**Use Case**: Standard semantic search - plugin provides text, system handles embedding.
+
+#### QueryDatasourceByVector
+
+Semantic search using a pre-computed embedding vector.
+
+```go
+// Generate query embedding
+queryResp, _ := ai_studio_sdk.GenerateEmbedding(ctx, datasourceID, []string{"search query"})
+queryVector := queryResp.Vectors[0].Values
+
+// Search with the pre-computed vector
+resp, err := ai_studio_sdk.QueryDatasourceByVector(ctx, datasourceID,
+    queryVector,
+    10,   // maxResults
+    0.75, // similarityThreshold
+)
+
+for _, result := range resp.Results {
+    fmt.Printf("Match: %s (score: %.2f)\n", result.Content, result.SimilarityScore)
+}
+```
+
+**Required Scope**: `datasources.query`
+
+**Use Case**: Advanced workflows with custom query embeddings or hybrid search strategies.
+
+**Supported Vector Stores**:
+- ✅ Pinecone
+- ✅ PGVector
+- ✅ Chroma
+- ✅ Weaviate
+- ⚠️ Qdrant (requires SDK)
+- ⚠️ Redis (requires RediSearch)
+
+### Complete Custom Ingestion Example
+
+Building a GitHub repository documentation ingestion plugin:
+
+```go
+func (p *GitHubDocsPlugin) IngestRepository(ctx plugin_sdk.Context, repo string, datasourceID uint32) error {
+    // Step 1: Fetch markdown files from GitHub
+    files, err := p.fetchMarkdownFiles(repo)
+    if err != nil {
+        return err
+    }
+
+    // Step 2: Custom chunking strategy (semantic chunking by headers)
+    var allChunks []string
+    var allMetadata []map[string]string
+
+    for _, file := range files {
+        chunks := p.semanticChunker(file.Content) // Your custom logic
+        for i, chunk := range chunks {
+            allChunks = append(allChunks, chunk)
+            allMetadata = append(allMetadata, map[string]string{
+                "source":      "github",
+                "repo":        repo,
+                "file":        file.Path,
+                "chunk_index": fmt.Sprintf("%d", i),
+                "updated_at":  file.UpdatedAt,
+            })
+        }
+    }
+
+    // Step 3: Generate embeddings for all chunks
+    embResp, err := ai_studio_sdk.GenerateEmbedding(ctx, datasourceID, allChunks)
+    if err != nil || !embResp.Success {
+        return fmt.Errorf("embedding generation failed: %v", err)
+    }
+
+    // Step 4: Store with pre-computed embeddings
+    documents := make([]*mgmtpb.DocumentWithEmbedding, len(allChunks))
+    for i := range allChunks {
+        documents[i] = &mgmtpb.DocumentWithEmbedding{
+            Content:   allChunks[i],
+            Embedding: embResp.Vectors[i].Values,
+            Metadata:  allMetadata[i],
+        }
+    }
+
+    storeResp, err := ai_studio_sdk.StoreDocuments(ctx, datasourceID, documents)
+    if err != nil || !storeResp.Success {
+        return fmt.Errorf("storage failed: %v", err)
+    }
+
+    ctx.Services.Logger().Info("Successfully ingested repository",
+        "repo", repo,
+        "chunks", storeResp.StoredCount)
+
+    return nil
+}
+```
+
+### Datasource Configuration
+
+For RAG APIs to work, datasources must be configured with:
+
+**Embedder Configuration**:
+- `EmbedVendor`: Embedder provider (`"openai"`, `"ollama"`, `"vertex"`, `"googleai"`)
+- `EmbedModel`: Model name (e.g., `"text-embedding-3-small"` for OpenAI, `"nomic-embed-text"` for Ollama)
+- `EmbedAPIKey`: API key if required by embedder
+- `EmbedUrl`: Embedder endpoint URL
+
+**Vector Store Configuration**:
+- `DBSourceType`: Vector store type (`"pinecone"`, `"chroma"`, `"pgvector"`, `"qdrant"`, `"redis"`, `"weaviate"`)
+- `DBConnString`: Connection URL for vector store
+- `DBConnAPIKey`: API key if required
+- `DBName`: Collection/namespace/table name
+
+**Important**: `EmbedModel` must be the actual model name (e.g., `"text-embedding-3-small"`), NOT the vendor name!
+
+### RAG Workflow Patterns
+
+#### Pattern 1: Separate Generate & Store (Full Control)
+
+```go
+// Generate embeddings
+embeddings, _ := ai_studio_sdk.GenerateEmbedding(ctx, dsID, customChunks)
+
+// Store with pre-computed embeddings (no re-embedding!)
+ai_studio_sdk.StoreDocuments(ctx, dsID, documentsWithEmbeddings)
+```
+
+**Best for**: Custom chunking algorithms, caching embeddings, using external embedding services.
+
+#### Pattern 2: Process & Store (Convenience)
+
+```go
+// Generate and store in one step
+ai_studio_sdk.ProcessAndStoreDocuments(ctx, dsID, chunks)
+```
+
+**Best for**: Simple ingestion when you don't need to inspect or cache embeddings.
+
+#### Pattern 3: Hybrid Search
+
+```go
+// Generate embeddings for multiple query variants
+variants := []string{"original query", "rephrased query", "expanded query"}
+embeddings, _ := ai_studio_sdk.GenerateEmbedding(ctx, dsID, variants)
+
+// Search with each variant and merge results
+allResults := []Result{}
+for _, emb := range embeddings.Vectors {
+    results, _ := ai_studio_sdk.QueryDatasourceByVector(ctx, dsID, emb.Values, 5, 0.7)
+    allResults = append(allResults, results.Results...)
+}
+
+// Deduplicate and rank
+finalResults := deduplicateAndRank(allResults)
+```
+
+**Best for**: Advanced search strategies, query expansion, multi-vector search.
+
+### Datasource Management APIs
+
+For managing datasources programmatically:
+
+```go
+// List all datasources
+datasources, err := ai_studio_sdk.ListDatasources(ctx, 1, 100, nil, "")
+
+// Get specific datasource
+ds, err := ai_studio_sdk.GetDatasource(ctx, datasourceID)
+
+// Create datasource with full configuration
+ds, err := ai_studio_sdk.CreateDatasourceWithEmbedder(ctx,
+    "My RAG Datasource",
+    "Short description",
+    "Long description",
+    "",                      // URL
+    "http://localhost:8000", // Chroma connection
+    "chroma",                // Vector store type
+    "",                      // DB API key
+    "my-collection",         // Collection name
+    "openai",                // Embedder vendor
+    "https://api.openai.com/v1/embeddings", // Embedder URL
+    "sk-...",                // Embed API key
+    "text-embedding-3-small", // Embed model
+    5, 1, true,
+)
+
+// Update datasource
+ds, err := ai_studio_sdk.UpdateDatasource(ctx, datasourceID, name, ...)
+
+// Delete datasource
+err := ai_studio_sdk.DeleteDatasource(ctx, datasourceID)
+
+// Search datasources
+results, err := ai_studio_sdk.SearchDatasources(ctx, "query")
+```
+
+**Required Scopes**: `datasources.read` (list/get/search), `datasources.write` (create/update/delete)
+
+### Error Handling
+
+```go
+resp, err := ai_studio_sdk.GenerateEmbedding(ctx, dsID, chunks)
+if err != nil {
+    // gRPC communication error
+    return fmt.Errorf("gRPC error: %w", err)
+}
+
+if !resp.Success {
+    // Server-side validation or processing error
+    ctx.Services.Logger().Error("Embedding generation failed",
+        "error", resp.ErrorMessage,
+        "datasource_id", dsID)
+    return fmt.Errorf("embedding failed: %s", resp.ErrorMessage)
+}
+
+// Success - use resp.Vectors
+```
+
+**Common Errors**:
+- `"datasource does not have embedder configured"` - Set EmbedVendor/EmbedModel/EmbedAPIKey
+- `"datasource does not have vector store configured"` - Set DBSourceType/DBConnString/DBName
+- `"failed to generate embeddings with openai/openai"` - EmbedModel should be model name, not vendor!
+- `"vector store connection failed"` - Ensure vector store is running and accessible
 
 ## Best Practices Summary
 

@@ -499,6 +499,24 @@ func (s *AIStudioManagementServer) ProcessDatasourceEmbeddings(ctx context.Conte
 	return s.datasourcesServer.ProcessDatasourceEmbeddings(ctx, req)
 }
 
+// === RAG/Embedding Operations ===
+
+func (s *AIStudioManagementServer) GenerateEmbedding(ctx context.Context, req *pb.GenerateEmbeddingRequest) (*pb.GenerateEmbeddingResponse, error) {
+	return s.datasourcesServer.GenerateEmbedding(ctx, req)
+}
+
+func (s *AIStudioManagementServer) StoreDocuments(ctx context.Context, req *pb.StoreDocumentsRequest) (*pb.StoreDocumentsResponse, error) {
+	return s.datasourcesServer.StoreDocuments(ctx, req)
+}
+
+func (s *AIStudioManagementServer) ProcessAndStoreDocuments(ctx context.Context, req *pb.ProcessAndStoreRequest) (*pb.ProcessAndStoreResponse, error) {
+	return s.datasourcesServer.ProcessAndStoreDocuments(ctx, req)
+}
+
+func (s *AIStudioManagementServer) QueryDatasourceByVector(ctx context.Context, req *pb.QueryByVectorRequest) (*pb.QueryDatasourceResponse, error) {
+	return s.datasourcesServer.QueryDatasourceByVector(ctx, req)
+}
+
 func (s *AIStudioManagementServer) UpdateDataCatalogue(ctx context.Context, req *pb.UpdateDataCatalogueRequest) (*pb.UpdateDataCatalogueResponse, error) {
 	return s.dataCataloguesServer.UpdateDataCatalogue(ctx, req)
 }
@@ -779,36 +797,37 @@ func (s *AIStudioManagementServer) QueryDatasource(ctx context.Context, req *pb.
 		return nil, err
 	}
 
-	// Load agent config for this plugin with App.Datasources preloaded
+	// Try to load agent config for this plugin (for agent plugins)
+	// If not found, allow querying any datasource (for non-agent plugins like service-api-test)
+	datasourceID := req.GetDatasourceId()
 	var agentConfig models.AgentConfig
 	if err := s.service.GetDB().
 		Preload("App.Datasources").
 		Preload("App.Credential").
 		Where("plugin_id = ?", plugin.ID).
-		First(&agentConfig).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, status.Errorf(codes.NotFound, "no agent configuration found for plugin")
+		First(&agentConfig).Error; err == nil {
+		// This is an agent plugin - verify datasource is in app's allowed datasources
+		datasourceAllowed := false
+		for _, ds := range agentConfig.App.Datasources {
+			if ds.ID == uint(datasourceID) {
+				datasourceAllowed = true
+				break
+			}
 		}
+		if !datasourceAllowed {
+			log.Warn().
+				Uint32("datasource_id", datasourceID).
+				Uint("app_id", agentConfig.App.ID).
+				Msg("Datasource not allowed for agent's app")
+			return nil, status.Errorf(codes.PermissionDenied, "datasource not allowed for this agent")
+		}
+		log.Debug().Uint("agent_id", agentConfig.ID).Msg("Agent plugin querying datasource")
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		// Unexpected error loading agent config
 		log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to load agent config")
 		return nil, status.Errorf(codes.Internal, "failed to load agent configuration")
 	}
-
-	// Verify datasource is in app's allowed datasources
-	datasourceID := req.GetDatasourceId()
-	datasourceAllowed := false
-	for _, ds := range agentConfig.App.Datasources {
-		if ds.ID == uint(datasourceID) {
-			datasourceAllowed = true
-			break
-		}
-	}
-	if !datasourceAllowed {
-		log.Warn().
-			Uint32("datasource_id", datasourceID).
-			Uint("app_id", agentConfig.App.ID).
-			Msg("Datasource not allowed for agent's app")
-		return nil, status.Errorf(codes.PermissionDenied, "datasource not allowed for this agent")
-	}
+	// If RecordNotFound, this is a non-agent plugin (like service-api-test) - allow access
 
 	// Load the datasource for RAG query
 	var datasource models.Datasource

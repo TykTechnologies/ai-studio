@@ -102,8 +102,10 @@ type ServiceAPIScope struct {
 	KVReadWrite string
 
 	// Datasource management scopes
-	DatasourcesRead  string
-	DatasourcesWrite string
+	DatasourcesRead       string
+	DatasourcesWrite      string
+	DatasourcesQuery      string // Query datasources (for agent plugins)
+	DatasourcesEmbeddings string // Generate embeddings and store documents
 
 	// Tag management scopes
 	TagsRead  string
@@ -135,10 +137,12 @@ var AvailableScopes = ServiceAPIScope{
 	ToolsOperations:     "tools.operations",
 	AppsRead:            "apps.read",
 	AppsWrite:           "apps.write",
-	KVReadWrite:         "kv.readwrite",
-	DatasourcesRead:     "datasources.read",
-	DatasourcesWrite:    "datasources.write",
-	TagsRead:            "tags.read",
+	KVReadWrite:           "kv.readwrite",
+	DatasourcesRead:       "datasources.read",
+	DatasourcesWrite:      "datasources.write",
+	DatasourcesQuery:      "datasources.query",
+	DatasourcesEmbeddings: "datasources.embeddings",
+	TagsRead:              "tags.read",
 	TagsWrite:           "tags.write",
 	FiltersRead:         "filters.read",
 	FiltersWrite:        "filters.write",

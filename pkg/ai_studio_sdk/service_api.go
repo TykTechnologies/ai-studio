@@ -793,6 +793,22 @@ func DeleteModelPrice(ctx context.Context, modelPriceID uint32) error {
 
 // === Datasource CRUD Operations ===
 
+// ListDatasources retrieves all datasources with optional filtering and pagination
+func ListDatasources(ctx context.Context, page, limit int32, isActive *bool, userID string) (*mgmtpb.ListDatasourcesResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.ListDatasources(ctx, &mgmtpb.ListDatasourcesRequest{
+		Context:  createPluginContext(AvailableScopes.DatasourcesRead),
+		Page:     page,
+		Limit:    limit,
+		IsActive: isActive,
+		UserId:   userID,
+	})
+}
+
 // GetDatasource retrieves a specific datasource
 func GetDatasource(ctx context.Context, datasourceID uint32) (*mgmtpb.GetDatasourceResponse, error) {
 	client, err := getServiceClient(ctx)
@@ -806,7 +822,7 @@ func GetDatasource(ctx context.Context, datasourceID uint32) (*mgmtpb.GetDatasou
 	})
 }
 
-// CreateDatasource creates a new datasource
+// CreateDatasource creates a new datasource with full configuration
 func CreateDatasource(ctx context.Context, name, shortDesc, longDesc, url, dbSourceType string, privacyScore int32, userID uint32, active bool) (*mgmtpb.CreateDatasourceResponse, error) {
 	client, err := getServiceClient(ctx)
 	if err != nil {
@@ -820,6 +836,38 @@ func CreateDatasource(ctx context.Context, name, shortDesc, longDesc, url, dbSou
 		LongDescription:  longDesc,
 		Url:              url,
 		DbSourceType:     dbSourceType,
+		PrivacyScore:     privacyScore,
+		UserId:           userID,
+		Active:           active,
+	})
+}
+
+// CreateDatasourceWithEmbedder creates a new datasource with full embedder configuration
+// This is the complete version that includes vector store and embedder setup for RAG
+func CreateDatasourceWithEmbedder(ctx context.Context, name, shortDesc, longDesc, url string,
+	dbConnString, dbSourceType, dbConnAPIKey, dbName string,
+	embedVendor, embedURL, embedAPIKey, embedModel string,
+	privacyScore int32, userID uint32, active bool) (*mgmtpb.CreateDatasourceResponse, error) {
+
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateDatasource(ctx, &mgmtpb.CreateDatasourceRequest{
+		Context:          createPluginContext(AvailableScopes.DatasourcesWrite),
+		Name:             name,
+		ShortDescription: shortDesc,
+		LongDescription:  longDesc,
+		Url:              url,
+		DbConnString:     dbConnString,
+		DbSourceType:     dbSourceType,
+		DbConnApiKey:     dbConnAPIKey,
+		DbName:           dbName,
+		EmbedVendor:      embedVendor,
+		EmbedUrl:         embedURL,
+		EmbedApiKey:      embedAPIKey,
+		EmbedModel:       embedModel,
 		PrivacyScore:     privacyScore,
 		UserId:           userID,
 		Active:           active,
@@ -879,6 +927,95 @@ func SearchDatasources(ctx context.Context, query string) (*mgmtpb.SearchDatasou
 	return client.SearchDatasources(ctx, &mgmtpb.SearchDatasourcesRequest{
 		Context: createPluginContext(AvailableScopes.DatasourcesRead),
 		Query:   query,
+	})
+}
+
+// QueryDatasource performs a semantic search on a datasource using a text query
+// The query text is automatically converted to an embedding and used to search the vector store
+func QueryDatasource(ctx context.Context, datasourceID uint32, query string, maxResults int32, similarityThreshold float64) (*mgmtpb.QueryDatasourceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.QueryDatasource(ctx, &mgmtpb.QueryDatasourceRequest{
+		Context:             createPluginContext(AvailableScopes.DatasourcesQuery),
+		DatasourceId:        datasourceID,
+		Query:               query,
+		MaxResults:          maxResults,
+		SimilarityThreshold: similarityThreshold,
+	})
+}
+
+// ProcessDatasourceEmbeddings triggers async processing of all files in a datasource
+// This generates embeddings for file content and stores them in the configured vector store
+func ProcessDatasourceEmbeddings(ctx context.Context, datasourceID uint32) (*mgmtpb.ProcessEmbeddingsResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.ProcessDatasourceEmbeddings(ctx, &mgmtpb.ProcessEmbeddingsRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesEmbeddings),
+		DatasourceId: datasourceID,
+	})
+}
+
+// GenerateEmbedding generates embeddings for text using the datasource's embedder configuration
+func GenerateEmbedding(ctx context.Context, datasourceID uint32, texts []string) (*mgmtpb.GenerateEmbeddingResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GenerateEmbedding(ctx, &mgmtpb.GenerateEmbeddingRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesEmbeddings),
+		DatasourceId: datasourceID,
+		Texts:        texts,
+	})
+}
+
+// StoreDocuments stores pre-vectorized documents in the datasource's vector store
+func StoreDocuments(ctx context.Context, datasourceID uint32, documents []*mgmtpb.DocumentWithEmbedding) (*mgmtpb.StoreDocumentsResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.StoreDocuments(ctx, &mgmtpb.StoreDocumentsRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesEmbeddings),
+		DatasourceId: datasourceID,
+		Documents:    documents,
+	})
+}
+
+// ProcessAndStoreDocuments generates embeddings and stores documents in one step
+func ProcessAndStoreDocuments(ctx context.Context, datasourceID uint32, chunks []*mgmtpb.DocumentChunk) (*mgmtpb.ProcessAndStoreResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.ProcessAndStoreDocuments(ctx, &mgmtpb.ProcessAndStoreRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesEmbeddings),
+		DatasourceId: datasourceID,
+		Chunks:       chunks,
+	})
+}
+
+// QueryDatasourceByVector performs similarity search using a pre-computed embedding vector
+func QueryDatasourceByVector(ctx context.Context, datasourceID uint32, embedding []float32, maxResults int32, similarityThreshold float64) (*mgmtpb.QueryDatasourceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.QueryDatasourceByVector(ctx, &mgmtpb.QueryByVectorRequest{
+		Context:             createPluginContext(AvailableScopes.DatasourcesQuery),
+		DatasourceId:        datasourceID,
+		Embedding:           embedding,
+		MaxResults:          maxResults,
+		SimilarityThreshold: similarityThreshold,
 	})
 }
 
