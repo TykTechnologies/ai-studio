@@ -865,6 +865,7 @@ llmsResp, err := ai_studio_sdk.ListLLMs(ctx, 1, 10)
 | CreateDatasource, UpdateDatasource, DeleteDatasource | `datasources.write` |
 | GenerateEmbedding, StoreDocuments, ProcessAndStoreDocuments | `datasources.embeddings` |
 | QueryDatasource, QueryDatasourceByVector | `datasources.query` |
+| CreateSchedule, GetSchedule, ListSchedules, UpdateSchedule, DeleteSchedule | `scheduler.manage` |
 
 ## RAG & Embedding Services
 
@@ -1223,6 +1224,179 @@ if !resp.Success {
 - `"failed to generate embeddings with openai/openai"` - EmbedModel should be model name, not vendor!
 - `"vector store connection failed"` - Ensure vector store is running and accessible
 
+## Schedule Management
+
+**Scope Required**: `scheduler.manage`
+**Available in**: AI Studio only
+
+Plugins can programmatically manage their scheduled tasks using the Schedule Management API. This complements manifest-based schedule declarations.
+
+### Overview
+
+Schedules can be created in two ways:
+1. **Manifest Schedules**: Declared in `plugin.manifest.json`, auto-registered when plugin loads
+2. **API Schedules**: Created programmatically via SDK during `Initialize()` or at runtime
+
+Both types execute via the `ExecuteScheduledTask()` capability method.
+
+### CreateSchedule
+
+Create a new schedule for your plugin:
+
+```go
+schedule, err := ai_studio_sdk.CreateSchedule(
+    ctx,
+    "hourly-sync",              // Schedule ID (unique per plugin)
+    "Hourly Data Sync",         // Human-readable name
+    "0 * * * *",                // Cron expression (5-field format)
+    "UTC",                      // Timezone
+    120,                        // Timeout in seconds
+    map[string]interface{}{     // Config passed to ExecuteScheduledTask
+        "batch_size": 100,
+    },
+    true,                       // Enabled
+)
+```
+
+**Returns**: `*mgmtpb.ScheduleInfo` with schedule details
+**Errors**: `AlreadyExists` if schedule_id already exists for this plugin
+
+### GetSchedule
+
+Retrieve schedule details by manifest schedule ID:
+
+```go
+schedule, err := ai_studio_sdk.GetSchedule(ctx, "hourly-sync")
+```
+
+**Returns**: `*mgmtpb.ScheduleInfo`
+**Errors**: `NotFound` if schedule doesn't exist
+
+### ListSchedules
+
+Get all schedules for your plugin:
+
+```go
+schedules, err := ai_studio_sdk.ListSchedules(ctx)
+```
+
+**Returns**: `[]*mgmtpb.ScheduleInfo` array
+
+### UpdateSchedule
+
+Update schedule fields (all fields optional):
+
+```go
+enabled := false
+timeout := int32(180)
+
+schedule, err := ai_studio_sdk.UpdateSchedule(ctx, "hourly-sync", ai_studio_sdk.UpdateScheduleOptions{
+    Name:           stringPtr("Updated Sync Task"),
+    CronExpr:       stringPtr("30 * * * *"),  // Every hour at :30
+    Timezone:       stringPtr("America/New_York"),
+    TimeoutSeconds: &timeout,
+    Enabled:        &enabled,
+    Config: map[string]interface{}{
+        "batch_size": 200,
+    },
+})
+```
+
+**Returns**: `*mgmtpb.ScheduleInfo` with updated schedule
+**Errors**: `NotFound` if schedule doesn't exist
+
+### DeleteSchedule
+
+Remove a schedule:
+
+```go
+err := ai_studio_sdk.DeleteSchedule(ctx, "hourly-sync")
+```
+
+**Errors**: `NotFound` if schedule doesn't exist
+
+### Complete Example
+
+```go
+package main
+
+import (
+    "context"
+    "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type MyPlugin struct {
+    plugin_sdk.BasePlugin
+}
+
+// Initialize creates API-managed schedules
+func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    if ctx.Runtime != plugin_sdk.RuntimeStudio {
+        return nil
+    }
+
+    apiCtx := context.Background()
+
+    // Check if schedule exists (idempotent)
+    if _, err := ai_studio_sdk.GetSchedule(apiCtx, "data-refresh"); err != nil {
+        // Create new schedule
+        _, err := ai_studio_sdk.CreateSchedule(
+            apiCtx,
+            "data-refresh",
+            "Refresh External Data",
+            "*/15 * * * *",  // Every 15 minutes
+            "UTC",
+            300,  // 5 minute timeout
+            map[string]interface{}{
+                "api_endpoint": "https://api.example.com/data",
+            },
+            true,
+        )
+        if err != nil {
+            return fmt.Errorf("failed to create schedule: %w", err)
+        }
+    }
+
+    return nil
+}
+
+// ExecuteScheduledTask handles all scheduled executions
+func (p *MyPlugin) ExecuteScheduledTask(ctx plugin_sdk.Context, schedule *plugin_sdk.Schedule) error {
+    switch schedule.ID {
+    case "data-refresh":
+        return p.refreshData(ctx, schedule)
+    default:
+        return fmt.Errorf("unknown schedule: %s", schedule.ID)
+    }
+}
+
+func (p *MyPlugin) refreshData(ctx plugin_sdk.Context, schedule *plugin_sdk.Schedule) error {
+    // Access config from schedule
+    endpoint := schedule.Config["api_endpoint"].(string)
+
+    // Perform sync logic...
+    ctx.Services.Logger().Info("Refreshing data", "endpoint", endpoint)
+
+    return nil
+}
+```
+
+### Manifest vs API Schedules
+
+**Use Manifest When**:
+- Schedule is core to plugin functionality
+- Configuration is static
+- Want schedules registered automatically
+
+**Use API When**:
+- Schedules are dynamic (based on external data)
+- Need runtime modification
+- Want conditional schedule creation
+- Building schedule management UI
+
+**Example**: Plugin manifest declares one immutable daily report, creates hourly syncs via API based on configured data sources.
+
 ## Best Practices Summary
 
 1. **Runtime Detection**: Always check `ctx.Runtime` before calling runtime-specific services
@@ -1240,6 +1414,7 @@ For complete working examples of Service API usage:
 - **Studio**: `examples/plugins/studio/service-api-test/` - Comprehensive Studio Services testing
 - **Gateway**: `examples/plugins/gateway/gateway-service-test/` - Gateway Services examples
 - **Rate Limiter**: `examples/plugins/studio/llm-rate-limiter-multiphase/` - Multi-capability plugin with KV storage
+- **Scheduler**: `examples/plugins/studio/scheduler-demo/` - Scheduled tasks with manifest and API patterns
 
 ## Next Steps
 
