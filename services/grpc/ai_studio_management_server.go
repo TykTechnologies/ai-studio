@@ -519,6 +519,24 @@ func (s *AIStudioManagementServer) QueryDatasourceByVector(ctx context.Context, 
 	return s.datasourcesServer.QueryDatasourceByVector(ctx, req)
 }
 
+// Advanced Datasource Operations - Metadata and Namespace Management
+
+func (s *AIStudioManagementServer) DeleteDocumentsByMetadata(ctx context.Context, req *pb.DeleteDocumentsByMetadataRequest) (*pb.DeleteDocumentsByMetadataResponse, error) {
+	return s.datasourcesServer.DeleteDocumentsByMetadata(ctx, req)
+}
+
+func (s *AIStudioManagementServer) QueryByMetadataOnly(ctx context.Context, req *pb.QueryByMetadataOnlyRequest) (*pb.QueryByMetadataOnlyResponse, error) {
+	return s.datasourcesServer.QueryByMetadataOnly(ctx, req)
+}
+
+func (s *AIStudioManagementServer) ListNamespaces(ctx context.Context, req *pb.ListNamespacesRequest) (*pb.ListNamespacesResponse, error) {
+	return s.datasourcesServer.ListNamespaces(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteNamespace(ctx context.Context, req *pb.DeleteNamespaceRequest) (*pb.DeleteNamespaceResponse, error) {
+	return s.datasourcesServer.DeleteNamespace(ctx, req)
+}
+
 func (s *AIStudioManagementServer) UpdateDataCatalogue(ctx context.Context, req *pb.UpdateDataCatalogueRequest) (*pb.UpdateDataCatalogueResponse, error) {
 	return s.dataCataloguesServer.UpdateDataCatalogue(ctx, req)
 }

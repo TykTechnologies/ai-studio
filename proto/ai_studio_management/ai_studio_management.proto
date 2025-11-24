@@ -65,6 +65,12 @@ service AIStudioManagementService {
     rpc ProcessAndStoreDocuments(ProcessAndStoreRequest) returns (ProcessAndStoreResponse);
     rpc QueryDatasourceByVector(QueryByVectorRequest) returns (QueryDatasourceResponse);
 
+    // Advanced Datasource Operations - Metadata and Namespace Management
+    rpc DeleteDocumentsByMetadata(DeleteDocumentsByMetadataRequest) returns (DeleteDocumentsByMetadataResponse);
+    rpc QueryByMetadataOnly(QueryByMetadataOnlyRequest) returns (QueryByMetadataOnlyResponse);
+    rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+    rpc DeleteNamespace(DeleteNamespaceRequest) returns (DeleteNamespaceResponse);
+
     // Data Catalogues Management Operations (Phase 1.2)
     rpc ListDataCatalogues(ListDataCataloguesRequest) returns (ListDataCataloguesResponse);
     rpc GetDataCatalogue(GetDataCatalogueRequest) returns (GetDataCatalogueResponse);
@@ -754,6 +760,66 @@ message ProcessAndStoreResponse {
     bool success = 1;
     int32 processed_count = 2;
     string error_message = 3;
+}
+
+// === Advanced Datasource Operations - Metadata and Namespace Management ===
+
+// DeleteDocumentsByMetadata - Delete chunks by metadata filter
+message DeleteDocumentsByMetadataRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    map<string, string> metadata_filter = 3;  // e.g., {"file_path": "src/main.go"}
+    string filter_mode = 4;  // "AND" or "OR" (default: AND)
+    bool dry_run = 5;  // If true, return count without deleting
+}
+
+message DeleteDocumentsByMetadataResponse {
+    bool success = 1;
+    int32 deleted_count = 2;  // Number of documents deleted (or would be deleted if dry_run)
+    string message = 3;
+}
+
+// QueryByMetadataOnly - Query documents by metadata (no vector similarity)
+message QueryByMetadataOnlyRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    map<string, string> metadata_filter = 3;
+    string filter_mode = 4;  // "AND" or "OR" (default: AND)
+    int32 limit = 5;  // Max results (default: 10, max: 100)
+    int32 offset = 6;  // Pagination offset (default: 0)
+}
+
+message QueryByMetadataOnlyResponse {
+    repeated DatasourceResult results = 1;
+    int32 total_count = 2;  // Total matching documents (for pagination)
+}
+
+// ListNamespaces - List all namespaces/collections in vector store
+message ListNamespacesRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+}
+
+message ListNamespacesResponse {
+    repeated NamespaceInfo namespaces = 1;
+}
+
+message NamespaceInfo {
+    string name = 1;
+    int32 document_count = 2;  // -1 if not supported by vector store
+}
+
+// DeleteNamespace - Delete entire namespace/collection
+message DeleteNamespaceRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    string namespace = 3;
+    bool confirm = 4;  // Must be true to actually delete (safety check)
+}
+
+message DeleteNamespaceResponse {
+    bool success = 1;
+    string message = 2;
 }
 
 // QueryDatasourceByVector - Query with pre-computed embedding vector

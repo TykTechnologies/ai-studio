@@ -97,6 +97,24 @@ func RunDatasourceTests(ctx context.Context) ([]TestResult, []uint32) {
 		// Test 12: ProcessDatasourceEmbeddings - Async batch processing
 		result = testProcessDatasourceEmbeddings(ctx, ragDatasourceID)
 		results = append(results, result)
+
+		// === ADVANCED METADATA OPERATIONS TESTS ===
+
+		// Test 13: DeleteDocumentsByMetadata - Dry run mode
+		result = testDeleteDocumentsByMetadataDryRun(ctx, ragDatasourceID)
+		results = append(results, result)
+
+		// Test 14: QueryByMetadataOnly - Find specific documents
+		result = testQueryByMetadataOnly(ctx, ragDatasourceID)
+		results = append(results, result)
+
+		// Test 15: ListNamespaces - List all collections
+		result = testListNamespaces(ctx, ragDatasourceID)
+		results = append(results, result)
+
+		// Test 16: DeleteDocumentsByMetadata - Actual deletion
+		result = testDeleteDocumentsByMetadata(ctx, ragDatasourceID)
+		results = append(results, result)
 	} else {
 		// Skip RAG tests if no configured datasource found
 		skipMessage := fmt.Sprintf("⚠️  SKIPPED - No datasource with embedder configured found.\n\n%s\n\n📋 Setup Instructions:\n1. Go to AI Studio UI → Datasources\n2. Create or edit a datasource\n3. Set EmbedVendor to your embedder provider (e.g., 'openai', 'ollama', 'vertex')\n4. Set EmbedModel to the actual model name (e.g., 'text-embedding-3-small' for OpenAI, 'nomic-embed-text' for Ollama)\n   ⚠️  Common mistake: Setting EmbedModel='openai' - this should be the actual model name!\n5. Set EmbedAPIKey if required by your embedder\n6. Set DBSourceType to your vector store (e.g., 'chroma', 'pinecone', 'pgvector')\n7. Ensure vector store is running and accessible\n8. Re-run tests to validate RAG APIs",
@@ -585,4 +603,142 @@ func testDeleteDatasource(ctx context.Context, dsID uint32) TestResult {
 		Duration:  duration,
 		Timestamp: time.Now(),
 	}
+}
+
+// === Advanced Metadata Operations Tests ===
+
+func testDeleteDocumentsByMetadataDryRun(ctx context.Context, dsID uint32) TestResult {
+	start := time.Now()
+
+	// Test dry-run mode with a metadata filter
+	metadata := map[string]string{"source": "service-api-test"}
+
+	count, err := ai_studio_sdk.DeleteDocumentsByMetadata(ctx, dsID, metadata, "AND", true)
+	duration := time.Since(start)
+
+	if err != nil {
+		return TestResult{
+			Operation: "DeleteDocumentsByMetadata (dry-run)",
+			Success:   false,
+			Message:   fmt.Sprintf("Error: %v", err),
+			Duration:  duration,
+			Timestamp: time.Now(),
+		}
+	}
+
+	return TestResult{
+		Operation: "DeleteDocumentsByMetadata (dry-run)",
+		Success:   true,
+		Message:   fmt.Sprintf("Would delete %d document(s) with source='service-api-test'", count),
+		Duration:  duration,
+		Timestamp: time.Now(),
+	}
+}
+
+func testDeleteDocumentsByMetadata(ctx context.Context, dsID uint32) TestResult {
+	start := time.Now()
+
+	// Delete documents with specific test_type metadata
+	metadata := map[string]string{"test_type": "auto_embedded"}
+
+	count, err := ai_studio_sdk.DeleteDocumentsByMetadata(ctx, dsID, metadata, "AND", false)
+	duration := time.Since(start)
+
+	if err != nil {
+		return TestResult{
+			Operation: "DeleteDocumentsByMetadata",
+			Success:   false,
+			Message:   fmt.Sprintf("Error: %v", err),
+			Duration:  duration,
+			Timestamp: time.Now(),
+		}
+	}
+
+	return TestResult{
+		Operation: "DeleteDocumentsByMetadata",
+		Success:   true,
+		Message:   fmt.Sprintf("Deleted %d document(s) with test_type='auto_embedded'", count),
+		Duration:  duration,
+		Timestamp: time.Now(),
+	}
+}
+
+func testQueryByMetadataOnly(ctx context.Context, dsID uint32) TestResult {
+	start := time.Now()
+
+	// Query for documents with specific metadata
+	metadata := map[string]string{"source": "service-api-test"}
+
+	results, totalCount, err := ai_studio_sdk.QueryByMetadataOnly(ctx, dsID, metadata, "AND", 10, 0)
+	duration := time.Since(start)
+
+	if err != nil {
+		return TestResult{
+			Operation: "QueryByMetadataOnly",
+			Success:   false,
+			Message:   fmt.Sprintf("Error: %v", err),
+			Duration:  duration,
+			Timestamp: time.Now(),
+		}
+	}
+
+	// Display first result as sample
+	sampleContent := ""
+	if len(results) > 0 {
+		sampleContent = fmt.Sprintf("\n   First result preview: %s (metadata: %v)",
+			truncateString(results[0].Content, 60),
+			results[0].Metadata)
+	}
+
+	return TestResult{
+		Operation: "QueryByMetadataOnly",
+		Success:   true,
+		Message:   fmt.Sprintf("Found %d/%d document(s) with source='service-api-test'%s", len(results), totalCount, sampleContent),
+		Duration:  duration,
+		Timestamp: time.Now(),
+	}
+}
+
+func testListNamespaces(ctx context.Context, dsID uint32) TestResult {
+	start := time.Now()
+
+	namespaces, err := ai_studio_sdk.ListNamespaces(ctx, dsID)
+	duration := time.Since(start)
+
+	if err != nil {
+		return TestResult{
+			Operation: "ListNamespaces",
+			Success:   false,
+			Message:   fmt.Sprintf("Error: %v", err),
+			Duration:  duration,
+			Timestamp: time.Now(),
+		}
+	}
+
+	// Build namespace summary
+	namespaceSummary := ""
+	for i, ns := range namespaces {
+		if i < 3 { // Show first 3
+			namespaceSummary += fmt.Sprintf("\n   - %s (%d docs)", ns.Name, ns.DocumentCount)
+		}
+	}
+	if len(namespaces) > 3 {
+		namespaceSummary += fmt.Sprintf("\n   ... and %d more", len(namespaces)-3)
+	}
+
+	return TestResult{
+		Operation: "ListNamespaces",
+		Success:   true,
+		Message:   fmt.Sprintf("Found %d namespace(s)%s", len(namespaces), namespaceSummary),
+		Duration:  duration,
+		Timestamp: time.Now(),
+	}
+}
+
+// Helper function to truncate long strings for display
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

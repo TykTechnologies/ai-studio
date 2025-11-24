@@ -1224,6 +1224,116 @@ if !resp.Success {
 - `"failed to generate embeddings with openai/openai"` - EmbedModel should be model name, not vendor!
 - `"vector store connection failed"` - Ensure vector store is running and accessible
 
+### Advanced Datasource Operations
+
+These operations provide fine-grained control over vector store data through metadata filtering and namespace management.
+
+#### Delete Documents by Metadata
+
+Delete specific documents from vector stores using metadata filters:
+
+```go
+// Delete all chunks for a specific file
+count, err := ai_studio_sdk.DeleteDocumentsByMetadata(
+    ctx,
+    datasourceID,
+    map[string]string{"file_path": "old-file.md"},
+    "AND",  // filter mode: "AND" or "OR"
+    false,  // dry_run: set true to preview without deleting
+)
+
+// Example with OR mode (delete documents matching any condition)
+count, err := ai_studio_sdk.DeleteDocumentsByMetadata(
+    ctx,
+    datasourceID,
+    map[string]string{
+        "status": "archived",
+        "expired": "true",
+    },
+    "OR",   // Matches documents with status=archived OR expired=true
+    false,
+)
+```
+
+**Parameters:**
+- `metadataFilter`: map of metadata key-value pairs to match
+- `filterMode`: `"AND"` (all conditions must match) or `"OR"` (any condition matches)
+- `dryRun`: if `true`, returns count without deleting
+
+**Returns:** Number of documents deleted (or would be deleted if dry-run)
+
+**Scope Required**: `datasources.write`
+
+#### Query by Metadata Only
+
+Query documents using only metadata filters (no vector similarity):
+
+```go
+results, totalCount, err := ai_studio_sdk.QueryByMetadataOnly(
+    ctx,
+    datasourceID,
+    map[string]string{"source": "internal-docs"},
+    "AND",
+    10,  // limit
+    0,   // offset
+)
+
+// Process results
+for _, result := range results {
+    fmt.Printf("Content: %s\nMetadata: %v\n", result.Content, result.Metadata)
+}
+fmt.Printf("Total matching documents: %d\n", totalCount)
+```
+
+**Parameters:**
+- `metadataFilter`: metadata key-value pairs to match
+- `filterMode`: `"AND"` or `"OR"`
+- `limit`: max results per page (1-100, default: 10)
+- `offset`: pagination offset
+
+**Returns:** Array of results and total count (for pagination)
+
+**Scope Required**: `datasources.query`
+
+#### List Namespaces
+
+List all namespaces/collections in a vector store:
+
+```go
+namespaces, err := ai_studio_sdk.ListNamespaces(ctx, datasourceID)
+for _, ns := range namespaces {
+    fmt.Printf("Namespace: %s, Documents: %d\n", ns.Name, ns.DocumentCount)
+}
+```
+
+**Returns:** Array of namespace info with document counts
+
+**Scope Required**: `datasources.read`
+
+**Note:** Document count may be `-1` if not supported by the vector store.
+
+#### Delete Namespace
+
+Delete an entire namespace/collection (bulk operation):
+
+```go
+// Requires confirm=true for safety
+err := ai_studio_sdk.DeleteNamespace(ctx, datasourceID, "old-namespace", true)
+```
+
+**Parameters:**
+- `namespace`: namespace/collection name to delete
+- `confirm`: must be `true` to proceed (safety check)
+
+**Scope Required**: `datasources.write`
+
+**Warning:** This is a destructive operation that deletes all documents in the namespace. Use with caution.
+
+**Supported Vector Stores:**
+- ✅ Full support: Chroma, PGVector, Pinecone, Weaviate
+- ⚠️ Limited: Redis (delete/query by metadata not fully supported)
+- ⚠️ Partial: Qdrant (namespace management only)
+
 ## Schedule Management
 
 **Scope Required**: `scheduler.manage`

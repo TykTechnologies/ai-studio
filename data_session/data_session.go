@@ -63,6 +63,12 @@ type DataSession struct {
 	Sources map[uint]*models.Datasource
 }
 
+// NamespaceInfo represents a namespace/collection in a vector store
+type NamespaceInfo struct {
+	Name          string
+	DocumentCount int // -1 if not supported by vector store
+}
+
 func NewDataSession(sources map[uint]*models.Datasource) *DataSession {
 	return &DataSession{
 		Sources: sources,

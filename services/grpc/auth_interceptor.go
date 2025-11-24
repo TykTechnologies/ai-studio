@@ -160,6 +160,12 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/ProcessAndStoreDocuments":   models.ServiceScopeDatasourcesEmbeddings,
 		"/ai_studio_management.AIStudioManagementService/QueryDatasourceByVector":    models.ServiceScopeDatasourcesQuery,
 
+		// Advanced datasource operations - metadata and namespace management
+		"/ai_studio_management.AIStudioManagementService/DeleteDocumentsByMetadata": models.ServiceScopeDatasourcesWrite,
+		"/ai_studio_management.AIStudioManagementService/QueryByMetadataOnly":       models.ServiceScopeDatasourcesQuery,
+		"/ai_studio_management.AIStudioManagementService/ListNamespaces":            models.ServiceScopeDatasourcesRead,
+		"/ai_studio_management.AIStudioManagementService/DeleteNamespace":           models.ServiceScopeDatasourcesWrite,
+
 		// Data catalogues management methods
 		"/ai_studio_management.AIStudioManagementService/ListDataCatalogues":   models.ServiceScopeDataCataloguesRead,
 		"/ai_studio_management.AIStudioManagementService/GetDataCatalogue":     models.ServiceScopeDataCataloguesRead,

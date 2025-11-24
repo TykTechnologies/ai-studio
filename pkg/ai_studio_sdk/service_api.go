@@ -1019,6 +1019,89 @@ func QueryDatasourceByVector(ctx context.Context, datasourceID uint32, embedding
 	})
 }
 
+// === Advanced Datasource Operations - Metadata and Namespace Management ===
+
+// DeleteDocumentsByMetadata deletes documents matching metadata filter
+func DeleteDocumentsByMetadata(ctx context.Context, datasourceID uint32, metadataFilter map[string]string, filterMode string, dryRun bool) (int32, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteDocumentsByMetadata(ctx, &mgmtpb.DeleteDocumentsByMetadataRequest{
+		Context:        createPluginContext(AvailableScopes.DatasourcesWrite),
+		DatasourceId:   datasourceID,
+		MetadataFilter: metadataFilter,
+		FilterMode:     filterMode,
+		DryRun:         dryRun,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete documents: %w", err)
+	}
+
+	return resp.DeletedCount, nil
+}
+
+// QueryByMetadataOnly queries documents using only metadata filters
+func QueryByMetadataOnly(ctx context.Context, datasourceID uint32, metadataFilter map[string]string, filterMode string, limit, offset int32) ([]*mgmtpb.DatasourceResult, int32, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.QueryByMetadataOnly(ctx, &mgmtpb.QueryByMetadataOnlyRequest{
+		Context:        createPluginContext(AvailableScopes.DatasourcesQuery),
+		DatasourceId:   datasourceID,
+		MetadataFilter: metadataFilter,
+		FilterMode:     filterMode,
+		Limit:          limit,
+		Offset:         offset,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query by metadata: %w", err)
+	}
+
+	return resp.Results, resp.TotalCount, nil
+}
+
+// ListNamespaces lists all namespaces/collections in the vector store
+func ListNamespaces(ctx context.Context, datasourceID uint32) ([]*mgmtpb.NamespaceInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.ListNamespaces(ctx, &mgmtpb.ListNamespacesRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesRead),
+		DatasourceId: datasourceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list namespaces: %w", err)
+	}
+
+	return resp.Namespaces, nil
+}
+
+// DeleteNamespace deletes an entire namespace/collection
+func DeleteNamespace(ctx context.Context, datasourceID uint32, namespace string, confirm bool) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	_, err = client.DeleteNamespace(ctx, &mgmtpb.DeleteNamespaceRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesWrite),
+		DatasourceId: datasourceID,
+		Namespace:    namespace,
+		Confirm:      confirm,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete namespace: %w", err)
+	}
+
+	return nil
+}
+
 // === Data Catalogue CRUD Operations ===
 
 // GetDataCatalogue retrieves a specific data catalogue

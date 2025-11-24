@@ -59,6 +59,10 @@ const (
 	AIStudioManagementService_StoreDocuments_FullMethodName              = "/ai_studio_management.AIStudioManagementService/StoreDocuments"
 	AIStudioManagementService_ProcessAndStoreDocuments_FullMethodName    = "/ai_studio_management.AIStudioManagementService/ProcessAndStoreDocuments"
 	AIStudioManagementService_QueryDatasourceByVector_FullMethodName     = "/ai_studio_management.AIStudioManagementService/QueryDatasourceByVector"
+	AIStudioManagementService_DeleteDocumentsByMetadata_FullMethodName   = "/ai_studio_management.AIStudioManagementService/DeleteDocumentsByMetadata"
+	AIStudioManagementService_QueryByMetadataOnly_FullMethodName         = "/ai_studio_management.AIStudioManagementService/QueryByMetadataOnly"
+	AIStudioManagementService_ListNamespaces_FullMethodName              = "/ai_studio_management.AIStudioManagementService/ListNamespaces"
+	AIStudioManagementService_DeleteNamespace_FullMethodName             = "/ai_studio_management.AIStudioManagementService/DeleteNamespace"
 	AIStudioManagementService_ListDataCatalogues_FullMethodName          = "/ai_studio_management.AIStudioManagementService/ListDataCatalogues"
 	AIStudioManagementService_GetDataCatalogue_FullMethodName            = "/ai_studio_management.AIStudioManagementService/GetDataCatalogue"
 	AIStudioManagementService_CreateDataCatalogue_FullMethodName         = "/ai_studio_management.AIStudioManagementService/CreateDataCatalogue"
@@ -152,6 +156,11 @@ type AIStudioManagementServiceClient interface {
 	StoreDocuments(ctx context.Context, in *StoreDocumentsRequest, opts ...grpc.CallOption) (*StoreDocumentsResponse, error)
 	ProcessAndStoreDocuments(ctx context.Context, in *ProcessAndStoreRequest, opts ...grpc.CallOption) (*ProcessAndStoreResponse, error)
 	QueryDatasourceByVector(ctx context.Context, in *QueryByVectorRequest, opts ...grpc.CallOption) (*QueryDatasourceResponse, error)
+	// Advanced Datasource Operations - Metadata and Namespace Management
+	DeleteDocumentsByMetadata(ctx context.Context, in *DeleteDocumentsByMetadataRequest, opts ...grpc.CallOption) (*DeleteDocumentsByMetadataResponse, error)
+	QueryByMetadataOnly(ctx context.Context, in *QueryByMetadataOnlyRequest, opts ...grpc.CallOption) (*QueryByMetadataOnlyResponse, error)
+	ListNamespaces(ctx context.Context, in *ListNamespacesRequest, opts ...grpc.CallOption) (*ListNamespacesResponse, error)
+	DeleteNamespace(ctx context.Context, in *DeleteNamespaceRequest, opts ...grpc.CallOption) (*DeleteNamespaceResponse, error)
 	// Data Catalogues Management Operations (Phase 1.2)
 	ListDataCatalogues(ctx context.Context, in *ListDataCataloguesRequest, opts ...grpc.CallOption) (*ListDataCataloguesResponse, error)
 	GetDataCatalogue(ctx context.Context, in *GetDataCatalogueRequest, opts ...grpc.CallOption) (*GetDataCatalogueResponse, error)
@@ -606,6 +615,46 @@ func (c *aIStudioManagementServiceClient) QueryDatasourceByVector(ctx context.Co
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) DeleteDocumentsByMetadata(ctx context.Context, in *DeleteDocumentsByMetadataRequest, opts ...grpc.CallOption) (*DeleteDocumentsByMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteDocumentsByMetadataResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteDocumentsByMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) QueryByMetadataOnly(ctx context.Context, in *QueryByMetadataOnlyRequest, opts ...grpc.CallOption) (*QueryByMetadataOnlyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryByMetadataOnlyResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_QueryByMetadataOnly_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListNamespaces(ctx context.Context, in *ListNamespacesRequest, opts ...grpc.CallOption) (*ListNamespacesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListNamespacesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListNamespaces_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteNamespace(ctx context.Context, in *DeleteNamespaceRequest, opts ...grpc.CallOption) (*DeleteNamespaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteNamespaceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteNamespace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *aIStudioManagementServiceClient) ListDataCatalogues(ctx context.Context, in *ListDataCataloguesRequest, opts ...grpc.CallOption) (*ListDataCataloguesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListDataCataloguesResponse)
@@ -1030,6 +1079,11 @@ type AIStudioManagementServiceServer interface {
 	StoreDocuments(context.Context, *StoreDocumentsRequest) (*StoreDocumentsResponse, error)
 	ProcessAndStoreDocuments(context.Context, *ProcessAndStoreRequest) (*ProcessAndStoreResponse, error)
 	QueryDatasourceByVector(context.Context, *QueryByVectorRequest) (*QueryDatasourceResponse, error)
+	// Advanced Datasource Operations - Metadata and Namespace Management
+	DeleteDocumentsByMetadata(context.Context, *DeleteDocumentsByMetadataRequest) (*DeleteDocumentsByMetadataResponse, error)
+	QueryByMetadataOnly(context.Context, *QueryByMetadataOnlyRequest) (*QueryByMetadataOnlyResponse, error)
+	ListNamespaces(context.Context, *ListNamespacesRequest) (*ListNamespacesResponse, error)
+	DeleteNamespace(context.Context, *DeleteNamespaceRequest) (*DeleteNamespaceResponse, error)
 	// Data Catalogues Management Operations (Phase 1.2)
 	ListDataCatalogues(context.Context, *ListDataCataloguesRequest) (*ListDataCataloguesResponse, error)
 	GetDataCatalogue(context.Context, *GetDataCatalogueRequest) (*GetDataCatalogueResponse, error)
@@ -1203,6 +1257,18 @@ func (UnimplementedAIStudioManagementServiceServer) ProcessAndStoreDocuments(con
 }
 func (UnimplementedAIStudioManagementServiceServer) QueryDatasourceByVector(context.Context, *QueryByVectorRequest) (*QueryDatasourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryDatasourceByVector not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteDocumentsByMetadata(context.Context, *DeleteDocumentsByMetadataRequest) (*DeleteDocumentsByMetadataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteDocumentsByMetadata not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) QueryByMetadataOnly(context.Context, *QueryByMetadataOnlyRequest) (*QueryByMetadataOnlyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryByMetadataOnly not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListNamespaces(context.Context, *ListNamespacesRequest) (*ListNamespacesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListNamespaces not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteNamespace(context.Context, *DeleteNamespaceRequest) (*DeleteNamespaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteNamespace not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) ListDataCatalogues(context.Context, *ListDataCataloguesRequest) (*ListDataCataloguesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDataCatalogues not implemented")
@@ -2054,6 +2120,78 @@ func _AIStudioManagementService_QueryDatasourceByVector_Handler(srv interface{},
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_DeleteDocumentsByMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteDocumentsByMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteDocumentsByMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteDocumentsByMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteDocumentsByMetadata(ctx, req.(*DeleteDocumentsByMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_QueryByMetadataOnly_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryByMetadataOnlyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).QueryByMetadataOnly(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_QueryByMetadataOnly_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).QueryByMetadataOnly(ctx, req.(*QueryByMetadataOnlyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListNamespaces_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListNamespacesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListNamespaces(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListNamespaces_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListNamespaces(ctx, req.(*ListNamespacesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteNamespace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteNamespaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteNamespace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteNamespace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteNamespace(ctx, req.(*DeleteNamespaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AIStudioManagementService_ListDataCatalogues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListDataCataloguesRequest)
 	if err := dec(in); err != nil {
@@ -2861,6 +2999,22 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryDatasourceByVector",
 			Handler:    _AIStudioManagementService_QueryDatasourceByVector_Handler,
+		},
+		{
+			MethodName: "DeleteDocumentsByMetadata",
+			Handler:    _AIStudioManagementService_DeleteDocumentsByMetadata_Handler,
+		},
+		{
+			MethodName: "QueryByMetadataOnly",
+			Handler:    _AIStudioManagementService_QueryByMetadataOnly_Handler,
+		},
+		{
+			MethodName: "ListNamespaces",
+			Handler:    _AIStudioManagementService_ListNamespaces_Handler,
+		},
+		{
+			MethodName: "DeleteNamespace",
+			Handler:    _AIStudioManagementService_DeleteNamespace_Handler,
 		},
 		{
 			MethodName: "ListDataCatalogues",
