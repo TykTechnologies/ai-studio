@@ -47,6 +47,10 @@ func InitModels(db *gorm.DB) error {
 		&InstalledPluginVersion{}, // Installed plugin version tracking
 		&MarketplaceConfig{},      // Marketplace configuration
 		&BrandingSettings{},       // UI branding customization
+		// Scheduler Models
+		&PluginSchedule{},          // Plugin scheduled tasks
+		&PluginScheduleExecution{}, // Schedule execution history
+		&SchedulerLease{},          // Scheduler leader election
 	); err != nil {
 		return err
 	}

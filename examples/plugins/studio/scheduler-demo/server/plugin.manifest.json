@@ -1,0 +1,31 @@
+{
+  "id": "com.tyk.scheduler-demo",
+  "version": "1.0.0",
+  "name": "Scheduler Demo Plugin",
+  "description": "Demonstrates the scheduler capability with multiple scheduled tasks",
+  "capabilities": {
+    "hooks": ["studio_ui"],
+    "primary_hook": "studio_ui"
+  },
+  "permissions": {
+    "services": ["kv.readwrite", "scheduler.manage"]
+  },
+  "schedules": [
+    {
+      "id": "daily-report",
+      "name": "Daily Summary Report",
+      "cron": "0 9 * * *",
+      "timezone": "America/New_York",
+      "enabled": true,
+      "timeout_seconds": 60,
+      "config": {
+        "recipients": ["admin@example.com"],
+        "description": "Generates daily summary at 9 AM ET (immutable manifest schedule)"
+      }
+    }
+  ],
+  "compat": {
+    "app": ">=2.6 <3.0",
+    "api": ["scheduler-v1"]
+  }
+}

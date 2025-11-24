@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: proto/ai_studio_management/ai_studio_management.proto
+// source: ai_studio_management.proto
 
 package ai_studio_management
 
@@ -90,6 +90,11 @@ const (
 	AIStudioManagementService_ExecuteTool_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ExecuteTool"
 	AIStudioManagementService_QueryDatasource_FullMethodName             = "/ai_studio_management.AIStudioManagementService/QueryDatasource"
 	AIStudioManagementService_CallLLM_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/CallLLM"
+	AIStudioManagementService_CreateSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/CreateSchedule"
+	AIStudioManagementService_GetSchedule_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/GetSchedule"
+	AIStudioManagementService_ListSchedules_FullMethodName               = "/ai_studio_management.AIStudioManagementService/ListSchedules"
+	AIStudioManagementService_UpdateSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/UpdateSchedule"
+	AIStudioManagementService_DeleteSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/DeleteSchedule"
 )
 
 // AIStudioManagementServiceClient is the client API for AIStudioManagementService service.
@@ -185,6 +190,12 @@ type AIStudioManagementServiceClient interface {
 	ExecuteTool(ctx context.Context, in *ExecuteToolRequest, opts ...grpc.CallOption) (*ExecuteToolResponse, error)
 	QueryDatasource(ctx context.Context, in *QueryDatasourceRequest, opts ...grpc.CallOption) (*QueryDatasourceResponse, error)
 	CallLLM(ctx context.Context, in *CallLLMRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CallLLMResponse], error)
+	// Schedule Management Operations
+	CreateSchedule(ctx context.Context, in *CreateScheduleRequest, opts ...grpc.CallOption) (*CreateScheduleResponse, error)
+	GetSchedule(ctx context.Context, in *GetScheduleRequest, opts ...grpc.CallOption) (*GetScheduleResponse, error)
+	ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error)
+	UpdateSchedule(ctx context.Context, in *UpdateScheduleRequest, opts ...grpc.CallOption) (*UpdateScheduleResponse, error)
+	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
 }
 
 type aIStudioManagementServiceClient struct {
@@ -914,6 +925,56 @@ func (c *aIStudioManagementServiceClient) CallLLM(ctx context.Context, in *CallL
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AIStudioManagementService_CallLLMClient = grpc.ServerStreamingClient[CallLLMResponse]
 
+func (c *aIStudioManagementServiceClient) CreateSchedule(ctx context.Context, in *CreateScheduleRequest, opts ...grpc.CallOption) (*CreateScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateScheduleResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetSchedule(ctx context.Context, in *GetScheduleRequest, opts ...grpc.CallOption) (*GetScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetScheduleResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSchedulesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListSchedules_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateSchedule(ctx context.Context, in *UpdateScheduleRequest, opts ...grpc.CallOption) (*UpdateScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateScheduleResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteScheduleResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AIStudioManagementServiceServer is the server API for AIStudioManagementService service.
 // All implementations must embed UnimplementedAIStudioManagementServiceServer
 // for forward compatibility.
@@ -1007,6 +1068,12 @@ type AIStudioManagementServiceServer interface {
 	ExecuteTool(context.Context, *ExecuteToolRequest) (*ExecuteToolResponse, error)
 	QueryDatasource(context.Context, *QueryDatasourceRequest) (*QueryDatasourceResponse, error)
 	CallLLM(*CallLLMRequest, grpc.ServerStreamingServer[CallLLMResponse]) error
+	// Schedule Management Operations
+	CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error)
+	GetSchedule(context.Context, *GetScheduleRequest) (*GetScheduleResponse, error)
+	ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error)
+	UpdateSchedule(context.Context, *UpdateScheduleRequest) (*UpdateScheduleResponse, error)
+	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
 	mustEmbedUnimplementedAIStudioManagementServiceServer()
 }
 
@@ -1229,6 +1296,21 @@ func (UnimplementedAIStudioManagementServiceServer) QueryDatasource(context.Cont
 }
 func (UnimplementedAIStudioManagementServiceServer) CallLLM(*CallLLMRequest, grpc.ServerStreamingServer[CallLLMResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method CallLLM not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSchedule not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetSchedule(context.Context, *GetScheduleRequest) (*GetScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSchedule not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSchedules not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateSchedule(context.Context, *UpdateScheduleRequest) (*UpdateScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateSchedule not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteSchedule not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) mustEmbedUnimplementedAIStudioManagementServiceServer() {
 }
@@ -2523,6 +2605,96 @@ func _AIStudioManagementService_CallLLM_Handler(srv interface{}, stream grpc.Ser
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AIStudioManagementService_CallLLMServer = grpc.ServerStreamingServer[CallLLMResponse]
 
+func _AIStudioManagementService_CreateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateSchedule(ctx, req.(*CreateScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetSchedule(ctx, req.(*GetScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListSchedules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSchedulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListSchedules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListSchedules_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListSchedules(ctx, req.(*ListSchedulesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateSchedule(ctx, req.(*UpdateScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteSchedule(ctx, req.(*DeleteScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AIStudioManagementService_ServiceDesc is the grpc.ServiceDesc for AIStudioManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2810,6 +2982,26 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "QueryDatasource",
 			Handler:    _AIStudioManagementService_QueryDatasource_Handler,
 		},
+		{
+			MethodName: "CreateSchedule",
+			Handler:    _AIStudioManagementService_CreateSchedule_Handler,
+		},
+		{
+			MethodName: "GetSchedule",
+			Handler:    _AIStudioManagementService_GetSchedule_Handler,
+		},
+		{
+			MethodName: "ListSchedules",
+			Handler:    _AIStudioManagementService_ListSchedules_Handler,
+		},
+		{
+			MethodName: "UpdateSchedule",
+			Handler:    _AIStudioManagementService_UpdateSchedule_Handler,
+		},
+		{
+			MethodName: "DeleteSchedule",
+			Handler:    _AIStudioManagementService_DeleteSchedule_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -2818,5 +3010,5 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "proto/ai_studio_management/ai_studio_management.proto",
+	Metadata: "ai_studio_management.proto",
 }

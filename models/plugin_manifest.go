@@ -56,6 +56,20 @@ type PluginManifest struct {
 
 	// Static assets
 	Assets []string `json:"assets"`
+
+	// Scheduled tasks
+	Schedules []ScheduleDefinition `json:"schedules,omitempty"`
+}
+
+// ScheduleDefinition represents a cron-based task schedule in the manifest
+type ScheduleDefinition struct {
+	ID             string                 `json:"id" binding:"required"`           // Unique schedule identifier
+	Name           string                 `json:"name" binding:"required"`         // Human-readable name
+	Cron           string                 `json:"cron" binding:"required"`         // Cron expression
+	Timezone       string                 `json:"timezone,omitempty"`              // Timezone (default: UTC)
+	Enabled        bool                   `json:"enabled"`                         // Whether enabled (default: true)
+	TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`       // Max execution time (default: 60)
+	Config         map[string]interface{} `json:"config,omitempty"`                // Schedule-specific config
 }
 
 // UISlot represents a UI extension point where plugins can mount components

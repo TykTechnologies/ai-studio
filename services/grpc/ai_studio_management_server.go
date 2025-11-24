@@ -47,6 +47,7 @@ type AIStudioManagementServer struct {
 	vendorsServer       *VendorsServer
 	modelPricingServer  *ModelPricingServer
 	pluginKVServer      *PluginKVServer
+	schedulerServer     *SchedulerServer
 
 	// Note: Analytics server removed - analytics functionality not available to plugins
 
@@ -121,6 +122,7 @@ func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementS
 		vendorsServer:       NewVendorsServer(service),
 		modelPricingServer:  NewModelPricingServer(service),
 		pluginKVServer:      NewPluginKVServer(pluginKVService),
+		schedulerServer:     NewSchedulerServer(service),
 		service:            service,
 		// Note: Analytics server removed - analytics functionality not available to plugins
 	}
@@ -1231,4 +1233,26 @@ func getStringFromMap(m map[string]interface{}, key string) string {
 		}
 	}
 	return ""
+}
+
+// Schedule Management Operations - delegate to scheduler server
+
+func (s *AIStudioManagementServer) CreateSchedule(ctx context.Context, req *pb.CreateScheduleRequest) (*pb.CreateScheduleResponse, error) {
+	return s.schedulerServer.CreateSchedule(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetSchedule(ctx context.Context, req *pb.GetScheduleRequest) (*pb.GetScheduleResponse, error) {
+	return s.schedulerServer.GetSchedule(ctx, req)
+}
+
+func (s *AIStudioManagementServer) ListSchedules(ctx context.Context, req *pb.ListSchedulesRequest) (*pb.ListSchedulesResponse, error) {
+	return s.schedulerServer.ListSchedules(ctx, req)
+}
+
+func (s *AIStudioManagementServer) UpdateSchedule(ctx context.Context, req *pb.UpdateScheduleRequest) (*pb.UpdateScheduleResponse, error) {
+	return s.schedulerServer.UpdateSchedule(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteSchedule(ctx context.Context, req *pb.DeleteScheduleRequest) (*pb.DeleteScheduleResponse, error) {
+	return s.schedulerServer.DeleteSchedule(ctx, req)
 }

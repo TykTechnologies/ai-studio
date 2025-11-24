@@ -109,6 +109,13 @@ service AIStudioManagementService {
     rpc ExecuteTool(ExecuteToolRequest) returns (ExecuteToolResponse);
     rpc QueryDatasource(QueryDatasourceRequest) returns (QueryDatasourceResponse);
     rpc CallLLM(CallLLMRequest) returns (stream CallLLMResponse);
+
+    // Schedule Management Operations
+    rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse);
+    rpc GetSchedule(GetScheduleRequest) returns (GetScheduleResponse);
+    rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
+    rpc UpdateSchedule(UpdateScheduleRequest) returns (UpdateScheduleResponse);
+    rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
 }
 
 // Common request context for all operations
@@ -1340,4 +1347,83 @@ message LLMUsage {
     int32 total_tokens = 3;
     int32 cache_read_tokens = 4;
     int32 cache_write_tokens = 5;
+}
+
+// Schedule Management Messages
+
+message CreateScheduleRequest {
+    PluginContext context = 1;
+    string schedule_id = 2;       // Unique identifier for this schedule (e.g., "hourly-sync")
+    string name = 3;              // Human-readable name
+    string cron_expr = 4;         // Cron expression (5-field format: "* * * * *")
+    string timezone = 5;          // Timezone (e.g., "UTC", "America/New_York")
+    int32 timeout_seconds = 6;    // Max execution time in seconds
+    string config_json = 7;       // JSON config passed to ExecuteScheduledTask
+    bool enabled = 8;             // Whether schedule is enabled
+}
+
+message CreateScheduleResponse {
+    ScheduleInfo schedule = 1;
+}
+
+message GetScheduleRequest {
+    PluginContext context = 1;
+    string schedule_id = 2;       // The manifest_schedule_id (not database ID)
+}
+
+message GetScheduleResponse {
+    ScheduleInfo schedule = 1;
+}
+
+message ListSchedulesRequest {
+    PluginContext context = 1;
+    // Lists all schedules for the calling plugin
+}
+
+message ListSchedulesResponse {
+    repeated ScheduleInfo schedules = 1;
+    int64 total_count = 2;
+}
+
+message UpdateScheduleRequest {
+    PluginContext context = 1;
+    string schedule_id = 2;       // The manifest_schedule_id to update
+
+    // Optional fields - only update if provided
+    optional string name = 3;
+    optional string cron_expr = 4;
+    optional string timezone = 5;
+    optional int32 timeout_seconds = 6;
+    optional string config_json = 7;
+    optional bool enabled = 8;
+}
+
+message UpdateScheduleResponse {
+    ScheduleInfo schedule = 1;
+}
+
+message DeleteScheduleRequest {
+    PluginContext context = 1;
+    string schedule_id = 2;       // The manifest_schedule_id to delete
+}
+
+message DeleteScheduleResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message ScheduleInfo {
+    uint32 id = 1;                // Database ID
+    uint32 plugin_id = 2;
+    string schedule_id = 3;       // Manifest schedule ID (unique per plugin)
+    string name = 4;
+    string cron_expr = 5;
+    string timezone = 6;
+    bool enabled = 7;
+    string config = 8;            // JSON config
+    int32 timeout_seconds = 9;
+    google.protobuf.Timestamp last_run = 10;
+    google.protobuf.Timestamp next_run = 11;
+    google.protobuf.Timestamp created_at = 12;
+    google.protobuf.Timestamp updated_at = 13;
 }

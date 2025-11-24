@@ -745,6 +745,14 @@ func (a *API) setupRoutes() {
 	// Plugin cleanup routes
 	v1.POST("/plugins/cleanup-orphaned-registry", a.cleanupOrphanedUIRegistry)
 
+	// Plugin schedule routes
+	v1.POST("/plugins/:id/schedules", a.CreatePluginSchedule)
+	v1.GET("/plugins/:id/schedules", a.GetPluginSchedules)
+	v1.GET("/plugins/:id/schedules/:schedule_id", a.GetPluginScheduleDetail)
+	v1.GET("/plugins/:id/schedules/:schedule_id/executions", a.GetPluginScheduleExecutions)
+	v1.PUT("/plugins/:id/schedules/:schedule_id", a.UpdatePluginSchedule)
+	v1.DELETE("/plugins/:id/schedules/:schedule_id", a.DeletePluginSchedule)
+
 	// Plugin asset serving (outside of v1 group for simpler URLs)
 	v1.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)
 

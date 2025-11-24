@@ -186,3 +186,7 @@ func (c *MicrogatewayPluginClient) GetObjectHookRegistrations(ctx context.Contex
 func (c *MicrogatewayPluginClient) HandleObjectHook(ctx context.Context, req *pb.ObjectHookRequest, opts ...grpc.CallOption) (*pb.ObjectHookResponse, error) {
 	return c.pluginStub.HandleObjectHook(ctx, req, opts...)
 }
+
+func (c *MicrogatewayPluginClient) ExecuteScheduledTask(ctx context.Context, req *pb.ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*pb.ExecuteScheduledTaskResponse, error) {
+	return c.pluginStub.ExecuteScheduledTask(ctx, req, opts...)
+}

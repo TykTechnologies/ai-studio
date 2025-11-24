@@ -30,6 +30,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
+	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/startup"
 
@@ -182,6 +183,25 @@ func main() {
 		} else if ociConfig == nil {
 			logger.Warn("Marketplace requires OCI support - set AI_STUDIO_OCI_CACHE_DIR to enable")
 		}
+	}
+
+	// Initialize and start scheduler service
+	if service.AIStudioPluginManager != nil {
+		logger.Info("Initializing scheduler service...")
+		schedulerService := scheduler.NewSchedulerService(db, service.AIStudioPluginManager)
+		if err := schedulerService.Start(); err != nil {
+			logger.Errorf("Failed to start scheduler service: %v", err)
+		} else {
+			logger.Info("Scheduler service started successfully")
+		}
+
+		// Ensure scheduler stops on shutdown
+		defer func() {
+			logger.Info("Stopping scheduler service...")
+			if err := schedulerService.Stop(); err != nil {
+				logger.Errorf("Error stopping scheduler service: %v", err)
+			}
+		}()
 	}
 
 	// Initialize mail service and notification service

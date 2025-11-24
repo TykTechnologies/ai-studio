@@ -122,6 +122,9 @@ type ServiceAPIScope struct {
 	// Data catalogue scopes
 	DataCataloguesRead  string
 	DataCataloguesWrite string
+
+	// Scheduler management scopes
+	SchedulerManage string
 }
 
 // AvailableScopes provides constants for common service API scopes
@@ -150,6 +153,7 @@ var AvailableScopes = ServiceAPIScope{
 	PricingWrite:        "pricing.write",
 	DataCataloguesRead:  "data-catalogues.read",
 	DataCataloguesWrite: "data-catalogues.write",
+	SchedulerManage:     "scheduler.manage",
 }
 
 // PluginContext provides context information for service API calls

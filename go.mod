@@ -187,6 +187,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/pmylund/go-cache v2.1.0+incompatible // indirect
 	github.com/redis/rueidis v1.0.34 // indirect
+	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/russellhaering/goxmldsig v1.4.0 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect

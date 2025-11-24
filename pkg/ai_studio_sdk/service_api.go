@@ -1139,3 +1139,157 @@ func CallLLMSimple(ctx context.Context, llmID uint32, model string, messages []*
 
 	return resp.Content, nil
 }
+
+// ===========================
+// Schedule Management Methods
+// ===========================
+
+// CreateSchedule creates a new schedule for the calling plugin
+func CreateSchedule(ctx context.Context, scheduleID, name, cronExpr, timezone string, timeoutSeconds int32, config map[string]interface{}, enabled bool) (*mgmtpb.ScheduleInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	// Convert config map to JSON string
+	configJSON := "{}"
+	if len(config) > 0 {
+		if configBytes, err := json.Marshal(config); err == nil {
+			configJSON = string(configBytes)
+		} else {
+			return nil, fmt.Errorf("failed to marshal config: %w", err)
+		}
+	}
+
+	resp, err := client.CreateSchedule(ctx, &mgmtpb.CreateScheduleRequest{
+		Context:        createPluginContext(AvailableScopes.SchedulerManage),
+		ScheduleId:     scheduleID,
+		Name:           name,
+		CronExpr:       cronExpr,
+		Timezone:       timezone,
+		TimeoutSeconds: timeoutSeconds,
+		ConfigJson:     configJSON,
+		Enabled:        enabled,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create schedule: %w", err)
+	}
+
+	return resp.Schedule, nil
+}
+
+// GetSchedule retrieves a specific schedule by manifest_schedule_id
+func GetSchedule(ctx context.Context, scheduleID string) (*mgmtpb.ScheduleInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.GetSchedule(ctx, &mgmtpb.GetScheduleRequest{
+		Context:    createPluginContext(AvailableScopes.SchedulerManage),
+		ScheduleId: scheduleID,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get schedule: %w", err)
+	}
+
+	return resp.Schedule, nil
+}
+
+// ListSchedules lists all schedules for the calling plugin
+func ListSchedules(ctx context.Context) ([]*mgmtpb.ScheduleInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.ListSchedules(ctx, &mgmtpb.ListSchedulesRequest{
+		Context: createPluginContext(AvailableScopes.SchedulerManage),
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list schedules: %w", err)
+	}
+
+	return resp.Schedules, nil
+}
+
+// UpdateScheduleOptions provides optional fields for updating a schedule
+type UpdateScheduleOptions struct {
+	Name           *string
+	CronExpr       *string
+	Timezone       *string
+	TimeoutSeconds *int32
+	Config         map[string]interface{}
+	Enabled        *bool
+}
+
+// UpdateSchedule updates an existing schedule with optional fields
+func UpdateSchedule(ctx context.Context, scheduleID string, opts UpdateScheduleOptions) (*mgmtpb.ScheduleInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	req := &mgmtpb.UpdateScheduleRequest{
+		Context:    createPluginContext(AvailableScopes.SchedulerManage),
+		ScheduleId: scheduleID,
+	}
+
+	// Set optional fields
+	if opts.Name != nil {
+		req.Name = opts.Name
+	}
+	if opts.CronExpr != nil {
+		req.CronExpr = opts.CronExpr
+	}
+	if opts.Timezone != nil {
+		req.Timezone = opts.Timezone
+	}
+	if opts.TimeoutSeconds != nil {
+		req.TimeoutSeconds = opts.TimeoutSeconds
+	}
+	if opts.Enabled != nil {
+		req.Enabled = opts.Enabled
+	}
+	if opts.Config != nil {
+		if configBytes, err := json.Marshal(opts.Config); err == nil {
+			configJSON := string(configBytes)
+			req.ConfigJson = &configJSON
+		} else {
+			return nil, fmt.Errorf("failed to marshal config: %w", err)
+		}
+	}
+
+	resp, err := client.UpdateSchedule(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update schedule: %w", err)
+	}
+
+	return resp.Schedule, nil
+}
+
+// DeleteSchedule deletes a schedule
+func DeleteSchedule(ctx context.Context, scheduleID string) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteSchedule(ctx, &mgmtpb.DeleteScheduleRequest{
+		Context:    createPluginContext(AvailableScopes.SchedulerManage),
+		ScheduleId: scheduleID,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to delete schedule: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete schedule failed: %s", resp.Message)
+	}
+
+	return nil
+}

@@ -2,8 +2,10 @@ package plugin_sdk
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
@@ -444,4 +446,60 @@ func (w *pluginServerWrapper) HandleObjectHook(ctx context.Context, req *pb.Obje
 
 	pluginCtx := w.createPluginContext(ctx, req.Context)
 	return handler.HandleObjectHook(pluginCtx, req)
+}
+
+// ExecuteScheduledTask implements pb.PluginServiceServer
+func (w *pluginServerWrapper) ExecuteScheduledTask(ctx context.Context, req *pb.ExecuteScheduledTaskRequest) (*pb.ExecuteScheduledTaskResponse, error) {
+	// Check if plugin implements SchedulerPlugin
+	scheduler, ok := w.plugin.(SchedulerPlugin)
+	if !ok {
+		return &pb.ExecuteScheduledTaskResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not implement SchedulerPlugin",
+		}, fmt.Errorf("plugin does not implement SchedulerPlugin")
+	}
+
+	// Set service broker ID if provided (for service API access)
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	// Build plugin context
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+
+	// Convert protobuf schedule to SDK schedule
+	var configMap map[string]interface{}
+	if req.Schedule.ConfigJson != "" {
+		// Parse JSON config
+		if err := json.Unmarshal([]byte(req.Schedule.ConfigJson), &configMap); err != nil {
+			return &pb.ExecuteScheduledTaskResponse{
+				Success:      false,
+				ErrorMessage: fmt.Sprintf("failed to parse schedule config: %v", err),
+			}, fmt.Errorf("failed to parse schedule config: %w", err)
+		}
+	}
+
+	schedule := &Schedule{
+		ID:             req.Schedule.Id,
+		Name:           req.Schedule.Name,
+		Cron:           req.Schedule.Cron,
+		Timezone:       req.Schedule.Timezone,
+		Enabled:        req.Schedule.Enabled,
+		TimeoutSeconds: int(req.Schedule.TimeoutSeconds),
+		Config:         configMap,
+	}
+
+	// Execute scheduled task
+	err := scheduler.ExecuteScheduledTask(pluginCtx, schedule)
+
+	if err != nil {
+		return &pb.ExecuteScheduledTaskResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil // Don't return gRPC error - just mark as failed
+	}
+
+	return &pb.ExecuteScheduledTaskResponse{
+		Success: true,
+	}, nil
 }

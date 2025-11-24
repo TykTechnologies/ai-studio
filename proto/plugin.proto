@@ -50,6 +50,9 @@ service PluginService {
     // Object Hook Methods (for AI Studio plugins)
     rpc GetObjectHookRegistrations(GetObjectHookRegistrationsRequest) returns (GetObjectHookRegistrationsResponse);
     rpc HandleObjectHook(ObjectHookRequest) returns (ObjectHookResponse);
+
+    // Scheduler Methods (for AI Studio plugins)
+    rpc ExecuteScheduledTask(ExecuteScheduledTaskRequest) returns (ExecuteScheduledTaskResponse);
 }
 
 // Common messages
@@ -426,4 +429,27 @@ message ObjectHookResponse {
     // Additional response metadata
     string message = 30;  // Optional message to log
     bool modified = 31;   // Whether the plugin modified the object
+}
+
+// Scheduler Messages
+
+message ExecuteScheduledTaskRequest {
+    PluginContext context = 1;           // Plugin context (with synthetic request ID)
+    ScheduleDefinition schedule = 2;     // Schedule definition
+    uint32 service_broker_id = 3;        // Broker ID for service API access during execution
+}
+
+message ExecuteScheduledTaskResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message ScheduleDefinition {
+    string id = 1;                       // Schedule ID from manifest
+    string name = 2;                     // Human-readable name
+    string cron = 3;                     // Cron expression
+    string timezone = 4;                 // Timezone for cron evaluation
+    bool enabled = 5;                    // Whether schedule is enabled
+    int32 timeout_seconds = 6;           // Maximum execution time
+    string config_json = 7;              // Schedule config as JSON string
 }

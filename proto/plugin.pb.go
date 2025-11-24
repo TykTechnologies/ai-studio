@@ -3382,6 +3382,210 @@ func (x *ObjectHookResponse) GetModified() bool {
 	return false
 }
 
+type ExecuteScheduledTaskRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Context         *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`                                           // Plugin context (with synthetic request ID)
+	Schedule        *ScheduleDefinition    `protobuf:"bytes,2,opt,name=schedule,proto3" json:"schedule,omitempty"`                                         // Schedule definition
+	ServiceBrokerId uint32                 `protobuf:"varint,3,opt,name=service_broker_id,json=serviceBrokerId,proto3" json:"service_broker_id,omitempty"` // Broker ID for service API access during execution
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ExecuteScheduledTaskRequest) Reset() {
+	*x = ExecuteScheduledTaskRequest{}
+	mi := &file_plugin_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteScheduledTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteScheduledTaskRequest) ProtoMessage() {}
+
+func (x *ExecuteScheduledTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteScheduledTaskRequest.ProtoReflect.Descriptor instead.
+func (*ExecuteScheduledTaskRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *ExecuteScheduledTaskRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *ExecuteScheduledTaskRequest) GetSchedule() *ScheduleDefinition {
+	if x != nil {
+		return x.Schedule
+	}
+	return nil
+}
+
+func (x *ExecuteScheduledTaskRequest) GetServiceBrokerId() uint32 {
+	if x != nil {
+		return x.ServiceBrokerId
+	}
+	return 0
+}
+
+type ExecuteScheduledTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecuteScheduledTaskResponse) Reset() {
+	*x = ExecuteScheduledTaskResponse{}
+	mi := &file_plugin_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecuteScheduledTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecuteScheduledTaskResponse) ProtoMessage() {}
+
+func (x *ExecuteScheduledTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecuteScheduledTaskResponse.ProtoReflect.Descriptor instead.
+func (*ExecuteScheduledTaskResponse) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *ExecuteScheduledTaskResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ExecuteScheduledTaskResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type ScheduleDefinition struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                                // Schedule ID from manifest
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`                                            // Human-readable name
+	Cron           string                 `protobuf:"bytes,3,opt,name=cron,proto3" json:"cron,omitempty"`                                            // Cron expression
+	Timezone       string                 `protobuf:"bytes,4,opt,name=timezone,proto3" json:"timezone,omitempty"`                                    // Timezone for cron evaluation
+	Enabled        bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`                                     // Whether schedule is enabled
+	TimeoutSeconds int32                  `protobuf:"varint,6,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"` // Maximum execution time
+	ConfigJson     string                 `protobuf:"bytes,7,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`              // Schedule config as JSON string
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ScheduleDefinition) Reset() {
+	*x = ScheduleDefinition{}
+	mi := &file_plugin_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScheduleDefinition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScheduleDefinition) ProtoMessage() {}
+
+func (x *ScheduleDefinition) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScheduleDefinition.ProtoReflect.Descriptor instead.
+func (*ScheduleDefinition) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *ScheduleDefinition) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ScheduleDefinition) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ScheduleDefinition) GetCron() string {
+	if x != nil {
+		return x.Cron
+	}
+	return ""
+}
+
+func (x *ScheduleDefinition) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *ScheduleDefinition) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *ScheduleDefinition) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+func (x *ScheduleDefinition) GetConfigJson() string {
+	if x != nil {
+		return x.ConfigJson
+	}
+	return ""
+}
+
 var File_plugin_proto protoreflect.FileDescriptor
 
 const file_plugin_proto_rawDesc = "" +
@@ -3719,7 +3923,23 @@ const file_plugin_proto_rawDesc = "" +
 	"\bmodified\x18\x1f \x01(\bR\bmodified\x1aA\n" +
 	"\x13PluginMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xea\v\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb2\x01\n" +
+	"\x1bExecuteScheduledTaskRequest\x12/\n" +
+	"\acontext\x18\x01 \x01(\v2\x15.plugin.PluginContextR\acontext\x126\n" +
+	"\bschedule\x18\x02 \x01(\v2\x1a.plugin.ScheduleDefinitionR\bschedule\x12*\n" +
+	"\x11service_broker_id\x18\x03 \x01(\rR\x0fserviceBrokerId\"]\n" +
+	"\x1cExecuteScheduledTaskResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\xcc\x01\n" +
+	"\x12ScheduleDefinition\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04cron\x18\x03 \x01(\tR\x04cron\x12\x1a\n" +
+	"\btimezone\x18\x04 \x01(\tR\btimezone\x12\x18\n" +
+	"\aenabled\x18\x05 \x01(\bR\aenabled\x12'\n" +
+	"\x0ftimeout_seconds\x18\x06 \x01(\x05R\x0etimeoutSeconds\x12\x1f\n" +
+	"\vconfig_json\x18\a \x01(\tR\n" +
+	"configJson2\xcd\f\n" +
 	"\rPluginService\x127\n" +
 	"\n" +
 	"Initialize\x12\x13.plugin.InitRequest\x1a\x14.plugin.InitResponse\x121\n" +
@@ -3743,7 +3963,8 @@ const file_plugin_proto_rawDesc = "" +
 	"\x0fGetConfigSchema\x12\x1e.plugin.GetConfigSchemaRequest\x1a\x1f.plugin.GetConfigSchemaResponse\x12N\n" +
 	"\x12HandleAgentMessage\x12\x1b.plugin.AgentMessageRequest\x1a\x19.plugin.AgentMessageChunk0\x01\x12s\n" +
 	"\x1aGetObjectHookRegistrations\x12).plugin.GetObjectHookRegistrationsRequest\x1a*.plugin.GetObjectHookRegistrationsResponse\x12I\n" +
-	"\x10HandleObjectHook\x12\x19.plugin.ObjectHookRequest\x1a\x1a.plugin.ObjectHookResponseB/Z-github.com/TykTechnologies/midsommar/v2/protob\x06proto3"
+	"\x10HandleObjectHook\x12\x19.plugin.ObjectHookRequest\x1a\x1a.plugin.ObjectHookResponse\x12a\n" +
+	"\x14ExecuteScheduledTask\x12#.plugin.ExecuteScheduledTaskRequest\x1a$.plugin.ExecuteScheduledTaskResponseB/Z-github.com/TykTechnologies/midsommar/v2/protob\x06proto3"
 
 var (
 	file_plugin_proto_rawDescOnce sync.Once
@@ -3758,7 +3979,7 @@ func file_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 64)
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 67)
 var file_plugin_proto_goTypes = []any{
 	(AgentMessageChunk_ChunkType)(0),           // 0: plugin.AgentMessageChunk.ChunkType
 	(*InitRequest)(nil),                        // 1: plugin.InitRequest
@@ -3809,51 +4030,54 @@ var file_plugin_proto_goTypes = []any{
 	(*ObjectHookRegistration)(nil),             // 46: plugin.ObjectHookRegistration
 	(*ObjectHookRequest)(nil),                  // 47: plugin.ObjectHookRequest
 	(*ObjectHookResponse)(nil),                 // 48: plugin.ObjectHookResponse
-	nil,                                        // 49: plugin.InitRequest.ConfigEntry
-	nil,                                        // 50: plugin.PluginContext.MetadataEntry
-	nil,                                        // 51: plugin.PluginContext.TraceContextEntry
-	nil,                                        // 52: plugin.PluginRequest.HeadersEntry
-	nil,                                        // 53: plugin.PluginResponse.HeadersEntry
-	nil,                                        // 54: plugin.AuthResponse.ClaimsEntry
-	nil,                                        // 55: plugin.EnrichedRequest.AuthClaimsEntry
-	nil,                                        // 56: plugin.HeadersRequest.HeadersEntry
-	nil,                                        // 57: plugin.HeadersResponse.HeadersEntry
-	nil,                                        // 58: plugin.ResponseWriteRequest.HeadersEntry
-	nil,                                        // 59: plugin.ResponseWriteResponse.HeadersEntry
-	nil,                                        // 60: plugin.App.MetadataEntry
-	nil,                                        // 61: plugin.User.MetadataEntry
-	nil,                                        // 62: plugin.DataCollectionResponse.MetadataEntry
-	nil,                                        // 63: plugin.ObjectHookRequest.MetadataEntry
-	nil,                                        // 64: plugin.ObjectHookResponse.PluginMetadataEntry
+	(*ExecuteScheduledTaskRequest)(nil),        // 49: plugin.ExecuteScheduledTaskRequest
+	(*ExecuteScheduledTaskResponse)(nil),       // 50: plugin.ExecuteScheduledTaskResponse
+	(*ScheduleDefinition)(nil),                 // 51: plugin.ScheduleDefinition
+	nil,                                        // 52: plugin.InitRequest.ConfigEntry
+	nil,                                        // 53: plugin.PluginContext.MetadataEntry
+	nil,                                        // 54: plugin.PluginContext.TraceContextEntry
+	nil,                                        // 55: plugin.PluginRequest.HeadersEntry
+	nil,                                        // 56: plugin.PluginResponse.HeadersEntry
+	nil,                                        // 57: plugin.AuthResponse.ClaimsEntry
+	nil,                                        // 58: plugin.EnrichedRequest.AuthClaimsEntry
+	nil,                                        // 59: plugin.HeadersRequest.HeadersEntry
+	nil,                                        // 60: plugin.HeadersResponse.HeadersEntry
+	nil,                                        // 61: plugin.ResponseWriteRequest.HeadersEntry
+	nil,                                        // 62: plugin.ResponseWriteResponse.HeadersEntry
+	nil,                                        // 63: plugin.App.MetadataEntry
+	nil,                                        // 64: plugin.User.MetadataEntry
+	nil,                                        // 65: plugin.DataCollectionResponse.MetadataEntry
+	nil,                                        // 66: plugin.ObjectHookRequest.MetadataEntry
+	nil,                                        // 67: plugin.ObjectHookResponse.PluginMetadataEntry
 }
 var file_plugin_proto_depIdxs = []int32{
-	49, // 0: plugin.InitRequest.config:type_name -> plugin.InitRequest.ConfigEntry
-	50, // 1: plugin.PluginContext.metadata:type_name -> plugin.PluginContext.MetadataEntry
-	51, // 2: plugin.PluginContext.trace_context:type_name -> plugin.PluginContext.TraceContextEntry
-	52, // 3: plugin.PluginRequest.headers:type_name -> plugin.PluginRequest.HeadersEntry
+	52, // 0: plugin.InitRequest.config:type_name -> plugin.InitRequest.ConfigEntry
+	53, // 1: plugin.PluginContext.metadata:type_name -> plugin.PluginContext.MetadataEntry
+	54, // 2: plugin.PluginContext.trace_context:type_name -> plugin.PluginContext.TraceContextEntry
+	55, // 3: plugin.PluginRequest.headers:type_name -> plugin.PluginRequest.HeadersEntry
 	7,  // 4: plugin.PluginRequest.context:type_name -> plugin.PluginContext
-	53, // 5: plugin.PluginResponse.headers:type_name -> plugin.PluginResponse.HeadersEntry
+	56, // 5: plugin.PluginResponse.headers:type_name -> plugin.PluginResponse.HeadersEntry
 	8,  // 6: plugin.AuthRequest.request:type_name -> plugin.PluginRequest
 	7,  // 7: plugin.AuthRequest.context:type_name -> plugin.PluginContext
-	54, // 8: plugin.AuthResponse.claims:type_name -> plugin.AuthResponse.ClaimsEntry
+	57, // 8: plugin.AuthResponse.claims:type_name -> plugin.AuthResponse.ClaimsEntry
 	8,  // 9: plugin.EnrichedRequest.request:type_name -> plugin.PluginRequest
-	55, // 10: plugin.EnrichedRequest.auth_claims:type_name -> plugin.EnrichedRequest.AuthClaimsEntry
-	56, // 11: plugin.HeadersRequest.headers:type_name -> plugin.HeadersRequest.HeadersEntry
+	58, // 10: plugin.EnrichedRequest.auth_claims:type_name -> plugin.EnrichedRequest.AuthClaimsEntry
+	59, // 11: plugin.HeadersRequest.headers:type_name -> plugin.HeadersRequest.HeadersEntry
 	7,  // 12: plugin.HeadersRequest.context:type_name -> plugin.PluginContext
-	57, // 13: plugin.HeadersResponse.headers:type_name -> plugin.HeadersResponse.HeadersEntry
-	58, // 14: plugin.ResponseWriteRequest.headers:type_name -> plugin.ResponseWriteRequest.HeadersEntry
+	60, // 13: plugin.HeadersResponse.headers:type_name -> plugin.HeadersResponse.HeadersEntry
+	61, // 14: plugin.ResponseWriteRequest.headers:type_name -> plugin.ResponseWriteRequest.HeadersEntry
 	7,  // 15: plugin.ResponseWriteRequest.context:type_name -> plugin.PluginContext
-	59, // 16: plugin.ResponseWriteResponse.headers:type_name -> plugin.ResponseWriteResponse.HeadersEntry
+	62, // 16: plugin.ResponseWriteResponse.headers:type_name -> plugin.ResponseWriteResponse.HeadersEntry
 	7,  // 17: plugin.GetAppRequest.context:type_name -> plugin.PluginContext
 	21, // 18: plugin.GetAppResponse.app:type_name -> plugin.App
 	7,  // 19: plugin.GetUserRequest.context:type_name -> plugin.PluginContext
 	22, // 20: plugin.GetUserResponse.user:type_name -> plugin.User
-	60, // 21: plugin.App.metadata:type_name -> plugin.App.MetadataEntry
-	61, // 22: plugin.User.metadata:type_name -> plugin.User.MetadataEntry
+	63, // 21: plugin.App.metadata:type_name -> plugin.App.MetadataEntry
+	64, // 22: plugin.User.metadata:type_name -> plugin.User.MetadataEntry
 	7,  // 23: plugin.ProxyLogRequest.context:type_name -> plugin.PluginContext
 	7,  // 24: plugin.AnalyticsRequest.context:type_name -> plugin.PluginContext
 	7,  // 25: plugin.BudgetUsageRequest.context:type_name -> plugin.PluginContext
-	62, // 26: plugin.DataCollectionResponse.metadata:type_name -> plugin.DataCollectionResponse.MetadataEntry
+	65, // 26: plugin.DataCollectionResponse.metadata:type_name -> plugin.DataCollectionResponse.MetadataEntry
 	31, // 27: plugin.ListAssetsResponse.assets:type_name -> plugin.AssetInfo
 	40, // 28: plugin.AgentMessageRequest.available_tools:type_name -> plugin.AgentToolInfo
 	41, // 29: plugin.AgentMessageRequest.available_datasources:type_name -> plugin.AgentDatasourceInfo
@@ -3863,55 +4087,59 @@ var file_plugin_proto_depIdxs = []int32{
 	0,  // 33: plugin.AgentMessageChunk.type:type_name -> plugin.AgentMessageChunk.ChunkType
 	46, // 34: plugin.GetObjectHookRegistrationsResponse.registrations:type_name -> plugin.ObjectHookRegistration
 	7,  // 35: plugin.ObjectHookRequest.context:type_name -> plugin.PluginContext
-	63, // 36: plugin.ObjectHookRequest.metadata:type_name -> plugin.ObjectHookRequest.MetadataEntry
-	64, // 37: plugin.ObjectHookResponse.plugin_metadata:type_name -> plugin.ObjectHookResponse.PluginMetadataEntry
-	1,  // 38: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
-	3,  // 39: plugin.PluginService.Ping:input_type -> plugin.PingRequest
-	5,  // 40: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
-	8,  // 41: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
-	10, // 42: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
-	17, // 43: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
-	19, // 44: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
-	12, // 45: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
-	13, // 46: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
-	15, // 47: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
-	23, // 48: plugin.PluginService.HandleProxyLog:input_type -> plugin.ProxyLogRequest
-	24, // 49: plugin.PluginService.HandleAnalytics:input_type -> plugin.AnalyticsRequest
-	25, // 50: plugin.PluginService.HandleBudgetUsage:input_type -> plugin.BudgetUsageRequest
-	27, // 51: plugin.PluginService.GetAsset:input_type -> plugin.GetAssetRequest
-	29, // 52: plugin.PluginService.ListAssets:input_type -> plugin.ListAssetsRequest
-	32, // 53: plugin.PluginService.GetManifest:input_type -> plugin.GetManifestRequest
-	34, // 54: plugin.PluginService.Call:input_type -> plugin.CallRequest
-	36, // 55: plugin.PluginService.GetConfigSchema:input_type -> plugin.GetConfigSchemaRequest
-	38, // 56: plugin.PluginService.HandleAgentMessage:input_type -> plugin.AgentMessageRequest
-	44, // 57: plugin.PluginService.GetObjectHookRegistrations:input_type -> plugin.GetObjectHookRegistrationsRequest
-	47, // 58: plugin.PluginService.HandleObjectHook:input_type -> plugin.ObjectHookRequest
-	2,  // 59: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
-	4,  // 60: plugin.PluginService.Ping:output_type -> plugin.PingResponse
-	6,  // 61: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
-	9,  // 62: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
-	11, // 63: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
-	18, // 64: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
-	20, // 65: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
-	9,  // 66: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
-	14, // 67: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
-	16, // 68: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
-	26, // 69: plugin.PluginService.HandleProxyLog:output_type -> plugin.DataCollectionResponse
-	26, // 70: plugin.PluginService.HandleAnalytics:output_type -> plugin.DataCollectionResponse
-	26, // 71: plugin.PluginService.HandleBudgetUsage:output_type -> plugin.DataCollectionResponse
-	28, // 72: plugin.PluginService.GetAsset:output_type -> plugin.GetAssetResponse
-	30, // 73: plugin.PluginService.ListAssets:output_type -> plugin.ListAssetsResponse
-	33, // 74: plugin.PluginService.GetManifest:output_type -> plugin.GetManifestResponse
-	35, // 75: plugin.PluginService.Call:output_type -> plugin.CallResponse
-	37, // 76: plugin.PluginService.GetConfigSchema:output_type -> plugin.GetConfigSchemaResponse
-	39, // 77: plugin.PluginService.HandleAgentMessage:output_type -> plugin.AgentMessageChunk
-	45, // 78: plugin.PluginService.GetObjectHookRegistrations:output_type -> plugin.GetObjectHookRegistrationsResponse
-	48, // 79: plugin.PluginService.HandleObjectHook:output_type -> plugin.ObjectHookResponse
-	59, // [59:80] is the sub-list for method output_type
-	38, // [38:59] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	66, // 36: plugin.ObjectHookRequest.metadata:type_name -> plugin.ObjectHookRequest.MetadataEntry
+	67, // 37: plugin.ObjectHookResponse.plugin_metadata:type_name -> plugin.ObjectHookResponse.PluginMetadataEntry
+	7,  // 38: plugin.ExecuteScheduledTaskRequest.context:type_name -> plugin.PluginContext
+	51, // 39: plugin.ExecuteScheduledTaskRequest.schedule:type_name -> plugin.ScheduleDefinition
+	1,  // 40: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
+	3,  // 41: plugin.PluginService.Ping:input_type -> plugin.PingRequest
+	5,  // 42: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
+	8,  // 43: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
+	10, // 44: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
+	17, // 45: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
+	19, // 46: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
+	12, // 47: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
+	13, // 48: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
+	15, // 49: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
+	23, // 50: plugin.PluginService.HandleProxyLog:input_type -> plugin.ProxyLogRequest
+	24, // 51: plugin.PluginService.HandleAnalytics:input_type -> plugin.AnalyticsRequest
+	25, // 52: plugin.PluginService.HandleBudgetUsage:input_type -> plugin.BudgetUsageRequest
+	27, // 53: plugin.PluginService.GetAsset:input_type -> plugin.GetAssetRequest
+	29, // 54: plugin.PluginService.ListAssets:input_type -> plugin.ListAssetsRequest
+	32, // 55: plugin.PluginService.GetManifest:input_type -> plugin.GetManifestRequest
+	34, // 56: plugin.PluginService.Call:input_type -> plugin.CallRequest
+	36, // 57: plugin.PluginService.GetConfigSchema:input_type -> plugin.GetConfigSchemaRequest
+	38, // 58: plugin.PluginService.HandleAgentMessage:input_type -> plugin.AgentMessageRequest
+	44, // 59: plugin.PluginService.GetObjectHookRegistrations:input_type -> plugin.GetObjectHookRegistrationsRequest
+	47, // 60: plugin.PluginService.HandleObjectHook:input_type -> plugin.ObjectHookRequest
+	49, // 61: plugin.PluginService.ExecuteScheduledTask:input_type -> plugin.ExecuteScheduledTaskRequest
+	2,  // 62: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
+	4,  // 63: plugin.PluginService.Ping:output_type -> plugin.PingResponse
+	6,  // 64: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
+	9,  // 65: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
+	11, // 66: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
+	18, // 67: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
+	20, // 68: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
+	9,  // 69: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
+	14, // 70: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
+	16, // 71: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
+	26, // 72: plugin.PluginService.HandleProxyLog:output_type -> plugin.DataCollectionResponse
+	26, // 73: plugin.PluginService.HandleAnalytics:output_type -> plugin.DataCollectionResponse
+	26, // 74: plugin.PluginService.HandleBudgetUsage:output_type -> plugin.DataCollectionResponse
+	28, // 75: plugin.PluginService.GetAsset:output_type -> plugin.GetAssetResponse
+	30, // 76: plugin.PluginService.ListAssets:output_type -> plugin.ListAssetsResponse
+	33, // 77: plugin.PluginService.GetManifest:output_type -> plugin.GetManifestResponse
+	35, // 78: plugin.PluginService.Call:output_type -> plugin.CallResponse
+	37, // 79: plugin.PluginService.GetConfigSchema:output_type -> plugin.GetConfigSchemaResponse
+	39, // 80: plugin.PluginService.HandleAgentMessage:output_type -> plugin.AgentMessageChunk
+	45, // 81: plugin.PluginService.GetObjectHookRegistrations:output_type -> plugin.GetObjectHookRegistrationsResponse
+	48, // 82: plugin.PluginService.HandleObjectHook:output_type -> plugin.ObjectHookResponse
+	50, // 83: plugin.PluginService.ExecuteScheduledTask:output_type -> plugin.ExecuteScheduledTaskResponse
+	62, // [62:84] is the sub-list for method output_type
+	40, // [40:62] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_plugin_proto_init() }
@@ -3925,7 +4153,7 @@ func file_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_proto_rawDesc), len(file_plugin_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   64,
+			NumMessages:   67,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

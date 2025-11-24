@@ -254,6 +254,10 @@ func (c *AIStudioPluginClient) HandleObjectHook(ctx context.Context, req *pb.Obj
 	return c.pluginStub.HandleObjectHook(ctx, req, opts...)
 }
 
+func (c *AIStudioPluginClient) ExecuteScheduledTask(ctx context.Context, req *pb.ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*pb.ExecuteScheduledTaskResponse, error) {
+	return c.pluginStub.ExecuteScheduledTask(ctx, req, opts...)
+}
+
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
 // Uses a universal handshake that works with any plugin type
 type ConfigOnlyGRPC struct {
@@ -369,9 +373,51 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		}
 	}
 
-	// Add plugin ID to config (broker ID will be passed per-request)
+	// Add plugin ID to config
 	configMap["plugin_id"] = fmt.Sprintf("%d", plugin.ID)
 	configMap["has_service_api"] = "true"
+
+	// Set up service broker for Initialize() so plugins can make service API calls during startup
+	var serviceBrokerID uint32
+	if clientWrapper.broker != nil && m.service != nil {
+		// Create brokered server for service API access during initialization
+		brokerID := clientWrapper.broker.NextId()
+
+		// Start broker server in background
+		go func() {
+			clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+				// Create server with plugin ID context for authentication
+				// Use inline interceptor to avoid import cycle with services/grpc
+				pluginIDInterceptor := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+					// Inject plugin ID into context using the exported constant
+					ctx = context.WithValue(ctx, "midsommar:plugin:id", plugin.ID)
+					return handler(ctx, req)
+				}
+
+				// Add interceptor to options
+				opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
+				s := grpc.NewServer(opts...)
+
+				// Register AI Studio management service server using factory function
+				if NewAIStudioManagementServerFunc != nil {
+					serverImpl := NewAIStudioManagementServerFunc(m.service)
+					if mgmtServer, ok := serverImpl.(mgmtpb.AIStudioManagementServiceServer); ok {
+						mgmtpb.RegisterAIStudioManagementServiceServer(s, mgmtServer)
+					}
+				}
+
+				return s
+			})
+		}()
+
+		serviceBrokerID = brokerID
+		configMap["service_broker_id"] = fmt.Sprintf("%d", serviceBrokerID)
+
+		log.Info().
+			Uint("plugin_id", plugin.ID).
+			Uint32("broker_id", serviceBrokerID).
+			Msg("✅ Service broker set up for Initialize() - plugin can make service API calls during startup")
+	}
 
 	initResp, err := clientWrapper.Initialize(ctx, &pb.InitRequest{
 		Config: configMap,
@@ -559,6 +605,66 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 				Str("manifest_id", manifest.ID).
 				Str("manifest_version", manifest.Version).
 				Msg("Auto-fetched manifest successfully - manifest service not available for UI registration")
+		}
+
+		// Register schedules from manifest
+		if len(manifest.Schedules) > 0 {
+			log.Info().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Int("schedule_count", len(manifest.Schedules)).
+				Msg("Registering scheduled tasks from manifest")
+
+			for _, scheduleDef := range manifest.Schedules {
+				// Set defaults
+				timezone := scheduleDef.Timezone
+				if timezone == "" {
+					timezone = "UTC"
+				}
+
+				timeoutSeconds := scheduleDef.TimeoutSeconds
+				if timeoutSeconds == 0 {
+					timeoutSeconds = 60
+				}
+
+				// Convert config to JSON
+				configJSON := "{}"
+				if len(scheduleDef.Config) > 0 {
+					if configBytes, err := json.Marshal(scheduleDef.Config); err == nil {
+						configJSON = string(configBytes)
+					}
+				}
+
+				// Create or update schedule in database
+				schedule := models.PluginSchedule{
+					PluginID:           pluginID,
+					ManifestScheduleID: scheduleDef.ID,
+					Name:               scheduleDef.Name,
+					CronExpr:           scheduleDef.Cron,
+					Timezone:           timezone,
+					Enabled:            scheduleDef.Enabled,
+					TimeoutSeconds:     timeoutSeconds,
+					Config:             configJSON,
+				}
+
+				// Upsert schedule (update if exists, create if not)
+				if err := m.db.Where("plugin_id = ? AND manifest_schedule_id = ?", pluginID, scheduleDef.ID).
+					Assign(schedule).
+					FirstOrCreate(&schedule).Error; err != nil {
+					log.Warn().
+						Uint("plugin_id", pluginID).
+						Str("schedule_id", scheduleDef.ID).
+						Err(err).
+						Msg("Failed to register schedule")
+				} else {
+					log.Info().
+						Uint("plugin_id", pluginID).
+						Str("schedule_id", scheduleDef.ID).
+						Str("schedule_name", scheduleDef.Name).
+						Str("cron", scheduleDef.Cron).
+						Msg("✅ Registered schedule")
+				}
+			}
 		}
 	}()
 
@@ -1415,6 +1521,100 @@ type AssetInfo struct {
 	Path     string `json:"path"`
 	MimeType string `json:"mime_type"`
 	Size     int64  `json:"size"`
+}
+
+// ExecuteScheduledTask executes a scheduled task on a plugin via gRPC
+func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, pluginID uint, contextProto *pb.PluginContext, scheduleProto *pb.ScheduleDefinition) (*pb.ExecuteScheduledTaskResponse, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if !loadedPlugin.IsHealthy {
+		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	}
+
+	// Set up per-request broker for service API access
+	var serviceBrokerID uint32
+	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+		if clientWrapper.broker != nil && clientWrapper.service != nil {
+			brokerID := clientWrapper.broker.NextId()
+
+			log.Info().
+				Uint("plugin_id", pluginID).
+				Str("schedule_id", scheduleProto.Id).
+				Uint32("broker_id", brokerID).
+				Msg("Setting up broker for scheduled task execution")
+
+			// Start brokered server for this scheduled task
+			serverReady := make(chan struct{})
+			go func() {
+				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+					// Inject plugin ID into context
+					pluginIDInterceptor := CreatePluginIDInterceptor(pluginID)
+					opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
+
+					s := grpc.NewServer(opts...)
+
+					// Register AI Studio management services
+					if NewAIStudioManagementServerFunc != nil {
+						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
+						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
+							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
+							log.Debug().
+								Uint32("broker_id", brokerID).
+								Uint("plugin_id", pluginID).
+								Msg("AI Studio services registered for scheduled task")
+						}
+					}
+
+					close(serverReady)
+					return s
+				})
+			}()
+
+			// Wait for server to be ready (with timeout)
+			select {
+			case <-serverReady:
+				log.Debug().Uint32("broker_id", brokerID).Msg("Brokered server ready for scheduled task")
+			case <-time.After(100 * time.Millisecond):
+				log.Warn().Uint32("broker_id", brokerID).Msg("Brokered server setup timeout - proceeding anyway")
+			}
+
+			serviceBrokerID = brokerID
+		}
+	}
+
+	// Call plugin's ExecuteScheduledTask gRPC method
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("schedule_id", scheduleProto.Id).
+		Str("schedule_name", scheduleProto.Name).
+		Uint32("service_broker_id", serviceBrokerID).
+		Msg("Executing scheduled task on plugin")
+
+	resp, err := loadedPlugin.GRPCClient.ExecuteScheduledTask(ctx, &pb.ExecuteScheduledTaskRequest{
+		Context:          contextProto,
+		Schedule:         scheduleProto,
+		ServiceBrokerId:  serviceBrokerID,
+	})
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("schedule_id", scheduleProto.Id).
+		Bool("success", resp != nil && resp.Success).
+		Str("error_message", func() string { if resp != nil { return resp.ErrorMessage } else { return "" } }()).
+		Err(err).
+		Msg("Scheduled task execution returned")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute scheduled task: %w", err)
+	}
+
+	return resp, nil
 }
 
 // DetectMimeType detects MIME type from file extension

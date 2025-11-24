@@ -199,6 +199,13 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/WritePluginKV":  models.ServiceScopeKVReadWrite,
 		"/ai_studio_management.AIStudioManagementService/ReadPluginKV":   models.ServiceScopeKVReadWrite,
 		"/ai_studio_management.AIStudioManagementService/DeletePluginKV": models.ServiceScopeKVReadWrite,
+
+		// Schedule management methods
+		"/ai_studio_management.AIStudioManagementService/CreateSchedule": models.ServiceScopeSchedulerManage,
+		"/ai_studio_management.AIStudioManagementService/GetSchedule":    models.ServiceScopeSchedulerManage,
+		"/ai_studio_management.AIStudioManagementService/ListSchedules":  models.ServiceScopeSchedulerManage,
+		"/ai_studio_management.AIStudioManagementService/UpdateSchedule": models.ServiceScopeSchedulerManage,
+		"/ai_studio_management.AIStudioManagementService/DeleteSchedule": models.ServiceScopeSchedulerManage,
 	}
 
 	return scopeMap[fullMethod]
@@ -249,4 +256,14 @@ func GetPluginFromContext(ctx context.Context) (*models.Plugin, bool) {
 		return plugin, true
 	}
 	return nil, false
+}
+
+// CreatePluginIDInterceptor creates an interceptor that injects plugin ID into all requests
+// Used for brokered servers to ensure plugin authentication context is available
+func CreatePluginIDInterceptor(pluginID uint) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		// Inject plugin ID into context
+		ctx = SetPluginIDInContext(ctx, pluginID)
+		return handler(ctx, req)
+	}
 }

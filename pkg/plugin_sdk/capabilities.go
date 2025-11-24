@@ -145,6 +145,30 @@ type ObjectHookHandler interface {
 	HandleObjectHook(ctx Context, req *pb.ObjectHookRequest) (*pb.ObjectHookResponse, error)
 }
 
+// SchedulerPlugin allows plugins to execute tasks on a cron-based schedule.
+// Use this when you need periodic background tasks like data synchronization,
+// cleanup operations, or scheduled processing.
+type SchedulerPlugin interface {
+	Plugin
+
+	// ExecuteScheduledTask is called when a scheduled task needs to run.
+	// ctx provides access to services (KV, logging) but has no request context.
+	// schedule contains the schedule definition including ID, name, cron expression, and custom config.
+	// Returns error if execution failed (will be recorded in execution history).
+	ExecuteScheduledTask(ctx Context, schedule *Schedule) error
+}
+
+// Schedule represents a cron-based task definition.
+type Schedule struct {
+	ID             string                 // Unique identifier from manifest
+	Name           string                 // Human-readable name
+	Cron           string                 // Cron expression (e.g., "0 * * * *")
+	Timezone       string                 // Timezone for cron evaluation (e.g., "America/New_York", "UTC")
+	Enabled        bool                   // Whether schedule is currently enabled
+	TimeoutSeconds int                    // Maximum execution time in seconds
+	Config         map[string]interface{} // Schedule-specific configuration from manifest
+}
+
 // HookType represents the type of plugin hook (for gateway compatibility)
 type HookType string
 
