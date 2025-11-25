@@ -6,3 +6,6 @@
 	path = enterprise
 	url = git@github.com:TykTechnologies/ai-studio-enterprise.git
 	branch = main
+[submodule "community"]
+	path = community
+	url = git@github.com:TykTechnologies/ai-studio-community-plugins.git
