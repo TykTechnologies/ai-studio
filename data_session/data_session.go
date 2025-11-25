@@ -19,6 +19,7 @@ import (
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/auth"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	weaviateModels "github.com/weaviate/weaviate/entities/models"
+	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/driver/postgres"
 
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
@@ -97,6 +98,32 @@ func (ds *DataSession) Search(query string, n int) ([]schema.Document, error) {
 		}
 
 		for i := range docs {
+			// Convert ChromaDB MetadataValue types to actual Go values
+			convertedMetadata := make(map[string]any)
+			for k, v := range docs[i].Metadata {
+				// Check if value is a ChromaDB v2.MetadataValue and extract the actual value
+				if chromaVal, ok := v.(chromago.MetadataValue); ok {
+					if rawVal, ok := chromaVal.GetRaw(); ok {
+						convertedMetadata[k] = rawVal
+					} else {
+						convertedMetadata[k] = chromaVal.String()
+					}
+				} else if chromaVal, ok := v.(*chromago.MetadataValue); ok {
+					// Handle pointer case
+					if rawVal, ok := chromaVal.GetRaw(); ok {
+						convertedMetadata[k] = rawVal
+					} else {
+						convertedMetadata[k] = chromaVal.String()
+					}
+				} else if pbVal, ok := v.(*structpb.Value); ok {
+					// Handle protobuf Value (for Pinecone compatibility)
+					convertedMetadata[k] = pbVal.AsInterface()
+				} else {
+					convertedMetadata[k] = v
+				}
+			}
+			docs[i].Metadata = convertedMetadata
+
 			enc, ok := docs[i].Metadata["encoding"]
 			if ok {
 				if enc == "base64" {
@@ -761,17 +788,20 @@ func (ds *DataSession) searchPineconeByVector(ctx context.Context, d *models.Dat
 	docs := make([]schema.Document, 0, len(queryResp.Matches))
 	for _, match := range queryResp.Matches {
 		metadata := make(map[string]any)
+		content := ""
+
 		if match.Vector != nil && match.Vector.Metadata != nil {
 			for k, v := range match.Vector.Metadata.Fields {
-				metadata[k] = v
-			}
-		}
-
-		// Extract content from metadata
-		content := ""
-		if contentVal, ok := metadata["content"]; ok {
-			if contentStr, ok := contentVal.(string); ok {
-				content = contentStr
+				// Extract actual value from protobuf Value type
+				if k == "content" {
+					// Content goes into PageContent, not metadata
+					if strVal, ok := v.GetKind().(*structpb.Value_StringValue); ok {
+						content = strVal.StringValue
+					}
+				} else {
+					// Convert protobuf Value to actual Go value
+					metadata[k] = v.AsInterface()
+				}
 			}
 		}
 
@@ -896,10 +926,93 @@ func (ds *DataSession) searchChromaByVector(ctx context.Context, store vectorsto
 
 			// Extract metadata if available
 			if len(metadatasGroups) > groupIdx && len(metadatasGroups[groupIdx]) > docIdx {
-				docMeta := metadatasGroups[groupIdx][docIdx]
-				// Convert DocumentMetadata interface to map by extracting values
-				// Store as opaque object for now
-				metadata["_chroma_metadata"] = docMeta
+				chromaMeta := metadatasGroups[groupIdx][docIdx]
+
+				slog.Info("ChromaDB metadata extraction",
+					"groupIdx", groupIdx,
+					"docIdx", docIdx,
+					"metadata_available", chromaMeta != nil)
+
+				// Extract all standard and custom metadata fields
+				// AI Studio standard fields
+				if val, ok := chromaMeta.GetString("filename"); ok {
+					metadata["filename"] = val
+					slog.Info("Extracted field", "key", "filename", "value", val)
+				}
+				if val, ok := chromaMeta.GetString("file_name"); ok {
+					metadata["file_name"] = val
+					slog.Info("Extracted field", "key", "file_name", "value", val)
+				}
+				if val, ok := chromaMeta.GetString("title"); ok {
+					metadata["title"] = val
+				}
+				if val, ok := chromaMeta.GetString("text"); ok {
+					metadata["text"] = val
+				}
+				if val, ok := chromaMeta.GetString("start"); ok {
+					metadata["start"] = val
+				}
+				if val, ok := chromaMeta.GetString("end"); ok {
+					metadata["end"] = val
+				}
+
+				// GitHub RAG plugin fields
+				if val, ok := chromaMeta.GetString("source"); ok {
+					metadata["source"] = val
+				}
+				if val, ok := chromaMeta.GetString("repo_id"); ok {
+					metadata["repo_id"] = val
+				}
+				if val, ok := chromaMeta.GetString("repo_name"); ok {
+					metadata["repo_name"] = val
+				}
+				if val, ok := chromaMeta.GetString("repo_owner"); ok {
+					metadata["repo_owner"] = val
+				}
+				if val, ok := chromaMeta.GetString("repo_host"); ok {
+					metadata["repo_host"] = val
+				}
+				if val, ok := chromaMeta.GetString("branch"); ok {
+					metadata["branch"] = val
+				}
+				if val, ok := chromaMeta.GetString("commit_sha"); ok {
+					metadata["commit_sha"] = val
+				}
+				if val, ok := chromaMeta.GetString("file_path"); ok {
+					metadata["file_path"] = val
+				}
+				if val, ok := chromaMeta.GetString("file_type"); ok {
+					metadata["file_type"] = val
+				}
+				if val, ok := chromaMeta.GetString("chunk_index"); ok {
+					metadata["chunk_index"] = val
+				}
+				if val, ok := chromaMeta.GetString("total_chunks"); ok {
+					metadata["total_chunks"] = val
+				}
+				if val, ok := chromaMeta.GetString("line_start"); ok {
+					metadata["line_start"] = val
+				}
+				if val, ok := chromaMeta.GetString("line_end"); ok {
+					metadata["line_end"] = val
+				}
+				if val, ok := chromaMeta.GetString("github_url"); ok {
+					metadata["github_url"] = val
+				}
+				if val, ok := chromaMeta.GetString("ingestion_timestamp"); ok {
+					metadata["ingestion_timestamp"] = val
+				}
+				if val, ok := chromaMeta.GetString("namespace"); ok {
+					metadata["namespace"] = val
+				}
+
+				// Other common fields
+				if val, ok := chromaMeta.GetString("encoding"); ok {
+					metadata["encoding"] = val
+				}
+				if val, ok := chromaMeta.GetString("test_type"); ok {
+					metadata["test_type"] = val
+				}
 			}
 
 			score := float32(0)
@@ -909,6 +1022,12 @@ func (ds *DataSession) searchChromaByVector(ctx context.Context, store vectorsto
 
 			// v2 Document interface has ContentString() method
 			content := doc.ContentString()
+
+			// Log final metadata before creating document
+			slog.Info("Final metadata for document",
+				"docIdx", docIdx,
+				"metadata_keys", len(metadata),
+				"metadata", metadata)
 
 			docs = append(docs, schema.Document{
 				PageContent: content,

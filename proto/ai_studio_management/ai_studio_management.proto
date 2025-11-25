@@ -56,6 +56,7 @@ service AIStudioManagementService {
     rpc CreateDatasource(CreateDatasourceRequest) returns (CreateDatasourceResponse);
     rpc UpdateDatasource(UpdateDatasourceRequest) returns (UpdateDatasourceResponse);
     rpc DeleteDatasource(DeleteDatasourceRequest) returns (DeleteDatasourceResponse);
+    rpc CloneDatasource(CloneDatasourceRequest) returns (CloneDatasourceResponse);
     rpc SearchDatasources(SearchDatasourcesRequest) returns (SearchDatasourcesResponse);
     rpc ProcessDatasourceEmbeddings(ProcessEmbeddingsRequest) returns (ProcessEmbeddingsResponse);
 
@@ -684,6 +685,15 @@ message DeleteDatasourceRequest {
 message DeleteDatasourceResponse {
     bool success = 1;
     string message = 2;
+}
+
+message CloneDatasourceRequest {
+    PluginContext context = 1;
+    uint32 source_datasource_id = 2;
+}
+
+message CloneDatasourceResponse {
+    DatasourceInfo datasource = 1;
 }
 
 message SearchDatasourcesRequest {

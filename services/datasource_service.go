@@ -104,31 +104,47 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	datasource.Icon = icon
 	datasource.Url = url
 	datasource.PrivacyScore = privacyScore
-	datasource.DBConnString = dbConnString
-	datasource.DBSourceType = dbSourceType
+
+	// Smart connection string update - preserve if empty
+	if dbConnString != "" {
+		datasource.DBConnString = dbConnString
+	}
+	if dbSourceType != "" {
+		datasource.DBSourceType = dbSourceType
+	}
+
 	// Smart DB connection API key update logic
 	if dbConnAPIKey == "[redacted]" {
 		// Don't update API key if it's the redacted placeholder
 	} else if dbConnAPIKey == "" {
-		// Clear API key if empty string is provided
-		datasource.DBConnAPIKey = ""
+		// Empty = preserve existing (don't clear)
 	} else {
 		// Update to new API key value
 		datasource.DBConnAPIKey = dbConnAPIKey
 	}
-	datasource.EmbedVendor = models.Vendor(embedVendor)
-	datasource.EmbedUrl = embedUrl
+
+	if embedVendor != "" {
+		datasource.EmbedVendor = models.Vendor(embedVendor)
+	}
+
+	// Smart embed URL update - preserve if empty
+	if embedUrl != "" {
+		datasource.EmbedUrl = embedUrl
+	}
+
 	// Smart embed API key update logic
 	if embedAPIKey == "[redacted]" {
 		// Don't update API key if it's the redacted placeholder
 	} else if embedAPIKey == "" {
-		// Clear API key if empty string is provided
-		datasource.EmbedAPIKey = ""
+		// Empty = preserve existing (don't clear)
 	} else {
 		// Update to new API key value
 		datasource.EmbedAPIKey = embedAPIKey
 	}
-	datasource.EmbedModel = embedModel
+
+	if embedModel != "" {
+		datasource.EmbedModel = embedModel
+	}
 	datasource.DBName = dbName
 	datasource.Active = active
 	datasource.UserID = userID
@@ -255,6 +271,52 @@ func (s *Service) DeleteDatasource(id uint) error {
 	}
 
 	return nil
+}
+
+// CloneDatasource creates a copy of an existing datasource with all configuration including API keys
+func (s *Service) CloneDatasource(sourceDatasourceID uint) (*models.Datasource, error) {
+	// Get source datasource with all relationships
+	source, err := s.GetDatasourceByID(sourceDatasourceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get source datasource: %w", err)
+	}
+
+	// Extract tag names for re-association
+	tagNames := make([]string, len(source.Tags))
+	for i, tag := range source.Tags {
+		tagNames[i] = tag.Name
+	}
+
+	// Create cloned datasource with "Copy of" prefix and inactive status
+	// IMPORTANT: This preserves API keys (DBConnAPIKey, EmbedAPIKey)
+	cloned, err := s.CreateDatasource(
+		fmt.Sprintf("Copy of %s", source.Name), // New name
+		source.ShortDescription,
+		source.LongDescription,
+		source.Icon,
+		source.Url,
+		source.PrivacyScore,
+		source.UserID,
+		tagNames,
+		source.DBConnString,
+		source.DBSourceType,
+		source.DBConnAPIKey, // API key preserved
+		source.DBName,
+		string(source.EmbedVendor), // Convert Vendor to string
+		source.EmbedUrl,
+		source.EmbedAPIKey, // API key preserved
+		source.EmbedModel,
+		false, // Start inactive for safety
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cloned datasource: %w", err)
+	}
+
+	logger.Info(fmt.Sprintf("Datasource cloned successfully: source_id=%d, cloned_id=%d, cloned_name=%s",
+		sourceDatasourceID, cloned.ID, cloned.Name))
+
+	return cloned, nil
 }
 
 func (s *Service) GetAllDatasources(pageSize int, pageNumber int, all bool) (models.Datasources, int64, int, error) {

@@ -272,6 +272,36 @@ func (s *DatasourcesServer) DeleteDatasource(ctx context.Context, req *pb.Delete
 	}, nil
 }
 
+// CloneDatasource clones an existing datasource with all configuration
+func (s *DatasourcesServer) CloneDatasource(ctx context.Context, req *pb.CloneDatasourceRequest) (*pb.CloneDatasourceResponse, error) {
+	sourceDatasourceID := req.GetSourceDatasourceId()
+	if sourceDatasourceID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "source_datasource_id is required")
+	}
+
+	// Call service layer to clone
+	datasource, err := s.service.CloneDatasource(uint(sourceDatasourceID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "source datasource not found: %d", sourceDatasourceID)
+		}
+		log.Error().Err(err).
+			Uint32("source_id", sourceDatasourceID).
+			Msg("Failed to clone datasource via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to clone datasource: %v", err)
+	}
+
+	log.Info().
+		Uint32("source_datasource_id", sourceDatasourceID).
+		Uint("cloned_datasource_id", datasource.ID).
+		Str("cloned_datasource_name", datasource.Name).
+		Msg("Cloned datasource via gRPC")
+
+	return &pb.CloneDatasourceResponse{
+		Datasource: convertDatasourceToPB(datasource),
+	}, nil
+}
+
 // ProcessDatasourceEmbeddings processes embeddings for a datasource
 func (s *DatasourcesServer) ProcessDatasourceEmbeddings(ctx context.Context, req *pb.ProcessEmbeddingsRequest) (*pb.ProcessEmbeddingsResponse, error) {
 	datasourceID := req.GetDatasourceId()

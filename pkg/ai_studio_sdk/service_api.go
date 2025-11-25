@@ -895,6 +895,40 @@ func UpdateDatasource(ctx context.Context, datasourceID uint32, name, shortDesc,
 	})
 }
 
+// UpdateDatasourceWithEmbedder updates an existing datasource with full embedder configuration
+func UpdateDatasourceWithEmbedder(ctx context.Context, datasourceID uint32,
+	name, shortDesc, longDesc, url string,
+	dbConnString, dbSourceType, dbConnAPIKey, dbName string,
+	embedVendor, embedURL, embedAPIKey, embedModel string,
+	privacyScore int32, userID uint32, active bool, tagNames []string) (*mgmtpb.UpdateDatasourceResponse, error) {
+
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateDatasource(ctx, &mgmtpb.UpdateDatasourceRequest{
+		Context:          createPluginContext(AvailableScopes.DatasourcesWrite),
+		DatasourceId:     datasourceID,
+		Name:             name,
+		ShortDescription: shortDesc,
+		LongDescription:  longDesc,
+		Url:              url,
+		DbConnString:     dbConnString,
+		DbSourceType:     dbSourceType,
+		DbConnApiKey:     dbConnAPIKey,
+		DbName:           dbName,
+		EmbedVendor:      embedVendor,
+		EmbedUrl:         embedURL,
+		EmbedApiKey:      embedAPIKey,
+		EmbedModel:       embedModel,
+		PrivacyScore:     privacyScore,
+		UserId:           userID,
+		Active:           active,
+		TagNames:         tagNames,
+	})
+}
+
 // DeleteDatasource deletes a datasource
 func DeleteDatasource(ctx context.Context, datasourceID uint32) error {
 	client, err := getServiceClient(ctx)
@@ -915,6 +949,19 @@ func DeleteDatasource(ctx context.Context, datasourceID uint32) error {
 	}
 
 	return nil
+}
+
+// CloneDatasource clones an existing datasource with all configuration including API keys
+func CloneDatasource(ctx context.Context, sourceDatasourceID uint32) (*mgmtpb.CloneDatasourceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CloneDatasource(ctx, &mgmtpb.CloneDatasourceRequest{
+		Context:            createPluginContext(AvailableScopes.DatasourcesWrite),
+		SourceDatasourceId: sourceDatasourceID,
+	})
 }
 
 // SearchDatasources searches datasources

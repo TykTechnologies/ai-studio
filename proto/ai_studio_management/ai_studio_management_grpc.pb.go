@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: ai_studio_management.proto
+// source: proto/ai_studio_management/ai_studio_management.proto
 
 package ai_studio_management
 
@@ -53,6 +53,7 @@ const (
 	AIStudioManagementService_CreateDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/CreateDatasource"
 	AIStudioManagementService_UpdateDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/UpdateDatasource"
 	AIStudioManagementService_DeleteDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/DeleteDatasource"
+	AIStudioManagementService_CloneDatasource_FullMethodName             = "/ai_studio_management.AIStudioManagementService/CloneDatasource"
 	AIStudioManagementService_SearchDatasources_FullMethodName           = "/ai_studio_management.AIStudioManagementService/SearchDatasources"
 	AIStudioManagementService_ProcessDatasourceEmbeddings_FullMethodName = "/ai_studio_management.AIStudioManagementService/ProcessDatasourceEmbeddings"
 	AIStudioManagementService_GenerateEmbedding_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GenerateEmbedding"
@@ -149,6 +150,7 @@ type AIStudioManagementServiceClient interface {
 	CreateDatasource(ctx context.Context, in *CreateDatasourceRequest, opts ...grpc.CallOption) (*CreateDatasourceResponse, error)
 	UpdateDatasource(ctx context.Context, in *UpdateDatasourceRequest, opts ...grpc.CallOption) (*UpdateDatasourceResponse, error)
 	DeleteDatasource(ctx context.Context, in *DeleteDatasourceRequest, opts ...grpc.CallOption) (*DeleteDatasourceResponse, error)
+	CloneDatasource(ctx context.Context, in *CloneDatasourceRequest, opts ...grpc.CallOption) (*CloneDatasourceResponse, error)
 	SearchDatasources(ctx context.Context, in *SearchDatasourcesRequest, opts ...grpc.CallOption) (*SearchDatasourcesResponse, error)
 	ProcessDatasourceEmbeddings(ctx context.Context, in *ProcessEmbeddingsRequest, opts ...grpc.CallOption) (*ProcessEmbeddingsResponse, error)
 	// RAG/Embedding Operations for Plugins
@@ -549,6 +551,16 @@ func (c *aIStudioManagementServiceClient) DeleteDatasource(ctx context.Context, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteDatasourceResponse)
 	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteDatasource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) CloneDatasource(ctx context.Context, in *CloneDatasourceRequest, opts ...grpc.CallOption) (*CloneDatasourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloneDatasourceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CloneDatasource_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1072,6 +1084,7 @@ type AIStudioManagementServiceServer interface {
 	CreateDatasource(context.Context, *CreateDatasourceRequest) (*CreateDatasourceResponse, error)
 	UpdateDatasource(context.Context, *UpdateDatasourceRequest) (*UpdateDatasourceResponse, error)
 	DeleteDatasource(context.Context, *DeleteDatasourceRequest) (*DeleteDatasourceResponse, error)
+	CloneDatasource(context.Context, *CloneDatasourceRequest) (*CloneDatasourceResponse, error)
 	SearchDatasources(context.Context, *SearchDatasourcesRequest) (*SearchDatasourcesResponse, error)
 	ProcessDatasourceEmbeddings(context.Context, *ProcessEmbeddingsRequest) (*ProcessEmbeddingsResponse, error)
 	// RAG/Embedding Operations for Plugins
@@ -1239,6 +1252,9 @@ func (UnimplementedAIStudioManagementServiceServer) UpdateDatasource(context.Con
 }
 func (UnimplementedAIStudioManagementServiceServer) DeleteDatasource(context.Context, *DeleteDatasourceRequest) (*DeleteDatasourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteDatasource not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CloneDatasource(context.Context, *CloneDatasourceRequest) (*CloneDatasourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloneDatasource not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) SearchDatasources(context.Context, *SearchDatasourcesRequest) (*SearchDatasourcesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchDatasources not implemented")
@@ -2008,6 +2024,24 @@ func _AIStudioManagementService_DeleteDatasource_Handler(srv interface{}, ctx co
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AIStudioManagementServiceServer).DeleteDatasource(ctx, req.(*DeleteDatasourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_CloneDatasource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloneDatasourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CloneDatasource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CloneDatasource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CloneDatasource(ctx, req.(*CloneDatasourceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2977,6 +3011,10 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AIStudioManagementService_DeleteDatasource_Handler,
 		},
 		{
+			MethodName: "CloneDatasource",
+			Handler:    _AIStudioManagementService_CloneDatasource_Handler,
+		},
+		{
 			MethodName: "SearchDatasources",
 			Handler:    _AIStudioManagementService_SearchDatasources_Handler,
 		},
@@ -3164,5 +3202,5 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "ai_studio_management.proto",
+	Metadata: "proto/ai_studio_management/ai_studio_management.proto",
 }

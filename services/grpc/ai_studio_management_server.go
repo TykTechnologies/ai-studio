@@ -497,6 +497,10 @@ func (s *AIStudioManagementServer) DeleteDatasource(ctx context.Context, req *pb
 	return s.datasourcesServer.DeleteDatasource(ctx, req)
 }
 
+func (s *AIStudioManagementServer) CloneDatasource(ctx context.Context, req *pb.CloneDatasourceRequest) (*pb.CloneDatasourceResponse, error) {
+	return s.datasourcesServer.CloneDatasource(ctx, req)
+}
+
 func (s *AIStudioManagementServer) ProcessDatasourceEmbeddings(ctx context.Context, req *pb.ProcessEmbeddingsRequest) (*pb.ProcessEmbeddingsResponse, error) {
 	return s.datasourcesServer.ProcessDatasourceEmbeddings(ctx, req)
 }

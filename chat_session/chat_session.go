@@ -709,7 +709,34 @@ func (cs *ChatSession) joinDocuments(docs []schema.Document, separator string) s
 	var text string
 	docLen := len(docs)
 	for k, doc := range docs {
-		text += doc.PageContent
+		// Add metadata if available
+		metadataFields := []string{}
+		if filePath, ok := doc.Metadata["file_path"].(string); ok && filePath != "" {
+			metadataFields = append(metadataFields, fmt.Sprintf("File Path: %s", filePath))
+		}
+		if githubURL, ok := doc.Metadata["github_url"].(string); ok && githubURL != "" {
+			metadataFields = append(metadataFields, fmt.Sprintf("GitHub URL: %s", githubURL))
+		}
+		if lineStart, ok := doc.Metadata["line_start"].(string); ok && lineStart != "" {
+			if lineEnd, ok := doc.Metadata["line_end"].(string); ok && lineEnd != "" {
+				metadataFields = append(metadataFields, fmt.Sprintf("Lines: %s-%s", lineStart, lineEnd))
+			}
+		}
+		if timestamp, ok := doc.Metadata["ingestion_timestamp"].(string); ok && timestamp != "" {
+			metadataFields = append(metadataFields, fmt.Sprintf("Ingested: %s", timestamp))
+		}
+
+		// Build document text with optional metadata header
+		if len(metadataFields) > 0 {
+			metadataHeader := "[METADATA FOR CONTENT:]\n"
+			for _, field := range metadataFields {
+				metadataHeader += fmt.Sprintf("- %s\n", field)
+			}
+			text += metadataHeader + "\n" + doc.PageContent
+		} else {
+			text += doc.PageContent
+		}
+
 		if k != docLen-1 {
 			text += separator
 		}
