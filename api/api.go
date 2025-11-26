@@ -94,7 +94,17 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		log.Printf("Failed to register Tyk provider: %v", err)
 	}
 
-	router := gin.Default()
+	// Use gin.New() instead of gin.Default() to have control over middleware
+	// gin.Default() adds Logger and Recovery middleware automatically
+	router := gin.New()
+
+	// Always add recovery middleware (handles panics)
+	router.Use(gin.Recovery())
+
+	// Only add Gin's request logger if debug logging is enabled
+	if logger.IsDebugEnabled() {
+		router.Use(gin.Logger())
+	}
 
 	// Add debug middleware only if DEBUG_HTTP=true
 	if os.Getenv("DEBUG_HTTP") == "true" {

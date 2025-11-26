@@ -56,7 +56,7 @@ func NewMarketplaceService(
 
 // Start begins background marketplace sync
 func (s *MarketplaceService) Start(ctx context.Context) {
-	log.Info().
+	log.Debug().
 		Str("default_index_url", s.defaultIndexURL).
 		Dur("sync_interval", s.syncInterval).
 		Msg("Starting marketplace service")
@@ -93,7 +93,7 @@ func (s *MarketplaceService) Stop() {
 
 // SyncAll syncs all active marketplace indexes
 func (s *MarketplaceService) SyncAll(ctx context.Context) error {
-	log.Info().Msg("Syncing all marketplace indexes")
+	log.Debug().Msg("Syncing all marketplace indexes")
 
 	indexes, err := models.GetAllActiveMarketplaceIndexes(s.db)
 	if err != nil {
@@ -146,7 +146,7 @@ func (s *MarketplaceService) SyncAll(ctx context.Context) error {
 func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.MarketplaceIndex) error {
 	startTime := time.Now()
 
-	log.Info().
+	log.Debug().
 		Uint("index_id", idx.ID).
 		Str("source_url", idx.SourceURL).
 		Msg("Syncing marketplace index")

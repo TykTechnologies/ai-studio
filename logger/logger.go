@@ -14,6 +14,8 @@ var (
 	Log zerolog.Logger
 	// defaultLevel is the default log level
 	defaultLevel = zerolog.InfoLevel
+	// currentLevel tracks the current log level for runtime checks
+	currentLevel = zerolog.InfoLevel
 )
 
 // LogLevel represents the available log levels
@@ -50,10 +52,21 @@ func Init(level string) {
 // SetLevel sets the global log level
 func SetLevel(level string) {
 	parsedLevel := parseLogLevel(level)
+	currentLevel = parsedLevel
 	zerolog.SetGlobalLevel(parsedLevel)
 	Log = Log.Level(parsedLevel)
 	// Update the global logger as well
 	log.Logger = Log
+}
+
+// GetLevel returns the current log level
+func GetLevel() zerolog.Level {
+	return currentLevel
+}
+
+// IsDebugEnabled returns true if debug logging is enabled
+func IsDebugEnabled() bool {
+	return currentLevel <= zerolog.DebugLevel
 }
 
 // parseLogLevel converts string to zerolog level

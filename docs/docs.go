@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"net/http"
 	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/logger"
 )
 
 //go:embed site/public
@@ -42,7 +44,7 @@ func (s *Server) Start() error {
 	s.Router.Handle("/", handler)
 
 	addr := fmt.Sprintf(":%d", s.Port)
-	fmt.Printf("Starting documentation server at :%s\n", addr)
+	logger.Infof("Starting documentation server at %s", addr)
 
 	server := &http.Server{
 		Addr:         addr,

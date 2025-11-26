@@ -15,22 +15,22 @@ import (
 )
 
 type Service struct {
-	DB                     *gorm.DB
-	Budget                 budget.Service
-	GroupAccessService     group_access.Service
-	NotificationService    *NotificationService
+	DB                  *gorm.DB
+	Budget              budget.Service
+	GroupAccessService  group_access.Service
+	NotificationService *NotificationService
 	// Hub-and-Spoke Services
-	EdgeService            *EdgeService
-	NamespaceService       *NamespaceService
-	EdgeManagementService  edge_management.Service
-	PluginService          *PluginService
-	PluginManifestService  *PluginManifestService
-	AIStudioPluginManager  *AIStudioPluginManager
-	PluginMetadataLoader   *PluginMetadataLoader
-	MarketplaceService     *MarketplaceService
+	EdgeService           *EdgeService
+	NamespaceService      *NamespaceService
+	EdgeManagementService edge_management.Service
+	PluginService         *PluginService
+	PluginManifestService *PluginManifestService
+	AIStudioPluginManager *AIStudioPluginManager
+	PluginMetadataLoader  *PluginMetadataLoader
+	MarketplaceService    *MarketplaceService
 	// Object Hooks
-	HookRegistry           *HookRegistry
-	HookManager            *HookManager
+	HookRegistry *HookRegistry
+	HookManager  *HookManager
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -85,9 +85,9 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	// Wire up plugin manager to plugin service for config schema functionality
 	if pluginService != nil && aiStudioPluginManager != nil {
 		pluginService.SetPluginManager(aiStudioPluginManager)
-		logger.Info("Wired AI Studio plugin manager to plugin service for config schema functionality")
+		logger.Debug("Wired AI Studio plugin manager to plugin service for config schema functionality")
 	} else {
-		logger.Warnf("Failed to wire plugin manager to plugin service (plugin_service_nil: %v, ai_studio_plugin_manager_nil: %v)",
+		logger.Debugf("Failed to wire plugin manager to plugin service (plugin_service_nil: %v, ai_studio_plugin_manager_nil: %v)",
 			pluginService == nil, aiStudioPluginManager == nil)
 	}
 
@@ -95,9 +95,9 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	var pluginMetadataLoader *PluginMetadataLoader
 	if aiStudioPluginManager != nil {
 		pluginMetadataLoader = NewPluginMetadataLoader(db, aiStudioPluginManager)
-		logger.Info("Initialized plugin metadata loader with enhanced config provider support")
+		logger.Debug("Initialized plugin metadata loader with enhanced config provider support")
 	} else {
-		logger.Warn("AI Studio plugin manager not available - plugin metadata loader will not be available")
+		logger.Debug("AI Studio plugin manager not available - plugin metadata loader will not be available")
 	}
 
 	// Initialize marketplace service (will be started separately in main.go)
@@ -106,7 +106,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		// Marketplace requires OCI support
 		// Configuration will be passed from main.go when starting the service
 		marketplaceService = nil // Will be initialized in main.go with proper config
-		logger.Info("Marketplace service will be initialized with configuration from main.go")
+		logger.Debug("Marketplace service will be initialized with configuration from main.go")
 	}
 
 	// Initialize object hooks system
@@ -114,9 +114,9 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	var hookManager *HookManager
 	if aiStudioPluginManager != nil {
 		hookManager = NewHookManager(hookRegistry, aiStudioPluginManager)
-		logger.Info("Initialized object hooks system")
+		logger.Debug("Initialized object hooks system")
 	} else {
-		logger.Warn("AI Studio plugin manager not available - object hooks will not be available")
+		logger.Debug("AI Studio plugin manager not available - object hooks will not be available")
 	}
 
 	// Create service instance
@@ -144,7 +144,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		// Set global service reference for GRPCServer access
 		SetGlobalServiceReference(service)
 
-		logger.Info("Wired service reference to AI Studio plugin manager for service provider injection")
+		logger.Debug("Wired service reference to AI Studio plugin manager for service provider injection")
 	}
 
 	return service
@@ -176,7 +176,6 @@ func (s *Service) Cleanup() error {
 
 	// Shutdown plugin manager first (most critical)
 	if s.AIStudioPluginManager != nil {
-		logger.Info("Shutting down AI Studio plugin manager...")
 		if err := s.AIStudioPluginManager.Shutdown(); err != nil {
 			logger.Errorf("Failed to shutdown plugin manager: %v", err)
 			errors = append(errors, fmt.Errorf("plugin manager shutdown: %w", err))

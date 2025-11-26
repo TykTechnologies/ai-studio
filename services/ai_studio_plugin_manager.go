@@ -35,7 +35,7 @@ var NewAIStudioManagementServerFunc func(*Service) interface{}
 // SetGlobalServiceReference sets the global service reference for GRPCServer access
 func SetGlobalServiceReference(service *Service) {
 	globalServiceReference = service
-	logger.Info("Global service reference set for plugin GRPCServer access")
+	logger.Debug("Global service reference set for plugin GRPCServer access")
 }
 
 
@@ -141,7 +141,7 @@ func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
 	// Allocate broker ID and start brokered server
 	brokerID := c.broker.NextId()
 
-	log.Info().
+	log.Debug().
 		Uint32("broker_id", brokerID).
 		Msg("Setting up long-lived brokered server for AI Studio service API access")
 
@@ -155,9 +155,9 @@ func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
 			aiStudioServer := NewAIStudioManagementServerFunc(c.service)
 			if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
 				mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-				log.Info().
+				log.Debug().
 					Uint32("broker_id", brokerID).
-					Msg("✅ AI Studio management services registered on long-lived brokered server")
+					Msg("AI Studio management services registered on long-lived brokered server")
 			}
 		} else {
 			log.Error().Msg("NewAIStudioManagementServerFunc not set - cannot create service server")
@@ -342,12 +342,12 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	// Set service reference in client wrapper for per-request broker setup
 	clientWrapper.service = m.service
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", plugin.ID).
 		Str("plugin_name", plugin.Name).
 		Bool("has_broker", clientWrapper.broker != nil).
 		Bool("has_service", clientWrapper.service != nil).
-		Msg("✅ Plugin client wrapper connected with broker access")
+		Msg("Plugin client wrapper connected with broker access")
 
 	// Initialize plugin with config
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -417,10 +417,10 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		serviceBrokerID = brokerID
 		configMap["service_broker_id"] = fmt.Sprintf("%d", serviceBrokerID)
 
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", plugin.ID).
 			Uint32("broker_id", serviceBrokerID).
-			Msg("✅ Service broker set up for Initialize() - plugin can make service API calls during startup")
+			Msg("Service broker set up for Initialize()")
 	}
 
 	initResp, err := clientWrapper.Initialize(ctx, &pb.InitRequest{
@@ -441,10 +441,10 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	if m.service != nil {
 		// Create working service provider adapter
 		serviceProvider = plugin_services.NewWorkingServiceProviderAdapter(m.service, plugin.ID)
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", plugin.ID).
 			Str("plugin_name", plugin.Name).
-			Msg("✅ Created working service provider for plugin - real analytics available")
+			Msg("Created working service provider for plugin")
 	} else {
 		log.Warn().
 			Uint("plugin_id", plugin.ID).
@@ -480,20 +480,20 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 				Str("plugin_name", plugin.Name).
 				Msg("Failed to inject service provider into plugin")
 		} else {
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
-				Msg("✅ Service provider injected into plugin successfully")
+				Msg("Service provider injected into plugin")
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("plugin_name", plugin.Name).
 		Str("command", plugin.Command).
 		Bool("is_oci", plugin.IsOCIPlugin()).
 		Bool("has_service_provider", serviceProvider != nil).
-		Msg("AI Studio plugin loaded successfully")
+		Msg("AI Studio plugin loaded")
 
 	// Register object hooks if plugin implements ObjectHookHandler
 	if m.service != nil && m.service.HookRegistry != nil {
@@ -510,21 +510,21 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 					Err(err).
 					Msg("Failed to register object hooks")
 			} else {
-				log.Info().
+				log.Debug().
 					Uint("plugin_id", pluginID).
 					Str("plugin_name", plugin.Name).
 					Int("hook_count", len(regs.Registrations)).
-					Msg("✅ Registered object hooks for plugin")
+					Msg("Registered object hooks for plugin")
 			}
 		}
 	}
 
 	// Auto-fetch and register manifest (new streamlined workflow)
 	go func() {
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", pluginID).
 			Str("plugin_name", plugin.Name).
-			Msg("Auto-fetching manifest for loaded AI Studio plugin")
+			Msg("Auto-fetching manifest for AI Studio plugin")
 
 		// Give plugin a moment to fully initialize
 		time.Sleep(1 * time.Second)
@@ -577,11 +577,11 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 					Err(updateErr).
 					Msg("Failed to update plugin hook types from manifest")
 			} else {
-				log.Info().
+				log.Debug().
 					Uint("plugin_id", pluginID).
 					Str("plugin_name", pluginForUI.Name).
 					Strs("hooks", pluginForUI.HookTypes).
-					Msg("✅ Auto-populated hook types from manifest")
+					Msg("Auto-populated hook types from manifest")
 			}
 		}
 
@@ -596,24 +596,24 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 				return
 			}
 
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("plugin_name", plugin.Name).
 				Str("manifest_id", manifest.ID).
 				Str("manifest_version", manifest.Version).
-				Msg("✅ Auto-fetched manifest and registered UI components")
+				Msg("Auto-fetched manifest and registered UI components")
 		} else {
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("plugin_name", plugin.Name).
 				Str("manifest_id", manifest.ID).
 				Str("manifest_version", manifest.Version).
-				Msg("Auto-fetched manifest successfully - manifest service not available for UI registration")
+				Msg("Auto-fetched manifest - manifest service not available for UI registration")
 		}
 
 		// Register schedules from manifest
 		if len(manifest.Schedules) > 0 {
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("plugin_name", plugin.Name).
 				Int("schedule_count", len(manifest.Schedules)).
@@ -661,12 +661,12 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 						Err(err).
 						Msg("Failed to register schedule")
 				} else {
-					log.Info().
+					log.Debug().
 						Uint("plugin_id", pluginID).
 						Str("schedule_id", scheduleDef.ID).
 						Str("schedule_name", scheduleDef.Name).
 						Str("cron", scheduleDef.Cron).
-						Msg("✅ Registered schedule")
+						Msg("Registered schedule")
 				}
 			}
 		}
@@ -686,10 +686,10 @@ func (m *AIStudioPluginManager) injectServiceProvider(loadedPlugin *LoadedAIStud
 	}
 
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", loadedPlugin.ID).
 		Str("plugin_name", loadedPlugin.Name).
-		Msg("✅ Service provider injected and available for plugin access")
+		Msg("Service provider injected and available for plugin access")
 
 	return nil
 }
@@ -747,7 +747,7 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 	// Unregister object hooks if registry is available
 	if m.service != nil && m.service.HookRegistry != nil {
 		m.service.HookRegistry.UnregisterPlugin(uint32(pluginID))
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", pluginID).
 			Str("plugin_name", loadedPlugin.Name).
 			Msg("Unregistered object hooks for plugin")
@@ -762,10 +762,10 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 	delete(m.loadedPlugins, pluginID)
 	delete(m.pluginClients, pluginID)
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("plugin_name", loadedPlugin.Name).
-		Msg("AI Studio plugin unloaded successfully")
+		Msg("AI Studio plugin unloaded")
 
 	return nil
 }
@@ -901,7 +901,7 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 			// Set up per-request brokered server for this call
 			brokerID := clientWrapper.broker.NextId()
 
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("method", method).
 				Uint32("broker_id", brokerID).
@@ -971,12 +971,11 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("method", method).
 		Uint32("service_broker_id", serviceBrokerID).
-		Str("payload", string(payloadBytes)).
-		Msg("🔥 Calling plugin RPC with broker ID")
+		Msg("Calling plugin RPC")
 
 	resp, err := loadedPlugin.GRPCClient.Call(ctx, &pb.CallRequest{
 		Method:           method,
@@ -984,13 +983,12 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 		ServiceBrokerId:  serviceBrokerID,
 	})
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("method", method).
 		Bool("success", resp != nil && resp.Success).
-		Str("error_message", func() string { if resp != nil { return resp.ErrorMessage } else { return "" } }()).
 		Err(err).
-		Msg("🔥 Plugin RPC returned")
+		Msg("Plugin RPC returned")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to call plugin RPC method: %w", err)
@@ -1047,7 +1045,7 @@ func (m *AIStudioPluginManager) createOCIPluginClient(command string) (*goplugin
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Str("command", command).
 		Str("executable_path", localPlugin.ExecutablePath).
 		Bool("verified", localPlugin.Verified).
@@ -1070,7 +1068,7 @@ func (m *AIStudioPluginManager) createLocalPluginClient(command string) (*goplug
 		cmdPath = strings.TrimPrefix(command, "file://")
 	}
 
-	log.Info().
+	log.Debug().
 		Str("command", command).
 		Str("path", cmdPath).
 		Msg("Creating client for local plugin executable")
@@ -1089,7 +1087,7 @@ func (m *AIStudioPluginManager) createGRPCPluginClient(command string) (*goplugi
 	// Parse gRPC URL: grpc://host:port
 	address := strings.TrimPrefix(command, "grpc://")
 
-	log.Info().
+	log.Debug().
 		Str("command", command).
 		Str("address", address).
 		Msg("Creating client for external gRPC plugin")
@@ -1236,7 +1234,7 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 		return fmt.Errorf("failed to get plugins: %w", err)
 	}
 
-	log.Info().Int("total_plugins", len(plugins)).Msg("Checking plugins for AI Studio support (UI/Agent/Object Hooks)")
+	log.Debug().Int("total_plugins", len(plugins)).Msg("Checking plugins for AI Studio support")
 
 	var loadErrors []string
 	loadedCount := 0
@@ -1298,15 +1296,15 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 			loadErrors = append(loadErrors, fmt.Sprintf("Plugin %s (ID %d): %v", plugin.Name, plugin.ID, err))
 		} else {
 			loadedCount++
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
 				Strs("hooks", plugin.GetAllHookTypes()).
-				Msg("Successfully loaded AI Studio plugin")
+				Msg("Loaded AI Studio plugin")
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Int("loaded", loadedCount).
 		Int("skipped", skippedCount).
 		Int("failed", len(loadErrors)).
@@ -1547,7 +1545,7 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 		if clientWrapper.broker != nil && clientWrapper.service != nil {
 			brokerID := clientWrapper.broker.NextId()
 
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("schedule_id", scheduleProto.Id).
 				Uint32("broker_id", brokerID).
@@ -1593,7 +1591,7 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 	}
 
 	// Call plugin's ExecuteScheduledTask gRPC method
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("schedule_id", scheduleProto.Id).
 		Str("schedule_name", scheduleProto.Name).
@@ -1606,11 +1604,10 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 		ServiceBrokerId:  serviceBrokerID,
 	})
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("schedule_id", scheduleProto.Id).
 		Bool("success", resp != nil && resp.Success).
-		Str("error_message", func() string { if resp != nil { return resp.ErrorMessage } else { return "" } }()).
 		Err(err).
 		Msg("Scheduled task execution returned")
 
@@ -1654,7 +1651,7 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 
 	if !exists {
 		// Try to load the plugin
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", pluginID).
 			Msg("Plugin not loaded, attempting to load for edge payload routing")
 
@@ -1739,7 +1736,7 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 		ServiceBrokerId: serviceBrokerID,
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("edge_id", payload.EdgeId).
 		Str("correlation_id", payload.CorrelationId).
@@ -1768,7 +1765,7 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 		return fmt.Errorf("plugin %d rejected edge payload: %s", pluginID, resp.ErrorMessage)
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("edge_id", payload.EdgeId).
 		Bool("handled", resp.Handled).

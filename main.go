@@ -29,9 +29,9 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
-	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/startup"
 
 	"github.com/go-mail/mail"
@@ -105,12 +105,12 @@ func main() {
 
 	// Initialize and start licensing service (ENT: validates license, starts periodic checks)
 	licensingConfig := licensing.Config{
-		LicenseKey:              appConf.LicenseKey,
-		TelemetryURL:            appConf.LicenseTelemetryURL,
-		TelemetryPeriod:         appConf.LicenseTelemetryPeriod,
-		TelemetryDisabled:       appConf.LicenseDisableTelemetry,
-		ValidityCheckPeriod:     appConf.LicenseValidityPeriod,
-		TelemetryConcurrency:    appConf.LicenseTelemetryConcurrency,
+		LicenseKey:           appConf.LicenseKey,
+		TelemetryURL:         appConf.LicenseTelemetryURL,
+		TelemetryPeriod:      appConf.LicenseTelemetryPeriod,
+		TelemetryDisabled:    appConf.LicenseDisableTelemetry,
+		ValidityCheckPeriod:  appConf.LicenseValidityPeriod,
+		TelemetryConcurrency: appConf.LicenseTelemetryConcurrency,
 	}
 	licensingService := licensing.NewService(licensingConfig, db)
 	if err := licensingService.Start(); err != nil {
@@ -132,26 +132,26 @@ func main() {
 	var ociConfig *ociplugins.OCIConfig
 	if appConf.OCIPlugins.IsEnabled() {
 		ociConfig = appConf.OCIPlugins.ToOCILibConfig()
-		logger.Infof("OCI plugin support enabled - cache dir: %s", appConf.OCIPlugins.CacheDir)
+		logger.Debugf("OCI plugin support enabled - cache dir: %s", appConf.OCIPlugins.CacheDir)
 	} else {
-		logger.Info("OCI plugin support disabled - set AI_STUDIO_OCI_CACHE_DIR to enable")
+		logger.Debug("OCI plugin support disabled - set AI_STUDIO_OCI_CACHE_DIR to enable")
 	}
 
 	service := services.NewServiceWithOCI(db, ociConfig)
 
 	// Load AI Studio plugins at startup (UI, Agent, and Object Hooks)
 	if service.AIStudioPluginManager != nil {
-		logger.Info("Loading AI Studio plugins (UI, Agent, Object Hooks)...")
+		logger.Debug("Loading AI Studio plugins (UI, Agent, Object Hooks)...")
 		if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
 			logger.Warnf("Failed to load some AI Studio plugins: %v", err)
 		} else {
-			logger.Info("AI Studio plugins loaded successfully")
+			logger.Debug("AI Studio plugins loaded successfully")
 		}
 	}
 
 	// Initialize and start marketplace service if enabled
 	if appConf.MarketplaceEnabled && ociConfig != nil {
-		logger.Info("Initializing marketplace service...")
+		logger.Debug("Initializing marketplace service...")
 
 		// Get OCI client from plugin service
 		var ociClient *ociplugins.OCIPluginClient
@@ -175,7 +175,7 @@ func main() {
 		defer cancel()
 		go service.MarketplaceService.Start(ctx)
 
-		logger.Infof("Marketplace service started - index URL: %s, sync interval: %v",
+		logger.Debugf("Marketplace service started - index URL: %s, sync interval: %v",
 			appConf.MarketplaceIndexURL, appConf.MarketplaceSyncInterval)
 	} else {
 		if !appConf.MarketplaceEnabled {
@@ -197,7 +197,6 @@ func main() {
 
 		// Ensure scheduler stops on shutdown
 		defer func() {
-			logger.Info("Stopping scheduler service...")
 			if err := schedulerService.Stop(); err != nil {
 				logger.Errorf("Error stopping scheduler service: %v", err)
 			}
@@ -282,7 +281,7 @@ func main() {
 			AuthToken:     appConf.GRPCAuthToken,
 			NextAuthToken: appConf.GRPCNextAuthToken,
 		}
-		
+
 		controlServer = grpc.NewControlServer(grpcConfig, db)
 
 		// Create reload coordinator and connect it to control server

@@ -135,7 +135,7 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 	// Initialize AI Studio's analytics system for processing edge pulse data
 	ctx := context.Background()
 	analytics.StartRecording(ctx, db)
-	log.Info().Msg("AI Studio analytics system initialized for control server")
+	log.Debug().Msg("AI Studio analytics system initialized for control server")
 
 	// Start cleanup routine
 	server.startCleanupRoutine()
@@ -224,7 +224,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 	// ENT: Returns requested namespace or "default" if empty
 	namespace := s.edgeManagementService.GetNamespaceForEdge(req.EdgeNamespace)
 
-	log.Info().
+	log.Debug().
 		Str("edge_id", req.EdgeId).
 		Str("requested_namespace", req.EdgeNamespace).
 		Str("assigned_namespace", namespace).
@@ -516,7 +516,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		tokenPrefix = req.Token[:8]
 	}
 
-	log.Info().
+	log.Debug().
 		Str("token_prefix", tokenPrefix).
 		Str("edge_id", req.EdgeId).
 		Str("edge_namespace", req.EdgeNamespace).
@@ -546,14 +546,14 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 	// Get the associated app
 	var app models.App
 	if err := s.db.Where("credential_id = ? AND is_active = ?", credential.ID, true).First(&app).Error; err != nil {
-		log.Info().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
+		log.Debug().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
 			ErrorMessage: "Associated app not found or inactive",
 		}, nil
 	}
 
-	log.Info().
+	log.Debug().
 		Str("token_prefix", tokenPrefix).
 		Uint("app_id", app.ID).
 		Str("app_name", app.Name).
@@ -574,7 +574,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 	// Performance monitoring: track total processing time
 	startTime := time.Now()
 
-	log.Info().
+	log.Debug().
 		Str("edge_id", req.EdgeId).
 		Str("edge_namespace", req.EdgeNamespace).
 		Uint64("sequence_number", req.SequenceNumber).
@@ -650,7 +650,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		analytics.RecordChatRecordsBatch(chatRecords)
 		processedRecords += uint64(len(req.AnalyticsEvents))
 
-		log.Info().
+		log.Debug().
 			Str("edge_id", req.EdgeId).
 			Int("analytics_events", len(req.AnalyticsEvents)).
 			Msg("Analytics events processed via batch operations")
@@ -683,7 +683,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 	// Performance monitoring: calculate total processing time
 	totalProcessingTime := time.Since(startTime)
 
-	log.Info().
+	log.Debug().
 		Str("edge_id", req.EdgeId).
 		Uint64("sequence_number", req.SequenceNumber).
 		Uint64("processed_records", processedRecords).
@@ -706,7 +706,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.PluginControlBatch) (*pb.PluginControlBatchResponse, error) {
 	startTime := time.Now()
 
-	log.Info().
+	log.Debug().
 		Str("edge_id", req.EdgeId).
 		Str("edge_namespace", req.EdgeNamespace).
 		Uint64("sequence_number", req.SequenceNumber).
@@ -739,7 +739,7 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 
 	totalProcessingTime := time.Since(startTime)
 
-	log.Info().
+	log.Debug().
 		Str("edge_id", req.EdgeId).
 		Uint64("sequence_number", req.SequenceNumber).
 		Uint64("processed_count", processedCount).
@@ -772,7 +772,7 @@ func (s *ControlServer) routeEdgePayloadToPlugin(ctx context.Context, payload *p
 func (s *ControlServer) SetPluginManager(manager interface{}) {
 	if pm, ok := manager.(EdgePayloadRouter); ok {
 		s.pluginManager = pm
-		log.Info().Msg("Plugin manager set for edge payload routing")
+		log.Debug().Msg("Plugin manager set for edge payload routing")
 	} else {
 		log.Warn().Msg("Plugin manager does not implement EdgePayloadRouter interface")
 	}
@@ -1122,17 +1122,17 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	// Get Plugins for namespace with preloaded LLM associations to avoid N+1 queries
-	log.Info().Str("namespace", namespace).Msg("Starting plugin query for configuration snapshot")
+	log.Debug().Str("namespace", namespace).Msg("Starting plugin query for configuration snapshot")
 
 	var plugins []models.Plugin
 	var pluginQuery *gorm.DB
 
 	pluginQuery = s.db.Model(&models.Plugin{})
 	if namespace == "" {
-		log.Info().Msg("Querying plugins for global namespace only")
+		log.Debug().Msg("Querying plugins for global namespace only")
 		pluginQuery = pluginQuery.Where("namespace = '' AND is_active = ?", true)
 	} else {
-		log.Info().
+		log.Debug().
 			Str("target_namespace", namespace).
 			Msg("Querying plugins for specific namespace (global + tenant)")
 		pluginQuery = pluginQuery.Where("(namespace = '' OR namespace = ?) AND is_active = ?", namespace, true)
@@ -1163,7 +1163,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		llmPluginMap[lp.PluginID] = append(llmPluginMap[lp.PluginID], lp)
 	}
 
-	log.Info().
+	log.Debug().
 		Str("namespace", namespace).
 		Int("found_plugins", len(plugins)).
 		Msg("Plugin query completed")
@@ -1203,7 +1203,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 					}
 				}
 
-				log.Info().
+				log.Debug().
 					Uint("plugin_id", plugin.ID).
 					Str("plugin_name", plugin.Name).
 					Uint("llm_id", llmPlugin.LLMID).
@@ -1211,7 +1211,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 					Str("hook_type", plugin.HookType).
 					Strs("hook_types", plugin.HookTypes).
 					Int("hook_types_count", len(plugin.HookTypes)).
-					Msg("📦 Syncing plugin to edge with hook types")
+					Msg("Syncing plugin to edge with hook types")
 
 				pbPlugin := &pb.PluginConfig{
 					Id:            uint32(plugin.ID),
@@ -1233,13 +1233,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 		} else {
 			// Plugin has no LLM associations, use base config only
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
 				Str("hook_type", plugin.HookType).
 				Strs("hook_types", plugin.HookTypes).
 				Int("hook_types_count", len(plugin.HookTypes)).
-				Msg("📦 Syncing plugin to edge (no LLM associations)")
+				Msg("Syncing plugin to edge (no LLM associations)")
 
 			var configJSON string
 			if plugin.Config != nil {
@@ -1268,7 +1268,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Str("namespace", namespace).
 		Int("llm_count", len(snapshot.Llms)).
 		Int("app_count", len(snapshot.Apps)).
@@ -1324,7 +1324,7 @@ func (s *ControlServer) encryptForMicrogateway(plaintext string) (string, error)
 // SetReloadCoordinator sets the reload coordinator reference (avoids import cycle)
 func (s *ControlServer) SetReloadCoordinator(coordinator interface{}) {
 	s.reloadCoordinator = coordinator
-	log.Info().Msg("Reload coordinator set for control server")
+	log.Debug().Msg("Reload coordinator set for control server")
 }
 
 // SendReloadRequest sends a reload request to a specific edge instance
@@ -1439,7 +1439,7 @@ func (s *ControlServer) startCleanupRoutine() {
 			s.cleanupStaleConnections()
 		}
 	}()
-	log.Info().Msg("Started edge connection cleanup routine")
+	log.Debug().Msg("Started edge connection cleanup routine")
 }
 
 // cleanupStaleConnections removes disconnected and stale edge connections

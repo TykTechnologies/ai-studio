@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -24,6 +23,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -204,7 +204,7 @@ func (p *Proxy) Start() error {
 		WriteTimeout: 600 * time.Second,
 		IdleTimeout:  300 * time.Second,
 	}
-	log.Printf("Starting proxy server on port %d", p.config.Port)
+	logger.Infof("Starting proxy server on port %d", p.config.Port)
 	return p.server.ListenAndServe()
 }
 
@@ -453,7 +453,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		req.URL.Path = strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
 		req.Host = upstreamURL.Host
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
-			log.Printf("ERROR setting vendor auth header in director: %v", err)
+			logger.Errorf("ERROR setting vendor auth header in director: %v", err)
 			// Cannot write http error from director. This needs robust handling or pre-flight check.
 		}
 	}
@@ -470,7 +470,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// Execute REST-only response hooks (hooks modify the buffered response in-place)
 		if p.responseHookManager != nil && p.hasResponseHooks() {
 			if err := p.executeBufferedResponseHooks(bufferedCapture, llm, app, r); err != nil {
-				log.Printf("Response hook execution failed: %v", err)
+				logger.Errorf("Response hook execution failed: %v", err)
 			}
 		}
 
@@ -488,7 +488,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 				r,
 			)
 			if err != nil {
-				log.Printf("Response filter execution failed: %v", err)
+				logger.Errorf("Response filter execution failed: %v", err)
 				// Fail open on error - allow response through
 			} else if blocked {
 				// Response was blocked by filter - return error instead
@@ -615,7 +615,7 @@ func (p *Proxy) AddResponseHook(hook ResponseHook) {
 
 	if manager, ok := p.responseHookManager.(*DefaultResponseHookManager); ok {
 		manager.AddHook(hook)
-		log.Printf("Added response hook: %s", hook.GetName())
+		logger.Debugf("Added response hook: %s", hook.GetName())
 	}
 }
 
@@ -823,11 +823,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					r,
 				)
 				if filterErr != nil {
-					log.Printf("Response filter execution error on chunk %d: %v", chunkIndex, filterErr)
+					logger.Errorf("Response filter execution error on chunk %d: %v", chunkIndex, filterErr)
 					// Fail open on error - continue streaming
 				} else if blocked {
 					// Response blocked mid-stream - send error chunk and stop
-					log.Printf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
+					logger.Warnf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
 					errorChunk := []byte(fmt.Sprintf(`{"error":"Response blocked by filter: %s"}`, blockMsg))
 					w.Write(errorChunk)
 					if f, ok := w.(http.Flusher); ok {
@@ -1256,7 +1256,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 			return cache, nil
 		}
 		// Tool has changed, we'll recreate the server below
-		log.Printf("Tool %s (ID: %d) has changed, recreating MCP server", toolModel.Name, toolModel.ID)
+		logger.Debugf("Tool %s (ID: %d) has changed, recreating MCP server", toolModel.Name, toolModel.ID)
 	}
 
 	// Create new MCP server if it doesn't exist or if tool has changed

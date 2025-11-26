@@ -124,7 +124,7 @@ func (s *SchedulerService) checkLeadershipAndRun() {
 
 	if isLeader {
 		// We're the leader - load and register schedules
-		log.Info().
+		log.Debug().
 			Str("instance_id", s.leaderElection.GetInstanceID()).
 			Msg("This instance is the scheduler leader")
 		s.loadAndRegisterSchedules()
@@ -132,7 +132,7 @@ func (s *SchedulerService) checkLeadershipAndRun() {
 		// We're a follower - stop any running schedules
 		s.mu.Lock()
 		if len(s.schedules) > 0 {
-			log.Info().
+			log.Debug().
 				Int("schedule_count", len(s.schedules)).
 				Msg("This instance is a follower, stopping schedules")
 			for _, runner := range s.schedules {
@@ -172,7 +172,7 @@ func (s *SchedulerService) loadAndRegisterSchedules() {
 				runner.cronEngine.Stop()
 			}
 			delete(s.schedules, scheduleID)
-			log.Info().
+			log.Debug().
 				Uint("schedule_id", scheduleID).
 				Msg("Unregistered deleted schedule from cron engine")
 		}
@@ -243,13 +243,13 @@ func (s *SchedulerService) registerScheduleUnsafe(schedule *models.PluginSchedul
 	schedule.NextRun = &nextRun
 	s.db.Save(schedule)
 
-	log.Info().
+	log.Debug().
 		Uint("schedule_id", schedule.ID).
 		Str("schedule_name", schedule.Name).
 		Str("cron", schedule.CronExpr).
 		Str("timezone", schedule.Timezone).
 		Time("next_run", nextRun).
-		Msg("Schedule registered successfully")
+		Msg("Schedule registered")
 
 	return nil
 }
@@ -309,7 +309,7 @@ func (s *SchedulerService) executeSchedule(schedule *models.PluginSchedule) {
 		return
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("schedule_id", schedule.ID).
 		Str("schedule_name", schedule.Name).
 		Uint("plugin_id", schedule.PluginID).
@@ -358,11 +358,11 @@ func (s *SchedulerService) executeSchedule(schedule *models.PluginSchedule) {
 	} else {
 		execution.Success = true
 		execution.Status = "completed"
-		log.Info().
+		log.Debug().
 			Uint("schedule_id", schedule.ID).
 			Str("schedule_name", schedule.Name).
 			Dur("duration", time.Since(start)).
-			Msg("Scheduled task execution completed successfully")
+			Msg("Scheduled task execution completed")
 	}
 
 	s.db.Save(execution)
@@ -440,7 +440,7 @@ func (s *SchedulerService) UnregisterSchedule(scheduleID uint) error {
 	// Remove from map
 	delete(s.schedules, scheduleID)
 
-	log.Info().
+	log.Debug().
 		Uint("schedule_id", scheduleID).
 		Msg("Schedule unregistered")
 	return nil
