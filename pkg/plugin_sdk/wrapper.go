@@ -503,3 +503,52 @@ func (w *pluginServerWrapper) ExecuteScheduledTask(ctx context.Context, req *pb.
 		Success: true,
 	}, nil
 }
+
+// AcceptEdgePayload implements pb.PluginServiceServer
+// This is called when a payload arrives from an edge (microgateway) instance
+func (w *pluginServerWrapper) AcceptEdgePayload(ctx context.Context, req *pb.EdgePayloadRequest) (*pb.EdgePayloadResponse, error) {
+	// Check if plugin implements EdgePayloadReceiver
+	receiver, ok := w.plugin.(EdgePayloadReceiver)
+	if !ok {
+		// Plugin doesn't handle edge payloads
+		return &pb.EdgePayloadResponse{
+			Success: false,
+			Handled: false,
+			ErrorMessage: "plugin does not implement EdgePayloadReceiver",
+		}, nil
+	}
+
+	// Set service broker ID if provided (for service API access)
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	// Build plugin context
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+
+	// Convert proto to SDK EdgePayload
+	edgePayload := &EdgePayload{
+		Payload:           req.Payload,
+		EdgeID:            req.EdgeId,
+		EdgeNamespace:     req.EdgeNamespace,
+		CorrelationID:     req.CorrelationId,
+		Metadata:          req.Metadata,
+		EdgeTimestamp:     req.EdgeTimestamp,
+		ReceivedTimestamp: req.ReceivedTimestamp,
+	}
+
+	// Call the plugin's AcceptEdgePayload handler
+	handled, err := receiver.AcceptEdgePayload(pluginCtx, edgePayload)
+	if err != nil {
+		return &pb.EdgePayloadResponse{
+			Success:      false,
+			Handled:      handled,
+			ErrorMessage: err.Error(),
+		}, nil // Don't return gRPC error - mark as failed
+	}
+
+	return &pb.EdgePayloadResponse{
+		Success: true,
+		Handled: handled,
+	}, nil
+}

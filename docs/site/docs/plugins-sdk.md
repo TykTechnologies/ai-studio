@@ -51,7 +51,7 @@ func main() {
 
 ## Plugin Capabilities
 
-Plugins implement one or more capability interfaces. The SDK supports 10 distinct capabilities:
+Plugins implement one or more capability interfaces. The SDK supports 12 distinct capabilities:
 
 | Capability | Interface | Where It Works | Purpose |
 |------------|-----------|----------------|---------|
@@ -65,6 +65,8 @@ Plugins implement one or more capability interfaces. The SDK supports 10 distinc
 | **Manifest Provider** | `ManifestProvider` | Gateway only | Provide plugin manifest (gateway-only plugins) |
 | **Agent** | `AgentPlugin` | Studio only | Conversational AI agent with streaming |
 | **Object Hooks** | `ObjectHookHandler` | Studio only | Intercept CRUD operations on objects |
+| **Scheduler** | `SchedulerPlugin` | Studio only | Execute tasks on cron-based schedules |
+| **Edge Payload** | `EdgePayloadReceiver` | Studio only | Receive data from edge (gateway) plugins |
 
 ### Multi-Capability Plugins
 
@@ -322,6 +324,81 @@ Provide plugin manifest for gateway-only plugins (no UI).
 ```go
 type ManifestProvider interface {
     GetManifest() ([]byte, error)
+}
+```
+
+### 11. SchedulerPlugin
+
+Execute tasks on cron-based schedules.
+
+```go
+type SchedulerPlugin interface {
+    ExecuteScheduledTask(ctx Context, schedule *Schedule) error
+}
+
+type Schedule struct {
+    ID             string                 // Unique identifier from manifest
+    Name           string                 // Human-readable name
+    Cron           string                 // Cron expression (e.g., "0 * * * *")
+    Timezone       string                 // Timezone for cron evaluation
+    Enabled        bool                   // Whether schedule is currently enabled
+    TimeoutSeconds int                    // Maximum execution time
+    Config         map[string]interface{} // Schedule-specific configuration
+}
+```
+
+**Example:**
+```go
+func (p *MyPlugin) ExecuteScheduledTask(ctx plugin_sdk.Context, schedule *plugin_sdk.Schedule) error {
+    ctx.Services.Logger().Info("Running scheduled task",
+        "schedule_id", schedule.ID,
+        "schedule_name", schedule.Name,
+    )
+
+    // Perform scheduled work
+    return p.runCleanup(ctx)
+}
+```
+
+### 12. EdgePayloadReceiver
+
+Receive data from edge (Microgateway) plugins. This enables the hub-and-spoke communication pattern where edge plugins can send data back to the control plane. See [Edge-to-Control Communication](plugins-edge-to-control.md) for complete details.
+
+```go
+type EdgePayloadReceiver interface {
+    AcceptEdgePayload(ctx Context, payload *EdgePayload) (handled bool, err error)
+}
+
+type EdgePayload struct {
+    Payload           []byte            // Raw payload data from edge plugin
+    EdgeID            string            // Edge instance identifier
+    EdgeNamespace     string            // Namespace of the edge instance
+    CorrelationID     string            // Correlation ID for tracking
+    Metadata          map[string]string // Key-value metadata
+    EdgeTimestamp     int64             // Unix timestamp when generated at edge
+    ReceivedTimestamp int64             // Unix timestamp when received at control
+}
+```
+
+**Example:**
+```go
+func (p *MyPlugin) AcceptEdgePayload(ctx plugin_sdk.Context, payload *plugin_sdk.EdgePayload) (bool, error) {
+    // Check if this payload is for us
+    if payload.Metadata["type"] != "my-plugin-data" {
+        return false, nil // Not our payload
+    }
+
+    ctx.Services.Logger().Info("Received edge payload",
+        "edge_id", payload.EdgeID,
+        "correlation_id", payload.CorrelationID,
+    )
+
+    // Process the payload
+    if err := p.processEdgeData(payload.Payload); err != nil {
+        return true, err
+    }
+
+    return true, nil
 }
 ```
 
@@ -673,6 +750,7 @@ If you have existing plugins using the old Microgateway SDK (`microgateway/plugi
 - [Microgateway Plugins Guide](plugins-microgateway.md) - Gateway-specific patterns
 - [AI Studio UI Plugins Guide](plugins-studio-ui.md) - Build plugin UIs
 - [AI Studio Agent Plugins Guide](plugins-studio-agent.md) - Build conversational agents
+- [Edge-to-Control Communication](plugins-edge-to-control.md) - Send data from edge to control plane
 - [Service API Reference](plugins-service-api.md) - Complete API documentation
 - [Plugin Examples](plugins-examples.md) - Browse working examples
 - [Best Practices Guide](plugins-best-practices.md) - Advanced patterns

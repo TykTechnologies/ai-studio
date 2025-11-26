@@ -787,6 +787,38 @@ if ctx.Runtime == plugin_sdk.RuntimeGateway {
 
 See [Service API Reference](plugins-service-api.md) for complete Gateway Services documentation.
 
+## Sending Data to Control Plane
+
+Gateway plugins can send data back to AI Studio (the control plane) using the `SendToControl` API. This is useful for:
+- Aggregating statistics from edge instances
+- Synchronizing state across the hub-and-spoke architecture
+- Sending alerts or notifications to central plugins
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/microgateway/plugins/sdk"
+
+func (p *MyPlugin) HandlePostAuth(ctx sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    // Send JSON data to control plane
+    stats := map[string]interface{}{
+        "requests": p.requestCount.Load(),
+        "errors":   p.errorCount.Load(),
+    }
+
+    pendingCount, err := sdk.SendToControlJSON(ctx, stats, "", map[string]string{
+        "metric_type": "gateway_stats",
+    })
+    if err != nil {
+        ctx.Services.Logger().Warn("Failed to queue stats", "error", err)
+    }
+
+    return &pb.PluginResponse{Modified: false}, nil
+}
+```
+
+The control plane plugin receives this data via the `EdgePayloadReceiver` interface.
+
+See [Edge-to-Control Communication](plugins-edge-to-control.md) for complete documentation.
+
 ## Working with Both Runtimes
 
 Plugins using the unified SDK can work in both Gateway and Studio:
@@ -824,6 +856,7 @@ If you have existing plugins using the old Microgateway SDK (`microgateway/plugi
 
 - **[Plugin SDK Reference](plugins-sdk.md)** - Complete SDK documentation
 - **[Service API Reference](plugins-service-api.md)** - Gateway Services API
+- **[Edge-to-Control Communication](plugins-edge-to-control.md)** - Send data to control plane
 - **[Plugin Examples](plugins-examples.md)** - Browse working examples
 - **[Plugin Deployment](plugins-deployment.md)** - Deployment options
 - **[Migration Guide](plugins-migration-guide.md)** - Upgrade from old SDK

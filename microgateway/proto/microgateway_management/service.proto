@@ -31,6 +31,9 @@ service MicrogatewayManagementService {
     rpc WritePluginKV(WritePluginKVRequest) returns (WritePluginKVResponse);
     rpc ReadPluginKV(ReadPluginKVRequest) returns (ReadPluginKVResponse);
     rpc DeletePluginKV(DeletePluginKVRequest) returns (DeletePluginKVResponse);
+
+    // Control Payload Queue Operations (for edge-to-control plugin communication)
+    rpc QueueControlPayload(QueueControlPayloadRequest) returns (QueueControlPayloadResponse);
 }
 
 // Common request context for all operations
@@ -228,4 +231,20 @@ message DeletePluginKVRequest {
 
 message DeletePluginKVResponse {
     bool deleted = 1;
+}
+
+// Control Payload Queue Messages (for edge-to-control plugin communication)
+// Used by plugins running on edge instances to send data back to AI Studio control plane
+
+message QueueControlPayloadRequest {
+    PluginContext context = 1;
+    bytes payload = 2;                    // Arbitrary payload data (max 1MB)
+    string correlation_id = 3;            // Optional correlation ID for tracking
+    map<string, string> metadata = 4;     // Optional key-value metadata
+}
+
+message QueueControlPayloadResponse {
+    bool success = 1;                     // Whether payload was successfully queued
+    string error_message = 2;             // Error description if success=false
+    int64 pending_count = 3;              // Number of payloads pending in queue
 }

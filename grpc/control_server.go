@@ -38,6 +38,11 @@ import (
 // CRITICAL SECURITY WARNING: This MUST be changed in production!
 const DEFAULT_ENCRYPTION_KEY = "DEFAULT_INSECURE_KEY_CHANGE_ME!!"
 
+// EdgePayloadRouter interface for routing edge payloads to plugins
+type EdgePayloadRouter interface {
+	RouteEdgePayload(ctx context.Context, payload *pb.PluginControlPayload) error
+}
+
 // EdgeInstance represents an active edge instance connection
 type EdgeInstanceConnection struct {
 	EdgeID        string
@@ -75,6 +80,9 @@ type ControlServer struct {
 
 	// Reload coordination (set after creation to avoid import cycle)
 	reloadCoordinator interface{} // Will be *services.ReloadCoordinator
+
+	// Plugin manager for routing edge payloads to plugins
+	pluginManager EdgePayloadRouter
 }
 
 // Config holds the control server configuration
@@ -691,6 +699,83 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		ProcessedAt:      timestamppb.Now(),
 		// UpdatedConfig: nil, // No config updates for now
 	}, nil
+}
+
+// SendPluginControlBatch handles plugin control payloads from edge instances
+// This enables plugins running on edge (microgateway) to send data back to AI Studio control plane
+func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.PluginControlBatch) (*pb.PluginControlBatchResponse, error) {
+	startTime := time.Now()
+
+	log.Info().
+		Str("edge_id", req.EdgeId).
+		Str("edge_namespace", req.EdgeNamespace).
+		Uint64("sequence_number", req.SequenceNumber).
+		Uint32("total_payloads", req.TotalPayloads).
+		Int("payloads_count", len(req.Payloads)).
+		Msg("AI Studio control server: received plugin control batch from edge")
+
+	var processedCount uint64
+	var errors []*pb.PluginPayloadError
+
+	// Process each payload - route to corresponding plugin
+	for _, payload := range req.Payloads {
+		err := s.routeEdgePayloadToPlugin(ctx, payload)
+		if err != nil {
+			log.Warn().
+				Err(err).
+				Uint32("plugin_id", payload.PluginId).
+				Str("correlation_id", payload.CorrelationId).
+				Msg("Failed to route edge payload to plugin")
+
+			errors = append(errors, &pb.PluginPayloadError{
+				PluginId:      payload.PluginId,
+				CorrelationId: payload.CorrelationId,
+				ErrorMessage:  err.Error(),
+			})
+		} else {
+			processedCount++
+		}
+	}
+
+	totalProcessingTime := time.Since(startTime)
+
+	log.Info().
+		Str("edge_id", req.EdgeId).
+		Uint64("sequence_number", req.SequenceNumber).
+		Uint64("processed_count", processedCount).
+		Int("error_count", len(errors)).
+		Int64("processing_time_ms", totalProcessingTime.Milliseconds()).
+		Msg("Plugin control batch processed")
+
+	return &pb.PluginControlBatchResponse{
+		Success:        len(errors) == 0,
+		Message:        fmt.Sprintf("Processed %d/%d payloads", processedCount, len(req.Payloads)),
+		ProcessedCount: processedCount,
+		SequenceNumber: req.SequenceNumber,
+		ProcessedAt:    timestamppb.Now(),
+		Errors:         errors,
+	}, nil
+}
+
+// routeEdgePayloadToPlugin routes an edge payload to the corresponding AI Studio plugin
+func (s *ControlServer) routeEdgePayloadToPlugin(ctx context.Context, payload *pb.PluginControlPayload) error {
+	// Check if plugin manager is available (set after server creation)
+	if s.pluginManager == nil {
+		return fmt.Errorf("plugin manager not available")
+	}
+
+	// Route to plugin manager which will handle AcceptEdgePayload call
+	return s.pluginManager.RouteEdgePayload(ctx, payload)
+}
+
+// SetPluginManager sets the plugin manager reference for routing edge payloads
+func (s *ControlServer) SetPluginManager(manager interface{}) {
+	if pm, ok := manager.(EdgePayloadRouter); ok {
+		s.pluginManager = pm
+		log.Info().Msg("Plugin manager set for edge payload routing")
+	} else {
+		log.Warn().Msg("Plugin manager does not implement EdgePayloadRouter interface")
+	}
 }
 
 // extractVendorFromEvent extracts vendor from analytics event

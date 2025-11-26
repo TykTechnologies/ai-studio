@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: plugin.proto
+// source: proto/plugin.proto
 
 package proto
 
@@ -41,6 +41,7 @@ const (
 	PluginService_GetObjectHookRegistrations_FullMethodName = "/plugin.PluginService/GetObjectHookRegistrations"
 	PluginService_HandleObjectHook_FullMethodName           = "/plugin.PluginService/HandleObjectHook"
 	PluginService_ExecuteScheduledTask_FullMethodName       = "/plugin.PluginService/ExecuteScheduledTask"
+	PluginService_AcceptEdgePayload_FullMethodName          = "/plugin.PluginService/AcceptEdgePayload"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -84,6 +85,9 @@ type PluginServiceClient interface {
 	HandleObjectHook(ctx context.Context, in *ObjectHookRequest, opts ...grpc.CallOption) (*ObjectHookResponse, error)
 	// Scheduler Methods (for AI Studio plugins)
 	ExecuteScheduledTask(ctx context.Context, in *ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*ExecuteScheduledTaskResponse, error)
+	// Edge Payload Methods (for plugins that receive data from edge instances)
+	// Called when an edge plugin sends data via SendToControl
+	AcceptEdgePayload(ctx context.Context, in *EdgePayloadRequest, opts ...grpc.CallOption) (*EdgePayloadResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -323,6 +327,16 @@ func (c *pluginServiceClient) ExecuteScheduledTask(ctx context.Context, in *Exec
 	return out, nil
 }
 
+func (c *pluginServiceClient) AcceptEdgePayload(ctx context.Context, in *EdgePayloadRequest, opts ...grpc.CallOption) (*EdgePayloadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EdgePayloadResponse)
+	err := c.cc.Invoke(ctx, PluginService_AcceptEdgePayload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -364,6 +378,9 @@ type PluginServiceServer interface {
 	HandleObjectHook(context.Context, *ObjectHookRequest) (*ObjectHookResponse, error)
 	// Scheduler Methods (for AI Studio plugins)
 	ExecuteScheduledTask(context.Context, *ExecuteScheduledTaskRequest) (*ExecuteScheduledTaskResponse, error)
+	// Edge Payload Methods (for plugins that receive data from edge instances)
+	// Called when an edge plugin sends data via SendToControl
+	AcceptEdgePayload(context.Context, *EdgePayloadRequest) (*EdgePayloadResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -439,6 +456,9 @@ func (UnimplementedPluginServiceServer) HandleObjectHook(context.Context, *Objec
 }
 func (UnimplementedPluginServiceServer) ExecuteScheduledTask(context.Context, *ExecuteScheduledTaskRequest) (*ExecuteScheduledTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteScheduledTask not implemented")
+}
+func (UnimplementedPluginServiceServer) AcceptEdgePayload(context.Context, *EdgePayloadRequest) (*EdgePayloadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AcceptEdgePayload not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -850,6 +870,24 @@ func _PluginService_ExecuteScheduledTask_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_AcceptEdgePayload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EdgePayloadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).AcceptEdgePayload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_AcceptEdgePayload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).AcceptEdgePayload(ctx, req.(*EdgePayloadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -941,6 +979,10 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ExecuteScheduledTask",
 			Handler:    _PluginService_ExecuteScheduledTask_Handler,
 		},
+		{
+			MethodName: "AcceptEdgePayload",
+			Handler:    _PluginService_AcceptEdgePayload_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -949,5 +991,5 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "plugin.proto",
+	Metadata: "proto/plugin.proto",
 }

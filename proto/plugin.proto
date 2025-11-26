@@ -53,6 +53,10 @@ service PluginService {
 
     // Scheduler Methods (for AI Studio plugins)
     rpc ExecuteScheduledTask(ExecuteScheduledTaskRequest) returns (ExecuteScheduledTaskResponse);
+
+    // Edge Payload Methods (for plugins that receive data from edge instances)
+    // Called when an edge plugin sends data via SendToControl
+    rpc AcceptEdgePayload(EdgePayloadRequest) returns (EdgePayloadResponse);
 }
 
 // Common messages
@@ -452,4 +456,29 @@ message ScheduleDefinition {
     bool enabled = 5;                    // Whether schedule is enabled
     int32 timeout_seconds = 6;           // Maximum execution time
     string config_json = 7;              // Schedule config as JSON string
+}
+
+// Edge Payload Messages
+// These enable plugins on the control plane to receive data from edge instances
+
+// EdgePayloadRequest is sent to a plugin when data arrives from an edge instance
+// via the SendToControl mechanism
+message EdgePayloadRequest {
+    bytes payload = 1;                           // The arbitrary payload data from edge
+    string edge_id = 2;                          // Edge instance that sent this payload
+    string edge_namespace = 3;                   // Edge namespace
+    string correlation_id = 4;                   // Optional correlation ID for tracking
+    map<string, string> metadata = 5;            // Optional key-value metadata from edge
+    int64 edge_timestamp = 6;                    // Unix timestamp when generated at edge
+    int64 received_timestamp = 7;                // Unix timestamp when received at control
+    PluginContext context = 8;                   // Plugin context
+    uint32 service_broker_id = 9;                // Broker ID for service API access
+}
+
+// EdgePayloadResponse is returned by the plugin after processing edge payload
+message EdgePayloadResponse {
+    bool success = 1;                            // Whether processing succeeded
+    bool handled = 2;                            // Whether plugin actually processed this payload
+    string error_message = 3;                    // Error description if success=false
+    map<string, string> metadata = 4;            // Optional response metadata
 }

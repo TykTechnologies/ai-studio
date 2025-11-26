@@ -42,6 +42,9 @@ type Config struct {
 
 	// Hub-and-Spoke Configuration
 	HubSpoke HubSpokeConfig
+
+	// Control Payload Configuration (for edge-to-control plugin data)
+	ControlPayload ControlPayloadConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -124,6 +127,24 @@ type HubSpokeConfig struct {
 	TokenCacheTTL        time.Duration `env:"EDGE_TOKEN_CACHE_TTL" envDefault:"5m"`
 	TokenCacheMaxSize    int           `env:"EDGE_TOKEN_CACHE_MAX_SIZE" envDefault:"1000"`
 	TokenCacheCleanupInt time.Duration `env:"EDGE_TOKEN_CACHE_CLEANUP_INTERVAL" envDefault:"1m"`
+}
+
+// ControlPayloadConfig holds configuration for edge-to-control plugin data transmission
+type ControlPayloadConfig struct {
+	// Enabled controls whether plugin control payloads are sent to control
+	Enabled bool `env:"CONTROL_PAYLOAD_ENABLED" envDefault:"true"`
+
+	// MaxPayloadSizeBytes is the maximum size of a single payload (default 1MB)
+	MaxPayloadSizeBytes int64 `env:"CONTROL_PAYLOAD_MAX_PAYLOAD_SIZE" envDefault:"1048576"`
+
+	// MaxBatchSizeBytes is the maximum total size of a batch (default 10MB)
+	MaxBatchSizeBytes int64 `env:"CONTROL_PAYLOAD_MAX_BATCH_SIZE" envDefault:"10485760"`
+
+	// BatchThreshold is the number of payloads that triggers an immediate send
+	BatchThreshold int `env:"CONTROL_PAYLOAD_BATCH_THRESHOLD" envDefault:"100"`
+
+	// RetentionHours is how long to keep sent payloads in the database
+	RetentionHours int `env:"CONTROL_PAYLOAD_RETENTION_HOURS" envDefault:"24"`
 }
 
 // AnalyticsConfig holds analytics configuration

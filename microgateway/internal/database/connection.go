@@ -85,6 +85,7 @@ func Migrate(db *gorm.DB) error {
 		&PluginKV{},
 		// Hub-and-Spoke models
 		&EdgeInstance{},
+		&ControlPayload{},
 	)
 }
 

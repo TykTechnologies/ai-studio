@@ -131,6 +131,15 @@ type GatewayServices interface {
 
 	// ValidateCredential validates an API credential (Gateway-only feature)
 	ValidateCredential(ctx context.Context, secret string) (interface{}, error)
+
+	// SendToControl queues a payload to be sent to the AI Studio control plane
+	// This is used by plugins running on edge (microgateway) instances to send
+	// data back to the control plane for aggregation or processing.
+	// Returns the number of payloads pending in the queue.
+	SendToControl(ctx context.Context, payload []byte, correlationID string, metadata map[string]string) (int64, error)
+
+	// SendToControlJSON is a convenience method that JSON-encodes a value and sends it to control
+	SendToControlJSON(ctx context.Context, value interface{}, correlationID string, metadata map[string]string) (int64, error)
 }
 
 // StudioServices provides access to AI Studio-specific services

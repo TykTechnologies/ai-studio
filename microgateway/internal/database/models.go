@@ -363,6 +363,20 @@ func (pkv *PluginKV) IsExpired() bool {
 	return pkv.ExpireAt.Before(time.Now())
 }
 
+// ControlPayload represents a queued payload to be sent to the control plane
+// This enables plugins on edge instances to send data back to their control-plane counterpart
+type ControlPayload struct {
+	ID            uint           `gorm:"primaryKey"`
+	PluginID      uint           `gorm:"not null;index:idx_control_payload_plugin"`
+	Payload       []byte         `gorm:"type:blob;not null"`
+	CorrelationID string         `gorm:"size:255;index:idx_control_payload_correlation"`
+	Metadata      datatypes.JSON `gorm:"type:json"`
+	Sent          bool           `gorm:"default:false;index:idx_control_payload_sent"`
+	SentAt        *time.Time
+	CreatedAt     time.Time      `gorm:"index:idx_control_payload_created"`
+}
+
 // TableName methods for new models
-func (EdgeInstance) TableName() string { return "edge_instances" }
-func (PluginKV) TableName() string     { return "plugin_kv" }
+func (EdgeInstance) TableName() string    { return "edge_instances" }
+func (PluginKV) TableName() string        { return "plugin_kv" }
+func (ControlPayload) TableName() string  { return "control_payloads" }

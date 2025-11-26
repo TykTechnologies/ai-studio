@@ -284,13 +284,19 @@ func main() {
 		}
 		
 		controlServer = grpc.NewControlServer(grpcConfig, db)
-		
+
 		// Create reload coordinator and connect it to control server
 		reloadCoordinator = services.NewReloadCoordinator(controlServer)
 		controlServer.SetReloadCoordinator(reloadCoordinator)
-		
+
 		// Connect reload coordinator to namespace service
 		service.NamespaceService.SetReloadCoordinator(reloadCoordinator)
+
+		// Wire plugin manager for edge-to-control payload routing
+		if service.AIStudioPluginManager != nil {
+			controlServer.SetPluginManager(service.AIStudioPluginManager)
+			logger.Info("AI Studio plugin manager connected to control server for edge payload routing")
+		}
 
 		logger.Info("Reload coordinator created and connected to control server and namespace service")
 

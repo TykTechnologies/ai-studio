@@ -51,6 +51,14 @@ func (g *gatewayServicesImpl) ValidateCredential(ctx context.Context, secret str
 	return mgwsdk.ValidateCredential(ctx, secret)
 }
 
+func (g *gatewayServicesImpl) SendToControl(ctx context.Context, payload []byte, correlationID string, metadata map[string]string) (int64, error) {
+	return mgwsdk.SendToControl(ctx, payload, correlationID, metadata)
+}
+
+func (g *gatewayServicesImpl) SendToControlJSON(ctx context.Context, value interface{}, correlationID string, metadata map[string]string) (int64, error) {
+	return mgwsdk.SendToControlJSON(ctx, value, correlationID, metadata)
+}
+
 // setBrokerIDForMicrogatewaySDK sets the broker ID for the Microgateway SDK
 func setBrokerIDForMicrogatewaySDK(brokerID uint32) {
 	mgwsdk.SetServiceBrokerID(brokerID)

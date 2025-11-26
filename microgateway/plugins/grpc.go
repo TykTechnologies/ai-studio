@@ -84,9 +84,13 @@ func (c *MicrogatewayPluginClient) SetupServiceBroker(managementServer interface
 
 	log.Info().
 		Uint32("broker_id", brokerID).
-		Msg("Setting up long-lived brokered server for microgateway service API access")
+		Str("broker_ptr", fmt.Sprintf("%p", c.broker)).
+		Msg("Setting up long-lived brokered server for microgateway service API access (HOST SIDE)")
 
 	// Start brokered server with microgateway management services
+	// Note: AcceptAndServe blocks, so we run it in a goroutine.
+	// The go-plugin broker handles synchronization internally - the plugin
+	// will wait for connection info when it calls Dial().
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
 		s := grpc.NewServer(opts...)
 
@@ -189,4 +193,8 @@ func (c *MicrogatewayPluginClient) HandleObjectHook(ctx context.Context, req *pb
 
 func (c *MicrogatewayPluginClient) ExecuteScheduledTask(ctx context.Context, req *pb.ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*pb.ExecuteScheduledTaskResponse, error) {
 	return c.pluginStub.ExecuteScheduledTask(ctx, req, opts...)
+}
+
+func (c *MicrogatewayPluginClient) AcceptEdgePayload(ctx context.Context, req *pb.EdgePayloadRequest, opts ...grpc.CallOption) (*pb.EdgePayloadResponse, error) {
+	return c.pluginStub.AcceptEdgePayload(ctx, req, opts...)
 }

@@ -284,7 +284,6 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		}
 	}
 
-	// Initialize plugin
 	// Convert config values to strings for gRPC transport
 	// For complex types (arrays, objects), JSON-encode them so plugins can parse them
 	configStrings := make(map[string]string)
@@ -309,6 +308,32 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		}
 	}
 
+	// Add plugin ID to config
+	configStrings["_plugin_id"] = fmt.Sprintf("%d", pluginID)
+
+	// Setup service broker BEFORE Initialize (like AI Studio does)
+	// This way the broker ID is available in the first and only Initialize call
+	if pm.managementServer != nil {
+		if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
+			setupBrokerID, err := clientWrapper.SetupServiceBroker(pm.managementServer)
+			if err != nil {
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Err(err).
+					Msg("Failed to setup service broker for plugin - service API will not be available")
+			} else {
+				log.Info().
+					Uint("plugin_id", pluginID).
+					Uint32("broker_id", setupBrokerID).
+					Msg("✅ Service broker setup complete - plugin can now access host services")
+
+				// Add broker ID to config so plugin receives it in Initialize
+				configStrings["_service_broker_id"] = fmt.Sprintf("%d", setupBrokerID)
+			}
+		}
+	}
+
+	// Initialize plugin with config (including broker ID if available)
 	initResp, err := grpcClient.Initialize(context.Background(), &pb.InitRequest{
 		Config: configStrings,
 	})
@@ -323,44 +348,6 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		err := fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
 		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, err
-	}
-
-	// Setup service broker if management server is available
-	var brokerID uint32
-	if pm.managementServer != nil {
-		// Check if this is a MicrogatewayPluginClient that supports broker setup
-		if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
-			// Use type assertion without checking specific methods - the interface is defined elsewhere
-			// Setup the service broker - this creates bidirectional gRPC channel
-			setupBrokerID, err := clientWrapper.SetupServiceBroker(pm.managementServer)
-			if err != nil {
-				log.Warn().
-					Uint("plugin_id", pluginID).
-					Err(err).
-					Msg("Failed to setup service broker for plugin - service API will not be available")
-			} else {
-				brokerID = setupBrokerID
-				log.Info().
-					Uint("plugin_id", pluginID).
-					Uint32("broker_id", brokerID).
-					Msg("✅ Service broker setup complete - plugin can now access host services")
-
-				// Add broker ID to config so plugin can use it
-				configStrings["_service_broker_id"] = fmt.Sprintf("%d", brokerID)
-				configStrings["_plugin_id"] = fmt.Sprintf("%d", pluginID)
-
-				// Send updated config to plugin with broker ID
-				_, err = grpcClient.Initialize(context.Background(), &pb.InitRequest{
-					Config: configStrings,
-				})
-				if err != nil {
-					log.Warn().
-						Uint("plugin_id", pluginID).
-						Err(err).
-						Msg("Failed to reinitialize plugin with broker ID")
-				}
-			}
-		}
 	}
 
 	// Create loaded plugin instance
@@ -1381,6 +1368,14 @@ func (pm *PluginManager) SetManagementServer(server interface{}) {
 	defer pm.mu.Unlock()
 	pm.managementServer = server
 	log.Info().Msg("Management server set for plugin manager service broker")
+}
+
+// GetManagementServer returns the management server for external wiring
+// This is used to wire the control payload queue from main.go
+func (pm *PluginManager) GetManagementServer() interface{} {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return pm.managementServer
 }
 
 // LoadDeferredBuiltinPlugins loads any built-in plugins that were deferred during initial load

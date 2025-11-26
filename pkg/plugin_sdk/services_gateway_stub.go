@@ -57,6 +57,14 @@ func (g *gatewayServicesImpl) ValidateCredential(ctx context.Context, secret str
 	return nil, fmt.Errorf("gateway services not available in this context")
 }
 
+func (g *gatewayServicesImpl) SendToControl(ctx context.Context, payload []byte, correlationID string, metadata map[string]string) (int64, error) {
+	return 0, fmt.Errorf("gateway services not available in this context")
+}
+
+func (g *gatewayServicesImpl) SendToControlJSON(ctx context.Context, value interface{}, correlationID string, metadata map[string]string) (int64, error) {
+	return 0, fmt.Errorf("gateway services not available in this context")
+}
+
 // setPluginIDForMicrogatewaySDK stub - no-op when microgateway SDK not available
 func setPluginIDForMicrogatewaySDK(pluginID uint32) {
 	// No-op in Studio-only builds

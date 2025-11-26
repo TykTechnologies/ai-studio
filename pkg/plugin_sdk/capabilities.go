@@ -169,6 +169,38 @@ type Schedule struct {
 	Config         map[string]interface{} // Schedule-specific configuration from manifest
 }
 
+// EdgePayloadReceiver handles payloads sent from edge (microgateway) instances.
+// Use this when you need to receive data from plugins running on edge instances
+// that are connected to AI Studio via the hub-and-spoke architecture.
+//
+// Example use case: An llm-cache plugin running on edge instances sends cache
+// statistics or shared cache data back to a central plugin on AI Studio.
+type EdgePayloadReceiver interface {
+	Plugin
+
+	// AcceptEdgePayload is called when a payload arrives from an edge instance.
+	// payload contains the raw data sent by the edge plugin via SendToControl().
+	// edgeID identifies which edge instance sent the payload.
+	// correlationID can be used for request/response matching or tracking.
+	// metadata contains any additional key-value data from the edge plugin.
+	//
+	// Returns:
+	//   - handled: true if this plugin processed the payload
+	//   - error: non-nil if processing failed
+	AcceptEdgePayload(ctx Context, payload *EdgePayload) (handled bool, err error)
+}
+
+// EdgePayload represents data sent from an edge plugin to a control plane plugin
+type EdgePayload struct {
+	Payload           []byte            // Arbitrary payload data from edge plugin
+	EdgeID            string            // Edge instance that sent the payload
+	EdgeNamespace     string            // Namespace of the edge instance
+	CorrelationID     string            // Optional correlation ID for tracking
+	Metadata          map[string]string // Optional key-value metadata
+	EdgeTimestamp     int64             // Unix timestamp when generated at edge
+	ReceivedTimestamp int64             // Unix timestamp when received at control
+}
+
 // HookType represents the type of plugin hook (for gateway compatibility)
 type HookType string
 

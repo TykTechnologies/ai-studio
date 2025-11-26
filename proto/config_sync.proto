@@ -30,6 +30,10 @@ service ConfigurationSyncService {
 
   // SendAnalyticsPulse sends batched analytics data from edge to control (NEW)
   rpc SendAnalyticsPulse(AnalyticsPulse) returns (AnalyticsPulseResponse);
+
+  // SendPluginControlBatch sends batched plugin control payloads from edge to control
+  // This allows plugins running on edge instances to send arbitrary data back to control
+  rpc SendPluginControlBatch(PluginControlBatch) returns (PluginControlBatchResponse);
 }
 
 // EdgeRegistrationRequest is sent when an edge instance connects
@@ -305,4 +309,45 @@ message ProxyLogSummary {
   repeated string unique_models = 12; // List of unique model names called
   uint32 total_tokens = 13;       // Total tokens across all requests
   double total_cost = 14;         // Total cost as cents (dollars * 10000, providing 4 decimal precision)
+}
+
+// Plugin Control Payload Messages
+// These enable plugins running on edge instances to send arbitrary data back to control
+
+// PluginControlPayload represents a single payload from an edge plugin to control
+message PluginControlPayload {
+  uint32 plugin_id = 1;                        // Numeric plugin ID (must match AI Studio plugin ID)
+  bytes payload = 2;                           // Arbitrary payload data (max 1MB)
+  string edge_id = 3;                          // Edge instance that generated this payload
+  string edge_namespace = 4;                   // Edge namespace
+  google.protobuf.Timestamp timestamp = 5;     // When payload was generated at edge
+  string correlation_id = 6;                   // Optional correlation ID for tracking
+  map<string, string> metadata = 7;            // Optional key-value metadata
+}
+
+// PluginControlBatch contains batched plugin control payloads from edge to control
+message PluginControlBatch {
+  string edge_id = 1;                          // Edge instance sending this batch
+  string edge_namespace = 2;                   // Edge namespace
+  repeated PluginControlPayload payloads = 3;  // Batched payloads
+  uint64 sequence_number = 4;                  // Incremental sequence for ordering/deduplication
+  google.protobuf.Timestamp batch_timestamp = 5; // When batch was generated
+  uint32 total_payloads = 6;                   // Total number of payloads in this batch
+}
+
+// PluginControlBatchResponse acknowledges receipt of plugin control batch
+message PluginControlBatchResponse {
+  bool success = 1;                            // Overall success (true if all payloads processed)
+  string message = 2;                          // Status message
+  uint64 processed_count = 3;                  // Number of payloads successfully processed
+  uint64 sequence_number = 4;                  // Echo sequence number for confirmation
+  google.protobuf.Timestamp processed_at = 5;  // When control processed the batch
+  repeated PluginPayloadError errors = 6;      // Per-payload errors if any
+}
+
+// PluginPayloadError represents an error processing a single payload
+message PluginPayloadError {
+  uint32 plugin_id = 1;                        // Plugin ID that failed
+  string correlation_id = 2;                   // Correlation ID from the payload
+  string error_message = 3;                    // Error description
 }

@@ -44,6 +44,9 @@ type SimpleEdgeClient struct {
 	// Reload handling (use interface to avoid import cycle)
 	reloadHandler interface{}
 
+	// Control payload queue for edge-to-control plugin communication
+	controlPayloadQueue *ControlPayloadQueue
+
 	// Connection state
 	connected bool
 
@@ -81,6 +84,11 @@ func (c *SimpleEdgeClient) Start() error {
 
 	c.conn = conn
 	c.client = pb.NewConfigurationSyncServiceClient(conn)
+
+	// Wire the control payload queue's gRPC client if set
+	if c.controlPayloadQueue != nil {
+		c.controlPayloadQueue.SetGRPCClient(c.client, c.createAuthContext)
+	}
 
 	// Test basic connectivity and register
 	if err := c.registerWithControl(); err != nil {
@@ -211,6 +219,16 @@ func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidat
 func (c *SimpleEdgeClient) SetReloadHandler(handler interface{}) {
 	c.reloadHandler = handler
 	log.Info().Msg("Reload handler set for edge client")
+}
+
+// SetControlPayloadQueue sets the control payload queue for edge-to-control plugin communication
+func (c *SimpleEdgeClient) SetControlPayloadQueue(queue *ControlPayloadQueue) {
+	c.controlPayloadQueue = queue
+	// Wire the queue's gRPC client and auth context
+	if c.client != nil {
+		queue.SetGRPCClient(c.client, c.createAuthContext)
+	}
+	log.Info().Msg("Control payload queue set for edge client")
 }
 
 // GetGRPCClient returns the gRPC client for use by pulse manager
@@ -635,6 +653,40 @@ func (c *SimpleEdgeClient) sendHeartbeat() {
 			Str("edge_id", c.config.HubSpoke.EdgeID).
 			Msg("Heartbeat sent successfully")
 	}
+
+	// Send pending control payloads (piggybacking on heartbeat interval)
+	c.sendPendingControlPayloads()
+}
+
+// sendPendingControlPayloads sends pending plugin control payloads to the control server
+func (c *SimpleEdgeClient) sendPendingControlPayloads() {
+	if c.controlPayloadQueue == nil {
+		return
+	}
+
+	// Check if there are pending payloads
+	pendingCount := c.controlPayloadQueue.GetPendingCount()
+	if pendingCount == 0 {
+		return
+	}
+
+	log.Debug().
+		Int64("pending_count", pendingCount).
+		Msg("Sending pending control payloads to control server")
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Send the batch
+	if err := c.controlPayloadQueue.SendPendingBatch(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to send control payload batch")
+	}
+
+	// Run periodic cleanup of old payloads
+	if err := c.controlPayloadQueue.CleanupOldPayloads(); err != nil {
+		log.Warn().Err(err).Msg("Failed to cleanup old control payloads")
+	}
 }
 
 // collectBasicMetrics gathers basic runtime metrics for heartbeat
@@ -768,6 +820,11 @@ func (c *SimpleEdgeClient) reconnectWithRetry() error {
 
 	c.conn = conn
 	c.client = pb.NewConfigurationSyncServiceClient(conn)
+
+	// Re-wire the control payload queue's gRPC client if set
+	if c.controlPayloadQueue != nil {
+		c.controlPayloadQueue.SetGRPCClient(c.client, c.createAuthContext)
+	}
 
 	// Test connectivity by registering with control
 	if err := c.registerWithControl(); err != nil {

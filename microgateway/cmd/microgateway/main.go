@@ -219,6 +219,43 @@ func main() {
 				serviceContainer.PluginManager.SetEdgeClient(edgeClient)
 				log.Info().Msg("Edge client connected to plugin manager for built-in plugin support")
 
+				// Create and wire control payload queue for edge-to-control plugin communication
+				if cfg.ControlPayload.Enabled {
+					log.Info().Msg("Creating control payload queue for edge-to-control plugin communication")
+
+					controlPayloadQueue := grpc.NewControlPayloadQueue(
+						db,
+						&cfg.ControlPayload,
+						cfg.HubSpoke.EdgeID,
+						cfg.HubSpoke.EdgeNamespace,
+					)
+
+					// Start the queue (runs migrations if needed)
+					if err := controlPayloadQueue.Start(); err != nil {
+						log.Error().Err(err).Msg("Failed to start control payload queue")
+					} else {
+						// Wire queue to edge client for transmission during heartbeats
+						edgeClient.SetControlPayloadQueue(controlPayloadQueue)
+						log.Info().Msg("Control payload queue wired to edge client")
+
+						// Wire queue to management server for plugin access
+						if mgmtServer := serviceContainer.PluginManager.GetManagementServer(); mgmtServer != nil {
+							if setter, ok := mgmtServer.(interface {
+								SetControlPayloadQueue(services.ControlPayloadQueueInterface)
+							}); ok {
+								setter.SetControlPayloadQueue(controlPayloadQueue)
+								log.Info().Msg("Control payload queue wired to management server - plugins can now use SendToControl()")
+							} else {
+								log.Warn().Msg("Management server does not support SetControlPayloadQueue interface")
+							}
+						} else {
+							log.Warn().Msg("Management server not available for control payload queue wiring")
+						}
+					}
+				} else {
+					log.Info().Msg("Control payload queue disabled via configuration")
+				}
+
 				// Load any deferred built-in plugins (like analytics_pulse)
 				if err := serviceContainer.PluginManager.LoadDeferredBuiltinPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
 					log.Error().Err(err).Msg("Failed to load deferred built-in plugins")

@@ -258,6 +258,10 @@ func (c *AIStudioPluginClient) ExecuteScheduledTask(ctx context.Context, req *pb
 	return c.pluginStub.ExecuteScheduledTask(ctx, req, opts...)
 }
 
+func (c *AIStudioPluginClient) AcceptEdgePayload(ctx context.Context, req *pb.EdgePayloadRequest, opts ...grpc.CallOption) (*pb.EdgePayloadResponse, error) {
+	return c.pluginStub.AcceptEdgePayload(ctx, req, opts...)
+}
+
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
 // Uses a universal handshake that works with any plugin type
 type ConfigOnlyGRPC struct {
@@ -1637,4 +1641,138 @@ func DetectMimeType(filename string) string {
 		}
 	}
 	return mimeType
+}
+
+// RouteEdgePayload routes a payload from an edge instance to the corresponding AI Studio plugin
+// This implements the EdgePayloadRouter interface required by the control server
+func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *pb.PluginControlPayload) error {
+	pluginID := uint(payload.PluginId)
+
+	m.mu.RLock()
+	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	m.mu.RUnlock()
+
+	if !exists {
+		// Try to load the plugin
+		log.Info().
+			Uint("plugin_id", pluginID).
+			Msg("Plugin not loaded, attempting to load for edge payload routing")
+
+		var err error
+		loadedPlugin, err = m.LoadPlugin(pluginID)
+		if err != nil {
+			return fmt.Errorf("plugin %d is not loaded and could not be loaded: %w", pluginID, err)
+		}
+	}
+
+	if !loadedPlugin.IsHealthy {
+		return fmt.Errorf("plugin %d is not healthy", pluginID)
+	}
+
+	// Set up per-request broker for service API access
+	var serviceBrokerID uint32
+	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+		if clientWrapper.broker != nil && clientWrapper.service != nil {
+			brokerID := clientWrapper.broker.NextId()
+
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Str("edge_id", payload.EdgeId).
+				Uint32("broker_id", brokerID).
+				Msg("Setting up broker for edge payload routing")
+
+			// Start brokered server for this edge payload call
+			serverReady := make(chan struct{})
+			go func() {
+				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+					// Inject plugin ID into context
+					pluginIDInterceptor := CreatePluginIDInterceptor(pluginID)
+					opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
+
+					s := grpc.NewServer(opts...)
+
+					// Register AI Studio management services
+					if NewAIStudioManagementServerFunc != nil {
+						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
+						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
+							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
+							log.Debug().
+								Uint32("broker_id", brokerID).
+								Uint("plugin_id", pluginID).
+								Msg("AI Studio services registered for edge payload routing")
+						}
+					}
+
+					close(serverReady)
+					return s
+				})
+			}()
+
+			// Wait for server to be ready (with timeout)
+			select {
+			case <-serverReady:
+				log.Debug().Uint32("broker_id", brokerID).Msg("Brokered server ready for edge payload")
+			case <-time.After(100 * time.Millisecond):
+				log.Warn().Uint32("broker_id", brokerID).Msg("Brokered server setup timeout - proceeding anyway")
+			}
+
+			serviceBrokerID = brokerID
+		}
+	}
+
+	// Create the edge payload request
+	edgePayloadReq := &pb.EdgePayloadRequest{
+		Payload:           payload.Payload,
+		EdgeId:            payload.EdgeId,
+		EdgeNamespace:     payload.EdgeNamespace,
+		CorrelationId:     payload.CorrelationId,
+		Metadata:          payload.Metadata,
+		EdgeTimestamp:     payload.Timestamp.AsTime().Unix(),
+		ReceivedTimestamp: time.Now().Unix(),
+		Context: &pb.PluginContext{
+			RequestId: payload.CorrelationId,
+			Metadata: map[string]string{
+				"edge_id":        payload.EdgeId,
+				"edge_namespace": payload.EdgeNamespace,
+			},
+		},
+		ServiceBrokerId: serviceBrokerID,
+	}
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("edge_id", payload.EdgeId).
+		Str("correlation_id", payload.CorrelationId).
+		Int("payload_size", len(payload.Payload)).
+		Uint32("service_broker_id", serviceBrokerID).
+		Msg("Routing edge payload to plugin")
+
+	// Call plugin's AcceptEdgePayload gRPC method
+	resp, err := loadedPlugin.GRPCClient.AcceptEdgePayload(ctx, edgePayloadReq)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Uint("plugin_id", pluginID).
+			Str("edge_id", payload.EdgeId).
+			Msg("Failed to call AcceptEdgePayload on plugin")
+		return fmt.Errorf("failed to route edge payload to plugin %d: %w", pluginID, err)
+	}
+
+	if !resp.Success {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("edge_id", payload.EdgeId).
+			Str("error", resp.ErrorMessage).
+			Bool("handled", resp.Handled).
+			Msg("Plugin rejected edge payload")
+		return fmt.Errorf("plugin %d rejected edge payload: %s", pluginID, resp.ErrorMessage)
+	}
+
+	log.Info().
+		Uint("plugin_id", pluginID).
+		Str("edge_id", payload.EdgeId).
+		Bool("handled", resp.Handled).
+		Msg("Edge payload successfully routed to plugin")
+
+	return nil
 }

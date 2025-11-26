@@ -130,19 +130,20 @@ type ContextMetadata struct {
 
 // TestReport aggregates all test results
 type TestReport struct {
-	Context     *ContextMetadata `json:"request_context"`
-	StartTime   time.Time        `json:"start_time"`
-	EndTime     time.Time        `json:"end_time"`
-	Duration    int64            `json:"total_duration_ms"`
-	TotalTests  int              `json:"total_tests"`
-	PassedTests int              `json:"passed_tests"`
-	FailedTests int              `json:"failed_tests"`
-	LLMTests    []TestResult     `json:"llm_tests"`
-	AppTests    []TestResult     `json:"app_tests"`
-	BudgetTests []TestResult     `json:"budget_tests"`
-	PricingTests []TestResult    `json:"pricing_tests"`
-	CredentialTests []TestResult `json:"credential_tests"`
-	KVTests     []TestResult     `json:"kv_tests"`
+	Context          *ContextMetadata `json:"request_context"`
+	StartTime        time.Time        `json:"start_time"`
+	EndTime          time.Time        `json:"end_time"`
+	Duration         int64            `json:"total_duration_ms"`
+	TotalTests       int              `json:"total_tests"`
+	PassedTests      int              `json:"passed_tests"`
+	FailedTests      int              `json:"failed_tests"`
+	LLMTests         []TestResult     `json:"llm_tests"`
+	AppTests         []TestResult     `json:"app_tests"`
+	BudgetTests      []TestResult     `json:"budget_tests"`
+	PricingTests     []TestResult     `json:"pricing_tests"`
+	CredentialTests  []TestResult     `json:"credential_tests"`
+	KVTests          []TestResult     `json:"kv_tests"`
+	ControlTests     []TestResult     `json:"control_tests"`
 }
 
 // runAllTests executes all service API tests
@@ -161,6 +162,7 @@ func runAllTests(pluginCtx plugin_sdk.Context, reqCtx *pb.PluginContext) *TestRe
 	report.PricingTests = runPricingTests(pluginCtx)
 	report.CredentialTests = runCredentialTests(pluginCtx)
 	report.KVTests = runKVTests(pluginCtx)
+	report.ControlTests = runControlTests(pluginCtx)
 
 	// Calculate summary
 	report.EndTime = time.Now()
@@ -171,6 +173,7 @@ func runAllTests(pluginCtx plugin_sdk.Context, reqCtx *pb.PluginContext) *TestRe
 	allTests = append(allTests, report.PricingTests...)
 	allTests = append(allTests, report.CredentialTests...)
 	allTests = append(allTests, report.KVTests...)
+	allTests = append(allTests, report.ControlTests...)
 
 	report.TotalTests = len(allTests)
 	for _, test := range allTests {
@@ -575,6 +578,128 @@ func runKVTests(pluginCtx plugin_sdk.Context) []TestResult {
 			Success:  true,
 			Duration: duration,
 			Details:  fmt.Sprintf("Deleted: %v", deleted),
+		})
+	}
+
+	return results
+}
+
+// runControlTests tests the SendToControl API for edge-to-control communication
+func runControlTests(pluginCtx plugin_sdk.Context) []TestResult {
+	var results []TestResult
+	ctx := pluginCtx.Context
+
+	// Check if Gateway services are available
+	if pluginCtx.Services.Gateway() == nil {
+		results = append(results, TestResult{
+			Name:     "SendToControl (raw bytes)",
+			Success:  false,
+			Error:    "Gateway services not available - cannot test SendToControl",
+			Duration: 0,
+		})
+		return results
+	}
+
+	// Test 1: SendToControl with raw bytes
+	start := time.Now()
+	testPayload := []byte(`{"test": "edge-to-control", "timestamp": "` + time.Now().Format(time.RFC3339) + `"}`)
+	pendingCount, err := pluginCtx.Services.Gateway().SendToControl(ctx, testPayload, "test-correlation-123", map[string]string{
+		"test_type": "raw_bytes",
+		"source":    "gateway-service-test",
+	})
+	duration := time.Since(start).Milliseconds()
+
+	if err != nil {
+		results = append(results, TestResult{
+			Name:     "SendToControl (raw bytes)",
+			Success:  false,
+			Error:    err.Error(),
+			Duration: duration,
+		})
+	} else {
+		results = append(results, TestResult{
+			Name:     "SendToControl (raw bytes)",
+			Success:  true,
+			Duration: duration,
+			Details:  fmt.Sprintf("Payload queued successfully, pending count: %d", pendingCount),
+		})
+	}
+
+	// Test 2: SendToControlJSON with structured data
+	start = time.Now()
+	testData := map[string]interface{}{
+		"event":     "test_event",
+		"timestamp": time.Now().Unix(),
+		"metrics": map[string]interface{}{
+			"requests": 100,
+			"errors":   5,
+			"latency":  42.5,
+		},
+		"tags": []string{"test", "gateway", "service-api"},
+	}
+	pendingCount, err = pluginCtx.Services.Gateway().SendToControlJSON(ctx, testData, "test-json-456", map[string]string{
+		"test_type": "json_struct",
+		"source":    "gateway-service-test",
+	})
+	duration = time.Since(start).Milliseconds()
+
+	if err != nil {
+		results = append(results, TestResult{
+			Name:     "SendToControlJSON (structured)",
+			Success:  false,
+			Error:    err.Error(),
+			Duration: duration,
+		})
+	} else {
+		results = append(results, TestResult{
+			Name:     "SendToControlJSON (structured)",
+			Success:  true,
+			Duration: duration,
+			Details:  fmt.Sprintf("JSON payload queued successfully, pending count: %d", pendingCount),
+		})
+	}
+
+	// Test 3: SendToControl with minimal parameters (no correlation ID, no metadata)
+	start = time.Now()
+	minimalPayload := []byte(`{"minimal": true}`)
+	pendingCount, err = pluginCtx.Services.Gateway().SendToControl(ctx, minimalPayload, "", nil)
+	duration = time.Since(start).Milliseconds()
+
+	if err != nil {
+		results = append(results, TestResult{
+			Name:     "SendToControl (minimal)",
+			Success:  false,
+			Error:    err.Error(),
+			Duration: duration,
+		})
+	} else {
+		results = append(results, TestResult{
+			Name:     "SendToControl (minimal)",
+			Success:  true,
+			Duration: duration,
+			Details:  fmt.Sprintf("Minimal payload queued, pending count: %d", pendingCount),
+		})
+	}
+
+	// Test 4: SendToControl with empty payload (edge case)
+	start = time.Now()
+	pendingCount, err = pluginCtx.Services.Gateway().SendToControl(ctx, []byte{}, "empty-payload-test", nil)
+	duration = time.Since(start).Milliseconds()
+
+	if err != nil {
+		// Empty payload might be rejected - that's acceptable behavior
+		results = append(results, TestResult{
+			Name:     "SendToControl (empty payload)",
+			Success:  true, // It's OK if this fails - empty payloads may be rejected
+			Duration: duration,
+			Details:  fmt.Sprintf("Empty payload handling: %s", err.Error()),
+		})
+	} else {
+		results = append(results, TestResult{
+			Name:     "SendToControl (empty payload)",
+			Success:  true,
+			Duration: duration,
+			Details:  fmt.Sprintf("Empty payload accepted, pending count: %d", pendingCount),
 		})
 	}
 
