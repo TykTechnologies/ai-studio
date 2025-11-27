@@ -37,7 +37,7 @@ func RequestIDMiddleware() gin.HandlerFunc {
 		// Set as response header for client observability and distributed tracing
 		c.Header("X-Request-ID", requestID)
 
-		log.Info().Str("request_id", requestID).Str("path", c.Request.URL.Path).Msg("🆔 Generated canonical request ID for request")
+		log.Debug().Str("request_id", requestID).Str("path", c.Request.URL.Path).Msg("🆔 Generated canonical request ID for request")
 
 		// Continue processing
 		c.Next()
@@ -60,8 +60,14 @@ type RouterConfig struct {
 
 // SetupRouter configures and returns the main application router
 func SetupRouter(config *RouterConfig) *gin.Engine {
-	// Use gin.Default() which includes logging and recovery middleware
-	router := gin.Default()
+	// Set Gin to release mode to reduce noise
+	gin.SetMode(gin.ReleaseMode)
+
+	// Use gin.New() instead of gin.Default() to control middleware
+	// gin.Default() adds Logger and Recovery middleware automatically
+	// We only want Recovery (handles panics) - no request logging
+	router := gin.New()
+	router.Use(gin.Recovery())
 
 	// CRITICAL: Add request ID middleware FIRST (before all other routes)
 	// This ensures ALL requests (gateway, API, health checks) get a canonical request ID
@@ -217,7 +223,7 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	if config.Gateway != nil {
 		gateway := router.Group("/")
 
-		log.Info().Msg("Mounting AI Gateway handler (plugins integrated via hooks)")
+		log.Debug().Msg("Mounting AI Gateway handler (plugins integrated via hooks)")
 		gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))

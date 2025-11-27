@@ -41,7 +41,7 @@ func (f *ProviderFactory) CreateProvider() (ConfigurationProvider, error) {
 
 // createDatabaseProvider creates a database-backed configuration provider
 func (f *ProviderFactory) createDatabaseProvider() (ConfigurationProvider, error) {
-	log.Info().
+	log.Debug().
 		Str("mode", f.config.HubSpoke.Mode).
 		Msg("Creating database configuration provider")
 	
@@ -59,7 +59,7 @@ func (f *ProviderFactory) createDatabaseProvider() (ConfigurationProvider, error
 
 // createGRPCProvider creates a gRPC-backed configuration provider for edge instances
 func (f *ProviderFactory) createGRPCProvider() (ConfigurationProvider, error) {
-	log.Info().
+	log.Debug().
 		Str("control_endpoint", f.config.HubSpoke.ControlEndpoint).
 		Str("edge_namespace", f.config.HubSpoke.EdgeNamespace).
 		Msg("Creating gRPC configuration provider")
@@ -67,7 +67,7 @@ func (f *ProviderFactory) createGRPCProvider() (ConfigurationProvider, error) {
 	// Create the real gRPC provider
 	provider := NewGRPCProvider(f.config.HubSpoke.EdgeNamespace)
 	
-	log.Info().Msg("gRPC configuration provider created - will be connected to edge client")
+	log.Debug().Msg("gRPC configuration provider created - will be connected to edge client")
 	
 	return provider, nil
 }

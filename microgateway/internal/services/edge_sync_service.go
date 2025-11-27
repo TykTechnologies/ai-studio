@@ -29,7 +29,7 @@ func NewEdgeSyncService(db *gorm.DB, namespace string) *EdgeSyncService {
 
 // SyncConfiguration syncs flattened configuration to local SQLite with join table recreation
 func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) error {
-	log.Info().
+	log.Debug().
 		Str("version", config.Version).
 		Str("namespace", s.namespace).
 		Int("llm_count", len(config.Llms)).
@@ -76,7 +76,7 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		return fmt.Errorf("failed to commit sync transaction: %w", err)
 	}
 
-	log.Info().
+	log.Debug().
 		Str("version", config.Version).
 		Str("namespace", s.namespace).
 		Msg("Configuration sync to local SQLite completed successfully")
@@ -86,7 +86,7 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 
 // clearExistingData clears existing configuration for this namespace
 func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
-	log.Info().Str("namespace", s.namespace).Msg("Clearing existing configuration data")
+	log.Debug().Str("namespace", s.namespace).Msg("Clearing existing configuration data")
 
 	// Clear join tables first (foreign key constraints)
 	if err := tx.Exec("DELETE FROM app_llms WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
@@ -122,13 +122,13 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 		return fmt.Errorf("failed to clear model_prices: %w", err)
 	}
 
-	log.Info().Msg("Existing configuration data cleared")
+	log.Debug().Msg("Existing configuration data cleared")
 	return nil
 }
 
 // syncLLMs syncs LLM entities and their join table relationships
 func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
-	log.Info().Int("count", len(llms)).Msg("Syncing LLMs to local SQLite")
+	log.Debug().Int("count", len(llms)).Msg("Syncing LLMs to local SQLite")
 
 	for _, pbLLM := range llms {
 		// Insert main LLM record
@@ -197,7 +197,7 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 
 // syncApps syncs App entities and recreates app_llms join table - THE CRITICAL PART
 func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
-	log.Info().Int("count", len(apps)).Msg("Syncing Apps to local SQLite")
+	log.Debug().Int("count", len(apps)).Msg("Syncing Apps to local SQLite")
 
 	for _, pbApp := range apps {
 		// Insert main App record
@@ -268,7 +268,7 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 
 // syncFilters syncs Filter entities
 func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) error {
-	log.Info().Int("count", len(filters)).Msg("Syncing Filters to local SQLite")
+	log.Debug().Int("count", len(filters)).Msg("Syncing Filters to local SQLite")
 
 	for _, pbFilter := range filters {
 		filter := &database.Filter{
@@ -309,9 +309,9 @@ func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) e
 	return nil
 }
 
-// syncPlugins syncs Plugin entities  
+// syncPlugins syncs Plugin entities
 func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) error {
-	log.Info().Int("count", len(plugins)).Msg("Syncing Plugins to local SQLite")
+	log.Debug().Int("count", len(plugins)).Msg("Syncing Plugins to local SQLite")
 
 	for _, pbPlugin := range plugins {
 		plugin := &database.Plugin{
@@ -373,7 +373,7 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 
 // syncModelPrices syncs ModelPrice entities
 func (s *EdgeSyncService) syncModelPrices(tx *gorm.DB, modelPrices []*pb.ModelPriceConfig) error {
-	log.Info().Int("count", len(modelPrices)).Msg("Syncing Model Prices to local SQLite")
+	log.Debug().Int("count", len(modelPrices)).Msg("Syncing Model Prices to local SQLite")
 
 	for _, pbPrice := range modelPrices {
 		// Insert ModelPrice record

@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -30,7 +31,12 @@ var (
 )
 
 func main() {
-	// Parse command line flags
+	// Print copyright notice FIRST before anything else
+	fmt.Println("Starting Tyk AI Microgateway")
+	fmt.Printf("Copyright Tyk Technologies, %d\n", time.Now().Year())
+	fmt.Println()
+
+	// Parse command line flags FIRST to get env file path
 	var (
 		envFile          = flag.String("env", ".env", "Path to environment file")
 		migrate          = flag.Bool("migrate", false, "Run database migrations and exit")
@@ -41,6 +47,14 @@ func main() {
 		_                = flag.String("config", "", "Path to config file (optional)")
 	)
 	flag.Parse()
+
+	// Pre-load .env file BEFORE setting up logging so LOG_LEVEL is available
+	// This is a best-effort load - errors are ignored (config.Load will handle properly)
+	_ = godotenv.Load(*envFile)
+
+	// Set up early console logging before config is loaded
+	// This ensures consistent log format from the very start
+	setupEarlyLogging()
 
 	// Show version if requested
 	if *version {
@@ -56,7 +70,7 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
 
-	// Setup logging
+	// Reconfigure logging based on config (may switch to JSON if explicitly requested)
 	setupLogging(cfg.Observability)
 
 	log.Info().
@@ -114,32 +128,32 @@ func main() {
 		log.Fatal().Err(err).Msg("License validation failed")
 	}
 	defer licensingService.Stop()
-	log.Info().Msg("Licensing service initialized")
+	log.Debug().Msg("Licensing service initialized")
 
 	// Initialize edge client FIRST if in edge mode (before creating services)
 	var edgeClient *grpc.SimpleEdgeClient
 	if cfg.IsEdge() {
-		log.Info().
+		log.Debug().
 			Str("control_endpoint", cfg.HubSpoke.ControlEndpoint).
 			Str("edge_id", cfg.HubSpoke.EdgeID).
 			Msg("Connecting to control server before initializing services")
-		
+
 		edgeClient = grpc.NewSimpleEdgeClient(cfg, Version, BuildHash, BuildTime)
-		
+
 		if err := edgeClient.Start(); err != nil {
 			log.Fatal().Err(err).Msg("Failed to connect to control server - edge cannot start without configuration")
 		}
-		
-		log.Info().Msg("Successfully connected to control server")
+
+		log.Debug().Msg("Successfully connected to control server")
 	}
 
 	// Initialize hub-spoke service container based on gateway mode
 	var serviceContainer *services.ServiceContainer
 	var hubSpokeContainer *services.HubSpokeServiceContainer
-	
+
 	// Always use hub-spoke container for control and edge modes
 	if cfg.IsControl() || cfg.IsEdge() {
-		log.Info().
+		log.Debug().
 			Str("gateway_mode", cfg.HubSpoke.Mode).
 			Msg("Initializing hub-spoke service container")
 		hubSpokeContainer, err = services.NewHubSpokeServiceContainer(db, cfg)
@@ -151,53 +165,53 @@ func main() {
 		// Connect edge client to provider if in edge mode
 		if cfg.IsEdge() && edgeClient != nil {
 			if grpcProvider, ok := hubSpokeContainer.ConfigProvider.(*providers.GRPCProvider); ok {
-				log.Info().Msg("Connecting edge client to gRPC provider")
-				
+				log.Debug().Msg("Connecting edge client to gRPC provider")
+
 				// Set up callback for configuration updates
 				edgeClient.SetOnConfigChange(func(config *pb.ConfigurationSnapshot) {
-					log.Info().
+					log.Debug().
 						Str("version", config.Version).
 						Int("llm_count", len(config.Llms)).
 						Int("app_count", len(config.Apps)).
 						Msg("Received configuration update from control, syncing to local SQLite")
-					
+
 					// Create sync service and sync to local SQLite with join tables
 					syncService := services.NewEdgeSyncService(db, cfg.HubSpoke.EdgeNamespace)
 					if err := syncService.SyncConfiguration(config); err != nil {
 						log.Error().Err(err).Msg("Failed to sync configuration to local SQLite")
 					} else {
-						log.Info().Msg("Configuration synced to local SQLite successfully")
+						log.Debug().Msg("Configuration synced to local SQLite successfully")
 					}
-					
+
 					// Also update gRPC provider cache for compatibility
 					grpcProvider.SetConfigurationCache(config)
 				})
-				
+
 				grpcProvider.SetEdgeClient(edgeClient)
-				
+
 				// If edge client already has configuration, sync it to SQLite
 				if initialConfig := edgeClient.GetCurrentConfiguration(); initialConfig != nil {
-					log.Info().
+					log.Debug().
 						Str("version", initialConfig.Version).
 						Msg("Setting initial configuration from edge client, syncing to local SQLite")
-					
+
 					// Sync initial configuration to SQLite
 					syncService := services.NewEdgeSyncService(db, cfg.HubSpoke.EdgeNamespace)
 					if err := syncService.SyncConfiguration(initialConfig); err != nil {
 						log.Error().Err(err).Msg("Failed to sync initial configuration to local SQLite")
 					} else {
-						log.Info().Msg("Initial configuration synced to local SQLite successfully")
+						log.Debug().Msg("Initial configuration synced to local SQLite successfully")
 					}
-					
+
 					grpcProvider.SetConfigurationCache(initialConfig)
 				}
-				
+
 				// Also connect edge client to hybrid gateway service for on-demand token validation
 				if hybridGateway, ok := hubSpokeContainer.GatewayService.(*services.HybridGatewayService); ok {
 					hybridGateway.SetEdgeClient(edgeClient)
-					log.Info().Msg("Edge client connected to hybrid gateway service for token validation")
+					log.Debug().Msg("Edge client connected to hybrid gateway service for token validation")
 				}
-				
+
 				// Create and connect edge reload handler for distributed reload operations
 				syncService := services.NewEdgeSyncService(db, cfg.HubSpoke.EdgeNamespace)
 				reloadHandler := services.NewEdgeReloadHandler(
@@ -213,15 +227,15 @@ func main() {
 					},
 				)
 				edgeClient.SetReloadHandler(reloadHandler)
-				log.Info().Msg("Edge reload handler created and connected to edge client")
+				log.Debug().Msg("Edge reload handler created and connected to edge client")
 
 				// Connect edge client to plugin manager for built-in plugins
 				serviceContainer.PluginManager.SetEdgeClient(edgeClient)
-				log.Info().Msg("Edge client connected to plugin manager for built-in plugin support")
+				log.Debug().Msg("Edge client connected to plugin manager for built-in plugin support")
 
 				// Create and wire control payload queue for edge-to-control plugin communication
 				if cfg.ControlPayload.Enabled {
-					log.Info().Msg("Creating control payload queue for edge-to-control plugin communication")
+					log.Debug().Msg("Creating control payload queue for edge-to-control plugin communication")
 
 					controlPayloadQueue := grpc.NewControlPayloadQueue(
 						db,
@@ -236,7 +250,7 @@ func main() {
 					} else {
 						// Wire queue to edge client for transmission during heartbeats
 						edgeClient.SetControlPayloadQueue(controlPayloadQueue)
-						log.Info().Msg("Control payload queue wired to edge client")
+						log.Debug().Msg("Control payload queue wired to edge client")
 
 						// Wire queue to management server for plugin access
 						if mgmtServer := serviceContainer.PluginManager.GetManagementServer(); mgmtServer != nil {
@@ -244,7 +258,7 @@ func main() {
 								SetControlPayloadQueue(services.ControlPayloadQueueInterface)
 							}); ok {
 								setter.SetControlPayloadQueue(controlPayloadQueue)
-								log.Info().Msg("Control payload queue wired to management server - plugins can now use SendToControl()")
+								log.Debug().Msg("Control payload queue wired to management server")
 							} else {
 								log.Warn().Msg("Management server does not support SetControlPayloadQueue interface")
 							}
@@ -253,7 +267,7 @@ func main() {
 						}
 					}
 				} else {
-					log.Info().Msg("Control payload queue disabled via configuration")
+					log.Debug().Msg("Control payload queue disabled via configuration")
 				}
 
 				// Load any deferred built-in plugins (like analytics_pulse)
@@ -261,12 +275,12 @@ func main() {
 					log.Error().Err(err).Msg("Failed to load deferred built-in plugins")
 				}
 
-				log.Info().Msg("Edge client connected to gRPC provider")
+				log.Debug().Msg("Edge client connected to gRPC provider")
 			}
 		}
 	} else {
 		// Standalone instances use traditional service container
-		log.Info().Msg("Initializing traditional service container for standalone mode")
+		log.Debug().Msg("Initializing traditional service container for standalone mode")
 		serviceContainer, err = services.NewServiceContainer(db, cfg)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to initialize services")
@@ -305,7 +319,7 @@ func main() {
 	// Start server in goroutine
 	serverErrors := make(chan error, 1)
 	go func() {
-		log.Info().
+		log.Debug().
 			Int("port", cfg.Server.Port).
 			Str("host", cfg.Server.Host).
 			Bool("tls", cfg.Server.TLSEnabled).
@@ -319,22 +333,22 @@ func main() {
 	// Start gRPC control server if in control mode
 	var controlServer *grpc.ControlServer
 	var reloadCoordinator *services.ReloadCoordinator
-	
+
 	if cfg.IsControl() {
-		log.Info().
+		log.Debug().
 			Int("grpc_port", cfg.HubSpoke.GRPCPort).
 			Msg("Starting gRPC control server for configuration synchronization")
-		
+
 		controlServer = grpc.NewControlServer(cfg, db)
-		
+
 		// Create reload coordinator and connect it to control server
 		reloadCoordinator = services.NewReloadCoordinator(controlServer)
 		controlServer.SetReloadCoordinator(reloadCoordinator)
-		
+
 		// Update server with reload coordinator for API endpoints
 		srv.SetReloadCoordinator(reloadCoordinator)
-		
-		log.Info().Msg("Reload coordinator created and connected to control server")
+
+		log.Debug().Msg("Reload coordinator created and connected to control server")
 		
 		go func() {
 			if err := controlServer.Start(); err != nil {
@@ -345,7 +359,7 @@ func main() {
 	
 	// Start background tasks and hub-spoke specific services
 	go func() {
-		log.Info().Msg("Starting background tasks")
+		log.Debug().Msg("Starting background tasks")
 		serviceContainer.StartBackgroundTasks(ctx)
 		
 		// Start hub-spoke specific services if available
@@ -372,23 +386,23 @@ func main() {
 	defer cancel()
 
 	// Stop background tasks and hub-spoke services
-	log.Info().Msg("Stopping background tasks")
+	log.Debug().Msg("Stopping background tasks")
 	serviceContainer.StopBackgroundTasks()
-	
+
 	// Stop gRPC components
 	if controlServer != nil {
-		log.Info().Msg("Stopping gRPC control server")
+		log.Debug().Msg("Stopping gRPC control server")
 		controlServer.Stop()
 	}
-	
+
 	if edgeClient != nil {
-		log.Info().Msg("Stopping gRPC edge client")
+		log.Debug().Msg("Stopping gRPC edge client")
 		edgeClient.Stop()
 	}
-	
+
 	// Stop hub-spoke specific services
 	if hubSpokeContainer != nil {
-		log.Info().Msg("Stopping hub-spoke services")
+		log.Debug().Msg("Stopping hub-spoke services")
 		hubSpokeContainer.StopHubSpokeServices()
 	}
 
@@ -403,6 +417,26 @@ func main() {
 	log.Info().Msg("Microgateway stopped gracefully")
 }
 
+// setupEarlyLogging sets up console logging before config is loaded
+// This ensures consistent log format from the very start of the application
+// Also applies LOG_LEVEL from environment so config-loading logs respect it
+func setupEarlyLogging() {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	log.Logger = log.Output(zerolog.ConsoleWriter{
+		Out:        os.Stdout,
+		TimeFormat: "2006-01-02T15:04:05.000-0700",
+		NoColor:    false,
+	})
+
+	// Apply log level early from environment variable
+	// This ensures logs during config.Load() respect the configured level
+	if logLevel := os.Getenv("LOG_LEVEL"); logLevel != "" {
+		if level, err := zerolog.ParseLevel(logLevel); err == nil {
+			zerolog.SetGlobalLevel(level)
+		}
+	}
+}
+
 // setupLogging configures the global logger based on configuration
 func setupLogging(cfg config.ObservabilityConfig) {
 	// Set log level
@@ -413,17 +447,13 @@ func setupLogging(cfg config.ObservabilityConfig) {
 	zerolog.SetGlobalLevel(level)
 
 	// Configure output format
-	if cfg.LogFormat == "text" {
-		log.Logger = log.Output(zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			TimeFormat: time.RFC3339,
-		})
-	} else {
+	if cfg.LogFormat == "json" {
+		// JSON format for structured logging (machine-readable)
+		zerolog.TimeFieldFormat = time.RFC3339Nano
 		log.Logger = log.With().Timestamp().Logger()
 	}
-
-	// Set global timestamp format
-	zerolog.TimeFieldFormat = time.RFC3339Nano
+	// For text format, we already set up console logging in setupEarlyLogging()
+	// so no need to reconfigure unless switching to JSON
 }
 
 // createAdminTokenCommand creates an admin token for management API access
@@ -474,6 +504,6 @@ func ensureAdminAppExists(serviceContainer *services.ServiceContainer) (*databas
 		return nil, fmt.Errorf("failed to create admin app: %w", err)
 	}
 
-	log.Info().Uint("app_id", adminApp.ID).Msg("Created admin app for token management")
+	log.Debug().Uint("app_id", adminApp.ID).Msg("Created admin app for token management")
 	return adminApp, nil
 }

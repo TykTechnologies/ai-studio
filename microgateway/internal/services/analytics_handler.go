@@ -80,7 +80,7 @@ func (h *MicrogatewaAnalyticsHandler) startBatchWorker() {
 		case logs := <-h.proxyLogBatchChan:
 			h.processProxyLogsBatchSync(logs)
 		case <-h.ctx.Done():
-			log.Info().Msg("Shutting down microgateway analytics batch worker")
+			log.Debug().Msg("Shutting down microgateway analytics batch worker")
 			close(h.chatRecordBatchChan)
 			close(h.proxyLogBatchChan)
 			return
@@ -140,7 +140,7 @@ func (h *MicrogatewaAnalyticsHandler) processChatRecordsBatchSync(records []*mod
 		log.Error().Err(err).Int("count", len(records)).Int64("processing_time_ms", processingTime.Milliseconds()).
 			Msg("Failed to create chat record batch")
 	} else {
-		log.Info().Int("count", len(records)).Int64("processing_time_ms", processingTime.Milliseconds()).
+		log.Debug().Int("count", len(records)).Int64("processing_time_ms", processingTime.Milliseconds()).
 			Float64("records_per_second", float64(len(records))/processingTime.Seconds()).
 			Msg("Created chat record batch successfully")
 	}
@@ -191,7 +191,7 @@ func (h *MicrogatewaAnalyticsHandler) processProxyLogsBatchSync(logs []*models.P
 		log.Error().Err(err).Int("count", len(logs)).Int64("processing_time_ms", processingTime.Milliseconds()).
 			Msg("Failed to create proxy log batch")
 	} else {
-		log.Info().Int("count", len(logs)).Int64("processing_time_ms", processingTime.Milliseconds()).
+		log.Debug().Int("count", len(logs)).Int64("processing_time_ms", processingTime.Milliseconds()).
 			Float64("records_per_second", float64(len(logs))/processingTime.Seconds()).
 			Str("first_vendor", logs[0].Vendor).
 			Msg("Created proxy log batch successfully")
@@ -208,7 +208,7 @@ func (h *MicrogatewaAnalyticsHandler) Stop() {
 // RecordChatRecord implements the midsommar analytics interface
 // Merges ChatRecord data into existing ProxyLog event (deduplication) or creates standalone event
 func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
-	log.Info().
+	log.Debug().
 		Uint("app_id", record.AppID).
 		Uint("llm_id", record.LLMID).
 		Str("model", record.Name).
@@ -222,7 +222,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 
 	if found {
 		// MERGE: Update existing event with ChatRecord data (richer token/cost info)
-		log.Info().
+		log.Debug().
 			Uint("existing_event_id", existingEventID).
 			Str("match_key", matchKey).
 			Msg("Found matching proxy log event - merging chat record data")
@@ -253,7 +253,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 			return
 		}
 
-		log.Info().
+		log.Debug().
 			Uint("event_id", existingEventID).
 			Str("model", record.Name).
 			Int("prompt_tokens", record.PromptTokens).
@@ -329,7 +329,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 
 	// NO MATCH: This is a standalone chat interaction (not via proxy)
 	// Create new analytics event from ChatRecord only
-	log.Info().
+	log.Debug().
 		Str("match_key", matchKey).
 		Msg("No matching proxy log found - creating standalone chat analytics event")
 
@@ -407,7 +407,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 	if err := h.db.Create(event).Error; err != nil {
 		log.Error().Err(err).Msg("Failed to create standalone chat analytics event")
 	} else {
-		log.Info().
+		log.Debug().
 			Uint("event_id", event.ID).
 			Str("request_id", event.RequestID).
 			Int("total_tokens", event.TotalTokens).
@@ -455,7 +455,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatLogEntry(entry *models.LLMChatLo
 // Creates analytics events directly from AI Gateway proxy logs
 // This is called FIRST for each request, creating a pending event that may be enriched by RecordChatRecord
 func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) {
-	log.Info().
+	log.Debug().
 		Uint("app_id", proxyLog.AppID).
 		Uint("user_id", proxyLog.UserID).
 		Str("vendor", proxyLog.Vendor).
@@ -520,7 +520,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 	// Store event ID for matching with incoming ChatRecord (uses AppID+Timestamp key)
 	h.storeEventForMatching(fmt.Sprintf("pending_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.Unix()), event.ID)
 
-	log.Info().
+	log.Debug().
 		Uint("event_id", event.ID).
 		Str("request_id", event.RequestID).
 		Msg("Skeleton analytics event created from proxy log (awaiting ChatRecord merge for tokens/cost)")
@@ -673,7 +673,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLogsBatch(logs []*models.ProxyL
 
 // SetAsGlobalHandler sets this handler as the global midsommar analytics handler
 func (h *MicrogatewaAnalyticsHandler) SetAsGlobalHandler() {
-	log.Info().Msg("Setting microgateway analytics handler as global handler")
+	log.Debug().Msg("Setting microgateway analytics handler as global handler")
 	analytics.SetHandler(h)
 }
 

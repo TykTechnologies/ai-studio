@@ -381,15 +381,15 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug string, r *http.Request) (bool, *http.Request) {
 	cred, err := cv.service.GetCredentialBySecret(apiKey) // API Key is the 'secret'
 	if err != nil {
-		log.Info().Err(err).Str("api_key_prefix", apiKey[:min(len(apiKey), 8)]).Msg("CheckAPICredential: GetCredentialBySecret failed")
+		log.Debug().Err(err).Str("api_key_prefix", apiKey[:min(len(apiKey), 8)]).Msg("CheckAPICredential: GetCredentialBySecret failed")
 		return false, r
 	}
 	if !cred.Active {
-		log.Info().Uint("cred_id", cred.ID).Msg("CheckAPICredential: Credential is inactive")
+		log.Debug().Uint("cred_id", cred.ID).Msg("CheckAPICredential: Credential is inactive")
 		return false, r
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("cred_id", cred.ID).
 		Int("cred_id_signed", int(cred.ID)).
 		Str("key_id", cred.KeyID).
@@ -397,11 +397,11 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 
 	app, err := cv.service.GetAppByCredentialID(cred.ID)
 	if err != nil {
-		log.Info().Err(err).Uint("cred_id", cred.ID).Int("cred_id_signed", int(cred.ID)).Msg("CheckAPICredential: GetAppByCredentialID failed")
+		log.Debug().Err(err).Uint("cred_id", cred.ID).Int("cred_id_signed", int(cred.ID)).Msg("CheckAPICredential: GetAppByCredentialID failed")
 		return false, r
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("app_id", app.ID).
 		Str("app_name", app.Name).
 		Int("llm_count", len(app.LLMs)).
@@ -431,10 +431,10 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	if llmSlug != "" {
 		llm, ok := cv.p.GetLLM(llmSlug)
 		if !ok {
-			log.Info().Str("llm_slug", llmSlug).Msg("CheckAPICredential: LLM not found in proxy cache")
+			log.Debug().Str("llm_slug", llmSlug).Msg("CheckAPICredential: LLM not found in proxy cache")
 			return false, r
 		}
-		log.Info().
+		log.Debug().
 			Uint("llm_id", llm.ID).
 			Str("llm_slug", llmSlug).
 			Uint("app_id", app.ID).
@@ -442,13 +442,13 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 			Msg("CheckAPICredential: Checking if app has access to LLM")
 
 		for i, l := range app.LLMs {
-			log.Info().Int("index", i).Uint("app_llm_id", l.ID).Uint("required_llm_id", llm.ID).Msg("CheckAPICredential: Comparing LLM IDs")
+			log.Debug().Int("index", i).Uint("app_llm_id", l.ID).Uint("required_llm_id", llm.ID).Msg("CheckAPICredential: Comparing LLM IDs")
 			if l.ID == llm.ID {
-				log.Info().Msg("CheckAPICredential: App has access to LLM - validation PASSED")
+				log.Debug().Msg("CheckAPICredential: App has access to LLM - validation PASSED")
 				return true, r
 			}
 		}
-		log.Info().
+		log.Debug().
 			Uint("app_id", app.ID).
 			Uint("required_llm_id", llm.ID).
 			Str("llm_slug", llmSlug).

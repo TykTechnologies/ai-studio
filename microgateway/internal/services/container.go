@@ -87,7 +87,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
 			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
 		} else {
-			log.Info().
+			log.Debug().
 				Str("cache_dir", ociConfig.CacheDir).
 				Int("public_keys", len(ociConfig.DefaultPublicKeys)).
 				Bool("require_signature", ociConfig.RequireSignature).
@@ -96,7 +96,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	} else {
 		// Standard plugin manager
 		pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
-		log.Info().Msg("OCI plugin support disabled - using standard plugin manager")
+		log.Debug().Msg("OCI plugin support disabled - using standard plugin manager")
 	}
 
 	// Set enterprise security service on plugin manager for OCI signature verification
@@ -104,28 +104,28 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
-		log.Info().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins in service container...")
+		log.Debug().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins in service container...")
 		
 		// Load plugin configuration
 		ctx := context.Background()
 		if err = cfg.LoadPluginConfig(ctx); err != nil {
 			log.Error().Err(err).Msg("Failed to load plugin configuration")
 		} else {
-			log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Plugin configurations loaded in service container")
+			log.Debug().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Plugin configurations loaded in service container")
 			
 			if len(cfg.Plugins.DataCollectionPlugins) > 0 {
 				// Load global plugins
 				if err := pluginManager.LoadGlobalDataCollectionPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
 					log.Error().Err(err).Msg("Failed to load global data collection plugins")
 				} else {
-					log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded in service container")
+					log.Debug().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded in service container")
 				}
 			} else {
-				log.Info().Msg("No data collection plugins configured")
+				log.Debug().Msg("No data collection plugins configured")
 			}
 		}
 	} else {
-		log.Info().Msg("No plugin configuration specified - skipping data collection plugins")
+		log.Debug().Msg("No plugin configuration specified - skipping data collection plugins")
 	}
 
 	// Pre-warm OCI plugins during startup
@@ -150,7 +150,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 	// Connect management server to plugin manager for bidirectional plugin communication
 	pluginManager.SetManagementServer(managementServer)
-	log.Info().Msg("✅ Management server connected to plugin manager - plugins can now access service API")
+	log.Debug().Msg("✅ Management server connected to plugin manager - plugins can now access service API")
 
 	return &ServiceContainer{
 		DB:         db,
@@ -175,7 +175,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 // StartBackgroundTasks starts minimal essential tasks only
 func (sc *ServiceContainer) StartBackgroundTasks(ctx context.Context) {
-	log.Info().Msg("Starting essential background tasks")
+	log.Debug().Msg("Starting essential background tasks")
 	
 	// Only start token cleanup (essential for security)
 	if tokenAuthProvider, ok := sc.AuthProvider.(*auth.TokenAuthProvider); ok {
@@ -184,21 +184,21 @@ func (sc *ServiceContainer) StartBackgroundTasks(ctx context.Context) {
 		}()
 	}
 
-	log.Info().Msg("Essential background tasks started")
+	log.Debug().Msg("Essential background tasks started")
 }
 
 // StopBackgroundTasks stops background tasks gracefully  
 func (sc *ServiceContainer) StopBackgroundTasks() {
-	log.Info().Msg("Stopping background tasks")
+	log.Debug().Msg("Stopping background tasks")
 	// Token cleanup will stop when context is cancelled
 }
 
 // Cleanup performs final cleanup of all services
 func (sc *ServiceContainer) Cleanup() {
-	log.Info().Msg("Starting service container cleanup")
+	log.Debug().Msg("Starting service container cleanup")
 
 	// Simple cleanup - no complex operations needed
-	log.Info().Msg("Service container cleanup completed")
+	log.Debug().Msg("Service container cleanup completed")
 }
 
 // Health checks all service health including plugins

@@ -29,7 +29,7 @@ func NewGRPCResponsePluginAdapter(serviceContainer *services.ServiceContainer, p
 		cacheValid:      true, // Use plugin manager's caching, not our own
 	}
 	
-	log.Info().Msg("gRPC response plugin adapter initialized - will use plugin manager for caching")
+	log.Debug().Msg("gRPC response plugin adapter initialized - will use plugin manager for caching")
 	return adapter
 }
 
@@ -50,14 +50,14 @@ func (a *GRPCResponsePluginAdapter) OnBeforeWriteHeaders(ctx context.Context, re
 	}
 	
 	if len(plugins) == 0 {
-		log.Info().Uint("llm_id", req.Context.LLMID).Msg("ℹ️ No response plugins configured for LLM")
+		log.Debug().Uint("llm_id", req.Context.LLMID).Msg("ℹ️ No response plugins configured for LLM")
 		return &proxy.HeadersResponse{
 			Modified: false,
 			Headers:  req.Headers,
 		}, nil
 	}
 
-	log.Info().Uint("llm_id", req.Context.LLMID).Int("plugin_count", len(plugins)).Msg("📝 Executing response plugins (OnBeforeWriteHeaders)")
+	log.Debug().Uint("llm_id", req.Context.LLMID).Int("plugin_count", len(plugins)).Msg("📝 Executing response plugins (OnBeforeWriteHeaders)")
 	
 	// Convert to protobuf and execute plugins
 	result := &proxy.HeadersResponse{
@@ -108,7 +108,7 @@ func (a *GRPCResponsePluginAdapter) OnBeforeWrite(ctx context.Context, req *prox
 	}
 	
 	if len(plugins) == 0 {
-		log.Info().Uint("llm_id", req.Context.LLMID).Msg("ℹ️ No response plugins configured for LLM (OnBeforeWrite)")
+		log.Debug().Uint("llm_id", req.Context.LLMID).Msg("ℹ️ No response plugins configured for LLM (OnBeforeWrite)")
 		return &proxy.ResponseWriteResponse{
 			Modified: false,
 			Body:     req.Body,
@@ -116,7 +116,7 @@ func (a *GRPCResponsePluginAdapter) OnBeforeWrite(ctx context.Context, req *prox
 		}, nil
 	}
 
-	log.Info().Uint("llm_id", req.Context.LLMID).Int("plugin_count", len(plugins)).Msg("📝 Executing response plugins (OnBeforeWrite)")
+	log.Debug().Uint("llm_id", req.Context.LLMID).Int("plugin_count", len(plugins)).Msg("📝 Executing response plugins (OnBeforeWrite)")
 	
 	// Convert to protobuf and execute plugins
 	result := &proxy.ResponseWriteResponse{
@@ -162,7 +162,7 @@ func (a *GRPCResponsePluginAdapter) OnBeforeWrite(ctx context.Context, req *prox
 
 // Reload is called when gateway configuration is reloaded (no-op since plugin manager handles caching)
 func (a *GRPCResponsePluginAdapter) Reload() error {
-	log.Info().Msg("gRPC response plugin adapter reload requested - plugin manager will handle caching")
+	log.Debug().Msg("gRPC response plugin adapter reload requested - plugin manager will handle caching")
 	return nil
 }
 

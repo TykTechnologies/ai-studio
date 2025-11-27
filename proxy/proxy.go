@@ -223,7 +223,7 @@ func (p *Proxy) Stop(ctx context.Context) error { return p.server.Shutdown(ctx) 
 func (p *Proxy) Reload() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	fmt.Println("proxy reloading resources...")
+	logger.Debug("proxy reloading resources")
 	return p.loadResources()
 }
 

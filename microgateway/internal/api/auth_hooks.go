@@ -418,7 +418,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 					r.Body = io.NopCloser(bytes.NewReader(modifiedEnrichedReq.PluginRequest.Body))
 					r.ContentLength = int64(len(modifiedEnrichedReq.PluginRequest.Body))
 
-					log.Info().
+					log.Debug().
 						Int("modified_body_len", len(modifiedEnrichedReq.PluginRequest.Body)).
 						Msg("✅ Applied post-auth plugin chain modifications to request")
 				}

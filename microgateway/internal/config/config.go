@@ -175,7 +175,7 @@ type SecurityConfig struct {
 // ObservabilityConfig holds logging, metrics, and monitoring configuration
 type ObservabilityConfig struct {
 	LogLevel        string `env:"LOG_LEVEL" envDefault:"info"`
-	LogFormat       string `env:"LOG_FORMAT" envDefault:"json"` // json or text
+	LogFormat       string `env:"LOG_FORMAT" envDefault:"text"` // json or text
 	EnableMetrics   bool   `env:"ENABLE_METRICS" envDefault:"true"`
 	MetricsPath     string `env:"METRICS_PATH" envDefault:"/metrics"`
 	EnableTracing   bool   `env:"ENABLE_TRACING" envDefault:"false"`
@@ -337,7 +337,7 @@ func (c *Config) LoadPluginConfig(ctx context.Context) error {
 	
 	c.Plugins.DataCollectionPlugins = plugins
 	
-	log.Info().Int("count", len(plugins)).Msg("Loaded plugin configurations")
+	log.Debug().Int("count", len(plugins)).Msg("Loaded plugin configurations")
 	return nil
 }
 

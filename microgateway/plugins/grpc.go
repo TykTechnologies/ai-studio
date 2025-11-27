@@ -82,7 +82,7 @@ func (c *MicrogatewayPluginClient) SetupServiceBroker(managementServer interface
 	// Allocate broker ID and start brokered server
 	brokerID := c.broker.NextId()
 
-	log.Info().
+	log.Debug().
 		Uint32("broker_id", brokerID).
 		Str("broker_ptr", fmt.Sprintf("%p", c.broker)).
 		Msg("Setting up long-lived brokered server for microgateway service API access (HOST SIDE)")
@@ -96,7 +96,7 @@ func (c *MicrogatewayPluginClient) SetupServiceBroker(managementServer interface
 
 		// Register microgateway management services on brokered server
 		mgmtpb.RegisterMicrogatewayManagementServiceServer(s, mgmtServer)
-		log.Info().
+		log.Debug().
 			Uint32("broker_id", brokerID).
 			Msg("✅ Microgateway management services registered on long-lived brokered server")
 

@@ -67,18 +67,18 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	analyticsPlugins := pluginManager.GetGlobalPluginsForHookType("analytics")
 	budgetPlugins := pluginManager.GetGlobalPluginsForHookType("budget")
 	
-	log.Info().
+	log.Debug().
 		Int("proxy_plugins", len(proxyPlugins)).
 		Int("analytics_plugins", len(analyticsPlugins)).
 		Int("budget_plugins", len(budgetPlugins)).
 		Msg("Plugin manager state verification in server")
 
-	log.Info().Msg("Analytics handler configured with plugin manager")
+	log.Debug().Msg("Analytics handler configured with plugin manager")
 
 	// Note: Response hooks are implemented directly in the AI Gateway, not in microgateway plugin system
 
 	// Create AI Gateway instance for mounting (not standalone)
-	log.Info().Msg("Creating AI Gateway for mounting in management server")
+	log.Debug().Msg("Creating AI Gateway for mounting in management server")
 	gateway := aigateway.NewWithAnalytics(
 		gatewayServiceAdapter,
 		budgetServiceAdapter,
@@ -87,23 +87,23 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	)
 	
 	// Manually trigger resource loading since we're mounting, not calling Start()
-	log.Info().Msg("Loading AI Gateway resources...")
+	log.Debug().Msg("Loading AI Gateway resources...")
 	if err := gateway.Reload(); err != nil {
 		return nil, fmt.Errorf("failed to load AI Gateway resources: %w", err)
 	}
-	log.Info().Msg("AI Gateway resources loaded successfully")
+	log.Debug().Msg("AI Gateway resources loaded successfully")
 
 	// Create and register gRPC response plugin adapter with AI Gateway
-	log.Info().Msg("Setting up gRPC response plugin adapter")
+	log.Debug().Msg("Setting up gRPC response plugin adapter")
 	responsePluginAdapter := api.NewGRPCResponsePluginAdapter(serviceContainer, pluginManager)
 	gateway.AddResponseHook(responsePluginAdapter)
-	log.Info().Msg("gRPC response plugin adapter registered with AI Gateway")
+	log.Debug().Msg("gRPC response plugin adapter registered with AI Gateway")
 
 	// Register authentication hooks for executing pre-auth, auth, and post-auth plugins
-	log.Info().Msg("Setting up authentication hooks for plugin execution")
+	log.Debug().Msg("Setting up authentication hooks for plugin execution")
 	authHooks := api.CreateAuthHooks(serviceContainer, pluginManager)
 	gateway.SetAuthHooks(authHooks)
-	log.Info().Msg("Authentication hooks registered with AI Gateway")
+	log.Debug().Msg("Authentication hooks registered with AI Gateway")
 
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{
@@ -148,7 +148,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 // SetReloadCoordinator sets the reload coordinator for hub-and-spoke operations (control mode only)
 func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordinator) {
 	// Since router is already created, we need to recreate it with the reload coordinator
-	log.Info().Msg("Recreating router with reload coordinator for hub-and-spoke endpoints")
+	log.Debug().Msg("Recreating router with reload coordinator for hub-and-spoke endpoints")
 	
 	// Update router config with reload coordinator
 	routerConfig := &api.RouterConfig{
@@ -168,42 +168,42 @@ func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordina
 	s.router = api.SetupRouter(routerConfig)
 	s.server.Handler = s.router
 	
-	log.Info().Msg("Router recreated with reload coordinator - hub-and-spoke endpoints now available")
+	log.Debug().Msg("Router recreated with reload coordinator - hub-and-spoke endpoints now available")
 }
 
 // Start starts the unified HTTP server with mounted AI Gateway
 func (s *Server) Start() error {
-	log.Info().
+	log.Debug().
 		Int("port", s.config.Server.Port).
 		Msg("Starting unified server with management API and mounted AI Gateway")
-	log.Info().
+	log.Debug().
 		Str("management_endpoints", "/api/v1/*").
 		Str("gateway_endpoints", "/llm/* /tools/* /datasource/*").
 		Msg("Available endpoints on single port")
 
 	if s.config.Server.TLSEnabled {
-		log.Info().Msg("Starting server with TLS")
+		log.Debug().Msg("Starting server with TLS")
 		return s.server.ListenAndServeTLS(
 			s.config.Server.TLSCertPath,
 			s.config.Server.TLSKeyPath,
 		)
 	}
 
-	log.Info().Msg("Starting server without TLS")
+	log.Debug().Msg("Starting server without TLS")
 	return s.server.ListenAndServe()
 }
 
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
-	log.Info().Msg("Shutting down unified server...")
+	log.Debug().Msg("Shutting down unified server...")
 
 	// Shutdown plugin manager first
 	if s.pluginManager != nil {
-		log.Info().Msg("Shutting down plugin manager...")
+		log.Debug().Msg("Shutting down plugin manager...")
 		if err := s.pluginManager.Shutdown(ctx); err != nil {
 			log.Error().Err(err).Msg("Failed to shutdown plugin manager")
 		} else {
-			log.Info().Msg("Plugin manager shutdown completed")
+			log.Debug().Msg("Plugin manager shutdown completed")
 		}
 	}
 
@@ -212,7 +212,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return fmt.Errorf("server shutdown failed: %w", err)
 	}
 
-	log.Info().Msg("Server stopped successfully")
+	log.Debug().Msg("Server stopped successfully")
 	return nil
 }
 
@@ -229,13 +229,13 @@ func (s *Server) Health() error {
 
 // Reload reloads the AI Gateway configuration
 func (s *Server) Reload() error {
-	log.Info().Msg("Reloading AI Gateway configuration...")
+	log.Debug().Msg("Reloading AI Gateway configuration...")
 	
 	if err := s.gateway.Reload(); err != nil {
 		log.Error().Err(err).Msg("Failed to reload AI Gateway configuration")
 		return fmt.Errorf("failed to reload AI Gateway: %w", err)
 	}
 	
-	log.Info().Msg("AI Gateway configuration reloaded successfully")
+	log.Debug().Msg("AI Gateway configuration reloaded successfully")
 	return nil
 }

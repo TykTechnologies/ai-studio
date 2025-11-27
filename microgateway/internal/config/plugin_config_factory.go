@@ -13,7 +13,7 @@ func NewPluginConfigLoader(cfg *Config) (PluginConfigLoader, error) {
 	switch {
 	case cfg.Plugins.ConfigServiceURL != "":
 		// HTTP service-based loader
-		log.Info().Str("url", cfg.Plugins.ConfigServiceURL).Msg("Creating HTTP plugin config loader")
+		log.Debug().Str("url", cfg.Plugins.ConfigServiceURL).Msg("Creating HTTP plugin config loader")
 		return NewHTTPPluginConfigLoader(
 			cfg.Plugins.ConfigServiceURL,
 			WithAuthToken(cfg.Plugins.ConfigServiceToken),
@@ -22,12 +22,12 @@ func NewPluginConfigLoader(cfg *Config) (PluginConfigLoader, error) {
 		
 	case cfg.Plugins.ConfigPath != "":
 		// File-based loader
-		log.Info().Str("path", cfg.Plugins.ConfigPath).Msg("Creating file-based plugin config loader")
+		log.Debug().Str("path", cfg.Plugins.ConfigPath).Msg("Creating file-based plugin config loader")
 		return NewFilePluginConfigLoader(cfg.Plugins.ConfigPath), nil
 		
 	default:
 		// No plugin configuration specified, return empty loader
-		log.Info().Msg("No plugin configuration specified - using empty loader")
+		log.Debug().Msg("No plugin configuration specified - using empty loader")
 		return NewEmptyPluginConfigLoader(), nil
 	}
 }

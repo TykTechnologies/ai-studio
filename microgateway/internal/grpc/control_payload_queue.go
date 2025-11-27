@@ -80,7 +80,7 @@ func (q *ControlPayloadQueue) Start() error {
 
 	q.started = true
 
-	log.Info().
+	log.Debug().
 		Str("edge_id", q.edgeID).
 		Bool("enabled", q.config.Enabled).
 		Int64("max_payload_size", q.config.MaxPayloadSizeBytes).
@@ -107,7 +107,7 @@ func (q *ControlPayloadQueue) Stop() {
 		log.Error().Err(err).Msg("Failed to flush control payload queue on shutdown")
 	}
 
-	log.Info().
+	log.Debug().
 		Uint64("total_queued", q.totalQueued).
 		Uint64("total_sent", q.totalSent).
 		Uint64("total_failed", q.totalFailed).
@@ -258,7 +258,7 @@ func (q *ControlPayloadQueue) SendPendingBatch(ctx context.Context) error {
 		TotalPayloads:  uint32(len(protoPayloads)),
 	}
 
-	log.Info().
+	log.Debug().
 		Uint64("sequence", seqNum).
 		Int("payload_count", len(protoPayloads)).
 		Int64("total_size", totalSize).
@@ -302,7 +302,7 @@ func (q *ControlPayloadQueue) SendPendingBatch(ctx context.Context) error {
 	q.totalSent += uint64(len(payloads))
 	q.mu.Unlock()
 
-	log.Info().
+	log.Debug().
 		Uint64("sequence", seqNum).
 		Uint64("processed", resp.ProcessedCount).
 		Bool("success", resp.Success).
