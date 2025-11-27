@@ -960,7 +960,6 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	if err := llmQuery.Debug().Find(&llmStats).Error; err != nil {
 		return nil, err
 	}
-	println("LEN:", len(llmStats))
 
 	for _, stat := range llmStats {
 		stat.MonthlyUsage = stat.MonthlyUsage / 10000

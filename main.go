@@ -44,7 +44,7 @@ var staticFiles embed.FS
 
 func printWelcome() {
 	fmt.Printf("Starting Tyk AI Portal %v\n", "v2.0-hub-spoke")
-	fmt.Println("Copyright Tyk Technologies, 2024")
+	fmt.Printf("Copyright Tyk Technologies, %s\n", time.Now().Format("2006"))
 }
 
 func main() {
@@ -76,7 +76,7 @@ func main() {
 		logger.Fatalf("Unsupported database type: %s", appConf.DatabaseType)
 	}
 
-	db, err := gorm.Open(dialector, &gorm.Config{})
+	db, err := gorm.Open(dialector, logger.GetGormConfig())
 	if err != nil {
 		logger.FatalErr("Failed to connect to database", err)
 	}
