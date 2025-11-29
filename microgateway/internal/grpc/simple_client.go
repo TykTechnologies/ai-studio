@@ -518,18 +518,31 @@ func (c *SimpleEdgeClient) processControlMessage(msg *pb.ControlMessage) error {
 // handleEventMessage handles event bridge messages from control
 func (c *SimpleEdgeClient) handleEventMessage(event *pb.EventFrame) error {
 	if event == nil {
+		log.Debug().Msg("handleEventMessage called with nil event")
 		return nil
 	}
 
-	log.Trace().
+	log.Debug().
 		Str("event_id", event.Id).
 		Str("topic", event.Topic).
 		Str("origin", event.Origin).
-		Msg("Received event from control")
+		Int32("direction", event.Dir).
+		Int("payload_len", len(event.Payload)).
+		Msg("Edge received event from control")
 
 	// Enqueue the event for the bridge to process
 	if c.streamAdapter != nil {
-		c.streamAdapter.EnqueueProtoEvent(event)
+		enqueued := c.streamAdapter.EnqueueProtoEvent(event)
+		log.Debug().
+			Str("event_id", event.Id).
+			Str("topic", event.Topic).
+			Bool("enqueued", enqueued).
+			Msg("Edge enqueued event for bridge processing")
+	} else {
+		log.Warn().
+			Str("event_id", event.Id).
+			Str("topic", event.Topic).
+			Msg("Edge streamAdapter is nil - cannot enqueue event")
 	}
 
 	return nil

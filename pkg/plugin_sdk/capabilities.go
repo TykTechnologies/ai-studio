@@ -52,6 +52,19 @@ type ResponseHandler interface {
 	OnBeforeWrite(ctx Context, req *pb.ResponseWriteRequest) (*pb.ResponseWriteResponse, error)
 }
 
+// StreamCompleteHandler processes completed streaming responses.
+// Use this when you need to cache, analyze, or process the full response after
+// all streaming chunks have been received and sent to the client.
+// This is called asynchronously after the streaming response completes.
+type StreamCompleteHandler interface {
+	Plugin
+
+	// OnStreamComplete is called after a streaming response has finished.
+	// The accumulated_response contains all SSE chunks concatenated together.
+	// This can be used to cache the complete response for future requests.
+	OnStreamComplete(ctx Context, req *pb.StreamCompleteRequest) (*pb.StreamCompleteResponse, error)
+}
+
 // DataCollector collects telemetry data for analytics, monitoring, or billing.
 // Use this when you need to export data to external systems.
 type DataCollector interface {

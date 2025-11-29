@@ -29,6 +29,7 @@ const (
 	PluginService_ProcessPostAuth_FullMethodName            = "/plugin.PluginService/ProcessPostAuth"
 	PluginService_OnBeforeWriteHeaders_FullMethodName       = "/plugin.PluginService/OnBeforeWriteHeaders"
 	PluginService_OnBeforeWrite_FullMethodName              = "/plugin.PluginService/OnBeforeWrite"
+	PluginService_OnStreamComplete_FullMethodName           = "/plugin.PluginService/OnStreamComplete"
 	PluginService_HandleProxyLog_FullMethodName             = "/plugin.PluginService/HandleProxyLog"
 	PluginService_HandleAnalytics_FullMethodName            = "/plugin.PluginService/HandleAnalytics"
 	PluginService_HandleBudgetUsage_FullMethodName          = "/plugin.PluginService/HandleBudgetUsage"
@@ -66,6 +67,8 @@ type PluginServiceClient interface {
 	// Response hooks (new clean interface)
 	OnBeforeWriteHeaders(ctx context.Context, in *HeadersRequest, opts ...grpc.CallOption) (*HeadersResponse, error)
 	OnBeforeWrite(ctx context.Context, in *ResponseWriteRequest, opts ...grpc.CallOption) (*ResponseWriteResponse, error)
+	// Streaming response hook - called after a streaming response completes
+	OnStreamComplete(ctx context.Context, in *StreamCompleteRequest, opts ...grpc.CallOption) (*StreamCompleteResponse, error)
 	// Data collection hooks
 	HandleProxyLog(ctx context.Context, in *ProxyLogRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
 	HandleAnalytics(ctx context.Context, in *AnalyticsRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
@@ -192,6 +195,16 @@ func (c *pluginServiceClient) OnBeforeWrite(ctx context.Context, in *ResponseWri
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResponseWriteResponse)
 	err := c.cc.Invoke(ctx, PluginService_OnBeforeWrite_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) OnStreamComplete(ctx context.Context, in *StreamCompleteRequest, opts ...grpc.CallOption) (*StreamCompleteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StreamCompleteResponse)
+	err := c.cc.Invoke(ctx, PluginService_OnStreamComplete_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +372,8 @@ type PluginServiceServer interface {
 	// Response hooks (new clean interface)
 	OnBeforeWriteHeaders(context.Context, *HeadersRequest) (*HeadersResponse, error)
 	OnBeforeWrite(context.Context, *ResponseWriteRequest) (*ResponseWriteResponse, error)
+	// Streaming response hook - called after a streaming response completes
+	OnStreamComplete(context.Context, *StreamCompleteRequest) (*StreamCompleteResponse, error)
 	// Data collection hooks
 	HandleProxyLog(context.Context, *ProxyLogRequest) (*DataCollectionResponse, error)
 	HandleAnalytics(context.Context, *AnalyticsRequest) (*DataCollectionResponse, error)
@@ -420,6 +435,9 @@ func (UnimplementedPluginServiceServer) OnBeforeWriteHeaders(context.Context, *H
 }
 func (UnimplementedPluginServiceServer) OnBeforeWrite(context.Context, *ResponseWriteRequest) (*ResponseWriteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBeforeWrite not implemented")
+}
+func (UnimplementedPluginServiceServer) OnStreamComplete(context.Context, *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OnStreamComplete not implemented")
 }
 func (UnimplementedPluginServiceServer) HandleProxyLog(context.Context, *ProxyLogRequest) (*DataCollectionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HandleProxyLog not implemented")
@@ -657,6 +675,24 @@ func _PluginService_OnBeforeWrite_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(PluginServiceServer).OnBeforeWrite(ctx, req.(*ResponseWriteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_OnStreamComplete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StreamCompleteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).OnStreamComplete(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_OnStreamComplete_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).OnStreamComplete(ctx, req.(*StreamCompleteRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -934,6 +970,10 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OnBeforeWrite",
 			Handler:    _PluginService_OnBeforeWrite_Handler,
+		},
+		{
+			MethodName: "OnStreamComplete",
+			Handler:    _PluginService_OnStreamComplete_Handler,
 		},
 		{
 			MethodName: "HandleProxyLog",

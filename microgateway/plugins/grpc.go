@@ -193,6 +193,10 @@ func (c *MicrogatewayPluginClient) OnBeforeWrite(ctx context.Context, req *pb.Re
 	return c.pluginStub.OnBeforeWrite(ctx, req, opts...)
 }
 
+func (c *MicrogatewayPluginClient) OnStreamComplete(ctx context.Context, req *pb.StreamCompleteRequest, opts ...grpc.CallOption) (*pb.StreamCompleteResponse, error) {
+	return c.pluginStub.OnStreamComplete(ctx, req, opts...)
+}
+
 func (c *MicrogatewayPluginClient) HandleProxyLog(ctx context.Context, req *pb.ProxyLogRequest, opts ...grpc.CallOption) (*pb.DataCollectionResponse, error) {
 	return c.pluginStub.HandleProxyLog(ctx, req, opts...)
 }

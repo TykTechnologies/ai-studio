@@ -43,6 +43,10 @@ type ServiceContainer struct {
 	// Plugin management
 	PluginManager         *plugins.PluginManager
 	PluginSecurityService plugin_security.Service
+
+	// Edge identity (populated in edge mode)
+	EdgeID        string
+	EdgeNamespace string
 }
 
 // NewServiceContainer creates a new service container with essential dependencies only
@@ -170,6 +174,10 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 		PluginManager:         pluginManager,
 		PluginSecurityService: pluginSecurityService,
+
+		// Edge identity from config (populated in edge mode)
+		EdgeID:        cfg.HubSpoke.EdgeID,
+		EdgeNamespace: cfg.HubSpoke.EdgeNamespace,
 	}, nil
 }
 
@@ -199,6 +207,21 @@ func (sc *ServiceContainer) Cleanup() {
 
 	// Simple cleanup - no complex operations needed
 	log.Debug().Msg("Service container cleanup completed")
+}
+
+// GetEdgeID returns the edge ID (for plugin context)
+func (sc *ServiceContainer) GetEdgeID() string {
+	return sc.EdgeID
+}
+
+// GetEdgeNamespace returns the edge namespace (for plugin context)
+func (sc *ServiceContainer) GetEdgeNamespace() string {
+	return sc.EdgeNamespace
+}
+
+// GetGatewayService returns the gateway service (for plugin middleware interface)
+func (sc *ServiceContainer) GetGatewayService() GatewayServiceInterface {
+	return sc.GatewayService
 }
 
 // Health checks all service health including plugins

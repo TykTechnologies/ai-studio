@@ -106,8 +106,16 @@ func (s *PluginEventServer) Publish(ctx context.Context, req *pb.PublishRequest)
 // Subscribe creates a subscription and streams events back to the plugin.
 // The stream remains open until the client disconnects.
 func (s *PluginEventServer) Subscribe(req *pb.SubscribeRequest, stream grpc.ServerStreamingServer[pb.EventMessage]) error {
+	log.Debug().
+		Str("plugin_id", req.PluginId).
+		Str("topic", req.Topic).
+		Bool("subscribe_all", req.SubscribeAll).
+		Str("node_id", s.nodeID).
+		Msg("🔔 PluginEventServer.Subscribe called by plugin")
+
 	// Validate request
 	if !req.SubscribeAll && req.Topic == "" {
+		log.Warn().Str("plugin_id", req.PluginId).Msg("Subscribe failed: no topic or subscribe_all specified")
 		return fmt.Errorf("either topic or subscribe_all must be specified")
 	}
 
@@ -119,8 +127,22 @@ func (s *PluginEventServer) Subscribe(req *pb.SubscribeRequest, stream grpc.Serv
 
 	// Create subscription handler
 	handler := func(ev eventbridge.Event) {
+		log.Debug().
+			Str("subscription_id", subID).
+			Str("plugin_id", req.PluginId).
+			Str("event_id", ev.ID).
+			Str("topic", ev.Topic).
+			Str("origin", ev.Origin).
+			Str("dir", ev.Dir.String()).
+			Msg("PluginEventServer handler received event from bus")
+
 		select {
 		case eventCh <- ev:
+			log.Debug().
+				Str("subscription_id", subID).
+				Str("plugin_id", req.PluginId).
+				Str("event_id", ev.ID).
+				Msg("PluginEventServer enqueued event to plugin channel")
 		default:
 			// Channel full, log and drop event
 			log.Warn().

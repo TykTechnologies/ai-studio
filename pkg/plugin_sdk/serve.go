@@ -262,6 +262,12 @@ func (w *pluginServerWrapper) Initialize(ctx context.Context, req *pb.InitReques
 				// Also set broker ID for event service (works in both contexts)
 				SetEventServiceBrokerID(uint32(brokerID))
 				log.Printf("Set event service broker ID: %d", brokerID)
+
+				// NOTE: Do NOT eagerly initialize event service client here.
+				// The host's AcceptAndServe goroutine may not have sent the connection info yet
+				// (there's a race between the goroutine calling Accept() and us calling Initialize).
+				// Let the event service initialize lazily on first use (like AI Studio SDK does).
+				// The lazy initialization in lazyEventService.getInner() will handle this correctly.
 			}
 		}
 	}

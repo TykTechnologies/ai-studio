@@ -79,6 +79,15 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		}
 
 		// Create plugin context (NO app_id yet - not authenticated)
+		// Include edge identity in metadata for plugin context
+		metadata := make(map[string]interface{})
+		if serviceContainer.EdgeID != "" {
+			metadata["edge_id"] = serviceContainer.EdgeID
+		}
+		if serviceContainer.EdgeNamespace != "" {
+			metadata["edge_namespace"] = serviceContainer.EdgeNamespace
+		}
+
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
@@ -86,7 +95,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 			Vendor:       vendor,
 			AppID:        uint(0), // NOT authenticated yet
 			UserID:       uint(0),
-			Metadata:     make(map[string]interface{}),
+			Metadata:     metadata,
 			TraceContext: make(map[string]string),
 		}
 
@@ -204,11 +213,20 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 		}
 
 		// Create plugin context for auth
+		// Include edge identity in metadata for plugin context
+		authMetadata := make(map[string]interface{})
+		if serviceContainer.EdgeID != "" {
+			authMetadata["edge_id"] = serviceContainer.EdgeID
+		}
+		if serviceContainer.EdgeNamespace != "" {
+			authMetadata["edge_namespace"] = serviceContainer.EdgeNamespace
+		}
+
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
 			LLMSlug:      llmSlug,
-			Metadata:     make(map[string]interface{}),
+			Metadata:     authMetadata,
 			TraceContext: make(map[string]string),
 		}
 
@@ -326,6 +344,15 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		}
 
 		// Create plugin context (NOW with authenticated app_id)
+		// Include edge identity in metadata for plugin context
+		postAuthMetadata := make(map[string]interface{})
+		if serviceContainer.EdgeID != "" {
+			postAuthMetadata["edge_id"] = serviceContainer.EdgeID
+		}
+		if serviceContainer.EdgeNamespace != "" {
+			postAuthMetadata["edge_namespace"] = serviceContainer.EdgeNamespace
+		}
+
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
@@ -333,7 +360,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			Vendor:       vendor,
 			AppID:        appID, // AUTHENTICATED app_id available!
 			UserID:       uint(0),
-			Metadata:     make(map[string]interface{}),
+			Metadata:     postAuthMetadata,
 			TraceContext: make(map[string]string),
 		}
 

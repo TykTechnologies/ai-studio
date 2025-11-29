@@ -27,6 +27,9 @@ service PluginService {
     // Response hooks (new clean interface)
     rpc OnBeforeWriteHeaders(HeadersRequest) returns (HeadersResponse);
     rpc OnBeforeWrite(ResponseWriteRequest) returns (ResponseWriteResponse);
+
+    // Streaming response hook - called after a streaming response completes
+    rpc OnStreamComplete(StreamCompleteRequest) returns (StreamCompleteResponse);
     
     // Data collection hooks
     rpc HandleProxyLog(ProxyLogRequest) returns (DataCollectionResponse);
@@ -160,6 +163,22 @@ message ResponseWriteResponse {
     bool modified = 1;
     bytes body = 2;
     map<string, string> headers = 3;
+}
+
+// Streaming response hook messages - for caching/processing complete streaming responses
+message StreamCompleteRequest {
+    bytes accumulated_response = 1;      // Full SSE response (all chunks concatenated)
+    map<string, string> headers = 2;     // Response headers from upstream
+    int32 status_code = 3;               // HTTP status code
+    PluginContext context = 4;           // Plugin context with request metadata
+    int32 chunk_count = 5;               // Number of chunks received
+    bytes request_body = 6;              // Original request body (for cache key generation)
+}
+
+message StreamCompleteResponse {
+    bool handled = 1;                    // Plugin processed the response
+    bool cached = 2;                     // Response was cached (for metrics/logging)
+    string error_message = 3;            // Error description if any
 }
 
 // Auth plugin context methods

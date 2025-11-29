@@ -371,7 +371,16 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 
 					// Create stream adapter for event bridge
 					streamAdapter := eventbridge.NewStreamAdapter(func(frame *eventbridge.EventFrame) error {
-						return stream.Send(&pb.ControlMessage{
+						log.Debug().
+							Str("edge_id", edgeID).
+							Str("event_id", frame.ID).
+							Str("topic", frame.Topic).
+							Str("origin", frame.Origin).
+							Int32("direction", frame.Dir).
+							Int("payload_len", len(frame.Payload)).
+							Msg("Control sending event to edge via stream")
+
+						err := stream.Send(&pb.ControlMessage{
 							Message: &pb.ControlMessage_Event{
 								Event: &pb.EventFrame{
 									Id:      frame.ID,
@@ -382,6 +391,20 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 								},
 							},
 						})
+						if err != nil {
+							log.Error().
+								Err(err).
+								Str("edge_id", edgeID).
+								Str("event_id", frame.ID).
+								Msg("Control failed to send event to edge")
+						} else {
+							log.Debug().
+								Str("edge_id", edgeID).
+								Str("event_id", frame.ID).
+								Str("topic", frame.Topic).
+								Msg("Control successfully sent event to edge")
+						}
+						return err
 					}, 100)
 
 					// Create and start event bridge for this edge connection

@@ -860,6 +860,62 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	if !isErr {
 		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now())
+
+		// Execute OnStreamComplete hook for plugins (e.g., caching)
+		if p.responseHookManager != nil && p.hasResponseHooks() {
+			go p.executeOnStreamComplete(r, resp, llm, app, fullResponse.Bytes(), reqBody, chunkIndex)
+		}
+	}
+}
+
+// executeOnStreamComplete calls the OnStreamComplete hook for streaming responses
+func (p *Proxy) executeOnStreamComplete(r *http.Request, resp *http.Response, llm *models.LLM, app *models.App, accumulatedResponse []byte, reqBody []byte, chunkCount int) {
+	// Get canonical request ID from context
+	requestID := ""
+	if reqID := r.Context().Value("request_id"); reqID != nil {
+		requestID = reqID.(string)
+	}
+
+	// Create plugin context
+	pluginCtx := &PluginContext{
+		RequestID: requestID,
+		LLMSlug:   llm.Name,
+		LLMID:     llm.ID,
+		AppID:     app.ID,
+		UserID:    app.UserID,
+		Metadata:  make(map[string]string),
+	}
+
+	// Add vendor to metadata for SSE format detection
+	pluginCtx.Metadata["vendor"] = string(llm.Vendor)
+
+	// Convert response headers to map
+	headers := make(map[string]string)
+	for key, values := range resp.Header {
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
+	}
+
+	// Create stream complete request
+	streamReq := &StreamCompleteRequest{
+		AccumulatedResponse: accumulatedResponse,
+		Headers:             headers,
+		StatusCode:          resp.StatusCode,
+		Context:             pluginCtx,
+		ChunkCount:          chunkCount,
+		RequestBody:         reqBody,
+	}
+
+	ctx := context.Background()
+	streamResp, err := p.responseHookManager.ExecuteOnStreamComplete(ctx, streamReq)
+	if err != nil {
+		logger.Errorf("Stream complete hook failed: %v", err)
+		return
+	}
+
+	if streamResp.Cached {
+		logger.Debugf("Streaming response cached for request %s", requestID)
 	}
 }
 

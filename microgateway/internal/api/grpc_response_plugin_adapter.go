@@ -156,7 +156,65 @@ func (a *GRPCResponsePluginAdapter) OnBeforeWrite(ctx context.Context, req *prox
 		
 		log.Debug().Str("plugin_name", plugin.Name).Bool("modified", pbResp.Modified).Int("body_len", len(pbResp.Body)).Msg("OnBeforeWrite executed")
 	}
-	
+
+	return result, nil
+}
+
+// OnStreamComplete implements proxy.ResponseHook
+// This is called after a streaming response has finished, providing the accumulated response.
+func (a *GRPCResponsePluginAdapter) OnStreamComplete(ctx context.Context, req *proxy.StreamCompleteRequest) (*proxy.StreamCompleteResponse, error) {
+	log.Debug().Uint("llm_id", req.Context.LLMID).Int("chunk_count", req.ChunkCount).Msg("OnStreamComplete called via adapter")
+
+	// Get plugins for this LLM using the plugin manager directly
+	plugins, err := a.pluginManager.GetPluginsForLLM(req.Context.LLMID, interfaces.HookTypeOnResponse)
+	if err != nil {
+		log.Error().Err(err).Uint("llm_id", req.Context.LLMID).Msg("Failed to get response plugins for LLM")
+		return &proxy.StreamCompleteResponse{Handled: false}, nil
+	}
+
+	if len(plugins) == 0 {
+		log.Debug().Uint("llm_id", req.Context.LLMID).Msg("ℹ️ No response plugins configured for LLM (OnStreamComplete)")
+		return &proxy.StreamCompleteResponse{Handled: false}, nil
+	}
+
+	log.Debug().Uint("llm_id", req.Context.LLMID).Int("plugin_count", len(plugins)).Int("response_size", len(req.AccumulatedResponse)).Msg("📝 Executing response plugins (OnStreamComplete)")
+
+	result := &proxy.StreamCompleteResponse{
+		Handled: false,
+	}
+
+	// Execute each plugin in sequence
+	for _, plugin := range plugins {
+		// Convert to protobuf
+		pbReq := &pb.StreamCompleteRequest{
+			AccumulatedResponse: req.AccumulatedResponse,
+			Headers:             req.Headers,
+			StatusCode:          int32(req.StatusCode),
+			Context:             convertPluginContextToPB(req.Context),
+			ChunkCount:          int32(req.ChunkCount),
+			RequestBody:         req.RequestBody,
+		}
+
+		// Call gRPC plugin
+		pbResp, err := plugin.GRPCClient.OnStreamComplete(ctx, pbReq)
+		if err != nil {
+			log.Error().Err(err).Str("plugin_name", plugin.Name).Msg("gRPC OnStreamComplete failed")
+			continue // Continue with other plugins
+		}
+
+		if pbResp.Handled {
+			result.Handled = true
+		}
+		if pbResp.Cached {
+			result.Cached = true
+		}
+		if pbResp.ErrorMessage != "" && result.ErrorMessage == "" {
+			result.ErrorMessage = pbResp.ErrorMessage
+		}
+
+		log.Debug().Str("plugin_name", plugin.Name).Bool("handled", pbResp.Handled).Bool("cached", pbResp.Cached).Msg("OnStreamComplete executed")
+	}
+
 	return result, nil
 }
 

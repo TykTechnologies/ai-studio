@@ -233,6 +233,10 @@ func main() {
 				serviceContainer.PluginManager.SetEdgeClient(edgeClient)
 				log.Debug().Msg("Edge client connected to plugin manager for built-in plugin support")
 
+				// Wire event bus from edge client to plugin manager for plugin pub/sub support
+				serviceContainer.PluginManager.SetEventBus(edgeClient.GetEventBus(), cfg.HubSpoke.EdgeID)
+				log.Debug().Str("edge_id", cfg.HubSpoke.EdgeID).Msg("Event bus wired to plugin manager for plugin event support")
+
 				// Create and wire control payload queue for edge-to-control plugin communication
 				if cfg.ControlPayload.Enabled {
 					log.Debug().Msg("Creating control payload queue for edge-to-control plugin communication")

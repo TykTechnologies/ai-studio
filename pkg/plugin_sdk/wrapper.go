@@ -34,7 +34,7 @@ func (w *pluginServerWrapper) createPluginContext(baseCtx context.Context, pbCtx
 		pbCtx = &pb.PluginContext{}
 	}
 
-	return Context{
+	ctx := Context{
 		Runtime:      w.runtime,
 		RequestID:    pbCtx.RequestId,
 		AppID:        pbCtx.AppId,
@@ -47,6 +47,18 @@ func (w *pluginServerWrapper) createPluginContext(baseCtx context.Context, pbCtx
 		Services:     w.services,
 		Context:      baseCtx,
 	}
+
+	// Populate edge info from metadata if available (set by microgateway)
+	if pbCtx.Metadata != nil {
+		if edgeID, ok := pbCtx.Metadata["edge_id"]; ok {
+			ctx.EdgeID = edgeID
+		}
+		if edgeNamespace, ok := pbCtx.Metadata["edge_namespace"]; ok {
+			ctx.EdgeNamespace = edgeNamespace
+		}
+	}
+
+	return ctx
 }
 
 // Initialize is implemented in serve.go to handle service broker setup
@@ -190,6 +202,20 @@ func (w *pluginServerWrapper) OnBeforeWrite(ctx context.Context, req *pb.Respons
 
 	pluginCtx := w.createPluginContext(ctx, req.Context)
 	return handler.OnBeforeWrite(pluginCtx, req)
+}
+
+// OnStreamComplete implements pb.PluginServiceServer
+// This is called after a streaming response has finished, providing the accumulated response.
+func (w *pluginServerWrapper) OnStreamComplete(ctx context.Context, req *pb.StreamCompleteRequest) (*pb.StreamCompleteResponse, error) {
+	// Check if plugin implements StreamCompleteHandler
+	handler, ok := w.plugin.(StreamCompleteHandler)
+	if !ok {
+		// Plugin doesn't handle stream complete, return unhandled
+		return &pb.StreamCompleteResponse{Handled: false}, nil
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	return handler.OnStreamComplete(pluginCtx, req)
 }
 
 // HandleProxyLog implements pb.PluginServiceServer

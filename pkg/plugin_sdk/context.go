@@ -39,6 +39,14 @@ type Context struct {
 	// Vendor is the LLM vendor (e.g., "anthropic", "openai")
 	Vendor string
 
+	// EdgeID is the edge instance identifier (only set in RuntimeGateway)
+	// Empty string in RuntimeStudio context
+	EdgeID string
+
+	// EdgeNamespace is the edge namespace (only set in RuntimeGateway)
+	// Empty string in RuntimeStudio context
+	EdgeNamespace string
+
 	// Metadata provides additional context as key-value pairs
 	Metadata map[string]string
 

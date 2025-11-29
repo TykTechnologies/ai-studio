@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	stdlog "log"
 	"sync"
 
 	"github.com/google/uuid"
@@ -45,8 +46,11 @@ func getEventServiceClient() (pb.PluginEventServiceClient, error) {
 	defer eventServiceMutex.Unlock()
 
 	if eventServiceClient != nil {
+		stdlog.Printf("[EventSDK] getEventServiceClient: returning existing client")
 		return eventServiceClient, nil
 	}
+
+	stdlog.Printf("[EventSDK] getEventServiceClient: creating new client (broker=%v, brokerID=%d)", eventServiceBroker != nil, eventServiceBrokerID)
 
 	if eventServiceBroker == nil {
 		return nil, fmt.Errorf("event service broker not initialized")
@@ -57,11 +61,14 @@ func getEventServiceClient() (pb.PluginEventServiceClient, error) {
 	}
 
 	// Dial the brokered server where the event service is registered
+	stdlog.Printf("[EventSDK] getEventServiceClient: dialing broker ID %d", eventServiceBrokerID)
 	conn, err := eventServiceBroker.Dial(eventServiceBrokerID)
 	if err != nil {
+		stdlog.Printf("[EventSDK] ❌ getEventServiceClient: dial failed: %v", err)
 		return nil, fmt.Errorf("failed to dial event service broker ID %d: %w", eventServiceBrokerID, err)
 	}
 
+	stdlog.Printf("[EventSDK] ✅ getEventServiceClient: dial successful, creating gRPC client")
 	eventServiceClient = pb.NewPluginEventServiceClient(conn)
 	log.Info().
 		Uint32("broker_id", eventServiceBrokerID).
@@ -139,11 +146,15 @@ func (e *eventServiceImpl) PublishRaw(ctx context.Context, topic string, payload
 
 // Subscribe registers a handler for events on a specific topic.
 func (e *eventServiceImpl) Subscribe(topic string, handler EventHandler) (string, error) {
+	stdlog.Printf("[EventSDK] Subscribe called: topic=%s pluginID=%s", topic, e.pluginID)
+
 	if e.client == nil {
+		stdlog.Printf("[EventSDK] ❌ Subscribe: client is nil!")
 		return "", fmt.Errorf("event service not initialized")
 	}
 
 	if handler == nil {
+		stdlog.Printf("[EventSDK] ❌ Subscribe: handler is nil!")
 		return "", fmt.Errorf("event handler cannot be nil")
 	}
 
@@ -161,6 +172,8 @@ func (e *eventServiceImpl) Subscribe(topic string, handler EventHandler) (string
 	e.subscriptions[subID] = sub
 	e.mu.Unlock()
 
+	stdlog.Printf("[EventSDK] Subscribe: starting runSubscription goroutine for subID=%s topic=%s", subID, topic)
+
 	// Start background goroutine to receive events
 	go e.runSubscription(ctx, subID, sub, &pb.SubscribeRequest{
 		Topic:        topic,
@@ -173,6 +186,7 @@ func (e *eventServiceImpl) Subscribe(topic string, handler EventHandler) (string
 		Str("topic", topic).
 		Msg("Plugin subscribed to event topic")
 
+	stdlog.Printf("[EventSDK] ✅ Subscribe: returning subID=%s for topic=%s", subID, topic)
 	return subID, nil
 }
 
@@ -240,8 +254,11 @@ func (e *eventServiceImpl) Unsubscribe(subscriptionID string) error {
 
 // runSubscription runs in a goroutine to receive events from the gRPC stream.
 func (e *eventServiceImpl) runSubscription(ctx context.Context, subID string, sub *activeSubscription, req *pb.SubscribeRequest) {
+	stdlog.Printf("[EventSDK] runSubscription starting: subID=%s topic=%s pluginID=%s", subID, sub.topic, req.PluginId)
+
 	stream, err := e.client.Subscribe(ctx, req)
 	if err != nil {
+		stdlog.Printf("[EventSDK] ❌ Failed to create subscription stream: subID=%s topic=%s error=%v", subID, sub.topic, err)
 		log.Error().
 			Err(err).
 			Str("subscription_id", subID).
@@ -255,9 +272,12 @@ func (e *eventServiceImpl) runSubscription(ctx context.Context, subID string, su
 		return
 	}
 
+	stdlog.Printf("[EventSDK] ✅ Subscription stream created successfully: subID=%s topic=%s", subID, sub.topic)
+
 	for {
 		select {
 		case <-ctx.Done():
+			stdlog.Printf("[EventSDK] Subscription context cancelled: subID=%s", subID)
 			// Subscription cancelled
 			return
 		default:
@@ -266,8 +286,10 @@ func (e *eventServiceImpl) runSubscription(ctx context.Context, subID string, su
 				// Check if this was a clean shutdown
 				select {
 				case <-ctx.Done():
+					stdlog.Printf("[EventSDK] Subscription stream closed (context done): subID=%s", subID)
 					return
 				default:
+					stdlog.Printf("[EventSDK] Subscription stream ended with error: subID=%s error=%v", subID, err)
 					log.Debug().
 						Err(err).
 						Str("subscription_id", subID).
@@ -280,6 +302,8 @@ func (e *eventServiceImpl) runSubscription(ctx context.Context, subID string, su
 					return
 				}
 			}
+
+			stdlog.Printf("[EventSDK] 📨 Received event from stream: subID=%s eventID=%s topic=%s origin=%s", subID, msg.Id, msg.Topic, msg.Origin)
 
 			// Convert proto message to SDK Event
 			event := Event{
@@ -295,6 +319,7 @@ func (e *eventServiceImpl) runSubscription(ctx context.Context, subID string, su
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
+						stdlog.Printf("[EventSDK] ❌ Panic in event handler: subID=%s eventID=%s panic=%v", subID, event.ID, r)
 						log.Error().
 							Interface("panic", r).
 							Str("subscription_id", subID).
@@ -302,7 +327,9 @@ func (e *eventServiceImpl) runSubscription(ctx context.Context, subID string, su
 							Msg("Panic in event handler")
 					}
 				}()
+				stdlog.Printf("[EventSDK] Calling event handler: subID=%s eventID=%s topic=%s", subID, event.ID, event.Topic)
 				sub.handler(event)
+				stdlog.Printf("[EventSDK] Event handler completed: subID=%s eventID=%s", subID, event.ID)
 			}()
 		}
 	}
@@ -366,15 +393,20 @@ func (l *lazyEventService) getInner() EventService {
 	defer l.mu.Unlock()
 
 	if l.initialized {
+		stdlog.Printf("[EventSDK] getInner: already initialized, returning existing service")
 		return l.inner
 	}
+
+	stdlog.Printf("[EventSDK] getInner: initializing event service for pluginID=%s runtime=%v", l.pluginID, l.runtime)
 
 	// Try to create the event service client
 	client, err := getEventServiceClient()
 	if err != nil {
+		stdlog.Printf("[EventSDK] ❌ getInner: failed to get event service client: %v (using stub)", err)
 		log.Warn().Err(err).Msg("Failed to initialize event service - using stub")
 		l.inner = &stubEventService{}
 	} else {
+		stdlog.Printf("[EventSDK] ✅ getInner: event service client obtained, creating event service")
 		l.inner = newEventService(client, l.pluginID)
 		log.Debug().Str("plugin_id", l.pluginID).Msg("Event service initialized")
 	}
@@ -392,7 +424,10 @@ func (l *lazyEventService) PublishRaw(ctx context.Context, topic string, payload
 }
 
 func (l *lazyEventService) Subscribe(topic string, handler EventHandler) (string, error) {
-	return l.getInner().Subscribe(topic, handler)
+	stdlog.Printf("[EventSDK] lazyEventService.Subscribe called: topic=%s pluginID=%s", topic, l.pluginID)
+	inner := l.getInner()
+	stdlog.Printf("[EventSDK] lazyEventService.Subscribe: got inner service, calling Subscribe")
+	return inner.Subscribe(topic, handler)
 }
 
 func (l *lazyEventService) SubscribeAll(handler EventHandler) (string, error) {

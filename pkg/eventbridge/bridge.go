@@ -115,39 +115,81 @@ func (b *Bridge) IsRunning() bool {
 // - Role: Control only forwards DirDown, edges only forward DirUp
 // - Topics: If configured, only matching topics are forwarded
 func (b *Bridge) localToRemote(ctx context.Context) {
+	log.Debug().
+		Str("node_id", b.nodeID).
+		Bool("is_control", b.isControl).
+		Msg("Bridge localToRemote goroutine started - subscribing to bus")
+
 	sub := b.bus.SubscribeAll(func(ev Event) {
+		log.Debug().
+			Str("node_id", b.nodeID).
+			Bool("is_control", b.isControl).
+			Str("topic", ev.Topic).
+			Str("event_id", ev.ID).
+			Str("dir", ev.Dir.String()).
+			Str("origin", ev.Origin).
+			Msg("Bridge received event from local bus")
+
 		// Direction filtering: never forward local events
 		if ev.Dir == DirLocal {
+			log.Debug().
+				Str("node_id", b.nodeID).
+				Str("event_id", ev.ID).
+				Msg("Bridge skipping event - direction is local")
 			return
 		}
 
 		// Role-based filtering
 		if b.isControl && ev.Dir != DirDown {
+			log.Debug().
+				Str("node_id", b.nodeID).
+				Str("event_id", ev.ID).
+				Str("dir", ev.Dir.String()).
+				Msg("Bridge skipping event - control node only forwards DirDown")
 			return
 		}
 		if !b.isControl && ev.Dir != DirUp {
+			log.Debug().
+				Str("node_id", b.nodeID).
+				Str("event_id", ev.ID).
+				Str("dir", ev.Dir.String()).
+				Msg("Bridge skipping event - edge node only forwards DirUp")
 			return
 		}
 
 		// Topic filtering (if configured)
 		if len(b.topics) > 0 && !b.topicMatches(ev.Topic) {
+			log.Debug().
+				Str("node_id", b.nodeID).
+				Str("event_id", ev.ID).
+				Str("topic", ev.Topic).
+				Msg("Bridge skipping event - topic does not match filter")
 			return
 		}
 
 		frame := ev.ToEventFrame()
 
+		log.Debug().
+			Str("node_id", b.nodeID).
+			Str("topic", ev.Topic).
+			Str("event_id", ev.ID).
+			Str("dir", ev.Dir.String()).
+			Msg("Bridge forwarding event to remote via stream")
+
 		if err := b.stream.SendEvent(frame); err != nil {
-			log.Debug().
+			log.Error().
 				Err(err).
+				Str("node_id", b.nodeID).
 				Str("topic", ev.Topic).
 				Str("event_id", ev.ID).
-				Msg("Failed to send event to remote")
+				Msg("Bridge failed to send event to remote")
 		} else {
-			log.Trace().
+			log.Debug().
+				Str("node_id", b.nodeID).
 				Str("topic", ev.Topic).
 				Str("event_id", ev.ID).
 				Str("dir", ev.Dir.String()).
-				Msg("Event forwarded to remote")
+				Msg("Bridge event successfully forwarded to remote")
 		}
 	})
 
@@ -163,9 +205,17 @@ func (b *Bridge) localToRemote(ctx context.Context) {
 // remoteToLocal receives events from the remote end and republishes them locally.
 // All received events are marked as DirLocal to prevent re-forwarding.
 func (b *Bridge) remoteToLocal(ctx context.Context) {
+	log.Debug().
+		Str("node_id", b.nodeID).
+		Bool("is_control", b.isControl).
+		Msg("Bridge remoteToLocal goroutine started - waiting for events from remote")
+
 	for {
 		select {
 		case <-ctx.Done():
+			log.Debug().
+				Str("node_id", b.nodeID).
+				Msg("Bridge remoteToLocal stopping - context done")
 			return
 		default:
 			frame, err := b.stream.RecvEvent()
@@ -173,6 +223,9 @@ func (b *Bridge) remoteToLocal(ctx context.Context) {
 				// Check if context was cancelled
 				select {
 				case <-ctx.Done():
+					log.Debug().
+						Str("node_id", b.nodeID).
+						Msg("Bridge remoteToLocal stopping - context cancelled during recv")
 					return
 				default:
 				}
@@ -180,7 +233,7 @@ func (b *Bridge) remoteToLocal(ctx context.Context) {
 				log.Debug().
 					Err(err).
 					Str("node_id", b.nodeID).
-					Msg("Failed to receive event from remote, bridge stopping")
+					Msg("Bridge failed to receive event from remote, bridge stopping")
 				return
 			}
 
@@ -188,16 +241,33 @@ func (b *Bridge) remoteToLocal(ctx context.Context) {
 				continue
 			}
 
+			log.Debug().
+				Str("node_id", b.nodeID).
+				Str("topic", frame.Topic).
+				Str("event_id", frame.ID).
+				Str("origin", frame.Origin).
+				Int32("dir", frame.Dir).
+				Msg("Bridge received event frame from remote")
+
 			// Convert to local event - CRITICAL: mark as DirLocal to prevent loops
 			ev := frame.ToEvent()
 
-			b.bus.Publish(ev)
-
-			log.Trace().
+			log.Debug().
+				Str("node_id", b.nodeID).
 				Str("topic", ev.Topic).
 				Str("event_id", ev.ID).
 				Str("origin", ev.Origin).
-				Msg("Event received from remote and published locally")
+				Str("dir", ev.Dir.String()).
+				Msg("Bridge publishing remote event to local bus")
+
+			b.bus.Publish(ev)
+
+			log.Debug().
+				Str("node_id", b.nodeID).
+				Str("topic", ev.Topic).
+				Str("event_id", ev.ID).
+				Str("origin", ev.Origin).
+				Msg("Bridge event received from remote and published locally")
 		}
 	}
 }

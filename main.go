@@ -139,15 +139,8 @@ func main() {
 
 	service := services.NewServiceWithOCI(db, ociConfig)
 
-	// Load AI Studio plugins at startup (UI, Agent, and Object Hooks)
-	if service.AIStudioPluginManager != nil {
-		logger.Debug("Loading AI Studio plugins (UI, Agent, Object Hooks)...")
-		if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
-			logger.Warnf("Failed to load some AI Studio plugins: %v", err)
-		} else {
-			logger.Debug("AI Studio plugins loaded successfully")
-		}
-	}
+	// NOTE: Plugin loading is deferred until after the event bus is wired (see below)
+	// This ensures plugins can subscribe to events during initialization
 
 	// Initialize and start marketplace service if enabled
 	if appConf.MarketplaceEnabled && ociConfig != nil {
@@ -295,6 +288,20 @@ func main() {
 		if service.AIStudioPluginManager != nil {
 			controlServer.SetPluginManager(service.AIStudioPluginManager)
 			logger.Info("AI Studio plugin manager connected to control server for edge payload routing")
+
+			// Wire event bus from control server to plugin manager for plugin pub/sub support
+			// This allows AI Studio plugins to subscribe/publish events that flow to/from edge instances
+			// IMPORTANT: This MUST happen BEFORE loading plugins so they can subscribe to events
+			service.AIStudioPluginManager.SetEventBus(controlServer.GetEventBus(), "control")
+			logger.Info("Event bus wired to AI Studio plugin manager for plugin event support")
+
+			// NOW load plugins - after event bus is wired so plugins can subscribe during init
+			logger.Debug("Loading AI Studio plugins (UI, Agent, Object Hooks)...")
+			if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
+				logger.Warnf("Failed to load some AI Studio plugins: %v", err)
+			} else {
+				logger.Debug("AI Studio plugins loaded successfully")
+			}
 		}
 
 		logger.Info("Reload coordinator created and connected to control server and namespace service")
@@ -313,6 +320,17 @@ func main() {
 				controlServer.Stop()
 			}
 		}()
+	} else {
+		// Non-control mode (standalone): Load plugins without event bus support
+		// Plugins will still work but won't be able to use pub/sub events
+		if service.AIStudioPluginManager != nil {
+			logger.Debug("Loading AI Studio plugins (standalone mode - no event bus)...")
+			if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
+				logger.Warnf("Failed to load some AI Studio plugins: %v", err)
+			} else {
+				logger.Debug("AI Studio plugins loaded successfully (standalone mode)")
+			}
+		}
 	}
 
 	noDocsArg := false
