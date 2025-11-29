@@ -101,9 +101,8 @@ func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(managementServer
 
 	log.Debug().
 		Uint32("broker_id", brokerID).
-		Str("broker_ptr", fmt.Sprintf("%p", c.broker)).
 		Bool("has_event_server", evtServer != nil).
-		Msg("Setting up long-lived brokered server for microgateway service API access (HOST SIDE)")
+		Msg("Setting up long-lived brokered server for microgateway service API access")
 
 	// Start brokered server with microgateway management services
 	// Note: AcceptAndServe blocks, so we run it in a goroutine.
@@ -116,14 +115,18 @@ func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(managementServer
 		mgmtpb.RegisterMicrogatewayManagementServiceServer(s, mgmtServer)
 		log.Debug().
 			Uint32("broker_id", brokerID).
-			Msg("✅ Microgateway management services registered on long-lived brokered server")
+			Msg("Microgateway management services registered on brokered server")
 
 		// Register plugin event service if provided
 		if evtServer != nil {
 			eventpb.RegisterPluginEventServiceServer(s, evtServer)
 			log.Debug().
 				Uint32("broker_id", brokerID).
-				Msg("✅ Plugin event service registered on long-lived brokered server")
+				Msg("Plugin event service registered on brokered server")
+		} else {
+			log.Warn().
+				Uint32("broker_id", brokerID).
+				Msg("No event server provided - plugins will NOT be able to subscribe to events")
 		}
 
 		return s
@@ -227,4 +230,15 @@ func (c *MicrogatewayPluginClient) ExecuteScheduledTask(ctx context.Context, req
 
 func (c *MicrogatewayPluginClient) AcceptEdgePayload(ctx context.Context, req *pb.EdgePayloadRequest, opts ...grpc.CallOption) (*pb.EdgePayloadResponse, error) {
 	return c.pluginStub.AcceptEdgePayload(ctx, req, opts...)
+}
+
+// OpenSession opens a long-lived session for broker access.
+// This blocks until timeout or CloseSession is called.
+func (c *MicrogatewayPluginClient) OpenSession(ctx context.Context, req *pb.OpenSessionRequest, opts ...grpc.CallOption) (*pb.OpenSessionResponse, error) {
+	return c.pluginStub.OpenSession(ctx, req, opts...)
+}
+
+// CloseSession explicitly closes an active session.
+func (c *MicrogatewayPluginClient) CloseSession(ctx context.Context, req *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
+	return c.pluginStub.CloseSession(ctx, req, opts...)
 }

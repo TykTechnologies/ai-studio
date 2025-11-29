@@ -279,6 +279,13 @@ func main() {
 					log.Error().Err(err).Msg("Failed to load deferred built-in plugins")
 				}
 
+				// Pre-warm all plugins to establish event subscriptions
+				// This must happen AFTER SetEventBus so plugins can subscribe to events
+				log.Debug().Msg("Pre-warming plugins for event subscriptions")
+				if err := serviceContainer.PluginManager.PrewarmAllPlugins(context.Background()); err != nil {
+					log.Warn().Err(err).Msg("Some plugins failed to pre-warm - event subscriptions may not work")
+				}
+
 				log.Debug().Msg("Edge client connected to gRPC provider")
 			}
 		}

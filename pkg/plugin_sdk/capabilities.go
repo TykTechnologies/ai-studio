@@ -214,6 +214,38 @@ type EdgePayload struct {
 	ReceivedTimestamp int64             // Unix timestamp when received at control
 }
 
+// SessionAware is an optional interface for plugins that need session lifecycle callbacks.
+// Implement this when your plugin needs to set up or tear down resources tied to the
+// session-based broker connection (e.g., event subscriptions, background tasks).
+//
+// The session pattern keeps go-plugin broker connections alive for plugins that need
+// persistent background services like event pub/sub.
+//
+// Example:
+//
+//	func (p *MyPlugin) OnSessionReady(ctx Context) {
+//	    // Subscribe to events, start background tasks
+//	    p.eventSubID, _ = ctx.Services.Events().Subscribe("my-topic", p.handleEvent)
+//	}
+//
+//	func (p *MyPlugin) OnSessionClosing(ctx Context) {
+//	    // Cleanup subscriptions before session ends
+//	    ctx.Services.Events().Unsubscribe(p.eventSubID)
+//	}
+type SessionAware interface {
+	// OnSessionReady is called when a session is first established.
+	// This is the place to set up event subscriptions, start background goroutines,
+	// or initialize resources that require a live broker connection.
+	// This is only called once per plugin lifetime (on the first OpenSession),
+	// not on session renewals (subsequent OpenSession calls after timeout).
+	OnSessionReady(ctx Context)
+
+	// OnSessionClosing is called before a session is explicitly closed.
+	// This is NOT called on session timeout (timeouts expect the host to re-open).
+	// Use this to clean up resources before the plugin shuts down.
+	OnSessionClosing(ctx Context)
+}
+
 // HookType represents the type of plugin hook (for gateway compatibility)
 type HookType string
 

@@ -7,6 +7,7 @@ import (
 	stdlog "log"
 	"sync"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 	"github.com/google/uuid"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
@@ -41,6 +42,7 @@ func SetEventServiceBrokerID(brokerID uint32) {
 }
 
 // getEventServiceClient creates and returns the event service client.
+// It reuses the shared broker connection from ai_studio_sdk to avoid dialing twice.
 func getEventServiceClient() (pb.PluginEventServiceClient, error) {
 	eventServiceMutex.Lock()
 	defer eventServiceMutex.Unlock()
@@ -50,28 +52,55 @@ func getEventServiceClient() (pb.PluginEventServiceClient, error) {
 		return eventServiceClient, nil
 	}
 
-	stdlog.Printf("[EventSDK] getEventServiceClient: creating new client (broker=%v, brokerID=%d)", eventServiceBroker != nil, eventServiceBrokerID)
-
-	if eventServiceBroker == nil {
-		return nil, fmt.Errorf("event service broker not initialized")
+	// Try to get the shared connection from AI Studio SDK first
+	// This avoids dialing the broker twice (which would fail)
+	conn := ai_studio_sdk.GetSharedBrokerConnection()
+	if conn != nil {
+		stdlog.Printf("[EventSDK] ✅ getEventServiceClient: using shared broker connection from AI Studio SDK")
+		eventServiceClient = pb.NewPluginEventServiceClient(conn)
+		log.Info().Msg("Event service client created via shared broker connection")
+		return eventServiceClient, nil
 	}
 
-	if eventServiceBrokerID == 0 {
-		return nil, fmt.Errorf("event service broker ID not set")
+	// Fall back to dialing if no shared connection exists yet
+	// This happens if the event service is used before any AI Studio SDK call
+	stdlog.Printf("[EventSDK] getEventServiceClient: no shared connection, attempting to dial")
+
+	// Prefer session broker if active (new session-based pattern)
+	broker := GetSessionBroker()
+	brokerID := GetSessionBrokerID()
+
+	// Fall back to legacy global state if no session
+	if broker == nil {
+		broker = eventServiceBroker
+	}
+	if brokerID == 0 {
+		brokerID = eventServiceBrokerID
+	}
+
+	stdlog.Printf("[EventSDK] getEventServiceClient: creating new client (session_broker=%v, session_brokerID=%d, legacy_broker=%v, legacy_brokerID=%d)",
+		GetSessionBroker() != nil, GetSessionBrokerID(), eventServiceBroker != nil, eventServiceBrokerID)
+
+	if broker == nil {
+		return nil, fmt.Errorf("event service broker not initialized (no session or legacy broker available)")
+	}
+
+	if brokerID == 0 {
+		return nil, fmt.Errorf("event service broker ID not set (no session or legacy broker ID)")
 	}
 
 	// Dial the brokered server where the event service is registered
-	stdlog.Printf("[EventSDK] getEventServiceClient: dialing broker ID %d", eventServiceBrokerID)
-	conn, err := eventServiceBroker.Dial(eventServiceBrokerID)
+	stdlog.Printf("[EventSDK] getEventServiceClient: dialing broker ID %d", brokerID)
+	dialConn, err := broker.Dial(brokerID)
 	if err != nil {
 		stdlog.Printf("[EventSDK] ❌ getEventServiceClient: dial failed: %v", err)
-		return nil, fmt.Errorf("failed to dial event service broker ID %d: %w", eventServiceBrokerID, err)
+		return nil, fmt.Errorf("failed to dial event service broker ID %d: %w", brokerID, err)
 	}
 
 	stdlog.Printf("[EventSDK] ✅ getEventServiceClient: dial successful, creating gRPC client")
-	eventServiceClient = pb.NewPluginEventServiceClient(conn)
+	eventServiceClient = pb.NewPluginEventServiceClient(dialConn)
 	log.Info().
-		Uint32("broker_id", eventServiceBrokerID).
+		Uint32("broker_id", brokerID).
 		Msg("Event service client created via broker dial")
 
 	return eventServiceClient, nil

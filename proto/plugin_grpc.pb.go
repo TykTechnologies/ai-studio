@@ -43,6 +43,8 @@ const (
 	PluginService_HandleObjectHook_FullMethodName           = "/plugin.PluginService/HandleObjectHook"
 	PluginService_ExecuteScheduledTask_FullMethodName       = "/plugin.PluginService/ExecuteScheduledTask"
 	PluginService_AcceptEdgePayload_FullMethodName          = "/plugin.PluginService/AcceptEdgePayload"
+	PluginService_OpenSession_FullMethodName                = "/plugin.PluginService/OpenSession"
+	PluginService_CloseSession_FullMethodName               = "/plugin.PluginService/CloseSession"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -91,6 +93,11 @@ type PluginServiceClient interface {
 	// Edge Payload Methods (for plugins that receive data from edge instances)
 	// Called when an edge plugin sends data via SendToControl
 	AcceptEdgePayload(ctx context.Context, in *EdgePayloadRequest, opts ...grpc.CallOption) (*EdgePayloadResponse, error)
+	// Session management for long-lived broker access
+	// OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
+	// Host should call this in a loop after Initialize() to maintain broker connectivity
+	OpenSession(ctx context.Context, in *OpenSessionRequest, opts ...grpc.CallOption) (*OpenSessionResponse, error)
+	CloseSession(ctx context.Context, in *CloseSessionRequest, opts ...grpc.CallOption) (*CloseSessionResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -350,6 +357,26 @@ func (c *pluginServiceClient) AcceptEdgePayload(ctx context.Context, in *EdgePay
 	return out, nil
 }
 
+func (c *pluginServiceClient) OpenSession(ctx context.Context, in *OpenSessionRequest, opts ...grpc.CallOption) (*OpenSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OpenSessionResponse)
+	err := c.cc.Invoke(ctx, PluginService_OpenSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) CloseSession(ctx context.Context, in *CloseSessionRequest, opts ...grpc.CallOption) (*CloseSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseSessionResponse)
+	err := c.cc.Invoke(ctx, PluginService_CloseSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -396,6 +423,11 @@ type PluginServiceServer interface {
 	// Edge Payload Methods (for plugins that receive data from edge instances)
 	// Called when an edge plugin sends data via SendToControl
 	AcceptEdgePayload(context.Context, *EdgePayloadRequest) (*EdgePayloadResponse, error)
+	// Session management for long-lived broker access
+	// OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
+	// Host should call this in a loop after Initialize() to maintain broker connectivity
+	OpenSession(context.Context, *OpenSessionRequest) (*OpenSessionResponse, error)
+	CloseSession(context.Context, *CloseSessionRequest) (*CloseSessionResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -477,6 +509,12 @@ func (UnimplementedPluginServiceServer) ExecuteScheduledTask(context.Context, *E
 }
 func (UnimplementedPluginServiceServer) AcceptEdgePayload(context.Context, *EdgePayloadRequest) (*EdgePayloadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AcceptEdgePayload not implemented")
+}
+func (UnimplementedPluginServiceServer) OpenSession(context.Context, *OpenSessionRequest) (*OpenSessionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OpenSession not implemented")
+}
+func (UnimplementedPluginServiceServer) CloseSession(context.Context, *CloseSessionRequest) (*CloseSessionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloseSession not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -924,6 +962,42 @@ func _PluginService_AcceptEdgePayload_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_OpenSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpenSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).OpenSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_OpenSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).OpenSession(ctx, req.(*OpenSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_CloseSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).CloseSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_CloseSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).CloseSession(ctx, req.(*CloseSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1022,6 +1096,14 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AcceptEdgePayload",
 			Handler:    _PluginService_AcceptEdgePayload_Handler,
+		},
+		{
+			MethodName: "OpenSession",
+			Handler:    _PluginService_OpenSession_Handler,
+		},
+		{
+			MethodName: "CloseSession",
+			Handler:    _PluginService_CloseSession_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

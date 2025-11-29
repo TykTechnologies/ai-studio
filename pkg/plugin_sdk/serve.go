@@ -61,8 +61,21 @@ type grpcPluginImpl struct {
 	wrapper *pluginServerWrapper
 }
 
+// storedBroker holds the gRPC broker reference for session management.
+// This is set during GRPCServer initialization and used by OpenSession.
+var storedBroker *goplugin.GRPCBroker
+
+// GetStoredBroker returns the stored broker reference.
+// Used by the session management to access the broker during OpenSession.
+func GetStoredBroker() *goplugin.GRPCBroker {
+	return storedBroker
+}
+
 // GRPCServer registers the plugin service with the gRPC server
 func (p *grpcPluginImpl) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server) error {
+	// Store broker reference for session management
+	storedBroker = broker
+
 	// Register the proto service
 	pb.RegisterPluginServiceServer(s, p.wrapper)
 

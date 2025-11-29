@@ -111,7 +111,7 @@ func (s *PluginEventServer) Subscribe(req *pb.SubscribeRequest, stream grpc.Serv
 		Str("topic", req.Topic).
 		Bool("subscribe_all", req.SubscribeAll).
 		Str("node_id", s.nodeID).
-		Msg("🔔 PluginEventServer.Subscribe called by plugin")
+		Msg("Plugin subscribing to events")
 
 	// Validate request
 	if !req.SubscribeAll && req.Topic == "" {
@@ -134,7 +134,7 @@ func (s *PluginEventServer) Subscribe(req *pb.SubscribeRequest, stream grpc.Serv
 			Str("topic", ev.Topic).
 			Str("origin", ev.Origin).
 			Str("dir", ev.Dir.String()).
-			Msg("PluginEventServer handler received event from bus")
+			Msg("PluginEventServer handler received event from bus - forwarding to plugin")
 
 		select {
 		case eventCh <- ev:
@@ -176,7 +176,7 @@ func (s *PluginEventServer) Subscribe(req *pb.SubscribeRequest, stream grpc.Serv
 		Str("plugin_id", req.PluginId).
 		Str("topic", req.Topic).
 		Bool("subscribe_all", req.SubscribeAll).
-		Msg("Plugin subscribed to events")
+		Msg("Plugin subscribed to events - subscription active on bus")
 
 	// Cleanup when stream closes
 	defer func() {

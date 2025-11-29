@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	stdlog "log"
+	"os"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/rs/zerolog/log"
 )
 
 // pluginServerWrapper implements pb.PluginServiceServer
@@ -576,5 +580,133 @@ func (w *pluginServerWrapper) AcceptEdgePayload(ctx context.Context, req *pb.Edg
 	return &pb.EdgePayloadResponse{
 		Success: true,
 		Handled: handled,
+	}, nil
+}
+
+// OpenSession implements pb.PluginServiceServer
+// This is the key method for session-based broker management.
+// It blocks until timeout or CloseSession is called, keeping the broker alive.
+func (w *pluginServerWrapper) OpenSession(ctx context.Context, req *pb.OpenSessionRequest) (*pb.OpenSessionResponse, error) {
+	// Generate a session ID
+	sessionID := fmt.Sprintf("session-%d-%d", req.PluginId, req.ServiceBrokerId)
+
+	// Use multiple output methods for visibility
+	fmt.Fprintf(os.Stderr, "🔔 [OpenSession] RPC received by plugin: sessionID=%s, pluginID=%d, brokerID=%d\n", sessionID, req.PluginId, req.ServiceBrokerId)
+	log.Error().
+		Str("session_id", sessionID).
+		Uint32("plugin_id", req.PluginId).
+		Uint32("broker_id", req.ServiceBrokerId).
+		Msg("🔔 [OpenSession] RPC received by plugin")
+
+	stdlog.Printf("[OpenSession] Starting: sessionID=%s, pluginID=%d, brokerID=%d", sessionID, req.PluginId, req.ServiceBrokerId)
+
+	// Get the stored broker and verify it's valid
+	broker := GetStoredBroker()
+	log.Error().
+		Bool("broker_nil", broker == nil).
+		Msg("🔔 [OpenSession] GetStoredBroker result")
+	stdlog.Printf("[OpenSession] GetStoredBroker returned: broker=%v (nil=%v)", broker, broker == nil)
+
+	// Initialize session state
+	firstSession, err := InitSession(sessionID, req.ServiceBrokerId, broker)
+	if err != nil {
+		log.Error().Err(err).Msg("❌ [OpenSession] InitSession failed")
+		stdlog.Printf("[OpenSession] InitSession failed: %v", err)
+		return &pb.OpenSessionResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	log.Error().
+		Bool("first_session", firstSession).
+		Msg("🔔 [OpenSession] InitSession succeeded")
+
+	// Set event service broker ID for this session
+	SetEventServiceBrokerID(req.ServiceBrokerId)
+	stdlog.Printf("[OpenSession] Set event service broker ID: %d", req.ServiceBrokerId)
+
+	// If this is the first session, notify plugin if it implements SessionAware
+	// IMPORTANT: Run this in a goroutine because:
+	// 1. OnSessionReady may call broker.Dial() for event subscriptions
+	// 2. broker.Dial() blocks until the broker server accepts the connection
+	// 3. The broker server can't accept new connections while we're blocking in this RPC handler
+	// By running async, we allow this RPC to proceed to WaitForClose, which lets the broker serve.
+	fmt.Fprintf(os.Stderr, "🔔 [OpenSession] firstSession=%v, checking SessionAware...\n", firstSession)
+	if firstSession {
+		if aware, ok := w.plugin.(SessionAware); ok {
+			fmt.Fprintf(os.Stderr, "🔔 [OpenSession] Plugin implements SessionAware, will call OnSessionReady in 500ms\n")
+			log.Error().Msg("🔔 [OpenSession] Plugin implements SessionAware, will call OnSessionReady in 500ms")
+			stdlog.Printf("[OpenSession] Plugin implements SessionAware, will call OnSessionReady in 500ms")
+			pluginCtx := w.createPluginContext(ctx, nil)
+			go func() {
+				// Delay to ensure:
+				// 1. This RPC handler returns and WaitForClose can proceed
+				// 2. The host's AcceptAndServe has time to start listening
+				// The host starts AcceptAndServe before calling OpenSession, but the
+				// listener setup is async. 500ms should be sufficient.
+				time.Sleep(500 * time.Millisecond)
+				fmt.Fprintf(os.Stderr, "🔔 [OpenSession] Calling OnSessionReady NOW\n")
+				log.Error().Msg("🔔 [OpenSession] Calling OnSessionReady now")
+				stdlog.Printf("[OpenSession] Calling OnSessionReady now")
+				aware.OnSessionReady(pluginCtx)
+				fmt.Fprintf(os.Stderr, "🔔 [OpenSession] OnSessionReady RETURNED\n")
+				log.Error().Msg("🔔 [OpenSession] OnSessionReady returned")
+				stdlog.Printf("[OpenSession] OnSessionReady returned")
+			}()
+		} else {
+			fmt.Fprintf(os.Stderr, "🔔 [OpenSession] Plugin does NOT implement SessionAware\n")
+			log.Error().Msg("🔔 [OpenSession] Plugin does NOT implement SessionAware")
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "🔔 [OpenSession] Not first session, skipping OnSessionReady\n")
+		log.Error().Msg("🔔 [OpenSession] Not first session, skipping OnSessionReady")
+	}
+
+	stdlog.Printf("[OpenSession] Entering WaitForClose with timeout %dms", req.TimeoutMs)
+
+	// Block until timeout or CloseSession
+	// This is where the broker becomes available for dial operations
+	reason := WaitForClose(req.TimeoutMs)
+	stdlog.Printf("[OpenSession] WaitForClose returned with reason: %s", reason)
+
+	// Map reason to proto enum
+	closeReason := pb.OpenSessionResponse_UNKNOWN
+	switch reason {
+	case "timeout":
+		closeReason = pb.OpenSessionResponse_TIMEOUT
+	case "explicit_close", "shutdown", "unload":
+		closeReason = pb.OpenSessionResponse_EXPLICIT_CLOSE
+	default:
+		if reason != "" {
+			closeReason = pb.OpenSessionResponse_PLUGIN_ERROR
+		}
+	}
+
+	return &pb.OpenSessionResponse{
+		Success:     true,
+		SessionId:   sessionID,
+		CloseReason: closeReason,
+	}, nil
+}
+
+// CloseSession implements pb.PluginServiceServer
+// This explicitly closes an active session before timeout.
+func (w *pluginServerWrapper) CloseSession(ctx context.Context, req *pb.CloseSessionRequest) (*pb.CloseSessionResponse, error) {
+	// Notify plugin if it implements SessionAware
+	if aware, ok := w.plugin.(SessionAware); ok {
+		pluginCtx := w.createPluginContext(ctx, nil)
+		aware.OnSessionClosing(pluginCtx)
+	}
+
+	// Close the session
+	reason := req.Reason
+	if reason == "" {
+		reason = "explicit_close"
+	}
+	CloseSession(reason)
+
+	return &pb.CloseSessionResponse{
+		Success: true,
 	}, nil
 }

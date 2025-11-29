@@ -69,6 +69,9 @@ type AIStudioPluginManager struct {
 
 	// Event server for plugin pub/sub
 	eventServer *PluginEventServer
+
+	// Session management for long-lived broker connections
+	pluginSessions map[uint]context.CancelFunc // plugin_id -> session cancel function
 }
 
 // LoadedAIStudioPlugin represents a loaded AI Studio plugin
@@ -94,6 +97,7 @@ func NewAIStudioPluginManager(db *gorm.DB, ociClient *ociplugins.OCIPluginClient
 		manifestService: nil, // Will be set later to avoid circular dependency
 		loadedPlugins:   make(map[uint]*LoadedAIStudioPlugin),
 		pluginClients:   make(map[uint]*goplugin.Client),
+		pluginSessions:  make(map[uint]context.CancelFunc),
 		handshakeConfig: goplugin.HandshakeConfig{
 			ProtocolVersion:  1,
 			MagicCookieKey:   "AI_STUDIO_PLUGIN",
@@ -320,6 +324,17 @@ func (c *AIStudioPluginClient) AcceptEdgePayload(ctx context.Context, req *pb.Ed
 	return c.pluginStub.AcceptEdgePayload(ctx, req, opts...)
 }
 
+// OpenSession opens a long-lived session for broker access.
+// This blocks until timeout or CloseSession is called.
+func (c *AIStudioPluginClient) OpenSession(ctx context.Context, req *pb.OpenSessionRequest, opts ...grpc.CallOption) (*pb.OpenSessionResponse, error) {
+	return c.pluginStub.OpenSession(ctx, req, opts...)
+}
+
+// CloseSession explicitly closes an active session.
+func (c *AIStudioPluginClient) CloseSession(ctx context.Context, req *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
+	return c.pluginStub.CloseSession(ctx, req, opts...)
+}
+
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
 // Uses a universal handshake that works with any plugin type
 type ConfigOnlyGRPC struct {
@@ -521,6 +536,16 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	if !initResp.Success {
 		client.Kill()
 		return nil, fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
+	}
+
+	// Start session loop for plugins that need persistent broker connections (e.g., event pub/sub)
+	// This runs in a background goroutine and maintains a long-polling session
+	if serviceBrokerID > 0 {
+		go m.runPluginSessionLoop(pluginID, clientWrapper, serviceBrokerID)
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Uint32("broker_id", serviceBrokerID).
+			Msg("Started plugin session loop for persistent broker connection")
 	}
 
 	// Create service provider for this plugin (if main service is available)
@@ -815,6 +840,11 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 		return fmt.Errorf("plugin %d is not loaded", pluginID)
 	}
 
+	// Close plugin session before shutdown (stops the session loop goroutine)
+	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+		m.closePluginSession(pluginID, clientWrapper)
+	}
+
 	// Shutdown plugin gracefully
 	if loadedPlugin.GRPCClient != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -855,6 +885,126 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 		Msg("AI Studio plugin unloaded")
 
 	return nil
+}
+
+// runPluginSessionLoop maintains a long-lived session for plugins that need persistent
+// broker connections (e.g., for event pub/sub). Uses long-polling pattern where sessions
+// timeout after 30 seconds and are automatically re-opened.
+func (m *AIStudioPluginManager) runPluginSessionLoop(pluginID uint, client *AIStudioPluginClient, brokerID uint32) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Store cancel function for cleanup
+	m.mu.Lock()
+	m.pluginSessions[pluginID] = cancel
+	m.mu.Unlock()
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Uint32("broker_id", brokerID).
+		Msg("Starting plugin session loop")
+
+	defer func() {
+		m.mu.Lock()
+		delete(m.pluginSessions, pluginID)
+		m.mu.Unlock()
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Msg("Plugin session loop ended")
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Msg("Session loop cancelled")
+			return
+		default:
+			// Open session with 30 second timeout (long-polling pattern)
+			resp, err := client.OpenSession(ctx, &pb.OpenSessionRequest{
+				ServiceBrokerId: brokerID,
+				PluginId:        uint32(pluginID),
+				TimeoutMs:       30000, // 30 second timeout
+			})
+			if err != nil {
+				// Check if context was cancelled
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					log.Warn().
+						Uint("plugin_id", pluginID).
+						Err(err).
+						Msg("Session open failed, retrying in 1 second")
+					time.Sleep(1 * time.Second)
+					continue
+				}
+			}
+
+			// Handle session close reason
+			switch resp.CloseReason {
+			case pb.OpenSessionResponse_TIMEOUT:
+				// Normal timeout, re-open session
+				log.Trace().
+					Uint("plugin_id", pluginID).
+					Msg("Session timed out, re-opening")
+				continue
+
+			case pb.OpenSessionResponse_EXPLICIT_CLOSE:
+				// Host or plugin requested close
+				log.Debug().
+					Uint("plugin_id", pluginID).
+					Msg("Session explicitly closed")
+				return
+
+			case pb.OpenSessionResponse_PLUGIN_ERROR:
+				// Plugin error, log and retry
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Str("error", resp.ErrorMessage).
+					Msg("Session closed due to plugin error, retrying")
+				time.Sleep(1 * time.Second)
+				continue
+
+			default:
+				// Unknown reason, retry
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Int32("reason", int32(resp.CloseReason)).
+					Msg("Session closed with unknown reason, retrying")
+				time.Sleep(1 * time.Second)
+				continue
+			}
+		}
+	}
+}
+
+// closePluginSession closes an active session for a plugin
+func (m *AIStudioPluginManager) closePluginSession(pluginID uint, client *AIStudioPluginClient) {
+	m.mu.Lock()
+	cancelFunc, exists := m.pluginSessions[pluginID]
+	m.mu.Unlock()
+
+	if !exists {
+		return
+	}
+
+	// Send explicit close to plugin
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := client.CloseSession(ctx, &pb.CloseSessionRequest{
+		Reason: "plugin_unload",
+	})
+	if err != nil {
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Err(err).
+			Msg("Failed to send session close to plugin (may already be closed)")
+	}
+
+	// Cancel the session loop goroutine
+	cancelFunc()
 }
 
 // GetPluginAsset retrieves an asset from a loaded plugin via gRPC

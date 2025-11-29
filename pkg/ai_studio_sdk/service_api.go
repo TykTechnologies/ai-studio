@@ -22,6 +22,7 @@ var (
 	initialized     bool
 	initMutex       sync.Mutex
 	grpcBroker      *goplugin.GRPCBroker
+	brokerConn      *grpc.ClientConn // Shared connection for all services on this broker
 )
 
 // Initialize sets up the SDK with broker access
@@ -100,6 +101,9 @@ func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClie
 		return nil, fmt.Errorf("failed to dial service broker ID %d: %w", serviceBrokerID, err)
 	}
 
+	// Store connection for sharing with other services (e.g., EventService)
+	brokerConn = conn
+
 	// Create service client from the brokered connection
 	serviceClient = mgmtpb.NewAIStudioManagementServiceClient(conn)
 
@@ -109,6 +113,15 @@ func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClie
 		Msg("✅ Service client created via broker dial - plugin can now call host services")
 
 	return serviceClient, nil
+}
+
+// GetSharedBrokerConnection returns the shared gRPC connection to the host's brokered server.
+// This allows other services (like EventService) to create clients on the same connection
+// without dialing again. Returns nil if no connection has been established yet.
+func GetSharedBrokerConnection() *grpc.ClientConn {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	return brokerConn
 }
 
 // createPluginContext creates the authentication context for service API calls
