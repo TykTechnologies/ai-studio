@@ -35,16 +35,28 @@ func (p *SchedulerDemoPlugin) Initialize(ctx plugin_sdk.Context, config map[stri
 
 // OnSessionReady implements plugin_sdk.SessionAware - called when the session broker is ready
 func (p *SchedulerDemoPlugin) OnSessionReady(ctx plugin_sdk.Context) {
-	log.Printf("scheduler-demo: OnSessionReady called - session broker is now active")
+	log.Printf("scheduler-demo: OnSessionReady called - session broker is now active (runtime: %s)", ctx.Runtime)
 
-	// Warm up the Service API connection
-	if ai_studio_sdk.IsInitialized() {
-		log.Printf("scheduler-demo: Warming up Service API connection...")
-		_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+	// Warm up the Service API connection based on runtime context
+	if ctx.Runtime == plugin_sdk.RuntimeGateway {
+		// Gateway runtime: Use KV read to warm up the microgateway SDK connection
+		log.Printf("scheduler-demo: Warming up Gateway Service API connection...")
+		_, err := ctx.Services.KV().Read(ctx, "warmup-probe")
 		if err != nil {
-			log.Printf("scheduler-demo: Service API warmup failed: %v (this may be OK if not in Studio runtime)", err)
+			log.Printf("scheduler-demo: Gateway Service API warmup completed (probe key not found is expected): %v", err)
 		} else {
-			log.Printf("scheduler-demo: Service API connection established successfully")
+			log.Printf("scheduler-demo: Gateway Service API connection established successfully")
+		}
+	} else {
+		// Studio runtime: Use AI Studio SDK
+		if ai_studio_sdk.IsInitialized() {
+			log.Printf("scheduler-demo: Warming up Studio Service API connection...")
+			_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+			if err != nil {
+				log.Printf("scheduler-demo: Studio Service API warmup failed: %v", err)
+			} else {
+				log.Printf("scheduler-demo: Studio Service API connection established successfully")
+			}
 		}
 	}
 

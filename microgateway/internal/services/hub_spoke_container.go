@@ -95,6 +95,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 
 	// Create plugin service adapter
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
+	pluginServiceAdapter.SetManagementService(management) // Enable LLM-based plugin pre-warming
 
 	// Initialize plugin manager with OCI support if configured
 	var pluginManager *plugins.PluginManager

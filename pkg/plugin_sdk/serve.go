@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	goplugin "github.com/hashicorp/go-plugin"
+	"github.com/hashicorp/go-hclog"
 	"google.golang.org/grpc"
 )
 
@@ -38,6 +40,14 @@ func Serve(userPlugin Plugin) {
 		services: nil, // Will be set in Initialize
 	}
 
+	// Create hclog logger that outputs to stderr
+	// This ensures plugin logs are captured by the host's SyncStderr
+	pluginLogger := hclog.New(&hclog.LoggerOptions{
+		Name:   userPlugin.GetInfo().Name,
+		Level:  hclog.Debug,
+		Output: os.Stderr,
+	})
+
 	// Serve using go-plugin
 	// Register both "plugin" and "config" services for full and config-only loading
 	goplugin.Serve(&goplugin.ServeConfig{
@@ -51,6 +61,7 @@ func Serve(userPlugin Plugin) {
 			"config": &configPluginImpl{wrapper: wrapper},
 		},
 		GRPCServer: goplugin.DefaultGRPCServer,
+		Logger:     pluginLogger,
 	})
 }
 

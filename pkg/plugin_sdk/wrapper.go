@@ -645,9 +645,11 @@ func (w *pluginServerWrapper) OpenSession(ctx context.Context, req *pb.OpenSessi
 	// 2. broker.Dial() blocks until the broker server accepts the connection
 	// 3. The broker server can't accept new connections while we're blocking in this RPC handler
 	// By running async, we allow this RPC to proceed to WaitForClose, which lets the broker serve.
+	stdlog.Printf("[OpenSession] firstSession=%v, checking if plugin implements SessionAware", firstSession)
+	stdlog.Printf("[OpenSession] Plugin type: %T", w.plugin)
 	if firstSession {
 		if aware, ok := w.plugin.(SessionAware); ok {
-			stdlog.Printf("[OpenSession] Plugin implements SessionAware, will call OnSessionReady in 500ms")
+			stdlog.Printf("[OpenSession] Plugin implements SessionAware (type assertion succeeded), will call OnSessionReady in 500ms")
 			pluginCtx := w.createPluginContext(ctx, nil)
 			go func() {
 				// Delay to ensure:
@@ -660,6 +662,8 @@ func (w *pluginServerWrapper) OpenSession(ctx context.Context, req *pb.OpenSessi
 				aware.OnSessionReady(pluginCtx)
 				stdlog.Printf("[OpenSession] OnSessionReady returned")
 			}()
+		} else {
+			stdlog.Printf("[OpenSession] Plugin does NOT implement SessionAware interface")
 		}
 	}
 

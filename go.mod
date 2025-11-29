@@ -38,6 +38,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.34.0
 	github.com/sashabaranov/go-openai v1.31.0
+	github.com/simonfxr/pubsub v0.0.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
 	github.com/swaggo/swag v1.16.3
@@ -190,7 +191,6 @@ require (
 	github.com/redis/rueidis v1.0.34 // indirect
 	github.com/russellhaering/goxmldsig v1.4.0 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
-	github.com/simonfxr/pubsub v0.0.5 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tidwall/gjson v1.17.1 // indirect

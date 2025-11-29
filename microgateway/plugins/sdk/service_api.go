@@ -16,12 +16,13 @@ import (
 
 // Global SDK state for service API access
 var (
-	serviceClient   pb.MicrogatewayManagementServiceClient
-	pluginID        uint32
-	serviceBrokerID uint32
-	initialized     bool
-	initMutex       sync.Mutex
-	grpcBroker      *goplugin.GRPCBroker
+	serviceClient      pb.MicrogatewayManagementServiceClient
+	pluginID           uint32
+	serviceBrokerID    uint32
+	initialized        bool
+	initMutex          sync.Mutex
+	grpcBroker         *goplugin.GRPCBroker
+	sharedBrokerConn   *grpc.ClientConn // Shared connection for other services (e.g., event service)
 )
 
 // Initialize sets up the SDK with broker access
@@ -153,6 +154,10 @@ func getServiceClient(ctx context.Context) (pb.MicrogatewayManagementServiceClie
 		return nil, fmt.Errorf("failed to dial service broker ID %d after %d attempts: %w", serviceBrokerID, maxRetries, err)
 	}
 
+	// Store the shared connection for other services (e.g., event service) to reuse
+	// The go-plugin broker only allows ONE connection per broker ID, so we must share
+	sharedBrokerConn = conn
+
 	// Create service client from the brokered connection
 	serviceClient = pb.NewMicrogatewayManagementServiceClient(conn)
 
@@ -177,6 +182,23 @@ func IsInitialized() bool {
 	initMutex.Lock()
 	defer initMutex.Unlock()
 	return initialized && serviceBrokerID != 0
+}
+
+// GetSharedBrokerConnection returns the shared gRPC connection to the host's brokered server.
+// This allows other services (like the event service) to reuse the same connection.
+// The go-plugin broker only allows ONE connection per broker ID.
+func GetSharedBrokerConnection() *grpc.ClientConn {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	return sharedBrokerConn
+}
+
+// SetSharedBrokerConnection stores a pre-dialed gRPC connection for shared use.
+// This is called by services that dial the broker first.
+func SetSharedBrokerConnection(conn *grpc.ClientConn) {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	sharedBrokerConn = conn
 }
 
 // LLM Management Functions

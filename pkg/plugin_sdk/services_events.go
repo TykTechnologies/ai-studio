@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+	mgwsdk "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
 	"github.com/google/uuid"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
@@ -42,7 +43,7 @@ func SetEventServiceBrokerID(brokerID uint32) {
 }
 
 // getEventServiceClient creates and returns the event service client.
-// It reuses the shared broker connection from ai_studio_sdk to avoid dialing twice.
+// It reuses the shared broker connection from either microgateway SDK or ai_studio_sdk to avoid dialing twice.
 func getEventServiceClient() (pb.PluginEventServiceClient, error) {
 	eventServiceMutex.Lock()
 	defer eventServiceMutex.Unlock()
@@ -52,19 +53,28 @@ func getEventServiceClient() (pb.PluginEventServiceClient, error) {
 		return eventServiceClient, nil
 	}
 
-	// Try to get the shared connection from AI Studio SDK first
+	// Try to get the shared connection from Microgateway SDK first (for gateway runtime)
 	// This avoids dialing the broker twice (which would fail)
-	conn := ai_studio_sdk.GetSharedBrokerConnection()
+	conn := mgwsdk.GetSharedBrokerConnection()
+	if conn != nil {
+		stdlog.Printf("[EventSDK] ✅ getEventServiceClient: using shared broker connection from Microgateway SDK")
+		eventServiceClient = pb.NewPluginEventServiceClient(conn)
+		log.Info().Msg("Event service client created via shared broker connection (microgateway)")
+		return eventServiceClient, nil
+	}
+
+	// Try AI Studio SDK shared connection (for studio runtime)
+	conn = ai_studio_sdk.GetSharedBrokerConnection()
 	if conn != nil {
 		stdlog.Printf("[EventSDK] ✅ getEventServiceClient: using shared broker connection from AI Studio SDK")
 		eventServiceClient = pb.NewPluginEventServiceClient(conn)
-		log.Info().Msg("Event service client created via shared broker connection")
+		log.Info().Msg("Event service client created via shared broker connection (ai_studio)")
 		return eventServiceClient, nil
 	}
 
 	// Fall back to dialing if no shared connection exists yet
-	// This happens if the event service is used before any AI Studio SDK call
-	stdlog.Printf("[EventSDK] getEventServiceClient: no shared connection, attempting to dial")
+	// This happens if the event service is used before any SDK call
+	stdlog.Printf("[EventSDK] getEventServiceClient: no shared connection from either SDK, attempting to dial")
 
 	// Prefer session broker if active (new session-based pattern)
 	broker := GetSessionBroker()

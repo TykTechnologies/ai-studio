@@ -123,20 +123,35 @@ func (p *LLMRateLimiterPlugin) Initialize(ctx plugin_sdk.Context, config map[str
 
 // OnSessionReady implements plugin_sdk.SessionAware - called when the session broker is ready
 func (p *LLMRateLimiterPlugin) OnSessionReady(ctx plugin_sdk.Context) {
-	log.Printf("%s: OnSessionReady called - session broker is now active", PluginName)
+	log.Printf("%s: OnSessionReady called - session broker is now active (runtime: %s)", PluginName, ctx.Runtime)
 
 	// Warm up the Service API connection by making a simple call.
 	// This establishes the broker connection early, avoiding timeout errors on first RPC call.
-	if ai_studio_sdk.IsInitialized() {
-		log.Printf("%s: Warming up Service API connection...", PluginName)
-		_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+	// Use the appropriate SDK based on runtime context.
+	if ctx.Runtime == plugin_sdk.RuntimeGateway {
+		// Gateway runtime: Use Gateway services to warm up the microgateway SDK connection
+		log.Printf("%s: Warming up Gateway Service API connection...", PluginName)
+		// Use a simple KV read to establish the broker connection
+		// The key doesn't need to exist - we're just warming up the connection
+		_, err := ctx.Services.KV().Read(ctx, "warmup-probe")
 		if err != nil {
-			log.Printf("%s: Service API warmup failed: %v (this may be OK if not in Studio runtime)", PluginName, err)
+			log.Printf("%s: Gateway Service API warmup completed (probe key not found is expected): %v", PluginName, err)
 		} else {
-			log.Printf("%s: Service API connection established successfully", PluginName)
+			log.Printf("%s: Gateway Service API connection established successfully", PluginName)
 		}
 	} else {
-		log.Printf("%s: SDK not initialized yet, skipping warmup", PluginName)
+		// Studio runtime: Use AI Studio SDK
+		if ai_studio_sdk.IsInitialized() {
+			log.Printf("%s: Warming up Studio Service API connection...", PluginName)
+			_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+			if err != nil {
+				log.Printf("%s: Studio Service API warmup failed: %v", PluginName, err)
+			} else {
+				log.Printf("%s: Studio Service API connection established successfully", PluginName)
+			}
+		} else {
+			log.Printf("%s: Studio SDK not initialized yet, skipping warmup", PluginName)
+		}
 	}
 }
 

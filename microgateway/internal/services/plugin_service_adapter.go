@@ -10,7 +10,8 @@ import (
 // PluginServiceAdapter adapts PluginService to match the plugins.PluginServiceInterface
 // This breaks the circular dependency between services and plugins packages
 type PluginServiceAdapter struct {
-	pluginService PluginServiceInterface
+	pluginService     PluginServiceInterface
+	managementService ManagementServiceInterface
 }
 
 // NewPluginServiceAdapter creates a new adapter for the plugin service
@@ -18,6 +19,11 @@ func NewPluginServiceAdapter(pluginService PluginServiceInterface) *PluginServic
 	return &PluginServiceAdapter{
 		pluginService: pluginService,
 	}
+}
+
+// SetManagementService sets the management service for LLM queries
+func (a *PluginServiceAdapter) SetManagementService(mgmt ManagementServiceInterface) {
+	a.managementService = mgmt
 }
 
 // GetPlugin implements plugins.PluginServiceInterface
@@ -145,4 +151,25 @@ func (a *PluginServiceAdapter) GetPluginsForLLM(llmID uint) ([]plugins.PluginDat
 	}
 
 	return result, nil
+}
+
+// GetAllLLMIDs implements plugins.PluginServiceInterface
+// Returns all LLM IDs for pre-warming plugins assigned to LLMs
+func (a *PluginServiceAdapter) GetAllLLMIDs() ([]uint, error) {
+	if a.managementService == nil {
+		return nil, nil // No management service, return empty list
+	}
+
+	// Get all active LLMs (page 0 = all, limit 10000 = get all)
+	llms, _, err := a.managementService.ListLLMs(0, 10000, "", true)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uint, len(llms))
+	for i, llm := range llms {
+		ids[i] = llm.ID
+	}
+
+	return ids, nil
 }

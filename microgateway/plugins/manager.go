@@ -33,7 +33,8 @@ type PluginServiceInterface interface {
 	GetPlugin(id uint) (PluginData, error)
 	GetPluginsByLLMID(llmID uint) ([]PluginData, error)
 	GetPluginsForLLM(llmID uint) ([]PluginData, error)
-	GetAllPlugins() ([]PluginData, error) // New method for pre-warming
+	GetAllPlugins() ([]PluginData, error)
+	GetAllLLMIDs() ([]uint, error) // Get all LLM IDs for pre-warming plugins
 }
 
 // PluginData represents plugin data from database (minimal interface)
@@ -153,11 +154,11 @@ var HandshakeConfig = plugin.HandshakeConfig{
 }
 
 // pluginLogger creates an hclog logger for go-plugin
-// Using Error level to see critical plugin output while suppressing noise
+// Using Debug level to see plugin output including OnSessionReady and event subscription logs
 func pluginLogger() hclog.Logger {
 	return hclog.New(&hclog.LoggerOptions{
 		Name:   "plugin",
-		Level:  hclog.Error, // Show Error level to see critical plugin output
+		Level:  hclog.Debug, // Show Debug level to see plugin logs
 		Output: os.Stderr,   // Output to stderr so we can see plugin logs
 	})
 }
@@ -410,7 +411,16 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	// Only if we have a client wrapper with session support
 	if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
 		brokerIDUint, _ := strconv.ParseUint(configStrings["_service_broker_id"], 10, 32)
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Uint64("broker_id", brokerIDUint).
+			Msg("Starting session loop for plugin")
 		go pm.runPluginSessionLoop(pluginID, clientWrapper, uint32(brokerIDUint))
+	} else {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("raw_type", fmt.Sprintf("%T", raw)).
+			Msg("⚠️ Plugin does NOT support session loop (not a MicrogatewayPluginClient)")
 	}
 
 	// Mark as ready (success) - call safe version after releasing lock
@@ -962,6 +972,8 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 			Cmd:              exec.Command(cmdPath),
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 			Logger:           pluginLogger(),
+			SyncStdout:       os.Stdout, // Forward plugin stdout to microgateway
+			SyncStderr:       os.Stderr, // Forward plugin stderr to microgateway
 		}), nil
 	}
 }
@@ -1034,6 +1046,8 @@ func (pm *PluginManager) createOCIPluginClient(command string) (*plugin.Client, 
 		Cmd:              exec.Command(localPlugin.ExecutablePath),
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 		Logger:           pluginLogger(),
+		SyncStdout:       os.Stdout, // Forward plugin stdout to microgateway
+		SyncStderr:       os.Stderr, // Forward plugin stderr to microgateway
 	}), nil
 }
 
@@ -1987,23 +2001,46 @@ func (pm *PluginManager) PreFetchOCIPlugin(command string) error {
 	return nil
 }
 
-// PrewarmAllPlugins loads all plugins at startup to establish event subscriptions.
+// PrewarmAllPlugins loads plugins assigned to LLMs at startup to establish event subscriptions.
 // This is called after SetEventBus to ensure plugins can subscribe to events.
-// The LLM-to-plugin assignments are still respected at request time.
+// Only plugins that are actually assigned to LLMs on this edge are loaded.
 func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
 	log.Debug().Msg("Starting plugin pre-warming for event subscriptions")
 
-	// Get all plugins from database
-	allPlugins, err := pm.service.GetAllPlugins()
+	// Get all LLM IDs on this edge
+	llmIDs, err := pm.service.GetAllLLMIDs()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get plugins for pre-warming")
-		return fmt.Errorf("failed to get plugins for pre-warming: %w", err)
+		log.Error().Err(err).Msg("Failed to get LLM IDs for pre-warming")
+		return fmt.Errorf("failed to get LLM IDs for pre-warming: %w", err)
 	}
+
+	log.Debug().Int("llm_count", len(llmIDs)).Msg("Found LLMs for plugin pre-warming")
+
+	// Collect unique plugins from all LLMs
+	pluginsSeen := make(map[uint]bool)
+	var pluginsToLoad []PluginData
+
+	for _, llmID := range llmIDs {
+		plugins, err := pm.service.GetPluginsForLLM(llmID)
+		if err != nil {
+			log.Warn().Uint("llm_id", llmID).Err(err).Msg("Failed to get plugins for LLM")
+			continue
+		}
+
+		for _, plugin := range plugins {
+			if !pluginsSeen[plugin.ID] {
+				pluginsSeen[plugin.ID] = true
+				pluginsToLoad = append(pluginsToLoad, plugin)
+			}
+		}
+	}
+
+	log.Debug().Int("unique_plugins", len(pluginsToLoad)).Msg("Found unique plugins to pre-warm")
 
 	var loadedCount int
 	var preWarmErrors []error
 
-	for _, plugin := range allPlugins {
+	for _, plugin := range pluginsToLoad {
 		// Skip plugins that are already loaded
 		pm.mu.RLock()
 		_, exists := pm.loadedPlugins[plugin.ID]
@@ -2045,13 +2082,14 @@ func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
 
 	if len(preWarmErrors) > 0 {
 		log.Warn().
-			Int("total_plugins", len(allPlugins)).
+			Int("total_plugins", len(pluginsToLoad)).
 			Int("loaded_plugins", loadedCount).
 			Int("failed_plugins", len(preWarmErrors)).
 			Msg("Plugin pre-warming completed with some errors")
 	} else {
 		log.Info().
 			Int("plugins_prewarmed", loadedCount).
+			Int("llms_checked", len(llmIDs)).
 			Msg("Plugin pre-warming completed successfully - event subscriptions should be active")
 	}
 
