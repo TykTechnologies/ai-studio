@@ -35,13 +35,72 @@ func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedReques
 }
 ```
 
-## Initialization
+## Initialization and Connection Warmup
 
-For Service API access, plugins must extract the broker ID during initialization:
+For Service API access in AI Studio, plugins use a **session-based broker pattern**. The SDK handles most of the setup automatically, but there's a critical pattern you must follow for reliable Service API access.
+
+### The Connection Warmup Pattern
+
+**Critical**: The go-plugin broker only accepts **ONE connection per broker ID**. If your plugin uses both the Event Service and the Management Service API, whichever service dials first will succeed, and the connection is shared between them.
+
+To ensure reliable Service API access, implement `SessionAware` and **warm up the connection in `OnSessionReady`**:
+
+```go
+import (
+    "context"
+    "log"
+
+    "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type MyPlugin struct {
+    plugin_sdk.BasePlugin
+    services plugin_sdk.ServiceBroker
+}
+
+func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    p.services = ctx.Services
+    return nil
+}
+
+// OnSessionReady implements plugin_sdk.SessionAware
+// CRITICAL: Warm up the Service API connection here!
+func (p *MyPlugin) OnSessionReady(ctx plugin_sdk.Context) {
+    log.Printf("Session ready - warming up service API connection...")
+
+    // Eagerly establish the broker connection by making a lightweight API call.
+    // This ensures the connection is ready before any RPC calls come in.
+    if ai_studio_sdk.IsInitialized() {
+        _, err := ai_studio_sdk.GetPluginsCount(context.Background())
+        if err != nil {
+            log.Printf("Service API warmup failed: %v", err)
+        } else {
+            log.Printf("Service API connection established successfully")
+        }
+    }
+}
+
+func (p *MyPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+    log.Printf("Session closing")
+}
+```
+
+### Why Warmup Is Required
+
+Without the warmup pattern, you may encounter **"timeout waiting for connection info"** errors when your plugin tries to use the Service API during an RPC call. This happens because:
+
+1. The broker connection is time-sensitive and must be established early
+2. Dialing late (during an RPC call from the UI) may fail if timing is off
+3. Event subscriptions and Service API calls share the same underlying connection
+
+### Legacy Pattern (Still Supported)
+
+The older pattern of extracting the broker ID manually during `Initialize` still works but is not recommended:
 
 ```go
 func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
-    // Extract broker ID for Service API access
+    // Extract broker ID for Service API access (automatic with SessionAware)
     brokerIDStr := ""
     if id, ok := config["_service_broker_id"]; ok {
         brokerIDStr = id
@@ -58,6 +117,8 @@ func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) 
     return nil
 }
 ```
+
+**Note**: The SDK now handles broker ID extraction automatically via `OpenSession`. You only need to implement `SessionAware` and warm up the connection.
 
 ## Universal Services
 
@@ -1759,14 +1820,15 @@ func (p *MyPlugin) refreshData(ctx plugin_sdk.Context, schedule *plugin_sdk.Sche
 
 ## Best Practices Summary
 
-1. **Runtime Detection**: Always check `ctx.Runtime` before calling runtime-specific services
-2. **Type Assertions**: Gateway and Studio services return `interface{}`, type assert to correct response types
-3. **Error Handling**: Always check errors from Service API calls
-4. **Logging**: Use `ctx.Services.Logger()` for consistent structured logging
-5. **KV Storage**: Understand storage differences between Studio (durable) and Gateway (ephemeral)
-6. **Broker ID**: Extract and set broker ID during plugin initialization for Service API access
-7. **Context Timeouts**: Use context timeouts for external calls
-8. **Caching**: Cache frequently accessed data in KV storage to reduce API calls
+1. **Connection Warmup**: Implement `SessionAware` and warm up Service API in `OnSessionReady` - this is critical for reliable API access
+2. **Runtime Detection**: Always check `ctx.Runtime` before calling runtime-specific services
+3. **Type Assertions**: Gateway and Studio services return `interface{}`, type assert to correct response types
+4. **Error Handling**: Always check errors from Service API calls
+5. **Logging**: Use `ctx.Services.Logger()` for consistent structured logging
+6. **KV Storage**: Understand storage differences between Studio (durable) and Gateway (ephemeral)
+7. **Shared Connections**: Event Service and Management Service API share the same broker connection - one warmup establishes both
+8. **Context Timeouts**: Use context timeouts for external calls
+9. **Caching**: Cache frequently accessed data in KV storage to reduce API calls
 
 ## Complete Examples
 

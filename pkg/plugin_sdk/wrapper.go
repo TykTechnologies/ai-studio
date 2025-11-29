@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	stdlog "log"
-	"os"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
-	"github.com/rs/zerolog/log"
 )
 
 // pluginServerWrapper implements pb.PluginServiceServer
@@ -78,6 +76,14 @@ func (w *pluginServerWrapper) Ping(ctx context.Context, req *pb.PingRequest) (*p
 // Shutdown implements pb.PluginServiceServer
 func (w *pluginServerWrapper) Shutdown(ctx context.Context, req *pb.ShutdownRequest) (*pb.ShutdownResponse, error) {
 	pluginCtx := w.createPluginContext(ctx, nil)
+
+	// Close any active session
+	CloseSession("shutdown")
+
+	// Cleanup service broker resources (event subscriptions, etc.)
+	if broker, ok := w.services.(*defaultServiceBroker); ok {
+		broker.Cleanup()
+	}
 
 	err := w.plugin.Shutdown(pluginCtx)
 	if err != nil {
@@ -384,8 +390,14 @@ func (w *pluginServerWrapper) Call(ctx context.Context, req *pb.CallRequest) (*p
 		}, nil
 	}
 
-	// Note: The server already injects the broker ID into the payload JSON
-	// We just pass it through to the plugin's RPC handler
+	// Set service broker ID if provided (for service API access)
+	// In AI Studio, each RPC call may get a per-request broker ID that should
+	// be used for service API calls during this RPC.
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		stdlog.Printf("[Call] Setting ai_studio_sdk broker ID to %d for RPC method %s", req.ServiceBrokerId, req.Method)
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
 	payload := []byte(req.Payload)
 
 	// Call the plugin's RPC handler
@@ -586,31 +598,21 @@ func (w *pluginServerWrapper) AcceptEdgePayload(ctx context.Context, req *pb.Edg
 // OpenSession implements pb.PluginServiceServer
 // This is the key method for session-based broker management.
 // It blocks until timeout or CloseSession is called, keeping the broker alive.
+//
+// The SDK automatically handles all broker setup - plugins don't need to do anything.
+// Service APIs (ai_studio_sdk, microgateway SDK) will "just work" after this is called.
 func (w *pluginServerWrapper) OpenSession(ctx context.Context, req *pb.OpenSessionRequest) (*pb.OpenSessionResponse, error) {
 	// Generate a session ID
 	sessionID := fmt.Sprintf("session-%d-%d", req.PluginId, req.ServiceBrokerId)
-
-	// Use multiple output methods for visibility
-	fmt.Fprintf(os.Stderr, "🔔 [OpenSession] RPC received by plugin: sessionID=%s, pluginID=%d, brokerID=%d\n", sessionID, req.PluginId, req.ServiceBrokerId)
-	log.Error().
-		Str("session_id", sessionID).
-		Uint32("plugin_id", req.PluginId).
-		Uint32("broker_id", req.ServiceBrokerId).
-		Msg("🔔 [OpenSession] RPC received by plugin")
 
 	stdlog.Printf("[OpenSession] Starting: sessionID=%s, pluginID=%d, brokerID=%d", sessionID, req.PluginId, req.ServiceBrokerId)
 
 	// Get the stored broker and verify it's valid
 	broker := GetStoredBroker()
-	log.Error().
-		Bool("broker_nil", broker == nil).
-		Msg("🔔 [OpenSession] GetStoredBroker result")
-	stdlog.Printf("[OpenSession] GetStoredBroker returned: broker=%v (nil=%v)", broker, broker == nil)
 
 	// Initialize session state
 	firstSession, err := InitSession(sessionID, req.ServiceBrokerId, broker)
 	if err != nil {
-		log.Error().Err(err).Msg("❌ [OpenSession] InitSession failed")
 		stdlog.Printf("[OpenSession] InitSession failed: %v", err)
 		return &pb.OpenSessionResponse{
 			Success:      false,
@@ -618,25 +620,33 @@ func (w *pluginServerWrapper) OpenSession(ctx context.Context, req *pb.OpenSessi
 		}, nil
 	}
 
-	log.Error().
-		Bool("first_session", firstSession).
-		Msg("🔔 [OpenSession] InitSession succeeded")
+	// ========================================================================
+	// CRITICAL: Set broker IDs for ALL SDKs so service APIs work automatically
+	// This is the key to good DX - plugins don't need to know about broker IDs
+	// ========================================================================
 
-	// Set event service broker ID for this session
+	// Set event service broker ID
 	SetEventServiceBrokerID(req.ServiceBrokerId)
-	stdlog.Printf("[OpenSession] Set event service broker ID: %d", req.ServiceBrokerId)
 
-	// If this is the first session, notify plugin if it implements SessionAware
+	// Set AI Studio SDK broker ID (for studio runtime)
+	ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	ai_studio_sdk.SetPluginID(req.PluginId)
+
+	// Set Microgateway SDK broker ID (for gateway runtime)
+	// This is done via the build-tag-controlled functions
+	setBrokerIDForMicrogatewaySDK(req.ServiceBrokerId)
+	setPluginIDForMicrogatewaySDK(req.PluginId)
+
+	stdlog.Printf("[OpenSession] SDK broker IDs configured: brokerID=%d, pluginID=%d", req.ServiceBrokerId, req.PluginId)
+
+	// If this is the first session, notify plugin if it implements SessionAware (optional)
 	// IMPORTANT: Run this in a goroutine because:
 	// 1. OnSessionReady may call broker.Dial() for event subscriptions
 	// 2. broker.Dial() blocks until the broker server accepts the connection
 	// 3. The broker server can't accept new connections while we're blocking in this RPC handler
 	// By running async, we allow this RPC to proceed to WaitForClose, which lets the broker serve.
-	fmt.Fprintf(os.Stderr, "🔔 [OpenSession] firstSession=%v, checking SessionAware...\n", firstSession)
 	if firstSession {
 		if aware, ok := w.plugin.(SessionAware); ok {
-			fmt.Fprintf(os.Stderr, "🔔 [OpenSession] Plugin implements SessionAware, will call OnSessionReady in 500ms\n")
-			log.Error().Msg("🔔 [OpenSession] Plugin implements SessionAware, will call OnSessionReady in 500ms")
 			stdlog.Printf("[OpenSession] Plugin implements SessionAware, will call OnSessionReady in 500ms")
 			pluginCtx := w.createPluginContext(ctx, nil)
 			go func() {
@@ -646,29 +656,16 @@ func (w *pluginServerWrapper) OpenSession(ctx context.Context, req *pb.OpenSessi
 				// The host starts AcceptAndServe before calling OpenSession, but the
 				// listener setup is async. 500ms should be sufficient.
 				time.Sleep(500 * time.Millisecond)
-				fmt.Fprintf(os.Stderr, "🔔 [OpenSession] Calling OnSessionReady NOW\n")
-				log.Error().Msg("🔔 [OpenSession] Calling OnSessionReady now")
 				stdlog.Printf("[OpenSession] Calling OnSessionReady now")
 				aware.OnSessionReady(pluginCtx)
-				fmt.Fprintf(os.Stderr, "🔔 [OpenSession] OnSessionReady RETURNED\n")
-				log.Error().Msg("🔔 [OpenSession] OnSessionReady returned")
 				stdlog.Printf("[OpenSession] OnSessionReady returned")
 			}()
-		} else {
-			fmt.Fprintf(os.Stderr, "🔔 [OpenSession] Plugin does NOT implement SessionAware\n")
-			log.Error().Msg("🔔 [OpenSession] Plugin does NOT implement SessionAware")
 		}
-	} else {
-		fmt.Fprintf(os.Stderr, "🔔 [OpenSession] Not first session, skipping OnSessionReady\n")
-		log.Error().Msg("🔔 [OpenSession] Not first session, skipping OnSessionReady")
 	}
-
-	stdlog.Printf("[OpenSession] Entering WaitForClose with timeout %dms", req.TimeoutMs)
 
 	// Block until timeout or CloseSession
 	// This is where the broker becomes available for dial operations
 	reason := WaitForClose(req.TimeoutMs)
-	stdlog.Printf("[OpenSession] WaitForClose returned with reason: %s", reason)
 
 	// Map reason to proto enum
 	closeReason := pb.OpenSessionResponse_UNKNOWN

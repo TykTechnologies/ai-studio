@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -56,21 +57,8 @@ func NewEchoAgentPlugin() *EchoAgentPlugin {
 func (p *EchoAgentPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
 	log.Printf("🤖 %s: Initialized in %s runtime", PluginName, ctx.Runtime)
 
-	// Extract and set broker ID for service API access
-	brokerIDStr := ""
-	if id, ok := config["_service_broker_id"]; ok {
-		brokerIDStr = id
-	} else if id, ok := config["service_broker_id"]; ok {
-		brokerIDStr = id
-	}
-
-	if brokerIDStr != "" {
-		var brokerID uint32
-		if _, err := fmt.Sscanf(brokerIDStr, "%d", &brokerID); err == nil {
-			ai_studio_sdk.SetServiceBrokerID(brokerID)
-			log.Printf("🤖 %s: Set service broker ID: %d", PluginName, brokerID)
-		}
-	}
+	// Note: Broker ID is now handled automatically by the SDK via OpenSession.
+	// Service API connections are established in OnSessionReady.
 
 	// Parse config for prefix, suffix, etc.
 	if prefix, ok := config["prefix"]; ok {
@@ -110,6 +98,30 @@ func (p *EchoAgentPlugin) Initialize(ctx plugin_sdk.Context, config map[string]s
 func (p *EchoAgentPlugin) Shutdown(ctx plugin_sdk.Context) error {
 	log.Printf("🤖 %s: Shutdown called", PluginName)
 	return nil
+}
+
+// OnSessionReady implements plugin_sdk.SessionAware - called when the session broker is ready
+func (p *EchoAgentPlugin) OnSessionReady(ctx plugin_sdk.Context) {
+	log.Printf("🤖 %s: OnSessionReady called - session broker is now active", PluginName)
+
+	// Warm up the Service API connection by making a simple call.
+	// This establishes the broker connection early, avoiding timeout errors on first LLM call.
+	if ai_studio_sdk.IsInitialized() {
+		log.Printf("🤖 %s: Warming up Service API connection...", PluginName)
+		_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+		if err != nil {
+			log.Printf("🤖 %s: Service API warmup failed: %v (this may be OK if not in Studio runtime)", PluginName, err)
+		} else {
+			log.Printf("🤖 %s: Service API connection established successfully", PluginName)
+		}
+	} else {
+		log.Printf("🤖 %s: SDK not initialized yet, skipping warmup", PluginName)
+	}
+}
+
+// OnSessionClosing implements plugin_sdk.SessionAware - called when the session is closing
+func (p *EchoAgentPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+	log.Printf("🤖 %s: OnSessionClosing called - cleaning up session resources", PluginName)
 }
 
 // GetManifest implements plugin_sdk.UIProvider

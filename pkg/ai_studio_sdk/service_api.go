@@ -52,7 +52,12 @@ func SetServiceBrokerID(brokerID uint32) {
 	defer initMutex.Unlock()
 
 	serviceBrokerID = brokerID
-	log.Info().Uint32("broker_id", brokerID).Msg("✅ Service broker ID set for host service access")
+	log.Info().
+		Uint32("broker_id", brokerID).
+		Bool("sdk_initialized", initialized).
+		Bool("has_grpc_broker", grpcBroker != nil).
+		Str("broker_ptr", fmt.Sprintf("%p", grpcBroker)).
+		Msg("✅ AI Studio SDK: Service broker ID set")
 }
 
 // ExtractBrokerIDFromPayload extracts the broker ID from RPC request payload
@@ -81,13 +86,21 @@ func SetPluginID(id uint32) {
 }
 
 // getServiceClient creates and returns the service client, creating it if necessary
+// Includes retry logic to handle race conditions where the broker server may not be ready yet
 func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClient, error) {
 	if serviceClient != nil {
 		return serviceClient, nil
 	}
 
+	log.Debug().
+		Bool("initialized", initialized).
+		Bool("has_broker", grpcBroker != nil).
+		Uint32("broker_id", serviceBrokerID).
+		Str("broker_ptr", fmt.Sprintf("%p", grpcBroker)).
+		Msg("getServiceClient: checking prerequisites (AI STUDIO SDK dial attempt)")
+
 	if !initialized || grpcBroker == nil {
-		return nil, fmt.Errorf("SDK not initialized - call ai_studio_sdk.Initialize() first")
+		return nil, fmt.Errorf("SDK not initialized - call ai_studio_sdk.Initialize() first (initialized=%v, broker=%v)", initialized, grpcBroker != nil)
 	}
 
 	if serviceBrokerID == 0 {
@@ -95,10 +108,27 @@ func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClie
 	}
 
 	// Dial the brokered server where AI Studio management services are registered
-	// This follows the go-plugin bidirectional pattern
-	conn, err := grpcBroker.Dial(serviceBrokerID)
+	// Retry with backoff to handle race conditions where server may not be ready yet
+	var conn *grpc.ClientConn
+	var err error
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		conn, err = grpcBroker.Dial(serviceBrokerID)
+		if err == nil {
+			break
+		}
+		if i < maxRetries-1 {
+			backoff := time.Duration(50*(i+1)) * time.Millisecond
+			log.Debug().
+				Int("attempt", i+1).
+				Dur("backoff", backoff).
+				Err(err).
+				Msg("Broker dial failed, retrying...")
+			time.Sleep(backoff)
+		}
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial service broker ID %d: %w", serviceBrokerID, err)
+		return nil, fmt.Errorf("failed to dial service broker ID %d after %d attempts: %w", serviceBrokerID, maxRetries, err)
 	}
 
 	// Store connection for sharing with other services (e.g., EventService)
@@ -122,6 +152,21 @@ func GetSharedBrokerConnection() *grpc.ClientConn {
 	initMutex.Lock()
 	defer initMutex.Unlock()
 	return brokerConn
+}
+
+// SetSharedBrokerConnection stores a pre-dialed gRPC connection for shared use.
+// This is called by the event service when it dials first, so ai_studio_sdk can reuse
+// the same connection instead of trying to dial again (which would fail since
+// go-plugin broker only accepts ONE connection per broker ID).
+func SetSharedBrokerConnection(conn *grpc.ClientConn) {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	if brokerConn == nil && conn != nil {
+		brokerConn = conn
+		// Also create the service client immediately since we have the connection
+		serviceClient = mgmtpb.NewAIStudioManagementServiceClient(conn)
+		log.Info().Msg("✅ AI Studio SDK: Shared broker connection set from external source")
+	}
 }
 
 // createPluginContext creates the authentication context for service API calls
@@ -254,11 +299,12 @@ func GetToolsCount(ctx context.Context) (int, error) {
 	return int(resp.TotalCount), nil
 }
 
-// IsInitialized returns whether the SDK has been initialized
+// IsInitialized returns whether the SDK has been initialized AND has a broker ID set.
+// Both conditions must be true for service API calls to work.
 func IsInitialized() bool {
 	initMutex.Lock()
 	defer initMutex.Unlock()
-	return initialized
+	return initialized && serviceBrokerID != 0
 }
 
 // Reset clears the SDK state (for testing)

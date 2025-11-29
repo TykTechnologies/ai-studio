@@ -84,6 +84,7 @@ type LoadedAIStudioPlugin struct {
 	Client          *goplugin.Client
 	GRPCClient      pb.PluginServiceClient
 	ServiceProvider plugin_services.AIStudioServiceProvider // Injected service provider
+	SessionBrokerID uint32                                  // Long-lived broker ID for session-based service API access
 	LoadTime        time.Time
 	IsHealthy       bool
 	LastPing        time.Time
@@ -574,6 +575,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		Client:          client,
 		GRPCClient:      clientWrapper, // Use client wrapper with broker access
 		ServiceProvider: serviceProvider,
+		SessionBrokerID: serviceBrokerID, // Store the long-lived session broker ID
 		LoadTime:        time.Now(),
 		IsHealthy:       true,
 		LastPing:        time.Now(),
@@ -833,16 +835,33 @@ func (m *AIStudioPluginManager) GetServiceProvider(pluginID uint) (plugin_servic
 // UnloadPlugin unloads an AI Studio plugin
 func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	loadedPlugin, exists := m.loadedPlugins[pluginID]
 	if !exists {
+		m.mu.Unlock()
 		return fmt.Errorf("plugin %d is not loaded", pluginID)
 	}
 
+	// Get client wrapper while holding lock
+	clientWrapper, hasClient := loadedPlugin.GRPCClient.(*AIStudioPluginClient)
+
+	// Release lock before closing session (closePluginSession needs the lock)
+	m.mu.Unlock()
+
 	// Close plugin session before shutdown (stops the session loop goroutine)
-	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+	// This must be done without holding the lock to avoid deadlock
+	if hasClient {
 		m.closePluginSession(pluginID, clientWrapper)
+	}
+
+	// Re-acquire lock for the rest of the cleanup
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Re-check that plugin still exists (could have been unloaded by another goroutine)
+	loadedPlugin, exists = m.loadedPlugins[pluginID]
+	if !exists {
+		return nil // Already unloaded
 	}
 
 	// Shutdown plugin gracefully
@@ -1131,89 +1150,15 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 		return nil, fmt.Errorf("failed to marshal RPC payload: %w", err)
 	}
 
-	// Set up per-request broker for service API access (if plugin needs it)
-	var serviceBrokerID uint32
-	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
-		if clientWrapper.broker != nil && clientWrapper.service != nil {
-			// Set up per-request brokered server for this call
-			brokerID := clientWrapper.broker.NextId()
+	// Use the long-lived session broker ID (set up during plugin load)
+	// The session broker is already running and serves all RPC calls for this plugin
+	serviceBrokerID := loadedPlugin.SessionBrokerID
 
-			log.Debug().
-				Uint("plugin_id", pluginID).
-				Str("method", method).
-				Uint32("broker_id", brokerID).
-				Msg("Setting up per-request broker for service API access")
-
-			// Start brokered server for this request
-			// Use a channel to ensure server is ready before proceeding
-			serverReady := make(chan struct{})
-			// Capture event server reference for closure
-			evtServer := clientWrapper.eventServer
-			go func() {
-				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-					// Inject plugin ID into context for all requests on this brokered server
-					pluginIDInterceptor := CreatePluginIDInterceptor(pluginID)
-					opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
-
-					s := grpc.NewServer(opts...)
-
-					// Register AI Studio management services with full implementation
-					// Use factory function to avoid circular import (set by grpc package)
-					if NewAIStudioManagementServerFunc != nil {
-						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
-						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
-							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-							log.Debug().
-								Uint32("broker_id", brokerID).
-								Uint("plugin_id", pluginID).
-								Msg("AI Studio services registered on per-request brokered server with plugin ID context")
-						}
-					} else {
-						log.Error().Msg("NewAIStudioManagementServerFunc not set - cannot create service server")
-					}
-
-					// Register plugin event service if available (for pub/sub support)
-					if evtServer != nil {
-						eventpb.RegisterPluginEventServiceServer(s, evtServer)
-						log.Debug().
-							Uint32("broker_id", brokerID).
-							Uint("plugin_id", pluginID).
-							Msg("Plugin event service registered on per-request brokered server")
-					}
-
-					// Signal that server is ready
-					close(serverReady)
-
-					return s
-				})
-			}()
-
-			// Wait for server to be ready before proceeding (with timeout)
-			select {
-			case <-serverReady:
-				log.Debug().Uint32("broker_id", brokerID).Msg("Brokered server ready for plugin calls")
-			case <-time.After(100 * time.Millisecond):
-				log.Warn().Uint32("broker_id", brokerID).Msg("Brokered server setup timeout - proceeding anyway")
-			}
-
-			serviceBrokerID = brokerID
-		}
-	}
-
-	// Add broker ID to payload if available
-	if serviceBrokerID != 0 {
-		// Add broker ID to the payload so plugin can access it
-		if payload == nil {
-			payload = make(map[string]interface{})
-		}
-		payload["_service_broker_id"] = serviceBrokerID
-
-		// Re-marshal payload with broker ID
-		payloadBytes, err = json.Marshal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal RPC payload with broker ID: %w", err)
-		}
-	}
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("method", method).
+		Uint32("session_broker_id", serviceBrokerID).
+		Msg("Using session broker for RPC call")
 
 	// Call plugin's Call gRPC method
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -1567,10 +1512,27 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 
 // Shutdown gracefully shuts down all loaded plugins
 func (m *AIStudioPluginManager) Shutdown() error {
+	log.Info().Msg("Shutting down AI Studio plugin manager")
+
+	// First, close all plugin sessions (without holding the main lock)
+	// This stops the session loop goroutines and allows clean shutdown
+	m.mu.Lock()
+	sessionsToClose := make(map[uint]*AIStudioPluginClient)
+	for pluginID, loadedPlugin := range m.loadedPlugins {
+		if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+			sessionsToClose[pluginID] = clientWrapper
+		}
+	}
+	m.mu.Unlock()
+
+	// Close sessions without holding the lock (closePluginSession needs the lock internally)
+	for pluginID, client := range sessionsToClose {
+		m.closePluginSession(pluginID, client)
+	}
+
+	// Now unload all plugins
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	log.Info().Msg("Shutting down AI Studio plugin manager")
 
 	for pluginID := range m.loadedPlugins {
 		if err := m.unloadPluginUnsafe(pluginID); err != nil {

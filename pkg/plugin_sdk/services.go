@@ -70,6 +70,15 @@ func (b *defaultServiceBroker) Events() EventService {
 	return b.eventService
 }
 
+// Cleanup releases all resources held by the service broker.
+// This should be called during plugin shutdown.
+func (b *defaultServiceBroker) Cleanup() {
+	// Cleanup event service subscriptions
+	if lazy, ok := b.eventService.(*lazyEventService); ok {
+		lazy.Cleanup()
+	}
+}
+
 // ===== KV Service (Runtime-Aware) =====
 
 type defaultKVService struct {

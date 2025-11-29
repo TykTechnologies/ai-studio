@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
@@ -16,18 +17,48 @@ var manifestJSON []byte
 // SchedulerDemoPlugin demonstrates the scheduler capability
 type SchedulerDemoPlugin struct {
 	plugin_sdk.BasePlugin
+	runtime plugin_sdk.RuntimeType
 }
 
-// Initialize sets up the plugin and creates API-managed schedules
+// Initialize sets up the plugin
 func (p *SchedulerDemoPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
-	// For AI Studio runtime, create API-managed schedules
-	if ctx.Runtime == plugin_sdk.RuntimeStudio {
-		if err := p.setupAPISchedules(ctx); err != nil {
-			return fmt.Errorf("failed to setup API schedules: %w", err)
+	log.Printf("scheduler-demo: Initialized in %s runtime", ctx.Runtime)
+
+	// Store runtime for use in OnSessionReady
+	p.runtime = ctx.Runtime
+
+	// Note: Broker ID is now handled automatically by the SDK via OpenSession.
+	// API-managed schedules are created in OnSessionReady when the broker is ready.
+
+	return nil
+}
+
+// OnSessionReady implements plugin_sdk.SessionAware - called when the session broker is ready
+func (p *SchedulerDemoPlugin) OnSessionReady(ctx plugin_sdk.Context) {
+	log.Printf("scheduler-demo: OnSessionReady called - session broker is now active")
+
+	// Warm up the Service API connection
+	if ai_studio_sdk.IsInitialized() {
+		log.Printf("scheduler-demo: Warming up Service API connection...")
+		_, err := ai_studio_sdk.GetPluginsCount(context.Background())
+		if err != nil {
+			log.Printf("scheduler-demo: Service API warmup failed: %v (this may be OK if not in Studio runtime)", err)
+		} else {
+			log.Printf("scheduler-demo: Service API connection established successfully")
 		}
 	}
 
-	return nil
+	// For AI Studio runtime, create API-managed schedules now that the broker is ready
+	if p.runtime == plugin_sdk.RuntimeStudio {
+		if err := p.setupAPISchedules(ctx); err != nil {
+			log.Printf("scheduler-demo: Failed to setup API schedules: %v", err)
+		}
+	}
+}
+
+// OnSessionClosing implements plugin_sdk.SessionAware - called when the session is closing
+func (p *SchedulerDemoPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+	log.Printf("scheduler-demo: OnSessionClosing called - cleaning up session resources")
 }
 
 // setupAPISchedules creates schedules via the service API

@@ -98,6 +98,12 @@ func getEventServiceClient() (pb.PluginEventServiceClient, error) {
 	}
 
 	stdlog.Printf("[EventSDK] ✅ getEventServiceClient: dial successful, creating gRPC client")
+
+	// CRITICAL: Share this connection with ai_studio_sdk so it doesn't try to dial again!
+	// The go-plugin broker only accepts ONE connection per broker ID, so we must share.
+	ai_studio_sdk.SetSharedBrokerConnection(dialConn)
+	stdlog.Printf("[EventSDK] ✅ Shared broker connection with ai_studio_sdk")
+
 	eventServiceClient = pb.NewPluginEventServiceClient(dialConn)
 	log.Info().
 		Uint32("broker_id", brokerID).
@@ -465,4 +471,20 @@ func (l *lazyEventService) SubscribeAll(handler EventHandler) (string, error) {
 
 func (l *lazyEventService) Unsubscribe(subscriptionID string) error {
 	return l.getInner().Unsubscribe(subscriptionID)
+}
+
+// Cleanup cancels all active subscriptions and releases resources.
+// This should be called during plugin shutdown.
+func (l *lazyEventService) Cleanup() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if !l.initialized {
+		return
+	}
+
+	// Check if the inner service has a cleanup method
+	if impl, ok := l.inner.(*eventServiceImpl); ok {
+		impl.cleanup()
+	}
 }

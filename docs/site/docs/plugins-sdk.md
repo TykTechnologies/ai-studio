@@ -766,6 +766,179 @@ See working examples in [`examples/plugins/`](../../../examples/plugins/) for in
 - Use secure defaults
 - Follow least privilege principle
 
+## Session-Based Broker Pattern
+
+Plugins running in AI Studio use a **session-based broker pattern** for Service API access. Understanding this pattern is critical for plugins that need to call host APIs (like `ai_studio_sdk.CreateLLM()`, `ai_studio_sdk.ListApps()`, etc.).
+
+### How It Works
+
+1. **Plugin loads**: The host creates a long-lived gRPC broker connection
+2. **Session opens**: The host calls `OpenSession` on the plugin, providing the broker ID
+3. **OnSessionReady callback**: For plugins implementing `SessionAware`, this signals the broker is ready
+4. **Service API available**: The plugin can now dial the broker and call host APIs
+
+### The SessionAware Interface
+
+Plugins that need early access to Service APIs should implement `SessionAware`:
+
+```go
+type SessionAware interface {
+    OnSessionReady(ctx Context)    // Called when broker connection is established
+    OnSessionClosing(ctx Context)  // Called before session closes
+}
+```
+
+### Connection Warmup Pattern (Critical!)
+
+**Important**: The go-plugin broker only accepts **ONE connection per broker ID**. If your plugin uses both the Event Service and the Management Service API, whichever dials first will succeed, and the connection must be shared.
+
+The SDK handles this automatically, but you should **warm up the connection early** in `OnSessionReady` to ensure it's established before any RPC calls come in:
+
+```go
+type MyPlugin struct {
+    plugin_sdk.BasePlugin
+    services plugin_sdk.ServiceBroker
+}
+
+func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    p.services = ctx.Services
+    return nil
+}
+
+// OnSessionReady implements plugin_sdk.SessionAware
+// This is called when the session-based broker connection is established.
+func (p *MyPlugin) OnSessionReady(ctx plugin_sdk.Context) {
+    log.Printf("Session ready - warming up service API connection...")
+
+    // Eagerly establish the broker connection by making a simple API call.
+    // This "warms up" the connection so subsequent RPC calls don't need to dial.
+    if ai_studio_sdk.IsInitialized() {
+        // Make a lightweight API call to establish the connection
+        _, err := ai_studio_sdk.GetPluginsCount(context.Background())
+        if err != nil {
+            log.Printf("Service API warmup failed: %v", err)
+        } else {
+            log.Printf("Service API connection established successfully")
+        }
+    }
+}
+
+// OnSessionClosing implements plugin_sdk.SessionAware
+func (p *MyPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+    log.Printf("Session closing - cleaning up resources")
+}
+```
+
+### Why Warmup Is Important
+
+Without warmup, you may encounter "timeout waiting for connection info" errors when your plugin tries to use the Service API during an RPC call. This happens because:
+
+1. The broker connection is time-sensitive
+2. Dialing late (during RPC) may fail if the broker has timed out
+3. Event subscriptions and Service API calls share the same connection
+
+### Complete Example: Plugin with Service API and Events
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type MyServicePlugin struct {
+    plugin_sdk.BasePlugin
+    services      plugin_sdk.ServiceBroker
+    eventSubID    string
+}
+
+func NewMyServicePlugin() *MyServicePlugin {
+    return &MyServicePlugin{
+        BasePlugin: plugin_sdk.NewBasePlugin("my-service-plugin", "1.0.0", "Plugin using Service API"),
+    }
+}
+
+func (p *MyServicePlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    p.services = ctx.Services
+    log.Printf("Initialized in %s runtime", ctx.Runtime)
+    return nil
+}
+
+// OnSessionReady - warm up connections and set up subscriptions
+func (p *MyServicePlugin) OnSessionReady(ctx plugin_sdk.Context) {
+    log.Printf("Session ready")
+
+    // 1. Warm up Service API connection
+    if ai_studio_sdk.IsInitialized() {
+        _, err := ai_studio_sdk.GetPluginsCount(context.Background())
+        if err != nil {
+            log.Printf("Service API warmup failed: %v", err)
+        } else {
+            log.Printf("Service API connection ready")
+        }
+    }
+
+    // 2. Set up event subscriptions (uses same connection)
+    if p.services != nil {
+        events := p.services.Events()
+        if events != nil {
+            subID, err := events.Subscribe("config.updated", p.handleConfigUpdate)
+            if err != nil {
+                log.Printf("Failed to subscribe to events: %v", err)
+            } else {
+                p.eventSubID = subID
+                log.Printf("Subscribed to config.updated events")
+            }
+        }
+    }
+}
+
+func (p *MyServicePlugin) handleConfigUpdate(ev plugin_sdk.Event) {
+    log.Printf("Received config update: %s", ev.Topic)
+    // Handle the event...
+}
+
+func (p *MyServicePlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+    // Clean up event subscription
+    if p.eventSubID != "" && p.services != nil {
+        p.services.Events().Unsubscribe(p.eventSubID)
+    }
+}
+
+// HandleRPC - called from UI, Service API is already warmed up
+func (p *MyServicePlugin) HandleRPC(method string, payload []byte) ([]byte, error) {
+    // Service API calls will work because connection was warmed up in OnSessionReady
+    llms, err := ai_studio_sdk.ListLLMs(context.Background(), 1, 10)
+    if err != nil {
+        return nil, err
+    }
+    // Process llms...
+    return []byte(`{"success": true}`), nil
+}
+
+func main() {
+    plugin_sdk.Serve(NewMyServicePlugin())
+}
+```
+
+### Troubleshooting Connection Issues
+
+**Error: "timeout waiting for connection info"**
+- Plugin is trying to dial the broker too late
+- Solution: Implement `SessionAware` and warm up the connection in `OnSessionReady`
+
+**Error: "service broker ID not set"**
+- The broker ID wasn't extracted from config
+- Solution: The SDK handles this automatically via `OpenSession`, but verify your plugin isn't overriding the broker setup
+
+**Error: "SDK not initialized"**
+- `ai_studio_sdk.Initialize()` wasn't called or failed
+- Solution: Check logs for initialization errors during plugin startup
+
 ## Migration from Old SDKs
 
 If you have existing plugins using the old Microgateway SDK (`microgateway/plugins/sdk`) or AI Studio SDK (`pkg/ai_studio_sdk`), see the [Migration Guide](plugins-migration-guide.md) for step-by-step instructions.
