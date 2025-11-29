@@ -18,6 +18,8 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -136,6 +138,7 @@ type PluginManager struct {
 
 	// Service broker for bidirectional plugin communication
 	managementServer interface{} // MicrogatewayManagementServiceServer (interface to avoid import cycle)
+	eventServer      interface{} // PluginEventServiceServer for plugin pub/sub (interface to avoid import cycle)
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -327,7 +330,14 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	// This way the broker ID is available in the first and only Initialize call
 	if pm.managementServer != nil {
 		if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
-			setupBrokerID, err := clientWrapper.SetupServiceBroker(pm.managementServer)
+			// Use SetupServiceBrokerWithEvents if event server is available
+			var setupBrokerID uint32
+			var err error
+			if pm.eventServer != nil {
+				setupBrokerID, err = clientWrapper.SetupServiceBrokerWithEvents(pm.managementServer, pm.eventServer)
+			} else {
+				setupBrokerID, err = clientWrapper.SetupServiceBroker(pm.managementServer)
+			}
 			if err != nil {
 				log.Warn().
 					Uint("plugin_id", pluginID).
@@ -337,6 +347,7 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 				log.Debug().
 					Uint("plugin_id", pluginID).
 					Uint32("broker_id", setupBrokerID).
+					Bool("has_event_server", pm.eventServer != nil).
 					Msg("✅ Service broker setup complete - plugin can now access host services")
 
 				// Add broker ID to config so plugin receives it in Initialize
@@ -1392,6 +1403,45 @@ func (pm *PluginManager) GetManagementServer() interface{} {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	return pm.managementServer
+}
+
+// SetEventServer sets the plugin event server for pub/sub support
+func (pm *PluginManager) SetEventServer(server interface{}) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.eventServer = server
+	log.Debug().Msg("Event server set for plugin manager service broker")
+}
+
+// GetEventServer returns the plugin event server
+func (pm *PluginManager) GetEventServer() interface{} {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return pm.eventServer
+}
+
+// SetEventBus creates a PluginEventServer from the given event bus and node ID.
+// This is a convenience method that creates the server internally.
+// The bus should implement eventbridge.Bus interface.
+func (pm *PluginManager) SetEventBus(bus interface{}, nodeID string) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	if bus == nil {
+		return
+	}
+
+	// Cast to eventbridge.Bus
+	eventBus, ok := bus.(eventbridge.Bus)
+	if !ok {
+		log.Warn().Msg("SetEventBus: provided bus does not implement eventbridge.Bus interface")
+		return
+	}
+
+	pm.eventServer = sdk.NewPluginEventServer(eventBus, nodeID)
+	log.Debug().
+		Str("node_id", nodeID).
+		Msg("Plugin event server created from event bus")
 }
 
 // LoadDeferredBuiltinPlugins loads any built-in plugins that were deferred during initial load

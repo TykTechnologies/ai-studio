@@ -190,6 +190,7 @@ require (
 	github.com/redis/rueidis v1.0.34 // indirect
 	github.com/russellhaering/goxmldsig v1.4.0 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
+	github.com/simonfxr/pubsub v0.0.5 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tidwall/gjson v1.17.1 // indirect

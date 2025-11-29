@@ -298,6 +298,7 @@ type EdgeMessage struct {
 	//	*EdgeMessage_ConfigRequest
 	//	*EdgeMessage_Unregistration
 	//	*EdgeMessage_ReloadResponse
+	//	*EdgeMessage_Event
 	Message       isEdgeMessage_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -385,6 +386,15 @@ func (x *EdgeMessage) GetReloadResponse() *ConfigurationReloadResponse {
 	return nil
 }
 
+func (x *EdgeMessage) GetEvent() *EventFrame {
+	if x != nil {
+		if x, ok := x.Message.(*EdgeMessage_Event); ok {
+			return x.Event
+		}
+	}
+	return nil
+}
+
 type isEdgeMessage_Message interface {
 	isEdgeMessage_Message()
 }
@@ -406,7 +416,11 @@ type EdgeMessage_Unregistration struct {
 }
 
 type EdgeMessage_ReloadResponse struct {
-	ReloadResponse *ConfigurationReloadResponse `protobuf:"bytes,5,opt,name=reload_response,json=reloadResponse,proto3,oneof"` // NEW: Reload status reporting
+	ReloadResponse *ConfigurationReloadResponse `protobuf:"bytes,5,opt,name=reload_response,json=reloadResponse,proto3,oneof"` // Reload status reporting
+}
+
+type EdgeMessage_Event struct {
+	Event *EventFrame `protobuf:"bytes,6,opt,name=event,proto3,oneof"` // Event bridge: events from edge to control
 }
 
 func (*EdgeMessage_Registration) isEdgeMessage_Message() {}
@@ -419,6 +433,8 @@ func (*EdgeMessage_Unregistration) isEdgeMessage_Message() {}
 
 func (*EdgeMessage_ReloadResponse) isEdgeMessage_Message() {}
 
+func (*EdgeMessage_Event) isEdgeMessage_Message() {}
+
 // ControlMessage is sent from control to edge
 type ControlMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -430,6 +446,7 @@ type ControlMessage struct {
 	//	*ControlMessage_HeartbeatResponse
 	//	*ControlMessage_Error
 	//	*ControlMessage_ReloadRequest
+	//	*ControlMessage_Event
 	Message       isControlMessage_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -526,6 +543,15 @@ func (x *ControlMessage) GetReloadRequest() *ConfigurationReloadRequest {
 	return nil
 }
 
+func (x *ControlMessage) GetEvent() *EventFrame {
+	if x != nil {
+		if x, ok := x.Message.(*ControlMessage_Event); ok {
+			return x.Event
+		}
+	}
+	return nil
+}
+
 type isControlMessage_Message interface {
 	isControlMessage_Message()
 }
@@ -551,7 +577,11 @@ type ControlMessage_Error struct {
 }
 
 type ControlMessage_ReloadRequest struct {
-	ReloadRequest *ConfigurationReloadRequest `protobuf:"bytes,6,opt,name=reload_request,json=reloadRequest,proto3,oneof"` // NEW: Initiate reload
+	ReloadRequest *ConfigurationReloadRequest `protobuf:"bytes,6,opt,name=reload_request,json=reloadRequest,proto3,oneof"` // Initiate reload
+}
+
+type ControlMessage_Event struct {
+	Event *EventFrame `protobuf:"bytes,7,opt,name=event,proto3,oneof"` // Event bridge: events from control to edge
 }
 
 func (*ControlMessage_RegistrationResponse) isControlMessage_Message() {}
@@ -565,6 +595,89 @@ func (*ControlMessage_HeartbeatResponse) isControlMessage_Message() {}
 func (*ControlMessage_Error) isControlMessage_Message() {}
 
 func (*ControlMessage_ReloadRequest) isControlMessage_Message() {}
+
+func (*ControlMessage_Event) isControlMessage_Message() {}
+
+// EventFrame represents an event for the event bridge system.
+// Events are routed based on their direction (dir field):
+// - 0 (Local): Events stay on the local bus, never forwarded
+// - 1 (Up): Events flow from edge to control
+// - 2 (Down): Events flow from control to edge(s)
+type EventFrame struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`           // UUID for deduplication and tracing
+	Topic         string                 `protobuf:"bytes,2,opt,name=topic,proto3" json:"topic,omitempty"`     // Logical topic name (e.g., "config.update", "metrics.report")
+	Origin        string                 `protobuf:"bytes,3,opt,name=origin,proto3" json:"origin,omitempty"`   // Node ID that created the event (e.g., "control" or "edge-123")
+	Dir           int32                  `protobuf:"varint,4,opt,name=dir,proto3" json:"dir,omitempty"`        // Direction: 0 = Local, 1 = Up, 2 = Down
+	Payload       []byte                 `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"` // Application payload as JSON
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EventFrame) Reset() {
+	*x = EventFrame{}
+	mi := &file_proto_config_sync_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventFrame) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventFrame) ProtoMessage() {}
+
+func (x *EventFrame) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventFrame.ProtoReflect.Descriptor instead.
+func (*EventFrame) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *EventFrame) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *EventFrame) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *EventFrame) GetOrigin() string {
+	if x != nil {
+		return x.Origin
+	}
+	return ""
+}
+
+func (x *EventFrame) GetDir() int32 {
+	if x != nil {
+		return x.Dir
+	}
+	return 0
+}
+
+func (x *EventFrame) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
 
 // HeartbeatRequest contains health and status information from edge
 type HeartbeatRequest struct {
@@ -580,7 +693,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_proto_config_sync_proto_msgTypes[5]
+	mi := &file_proto_config_sync_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -592,7 +705,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[5]
+	mi := &file_proto_config_sync_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -605,7 +718,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{5}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *HeartbeatRequest) GetEdgeId() string {
@@ -657,7 +770,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_proto_config_sync_proto_msgTypes[6]
+	mi := &file_proto_config_sync_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -669,7 +782,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[6]
+	mi := &file_proto_config_sync_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -682,7 +795,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{6}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *HeartbeatResponse) GetAcknowledged() bool {
@@ -725,7 +838,7 @@ type EdgeUnregistrationRequest struct {
 
 func (x *EdgeUnregistrationRequest) Reset() {
 	*x = EdgeUnregistrationRequest{}
-	mi := &file_proto_config_sync_proto_msgTypes[7]
+	mi := &file_proto_config_sync_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -737,7 +850,7 @@ func (x *EdgeUnregistrationRequest) String() string {
 func (*EdgeUnregistrationRequest) ProtoMessage() {}
 
 func (x *EdgeUnregistrationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[7]
+	mi := &file_proto_config_sync_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -750,7 +863,7 @@ func (x *EdgeUnregistrationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EdgeUnregistrationRequest.ProtoReflect.Descriptor instead.
 func (*EdgeUnregistrationRequest) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{7}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *EdgeUnregistrationRequest) GetEdgeId() string {
@@ -789,7 +902,7 @@ type EdgeMetrics struct {
 
 func (x *EdgeMetrics) Reset() {
 	*x = EdgeMetrics{}
-	mi := &file_proto_config_sync_proto_msgTypes[8]
+	mi := &file_proto_config_sync_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -801,7 +914,7 @@ func (x *EdgeMetrics) String() string {
 func (*EdgeMetrics) ProtoMessage() {}
 
 func (x *EdgeMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[8]
+	mi := &file_proto_config_sync_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -814,7 +927,7 @@ func (x *EdgeMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EdgeMetrics.ProtoReflect.Descriptor instead.
 func (*EdgeMetrics) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{8}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *EdgeMetrics) GetRequestsProcessed() uint64 {
@@ -871,7 +984,7 @@ type ErrorMessage struct {
 
 func (x *ErrorMessage) Reset() {
 	*x = ErrorMessage{}
-	mi := &file_proto_config_sync_proto_msgTypes[9]
+	mi := &file_proto_config_sync_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -883,7 +996,7 @@ func (x *ErrorMessage) String() string {
 func (*ErrorMessage) ProtoMessage() {}
 
 func (x *ErrorMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[9]
+	mi := &file_proto_config_sync_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -896,7 +1009,7 @@ func (x *ErrorMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorMessage.ProtoReflect.Descriptor instead.
 func (*ErrorMessage) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{9}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ErrorMessage) GetCode() string {
@@ -932,7 +1045,7 @@ type AuthenticationRequest struct {
 
 func (x *AuthenticationRequest) Reset() {
 	*x = AuthenticationRequest{}
-	mi := &file_proto_config_sync_proto_msgTypes[10]
+	mi := &file_proto_config_sync_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -944,7 +1057,7 @@ func (x *AuthenticationRequest) String() string {
 func (*AuthenticationRequest) ProtoMessage() {}
 
 func (x *AuthenticationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[10]
+	mi := &file_proto_config_sync_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -957,7 +1070,7 @@ func (x *AuthenticationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthenticationRequest.ProtoReflect.Descriptor instead.
 func (*AuthenticationRequest) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{10}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AuthenticationRequest) GetToken() string {
@@ -993,7 +1106,7 @@ type AuthenticationResponse struct {
 
 func (x *AuthenticationResponse) Reset() {
 	*x = AuthenticationResponse{}
-	mi := &file_proto_config_sync_proto_msgTypes[11]
+	mi := &file_proto_config_sync_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1005,7 +1118,7 @@ func (x *AuthenticationResponse) String() string {
 func (*AuthenticationResponse) ProtoMessage() {}
 
 func (x *AuthenticationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[11]
+	mi := &file_proto_config_sync_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1018,7 +1131,7 @@ func (x *AuthenticationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthenticationResponse.ProtoReflect.Descriptor instead.
 func (*AuthenticationResponse) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{11}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AuthenticationResponse) GetAuthenticated() bool {
@@ -1061,7 +1174,7 @@ type TokenValidationRequest struct {
 
 func (x *TokenValidationRequest) Reset() {
 	*x = TokenValidationRequest{}
-	mi := &file_proto_config_sync_proto_msgTypes[12]
+	mi := &file_proto_config_sync_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1073,7 +1186,7 @@ func (x *TokenValidationRequest) String() string {
 func (*TokenValidationRequest) ProtoMessage() {}
 
 func (x *TokenValidationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[12]
+	mi := &file_proto_config_sync_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1086,7 +1199,7 @@ func (x *TokenValidationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenValidationRequest.ProtoReflect.Descriptor instead.
 func (*TokenValidationRequest) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{12}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *TokenValidationRequest) GetToken() string {
@@ -1125,7 +1238,7 @@ type TokenValidationResponse struct {
 
 func (x *TokenValidationResponse) Reset() {
 	*x = TokenValidationResponse{}
-	mi := &file_proto_config_sync_proto_msgTypes[13]
+	mi := &file_proto_config_sync_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1137,7 +1250,7 @@ func (x *TokenValidationResponse) String() string {
 func (*TokenValidationResponse) ProtoMessage() {}
 
 func (x *TokenValidationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[13]
+	mi := &file_proto_config_sync_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1150,7 +1263,7 @@ func (x *TokenValidationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenValidationResponse.ProtoReflect.Descriptor instead.
 func (*TokenValidationResponse) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{13}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TokenValidationResponse) GetValid() bool {
@@ -1217,7 +1330,7 @@ type ConfigurationReloadRequest struct {
 
 func (x *ConfigurationReloadRequest) Reset() {
 	*x = ConfigurationReloadRequest{}
-	mi := &file_proto_config_sync_proto_msgTypes[14]
+	mi := &file_proto_config_sync_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1229,7 +1342,7 @@ func (x *ConfigurationReloadRequest) String() string {
 func (*ConfigurationReloadRequest) ProtoMessage() {}
 
 func (x *ConfigurationReloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[14]
+	mi := &file_proto_config_sync_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1242,7 +1355,7 @@ func (x *ConfigurationReloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigurationReloadRequest.ProtoReflect.Descriptor instead.
 func (*ConfigurationReloadRequest) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{14}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ConfigurationReloadRequest) GetOperationId() string {
@@ -1303,7 +1416,7 @@ type ConfigurationReloadResponse struct {
 
 func (x *ConfigurationReloadResponse) Reset() {
 	*x = ConfigurationReloadResponse{}
-	mi := &file_proto_config_sync_proto_msgTypes[15]
+	mi := &file_proto_config_sync_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1315,7 +1428,7 @@ func (x *ConfigurationReloadResponse) String() string {
 func (*ConfigurationReloadResponse) ProtoMessage() {}
 
 func (x *ConfigurationReloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[15]
+	mi := &file_proto_config_sync_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1328,7 +1441,7 @@ func (x *ConfigurationReloadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigurationReloadResponse.ProtoReflect.Descriptor instead.
 func (*ConfigurationReloadResponse) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{15}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ConfigurationReloadResponse) GetOperationId() string {
@@ -1410,7 +1523,7 @@ type AnalyticsPulse struct {
 
 func (x *AnalyticsPulse) Reset() {
 	*x = AnalyticsPulse{}
-	mi := &file_proto_config_sync_proto_msgTypes[16]
+	mi := &file_proto_config_sync_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1422,7 +1535,7 @@ func (x *AnalyticsPulse) String() string {
 func (*AnalyticsPulse) ProtoMessage() {}
 
 func (x *AnalyticsPulse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[16]
+	mi := &file_proto_config_sync_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1435,7 +1548,7 @@ func (x *AnalyticsPulse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyticsPulse.ProtoReflect.Descriptor instead.
 func (*AnalyticsPulse) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{16}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AnalyticsPulse) GetEdgeId() string {
@@ -1538,7 +1651,7 @@ type AnalyticsPulseResponse struct {
 
 func (x *AnalyticsPulseResponse) Reset() {
 	*x = AnalyticsPulseResponse{}
-	mi := &file_proto_config_sync_proto_msgTypes[17]
+	mi := &file_proto_config_sync_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1550,7 +1663,7 @@ func (x *AnalyticsPulseResponse) String() string {
 func (*AnalyticsPulseResponse) ProtoMessage() {}
 
 func (x *AnalyticsPulseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[17]
+	mi := &file_proto_config_sync_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1563,7 +1676,7 @@ func (x *AnalyticsPulseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyticsPulseResponse.ProtoReflect.Descriptor instead.
 func (*AnalyticsPulseResponse) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{17}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *AnalyticsPulseResponse) GetSuccess() bool {
@@ -1626,7 +1739,7 @@ type AnalyticsPulseConfig struct {
 
 func (x *AnalyticsPulseConfig) Reset() {
 	*x = AnalyticsPulseConfig{}
-	mi := &file_proto_config_sync_proto_msgTypes[18]
+	mi := &file_proto_config_sync_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1638,7 +1751,7 @@ func (x *AnalyticsPulseConfig) String() string {
 func (*AnalyticsPulseConfig) ProtoMessage() {}
 
 func (x *AnalyticsPulseConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[18]
+	mi := &file_proto_config_sync_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1651,7 +1764,7 @@ func (x *AnalyticsPulseConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyticsPulseConfig.ProtoReflect.Descriptor instead.
 func (*AnalyticsPulseConfig) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{18}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *AnalyticsPulseConfig) GetEnabled() bool {
@@ -1752,7 +1865,7 @@ type AnalyticsEvent struct {
 
 func (x *AnalyticsEvent) Reset() {
 	*x = AnalyticsEvent{}
-	mi := &file_proto_config_sync_proto_msgTypes[19]
+	mi := &file_proto_config_sync_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1764,7 +1877,7 @@ func (x *AnalyticsEvent) String() string {
 func (*AnalyticsEvent) ProtoMessage() {}
 
 func (x *AnalyticsEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[19]
+	mi := &file_proto_config_sync_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1777,7 +1890,7 @@ func (x *AnalyticsEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyticsEvent.ProtoReflect.Descriptor instead.
 func (*AnalyticsEvent) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{19}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *AnalyticsEvent) GetRequestId() string {
@@ -1988,7 +2101,7 @@ type BudgetUsageEvent struct {
 
 func (x *BudgetUsageEvent) Reset() {
 	*x = BudgetUsageEvent{}
-	mi := &file_proto_config_sync_proto_msgTypes[20]
+	mi := &file_proto_config_sync_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2000,7 +2113,7 @@ func (x *BudgetUsageEvent) String() string {
 func (*BudgetUsageEvent) ProtoMessage() {}
 
 func (x *BudgetUsageEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[20]
+	mi := &file_proto_config_sync_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2013,7 +2126,7 @@ func (x *BudgetUsageEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BudgetUsageEvent.ProtoReflect.Descriptor instead.
 func (*BudgetUsageEvent) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{20}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *BudgetUsageEvent) GetAppId() uint32 {
@@ -2110,7 +2223,7 @@ type ProxyLogSummary struct {
 
 func (x *ProxyLogSummary) Reset() {
 	*x = ProxyLogSummary{}
-	mi := &file_proto_config_sync_proto_msgTypes[21]
+	mi := &file_proto_config_sync_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2122,7 +2235,7 @@ func (x *ProxyLogSummary) String() string {
 func (*ProxyLogSummary) ProtoMessage() {}
 
 func (x *ProxyLogSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[21]
+	mi := &file_proto_config_sync_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2135,7 +2248,7 @@ func (x *ProxyLogSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyLogSummary.ProtoReflect.Descriptor instead.
 func (*ProxyLogSummary) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{21}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ProxyLogSummary) GetAppId() uint32 {
@@ -2252,7 +2365,7 @@ type PluginControlPayload struct {
 
 func (x *PluginControlPayload) Reset() {
 	*x = PluginControlPayload{}
-	mi := &file_proto_config_sync_proto_msgTypes[22]
+	mi := &file_proto_config_sync_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2264,7 +2377,7 @@ func (x *PluginControlPayload) String() string {
 func (*PluginControlPayload) ProtoMessage() {}
 
 func (x *PluginControlPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[22]
+	mi := &file_proto_config_sync_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2277,7 +2390,7 @@ func (x *PluginControlPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginControlPayload.ProtoReflect.Descriptor instead.
 func (*PluginControlPayload) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{22}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *PluginControlPayload) GetPluginId() uint32 {
@@ -2344,7 +2457,7 @@ type PluginControlBatch struct {
 
 func (x *PluginControlBatch) Reset() {
 	*x = PluginControlBatch{}
-	mi := &file_proto_config_sync_proto_msgTypes[23]
+	mi := &file_proto_config_sync_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2356,7 +2469,7 @@ func (x *PluginControlBatch) String() string {
 func (*PluginControlBatch) ProtoMessage() {}
 
 func (x *PluginControlBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[23]
+	mi := &file_proto_config_sync_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2369,7 +2482,7 @@ func (x *PluginControlBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginControlBatch.ProtoReflect.Descriptor instead.
 func (*PluginControlBatch) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{23}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PluginControlBatch) GetEdgeId() string {
@@ -2429,7 +2542,7 @@ type PluginControlBatchResponse struct {
 
 func (x *PluginControlBatchResponse) Reset() {
 	*x = PluginControlBatchResponse{}
-	mi := &file_proto_config_sync_proto_msgTypes[24]
+	mi := &file_proto_config_sync_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2441,7 +2554,7 @@ func (x *PluginControlBatchResponse) String() string {
 func (*PluginControlBatchResponse) ProtoMessage() {}
 
 func (x *PluginControlBatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[24]
+	mi := &file_proto_config_sync_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2454,7 +2567,7 @@ func (x *PluginControlBatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginControlBatchResponse.ProtoReflect.Descriptor instead.
 func (*PluginControlBatchResponse) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{24}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PluginControlBatchResponse) GetSuccess() bool {
@@ -2511,7 +2624,7 @@ type PluginPayloadError struct {
 
 func (x *PluginPayloadError) Reset() {
 	*x = PluginPayloadError{}
-	mi := &file_proto_config_sync_proto_msgTypes[25]
+	mi := &file_proto_config_sync_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2523,7 +2636,7 @@ func (x *PluginPayloadError) String() string {
 func (*PluginPayloadError) ProtoMessage() {}
 
 func (x *PluginPayloadError) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[25]
+	mi := &file_proto_config_sync_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2536,7 +2649,7 @@ func (x *PluginPayloadError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginPayloadError.ProtoReflect.Descriptor instead.
 func (*PluginPayloadError) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{25}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *PluginPayloadError) GetPluginId() uint32 {
@@ -2584,22 +2697,31 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0einitial_config\x18\x04 \x01(\v2#.microgateway.ConfigurationSnapshotR\rinitialConfig\"\x7f\n" +
 	"\x14ConfigurationRequest\x12%\n" +
 	"\x0eedge_namespace\x18\x01 \x01(\tR\redgeNamespace\x12@\n" +
-	"\x0elast_sync_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\flastSyncTime\"\x9b\x03\n" +
+	"\x0elast_sync_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\flastSyncTime\"\xcd\x03\n" +
 	"\vEdgeMessage\x12K\n" +
 	"\fregistration\x18\x01 \x01(\v2%.microgateway.EdgeRegistrationRequestH\x00R\fregistration\x12>\n" +
 	"\theartbeat\x18\x02 \x01(\v2\x1e.microgateway.HeartbeatRequestH\x00R\theartbeat\x12K\n" +
 	"\x0econfig_request\x18\x03 \x01(\v2\".microgateway.ConfigurationRequestH\x00R\rconfigRequest\x12Q\n" +
 	"\x0eunregistration\x18\x04 \x01(\v2'.microgateway.EdgeUnregistrationRequestH\x00R\x0eunregistration\x12T\n" +
-	"\x0freload_response\x18\x05 \x01(\v2).microgateway.ConfigurationReloadResponseH\x00R\x0ereloadResponseB\t\n" +
-	"\amessage\"\xdd\x03\n" +
+	"\x0freload_response\x18\x05 \x01(\v2).microgateway.ConfigurationReloadResponseH\x00R\x0ereloadResponse\x120\n" +
+	"\x05event\x18\x06 \x01(\v2\x18.microgateway.EventFrameH\x00R\x05eventB\t\n" +
+	"\amessage\"\x8f\x04\n" +
 	"\x0eControlMessage\x12]\n" +
 	"\x15registration_response\x18\x01 \x01(\v2&.microgateway.EdgeRegistrationResponseH\x00R\x14registrationResponse\x12K\n" +
 	"\rconfiguration\x18\x02 \x01(\v2#.microgateway.ConfigurationSnapshotH\x00R\rconfiguration\x12;\n" +
 	"\x06change\x18\x03 \x01(\v2!.microgateway.ConfigurationChangeH\x00R\x06change\x12P\n" +
 	"\x12heartbeat_response\x18\x04 \x01(\v2\x1f.microgateway.HeartbeatResponseH\x00R\x11heartbeatResponse\x122\n" +
 	"\x05error\x18\x05 \x01(\v2\x1a.microgateway.ErrorMessageH\x00R\x05error\x12Q\n" +
-	"\x0ereload_request\x18\x06 \x01(\v2(.microgateway.ConfigurationReloadRequestH\x00R\rreloadRequestB\t\n" +
-	"\amessage\"\xed\x01\n" +
+	"\x0ereload_request\x18\x06 \x01(\v2(.microgateway.ConfigurationReloadRequestH\x00R\rreloadRequest\x120\n" +
+	"\x05event\x18\a \x01(\v2\x18.microgateway.EventFrameH\x00R\x05eventB\t\n" +
+	"\amessage\"v\n" +
+	"\n" +
+	"EventFrame\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05topic\x18\x02 \x01(\tR\x05topic\x12\x16\n" +
+	"\x06origin\x18\x03 \x01(\tR\x06origin\x12\x10\n" +
+	"\x03dir\x18\x04 \x01(\x05R\x03dir\x12\x18\n" +
+	"\apayload\x18\x05 \x01(\fR\apayload\"\xed\x01\n" +
 	"\x10HeartbeatRequest\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12\x1d\n" +
 	"\n" +
@@ -2826,7 +2948,7 @@ func file_proto_config_sync_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_config_sync_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_proto_config_sync_proto_goTypes = []any{
 	(ReloadPhase)(0),                    // 0: microgateway.ReloadPhase
 	(*EdgeRegistrationRequest)(nil),     // 1: microgateway.EdgeRegistrationRequest
@@ -2834,101 +2956,104 @@ var file_proto_config_sync_proto_goTypes = []any{
 	(*ConfigurationRequest)(nil),        // 3: microgateway.ConfigurationRequest
 	(*EdgeMessage)(nil),                 // 4: microgateway.EdgeMessage
 	(*ControlMessage)(nil),              // 5: microgateway.ControlMessage
-	(*HeartbeatRequest)(nil),            // 6: microgateway.HeartbeatRequest
-	(*HeartbeatResponse)(nil),           // 7: microgateway.HeartbeatResponse
-	(*EdgeUnregistrationRequest)(nil),   // 8: microgateway.EdgeUnregistrationRequest
-	(*EdgeMetrics)(nil),                 // 9: microgateway.EdgeMetrics
-	(*ErrorMessage)(nil),                // 10: microgateway.ErrorMessage
-	(*AuthenticationRequest)(nil),       // 11: microgateway.AuthenticationRequest
-	(*AuthenticationResponse)(nil),      // 12: microgateway.AuthenticationResponse
-	(*TokenValidationRequest)(nil),      // 13: microgateway.TokenValidationRequest
-	(*TokenValidationResponse)(nil),     // 14: microgateway.TokenValidationResponse
-	(*ConfigurationReloadRequest)(nil),  // 15: microgateway.ConfigurationReloadRequest
-	(*ConfigurationReloadResponse)(nil), // 16: microgateway.ConfigurationReloadResponse
-	(*AnalyticsPulse)(nil),              // 17: microgateway.AnalyticsPulse
-	(*AnalyticsPulseResponse)(nil),      // 18: microgateway.AnalyticsPulseResponse
-	(*AnalyticsPulseConfig)(nil),        // 19: microgateway.AnalyticsPulseConfig
-	(*AnalyticsEvent)(nil),              // 20: microgateway.AnalyticsEvent
-	(*BudgetUsageEvent)(nil),            // 21: microgateway.BudgetUsageEvent
-	(*ProxyLogSummary)(nil),             // 22: microgateway.ProxyLogSummary
-	(*PluginControlPayload)(nil),        // 23: microgateway.PluginControlPayload
-	(*PluginControlBatch)(nil),          // 24: microgateway.PluginControlBatch
-	(*PluginControlBatchResponse)(nil),  // 25: microgateway.PluginControlBatchResponse
-	(*PluginPayloadError)(nil),          // 26: microgateway.PluginPayloadError
-	nil,                                 // 27: microgateway.EdgeRegistrationRequest.MetadataEntry
-	nil,                                 // 28: microgateway.EdgeMetrics.CustomMetricsEntry
-	nil,                                 // 29: microgateway.PluginControlPayload.MetadataEntry
-	(*HealthStatus)(nil),                // 30: microgateway.HealthStatus
-	(*ConfigurationSnapshot)(nil),       // 31: microgateway.ConfigurationSnapshot
-	(*timestamppb.Timestamp)(nil),       // 32: google.protobuf.Timestamp
-	(*ConfigurationChange)(nil),         // 33: microgateway.ConfigurationChange
-	(*emptypb.Empty)(nil),               // 34: google.protobuf.Empty
+	(*EventFrame)(nil),                  // 6: microgateway.EventFrame
+	(*HeartbeatRequest)(nil),            // 7: microgateway.HeartbeatRequest
+	(*HeartbeatResponse)(nil),           // 8: microgateway.HeartbeatResponse
+	(*EdgeUnregistrationRequest)(nil),   // 9: microgateway.EdgeUnregistrationRequest
+	(*EdgeMetrics)(nil),                 // 10: microgateway.EdgeMetrics
+	(*ErrorMessage)(nil),                // 11: microgateway.ErrorMessage
+	(*AuthenticationRequest)(nil),       // 12: microgateway.AuthenticationRequest
+	(*AuthenticationResponse)(nil),      // 13: microgateway.AuthenticationResponse
+	(*TokenValidationRequest)(nil),      // 14: microgateway.TokenValidationRequest
+	(*TokenValidationResponse)(nil),     // 15: microgateway.TokenValidationResponse
+	(*ConfigurationReloadRequest)(nil),  // 16: microgateway.ConfigurationReloadRequest
+	(*ConfigurationReloadResponse)(nil), // 17: microgateway.ConfigurationReloadResponse
+	(*AnalyticsPulse)(nil),              // 18: microgateway.AnalyticsPulse
+	(*AnalyticsPulseResponse)(nil),      // 19: microgateway.AnalyticsPulseResponse
+	(*AnalyticsPulseConfig)(nil),        // 20: microgateway.AnalyticsPulseConfig
+	(*AnalyticsEvent)(nil),              // 21: microgateway.AnalyticsEvent
+	(*BudgetUsageEvent)(nil),            // 22: microgateway.BudgetUsageEvent
+	(*ProxyLogSummary)(nil),             // 23: microgateway.ProxyLogSummary
+	(*PluginControlPayload)(nil),        // 24: microgateway.PluginControlPayload
+	(*PluginControlBatch)(nil),          // 25: microgateway.PluginControlBatch
+	(*PluginControlBatchResponse)(nil),  // 26: microgateway.PluginControlBatchResponse
+	(*PluginPayloadError)(nil),          // 27: microgateway.PluginPayloadError
+	nil,                                 // 28: microgateway.EdgeRegistrationRequest.MetadataEntry
+	nil,                                 // 29: microgateway.EdgeMetrics.CustomMetricsEntry
+	nil,                                 // 30: microgateway.PluginControlPayload.MetadataEntry
+	(*HealthStatus)(nil),                // 31: microgateway.HealthStatus
+	(*ConfigurationSnapshot)(nil),       // 32: microgateway.ConfigurationSnapshot
+	(*timestamppb.Timestamp)(nil),       // 33: google.protobuf.Timestamp
+	(*ConfigurationChange)(nil),         // 34: microgateway.ConfigurationChange
+	(*emptypb.Empty)(nil),               // 35: google.protobuf.Empty
 }
 var file_proto_config_sync_proto_depIdxs = []int32{
-	27, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
-	30, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
-	31, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
-	32, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
+	28, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
+	31, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
+	32, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
+	33, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
 	1,  // 4: microgateway.EdgeMessage.registration:type_name -> microgateway.EdgeRegistrationRequest
-	6,  // 5: microgateway.EdgeMessage.heartbeat:type_name -> microgateway.HeartbeatRequest
+	7,  // 5: microgateway.EdgeMessage.heartbeat:type_name -> microgateway.HeartbeatRequest
 	3,  // 6: microgateway.EdgeMessage.config_request:type_name -> microgateway.ConfigurationRequest
-	8,  // 7: microgateway.EdgeMessage.unregistration:type_name -> microgateway.EdgeUnregistrationRequest
-	16, // 8: microgateway.EdgeMessage.reload_response:type_name -> microgateway.ConfigurationReloadResponse
-	2,  // 9: microgateway.ControlMessage.registration_response:type_name -> microgateway.EdgeRegistrationResponse
-	31, // 10: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
-	33, // 11: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
-	7,  // 12: microgateway.ControlMessage.heartbeat_response:type_name -> microgateway.HeartbeatResponse
-	10, // 13: microgateway.ControlMessage.error:type_name -> microgateway.ErrorMessage
-	15, // 14: microgateway.ControlMessage.reload_request:type_name -> microgateway.ConfigurationReloadRequest
-	30, // 15: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
-	9,  // 16: microgateway.HeartbeatRequest.metrics:type_name -> microgateway.EdgeMetrics
-	32, // 17: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
-	28, // 18: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
-	32, // 19: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
-	32, // 20: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
-	0,  // 21: microgateway.ConfigurationReloadResponse.phase:type_name -> microgateway.ReloadPhase
-	32, // 22: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
-	32, // 23: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
-	32, // 24: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
-	32, // 25: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
-	20, // 26: microgateway.AnalyticsPulse.analytics_events:type_name -> microgateway.AnalyticsEvent
-	21, // 27: microgateway.AnalyticsPulse.budget_events:type_name -> microgateway.BudgetUsageEvent
-	22, // 28: microgateway.AnalyticsPulse.proxy_summaries:type_name -> microgateway.ProxyLogSummary
-	32, // 29: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
-	19, // 30: microgateway.AnalyticsPulseResponse.updated_config:type_name -> microgateway.AnalyticsPulseConfig
-	32, // 31: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
-	32, // 32: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
-	32, // 33: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
-	32, // 34: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
-	32, // 35: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
-	32, // 36: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
-	32, // 37: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
-	29, // 38: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
-	23, // 39: microgateway.PluginControlBatch.payloads:type_name -> microgateway.PluginControlPayload
-	32, // 40: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
-	32, // 41: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
-	26, // 42: microgateway.PluginControlBatchResponse.errors:type_name -> microgateway.PluginPayloadError
-	1,  // 43: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
-	3,  // 44: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
-	4,  // 45: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
-	6,  // 46: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
-	8,  // 47: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
-	13, // 48: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
-	17, // 49: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
-	24, // 50: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
-	2,  // 51: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
-	31, // 52: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
-	5,  // 53: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
-	7,  // 54: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
-	34, // 55: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
-	14, // 56: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
-	18, // 57: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
-	25, // 58: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
-	51, // [51:59] is the sub-list for method output_type
-	43, // [43:51] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	9,  // 7: microgateway.EdgeMessage.unregistration:type_name -> microgateway.EdgeUnregistrationRequest
+	17, // 8: microgateway.EdgeMessage.reload_response:type_name -> microgateway.ConfigurationReloadResponse
+	6,  // 9: microgateway.EdgeMessage.event:type_name -> microgateway.EventFrame
+	2,  // 10: microgateway.ControlMessage.registration_response:type_name -> microgateway.EdgeRegistrationResponse
+	32, // 11: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
+	34, // 12: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
+	8,  // 13: microgateway.ControlMessage.heartbeat_response:type_name -> microgateway.HeartbeatResponse
+	11, // 14: microgateway.ControlMessage.error:type_name -> microgateway.ErrorMessage
+	16, // 15: microgateway.ControlMessage.reload_request:type_name -> microgateway.ConfigurationReloadRequest
+	6,  // 16: microgateway.ControlMessage.event:type_name -> microgateway.EventFrame
+	31, // 17: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
+	10, // 18: microgateway.HeartbeatRequest.metrics:type_name -> microgateway.EdgeMetrics
+	33, // 19: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
+	29, // 20: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
+	33, // 21: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
+	33, // 22: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
+	0,  // 23: microgateway.ConfigurationReloadResponse.phase:type_name -> microgateway.ReloadPhase
+	33, // 24: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
+	33, // 25: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
+	33, // 26: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
+	33, // 27: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
+	21, // 28: microgateway.AnalyticsPulse.analytics_events:type_name -> microgateway.AnalyticsEvent
+	22, // 29: microgateway.AnalyticsPulse.budget_events:type_name -> microgateway.BudgetUsageEvent
+	23, // 30: microgateway.AnalyticsPulse.proxy_summaries:type_name -> microgateway.ProxyLogSummary
+	33, // 31: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
+	20, // 32: microgateway.AnalyticsPulseResponse.updated_config:type_name -> microgateway.AnalyticsPulseConfig
+	33, // 33: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
+	33, // 34: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
+	33, // 35: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
+	33, // 36: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
+	33, // 37: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
+	33, // 38: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
+	33, // 39: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
+	30, // 40: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
+	24, // 41: microgateway.PluginControlBatch.payloads:type_name -> microgateway.PluginControlPayload
+	33, // 42: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
+	33, // 43: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
+	27, // 44: microgateway.PluginControlBatchResponse.errors:type_name -> microgateway.PluginPayloadError
+	1,  // 45: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
+	3,  // 46: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
+	4,  // 47: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
+	7,  // 48: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
+	9,  // 49: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
+	14, // 50: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
+	18, // 51: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
+	25, // 52: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
+	2,  // 53: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
+	32, // 54: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
+	5,  // 55: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
+	8,  // 56: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
+	35, // 57: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
+	15, // 58: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
+	19, // 59: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
+	26, // 60: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
+	53, // [53:61] is the sub-list for method output_type
+	45, // [45:53] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_proto_config_sync_proto_init() }
@@ -2943,6 +3068,7 @@ func file_proto_config_sync_proto_init() {
 		(*EdgeMessage_ConfigRequest)(nil),
 		(*EdgeMessage_Unregistration)(nil),
 		(*EdgeMessage_ReloadResponse)(nil),
+		(*EdgeMessage_Event)(nil),
 	}
 	file_proto_config_sync_proto_msgTypes[4].OneofWrappers = []any{
 		(*ControlMessage_RegistrationResponse)(nil),
@@ -2951,6 +3077,7 @@ func file_proto_config_sync_proto_init() {
 		(*ControlMessage_HeartbeatResponse)(nil),
 		(*ControlMessage_Error)(nil),
 		(*ControlMessage_ReloadRequest)(nil),
+		(*ControlMessage_Event)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2958,7 +3085,7 @@ func file_proto_config_sync_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_config_sync_proto_rawDesc), len(file_proto_config_sync_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   29,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

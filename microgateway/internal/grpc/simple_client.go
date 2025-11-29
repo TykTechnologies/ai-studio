@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -29,9 +30,9 @@ type SimpleEdgeClient struct {
 	configCache *pb.ConfigurationSnapshot
 
 	// Build information
-	version    string
-	buildHash  string
-	buildTime  string
+	version   string
+	buildHash string
+	buildTime string
 
 	// Bidirectional streaming
 	stream       pb.ConfigurationSyncService_SubscribeToChangesClient
@@ -55,18 +56,29 @@ type SimpleEdgeClient struct {
 	reconnectAttempts int
 	maxReconnects     int
 	reconnectInterval time.Duration
+
+	// Event bridge components
+	eventBus      eventbridge.Bus
+	streamAdapter *eventbridge.StreamAdapter
+	eventBridge   *eventbridge.Bridge
+	bridgeCtx     context.Context
+	bridgeCancel  context.CancelFunc
 }
 
 // NewSimpleEdgeClient creates a basic edge client
 func NewSimpleEdgeClient(cfg *config.Config, version, buildHash, buildTime string) *SimpleEdgeClient {
-	return &SimpleEdgeClient{
+	client := &SimpleEdgeClient{
 		config:            cfg,
 		version:           version,
 		buildHash:         buildHash,
 		buildTime:         buildTime,
-		maxReconnects:     -1,                // Unlimited reconnections
-		reconnectInterval: 5 * time.Second,   // 5 second retry interval
+		maxReconnects:     -1,              // Unlimited reconnections
+		reconnectInterval: 5 * time.Second, // 5 second retry interval
+		eventBus:          eventbridge.NewBus(),
 	}
+
+	log.Debug().Msg("Event bridge bus initialized for edge client")
+	return client
 }
 
 // Start connects to the control server and gets initial configuration
@@ -174,6 +186,13 @@ func (c *SimpleEdgeClient) IsConnected() bool {
 // GetCurrentConfiguration returns the cached configuration
 func (c *SimpleEdgeClient) GetCurrentConfiguration() *pb.ConfigurationSnapshot {
 	return c.configCache
+}
+
+// GetEventBus returns the edge client's event bus for subscribing to events.
+// This allows other microgateway components to subscribe to events from control
+// and publish events to control.
+func (c *SimpleEdgeClient) GetEventBus() eventbridge.Bus {
+	return c.eventBus
 }
 
 // ValidateTokenOnDemand validates a token by calling the control instance
@@ -299,6 +318,9 @@ func (c *SimpleEdgeClient) establishStream() error {
 
 	c.stream = stream
 
+	// Setup event bridge for this connection
+	c.setupEventBridge()
+
 	// Send initial registration via stream to establish connection
 	regMsg := &pb.EdgeMessage{
 		Message: &pb.EdgeMessage_Registration{
@@ -337,6 +359,50 @@ func (c *SimpleEdgeClient) establishStream() error {
 	return nil
 }
 
+// setupEventBridge creates and starts the event bridge for the current stream
+func (c *SimpleEdgeClient) setupEventBridge() {
+	// Create bridge context
+	c.bridgeCtx, c.bridgeCancel = context.WithCancel(context.Background())
+
+	// Create stream adapter that sends events to control
+	c.streamAdapter = eventbridge.NewStreamAdapter(func(frame *eventbridge.EventFrame) error {
+		return c.stream.Send(&pb.EdgeMessage{
+			Message: &pb.EdgeMessage_Event{
+				Event: &pb.EventFrame{
+					Id:      frame.ID,
+					Topic:   frame.Topic,
+					Origin:  frame.Origin,
+					Dir:     frame.Dir,
+					Payload: frame.Payload,
+				},
+			},
+		})
+	}, 100)
+
+	// Create and start bridge (edge node, not control)
+	c.eventBridge = eventbridge.NewBridge(eventbridge.BridgeConfig{
+		NodeID:    c.config.HubSpoke.EdgeID,
+		IsControl: false,
+	}, c.eventBus, c.streamAdapter)
+	c.eventBridge.Start(c.bridgeCtx)
+
+	log.Debug().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Event bridge started for edge client")
+}
+
+// stopEventBridge stops the event bridge and cleans up resources
+func (c *SimpleEdgeClient) stopEventBridge() {
+	if c.bridgeCancel != nil {
+		c.bridgeCancel()
+	}
+	if c.eventBridge != nil {
+		c.eventBridge.Stop()
+	}
+	if c.streamAdapter != nil {
+		c.streamAdapter.Close()
+	}
+	log.Debug().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Event bridge stopped for edge client")
+}
+
 // handleIncomingMessages processes messages from control server with comprehensive error recovery
 func (c *SimpleEdgeClient) handleIncomingMessages() {
 	defer func() {
@@ -346,6 +412,10 @@ func (c *SimpleEdgeClient) handleIncomingMessages() {
 		}
 
 		c.connected = false
+
+		// Stop event bridge before cancelling stream context
+		c.stopEventBridge()
+
 		if c.streamCancel != nil {
 			c.streamCancel()
 		}
@@ -436,10 +506,33 @@ func (c *SimpleEdgeClient) processControlMessage(msg *pb.ControlMessage) error {
 	case *pb.ControlMessage_ReloadRequest:
 		return c.handleReloadRequest(m.ReloadRequest)
 
+	case *pb.ControlMessage_Event:
+		return c.handleEventMessage(m.Event)
+
 	default:
 		log.Warn().Msg("Unknown control message type received")
 		return nil
 	}
+}
+
+// handleEventMessage handles event bridge messages from control
+func (c *SimpleEdgeClient) handleEventMessage(event *pb.EventFrame) error {
+	if event == nil {
+		return nil
+	}
+
+	log.Trace().
+		Str("event_id", event.Id).
+		Str("topic", event.Topic).
+		Str("origin", event.Origin).
+		Msg("Received event from control")
+
+	// Enqueue the event for the bridge to process
+	if c.streamAdapter != nil {
+		c.streamAdapter.EnqueueProtoEvent(event)
+	}
+
+	return nil
 }
 
 // handleRegistrationResponse processes registration responses

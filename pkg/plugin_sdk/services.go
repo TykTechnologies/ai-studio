@@ -17,6 +17,7 @@ type defaultServiceBroker struct {
 	logger         LogService
 	gatewayService GatewayServices
 	studioService  StudioServices
+	eventService   EventService
 }
 
 // newServiceBroker creates a service broker for the given runtime
@@ -39,6 +40,13 @@ func newServiceBroker(runtime RuntimeType, pluginID uint32) ServiceBroker {
 		broker.studioService = &studioServicesImpl{}
 	}
 
+	// Event service is lazily initialized when first accessed
+	// It needs the gRPC broker connection which is set up during plugin startup
+	broker.eventService = &lazyEventService{
+		runtime:  runtime,
+		pluginID: fmt.Sprintf("%d", pluginID),
+	}
+
 	return broker
 }
 
@@ -56,6 +64,10 @@ func (b *defaultServiceBroker) Gateway() GatewayServices {
 
 func (b *defaultServiceBroker) Studio() StudioServices {
 	return b.studioService
+}
+
+func (b *defaultServiceBroker) Events() EventService {
+	return b.eventService
 }
 
 // ===== KV Service (Runtime-Aware) =====

@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package plugin_events;
+
+option go_package = "github.com/TykTechnologies/midsommar/v2/proto/plugin_events";
+
+// PluginEventService provides event pub/sub for plugins via go-plugin broker.
+// This service is implemented by the host (AI Studio or Microgateway) and called
+// by plugins to publish events and subscribe to event streams.
+service PluginEventService {
+    // Publish sends an event to the host's event bus.
+    // The event will be routed based on the direction:
+    // - DirLocal (0): stays on local bus only
+    // - DirUp (1): forwarded from edge to control
+    // - DirDown (2): forwarded from control to edge(s)
+    rpc Publish(PublishRequest) returns (PublishResponse);
+
+    // Subscribe creates a subscription and streams events back to the plugin.
+    // The stream remains open until the client disconnects or calls Unsubscribe.
+    // Events matching the subscription criteria are sent as they occur.
+    rpc Subscribe(SubscribeRequest) returns (stream EventMessage);
+
+    // Unsubscribe removes a subscription by ID.
+    // This is optional - subscriptions are automatically cleaned up when the
+    // Subscribe stream is closed.
+    rpc Unsubscribe(UnsubscribeRequest) returns (UnsubscribeResponse);
+}
+
+// PublishRequest is sent by a plugin to publish an event
+message PublishRequest {
+    // topic is the logical topic name (e.g., "cache.hit", "config.reload")
+    string topic = 1;
+
+    // payload is the JSON-encoded event payload
+    bytes payload = 2;
+
+    // direction controls event routing:
+    // 0 = DirLocal (stays on local bus)
+    // 1 = DirUp (edge to control)
+    // 2 = DirDown (control to edge)
+    int32 direction = 3;
+
+    // plugin_id identifies the plugin publishing the event (for origin tracking)
+    string plugin_id = 4;
+}
+
+// PublishResponse is returned after publishing an event
+message PublishResponse {
+    // success indicates whether the event was published successfully
+    bool success = 1;
+
+    // error_message contains the error description if success is false
+    string error_message = 2;
+
+    // event_id is the generated UUID for the published event
+    string event_id = 3;
+}
+
+// SubscribeRequest is sent by a plugin to subscribe to events
+message SubscribeRequest {
+    // topic is the topic to subscribe to. If empty and subscribe_all is false,
+    // no events will be received.
+    string topic = 1;
+
+    // subscribe_all subscribes to all events regardless of topic
+    bool subscribe_all = 2;
+
+    // plugin_id identifies the subscribing plugin (for tracking/logging)
+    string plugin_id = 3;
+}
+
+// EventMessage is streamed to plugins for matching events
+message EventMessage {
+    // id is the unique event identifier (UUID)
+    string id = 1;
+
+    // topic is the logical topic name
+    string topic = 2;
+
+    // origin is the node/plugin that created the event
+    string origin = 3;
+
+    // direction indicates the original routing direction (informational)
+    // When received via Subscribe, events are always effectively "local"
+    int32 direction = 4;
+
+    // payload is the JSON-encoded event payload
+    bytes payload = 5;
+}
+
+// UnsubscribeRequest is sent to remove a subscription
+message UnsubscribeRequest {
+    // subscription_id is the ID returned from Subscribe (client-generated)
+    string subscription_id = 1;
+}
+
+// UnsubscribeResponse is returned after unsubscribing
+message UnsubscribeResponse {
+    // success indicates whether the unsubscribe was successful
+    bool success = 1;
+
+    // error_message contains the error description if success is false
+    string error_message = 2;
+}

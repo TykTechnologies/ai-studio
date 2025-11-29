@@ -10,7 +10,7 @@ The Unified SDK (`pkg/plugin_sdk`) is the modern, recommended approach for all p
 - **Automatic Runtime Detection**: SDK detects the execution environment
 - **Capability-Based Design**: Implement only what you need
 - **Type-Safe**: Clean Go types, no manual proto handling
-- **Service Access**: Built-in KV storage, logging, and management APIs
+- **Service Access**: Built-in KV storage, logging, events, and management APIs
 - **Context-Rich**: Access to app, user, LLM metadata in every call
 
 ### Installation
@@ -470,6 +470,30 @@ ctx.Services.Logger().Error("Error", "details", details)
 ctx.Services.Logger().Debug("Debug info", "data", data)
 ```
 
+**Events:**
+```go
+// Publish an event (flows up from edge to control)
+err := ctx.Services.Events().Publish(ctx, "cache.invalidate", payload, plugin_sdk.DirUp)
+
+// Subscribe to events on a specific topic
+subscriptionID, err := ctx.Services.Events().Subscribe("cache.invalidate", func(ev plugin_sdk.Event) {
+    // Handle event
+})
+
+// Subscribe to all events
+subscriptionID, err := ctx.Services.Events().SubscribeAll(func(ev plugin_sdk.Event) {
+    // Handle any event
+})
+
+// Unsubscribe when done
+err := ctx.Services.Events().Unsubscribe(subscriptionID)
+```
+
+**Note on Events:**
+- Events enable real-time communication between plugins and across the hub-spoke architecture
+- Direction controls routing: `DirLocal` (stays local), `DirUp` (edge→control), `DirDown` (control→edge)
+- See [Service API Reference](plugins-service-api.md#event-service) for complete documentation
+
 #### Runtime-Specific Services
 
 **Gateway Services** (`ctx.Services.Gateway()`):
@@ -721,6 +745,8 @@ See working examples in [`examples/plugins/`](../../../examples/plugins/) for in
 - Use context timeouts for external calls
 - Cache frequently accessed data in KV storage
 - Handle service errors gracefully
+- Use Events for cross-plugin and edge-to-control communication
+- Unsubscribe from events in `Shutdown()` to prevent leaks
 
 ### Performance
 - Minimize Service API calls in request path

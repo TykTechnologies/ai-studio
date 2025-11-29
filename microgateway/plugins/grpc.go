@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"net/rpc"
 
-	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	mgmtpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -65,6 +66,13 @@ type MicrogatewayPluginClient struct {
 // SetupServiceBroker creates a long-lived brokered server for microgateway services
 // Returns the broker ID that the plugin can use to dial back to host services
 func (c *MicrogatewayPluginClient) SetupServiceBroker(managementServer interface{}) (uint32, error) {
+	return c.SetupServiceBrokerWithEvents(managementServer, nil)
+}
+
+// SetupServiceBrokerWithEvents creates a long-lived brokered server for microgateway services
+// including the plugin event service for pub/sub.
+// Returns the broker ID that the plugin can use to dial back to host services.
+func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(managementServer interface{}, eventServer interface{}) (uint32, error) {
 	if c.broker == nil {
 		return 0, fmt.Errorf("broker not available")
 	}
@@ -79,12 +87,22 @@ func (c *MicrogatewayPluginClient) SetupServiceBroker(managementServer interface
 		return 0, fmt.Errorf("invalid management server type - does not implement MicrogatewayManagementServiceServer")
 	}
 
+	// Cast event server if provided
+	var evtServer eventpb.PluginEventServiceServer
+	if eventServer != nil {
+		evtServer, ok = eventServer.(eventpb.PluginEventServiceServer)
+		if !ok {
+			return 0, fmt.Errorf("invalid event server type - does not implement PluginEventServiceServer")
+		}
+	}
+
 	// Allocate broker ID and start brokered server
 	brokerID := c.broker.NextId()
 
 	log.Debug().
 		Uint32("broker_id", brokerID).
 		Str("broker_ptr", fmt.Sprintf("%p", c.broker)).
+		Bool("has_event_server", evtServer != nil).
 		Msg("Setting up long-lived brokered server for microgateway service API access (HOST SIDE)")
 
 	// Start brokered server with microgateway management services
@@ -99,6 +117,14 @@ func (c *MicrogatewayPluginClient) SetupServiceBroker(managementServer interface
 		log.Debug().
 			Uint32("broker_id", brokerID).
 			Msg("✅ Microgateway management services registered on long-lived brokered server")
+
+		// Register plugin event service if provided
+		if evtServer != nil {
+			eventpb.RegisterPluginEventServiceServer(s, evtServer)
+			log.Debug().
+				Uint32("broker_id", brokerID).
+				Msg("✅ Plugin event service registered on long-lived brokered server")
+		}
 
 		return s
 	})

@@ -2,6 +2,7 @@ package plugin_sdk
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"time"
 )
@@ -67,6 +68,11 @@ type ServiceBroker interface {
 	// Studio returns Studio-specific services (only available in RuntimeStudio)
 	// Returns nil if called in Gateway context
 	Studio() StudioServices
+
+	// Events returns the event pub/sub service (works in both contexts)
+	// Allows plugins to publish and subscribe to events that flow across
+	// edge/control boundaries via the event bridge system.
+	Events() EventService
 }
 
 // KVService provides key-value storage for plugin data.
@@ -213,4 +219,104 @@ func NewContext(baseCtx context.Context, services ServiceBroker, requestID strin
 		Services:     services,
 		Context:      baseCtx,
 	}
+}
+
+// ============================================================================
+// Event Service Types
+// ============================================================================
+
+// Direction controls event routing and prevents feedback loops.
+// Events are routed based on their direction:
+// - DirLocal: Events stay on the local bus, never forwarded
+// - DirUp: Events flow from edge to control
+// - DirDown: Events flow from control to edge(s)
+type Direction int
+
+const (
+	// DirLocal indicates events that should only be processed locally
+	DirLocal Direction = iota
+	// DirUp indicates events flowing from edge to control
+	DirUp
+	// DirDown indicates events flowing from control to edge(s)
+	DirDown
+)
+
+// String returns a human-readable representation of the Direction.
+func (d Direction) String() string {
+	switch d {
+	case DirLocal:
+		return "local"
+	case DirUp:
+		return "up"
+	case DirDown:
+		return "down"
+	default:
+		return "unknown"
+	}
+}
+
+// DirectionFromInt32 converts an int32 to Direction.
+func DirectionFromInt32(d int32) Direction {
+	switch d {
+	case 0:
+		return DirLocal
+	case 1:
+		return DirUp
+	case 2:
+		return DirDown
+	default:
+		return DirLocal
+	}
+}
+
+// Event represents an event received from the event bus.
+type Event struct {
+	// ID is a UUID for deduplication and tracing
+	ID string
+
+	// Topic is the logical topic name (e.g., "config.update", "metrics.report")
+	Topic string
+
+	// Origin is the node/plugin ID that created the event
+	Origin string
+
+	// Dir is the direction (informational - when received, always treated as local)
+	Dir Direction
+
+	// Payload is the application-specific data as JSON
+	Payload json.RawMessage
+}
+
+// EventHandler is a callback function invoked when an event is received.
+type EventHandler func(event Event)
+
+// EventService provides pub/sub capabilities for plugins.
+// This service allows plugins to publish events to the event bus and
+// subscribe to receive events. Events can flow across node boundaries
+// (edge ↔ control) based on their direction.
+type EventService interface {
+	// Publish sends an event to the event bus.
+	// topic: logical topic name (e.g., "cache.hit", "config.reload")
+	// payload: arbitrary data (will be JSON-encoded)
+	// dir: routing direction:
+	//   - DirLocal: stays on local bus only
+	//   - DirUp: forwarded from edge to control
+	//   - DirDown: forwarded from control to edge(s)
+	Publish(ctx context.Context, topic string, payload interface{}, dir Direction) error
+
+	// PublishRaw sends an event with a pre-encoded JSON payload.
+	PublishRaw(ctx context.Context, topic string, payload []byte, dir Direction) error
+
+	// Subscribe registers a handler for events on a specific topic.
+	// Returns a subscription ID that can be used to unsubscribe.
+	// The handler is called asynchronously for each matching event.
+	Subscribe(topic string, handler EventHandler) (string, error)
+
+	// SubscribeAll registers a handler for all events regardless of topic.
+	// Returns a subscription ID that can be used to unsubscribe.
+	SubscribeAll(handler EventHandler) (string, error)
+
+	// Unsubscribe removes a subscription by ID.
+	// After this call, the handler will no longer receive events.
+	Unsubscribe(subscriptionID string) error
 }

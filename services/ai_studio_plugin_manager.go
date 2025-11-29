@@ -13,11 +13,13 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
-	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
+	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
+	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -28,6 +30,9 @@ import (
 // This is set when the service is created to avoid circular dependencies
 var globalServiceReference *Service
 
+// Global event server reference for plugin pub/sub
+var globalEventServerReference *PluginEventServer
+
 // NewAIStudioManagementServerFunc is a factory function for creating AIStudioManagementServer
 // This is set by the grpc package to avoid circular imports
 var NewAIStudioManagementServerFunc func(*Service) interface{}
@@ -36,6 +41,12 @@ var NewAIStudioManagementServerFunc func(*Service) interface{}
 func SetGlobalServiceReference(service *Service) {
 	globalServiceReference = service
 	logger.Debug("Global service reference set for plugin GRPCServer access")
+}
+
+// SetGlobalEventServer sets the global event server for plugin pub/sub access
+func SetGlobalEventServer(server *PluginEventServer) {
+	globalEventServerReference = server
+	logger.Debug("Global event server set for plugin pub/sub access")
 }
 
 
@@ -55,6 +66,9 @@ type AIStudioPluginManager struct {
 	// Plugin configuration
 	handshakeConfig goplugin.HandshakeConfig
 	pluginMap       map[string]goplugin.Plugin
+
+	// Event server for plugin pub/sub
+	eventServer *PluginEventServer
 }
 
 // LoadedAIStudioPlugin represents a loaded AI Studio plugin
@@ -105,6 +119,32 @@ func (m *AIStudioPluginManager) SetService(service *Service) {
 	m.service = service
 }
 
+// SetEventBus creates a PluginEventServer from the given event bus and node ID.
+// This enables plugin pub/sub functionality.
+func (m *AIStudioPluginManager) SetEventBus(bus eventbridge.Bus, nodeID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if bus == nil {
+		return
+	}
+
+	m.eventServer = NewPluginEventServer(bus, nodeID)
+	// Also set the global reference for GRPCClient access
+	SetGlobalEventServer(m.eventServer)
+
+	log.Debug().
+		Str("node_id", nodeID).
+		Msg("Plugin event server created for AI Studio plugin manager")
+}
+
+// GetEventServer returns the plugin event server
+func (m *AIStudioPluginManager) GetEventServer() *PluginEventServer {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.eventServer
+}
+
 // AIStudioPluginGRPC implements the goplugin.Plugin interface for gRPC
 type AIStudioPluginGRPC struct {
 	goplugin.NetRPCUnsupportedPlugin
@@ -118,17 +158,19 @@ func (p *AIStudioPluginGRPC) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Ser
 func (p *AIStudioPluginGRPC) GRPCClient(ctx context.Context, broker *goplugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	// Return client wrapper that stores broker for host-side service setup
 	return &AIStudioPluginClient{
-		broker:     broker,
-		pluginStub: pb.NewPluginServiceClient(c),
-		service:    globalServiceReference,
+		broker:      broker,
+		pluginStub:  pb.NewPluginServiceClient(c),
+		service:     globalServiceReference,
+		eventServer: globalEventServerReference,
 	}, nil
 }
 
 // AIStudioPluginClient wraps the plugin client with broker access for host service setup
 type AIStudioPluginClient struct {
-	broker     *goplugin.GRPCBroker
-	pluginStub pb.PluginServiceClient
-	service    *Service // Reference to AI Studio service for brokered servers
+	broker      *goplugin.GRPCBroker
+	pluginStub  pb.PluginServiceClient
+	service     *Service             // Reference to AI Studio service for brokered servers
+	eventServer *PluginEventServer   // Reference to plugin event server for pub/sub
 }
 
 // SetupServiceBroker creates a long-lived brokered server for AI Studio services
@@ -143,7 +185,11 @@ func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
 
 	log.Debug().
 		Uint32("broker_id", brokerID).
+		Bool("has_event_server", c.eventServer != nil).
 		Msg("Setting up long-lived brokered server for AI Studio service API access")
+
+	// Capture event server reference for closure
+	evtServer := c.eventServer
 
 	// Start brokered server with AI Studio management services
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
@@ -161,6 +207,14 @@ func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
 			}
 		} else {
 			log.Error().Msg("NewAIStudioManagementServerFunc not set - cannot create service server")
+		}
+
+		// Register plugin event service if available
+		if evtServer != nil {
+			eventpb.RegisterPluginEventServiceServer(s, evtServer)
+			log.Debug().
+				Uint32("broker_id", brokerID).
+				Msg("Plugin event service registered on long-lived brokered server")
 		}
 
 		return s

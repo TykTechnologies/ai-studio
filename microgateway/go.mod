@@ -144,6 +144,7 @@ require (
 	github.com/redis/go-redis/v9 v9.5.3 // indirect
 	github.com/redis/rueidis v1.0.34 // indirect
 	github.com/russellhaering/goxmldsig v1.4.0 // indirect
+	github.com/simonfxr/pubsub v0.0.5 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect

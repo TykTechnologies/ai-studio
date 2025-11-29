@@ -67,7 +67,8 @@ message EdgeMessage {
     HeartbeatRequest heartbeat = 2;
     ConfigurationRequest config_request = 3;
     EdgeUnregistrationRequest unregistration = 4;
-    ConfigurationReloadResponse reload_response = 5; // NEW: Reload status reporting
+    ConfigurationReloadResponse reload_response = 5; // Reload status reporting
+    EventFrame event = 6; // Event bridge: events from edge to control
   }
 }
 
@@ -79,8 +80,22 @@ message ControlMessage {
     ConfigurationChange change = 3;
     HeartbeatResponse heartbeat_response = 4;
     ErrorMessage error = 5;
-    ConfigurationReloadRequest reload_request = 6; // NEW: Initiate reload
+    ConfigurationReloadRequest reload_request = 6; // Initiate reload
+    EventFrame event = 7; // Event bridge: events from control to edge
   }
+}
+
+// EventFrame represents an event for the event bridge system.
+// Events are routed based on their direction (dir field):
+// - 0 (Local): Events stay on the local bus, never forwarded
+// - 1 (Up): Events flow from edge to control
+// - 2 (Down): Events flow from control to edge(s)
+message EventFrame {
+  string id = 1;       // UUID for deduplication and tracing
+  string topic = 2;    // Logical topic name (e.g., "config.update", "metrics.report")
+  string origin = 3;   // Node ID that created the event (e.g., "control" or "edge-123")
+  int32 dir = 4;       // Direction: 0 = Local, 1 = Up, 2 = Down
+  bytes payload = 5;   // Application payload as JSON
 }
 
 // HeartbeatRequest contains health and status information from edge

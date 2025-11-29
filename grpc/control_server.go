@@ -19,6 +19,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
@@ -53,6 +54,12 @@ type EdgeInstanceConnection struct {
 	Stream        pb.ConfigurationSyncService_SubscribeToChangesServer
 	LastHeartbeat time.Time
 
+	// Event bridge components for this connection
+	streamAdapter *eventbridge.StreamAdapter
+	eventBridge   *eventbridge.Bridge
+	bridgeCtx     context.Context
+	bridgeCancel  context.CancelFunc
+
 	// Mutex to protect concurrent access to EdgeInstanceConnection fields
 	mu sync.RWMutex
 }
@@ -83,6 +90,9 @@ type ControlServer struct {
 
 	// Plugin manager for routing edge payloads to plugins
 	pluginManager EdgePayloadRouter
+
+	// Event bridge: local event bus for control node
+	eventBus eventbridge.Bus
 }
 
 // Config holds the control server configuration
@@ -130,12 +140,15 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 		edgeConnections:       make(map[string]*EdgeInstanceConnection),
 		maxConcurrentStreams:  maxStreams,
 		edgeManagementService: edge_management.NewService(db),
+		eventBus:              eventbridge.NewBus(),
 	}
 
 	// Initialize AI Studio's analytics system for processing edge pulse data
 	ctx := context.Background()
 	analytics.StartRecording(ctx, db)
 	log.Debug().Msg("AI Studio analytics system initialized for control server")
+
+	log.Debug().Msg("Event bridge bus initialized for control server")
 
 	// Start cleanup routine
 	server.startCleanupRoutine()
@@ -353,6 +366,31 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					// Normalize namespace (CE: forces "default", ENT: accepts as-is)
 					normalizedNamespace := s.edgeManagementService.GetNamespaceForEdge(m.Registration.EdgeNamespace)
 
+					// Create bridge context for this connection
+					bridgeCtx, bridgeCancel := context.WithCancel(context.Background())
+
+					// Create stream adapter for event bridge
+					streamAdapter := eventbridge.NewStreamAdapter(func(frame *eventbridge.EventFrame) error {
+						return stream.Send(&pb.ControlMessage{
+							Message: &pb.ControlMessage_Event{
+								Event: &pb.EventFrame{
+									Id:      frame.ID,
+									Topic:   frame.Topic,
+									Origin:  frame.Origin,
+									Dir:     frame.Dir,
+									Payload: frame.Payload,
+								},
+							},
+						})
+					}, 100)
+
+					// Create and start event bridge for this edge connection
+					bridge := eventbridge.NewBridge(eventbridge.BridgeConfig{
+						NodeID:    "control",
+						IsControl: true,
+					}, s.eventBus, streamAdapter)
+					bridge.Start(bridgeCtx)
+
 					s.edgeMutex.Lock()
 					edgeConnection = &EdgeInstanceConnection{
 						EdgeID:        m.Registration.EdgeId,
@@ -361,9 +399,15 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 						Version:       m.Registration.Version,
 						Stream:        stream,
 						LastHeartbeat: time.Now(),
+						streamAdapter: streamAdapter,
+						eventBridge:   bridge,
+						bridgeCtx:     bridgeCtx,
+						bridgeCancel:  bridgeCancel,
 					}
 					s.edgeConnections[edgeID] = edgeConnection
 					s.edgeMutex.Unlock()
+
+					log.Debug().Str("edge_id", edgeID).Msg("Event bridge started for edge connection")
 
 					// Send registration response
 					response := &pb.ControlMessage{
@@ -438,6 +482,20 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 						}
 					}
 				}
+
+			case *pb.EdgeMessage_Event:
+				// Handle event bridge message from edge
+				if m.Event != nil && edgeConnection != nil && edgeConnection.streamAdapter != nil {
+					log.Trace().
+						Str("event_id", m.Event.Id).
+						Str("topic", m.Event.Topic).
+						Str("origin", m.Event.Origin).
+						Str("edge_id", edgeID).
+						Msg("Received event from edge")
+
+					// Enqueue the event for the bridge to process
+					edgeConnection.streamAdapter.EnqueueProtoEvent(m.Event)
+				}
 			}
 		}
 	}()
@@ -447,6 +505,17 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 
 	// Cleanup when stream closes
 	if edgeConnection != nil {
+		// Stop event bridge for this connection
+		if edgeConnection.bridgeCancel != nil {
+			edgeConnection.bridgeCancel()
+		}
+		if edgeConnection.eventBridge != nil {
+			edgeConnection.eventBridge.Stop()
+		}
+		if edgeConnection.streamAdapter != nil {
+			edgeConnection.streamAdapter.Close()
+		}
+
 		s.edgeMutex.Lock()
 		if existingEdge, exists := s.edgeConnections[edgeID]; exists && existingEdge == edgeConnection {
 			existingEdge.Status = "disconnected"
@@ -459,6 +528,8 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 		if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
 			edgeInstance.UpdateStatus(s.db, models.EdgeStatusDisconnected)
 		}
+
+		log.Debug().Str("edge_id", edgeID).Msg("Event bridge stopped for edge connection")
 	}
 
 	log.Debug().Str("edge_id", edgeID).Msg("Edge stream closed")
@@ -490,6 +561,12 @@ func (s *ControlServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequ
 		Acknowledged: true,
 		Message:      "Heartbeat acknowledged by AI Studio",
 	}, nil
+}
+
+// GetEventBus returns the control server's event bus for subscribing to events.
+// This allows other AI Studio components to subscribe to events from edges.
+func (s *ControlServer) GetEventBus() eventbridge.Bus {
+	return s.eventBus
 }
 
 // UnregisterEdge handles edge instance unregistration

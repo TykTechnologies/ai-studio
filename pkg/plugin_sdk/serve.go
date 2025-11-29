@@ -74,6 +74,9 @@ func (p *grpcPluginImpl) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server)
 	// IMPORTANT: Cannot use fmt.Printf during plugin startup - breaks go-plugin handshake
 	// Use log.Printf which goes to hclog and doesn't interfere
 
+	// Store broker for event service access (works in both contexts)
+	SetEventServiceBroker(broker)
+
 	if runtime == RuntimeGateway {
 		// Gateway context - use Microgateway SDK
 		if err := initializeMicrogatewaySDK(s, broker, 0); err != nil {
@@ -255,6 +258,10 @@ func (w *pluginServerWrapper) Initialize(ctx context.Context, req *pb.InitReques
 					ai_studio_sdk.SetServiceBrokerID(uint32(brokerID))
 					log.Printf("Set AI Studio service broker ID: %d", brokerID)
 				}
+
+				// Also set broker ID for event service (works in both contexts)
+				SetEventServiceBrokerID(uint32(brokerID))
+				log.Printf("Set event service broker ID: %d", brokerID)
 			}
 		}
 	}

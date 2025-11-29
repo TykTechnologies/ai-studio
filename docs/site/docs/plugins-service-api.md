@@ -175,6 +175,256 @@ func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedReques
 }
 ```
 
+### Event Service
+
+The Event Service enables plugins to publish and subscribe to events using the Event Bridge system. This allows plugins to communicate across the distributed architecture (edge ↔ control) using a pub/sub pattern.
+
+**Key Features:**
+- Publish events to the local event bus
+- Subscribe to events by topic or all events
+- Events can flow across the hub-spoke architecture based on direction
+- Automatic cleanup of subscriptions when plugin disconnects
+
+#### Event Directions
+
+Events have a direction that controls routing:
+
+| Direction | Constant | Description |
+|-----------|----------|-------------|
+| Local | `plugin_sdk.DirLocal` | Stays on local bus only, never forwarded |
+| Up | `plugin_sdk.DirUp` | Flows from edge (Microgateway) to control (AI Studio) |
+| Down | `plugin_sdk.DirDown` | Flows from control (AI Studio) to edge(s) |
+
+#### Publish Event
+
+Publish an event with a JSON-serializable payload:
+
+```go
+err := ctx.Services.Events().Publish(ctx, "my.topic", payload, plugin_sdk.DirUp)
+```
+
+Example:
+```go
+// Publish a cache hit event to the local bus only
+cacheEvent := map[string]interface{}{
+    "key":       "user:123",
+    "hit":       true,
+    "timestamp": time.Now().Unix(),
+}
+err := ctx.Services.Events().Publish(ctx, "cache.hit", cacheEvent, plugin_sdk.DirLocal)
+if err != nil {
+    ctx.Services.Logger().Error("Failed to publish cache event", "error", err)
+}
+
+// Publish metrics from edge to control
+metrics := map[string]interface{}{
+    "requests_per_second": 1500,
+    "avg_latency_ms":      25,
+    "error_rate":          0.02,
+}
+err = ctx.Services.Events().Publish(ctx, "metrics.report", metrics, plugin_sdk.DirUp)
+```
+
+#### Publish Raw Event
+
+Publish an event with pre-serialized JSON payload (avoids double-serialization):
+
+```go
+err := ctx.Services.Events().PublishRaw(ctx, "my.topic", jsonBytes, plugin_sdk.DirUp)
+```
+
+Example:
+```go
+// When you already have JSON bytes
+jsonPayload := []byte(`{"status": "ready", "version": "1.0.0"}`)
+err := ctx.Services.Events().PublishRaw(ctx, "plugin.status", jsonPayload, plugin_sdk.DirLocal)
+```
+
+#### Subscribe to Events
+
+Subscribe to events on a specific topic:
+
+```go
+subscriptionID, err := ctx.Services.Events().Subscribe("my.topic", func(ev plugin_sdk.Event) {
+    // Handle event
+    fmt.Printf("Received: %s from %s\n", ev.Topic, ev.Origin)
+})
+```
+
+Example:
+```go
+// Subscribe to configuration updates
+subID, err := ctx.Services.Events().Subscribe("config.updated", func(ev plugin_sdk.Event) {
+    ctx.Services.Logger().Info("Configuration updated",
+        "event_id", ev.ID,
+        "origin", ev.Origin,
+    )
+
+    // Parse payload
+    var config map[string]interface{}
+    if err := json.Unmarshal(ev.Payload, &config); err != nil {
+        ctx.Services.Logger().Error("Failed to parse config", "error", err)
+        return
+    }
+
+    // Apply new configuration
+    p.applyConfig(config)
+})
+if err != nil {
+    ctx.Services.Logger().Error("Failed to subscribe", "error", err)
+}
+
+// Store subscription ID to unsubscribe later
+p.configSubID = subID
+```
+
+#### Subscribe to All Events
+
+Subscribe to all events regardless of topic:
+
+```go
+subscriptionID, err := ctx.Services.Events().SubscribeAll(func(ev plugin_sdk.Event) {
+    // Handle all events
+})
+```
+
+Example:
+```go
+// Monitor all events for debugging
+subID, err := ctx.Services.Events().SubscribeAll(func(ev plugin_sdk.Event) {
+    ctx.Services.Logger().Debug("Event observed",
+        "id", ev.ID,
+        "topic", ev.Topic,
+        "origin", ev.Origin,
+        "direction", ev.Dir,
+    )
+})
+```
+
+#### Unsubscribe
+
+Remove a subscription:
+
+```go
+err := ctx.Services.Events().Unsubscribe(subscriptionID)
+```
+
+Example:
+```go
+// Clean up subscription in Shutdown
+func (p *MyPlugin) Shutdown(ctx plugin_sdk.Context) error {
+    if p.configSubID != "" {
+        if err := ctx.Services.Events().Unsubscribe(p.configSubID); err != nil {
+            ctx.Services.Logger().Warn("Failed to unsubscribe", "error", err)
+        }
+    }
+    return nil
+}
+```
+
+**Note:** Subscriptions are automatically cleaned up when the plugin process terminates, but it's good practice to explicitly unsubscribe in `Shutdown()`.
+
+#### Event Structure
+
+Events have the following fields:
+
+```go
+type Event struct {
+    ID      string           // UUID for deduplication and tracing
+    Topic   string           // Logical topic name (e.g., "config.update")
+    Origin  string           // Node/plugin that created the event
+    Dir     Direction        // Routing direction
+    Payload json.RawMessage  // JSON payload
+}
+```
+
+#### Complete Example: Event-Driven Cache Invalidation
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type CachePlugin struct {
+    plugin_sdk.BasePlugin
+    cache           map[string][]byte
+    invalidationSub string
+}
+
+func (p *CachePlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    p.cache = make(map[string][]byte)
+
+    // Subscribe to cache invalidation events from control
+    subID, err := ctx.Services.Events().Subscribe("cache.invalidate", func(ev plugin_sdk.Event) {
+        var req struct {
+            Keys []string `json:"keys"`
+        }
+        if err := json.Unmarshal(ev.Payload, &req); err != nil {
+            return
+        }
+
+        for _, key := range req.Keys {
+            delete(p.cache, key)
+        }
+
+        ctx.Services.Logger().Info("Cache invalidated",
+            "keys", len(req.Keys),
+            "origin", ev.Origin,
+        )
+    })
+    if err != nil {
+        return err
+    }
+    p.invalidationSub = subID
+
+    return nil
+}
+
+func (p *CachePlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    cacheKey := req.Path
+
+    // Check cache
+    if data, ok := p.cache[cacheKey]; ok {
+        // Publish cache hit event (local only for metrics)
+        ctx.Services.Events().Publish(ctx, "cache.hit", map[string]interface{}{
+            "key": cacheKey,
+        }, plugin_sdk.DirLocal)
+
+        // Return cached response...
+    }
+
+    // Cache miss - continue to upstream
+    return &pb.PluginResponse{Modified: false}, nil
+}
+
+func (p *CachePlugin) Shutdown(ctx plugin_sdk.Context) error {
+    if p.invalidationSub != "" {
+        ctx.Services.Events().Unsubscribe(p.invalidationSub)
+    }
+    return nil
+}
+```
+
+#### Event Service Best Practices
+
+1. **Use Appropriate Directions**:
+   - `DirLocal` for metrics and debugging within a single node
+   - `DirUp` for edge plugins sending data to control
+   - `DirDown` for control pushing updates to edges
+
+2. **Handle Payload Parsing Errors**: Always validate and handle JSON unmarshaling errors in event handlers.
+
+3. **Avoid Blocking in Handlers**: Event handlers should be fast. For heavy processing, spawn a goroutine or queue work.
+
+4. **Clean Up Subscriptions**: Unsubscribe in `Shutdown()` for explicit cleanup.
+
+5. **Use Meaningful Topics**: Use dot-separated topic names for clarity (e.g., `cache.invalidate`, `config.updated`, `metrics.report`).
+
+6. **Include Context in Payloads**: Add timestamps, correlation IDs, or source info to payloads for debugging.
+
 ## Studio Services
 
 Available when `ctx.Runtime == plugin_sdk.RuntimeStudio`.
