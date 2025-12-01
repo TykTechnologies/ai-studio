@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback, memo, useMemo } from "react";
+import React, { useState, useEffect, useCallback, memo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDebounce } from "use-debounce";
 import apiClient from "../utils/apiClient";
+import SearchInput from "../components/common/SearchInput";
 import {
   Table,
   TableBody,
@@ -58,6 +60,9 @@ const Users = memo(() => {
   });
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
+  const isFirstRender = useRef(true);
   const { features } = useSystemFeatures();
 
   // Helper function to check if we're in gateway-only mode
@@ -81,13 +86,18 @@ const Users = memo(() => {
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/users", {
-        params: {
-          page,
-          page_size: pageSize,
-          sort: `${sortOrder === "desc" ? "-" : ""}${sortField}`,
-        },
-      });
+      const params = {
+        page,
+        page_size: pageSize,
+        sort: `${sortOrder === "desc" ? "-" : ""}${sortField}`,
+      };
+
+      // Only include search param if 2+ characters entered
+      if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
+        params.search = debouncedSearchTerm;
+      }
+
+      const response = await apiClient.get("/users", { params });
       setUsers(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -99,7 +109,7 @@ const Users = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, updatePaginationData, sortField, sortOrder]);
+  }, [page, pageSize, updatePaginationData, sortField, sortOrder, debouncedSearchTerm]);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -114,6 +124,19 @@ const Users = memo(() => {
     fetchUsers();
     fetchGroups();
   }, [fetchUsers, fetchGroups]);
+
+  // Reset to page 1 when search term changes (but not on initial render)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    handlePageChange(1);
+  }, [debouncedSearchTerm, handlePageChange]);
+
+  const handleSearch = useCallback((value) => {
+    setSearchTerm(value);
+  }, []);
 
   const handleMenuOpen = useCallback((event, user) => {
     event.stopPropagation();
@@ -263,6 +286,13 @@ const Users = memo(() => {
         </PrimaryButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
+        <Box sx={{ mb: 2, maxWidth: 400 }}>
+          <SearchInput
+            value={searchTerm}
+            onChange={handleSearch}
+            placeholder="Search by name or email..."
+          />
+        </Box>
         <StyledPaper>
           <Table>
             <TableHead>
