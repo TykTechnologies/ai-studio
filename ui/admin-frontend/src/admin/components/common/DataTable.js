@@ -9,7 +9,6 @@ import {
   MenuItem,
   InputAdornment,
   Box,
-  Typography
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -74,10 +73,7 @@ const DataTable = memo(({
   return (
     <>
     {enableSearch && (
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
-          Table Search
-        </Typography>
+      <Box sx={{ mb: 2, maxWidth: 400 }}>
         <StyledTextField
           placeholder={searchPlaceholder}
           variant="outlined"

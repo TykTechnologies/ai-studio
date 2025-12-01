@@ -351,10 +351,15 @@ func (a *Apps) ListByUserID(db *gorm.DB, userID uint, pageSize int, pageNumber i
 }
 
 // Search returns apps matching the given search term with pagination
+// Searches across app name, description, and associated user's name and email
 func (a *Apps) Search(db *gorm.DB, searchTerm string, pageSize int, pageNumber int, all bool, sort string) (int64, int, error) {
 	var totalCount int64
-	// Enable debug mode to log SQL queries
-	query := db.Model(&App{}).Where("name LIKE ? OR description LIKE ?", "%"+searchTerm+"%", "%"+searchTerm+"%")
+	searchPattern := "%" + searchTerm + "%"
+	// Join with users table to search by user name/email as well
+	query := db.Model(&App{}).
+		Joins("LEFT JOIN users ON users.id = apps.user_id").
+		Where("apps.name LIKE ? OR apps.description LIKE ? OR users.name LIKE ? OR users.email LIKE ?",
+			searchPattern, searchPattern, searchPattern, searchPattern)
 
 	// Handle sorting
 	if sort != "" {
