@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useDebounce } from "use-debounce";
 import apiClient from "../../utils/apiClient";
+import SearchInput from "../common/SearchInput";
 import {
   Typography,
   CircularProgress,
@@ -134,6 +136,9 @@ const LLMDetails = () => {
   const [endDate, setEndDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+  const [proxyLogSearchTerm, setProxyLogSearchTerm] = useState("");
+  const [debouncedProxyLogSearch] = useDebounce(proxyLogSearchTerm, 500);
+  const isFirstSearchRender = useRef(true);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -150,6 +155,37 @@ const LLMDetails = () => {
   const apiKeyPlaceholder = "API Key not set";
   const theme = useTheme();
 
+  const handleProxyLogSearch = useCallback((value) => {
+    setProxyLogSearchTerm(value);
+  }, []);
+
+  // Define fetchProxyLogs before the useEffect that uses it
+  const fetchProxyLogs = useCallback(async () => {
+    try {
+      const params = {
+        start_date: startDate,
+        end_date: endDate,
+        llm_id: id,
+        page,
+        page_size: pageSize,
+      };
+
+      // Only include search param if 2+ characters entered
+      if (debouncedProxyLogSearch && debouncedProxyLogSearch.length >= 2) {
+        params.search = debouncedProxyLogSearch;
+      }
+
+      const response = await apiClient.get(`/analytics/proxy-logs-for-llm`, { params });
+      setProxyLogs(response.data.data);
+      updatePaginationData(
+        response.data.meta.total_count,
+        response.data.meta.total_pages,
+      );
+    } catch (error) {
+      console.error("Error fetching proxy logs", error);
+    }
+  }, [startDate, endDate, id, page, pageSize, debouncedProxyLogSearch, updatePaginationData]);
+
   useEffect(() => {
     fetchLLMDetails();
   }, [id]);
@@ -157,7 +193,6 @@ const LLMDetails = () => {
   useEffect(() => {
     if (llm) {
       fetchVendorUsage();
-      fetchProxyLogs();
       fetchVendorModelCost();
 
       // Initialize budget usage with 0 if no monthly budget
@@ -169,7 +204,23 @@ const LLMDetails = () => {
         });
       }
     }
-  }, [llm, startDate, endDate, page, pageSize]);
+  }, [llm, startDate, endDate]);
+
+  // Separate effect for proxy logs to handle pagination and search independently
+  useEffect(() => {
+    if (llm) {
+      fetchProxyLogs();
+    }
+  }, [llm, fetchProxyLogs]);
+
+  // Reset to page 1 when proxy log search term changes (but not on initial render)
+  useEffect(() => {
+    if (isFirstSearchRender.current) {
+      isFirstSearchRender.current = false;
+      return;
+    }
+    handlePageChange(1);
+  }, [debouncedProxyLogSearch, handlePageChange]);
 
   const fetchVendorModelCost = async () => {
     try {
@@ -247,27 +298,6 @@ const LLMDetails = () => {
       }
     } catch (error) {
       console.error("Error fetching usage data", error);
-    }
-  };
-
-  const fetchProxyLogs = async () => {
-    try {
-      const response = await apiClient.get(`/analytics/proxy-logs-for-llm`, {
-        params: {
-          start_date: startDate,
-          end_date: endDate,
-          llm_id: id,
-          page,
-          page_size: pageSize,
-        },
-      });
-      setProxyLogs(response.data.data);
-      updatePaginationData(
-        response.data.meta.total_count,
-        response.data.meta.total_pages,
-      );
-    } catch (error) {
-      console.error("Error fetching proxy logs", error);
     }
   };
 
@@ -772,61 +802,82 @@ const LLMDetails = () => {
 
 
         <SectionTitle>Proxy Logs</SectionTitle>
+        <Box sx={{ mb: 2, maxWidth: 400 }}>
+          <SearchInput
+            value={proxyLogSearchTerm}
+            onChange={handleProxyLogSearch}
+            placeholder="Search request or response..."
+          />
+        </Box>
         <StyledPaper>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
-                  Timestamp
-                </StyledTableHeaderCell>
-                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
-                  Vendor
-                </StyledTableHeaderCell>
-                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
-                  Response Code
-                </StyledTableHeaderCell>
-                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
-                  Request
-                </StyledTableHeaderCell>
-                <StyledTableHeaderCell sx={{ verticalAlign: "top" }}>
-                  Response
-                </StyledTableHeaderCell>
-              </TableRow>
-            </TableHead>
+          <TableContainer sx={{ maxWidth: "100%", overflowX: "auto" }}>
+            <Table sx={{ tableLayout: "fixed", width: "100%" }}>
+              <TableHead>
+                <TableRow>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "15%" }}>
+                    Timestamp
+                  </StyledTableHeaderCell>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "10%" }}>
+                    Vendor
+                  </StyledTableHeaderCell>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "10%" }}>
+                    Response Code
+                  </StyledTableHeaderCell>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "32.5%" }}>
+                    Request
+                  </StyledTableHeaderCell>
+                  <StyledTableHeaderCell sx={{ verticalAlign: "top", width: "32.5%" }}>
+                    Response
+                  </StyledTableHeaderCell>
+                </TableRow>
+              </TableHead>
             <TableBody>
-              {proxyLogs?.map((log) => (
-                <StyledTableRow key={log.id}>
-                  <StyledTableCell sx={{ verticalAlign: "top" }}>
-                    {new Date(log.attributes.time_stamp).toLocaleString()}
+              {proxyLogs?.length === 0 && debouncedProxyLogSearch ? (
+                <TableRow>
+                  <StyledTableCell colSpan={5} align="center">
+                    No proxy logs found matching "{debouncedProxyLogSearch}"
                   </StyledTableCell>
-                  <StyledTableCell sx={{ verticalAlign: "top" }}>
-                    {log.attributes.vendor}
-                  </StyledTableCell>
-                  <StyledTableCell sx={{ verticalAlign: "top" }}>
-                    {log.attributes.response_code}
-                  </StyledTableCell>
-                  <StyledTableCell sx={{ verticalAlign: "top" }}>
-                    <pre>
-                      <code>
-                        <ExpandableMessage
-                          message={log.attributes.request_body}
-                        />
-                      </code>
-                    </pre>
-                  </StyledTableCell>
-                  <StyledTableCell sx={{ verticalAlign: "top" }}>
-                    <pre>
-                      <code>
-                        <ExpandableMessage
-                          message={log.attributes.response_body}
-                        />
-                      </code>
-                    </pre>
-                  </StyledTableCell>
-                </StyledTableRow>
-              ))}
+                </TableRow>
+              ) : (
+                proxyLogs?.map((log) => (
+                  <StyledTableRow key={log.id}>
+                    <StyledTableCell sx={{ verticalAlign: "top" }}>
+                      {new Date(log.attributes.time_stamp).toLocaleString()}
+                    </StyledTableCell>
+                    <StyledTableCell sx={{ verticalAlign: "top" }}>
+                      {log.attributes.vendor}
+                    </StyledTableCell>
+                    <StyledTableCell sx={{ verticalAlign: "top" }}>
+                      {log.attributes.response_code}
+                    </StyledTableCell>
+                    <StyledTableCell sx={{ verticalAlign: "top", overflow: "hidden" }}>
+                      <Box sx={{ overflow: "auto", maxHeight: 200 }}>
+                        <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                          <code>
+                            <ExpandableMessage
+                              message={log.attributes.request_body}
+                            />
+                          </code>
+                        </pre>
+                      </Box>
+                    </StyledTableCell>
+                    <StyledTableCell sx={{ verticalAlign: "top", overflow: "hidden" }}>
+                      <Box sx={{ overflow: "auto", maxHeight: 200 }}>
+                        <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                          <code>
+                            <ExpandableMessage
+                              message={log.attributes.response_body}
+                            />
+                          </code>
+                        </pre>
+                      </Box>
+                    </StyledTableCell>
+                  </StyledTableRow>
+                ))
+              )}
             </TableBody>
-          </Table>
+            </Table>
+          </TableContainer>
           <PaginationControls
             page={page}
             pageSize={pageSize}

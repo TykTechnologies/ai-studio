@@ -1029,7 +1029,8 @@ func GetProxyLogsForAppID(db *gorm.DB, startDate, endDate time.Time, appID uint,
 }
 
 // GetProxyLogsForLLM returns paginated proxy logs for a specific LLM by filtering on vendor
-func GetProxyLogsForLLM(db *gorm.DB, startDate, endDate time.Time, llmID uint, page, pageSize int) ([]models.ProxyLog, int64, error) {
+// Optional search parameter searches request_body and response_body fields
+func GetProxyLogsForLLM(db *gorm.DB, startDate, endDate time.Time, llmID uint, page, pageSize int, search string) ([]models.ProxyLog, int64, error) {
 	var proxyLogs []models.ProxyLog
 	var totalCount int64
 
@@ -1044,6 +1045,12 @@ func GetProxyLogsForLLM(db *gorm.DB, startDate, endDate time.Time, llmID uint, p
 	// Filter proxy_logs by vendor and date range
 	query := db.Model(&models.ProxyLog{}).
 		Where("vendor = ? AND time_stamp BETWEEN ? AND ?", llm.Vendor, startDate, endDate)
+
+	// Add search filter if provided
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		query = query.Where("request_body LIKE ? OR response_body LIKE ?", searchPattern, searchPattern)
+	}
 
 	// Count total records
 	err := query.Count(&totalCount).Error
