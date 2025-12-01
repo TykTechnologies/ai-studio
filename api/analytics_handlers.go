@@ -993,6 +993,7 @@ func (a *API) getProxyLogsForLLM(c *gin.Context) {
 // @Param app_id query int true "App ID"
 // @Param page query int false "Page number (default: 1)"
 // @Param page_size query int false "Page size (default: 10)"
+// @Param search query string false "Search term for request/response body"
 // @Success 200 {object} models.PaginatedProxyLogs
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
@@ -1030,7 +1031,9 @@ func (a *API) getProxyLogsForApp(c *gin.Context) {
 		pageSize = 10
 	}
 
-	logs, totalCount, err := analytics.GetProxyLogsForAppID(a.service.DB, startDate, endDate, uint(appID), page, pageSize)
+	search := c.Query("search")
+
+	logs, totalCount, err := analytics.GetProxyLogsForAppID(a.service.DB, startDate, endDate, uint(appID), page, pageSize, search)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
