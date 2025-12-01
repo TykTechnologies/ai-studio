@@ -37,6 +37,11 @@ func (s *Service) CreateGroup(name string, userIDs, catalogueIDs, dataCatalogueI
 		return nil, err
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitGroupCreated(group, group.ID, 0)
+	}
+
 	return group, nil
 }
 
@@ -83,6 +88,11 @@ func (s *Service) UpdateGroup(id uint, name string, userIDs, catalogueIDs, dataC
 		return nil, err
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitGroupUpdated(group, group.ID, 0)
+	}
+
 	return group, nil
 }
 
@@ -107,7 +117,16 @@ func (s *Service) DeleteGroup(id uint) error {
 		return err
 	}
 
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitGroupDeleted(id, 0)
+	}
+
+	return nil
 }
 
 func (s *Service) AddUserToGroup(userID, groupID uint) error {

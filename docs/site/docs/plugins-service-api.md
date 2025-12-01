@@ -486,6 +486,153 @@ func (p *CachePlugin) Shutdown(ctx plugin_sdk.Context) error {
 
 6. **Include Context in Payloads**: Add timestamps, correlation IDs, or source info to payloads for debugging.
 
+### System CRUD Events
+
+AI Studio emits built-in system events when core objects are created, updated, or deleted. These events are published to the local event bus (control-plane only) and can be subscribed to by any plugin.
+
+#### Available System Events
+
+| Topic | Object Type | Action | Description |
+|-------|-------------|--------|-------------|
+| `system.llm.created` | LLM | created | Emitted when an LLM is created |
+| `system.llm.updated` | LLM | updated | Emitted when an LLM is updated |
+| `system.llm.deleted` | LLM | deleted | Emitted when an LLM is deleted |
+| `system.app.created` | App | created | Emitted when an App is created |
+| `system.app.updated` | App | updated | Emitted when an App is updated |
+| `system.app.deleted` | App | deleted | Emitted when an App is deleted |
+| `system.app.approved` | App | approved | Emitted when an App's credential is activated |
+| `system.datasource.created` | Datasource | created | Emitted when a Datasource is created |
+| `system.datasource.updated` | Datasource | updated | Emitted when a Datasource is updated |
+| `system.datasource.deleted` | Datasource | deleted | Emitted when a Datasource is deleted |
+| `system.user.created` | User | created | Emitted when a User is created |
+| `system.user.updated` | User | updated | Emitted when a User is updated |
+| `system.user.deleted` | User | deleted | Emitted when a User is deleted |
+| `system.group.created` | Group | created | Emitted when a Group is created |
+| `system.group.updated` | Group | updated | Emitted when a Group is updated |
+| `system.group.deleted` | Group | deleted | Emitted when a Group is deleted |
+| `system.tool.created` | Tool | created | Emitted when a Tool is created |
+| `system.tool.updated` | Tool | updated | Emitted when a Tool is updated |
+| `system.tool.deleted` | Tool | deleted | Emitted when a Tool is deleted |
+
+#### Event Payload Structure
+
+All system CRUD events use a consistent payload structure:
+
+```go
+type ObjectEventPayload struct {
+    ObjectType string      `json:"object_type"`  // "llm", "app", "datasource", "user", "group", "tool"
+    Action     string      `json:"action"`       // "created", "updated", "deleted", "approved"
+    ObjectID   uint        `json:"object_id"`    // ID of the affected object
+    UserID     uint        `json:"user_id"`      // User who performed the action (0 if system/unknown)
+    Timestamp  time.Time   `json:"timestamp"`    // When the event occurred
+    Object     interface{} `json:"object"`       // The full object (for create/update, nil for delete)
+}
+```
+
+#### Subscribing to System Events
+
+```go
+// Subscribe to all App events using wildcard
+subID, err := ctx.Services.Events().Subscribe("system.app.*", func(ev plugin_sdk.Event) {
+    var payload struct {
+        ObjectType string      `json:"object_type"`
+        Action     string      `json:"action"`
+        ObjectID   uint        `json:"object_id"`
+        UserID     uint        `json:"user_id"`
+        Timestamp  time.Time   `json:"timestamp"`
+        Object     interface{} `json:"object"`
+    }
+
+    if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+        ctx.Services.Logger().Error("Failed to parse event payload", "error", err)
+        return
+    }
+
+    ctx.Services.Logger().Info("App event received",
+        "action", payload.Action,
+        "object_id", payload.ObjectID,
+        "user_id", payload.UserID,
+    )
+})
+
+// Or subscribe to a specific event
+subID, err := ctx.Services.Events().Subscribe("system.user.created", func(ev plugin_sdk.Event) {
+    // Handle new user creation
+})
+```
+
+#### Example: Audit Log Plugin
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "time"
+
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type AuditLogPlugin struct {
+    plugin_sdk.BasePlugin
+    subscriptions []string
+}
+
+func (p *AuditLogPlugin) OnSessionReady(ctx plugin_sdk.Context) {
+    // Subscribe to all system events
+    topics := []string{
+        "system.llm.created", "system.llm.updated", "system.llm.deleted",
+        "system.app.created", "system.app.updated", "system.app.deleted", "system.app.approved",
+        "system.datasource.created", "system.datasource.updated", "system.datasource.deleted",
+        "system.user.created", "system.user.updated", "system.user.deleted",
+        "system.group.created", "system.group.updated", "system.group.deleted",
+        "system.tool.created", "system.tool.updated", "system.tool.deleted",
+    }
+
+    for _, topic := range topics {
+        subID, err := ctx.Services.Events().Subscribe(topic, func(ev plugin_sdk.Event) {
+            p.logAuditEvent(ctx, ev)
+        })
+        if err != nil {
+            ctx.Services.Logger().Error("Failed to subscribe to event", "topic", topic, "error", err)
+            continue
+        }
+        p.subscriptions = append(p.subscriptions, subID)
+    }
+}
+
+func (p *AuditLogPlugin) logAuditEvent(ctx plugin_sdk.Context, ev plugin_sdk.Event) {
+    var payload struct {
+        ObjectType string    `json:"object_type"`
+        Action     string    `json:"action"`
+        ObjectID   uint      `json:"object_id"`
+        UserID     uint      `json:"user_id"`
+        Timestamp  time.Time `json:"timestamp"`
+    }
+
+    if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+        return
+    }
+
+    // Log to external audit system, KV storage, etc.
+    ctx.Services.Logger().Info("AUDIT",
+        "object_type", payload.ObjectType,
+        "action", payload.Action,
+        "object_id", payload.ObjectID,
+        "user_id", payload.UserID,
+        "timestamp", payload.Timestamp,
+    )
+}
+
+func (p *AuditLogPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+    for _, subID := range p.subscriptions {
+        ctx.Services.Events().Unsubscribe(subID)
+    }
+}
+```
+
+**Note**: System events are published with `DirLocal` direction, meaning they stay on the control plane and are not forwarded to edge instances.
+
 ## Studio Services
 
 Available when `ctx.Runtime == plugin_sdk.RuntimeStudio`.

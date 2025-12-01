@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -31,6 +32,9 @@ type Service struct {
 	// Object Hooks
 	HookRegistry *HookRegistry
 	HookManager  *HookManager
+	// System Events
+	EventBus     eventbridge.Bus
+	SystemEvents *SystemEventEmitter
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -236,5 +240,14 @@ func (s *Service) CleanupWithContext(ctx context.Context) error {
 	case <-ctx.Done():
 		logger.Warn("Service cleanup timeout exceeded")
 		return fmt.Errorf("cleanup timeout: %w", ctx.Err())
+	}
+}
+
+// SetEventBus sets the event bus and initializes the system event emitter
+func (s *Service) SetEventBus(bus eventbridge.Bus) {
+	s.EventBus = bus
+	if bus != nil {
+		s.SystemEvents = NewSystemEventEmitter(bus, "control")
+		logger.Debug("Initialized system event emitter")
 	}
 }

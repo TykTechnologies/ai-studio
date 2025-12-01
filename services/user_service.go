@@ -146,6 +146,11 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitUserCreated(user, user.ID, 0)
+	}
+
 	return user, nil
 }
 
@@ -267,6 +272,11 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitUserUpdated(user, user.ID, user.ID)
+	}
+
 	return user, nil
 }
 
@@ -360,6 +370,11 @@ func (s *Service) DeleteUser(user *models.User) error {
 			// Log but don't fail the operation
 			logger.Warn(fmt.Sprintf("After-delete hooks failed: %v", err))
 		}
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitUserDeleted(user.ID, 0)
 	}
 
 	return nil

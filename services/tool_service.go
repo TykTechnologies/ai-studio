@@ -83,6 +83,11 @@ func (s *Service) CreateTool(name, description, toolType string, oasSpec string,
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitToolCreated(tool, tool.ID, 0)
+	}
+
 	return tool, nil
 }
 
@@ -151,6 +156,11 @@ func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpe
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitToolUpdated(tool, tool.ID, 0)
+	}
+
 	return tool, nil
 }
 
@@ -208,6 +218,11 @@ func (s *Service) DeleteTool(id uint) error {
 			// Log but don't fail the operation
 			logger.Warn(fmt.Sprintf("After-delete hooks failed: %v", err))
 		}
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitToolDeleted(id, 0)
 	}
 
 	return nil

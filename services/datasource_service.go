@@ -89,6 +89,11 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitDatasourceCreated(datasource, datasource.ID, userID)
+	}
+
 	return datasource, nil
 }
 
@@ -212,6 +217,11 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitDatasourceUpdated(datasource, datasource.ID, userID)
+	}
+
 	return datasource, nil
 }
 
@@ -268,6 +278,11 @@ func (s *Service) DeleteDatasource(id uint) error {
 			// Log but don't fail the operation
 			logger.Warn(fmt.Sprintf("After-delete hooks failed: %v", err))
 		}
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitDatasourceDeleted(id, datasource.UserID)
 	}
 
 	return nil

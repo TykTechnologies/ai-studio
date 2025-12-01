@@ -304,6 +304,10 @@ func main() {
 			}
 		}
 
+		// Wire event bus to service for system CRUD events
+		service.SetEventBus(controlServer.GetEventBus())
+		logger.Info("Event bus wired to service for system CRUD events")
+
 		logger.Info("Reload coordinator created and connected to control server and namespace service")
 
 		go func() {

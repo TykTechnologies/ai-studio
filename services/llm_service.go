@@ -105,6 +105,11 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitLLMCreated(llm, llm.ID, 0)
+	}
+
 	return llm, nil
 }
 
@@ -186,6 +191,11 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 			// Log but don't fail the operation
 			logger.Warn(fmt.Sprintf("After-create hooks failed: %v", err))
 		}
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitLLMCreated(llm, llm.ID, 0)
 	}
 
 	return llm, nil
@@ -274,6 +284,11 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 			// Log but don't fail the operation
 			logger.Warn(fmt.Sprintf("After-update hooks failed: %v", err))
 		}
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitLLMUpdated(llm, llm.ID, 0)
 	}
 
 	return llm, nil
@@ -406,6 +421,11 @@ func (s *Service) DeleteLLM(id uint) error {
 			// Log but don't fail the operation
 			logger.Warn(fmt.Sprintf("After-delete hooks failed: %v", err))
 		}
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitLLMDeleted(id, 0)
 	}
 
 	return nil
