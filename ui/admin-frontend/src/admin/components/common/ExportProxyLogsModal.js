@@ -18,7 +18,7 @@ import apiClient from "../../utils/apiClient";
 const ExportProxyLogsModal = ({
   open,
   onClose,
-  sourceType, // 'app' or 'llm'
+  sourceType, // 'app', 'llm', or 'user'
   sourceId,
   initialStartDate,
   initialEndDate,
@@ -92,15 +92,49 @@ const ExportProxyLogsModal = ({
     }
   };
 
+  // Get title and description based on source type
+  const getTitle = () => {
+    return sourceType === "user" ? "Export Chat History" : "Export Proxy Logs";
+  };
+
+  const getDescription = () => {
+    switch (sourceType) {
+      case "user":
+        return "Export chat conversations for this user to a JSON file";
+      case "app":
+        return "Export logs for this application to a JSON file";
+      case "llm":
+        return "Export logs for this LLM vendor to a JSON file";
+      default:
+        return "Export logs to a JSON file";
+    }
+  };
+
+  const getSearchPlaceholder = () => {
+    return sourceType === "user"
+      ? "Search conversation names..."
+      : "Search request or response content";
+  };
+
+  const getFeatureName = () => {
+    return sourceType === "user" ? "Chat History Export" : "Proxy Log Export";
+  };
+
+  const getFeatureDescription = () => {
+    return sourceType === "user"
+      ? "Export chat conversations to JSON files for analysis and compliance. This feature is available in the Enterprise Edition."
+      : "Export proxy logs to JSON files for analysis and compliance. This feature is available in the Enterprise Edition.";
+  };
+
   // Show enterprise badge if not enterprise
   if (!isEnterprise) {
     return (
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>Export Proxy Logs</DialogTitle>
+        <DialogTitle>{getTitle()}</DialogTitle>
         <DialogContent>
           <EnterpriseFeatureBadge
-            feature="Proxy Log Export"
-            description="Export proxy logs to JSON files for analysis and compliance. This feature is available in the Enterprise Edition."
+            feature={getFeatureName()}
+            description={getFeatureDescription()}
           />
         </DialogContent>
         <DialogActions>
@@ -116,10 +150,10 @@ const ExportProxyLogsModal = ({
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         <Typography variant="h6">
-          Export Proxy Logs
+          {getTitle()}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          Export logs for {sourceType === "app" ? "this application" : "this LLM vendor"} to a JSON file
+          {getDescription()}
         </Typography>
       </DialogTitle>
 
@@ -166,13 +200,15 @@ const ExportProxyLogsModal = ({
               Search Filter (Optional)
             </Typography>
             <TextField
-              label="Search request or response content"
+              label={getSearchPlaceholder()}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               size="small"
               fullWidth
               disabled={loading}
-              helperText="Leave empty to export all logs within the date range"
+              helperText={sourceType === "user"
+                ? "Leave empty to export all conversations within the date range"
+                : "Leave empty to export all logs within the date range"}
               sx={{ mb: 2 }}
             />
 

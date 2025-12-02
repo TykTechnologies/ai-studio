@@ -17,12 +17,13 @@ const (
 	ExportStatusExpired    ExportStatus = "expired"
 )
 
-// ExportSourceType indicates whether the export is for an App or LLM
+// ExportSourceType indicates whether the export is for an App, LLM, or User chat history
 type ExportSourceType string
 
 const (
-	ExportSourceApp ExportSourceType = "app"
-	ExportSourceLLM ExportSourceType = "llm"
+	ExportSourceApp  ExportSourceType = "app"
+	ExportSourceLLM  ExportSourceType = "llm"
+	ExportSourceUser ExportSourceType = "user"
 )
 
 // ProxyLogExport tracks export job status and file references for proxy log exports.

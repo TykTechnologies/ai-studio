@@ -14,7 +14,7 @@ import (
 
 // ExportRequest represents the request body for starting an export
 type ExportRequest struct {
-	SourceType string `json:"source_type" binding:"required,oneof=app llm"`
+	SourceType string `json:"source_type" binding:"required,oneof=app llm user"`
 	SourceID   uint   `json:"source_id" binding:"required"`
 	StartDate  string `json:"start_date" binding:"required"`
 	EndDate    string `json:"end_date" binding:"required"`
@@ -115,10 +115,13 @@ func (a *API) startExport(c *gin.Context) {
 
 	// Convert source type
 	var sourceType models.ExportSourceType
-	if req.SourceType == "app" {
+	switch req.SourceType {
+	case "app":
 		sourceType = models.ExportSourceApp
-	} else {
+	case "llm":
 		sourceType = models.ExportSourceLLM
+	case "user":
+		sourceType = models.ExportSourceUser
 	}
 
 	// Create export request
