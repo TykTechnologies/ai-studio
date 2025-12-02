@@ -489,3 +489,49 @@ func SendToControlJSON(ctx context.Context, value interface{}, correlationID str
 	}
 	return SendToControl(ctx, data, correlationID, metadata)
 }
+
+// License Information Functions
+
+// LicenseInfo contains license information returned by GetLicenseInfo
+type LicenseInfo struct {
+	Valid        bool     // Whether license is currently valid
+	DaysLeft     int      // Days until license expires (-1 = never expires)
+	Type         string   // "community" or "enterprise"
+	Entitlements []string // List of enabled features/entitlements
+	Organization string   // Organization name from license (if any)
+}
+
+// GetLicenseInfo returns license information from the host
+// This can be used by plugins to check if enterprise features are available
+// All plugins can call this without requiring special scopes
+func GetLicenseInfo(ctx context.Context) (*LicenseInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.GetLicenseInfo(ctx, &pb.GetLicenseInfoRequest{
+		Context: createPluginContext(""), // No scope required
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get license info: %w", err)
+	}
+
+	return &LicenseInfo{
+		Valid:        resp.LicenseValid,
+		DaysLeft:     int(resp.DaysRemaining),
+		Type:         resp.LicenseType,
+		Entitlements: resp.Entitlements,
+		Organization: resp.Organization,
+	}, nil
+}
+
+// IsEnterprise returns true if the microgateway is running in enterprise mode
+// This is a convenience function that checks if license type is "enterprise"
+func IsEnterprise(ctx context.Context) (bool, error) {
+	info, err := GetLicenseInfo(ctx)
+	if err != nil {
+		return false, err
+	}
+	return info.Type == "enterprise", nil
+}

@@ -82,3 +82,8 @@ func writeKVGateway(ctx context.Context, key string, value []byte, expireAt *tim
 func deleteKVGateway(ctx context.Context, key string) (bool, error) {
 	return false, fmt.Errorf("gateway KV not available in this build")
 }
+
+// getLicenseInfoGateway stub - returns error when microgateway SDK not available
+func getLicenseInfoGateway(ctx context.Context) (*LicenseInfo, error) {
+	return nil, fmt.Errorf("gateway license service not available in this build")
+}

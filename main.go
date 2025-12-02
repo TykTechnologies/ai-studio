@@ -140,6 +140,9 @@ func main() {
 
 	service := services.NewServiceWithOCI(db, ociConfig)
 
+	// Wire licensing service to main service for plugin license checks
+	service.SetLicensingService(licensingService)
+
 	// NOTE: Plugin loading is deferred until after the event bus is wired (see below)
 	// This ensures plugins can subscribe to events during initialization
 

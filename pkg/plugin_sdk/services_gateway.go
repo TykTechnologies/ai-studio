@@ -85,3 +85,19 @@ func writeKVGateway(ctx context.Context, key string, value []byte, expireAt *tim
 func deleteKVGateway(ctx context.Context, key string) (bool, error) {
 	return mgwsdk.DeletePluginKV(ctx, key)
 }
+
+// getLicenseInfoGateway retrieves license info from the Microgateway
+func getLicenseInfoGateway(ctx context.Context) (*LicenseInfo, error) {
+	info, err := mgwsdk.GetLicenseInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &LicenseInfo{
+		Valid:         info.Valid,
+		DaysRemaining: info.DaysLeft,
+		Type:          info.Type,
+		Entitlements:  info.Entitlements,
+		Organization:  info.Organization,
+		// Note: Microgateway SDK doesn't include ExpiresAt, so it stays as zero value
+	}, nil
+}

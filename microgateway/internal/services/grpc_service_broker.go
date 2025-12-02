@@ -21,6 +21,13 @@ type ControlPayloadQueueInterface interface {
 	GetPendingCount() int64
 }
 
+// LicensingServiceInterface defines the interface for license checking
+// This is a minimal interface to avoid circular imports with the licensing package
+type LicensingServiceInterface interface {
+	IsValid() bool
+	DaysLeft() int
+}
+
 // MicrogatewayManagementServer implements the gRPC service for plugin-to-host communication
 type MicrogatewayManagementServer struct {
 	pb.UnimplementedMicrogatewayManagementServiceServer
@@ -30,6 +37,7 @@ type MicrogatewayManagementServer struct {
 	managementService     ManagementServiceInterface
 	cryptoService         CryptoServiceInterface
 	controlPayloadQueue   ControlPayloadQueueInterface
+	licensingService      LicensingServiceInterface
 }
 
 // NewMicrogatewayManagementServer creates a new service broker server
@@ -52,6 +60,11 @@ func NewMicrogatewayManagementServer(
 // SetControlPayloadQueue sets the control payload queue for edge-to-control communication
 func (s *MicrogatewayManagementServer) SetControlPayloadQueue(queue ControlPayloadQueueInterface) {
 	s.controlPayloadQueue = queue
+}
+
+// SetLicensingService sets the licensing service for license info queries
+func (s *MicrogatewayManagementServer) SetLicensingService(svc LicensingServiceInterface) {
+	s.licensingService = svc
 }
 
 // validatePluginScope validates that the calling plugin has the required scope
@@ -535,6 +548,53 @@ func (s *MicrogatewayManagementServer) QueueControlPayload(ctx context.Context, 
 		Success:      true,
 		PendingCount: pendingCount,
 	}, nil
+}
+
+// GetLicenseInfo returns license information for plugins to check enterprise features
+// This is a special RPC that doesn't require scope validation - all plugins can check license status
+func (s *MicrogatewayManagementServer) GetLicenseInfo(ctx context.Context, req *pb.GetLicenseInfoRequest) (*pb.GetLicenseInfoResponse, error) {
+	// Validate that we have a valid plugin context (but no scope required)
+	if req.Context == nil || req.Context.PluginId == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "plugin context required")
+	}
+
+	// If no licensing service is configured, we're in community mode
+	if s.licensingService == nil {
+		log.Debug().
+			Uint32("plugin_id", req.Context.PluginId).
+			Msg("GetLicenseInfo called but no licensing service configured (community mode)")
+		return &pb.GetLicenseInfoResponse{
+			LicenseValid:   true, // Community is always "valid"
+			DaysRemaining:  -1,   // -1 means never expires
+			LicenseType:    "community",
+			Entitlements:   []string{},
+			Organization:   "",
+			ExpiresAt:      nil,
+		}, nil
+	}
+
+	// Get license info from the licensing service
+	isValid := s.licensingService.IsValid()
+	daysLeft := s.licensingService.DaysLeft()
+
+	// Build response for enterprise mode
+	resp := &pb.GetLicenseInfoResponse{
+		LicenseValid:   isValid,
+		DaysRemaining:  int32(daysLeft),
+		LicenseType:    "enterprise",
+		Entitlements:   []string{"advanced-llm-cache"}, // Enterprise features
+		Organization:   "",                              // Not currently exposed by licensing service
+		ExpiresAt:      nil,                             // Could be calculated from daysLeft if needed
+	}
+
+	log.Debug().
+		Uint32("plugin_id", req.Context.PluginId).
+		Bool("license_valid", resp.LicenseValid).
+		Int32("days_remaining", resp.DaysRemaining).
+		Str("license_type", resp.LicenseType).
+		Msg("GetLicenseInfo called by plugin")
+
+	return resp, nil
 }
 
 // Helper conversion functions

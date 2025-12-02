@@ -90,4 +90,5 @@ const (
 	FeatureTrack               = "track"                     // Telemetry enabled
 	FeatureHubSpokeMultiTenant = "hub_spoke_multi_tenant"    // Multi-tenant namespace support (ENT)
 	FeatureGroups              = "feature_groups"            // Group-based access control (ENT)
+	FeatureAdvancedLLMCache    = "feature_advanced_llm_cache" // Enterprise LLM Cache with distributed backends (ENT)
 )

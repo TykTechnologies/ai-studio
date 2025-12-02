@@ -58,6 +58,12 @@ help:
 	@echo "  make clean              - Clean build artifacts"
 	@echo "  make show-edition       - Show current edition info"
 	@echo ""
+	@echo "Integration Tests (requires Docker):"
+	@echo "  make test-integration                      - Run all integration tests"
+	@echo "  make test-integration-plugin-cache         - Run cache plugin integration tests"
+	@echo "  make test-integration-plugin-cache-full    - Run all cache plugin tests (with cluster+syslog)"
+	@echo "  make test-integration-plugin-cache-coverage - Run with coverage report"
+	@echo ""
 
 # Build target (default to production multi-platform builds)
 build: build-prod
@@ -266,6 +272,50 @@ test:
 	go test $(BUILD_TAGS) ./...
 	cd microgateway && go test $(BUILD_TAGS) ./...
 
+# ============================================================================
+# Integration Tests (Enterprise)
+# ============================================================================
+# Note: The advanced-llm-cache plugin has its own go.mod, so tests run from
+# within the plugin directory
+
+# Run all enterprise integration tests (requires Docker)
+# Note: -count=1 disables test caching so env vars are respected on each run
+test-integration:
+	@echo "Running all enterprise integration tests..."
+	cd enterprise/plugins/advanced-llm-cache && go test -v -count=1 -tags="integration,enterprise" ./tests/integration/...
+
+# Run integration tests for advanced-llm-cache plugin
+test-integration-plugin-cache:
+	@echo "Running advanced-llm-cache integration tests..."
+	cd enterprise/plugins/advanced-llm-cache && go test -v -count=1 -tags="integration,enterprise" ./tests/integration/...
+
+# Run full integration tests with all optional features enabled
+test-integration-plugin-cache-full:
+	@echo "Running full advanced-llm-cache integration tests (all features)..."
+	cd enterprise/plugins/advanced-llm-cache && INTEGRATION_REDIS_CLUSTER=1 INTEGRATION_SYSLOG=1 \
+		go test -v -count=1 -tags="integration,enterprise" ./tests/integration/...
+
+# Run integration tests with coverage
+test-integration-plugin-cache-coverage:
+	@echo "Running advanced-llm-cache integration tests with coverage..."
+	cd enterprise/plugins/advanced-llm-cache && go test -v -count=1 -tags="integration,enterprise" -coverprofile=integration-coverage.out \
+		./tests/integration/...
+	cd enterprise/plugins/advanced-llm-cache && go tool cover -func=integration-coverage.out | tail -1
+
+# Run integration tests with Redis cluster (slower startup)
+test-integration-plugin-cache-cluster:
+	@echo "Running Redis cluster integration tests..."
+	cd enterprise/plugins/advanced-llm-cache && INTEGRATION_REDIS_CLUSTER=1 \
+		go test -v -count=1 -tags="integration,enterprise" -run ".*Cluster.*" \
+		./tests/integration/...
+
+# Run integration tests with Syslog
+test-integration-plugin-cache-syslog:
+	@echo "Running Syslog audit integration tests..."
+	cd enterprise/plugins/advanced-llm-cache && INTEGRATION_SYSLOG=1 \
+		go test -v -count=1 -tags="integration,enterprise" -run ".*Syslog.*" \
+		./tests/integration/...
+
 # Performance testing targets
 perf-test:
 	@echo "Running performance test suite..."
@@ -423,4 +473,7 @@ show-edition:
 	build-local build-community build-enterprise \
 	plugins test clean start-dev stop-dev \
 	perf-test perf-profile perf-baseline perf-compare perf-report perf-clean \
-	init-enterprise update-enterprise show-edition
+	init-enterprise update-enterprise show-edition \
+	test-integration test-integration-plugin-cache test-integration-plugin-cache-full \
+	test-integration-plugin-cache-coverage test-integration-plugin-cache-cluster \
+	test-integration-plugin-cache-syslog

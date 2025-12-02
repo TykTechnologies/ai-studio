@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/group_access"
+	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"gorm.io/gorm"
 )
@@ -38,6 +39,8 @@ type Service struct {
 	// System Events
 	EventBus     eventbridge.Bus
 	SystemEvents *SystemEventEmitter
+	// Licensing (set after creation via SetLicensingService)
+	LicensingService licensing.Service
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -269,4 +272,10 @@ func (s *Service) SetEventBus(bus eventbridge.Bus) {
 		s.SystemEvents = NewSystemEventEmitter(bus, "control")
 		logger.Debug("Initialized system event emitter")
 	}
+}
+
+// SetLicensingService sets the licensing service for plugin license checks
+func (s *Service) SetLicensingService(svc licensing.Service) {
+	s.LicensingService = svc
+	logger.Debug("Licensing service set on main service")
 }

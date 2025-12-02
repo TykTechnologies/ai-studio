@@ -123,6 +123,10 @@ service AIStudioManagementService {
     rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
     rpc UpdateSchedule(UpdateScheduleRequest) returns (UpdateScheduleResponse);
     rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
+
+    // License Information (Enterprise)
+    // Allows plugins to check license status and entitlements at runtime
+    rpc GetLicenseInfo(GetLicenseInfoRequest) returns (GetLicenseInfoResponse);
 }
 
 // Common request context for all operations
@@ -1502,4 +1506,19 @@ message ScheduleInfo {
     google.protobuf.Timestamp next_run = 11;
     google.protobuf.Timestamp created_at = 12;
     google.protobuf.Timestamp updated_at = 13;
+}
+
+// License Information Messages
+
+message GetLicenseInfoRequest {
+    PluginContext context = 1;
+}
+
+message GetLicenseInfoResponse {
+    bool license_valid = 1;           // True if a valid enterprise license is present
+    int32 days_remaining = 2;         // Days until license expires (-1 for community/never expires)
+    string license_type = 3;          // "community" or "enterprise"
+    repeated string entitlements = 4; // List of enabled features/entitlements
+    string organization = 5;          // Licensed organization name (enterprise only)
+    google.protobuf.Timestamp expires_at = 6; // License expiration timestamp (nil for community)
 }

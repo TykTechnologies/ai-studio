@@ -100,6 +100,7 @@ const (
 	AIStudioManagementService_ListSchedules_FullMethodName               = "/ai_studio_management.AIStudioManagementService/ListSchedules"
 	AIStudioManagementService_UpdateSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/UpdateSchedule"
 	AIStudioManagementService_DeleteSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/DeleteSchedule"
+	AIStudioManagementService_GetLicenseInfo_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetLicenseInfo"
 )
 
 // AIStudioManagementServiceClient is the client API for AIStudioManagementService service.
@@ -207,6 +208,9 @@ type AIStudioManagementServiceClient interface {
 	ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error)
 	UpdateSchedule(ctx context.Context, in *UpdateScheduleRequest, opts ...grpc.CallOption) (*UpdateScheduleResponse, error)
 	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
+	// License Information (Enterprise)
+	// Allows plugins to check license status and entitlements at runtime
+	GetLicenseInfo(ctx context.Context, in *GetLicenseInfoRequest, opts ...grpc.CallOption) (*GetLicenseInfoResponse, error)
 }
 
 type aIStudioManagementServiceClient struct {
@@ -1036,6 +1040,16 @@ func (c *aIStudioManagementServiceClient) DeleteSchedule(ctx context.Context, in
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) GetLicenseInfo(ctx context.Context, in *GetLicenseInfoRequest, opts ...grpc.CallOption) (*GetLicenseInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLicenseInfoResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetLicenseInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AIStudioManagementServiceServer is the server API for AIStudioManagementService service.
 // All implementations must embed UnimplementedAIStudioManagementServiceServer
 // for forward compatibility.
@@ -1141,6 +1155,9 @@ type AIStudioManagementServiceServer interface {
 	ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error)
 	UpdateSchedule(context.Context, *UpdateScheduleRequest) (*UpdateScheduleResponse, error)
 	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
+	// License Information (Enterprise)
+	// Allows plugins to check license status and entitlements at runtime
+	GetLicenseInfo(context.Context, *GetLicenseInfoRequest) (*GetLicenseInfoResponse, error)
 	mustEmbedUnimplementedAIStudioManagementServiceServer()
 }
 
@@ -1393,6 +1410,9 @@ func (UnimplementedAIStudioManagementServiceServer) UpdateSchedule(context.Conte
 }
 func (UnimplementedAIStudioManagementServiceServer) DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteSchedule not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetLicenseInfo(context.Context, *GetLicenseInfoRequest) (*GetLicenseInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetLicenseInfo not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) mustEmbedUnimplementedAIStudioManagementServiceServer() {
 }
@@ -2867,6 +2887,24 @@ func _AIStudioManagementService_DeleteSchedule_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_GetLicenseInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLicenseInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetLicenseInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetLicenseInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetLicenseInfo(ctx, req.(*GetLicenseInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AIStudioManagementService_ServiceDesc is the grpc.ServiceDesc for AIStudioManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3193,6 +3231,10 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteSchedule",
 			Handler:    _AIStudioManagementService_DeleteSchedule_Handler,
+		},
+		{
+			MethodName: "GetLicenseInfo",
+			Handler:    _AIStudioManagementService_GetLicenseInfo_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

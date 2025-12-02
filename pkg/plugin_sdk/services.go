@@ -138,6 +138,71 @@ func (l *defaultLogService) Error(msg string, fields ...interface{}) {
 	log.Printf("[ERROR] [Plugin %d] %s %v", l.pluginID, msg, fields)
 }
 
+// ===== License Service (Runtime-Aware) =====
+
+// LicenseInfo contains information about the host's license status.
+// This is a unified type that works in both AI Studio and Microgateway contexts.
+type LicenseInfo struct {
+	// Valid indicates whether a valid enterprise license is present
+	Valid bool
+
+	// DaysRemaining is the number of days until license expires (-1 for community/never expires)
+	DaysRemaining int
+
+	// Type is the license type: "community" or "enterprise"
+	Type string
+
+	// Entitlements is a list of enabled features/entitlements
+	Entitlements []string
+
+	// Organization is the licensed organization name (enterprise only)
+	Organization string
+
+	// ExpiresAt is the license expiration timestamp (zero for community licenses)
+	ExpiresAt time.Time
+}
+
+// IsEnterprise returns true if this is an enterprise license
+func (l *LicenseInfo) IsEnterprise() bool {
+	return l.Type == "enterprise" && l.Valid
+}
+
+// HasEntitlement checks if a specific entitlement is enabled
+func (l *LicenseInfo) HasEntitlement(entitlement string) bool {
+	for _, e := range l.Entitlements {
+		if e == entitlement {
+			return true
+		}
+	}
+	return false
+}
+
+// GetLicenseInfo retrieves license information from the host.
+// This is a runtime-aware function that works in both AI Studio and Microgateway contexts.
+// All plugins can call this without requiring special scopes.
+func GetLicenseInfo(ctx context.Context, runtime RuntimeType) (*LicenseInfo, error) {
+	if runtime == RuntimeGateway {
+		return getLicenseInfoGateway(ctx)
+	}
+	return getLicenseInfoStudio(ctx)
+}
+
+// getLicenseInfoStudio retrieves license info from AI Studio
+func getLicenseInfoStudio(ctx context.Context) (*LicenseInfo, error) {
+	info, err := ai_studio_sdk.GetLicenseInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &LicenseInfo{
+		Valid:         info.LicenseValid,
+		DaysRemaining: info.DaysRemaining,
+		Type:          info.LicenseType,
+		Entitlements:  info.Entitlements,
+		Organization:  info.Organization,
+		ExpiresAt:     info.ExpiresAt,
+	}, nil
+}
+
 // ===== Gateway Services Implementation =====
 
 

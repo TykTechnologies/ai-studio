@@ -1263,6 +1263,59 @@ func (s *AIStudioManagementServer) CreateSchedule(ctx context.Context, req *pb.C
 	return s.schedulerServer.CreateSchedule(ctx, req)
 }
 
+// GetLicenseInfo returns license information for plugins to check enterprise features
+// This is a special RPC that doesn't require scope validation - all plugins can check license status
+func (s *AIStudioManagementServer) GetLicenseInfo(ctx context.Context, req *pb.GetLicenseInfoRequest) (*pb.GetLicenseInfoResponse, error) {
+	// Get licensing service from main service
+	licensingSvc := s.service.LicensingService
+	if licensingSvc == nil {
+		// No licensing service means community edition
+		log.Debug().Msg("GetLicenseInfo called but no licensing service configured (community mode)")
+		return &pb.GetLicenseInfoResponse{
+			LicenseValid:   true, // Community is always "valid"
+			DaysRemaining:  -1,   // -1 means never expires
+			LicenseType:    "community",
+			Entitlements:   []string{},
+			Organization:   "",
+			ExpiresAt:      nil,
+		}, nil
+	}
+
+	// Get license info from the licensing service
+	licenseInfo := licensingSvc.GetLicenseInfo()
+	isValid := licensingSvc.IsValid()
+	daysLeft := licensingSvc.DaysLeft()
+
+	// Build response
+	resp := &pb.GetLicenseInfoResponse{
+		LicenseValid:  isValid,
+		DaysRemaining: int32(daysLeft),
+		LicenseType:   "community", // Default to community
+	}
+
+	if licenseInfo != nil {
+		// Enterprise license present
+		resp.LicenseType = "enterprise"
+		resp.ExpiresAt = timestamppb.New(licenseInfo.ExpiresAt)
+
+		// Extract entitlement names
+		var entitlements []string
+		for name := range licenseInfo.Features {
+			entitlements = append(entitlements, name)
+		}
+		resp.Entitlements = entitlements
+	}
+
+	log.Debug().
+		Bool("license_valid", resp.LicenseValid).
+		Int32("days_remaining", resp.DaysRemaining).
+		Str("license_type", resp.LicenseType).
+		Int("entitlement_count", len(resp.Entitlements)).
+		Msg("GetLicenseInfo called by plugin")
+
+	return resp, nil
+}
+
 func (s *AIStudioManagementServer) GetSchedule(ctx context.Context, req *pb.GetScheduleRequest) (*pb.GetScheduleResponse, error) {
 	return s.schedulerServer.GetSchedule(ctx, req)
 }

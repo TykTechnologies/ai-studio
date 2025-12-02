@@ -314,6 +314,16 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Wire licensing service to management server for plugin license checks
+	if mgmtServer := serviceContainer.PluginManager.GetManagementServer(); mgmtServer != nil {
+		if setter, ok := mgmtServer.(interface {
+			SetLicensingService(services.LicensingServiceInterface)
+		}); ok {
+			setter.SetLicensingService(licensingService)
+			log.Debug().Msg("Licensing service wired to management server for plugin access")
+		}
+	}
+
 	// Create and configure server
 	srv, err := server.New(cfg, serviceContainer, Version, BuildHash, BuildTime)
 	if err != nil {

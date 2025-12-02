@@ -1482,3 +1482,73 @@ func DeleteSchedule(ctx context.Context, scheduleID string) error {
 
 	return nil
 }
+
+// ===========================
+// License Information Methods
+// ===========================
+
+// LicenseInfo represents license information returned from the host
+type LicenseInfo struct {
+	LicenseValid  bool      // True if a valid enterprise license is present
+	DaysRemaining int       // Days until license expires (-1 for community/never expires)
+	LicenseType   string    // "community" or "enterprise"
+	Entitlements  []string  // List of enabled features/entitlements
+	Organization  string    // Licensed organization name (enterprise only)
+	ExpiresAt     time.Time // License expiration timestamp (zero for community)
+}
+
+// GetLicenseInfo retrieves license information from the AI Studio host
+// This allows plugins to check if they're running in enterprise mode and what features are available
+// Note: This doesn't require any special scope - all plugins can check license status
+func GetLicenseInfo(ctx context.Context) (*LicenseInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.GetLicenseInfo(ctx, &mgmtpb.GetLicenseInfoRequest{
+		Context: createPluginContext(""), // No scope required for license check
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get license info: %w", err)
+	}
+
+	info := &LicenseInfo{
+		LicenseValid:  resp.LicenseValid,
+		DaysRemaining: int(resp.DaysRemaining),
+		LicenseType:   resp.LicenseType,
+		Entitlements:  resp.Entitlements,
+		Organization:  resp.Organization,
+	}
+
+	// Convert timestamp if present
+	if resp.ExpiresAt != nil {
+		info.ExpiresAt = resp.ExpiresAt.AsTime()
+	}
+
+	return info, nil
+}
+
+// IsEnterpriseMode is a helper that checks if the host has an enterprise license
+func IsEnterpriseMode(ctx context.Context) (bool, error) {
+	info, err := GetLicenseInfo(ctx)
+	if err != nil {
+		return false, err
+	}
+	return info.LicenseType == "enterprise" && info.LicenseValid, nil
+}
+
+// HasEntitlement checks if a specific feature entitlement is enabled
+func HasEntitlement(ctx context.Context, entitlement string) (bool, error) {
+	info, err := GetLicenseInfo(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	for _, e := range info.Entitlements {
+		if e == entitlement {
+			return true, nil
+		}
+	}
+	return false, nil
+}
