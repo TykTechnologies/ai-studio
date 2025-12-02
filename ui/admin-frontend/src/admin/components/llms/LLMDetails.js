@@ -25,6 +25,9 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import DownloadIcon from "@mui/icons-material/Download";
+import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
+import { useEdition } from "../../context/EditionContext";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -120,6 +123,7 @@ const SectionTitle = ({ children }) => (
 );
 
 const LLMDetails = () => {
+  const { isEnterprise } = useEdition();
   const [llm, setLLM] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState("");
@@ -128,6 +132,7 @@ const LLMDetails = () => {
   const [vendorModelCostData, setVendorModelCostData] = useState([]);
   const [proxyLogs, setProxyLogs] = useState([]);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -800,8 +805,19 @@ const LLMDetails = () => {
 
         <Divider sx={{ my: 3 }} />
 
-
-        <SectionTitle>Proxy Logs</SectionTitle>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <SectionTitle>Proxy Logs</SectionTitle>
+          {isEnterprise && (
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={() => setExportModalOpen(true)}
+              size="small"
+            >
+              Export
+            </Button>
+          )}
+        </Box>
         <Box sx={{ mb: 2, maxWidth: 400 }}>
           <SearchInput
             value={proxyLogSearchTerm}
@@ -903,6 +919,16 @@ const LLMDetails = () => {
           </PrimaryButton>
         </Box>
       </ContentBox>
+
+      <ExportProxyLogsModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        sourceType="llm"
+        sourceId={parseInt(id)}
+        initialStartDate={startDate}
+        initialEndDate={endDate}
+        initialSearch={debouncedProxyLogSearch}
+      />
     </>
   );
 };

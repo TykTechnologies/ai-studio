@@ -51,6 +51,8 @@ func InitModels(db *gorm.DB) error {
 		&PluginSchedule{},          // Plugin scheduled tasks
 		&PluginScheduleExecution{}, // Schedule execution history
 		&SchedulerLease{},          // Scheduler leader election
+		// Export Models
+		&ProxyLogExport{}, // Proxy log export jobs (Enterprise)
 	); err != nil {
 		return err
 	}

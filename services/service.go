@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
@@ -12,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/group_access"
+	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"gorm.io/gorm"
 )
 
@@ -20,6 +22,7 @@ type Service struct {
 	Budget              budget.Service
 	GroupAccessService  group_access.Service
 	NotificationService *NotificationService
+	LogExportService    log_export.Service
 	// Hub-and-Spoke Services
 	EdgeService           *EdgeService
 	NamespaceService      *NamespaceService
@@ -46,6 +49,14 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	notificationService := NewNotificationService(db, "", "", 0, "", "", nil) // SMTP will be configured when needed
 	budgetSvc := budget.NewService(db, notificationService)
 	groupAccessSvc := group_access.NewService(db)
+
+	// Initialize log export service with storage path from environment
+	exportStoragePath := os.Getenv("EXPORT_STORAGE_PATH")
+	if exportStoragePath == "" {
+		exportStoragePath = "./data/exports"
+	}
+	siteURL := os.Getenv("SITE_URL")
+	logExportSvc := log_export.NewService(db, notificationService, exportStoragePath, siteURL)
 
 	// Initialize hub-and-spoke services
 	edgeService := NewEdgeService(db)
@@ -129,6 +140,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		NotificationService:   notificationService,
 		Budget:                budgetSvc,
 		GroupAccessService:    groupAccessSvc,
+		LogExportService:      logExportSvc,
 		EdgeService:           edgeService,
 		NamespaceService:      namespaceService,
 		EdgeManagementService: edgeManagementService,
@@ -177,6 +189,13 @@ func (s *Service) Cleanup() error {
 	logger.Info("Starting service cleanup...")
 
 	var errors []error
+
+	// Stop log export service (cleanup goroutine)
+	if s.LogExportService != nil {
+		logger.Info("Stopping log export service...")
+		s.LogExportService.Stop()
+		logger.Info("Log export service stopped")
+	}
 
 	// Shutdown plugin manager first (most critical)
 	if s.AIStudioPluginManager != nil {

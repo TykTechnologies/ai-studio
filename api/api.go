@@ -836,6 +836,11 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", a.getProxyLogsForLLM)
 
+	// Export routes (Enterprise feature)
+	v1.POST("/exports", a.startExport)
+	v1.GET("/exports/:id", a.getExport)
+	v1.GET("/exports/:id/download", a.downloadExport)
+
 	// FileStore routes
 	v1.POST("/filestore", a.createFileStore)
 	v1.GET("/filestore/:id", a.getFileStore)

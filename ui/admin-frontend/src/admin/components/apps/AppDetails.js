@@ -58,6 +58,9 @@ import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import IconButton from "@mui/material/IconButton";
+import DownloadIcon from "@mui/icons-material/Download";
+import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
+import { useEdition } from "../../context/EditionContext";
 
 ChartJS.register(
   CategoryScale,
@@ -121,6 +124,7 @@ const ExpandableMessage = ({ message, isCode = false }) => {
 };
 
 const AppDetails = () => {
+  const { isEnterprise } = useEdition();
   const [app, setApp] = useState(null);
   const [credential, setCredential] = useState(null);
   const [user, setUser] = useState(null);
@@ -134,6 +138,7 @@ const AppDetails = () => {
   const [budgetUsageData, setBudgetUsageData] = useState(null);
   const [appInteractionsData, setAppInteractionsData] = useState(null);
   const [proxyLogs, setProxyLogs] = useState([]);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [startDate, setStartDate] = useState(
     new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
@@ -813,7 +818,19 @@ const AppDetails = () => {
 
         <Divider sx={{ my: 3 }} />
 
-        <SectionTitle>Proxy Logs</SectionTitle>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <SectionTitle>Proxy Logs</SectionTitle>
+          {isEnterprise && (
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={() => setExportModalOpen(true)}
+              size="small"
+            >
+              Export
+            </Button>
+          )}
+        </Box>
         <Box sx={{ mb: 2, maxWidth: 400 }}>
           <SearchInput
             value={proxyLogSearchTerm}
@@ -934,6 +951,16 @@ const AppDetails = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <ExportProxyLogsModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        sourceType="app"
+        sourceId={parseInt(id)}
+        initialStartDate={startDate}
+        initialEndDate={endDate}
+        initialSearch={debouncedProxyLogSearch}
+      />
     </>
   );
 };

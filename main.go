@@ -31,6 +31,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
+	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
 	"github.com/TykTechnologies/midsommar/v2/startup"
 
@@ -246,6 +247,18 @@ func main() {
 	defer stopRec()
 	analytics.StartRecording(ctx, db)
 	budgetService := budget.NewService(db, notificationService)
+
+	// Reinitialize LogExportService with the proper notification service (with SMTP configured)
+	// The service created in NewServiceWithOCI has a notification service without SMTP
+	exportStoragePath := os.Getenv("EXPORT_STORAGE_PATH")
+	if exportStoragePath == "" {
+		exportStoragePath = "./data/exports"
+	}
+	// Stop the old service's cleanup goroutine before replacing
+	if service.LogExportService != nil {
+		service.LogExportService.Stop()
+	}
+	service.LogExportService = log_export.NewService(db, notificationService, exportStoragePath, appConf.SiteURL)
 
 	// Initialize and start telemetry
 	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, "v2.0-hub-spoke")
