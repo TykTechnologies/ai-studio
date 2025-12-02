@@ -38,6 +38,7 @@ import {
   StyledAccordion,
 } from "../../styles/sharedStyles";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import { useEdition } from "../../context/EditionContext";
 import pluginService from "../../services/pluginService";
 import PluginConfigDialog from './PluginConfigDialog';
 import {
@@ -99,6 +100,7 @@ const LLMForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const theme = useTheme();
+  const { isEnterprise } = useEdition();
   const [newModel, setNewModel] = useState("");
 
   useEffect(() => {
@@ -639,59 +641,62 @@ const LLMForm = () => {
             </AccordionDetails>
           </StyledAccordion>
 
-          <StyledAccordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography>Filters</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Filters added here are executed in the AI Gateway when a request
-                flows through the REST endpoint.
-              </Typography>
-              {filtersLoading ? (
-                <Typography>Loading filters...</Typography>
-              ) : filters === null ? (
-                <Typography>
-                  Error loading filters. Please try again.
+          {/* Filters Section - Enterprise Only */}
+          {isEnterprise && (
+            <StyledAccordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography>Filters</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Filters added here are executed in the AI Gateway when a request
+                  flows through the REST endpoint.
                 </Typography>
-              ) : filters.length === 0 ? (
-                <Typography>No filters available.</Typography>
-              ) : (
-                <FormControl fullWidth>
-                  <InputLabel>Filters</InputLabel>
-                  <Select
-                    multiple
-                    name="filters"
-                    value={llm.filters || []}
-                    onChange={handleChange}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                        {selected.map((value) => {
-                          const filter = filters.find((f) => f.id === value);
-                          return (
-                            <Chip
-                              key={value}
-                              label={
-                                filter
-                                  ? filter.attributes.name
-                                  : "Unknown Filter"
-                              }
-                            />
-                          );
-                        })}
-                      </Box>
-                    )}
-                  >
-                    {filters.map((filter) => (
-                      <MenuItem key={filter.id} value={filter.id.toString()}>
-                        {filter.attributes.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-            </AccordionDetails>
-          </StyledAccordion>
+                {filtersLoading ? (
+                  <Typography>Loading filters...</Typography>
+                ) : filters === null ? (
+                  <Typography>
+                    Error loading filters. Please try again.
+                  </Typography>
+                ) : filters.length === 0 ? (
+                  <Typography>No filters available.</Typography>
+                ) : (
+                  <FormControl fullWidth>
+                    <InputLabel>Filters</InputLabel>
+                    <Select
+                      multiple
+                      name="filters"
+                      value={llm.filters || []}
+                      onChange={handleChange}
+                      renderValue={(selected) => (
+                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                          {selected.map((value) => {
+                            const filter = filters.find((f) => f.id === value);
+                            return (
+                              <Chip
+                                key={value}
+                                label={
+                                  filter
+                                    ? filter.attributes.name
+                                    : "Unknown Filter"
+                                }
+                              />
+                            );
+                          })}
+                        </Box>
+                      )}
+                    >
+                      {filters.map((filter) => (
+                        <MenuItem key={filter.id} value={filter.id.toString()}>
+                          {filter.attributes.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+              </AccordionDetails>
+            </StyledAccordion>
+          )}
 
           {/* Plugin Assignment Section */}
           <StyledAccordion>
