@@ -8,13 +8,16 @@ import {
   TableBody,
   TableHead,
   Paper,
-  TableRow
+  TableRow,
+  Box
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DownloadIcon from "@mui/icons-material/Download";
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   StyledPaper,
@@ -27,6 +30,7 @@ import TruncatedMessage from "./TruncatedMessage";
 
 const UserMessageLog = () => {
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [chatInfo, setChatInfo] = useState(null);
   const [llmInfo, setLLMInfo] = useState(null);
   const [llmSettings, setLLMSettings] = useState(null);
@@ -99,6 +103,50 @@ const UserMessageLog = () => {
     }
   }, []);
 
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      // Fetch all messages for this session (using a large page size to get all)
+      const response = await apiClient.get(
+        `/chat-history-records/messages/${sessionId}`,
+        { params: { page: 1, page_size: 10000 } }
+      );
+
+      const allMessages = response.data.data || [];
+
+      // Build export data structure
+      const exportData = {
+        session_id: sessionId,
+        chat_name: chatInfo?.attributes?.name || "Unknown",
+        chat_id: chatInfo?.id || null,
+        vendor: llmInfo?.attributes?.vendor || "Unknown",
+        model: llmSettings?.attributes?.model_name || "Unknown",
+        exported_at: new Date().toISOString(),
+        total_messages: allMessages.length,
+        messages: allMessages.map(msg => ({
+          id: msg.id,
+          content: msg.attributes.content,
+          created_at: msg.attributes.created_at
+        }))
+      };
+
+      // Create and download JSON file
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `chat-export-${sessionId}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error exporting chat", error);
+    } finally {
+      setExporting(false);
+    }
+  }, [sessionId, chatInfo, llmInfo, llmSettings]);
+
   useEffect(() => {
     console.log(`Pagination updated: page ${page}, pageSize ${pageSize}`);
   }, [page, pageSize]);
@@ -131,13 +179,23 @@ const UserMessageLog = () => {
         <Typography variant="headingXLarge" fontWeight="bold">
           Chat Log
         </Typography>
-        <SecondaryLinkButton
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate(-1)}
-          color="primary"
-        >
-          Back
-        </SecondaryLinkButton>
+        <Box sx={{ display: "flex", gap: 2 }}>
+          <SecondaryOutlineButton
+            startIcon={exporting ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+            onClick={handleExport}
+            disabled={exporting}
+            size="small"
+          >
+            {exporting ? "Exporting..." : "Export"}
+          </SecondaryOutlineButton>
+          <SecondaryLinkButton
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate(-1)}
+            color="primary"
+          >
+            Back
+          </SecondaryLinkButton>
+        </Box>
       </TitleBox>
       <ContentBox>
         <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
