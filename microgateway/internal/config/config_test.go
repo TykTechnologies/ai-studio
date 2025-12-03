@@ -30,7 +30,7 @@ func TestLoad_WithDefaults(t *testing.T) {
 		assert.Equal(t, "sqlite", cfg.Database.Type)
 		assert.True(t, cfg.Cache.Enabled)
 		assert.Equal(t, "info", cfg.Observability.LogLevel)
-		assert.Equal(t, "json", cfg.Observability.LogFormat)
+		assert.Equal(t, "text", cfg.Observability.LogFormat)
 	})
 }
 

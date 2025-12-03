@@ -503,6 +503,44 @@ func (a *API) ProcessFileEmbeddingHandler(c *gin.Context) {
 	})
 }
 
+// @Summary Clone a datasource
+// @Description Creates a copy of an existing datasource including all API keys (server-side clone)
+// @Tags datasources
+// @Accept json
+// @Produce json
+// @Param id path int true "Source Datasource ID"
+// @Success 201 {object} DatasourceResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /datasources/{id}/clone [post]
+// @Security BearerAuth
+func (a *API) cloneDatasource(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid datasource ID"}},
+		})
+		return
+	}
+
+	cloned, err := a.service.CloneDatasource(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"data": serializeDatasource(cloned)})
+}
+
 func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 	if datasource == nil {
 		datasource = &models.Datasource{}

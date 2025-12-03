@@ -121,10 +121,8 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	// Smart DB connection API key update logic
 	if dbConnAPIKey == "[redacted]" {
 		// Don't update API key if it's the redacted placeholder
-	} else if dbConnAPIKey == "" {
-		// Empty = preserve existing (don't clear)
 	} else {
-		// Update to new API key value
+		// Empty string clears the key, any other value updates it
 		datasource.DBConnAPIKey = dbConnAPIKey
 	}
 
@@ -140,10 +138,8 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	// Smart embed API key update logic
 	if embedAPIKey == "[redacted]" {
 		// Don't update API key if it's the redacted placeholder
-	} else if embedAPIKey == "" {
-		// Empty = preserve existing (don't clear)
 	} else {
-		// Update to new API key value
+		// Empty string clears the key, any other value updates it
 		datasource.EmbedAPIKey = embedAPIKey
 	}
 

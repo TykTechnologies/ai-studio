@@ -160,6 +160,26 @@ func (m *MockPluginServiceClient) HandleObjectHook(ctx context.Context, in *pb.O
 	return nil, nil
 }
 
+func (m *MockPluginServiceClient) OnStreamComplete(ctx context.Context, in *pb.StreamCompleteRequest, opts ...grpc.CallOption) (*pb.StreamCompleteResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) ExecuteScheduledTask(ctx context.Context, in *pb.ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*pb.ExecuteScheduledTaskResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) AcceptEdgePayload(ctx context.Context, in *pb.EdgePayloadRequest, opts ...grpc.CallOption) (*pb.EdgePayloadResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) OpenSession(ctx context.Context, in *pb.OpenSessionRequest, opts ...grpc.CallOption) (*pb.OpenSessionResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) CloseSession(ctx context.Context, in *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
+	return nil, nil
+}
+
 // MockAgentMessageStream implements the gRPC stream interface
 type MockAgentMessageStream struct {
 	grpc.ClientStream

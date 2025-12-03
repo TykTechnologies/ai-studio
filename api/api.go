@@ -563,6 +563,7 @@ func (a *API) setupRoutes() {
 	v1.POST("/datasources/:id/filestores/:filestore_id", a.addFileStoreToDatasource)
 	v1.DELETE("/datasources/:id/filestores/:filestore_id", a.removeFileStoreFromDatasource)
 	v1.POST("/datasources/:id/process-embeddings", a.ProcessFileEmbeddingHandler)
+	v1.POST("/datasources/:id/clone", a.cloneDatasource)
 
 	// Data Catalogue routes
 	v1.POST("/data-catalogues", a.createDataCatalogue)

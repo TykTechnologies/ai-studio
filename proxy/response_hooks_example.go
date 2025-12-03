@@ -82,6 +82,15 @@ func (h *ExampleResponseHook) OnBeforeWrite(ctx context.Context, req *ResponseWr
 	}, nil
 }
 
+// OnStreamComplete is called after a streaming response finishes
+func (h *ExampleResponseHook) OnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	// Example hook doesn't need to do anything special for stream completion
+	return &StreamCompleteResponse{
+		Handled: false,
+		Cached:  false,
+	}, nil
+}
+
 // CORSResponseHook adds CORS headers to responses
 type CORSResponseHook struct{}
 
@@ -116,6 +125,15 @@ func (h *CORSResponseHook) OnBeforeWrite(ctx context.Context, req *ResponseWrite
 		Modified: false,
 		Body:     req.Body,
 		Headers:  req.Headers,
+	}, nil
+}
+
+// OnStreamComplete is called after a streaming response finishes
+func (h *CORSResponseHook) OnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	// CORS hook doesn't need to do anything special for stream completion
+	return &StreamCompleteResponse{
+		Handled: false,
+		Cached:  false,
 	}, nil
 }
 
@@ -164,6 +182,15 @@ func (h *ContentFilterHook) OnBeforeWrite(ctx context.Context, req *ResponseWrit
 		Modified: true,
 		Body:     []byte(bodyStr),
 		Headers:  req.Headers,
+	}, nil
+}
+
+// OnStreamComplete is called after a streaming response finishes
+func (h *ContentFilterHook) OnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	// Content filter doesn't need to do anything special for stream completion
+	return &StreamCompleteResponse{
+		Handled: false,
+		Cached:  false,
 	}, nil
 }
 

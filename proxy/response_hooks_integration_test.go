@@ -195,6 +195,13 @@ func (h *IntegrationTestHook) OnBeforeWrite(ctx context.Context, req *ResponseWr
 	}, nil
 }
 
+func (h *IntegrationTestHook) OnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	return &StreamCompleteResponse{
+		Handled: false,
+		Cached:  false,
+	}, nil
+}
+
 // SecondTestHook for testing hook chaining
 type SecondTestHook struct{}
 
@@ -241,5 +248,12 @@ func (h *SecondTestHook) OnBeforeWrite(ctx context.Context, req *ResponseWriteRe
 		Modified: true,
 		Body:     modifiedBody,
 		Headers:  req.Headers,
+	}, nil
+}
+
+func (h *SecondTestHook) OnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	return &StreamCompleteResponse{
+		Handled: false,
+		Cached:  false,
 	}, nil
 }

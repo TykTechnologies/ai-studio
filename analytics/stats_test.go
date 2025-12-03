@@ -682,7 +682,7 @@ func TestGetProxyLogsForAppID(t *testing.T) {
 		startDate := now.AddDate(0, 0, -1)
 		endDate := now.AddDate(0, 0, 1)
 
-		logs, total, err := GetProxyLogsForAppID(db, startDate, endDate, app.ID, 1, 10)
+		logs, total, err := GetProxyLogsForAppID(db, startDate, endDate, app.ID, 1, 10, "")
 
 		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, len(logs), 1)
@@ -710,7 +710,7 @@ func TestGetProxyLogsForLLM(t *testing.T) {
 		startDate := now.AddDate(0, 0, -1)
 		endDate := now.AddDate(0, 0, 1)
 
-		logs, total, err := GetProxyLogsForLLM(db, startDate, endDate, llm.ID, 1, 10)
+		logs, total, err := GetProxyLogsForLLM(db, startDate, endDate, llm.ID, 1, 10, "")
 
 		assert.NoError(t, err)
 		assert.GreaterOrEqual(t, len(logs), 0)

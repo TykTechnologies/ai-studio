@@ -9,6 +9,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// instanceCounter is used to generate unique instance IDs within the same process (for testing)
+var instanceCounter int64
+
 // LeaderElectionManager handles leader election using database-based leasing
 type LeaderElectionManager struct {
 	db         *gorm.DB
@@ -22,7 +25,8 @@ func NewLeaderElectionManager(db *gorm.DB) *LeaderElectionManager {
 	if hostname == "" {
 		hostname = "unknown"
 	}
-	instanceID := fmt.Sprintf("%s-%d", hostname, os.Getpid())
+	instanceCounter++
+	instanceID := fmt.Sprintf("%s-%d-%d", hostname, os.Getpid(), instanceCounter)
 
 	return &LeaderElectionManager{
 		db:         db,

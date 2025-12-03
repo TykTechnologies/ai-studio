@@ -162,20 +162,8 @@ const DatasourceList = () => {
 
   const handleCloneDatasource = async (datasource) => {
     try {
-      // Clone via backend API - preserves all config including API keys
-      const cloneData = {
-        data: {
-          type: "datasources",
-          attributes: {
-            ...datasource.attributes,
-            name: `Copy of ${datasource.attributes.name}`,
-            active: false,
-            files: [],
-          },
-        },
-      };
-
-      const response = await apiClient.post("/datasources", cloneData);
+      // Use server-side clone endpoint that preserves API keys
+      const response = await apiClient.post(`/datasources/${datasource.id}/clone`);
       const newDatasourceId = response.data.data.id;
 
       setSnackbar({

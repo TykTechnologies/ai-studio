@@ -361,15 +361,21 @@ func (a *Apps) Search(db *gorm.DB, searchTerm string, pageSize int, pageNumber i
 		Where("apps.name LIKE ? OR apps.description LIKE ? OR users.name LIKE ? OR users.email LIKE ?",
 			searchPattern, searchPattern, searchPattern, searchPattern)
 
-	// Handle sorting
+	// Handle sorting - prefix with apps. to avoid ambiguity with joined tables
 	if sort != "" {
+		sortField := sort
+		direction := "ASC"
 		if sort[0] == '-' {
-			query = query.Order(sort[1:] + " DESC")
-		} else {
-			query = query.Order(sort + " ASC")
+			sortField = sort[1:]
+			direction = "DESC"
 		}
+		// Prefix with apps. for common columns that might exist in joined tables
+		if sortField == "name" || sortField == "id" || sortField == "created_at" || sortField == "updated_at" {
+			sortField = "apps." + sortField
+		}
+		query = query.Order(sortField + " " + direction)
 	} else {
-		query = query.Order("id ASC") // Default sort by ID ascending
+		query = query.Order("apps.id ASC") // Default sort by ID ascending
 	}
 
 	if err := query.Count(&totalCount).Error; err != nil {

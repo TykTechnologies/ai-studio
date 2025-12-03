@@ -85,29 +85,14 @@ const DatasourceDetails = () => {
 
   const handleCloneDataSource = async () => {
     try {
-      // Create new datasource data with modified name
-      const cloneData = {
-        data: {
-          type: "datasources",
-          attributes: {
-            ...datasource.attributes,
-            name: `Copy of ${datasource.attributes.name}`,
-            active: false,
-            // Reset files array if it exists
-            files: [],
-          },
-        },
-      };
-
-      // Create new datasource
-      const response = await apiClient.post("/datasources", cloneData);
+      // Use server-side clone endpoint that preserves API keys
+      const response = await apiClient.post(`/datasources/${id}/clone`);
       const newDatasourceId = response.data.data.id;
 
       // Redirect to edit page of new datasource
       navigate(`/admin/datasources/edit/${newDatasourceId}`);
     } catch (error) {
       console.error("Error cloning datasource:", error);
-      // You might want to add some error handling here, like showing a snackbar
     }
   };
 

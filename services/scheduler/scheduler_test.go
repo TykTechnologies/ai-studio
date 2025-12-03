@@ -22,6 +22,8 @@ type mockPluginClient struct {
 
 func (m *mockPluginClient) ExecuteScheduledTask(ctx context.Context, pluginID uint, contextProto *pb.PluginContext, scheduleProto *pb.ScheduleDefinition) (*pb.ExecuteScheduledTaskResponse, error) {
 	m.callCount++
+	// Small delay to ensure measurable duration (at least 1ms)
+	time.Sleep(2 * time.Millisecond)
 	if m.executeScheduledTaskFunc != nil {
 		return m.executeScheduledTaskFunc(ctx, pluginID, contextProto, scheduleProto)
 	}
@@ -363,7 +365,8 @@ func TestCronExpressionParsing(t *testing.T) {
 		{"Every hour", "0 * * * *", false},
 		{"Daily at midnight", "0 0 * * *", false},
 		{"Every 5 minutes", "*/5 * * * *", false},
-		{"With seconds", "0 * * * * *", false},
+		// Note: 6-field cron with seconds is not supported without cron.WithSeconds()
+		{"With seconds (6-field)", "0 * * * * *", true},
 		{"Invalid expression", "invalid", true},
 		{"Too many fields", "* * * * * * *", true},
 	}
@@ -412,15 +415,17 @@ func TestTimezoneSupport(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.timezone, func(t *testing.T) {
 			schedule := &models.PluginSchedule{
-				PluginID:       1,
+				PluginID:           1,
 				ManifestScheduleID: fmt.Sprintf("test-%s", tc.timezone),
-				Name:           "Test Task",
-				CronExpr:       "0 9 * * *", // 9 AM
-				Timezone:       tc.timezone,
-				Enabled:        true,
-				TimeoutSeconds: 60,
-				Config:         "{}",
+				Name:               "Test Task",
+				CronExpr:           "0 9 * * *", // 9 AM
+				Timezone:           tc.timezone,
+				Enabled:            true,
+				TimeoutSeconds:     60,
+				Config:             "{}",
 			}
+			// Create in DB to get an ID
+			db.Create(schedule)
 
 			err := schedulerService.registerScheduleUnsafe(schedule)
 

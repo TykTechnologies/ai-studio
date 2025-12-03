@@ -204,7 +204,7 @@ func TestListChatHistoryRecordsByUserID(t *testing.T) {
 }
 
 func TestSearchChatHistoryRecords(t *testing.T) {
-	service, _ := setupHistoryTest(t)
+	service, db := setupHistoryTest(t)
 
 	userID := uint(600)
 
@@ -215,6 +215,12 @@ func TestSearchChatHistoryRecords(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = service.CreateChatHistoryRecord("search-3", 3, userID, "Meeting Notes")
 	assert.NoError(t, err)
+
+	// Create CMessage records for each session (need >1 per session for SearchChatHistoryRecords)
+	for _, sessionID := range []string{"search-1", "search-2", "search-3"} {
+		db.Create(&models.CMessage{Session: sessionID, Content: []byte("msg1")})
+		db.Create(&models.CMessage{Session: sessionID, Content: []byte("msg2")})
+	}
 
 	t.Run("Search finds matching records", func(t *testing.T) {
 		results, totalCount, _, err := service.SearchChatHistoryRecords(userID, "Project", 10, 1, false)
