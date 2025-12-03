@@ -90,6 +90,44 @@ func TestWithSyslog(t *testing.T) {
 }
 ```
 
+### HashiCorp Vault
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/pkg/testinfra/containers"
+
+func TestWithVault(t *testing.T) {
+    ctx := context.Background()
+
+    // Create Vault container in dev mode
+    vault, err := containers.NewVaultContainer(ctx, nil)
+    if err != nil {
+        t.Fatal(err)
+    }
+    defer vault.Close(ctx)
+
+    // Get connection details
+    fmt.Println("Vault address:", vault.Addr())  // http://host:port
+    fmt.Println("Vault token:", vault.Token())   // root token for dev mode
+
+    // Vault dev mode has KV v2 enabled at "secret/" by default
+}
+```
+
+**Configuration options:**
+```go
+cfg := &containers.VaultConfig{
+    RootToken: "my-root-token",  // Optional: root token (default: "test-token")
+    Version:   "1.15.4",         // Optional: Vault image tag (default: "latest")
+}
+vault, err := containers.NewVaultContainer(ctx, cfg)
+```
+
+**Helper methods:**
+```go
+// Enable KV v2 at a custom path (not needed for "secret/" which is enabled by default)
+err := vault.EnableKVEngine(ctx, "custom-secrets")
+```
+
 ## Suite Fixtures (TestMain Pattern)
 
 For better performance, share containers across tests in a suite:

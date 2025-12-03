@@ -63,6 +63,7 @@ help:
 	@echo "  make test-integration-plugin-cache         - Run cache plugin integration tests"
 	@echo "  make test-integration-plugin-cache-full    - Run all cache plugin tests (with cluster+syslog)"
 	@echo "  make test-integration-plugin-cache-coverage - Run with coverage report"
+	@echo "  make test-integration-plugin-github-rag    - Run github-rag-ingest Vault integration tests"
 	@echo ""
 
 # Build target (default to production multi-platform builds)
@@ -316,6 +317,12 @@ test-integration-plugin-cache-syslog:
 		go test -v -count=1 -tags="integration,enterprise" -run ".*Syslog.*" \
 		./tests/integration/...
 
+# Run Vault integration tests for github-rag-ingest plugin
+test-integration-plugin-github-rag:
+	@echo "Running github-rag-ingest Vault integration tests..."
+	cd community/plugins/github-rag-ingest/server && \
+		go test -v -count=1 -tags=integration ./secrets/...
+
 # Performance testing targets
 perf-test:
 	@echo "Running performance test suite..."
@@ -476,4 +483,4 @@ show-edition:
 	init-enterprise update-enterprise show-edition \
 	test-integration test-integration-plugin-cache test-integration-plugin-cache-full \
 	test-integration-plugin-cache-coverage test-integration-plugin-cache-cluster \
-	test-integration-plugin-cache-syslog
+	test-integration-plugin-cache-syslog test-integration-plugin-github-rag
