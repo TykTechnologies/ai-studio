@@ -408,15 +408,75 @@ make stop-backend      # Stop backend server
 ```
 
 ### Testing
+
+The project has multiple test categories with different build tags. Here's how to run them:
+
+#### Quick Test Commands
+
 ```bash
-# Run all tests
+# Run all standard unit tests (fastest)
 go test ./...
 
-# Run tests for specific package
+# Run tests for a specific package
 go test ./api/...
 
-# Run tests with coverage
+# Run tests with coverage report
 go test -coverprofile=coverage.out -coverpkg=./... ./...
+go tool cover -html=coverage.out  # View in browser
+```
+
+#### Complete Test Suite
+
+To validate everything before a release or major change:
+
+```bash
+# 1. Unit tests (no special tags required)
+go test ./...
+
+# 2. Enterprise feature tests
+go test -tags enterprise ./...
+
+# 3. Integration tests (requires test environment)
+go test -tags integration ./...
+
+# 4. Plugin E2E tests (builds and spawns real plugin binaries)
+go test -tags e2e ./pkg/testinfra/plugintest/...
+
+# 5. All tests combined (comprehensive validation)
+go test -tags "enterprise,integration,e2e" ./...
+```
+
+#### Test Categories Explained
+
+| Category | Build Tag | Description | Speed |
+|----------|-----------|-------------|-------|
+| **Unit** | _(none)_ | Standard tests, no external deps | Fast |
+| **Enterprise** | `enterprise` | Tests for enterprise-only features | Fast |
+| **Integration** | `integration` | Tests requiring DB/services | Medium |
+| **E2E Plugin** | `e2e` | Spawns real plugin subprocesses | Slow |
+
+#### Plugin Contract Tests
+
+The plugin test framework validates UI-to-RPC contracts without building plugins:
+
+```bash
+# Fast contract validation (no plugin build)
+go test -v ./pkg/testinfra/plugintest/... -run "TestAdvancedLLMCacheUIContract"
+```
+
+#### CI/CD Recommendation
+
+For CI pipelines, we recommend:
+
+```yaml
+# Fast feedback (every PR)
+- run: go test ./...
+
+# Pre-merge validation
+- run: go test -tags enterprise ./...
+
+# Nightly/release validation
+- run: go test -tags "enterprise,integration,e2e" ./...
 ```
 
 ## Community & Support
