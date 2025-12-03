@@ -283,6 +283,42 @@ func (s *MarketplaceService) processIndex(ctx context.Context, index *marketplac
 		}
 	}
 
+	// Remove stale plugins that are no longer in the index
+	// Build a set of all plugin:version keys from the current index
+	indexPluginVersions := make(map[string]bool)
+	for pluginID, versions := range index.Plugins {
+		for _, v := range versions {
+			key := fmt.Sprintf("%s:%s", pluginID, v.Version)
+			indexPluginVersions[key] = true
+		}
+	}
+
+	// Find and delete plugins from this source that are no longer in the index
+	var stalePlugins []models.MarketplacePlugin
+	if err := s.db.Where("synced_from_url = ?", sourceURL).Find(&stalePlugins).Error; err != nil {
+		log.Error().Err(err).Msg("Failed to query existing marketplace plugins for cleanup")
+	} else {
+		for _, stale := range stalePlugins {
+			key := fmt.Sprintf("%s:%s", stale.PluginID, stale.Version)
+			if !indexPluginVersions[key] {
+				if err := s.db.Delete(&stale).Error; err != nil {
+					log.Error().
+						Err(err).
+						Str("plugin_id", stale.PluginID).
+						Str("version", stale.Version).
+						Msg("Failed to delete stale marketplace plugin")
+					result.Errors = append(result.Errors, fmt.Sprintf("Failed to delete stale %s@%s: %v", stale.PluginID, stale.Version, err))
+				} else {
+					result.PluginsRemoved++
+					log.Debug().
+						Str("plugin_id", stale.PluginID).
+						Str("version", stale.Version).
+						Msg("Removed stale marketplace plugin")
+				}
+			}
+		}
+	}
+
 	return result, nil
 }
 
@@ -313,6 +349,21 @@ func (s *MarketplaceService) indexedPluginToModel(indexed *marketplace.IndexedPl
 		RequiredUI:       indexed.RequiredUI,
 		LastSynced:       time.Now(),
 		SyncedFromURL:    sourceURL,
+		// Additional fields
+		License:           indexed.License,
+		Keywords:          indexed.Keywords,
+		Hooks:             indexed.Hooks,
+		Screenshots:       indexed.Screenshots,
+		APIVersions:       indexed.APIVersions,
+		Dependencies:      indexed.Dependencies,
+		DocumentationURL:  indexed.DocumentationURL,
+		RepositoryURL:     indexed.RepositoryURL,
+		SupportURL:        indexed.SupportURL,
+		HomepageURL:       indexed.HomepageURL,
+		IssuesURL:         indexed.IssuesURL,
+		DeprecatedMessage: indexed.DeprecatedMessage,
+		ReplacementPlugin: indexed.Replacement,
+		EnterpriseOnly:    indexed.EnterpriseOnly,
 	}
 }
 

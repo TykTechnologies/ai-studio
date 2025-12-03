@@ -66,8 +66,21 @@ func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPl
 		return nil, nil, nil, fmt.Errorf("failed to pull artifact: %w", err)
 	}
 
+	// Check if this is a multi-arch image index
+	switch descriptor.MediaType {
+	case ocispec.MediaTypeImageIndex, "application/vnd.docker.distribution.manifest.list.v2+json":
+		// Handle multi-arch index - resolve to platform-specific manifest
+		return f.pullFromIndex(ctx, store, &descriptor, params)
+	}
+
+	// Handle single-platform manifest
+	return f.pullFromManifest(ctx, store, &descriptor, params)
+}
+
+// pullFromManifest extracts plugin data from a single-platform manifest
+func (f *ORASFetcher) pullFromManifest(ctx context.Context, store content.Storage, descriptor *ocispec.Descriptor, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
 	// Read and parse manifest
-	manifestData, err := content.FetchAll(ctx, store, descriptor)
+	manifestData, err := content.FetchAll(ctx, store, *descriptor)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 	}
@@ -98,7 +111,78 @@ func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPl
 		return nil, nil, nil, fmt.Errorf("failed to extract binary: %w", err)
 	}
 
-	return &descriptor, pluginConfig, binaryData, nil
+	return descriptor, pluginConfig, binaryData, nil
+}
+
+// pullFromIndex handles multi-arch image indexes by selecting the appropriate platform manifest
+func (f *ORASFetcher) pullFromIndex(ctx context.Context, store content.Storage, indexDesc *ocispec.Descriptor, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
+	// Fetch and parse the index
+	indexData, err := content.FetchAll(ctx, store, *indexDesc)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to fetch index: %w", err)
+	}
+
+	var index ocispec.Index
+	if err := json.Unmarshal(indexData, &index); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to parse index: %w", err)
+	}
+
+	// Normalize target architecture
+	targetArch := params.Architecture
+	if targetArch == "" {
+		targetArch = runtime.GOOS + "/" + runtime.GOARCH
+	}
+
+	// Find matching platform manifest
+	manifestDesc, err := f.selectPlatformManifest(&index, targetArch)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// The platform-specific manifest should already be in the store from oras.Copy()
+	return f.pullFromManifest(ctx, store, manifestDesc, params)
+}
+
+// selectPlatformManifest selects the appropriate manifest from an index based on target architecture
+func (f *ORASFetcher) selectPlatformManifest(index *ocispec.Index, targetArch string) (*ocispec.Descriptor, error) {
+	if len(index.Manifests) == 0 {
+		return nil, fmt.Errorf("no manifests found in index")
+	}
+
+	// First pass: look for exact platform match
+	for i := range index.Manifests {
+		manifest := &index.Manifests[i]
+		if manifest.Platform != nil {
+			manifestPlatform := manifest.Platform.OS + "/" + manifest.Platform.Architecture
+			if manifestPlatform == targetArch {
+				return manifest, nil
+			}
+		}
+	}
+
+	// Second pass: look for compatible platform (e.g., arm64 can run amd64 via emulation)
+	for i := range index.Manifests {
+		manifest := &index.Manifests[i]
+		if manifest.Platform != nil {
+			manifestPlatform := manifest.Platform.OS + "/" + manifest.Platform.Architecture
+			if f.isCompatibleArchitecture(manifestPlatform, targetArch) {
+				return manifest, nil
+			}
+		}
+	}
+
+	// Build list of available platforms for error message
+	var availablePlatforms []string
+	for _, manifest := range index.Manifests {
+		if manifest.Platform != nil {
+			availablePlatforms = append(availablePlatforms, manifest.Platform.OS+"/"+manifest.Platform.Architecture)
+		}
+	}
+
+	return nil, &ErrIncompatibleArchitecture{
+		PluginArch:  strings.Join(availablePlatforms, ", "),
+		RuntimeArch: targetArch,
+	}
 }
 
 // configureAuth sets up authentication for the registry
@@ -239,7 +323,7 @@ func (f *ORASFetcher) PullManifest(ctx context.Context, ref *OCIReference, param
 		return nil, nil, fmt.Errorf("failed to resolve reference: %w", err)
 	}
 
-	// Fetch manifest content
+	// Fetch manifest/index content
 	manifestReader, err := repo.Fetch(ctx, descriptor)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to fetch manifest: %w", err)
@@ -251,12 +335,59 @@ func (f *ORASFetcher) PullManifest(ctx context.Context, ref *OCIReference, param
 		return nil, nil, fmt.Errorf("failed to read manifest: %w", err)
 	}
 
+	// Check if this is a multi-arch image index
+	switch descriptor.MediaType {
+	case ocispec.MediaTypeImageIndex, "application/vnd.docker.distribution.manifest.list.v2+json":
+		// Handle multi-arch index - resolve to platform-specific manifest
+		return f.pullManifestFromIndex(ctx, repo, manifestData, params)
+	}
+
+	// Parse as single-platform manifest
 	var manifest ocispec.Manifest
 	if err := json.Unmarshal(manifestData, &manifest); err != nil {
 		return nil, nil, fmt.Errorf("failed to parse manifest: %w", err)
 	}
 
 	return &descriptor, &manifest, nil
+}
+
+// pullManifestFromIndex resolves a multi-arch index to the appropriate platform manifest
+func (f *ORASFetcher) pullManifestFromIndex(ctx context.Context, repo *remote.Repository, indexData []byte, params *OCIPluginParams) (*ocispec.Descriptor, *ocispec.Manifest, error) {
+	var index ocispec.Index
+	if err := json.Unmarshal(indexData, &index); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse index: %w", err)
+	}
+
+	// Normalize target architecture
+	targetArch := params.Architecture
+	if targetArch == "" {
+		targetArch = runtime.GOOS + "/" + runtime.GOARCH
+	}
+
+	// Find matching platform manifest
+	manifestDesc, err := f.selectPlatformManifest(&index, targetArch)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Fetch the platform-specific manifest
+	manifestReader, err := repo.Fetch(ctx, *manifestDesc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch platform manifest: %w", err)
+	}
+	defer manifestReader.Close()
+
+	manifestData, err := content.ReadAll(manifestReader, *manifestDesc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read platform manifest: %w", err)
+	}
+
+	var manifest ocispec.Manifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse platform manifest: %w", err)
+	}
+
+	return manifestDesc, &manifest, nil
 }
 
 // CheckExists verifies if an artifact exists in the registry without downloading

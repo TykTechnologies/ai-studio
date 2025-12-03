@@ -23,6 +23,7 @@ import {
   OpenInNew as OpenInNewIcon,
   Security as SecurityIcon,
   Download as DownloadIcon,
+  Star as StarIcon,
 } from '@mui/icons-material';
 import marketplaceService from '../../services/marketplaceService';
 
@@ -87,6 +88,9 @@ const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
               <Chip label={plugin.publisher} size="small" color="primary" />
               <Chip label={plugin.maturity} size="small" />
               <Chip label={`v${plugin.version}`} size="small" variant="outlined" />
+              {plugin.enterprise_only && (
+                <Chip label="Enterprise" size="small" color="secondary" icon={<StarIcon />} />
+              )}
             </Box>
           </Box>
         </Box>
@@ -107,6 +111,15 @@ const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
           <Typography variant="body1" paragraph>
             {plugin.description}
           </Typography>
+
+          {plugin.enterprise_only && (
+            <Alert severity="info" icon={<StarIcon />} sx={{ mb: 2 }}>
+              <strong>Enterprise Only</strong>
+              <Typography variant="body2">
+                This plugin requires an Enterprise license to install and use.
+              </Typography>
+            </Alert>
+          )}
 
           {plugin.deprecated && (
             <Alert severity="warning" sx={{ mb: 2 }}>
@@ -310,8 +323,9 @@ const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
               onInstall(plugin);
               onClose();
             }}
+            disabled={plugin.enterprise_only}
           >
-            Install Plugin
+            {plugin.enterprise_only ? 'Enterprise Required' : 'Install Plugin'}
           </Button>
         )}
       </DialogActions>

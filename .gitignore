@@ -117,5 +117,6 @@ examples/plugins/gateway/legacy-collectors/file_proxy_collector/file_proxy_colle
 examples/plugins/studio/scheduler-demo/scheduler-demo
 data/exports
 data/exports/*
+keys/*
 *.test
 *.out

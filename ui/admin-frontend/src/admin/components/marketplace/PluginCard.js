@@ -13,6 +13,7 @@ import {
   Verified as VerifiedIcon,
   CheckCircle as CheckCircleIcon,
   Warning as WarningIcon,
+  Star as StarIcon,
 } from '@mui/icons-material';
 
 const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
@@ -61,21 +62,35 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
         position: 'relative',
       }}
     >
-      {plugin.deprecated && (
+      {(plugin.deprecated || plugin.enterprise_only) && (
         <Box
           sx={{
             position: 'absolute',
             top: 8,
             right: 8,
             zIndex: 1,
+            display: 'flex',
+            gap: 0.5,
+            flexDirection: 'column',
+            alignItems: 'flex-end',
           }}
         >
-          <Chip
-            label="Deprecated"
-            size="small"
-            color="error"
-            icon={<WarningIcon />}
-          />
+          {plugin.enterprise_only && (
+            <Chip
+              label="Enterprise"
+              size="small"
+              color="secondary"
+              icon={<StarIcon />}
+            />
+          )}
+          {plugin.deprecated && (
+            <Chip
+              label="Deprecated"
+              size="small"
+              color="error"
+              icon={<WarningIcon />}
+            />
+          )}
         </Box>
       )}
 
@@ -177,8 +192,9 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
             onClick={() => onInstall(plugin)}
             fullWidth
             variant="contained"
+            disabled={plugin.enterprise_only}
           >
-            Install
+            {plugin.enterprise_only ? 'Enterprise' : 'Install'}
           </Button>
         )}
       </CardActions>

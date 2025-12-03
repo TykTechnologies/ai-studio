@@ -68,6 +68,9 @@ type MarketplacePlugin struct {
 	DeprecatedMessage string  `json:"deprecated_message" gorm:"type:text"`
 	ReplacementPlugin string  `json:"replacement_plugin" gorm:"size:255"`
 
+	// Enterprise
+	EnterpriseOnly  bool      `json:"enterprise_only" gorm:"default:false;index:idx_marketplace_enterprise"`
+
 	// Cache info
 	LastSynced      time.Time `json:"last_synced"`
 	SyncedFromURL   string    `json:"synced_from_url" gorm:"uniqueIndex:idx_marketplace_plugin_version_source;size:500"`
