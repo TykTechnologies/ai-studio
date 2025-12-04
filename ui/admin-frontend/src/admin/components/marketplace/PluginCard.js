@@ -15,8 +15,14 @@ import {
   Warning as WarningIcon,
   Star as StarIcon,
 } from '@mui/icons-material';
+import { useEdition } from '../../context/EditionContext';
 
 const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
+  const { isEnterprise, loading } = useEdition();
+
+  // Disable install for enterprise-only plugins when not running enterprise binary
+  // Also disable while loading to prevent flash of enabled state
+  const isInstallDisabled = loading || (plugin.enterprise_only && !isEnterprise);
   const getPublisherColor = (publisher) => {
     switch (publisher) {
       case 'tyk-official':
@@ -62,35 +68,21 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
         position: 'relative',
       }}
     >
-      {(plugin.deprecated || plugin.enterprise_only) && (
+      {plugin.deprecated && (
         <Box
           sx={{
             position: 'absolute',
             top: 8,
             right: 8,
             zIndex: 1,
-            display: 'flex',
-            gap: 0.5,
-            flexDirection: 'column',
-            alignItems: 'flex-end',
           }}
         >
-          {plugin.enterprise_only && (
-            <Chip
-              label="Enterprise"
-              size="small"
-              color="secondary"
-              icon={<StarIcon />}
-            />
-          )}
-          {plugin.deprecated && (
-            <Chip
-              label="Deprecated"
-              size="small"
-              color="error"
-              icon={<WarningIcon />}
-            />
-          )}
+          <Chip
+            label="Deprecated"
+            size="small"
+            color="error"
+            icon={<WarningIcon />}
+          />
         </Box>
       )}
 
@@ -127,6 +119,14 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
                   label={plugin.category}
                   size="small"
                   variant="outlined"
+                />
+              )}
+              {plugin.enterprise_only && (
+                <Chip
+                  label="Enterprise"
+                  size="small"
+                  color="secondary"
+                  icon={<StarIcon />}
                 />
               )}
             </Box>
@@ -192,9 +192,9 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
             onClick={() => onInstall(plugin)}
             fullWidth
             variant="contained"
-            disabled={plugin.enterprise_only}
+            disabled={isInstallDisabled}
           >
-            {plugin.enterprise_only ? 'Enterprise' : 'Install'}
+            {isInstallDisabled && plugin.enterprise_only ? 'Enterprise Required' : 'Install'}
           </Button>
         )}
       </CardActions>

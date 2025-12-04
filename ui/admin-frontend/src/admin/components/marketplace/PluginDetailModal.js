@@ -26,6 +26,7 @@ import {
   Star as StarIcon,
 } from '@mui/icons-material';
 import marketplaceService from '../../services/marketplaceService';
+import { useEdition } from '../../context/EditionContext';
 
 function TabPanel({ children, value, index }) {
   return (
@@ -36,9 +37,13 @@ function TabPanel({ children, value, index }) {
 }
 
 const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
+  const { isEnterprise, loading: editionLoading } = useEdition();
   const [tabValue, setTabValue] = useState(0);
   const [versions, setVersions] = useState([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
+
+  // Disable install for enterprise-only plugins when not running enterprise binary
+  const isInstallDisabled = editionLoading || (plugin?.enterprise_only && !isEnterprise);
 
   useEffect(() => {
     if (open && plugin) {
@@ -112,7 +117,7 @@ const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
             {plugin.description}
           </Typography>
 
-          {plugin.enterprise_only && (
+          {plugin.enterprise_only && isInstallDisabled && (
             <Alert severity="info" icon={<StarIcon />} sx={{ mb: 2 }}>
               <strong>Enterprise Only</strong>
               <Typography variant="body2">
@@ -323,9 +328,9 @@ const PluginDetailModal = ({ open, plugin, onClose, onInstall }) => {
               onInstall(plugin);
               onClose();
             }}
-            disabled={plugin.enterprise_only}
+            disabled={isInstallDisabled}
           >
-            {plugin.enterprise_only ? 'Enterprise Required' : 'Install Plugin'}
+            {isInstallDisabled && plugin.enterprise_only ? 'Enterprise Required' : 'Install Plugin'}
           </Button>
         )}
       </DialogActions>
