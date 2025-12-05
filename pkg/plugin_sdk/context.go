@@ -180,6 +180,11 @@ type StudioServices interface {
 
 	// CallLLM proxies LLM requests (for agent plugins, Studio-only)
 	CallLLM(ctx context.Context, llmID uint32, model string, messages interface{}, temperature float64, maxTokens int32) (interface{}, error)
+
+	// UpdatePluginConfig updates the plugin's own configuration in the database
+	// configJSON should be a valid JSON string containing the full configuration
+	// Returns success status and any error message
+	UpdatePluginConfig(ctx context.Context, pluginID uint32, configJSON string) (bool, string, error)
 }
 
 // detectRuntime determines the runtime environment from environment variables

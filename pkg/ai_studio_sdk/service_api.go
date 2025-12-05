@@ -85,6 +85,14 @@ func SetPluginID(id uint32) {
 	log.Info().Uint32("plugin_id", pluginID).Msg("✅ Plugin ID updated in SDK")
 }
 
+// GetPluginID returns the current plugin ID
+// This can be used by plugins to get their own ID for API calls
+func GetPluginID() uint32 {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	return pluginID
+}
+
 // getServiceClient creates and returns the service client, creating it if necessary
 // Includes retry logic to handle race conditions where the broker server may not be ready yet
 func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClient, error) {
@@ -201,6 +209,21 @@ func GetPlugin(ctx context.Context, pluginID uint32) (*mgmtpb.GetPluginResponse,
 	return client.GetPlugin(ctx, &mgmtpb.GetPluginRequest{
 		Context:  createPluginContext(AvailableScopes.PluginsRead),
 		PluginId: pluginID,
+	})
+}
+
+// UpdatePluginConfig updates the configuration of a specific plugin
+// The configJSON parameter should be a valid JSON string containing the full configuration
+func UpdatePluginConfig(ctx context.Context, pluginID uint32, configJSON string) (*mgmtpb.UpdatePluginConfigResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdatePluginConfig(ctx, &mgmtpb.UpdatePluginConfigRequest{
+		Context:    createPluginContext(AvailableScopes.PluginsWrite),
+		PluginId:   pluginID,
+		ConfigJson: configJSON,
 	})
 }
 

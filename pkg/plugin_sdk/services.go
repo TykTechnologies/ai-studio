@@ -245,3 +245,11 @@ func (s *studioServicesImpl) CallLLM(ctx context.Context, llmID uint32, model st
 	// TODO: Implement CallLLM wrapper when needed for agent plugins
 	return nil, fmt.Errorf("CallLLM not yet implemented in unified SDK")
 }
+
+func (s *studioServicesImpl) UpdatePluginConfig(ctx context.Context, pluginID uint32, configJSON string) (bool, string, error) {
+	resp, err := ai_studio_sdk.UpdatePluginConfig(ctx, pluginID, configJSON)
+	if err != nil {
+		return false, "", err
+	}
+	return resp.Success, resp.Message, nil
+}
