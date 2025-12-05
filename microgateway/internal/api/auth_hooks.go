@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/rs/zerolog/log"
 )
 
@@ -432,6 +433,19 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 					r.ContentLength = int64(len(pluginResp.Body))
 				}
 			}
+
+			// Apply context updates (e.g., upstream_override for DLB plugin)
+			if len(pluginResp.ContextUpdates) > 0 {
+				ctx := r.Context()
+				for key, value := range pluginResp.ContextUpdates {
+					ctx = context.WithValue(ctx, key, value)
+					log.Debug().
+						Str("key", key).
+						Str("value", value).
+						Msg("Applied plugin context update to request")
+				}
+				*r = *r.WithContext(ctx)
+			}
 		} else if modifiedEnrichedReq, ok := result.(*interfaces.EnrichedRequest); ok {
 			// Handle EnrichedRequest from post-auth chain (new behavior for chained plugins)
 			// Apply modifications from the plugin chain
@@ -451,6 +465,22 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 				}
 			}
 		}
+
+		// Apply context updates from plugin context metadata (populated by plugin chain)
+		if pluginCtx != nil && pluginCtx.Metadata != nil {
+			ctx := r.Context()
+			for key, value := range pluginCtx.Metadata {
+				if strVal, ok := value.(string); ok {
+					ctx = context.WithValue(ctx, key, strVal)
+					log.Debug().
+						Str("key", key).
+						Str("value", strVal).
+						Msg("Applied plugin metadata to request context")
+				}
+			}
+			*r = *r.WithContext(ctx)
+		}
+
 		return false // Continue to proxy
 	}
 }

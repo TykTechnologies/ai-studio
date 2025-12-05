@@ -123,6 +123,7 @@ message PluginResponse {
     bytes body = 4;
     bool block = 5;  // Stop processing if true
     string error_message = 6;
+    map<string, string> context_updates = 7;  // Updates to request context (e.g., upstream_override)
 }
 
 message AuthRequest {

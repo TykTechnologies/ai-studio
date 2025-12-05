@@ -110,14 +110,15 @@ func convertPluginResponse(resp *pb.PluginResponse) *interfaces.PluginResponse {
 	if resp == nil {
 		return &interfaces.PluginResponse{}
 	}
-	
+
 	return &interfaces.PluginResponse{
-		Modified:     resp.Modified,
-		StatusCode:   int(resp.StatusCode),
-		Headers:      resp.Headers,
-		Body:         resp.Body,
-		Block:        resp.Block,
-		ErrorMessage: resp.ErrorMessage,
+		Modified:       resp.Modified,
+		StatusCode:     int(resp.StatusCode),
+		Headers:        resp.Headers,
+		Body:           resp.Body,
+		Block:          resp.Block,
+		ErrorMessage:   resp.ErrorMessage,
+		ContextUpdates: resp.ContextUpdates,
 	}
 }
 
@@ -223,14 +224,15 @@ func convertInterfacePluginResponse(resp *interfaces.PluginResponse) *pb.PluginR
 	if resp == nil {
 		return &pb.PluginResponse{}
 	}
-	
+
 	return &pb.PluginResponse{
-		Modified:     resp.Modified,
-		StatusCode:   int32(resp.StatusCode),
-		Headers:      resp.Headers,
-		Body:         resp.Body,
-		Block:        resp.Block,
-		ErrorMessage: resp.ErrorMessage,
+		Modified:       resp.Modified,
+		StatusCode:     int32(resp.StatusCode),
+		Headers:        resp.Headers,
+		Body:           resp.Body,
+		Block:          resp.Block,
+		ErrorMessage:   resp.ErrorMessage,
+		ContextUpdates: resp.ContextUpdates,
 	}
 }
 

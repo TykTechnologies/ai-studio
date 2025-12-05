@@ -683,6 +683,21 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 				// result stays as enrichedReq for the next plugin
 			}
 
+			// Apply context updates from plugin (e.g., upstream_override for DLB)
+			if len(resp.ContextUpdates) > 0 {
+				if pluginCtx.Metadata == nil {
+					pluginCtx.Metadata = make(map[string]interface{})
+				}
+				for key, value := range resp.ContextUpdates {
+					pluginCtx.Metadata[key] = value
+					log.Debug().
+						Str("plugin_name", plugin.Name).
+						Str("key", key).
+						Str("value", value).
+						Msg("📝 Plugin set context update")
+				}
+			}
+
 		case interfaces.HookTypeOnResponse:
 			// NOTE: Response plugins are handled by the AI Gateway through the adapter
 			// The plugin manager loads response plugins, but the AI Gateway handles execution

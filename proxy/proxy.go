@@ -441,7 +441,17 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
-	upstreamURL, err := url.Parse(llm.APIEndpoint)
+
+	// Check for upstream override from plugins (e.g., DLB load balancer)
+	upstreamEndpoint := llm.APIEndpoint
+	if override := r.Context().Value("upstream_override"); override != nil {
+		if overrideURL, ok := override.(string); ok && overrideURL != "" {
+			logger.Debugf("Using upstream override from plugin: %s", overrideURL)
+			upstreamEndpoint = overrideURL
+		}
+	}
+
+	upstreamURL, err := url.Parse(upstreamEndpoint)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL", err, false)
 		return
@@ -745,7 +755,17 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
-	upstreamURL, err := url.Parse(llm.APIEndpoint)
+
+	// Check for upstream override from plugins (e.g., DLB load balancer)
+	upstreamEndpoint := llm.APIEndpoint
+	if override := r.Context().Value("upstream_override"); override != nil {
+		if overrideURL, ok := override.(string); ok && overrideURL != "" {
+			logger.Debugf("Using upstream override from plugin for streaming: %s", overrideURL)
+			upstreamEndpoint = overrideURL
+		}
+	}
+
+	upstreamURL, err := url.Parse(upstreamEndpoint)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL for streaming", err, false)
 		return
