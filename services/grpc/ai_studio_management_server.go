@@ -168,6 +168,10 @@ func (s *AIStudioManagementServer) DeleteLLM(ctx context.Context, req *pb.Delete
 	return s.llmServer.DeleteLLM(ctx, req)
 }
 
+func (s *AIStudioManagementServer) UpdateLLMPlugins(ctx context.Context, req *pb.UpdateLLMPluginsRequest) (*pb.UpdateLLMPluginsResponse, error) {
+	return s.llmServer.UpdateLLMPlugins(ctx, req)
+}
+
 // Analytics Operations are not available to plugins
 // Analytics logic remains in the REST API layer for architectural consistency
 

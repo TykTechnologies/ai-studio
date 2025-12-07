@@ -28,6 +28,7 @@ const (
 	AIStudioManagementService_CreateLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/CreateLLM"
 	AIStudioManagementService_UpdateLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateLLM"
 	AIStudioManagementService_DeleteLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteLLM"
+	AIStudioManagementService_UpdateLLMPlugins_FullMethodName            = "/ai_studio_management.AIStudioManagementService/UpdateLLMPlugins"
 	AIStudioManagementService_GetAnalyticsSummary_FullMethodName         = "/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary"
 	AIStudioManagementService_GetUsageStatistics_FullMethodName          = "/ai_studio_management.AIStudioManagementService/GetUsageStatistics"
 	AIStudioManagementService_GetCostAnalysis_FullMethodName             = "/ai_studio_management.AIStudioManagementService/GetCostAnalysis"
@@ -121,6 +122,7 @@ type AIStudioManagementServiceClient interface {
 	CreateLLM(ctx context.Context, in *CreateLLMRequest, opts ...grpc.CallOption) (*CreateLLMResponse, error)
 	UpdateLLM(ctx context.Context, in *UpdateLLMRequest, opts ...grpc.CallOption) (*UpdateLLMResponse, error)
 	DeleteLLM(ctx context.Context, in *DeleteLLMRequest, opts ...grpc.CallOption) (*DeleteLLMResponse, error)
+	UpdateLLMPlugins(ctx context.Context, in *UpdateLLMPluginsRequest, opts ...grpc.CallOption) (*UpdateLLMPluginsResponse, error)
 	// Analytics Operations (with caching)
 	GetAnalyticsSummary(ctx context.Context, in *GetAnalyticsSummaryRequest, opts ...grpc.CallOption) (*GetAnalyticsSummaryResponse, error)
 	GetUsageStatistics(ctx context.Context, in *GetUsageStatisticsRequest, opts ...grpc.CallOption) (*GetUsageStatisticsResponse, error)
@@ -305,6 +307,16 @@ func (c *aIStudioManagementServiceClient) DeleteLLM(ctx context.Context, in *Del
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteLLMResponse)
 	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteLLM_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateLLMPlugins(ctx context.Context, in *UpdateLLMPluginsRequest, opts ...grpc.CallOption) (*UpdateLLMPluginsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateLLMPluginsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateLLMPlugins_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1068,6 +1080,7 @@ type AIStudioManagementServiceServer interface {
 	CreateLLM(context.Context, *CreateLLMRequest) (*CreateLLMResponse, error)
 	UpdateLLM(context.Context, *UpdateLLMRequest) (*UpdateLLMResponse, error)
 	DeleteLLM(context.Context, *DeleteLLMRequest) (*DeleteLLMResponse, error)
+	UpdateLLMPlugins(context.Context, *UpdateLLMPluginsRequest) (*UpdateLLMPluginsResponse, error)
 	// Analytics Operations (with caching)
 	GetAnalyticsSummary(context.Context, *GetAnalyticsSummaryRequest) (*GetAnalyticsSummaryResponse, error)
 	GetUsageStatistics(context.Context, *GetUsageStatisticsRequest) (*GetUsageStatisticsResponse, error)
@@ -1194,6 +1207,9 @@ func (UnimplementedAIStudioManagementServiceServer) UpdateLLM(context.Context, *
 }
 func (UnimplementedAIStudioManagementServiceServer) DeleteLLM(context.Context, *DeleteLLMRequest) (*DeleteLLMResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteLLM not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateLLMPlugins(context.Context, *UpdateLLMPluginsRequest) (*UpdateLLMPluginsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateLLMPlugins not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) GetAnalyticsSummary(context.Context, *GetAnalyticsSummaryRequest) (*GetAnalyticsSummaryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAnalyticsSummary not implemented")
@@ -1594,6 +1610,24 @@ func _AIStudioManagementService_DeleteLLM_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AIStudioManagementServiceServer).DeleteLLM(ctx, req.(*DeleteLLMRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateLLMPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLLMPluginsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateLLMPlugins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateLLMPlugins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateLLMPlugins(ctx, req.(*UpdateLLMPluginsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2947,6 +2981,10 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteLLM",
 			Handler:    _AIStudioManagementService_DeleteLLM_Handler,
+		},
+		{
+			MethodName: "UpdateLLMPlugins",
+			Handler:    _AIStudioManagementService_UpdateLLMPlugins_Handler,
 		},
 		{
 			MethodName: "GetAnalyticsSummary",

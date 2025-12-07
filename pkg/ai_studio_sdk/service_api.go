@@ -481,6 +481,22 @@ func DeleteLLM(ctx context.Context, llmID uint32) error {
 	return nil
 }
 
+// UpdateLLMPlugins updates the plugin associations for an LLM
+// If append is true, plugins are added to existing associations; otherwise they replace all
+func UpdateLLMPlugins(ctx context.Context, llmID uint32, pluginIDs []uint32, append bool) (*mgmtpb.UpdateLLMPluginsResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateLLMPlugins(ctx, &mgmtpb.UpdateLLMPluginsRequest{
+		Context:   createPluginContext(AvailableScopes.LLMsWrite),
+		LlmId:     llmID,
+		PluginIds: pluginIDs,
+		Append:    append,
+	})
+}
+
 // === App CRUD Operations ===
 
 // GetApp retrieves a specific app

@@ -253,3 +253,11 @@ func (s *studioServicesImpl) UpdatePluginConfig(ctx context.Context, pluginID ui
 	}
 	return resp.Success, resp.Message, nil
 }
+
+func (s *studioServicesImpl) UpdateLLMPlugins(ctx context.Context, llmID uint32, pluginIDs []uint32, appendMode bool) (bool, string, []uint32, error) {
+	resp, err := ai_studio_sdk.UpdateLLMPlugins(ctx, llmID, pluginIDs, appendMode)
+	if err != nil {
+		return false, "", nil, err
+	}
+	return resp.Success, resp.Message, resp.PluginIds, nil
+}

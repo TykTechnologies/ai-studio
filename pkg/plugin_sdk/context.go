@@ -185,6 +185,11 @@ type StudioServices interface {
 	// configJSON should be a valid JSON string containing the full configuration
 	// Returns success status and any error message
 	UpdatePluginConfig(ctx context.Context, pluginID uint32, configJSON string) (bool, string, error)
+
+	// UpdateLLMPlugins updates plugin associations for an LLM
+	// If append is true, the plugin is added to existing associations; otherwise replaces all
+	// Returns success status and the final list of plugin IDs
+	UpdateLLMPlugins(ctx context.Context, llmID uint32, pluginIDs []uint32, append bool) (bool, string, []uint32, error)
 }
 
 // detectRuntime determines the runtime environment from environment variables

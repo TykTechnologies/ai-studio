@@ -113,9 +113,10 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/ListLLMs":      models.ServiceScopeLLMsRead,
 		"/ai_studio_management.AIStudioManagementService/GetLLM":        models.ServiceScopeLLMsRead,
 		"/ai_studio_management.AIStudioManagementService/GetLLMPlugins": models.ServiceScopeLLMsRead,
-		"/ai_studio_management.AIStudioManagementService/CreateLLM":     models.ServiceScopeLLMsWrite,
-		"/ai_studio_management.AIStudioManagementService/UpdateLLM":     models.ServiceScopeLLMsWrite,
-		"/ai_studio_management.AIStudioManagementService/DeleteLLM":     models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/CreateLLM":       models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateLLM":       models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteLLM":       models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateLLMPlugins": models.ServiceScopeLLMsWrite,
 
 		// Analytics methods
 		"/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary": models.ServiceScopeAnalyticsRead,

@@ -21,6 +21,7 @@ service AIStudioManagementService {
     rpc CreateLLM(CreateLLMRequest) returns (CreateLLMResponse);
     rpc UpdateLLM(UpdateLLMRequest) returns (UpdateLLMResponse);
     rpc DeleteLLM(DeleteLLMRequest) returns (DeleteLLMResponse);
+    rpc UpdateLLMPlugins(UpdateLLMPluginsRequest) returns (UpdateLLMPluginsResponse);
 
     // Analytics Operations (with caching)
     rpc GetAnalyticsSummary(GetAnalyticsSummaryRequest) returns (GetAnalyticsSummaryResponse);
@@ -302,6 +303,20 @@ message DeleteLLMRequest {
 message DeleteLLMResponse {
     bool success = 1;
     string message = 2;
+}
+
+// UpdateLLMPlugins - Add or update plugin associations for an LLM
+message UpdateLLMPluginsRequest {
+    PluginContext context = 1;
+    uint32 llm_id = 2;
+    repeated uint32 plugin_ids = 3;  // List of plugin IDs to associate with this LLM
+    bool append = 4;                  // If true, adds to existing plugins; if false, replaces all
+}
+
+message UpdateLLMPluginsResponse {
+    bool success = 1;
+    string message = 2;
+    repeated uint32 plugin_ids = 3;  // Final list of plugin IDs after update
 }
 
 // Analytics Messages
