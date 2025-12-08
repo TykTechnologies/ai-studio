@@ -37,17 +37,25 @@ func TestAdvancedLLMCacheUIContract(t *testing.T) {
 	}
 
 	// Known RPC methods implemented by the advanced-llm-cache plugin
+	// See enterprise/plugins/advanced-llm-cache/main.go HandleRPC() for the full list
 	implementedMethods := map[string]bool{
-		"getMetrics":       true,
-		"clearCache":       true,
-		"getConfig":        true,
-		"getClearStatus":   true,
-		"getBackendHealth": true,
-		"getHealth":        true,
-		"testBackend":      true,
-		"getLicenseStatus": true,
-		"listEntries":      true,
-		"deleteEntry":      true,
+		"getMetrics":             true,
+		"clearCache":             true,
+		"getConfig":              true,
+		"getFullConfig":          true,
+		"updateConfig":           true,
+		"validateConfig":         true,
+		"getClearStatus":         true,
+		"getBackendHealth":       true,
+		"getHealth":              true,
+		"testBackend":            true,
+		"testRedisConnection":    true,
+		"getLicenseStatus":       true,
+		"listEntries":            true,
+		"deleteEntry":            true,
+		"listApps":               true,
+		"getAppCacheSettings":    true,
+		"updateAppCacheSettings": true,
 	}
 
 	// Check for missing methods

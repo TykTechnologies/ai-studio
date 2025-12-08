@@ -197,13 +197,14 @@ func TestPluginRPCAfterSession(t *testing.T) {
 	t.Logf("getConfig response: %s", string(response))
 }
 
-// TestPluginCommunityLicense tests behavior with community license.
-func TestPluginCommunityLicense(t *testing.T) {
+// TestPluginNoLicenseFailsToStart tests that enterprise plugin fails without valid license.
+// Enterprise plugins require a valid enterprise license - there is no "community mode".
+func TestPluginNoLicenseFailsToStart(t *testing.T) {
 	harness := setupE2EHarness(t)
 	defer harness.Stop()
 
-	// Set community license (no enterprise features)
-	harness.SetLicense("community", false, 0)
+	// No enterprise license - plugin should fail during OpenSession
+	harness.SetLicense("", false, 0)
 	harness.SetEntitlements([]string{})
 
 	if err := harness.Start(); err != nil {
@@ -214,25 +215,18 @@ func TestPluginCommunityLicense(t *testing.T) {
 		"enabled":           "true",
 		"ttl_seconds":       "300",
 		"max_cache_size_mb": "64",
-		// Try to enable Redis (enterprise feature)
-		"backend_type":    "redis",
-		"redis_address":   "localhost:6379",
 	})
 	if err != nil {
 		t.Fatalf("Initialize failed: %v", err)
 	}
 
-	if err := harness.OpenSession(); err != nil {
-		t.Fatalf("OpenSession failed: %v", err)
+	// OpenSession should fail because the plugin exits when no enterprise license is present
+	err = harness.OpenSession()
+	if err == nil {
+		t.Error("Expected OpenSession to fail without enterprise license, but it succeeded")
+	} else {
+		t.Logf("OpenSession correctly failed without enterprise license: %v", err)
 	}
-
-	// Check license status
-	response, err := harness.CallRPC("getLicenseStatus", []byte("{}"))
-	if err != nil {
-		t.Fatalf("getLicenseStatus RPC failed: %v", err)
-	}
-
-	t.Logf("License status: %s", string(response))
 }
 
 // setupE2EHarness creates and configures a test harness for E2E tests.

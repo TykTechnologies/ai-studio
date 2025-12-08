@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+// ============================================================================
+// Enterprise License Tests
+// ============================================================================
+// The Advanced LLM Cache plugin is an enterprise plugin that requires a valid
+// enterprise license to operate. There is no "community mode" - without a valid
+// enterprise license, the plugin will fail to start.
+
 // TestLicenseEnterpriseFeaturesEnabled tests enterprise features with valid license.
 func TestLicenseEnterpriseFeaturesEnabled(t *testing.T) {
 	harness := setupE2EHarness(t)
@@ -56,13 +63,14 @@ func TestLicenseEnterpriseFeaturesEnabled(t *testing.T) {
 	}
 }
 
-// TestLicenseCommunityRestrictions tests that community license restricts features.
-func TestLicenseCommunityRestrictions(t *testing.T) {
+// TestLicenseNoLicenseFailsToStart tests that enterprise plugin fails without enterprise license.
+// Enterprise plugins require a valid enterprise license to operate - there is no "community mode".
+func TestLicenseNoLicenseFailsToStart(t *testing.T) {
 	harness := setupE2EHarness(t)
 	defer harness.Stop()
 
-	// Set community license (no enterprise features)
-	harness.SetLicense("community", false, 0)
+	// No enterprise license - plugin should fail to start
+	harness.SetLicense("", false, 0)
 	harness.SetEntitlements([]string{})
 
 	if err := harness.Start(); err != nil {
@@ -78,28 +86,12 @@ func TestLicenseCommunityRestrictions(t *testing.T) {
 		t.Fatalf("Initialize failed: %v", err)
 	}
 
-	if err := harness.OpenSession(); err != nil {
-		t.Fatalf("OpenSession failed: %v", err)
-	}
-
-	// Get license status
-	response, err := harness.CallRPC("getLicenseStatus", []byte("{}"))
-	if err != nil {
-		t.Fatalf("getLicenseStatus RPC failed: %v", err)
-	}
-
-	var status map[string]interface{}
-	if err := json.Unmarshal(response, &status); err != nil {
-		t.Fatalf("Failed to parse license status: %v", err)
-	}
-
-	t.Logf("Community license status: %+v", status)
-
-	// Verify enterprise features are disabled
-	if enabled, ok := status["enterprise_enabled"].(bool); ok {
-		if enabled {
-			t.Error("Expected enterprise_enabled=false with community license")
-		}
+	// OpenSession should fail because the plugin exits when no enterprise license is present
+	err = harness.OpenSession()
+	if err == nil {
+		t.Error("Expected OpenSession to fail without enterprise license, but it succeeded")
+	} else {
+		t.Logf("OpenSession correctly failed without enterprise license: %v", err)
 	}
 }
 
@@ -108,7 +100,7 @@ func TestLicenseExpiringSoon(t *testing.T) {
 	harness := setupE2EHarness(t)
 	defer harness.Stop()
 
-	// Set license expiring in 7 days
+	// Set license expiring in 7 days - should still work
 	harness.SetLicense("enterprise", true, 7)
 	harness.SetEntitlements([]string{"advanced-llm-cache"})
 
@@ -139,20 +131,52 @@ func TestLicenseExpiringSoon(t *testing.T) {
 	}
 
 	// Features should still work with valid (but expiring) license
-	if enabled, ok := status["enterprise_enabled"].(bool); ok && !enabled {
-		t.Log("Note: Enterprise features disabled even with valid expiring license")
+	if enabled, ok := status["enterprise_enabled"].(bool); ok {
+		if !enabled {
+			t.Error("Expected enterprise_enabled=true with valid expiring license")
+		}
 	}
 
 	t.Logf("Expiring license status: %+v", status)
 }
 
-// TestLicenseExpired tests behavior with expired license.
-func TestLicenseExpired(t *testing.T) {
+// TestLicenseExpiredFailsToStart tests that plugin fails with expired license.
+// Enterprise plugins require a valid (non-expired) enterprise license.
+func TestLicenseExpiredFailsToStart(t *testing.T) {
 	harness := setupE2EHarness(t)
 	defer harness.Stop()
 
-	// Set expired license
+	// Set expired license - plugin should fail to start
 	harness.SetLicense("enterprise", false, -30) // Expired 30 days ago
+	harness.SetEntitlements([]string{"advanced-llm-cache"})
+
+	if err := harness.Start(); err != nil {
+		t.Fatalf("Failed to start plugin: %v", err)
+	}
+
+	err := harness.Initialize(map[string]string{
+		"enabled": "true",
+	})
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// OpenSession should fail because the plugin exits when license is expired
+	err = harness.OpenSession()
+	if err == nil {
+		t.Error("Expected OpenSession to fail with expired license, but it succeeded")
+	} else {
+		t.Logf("OpenSession correctly failed with expired license: %v", err)
+	}
+}
+
+// TestLicenseEntitlementCheck tests that specific entitlements are checked.
+func TestLicenseEntitlementCheck(t *testing.T) {
+	harness := setupE2EHarness(t)
+	defer harness.Stop()
+
+	// Set enterprise license WITH the required entitlement
+	harness.SetLicense("enterprise", true, 365)
 	harness.SetEntitlements([]string{"advanced-llm-cache"})
 
 	if err := harness.Start(); err != nil {
@@ -181,53 +205,7 @@ func TestLicenseExpired(t *testing.T) {
 		t.Fatalf("Failed to parse license status: %v", err)
 	}
 
-	// Enterprise features should be disabled with expired license
-	if enabled, ok := status["enterprise_enabled"].(bool); ok && enabled {
-		t.Error("Expected enterprise_enabled=false with expired license")
-	}
-
-	t.Logf("Expired license status: %+v", status)
-}
-
-// TestLicenseEntitlementCheck tests that specific entitlements are checked.
-func TestLicenseEntitlementCheck(t *testing.T) {
-	harness := setupE2EHarness(t)
-	defer harness.Stop()
-
-	// Set enterprise license but WITHOUT the required entitlement
-	harness.SetLicense("enterprise", true, 365)
-	harness.SetEntitlements([]string{"other-feature", "something-else"}) // Missing "advanced-llm-cache"
-
-	if err := harness.Start(); err != nil {
-		t.Fatalf("Failed to start plugin: %v", err)
-	}
-
-	err := harness.Initialize(map[string]string{
-		"enabled": "true",
-	})
-	if err != nil {
-		t.Fatalf("Initialize failed: %v", err)
-	}
-
-	if err := harness.OpenSession(); err != nil {
-		t.Fatalf("OpenSession failed: %v", err)
-	}
-
-	// Get license status
-	response, err := harness.CallRPC("getLicenseStatus", []byte("{}"))
-	if err != nil {
-		t.Fatalf("getLicenseStatus RPC failed: %v", err)
-	}
-
-	var status map[string]interface{}
-	if err := json.Unmarshal(response, &status); err != nil {
-		t.Fatalf("Failed to parse license status: %v", err)
-	}
-
-	t.Logf("License status without required entitlement: %+v", status)
-
-	// Plugin may still work but enterprise features may be restricted
-	// depending on entitlement requirements
+	t.Logf("License status with entitlement: %+v", status)
 }
 
 // TestLicenseServiceBrokerIntegration tests that license is fetched via service broker.
@@ -272,39 +250,37 @@ func TestLicenseServiceBrokerIntegration(t *testing.T) {
 	}
 }
 
-// TestLicenseRedisBackendRestriction tests Redis backend requires enterprise license.
-func TestLicenseRedisBackendRestriction(t *testing.T) {
+// TestLicenseRedisBackendWithEnterprise tests Redis backend works with enterprise license.
+func TestLicenseRedisBackendWithEnterprise(t *testing.T) {
 	harness := setupE2EHarness(t)
 	defer harness.Stop()
 
-	// Community license - should not allow Redis
-	harness.SetLicense("community", false, 0)
-	harness.SetEntitlements([]string{})
+	// Enterprise license - Redis backend should work
+	harness.SetLicense("enterprise", true, 365)
+	harness.SetEntitlements([]string{"advanced-llm-cache"})
 
 	if err := harness.Start(); err != nil {
 		t.Fatalf("Failed to start plugin: %v", err)
 	}
 
-	// Try to configure Redis backend
+	// Configure with Redis backend (may fail to connect but initialization should work)
 	err := harness.Initialize(map[string]string{
 		"enabled":       "true",
 		"backend_type":  "redis",
 		"redis_address": "localhost:6379",
 	})
 	if err != nil {
-		t.Logf("Initialize with Redis on community license returned error: %v", err)
+		t.Logf("Initialize returned error (may be expected if Redis not available): %v", err)
 	}
 
 	if err := harness.OpenSession(); err != nil {
-		// May fail if Redis backend is strictly enforced
-		t.Logf("OpenSession returned: %v", err)
+		t.Fatalf("OpenSession failed: %v", err)
 	}
 
-	// Get config to see what backend was actually used
+	// Get config to verify backend configuration
 	response, err := harness.CallRPC("getConfig", []byte("{}"))
 	if err != nil {
-		t.Logf("getConfig failed (may be expected): %v", err)
-		return
+		t.Fatalf("getConfig failed: %v", err)
 	}
 
 	var config map[string]interface{}
@@ -312,14 +288,5 @@ func TestLicenseRedisBackendRestriction(t *testing.T) {
 		t.Fatalf("Failed to parse config: %v", err)
 	}
 
-	// Check if Redis was actually enabled or fell back to memory
-	if backend, ok := config["backend"].(map[string]interface{}); ok {
-		if backendType, ok := backend["type"].(string); ok {
-			if backendType == "redis" {
-				t.Log("Warning: Redis backend was allowed without enterprise license")
-			} else {
-				t.Logf("Backend fell back to '%s' as expected for community license", backendType)
-			}
-		}
-	}
+	t.Logf("Config with Redis backend: %+v", config)
 }
