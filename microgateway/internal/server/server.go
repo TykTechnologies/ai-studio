@@ -107,16 +107,17 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{
-		AuthProvider:     serviceContainer.AuthProvider,
-		Services:         serviceContainer,
-		Gateway:          gateway, // Mount gateway back in router
-		PluginManager:    api.NewPluginManagerAdapter(pluginManager),
-		ReloadCoordinator: nil, // Will be set for control instances
-		EnableSwagger:    cfg.IsDevelopment(),
-		EnableMetrics:    cfg.Observability.EnableMetrics,
-		Version:          version,
-		BuildHash:        buildHash,
-		BuildTime:        buildTime,
+		AuthProvider:       serviceContainer.AuthProvider,
+		Services:           serviceContainer,
+		Gateway:            gateway, // Mount gateway back in router
+		PluginManager:      api.NewPluginManagerAdapter(pluginManager),
+		ReloadCoordinator:  nil, // Will be set for control instances
+		ModelRouterService: serviceContainer.ModelRouterService, // Enterprise: Model router
+		EnableSwagger:      cfg.IsDevelopment(),
+		EnableMetrics:      cfg.Observability.EnableMetrics,
+		Version:            version,
+		BuildHash:          buildHash,
+		BuildTime:          buildTime,
 	}
 
 	router := api.SetupRouter(routerConfig)

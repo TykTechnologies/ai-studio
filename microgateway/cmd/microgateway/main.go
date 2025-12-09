@@ -173,6 +173,7 @@ func main() {
 						Str("version", config.Version).
 						Int("llm_count", len(config.Llms)).
 						Int("app_count", len(config.Apps)).
+						Int("model_router_count", len(config.ModelRouters)).
 						Msg("Received configuration update from control, syncing to local SQLite")
 
 					// Create sync service and sync to local SQLite with join tables
@@ -181,6 +182,15 @@ func main() {
 						log.Error().Err(err).Msg("Failed to sync configuration to local SQLite")
 					} else {
 						log.Debug().Msg("Configuration synced to local SQLite successfully")
+
+						// Reload model routers after successful sync (Enterprise feature)
+						if serviceContainer.ModelRouterService != nil {
+							if err := serviceContainer.ModelRouterService.LoadRouters(cfg.HubSpoke.EdgeNamespace); err != nil {
+								log.Error().Err(err).Msg("Failed to reload model routers after sync")
+							} else {
+								log.Debug().Msg("Model routers reloaded after configuration sync")
+							}
+						}
 					}
 
 					// Also update gRPC provider cache for compatibility
@@ -193,6 +203,7 @@ func main() {
 				if initialConfig := edgeClient.GetCurrentConfiguration(); initialConfig != nil {
 					log.Debug().
 						Str("version", initialConfig.Version).
+						Int("model_router_count", len(initialConfig.ModelRouters)).
 						Msg("Setting initial configuration from edge client, syncing to local SQLite")
 
 					// Sync initial configuration to SQLite
@@ -201,6 +212,15 @@ func main() {
 						log.Error().Err(err).Msg("Failed to sync initial configuration to local SQLite")
 					} else {
 						log.Debug().Msg("Initial configuration synced to local SQLite successfully")
+
+						// Reload model routers after successful initial sync (Enterprise feature)
+						if serviceContainer.ModelRouterService != nil {
+							if err := serviceContainer.ModelRouterService.LoadRouters(cfg.HubSpoke.EdgeNamespace); err != nil {
+								log.Error().Err(err).Msg("Failed to reload model routers after initial sync")
+							} else {
+								log.Debug().Msg("Model routers reloaded after initial configuration sync")
+							}
+						}
 					}
 
 					grpcProvider.SetConfigurationCache(initialConfig)

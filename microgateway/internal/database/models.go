@@ -196,6 +196,13 @@ type AnalyticsEvent struct {
 	RequestBody    string         `gorm:"type:text"` // Store request payload
 	ResponseBody   string         `gorm:"type:text"` // Store response payload
 
+	// Model Router metadata (Enterprise)
+	RouterSlug          string // Model router slug if routed via /router/
+	RouterPoolName      string // Pool name that matched the model pattern
+	RouterSourceModel   string // Original model name before mapping
+	RouterTargetModel   string // Model name after mapping (may be same as source)
+	RouterSelectionAlgo string // Selection algorithm used: "round_robin" or "weighted"
+
 	// Timestamps
 	TimeStamp      time.Time      `gorm:"index:idx_analytics_timestamp"` // Match LLMChatRecord field name
 	CreatedAt      time.Time      `gorm:"index:idx_analytics_app"`
@@ -376,7 +383,67 @@ type ControlPayload struct {
 	CreatedAt     time.Time      `gorm:"index:idx_control_payload_created"`
 }
 
+// ModelRouter represents a model router configuration (Enterprise)
+// Routes incoming requests to LLM vendors based on model name patterns
+type ModelRouter struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	Name        string         `gorm:"not null" json:"name"`
+	Slug        string         `gorm:"uniqueIndex:idx_router_slug_namespace;not null" json:"slug"`
+	Description string         `json:"description"`
+	APICompat   string         `gorm:"default:'openai'" json:"api_compat"` // Currently only 'openai' supported
+	IsActive    bool           `gorm:"default:false;index:idx_router_active" json:"is_active"`
+	Namespace   string         `gorm:"default:'';uniqueIndex:idx_router_slug_namespace;index:idx_router_namespace" json:"namespace"`
+	Pools       []ModelPool    `gorm:"foreignKey:RouterID;constraint:OnDelete:CASCADE" json:"pools"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+}
+
+// ModelPool groups vendors that handle specific model patterns
+type ModelPool struct {
+	ID                 uint            `gorm:"primaryKey" json:"id"`
+	RouterID           uint            `gorm:"not null;index:idx_pool_router" json:"router_id"`
+	Name               string          `gorm:"not null" json:"name"`
+	ModelPattern       string          `gorm:"not null" json:"model_pattern"` // Glob pattern, e.g., "claude-*"
+	SelectionAlgorithm string          `gorm:"default:'round_robin'" json:"selection_algorithm"` // "round_robin" or "weighted"
+	Priority           int             `gorm:"default:0" json:"priority"` // Higher priority pools are checked first
+	Vendors            []PoolVendor    `gorm:"foreignKey:PoolID;constraint:OnDelete:CASCADE" json:"vendors"`
+	Mappings           []ModelMapping  `gorm:"foreignKey:PoolID;constraint:OnDelete:CASCADE" json:"mappings"`
+	CreatedAt          time.Time       `json:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt  `gorm:"index" json:"deleted_at,omitempty"`
+}
+
+// PoolVendor represents an LLM vendor within a pool
+type PoolVendor struct {
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	PoolID    uint           `gorm:"not null;index:idx_vendor_pool" json:"pool_id"`
+	LLMID     uint           `gorm:"not null;index:idx_vendor_llm" json:"llm_id"`
+	LLMSlug   string         `gorm:"not null" json:"llm_slug"` // Denormalized for quick lookup
+	Weight    int            `gorm:"default:1" json:"weight"`  // Used for weighted selection
+	IsActive  bool           `gorm:"default:true" json:"is_active"`
+	LLM       *LLM           `gorm:"foreignKey:LLMID" json:"llm,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+}
+
+// ModelMapping allows renaming models within a pool
+type ModelMapping struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	PoolID      uint           `gorm:"not null;index:idx_mapping_pool" json:"pool_id"`
+	SourceModel string         `gorm:"not null" json:"source_model"` // Model name from request
+	TargetModel string         `gorm:"not null" json:"target_model"` // Model name to send to vendor
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+}
+
 // TableName methods for new models
 func (EdgeInstance) TableName() string    { return "edge_instances" }
 func (PluginKV) TableName() string        { return "plugin_kv" }
 func (ControlPayload) TableName() string  { return "control_payloads" }
+func (ModelRouter) TableName() string     { return "model_routers" }
+func (ModelPool) TableName() string       { return "model_pools" }
+func (PoolVendor) TableName() string      { return "pool_vendors" }
+func (ModelMapping) TableName() string    { return "model_mappings" }

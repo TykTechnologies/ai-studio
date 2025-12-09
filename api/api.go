@@ -776,6 +776,14 @@ func (a *API) setupRoutes() {
 	v1.GET("/llms/:id/plugins/:pluginId/config", a.getLLMPluginConfig)
 	v1.PUT("/llms/:id/plugins/:pluginId/config", a.updateLLMPluginConfig)
 
+	// Model Router routes (Enterprise only)
+	v1.POST("/model-routers", a.createModelRouter)
+	v1.GET("/model-routers/:id", a.getModelRouter)
+	v1.PATCH("/model-routers/:id", a.updateModelRouter)
+	v1.DELETE("/model-routers/:id", a.deleteModelRouter)
+	v1.GET("/model-routers", a.listModelRouters)
+	v1.PATCH("/model-routers/:id/toggle", a.toggleModelRouterActive)
+
 	// Marketplace routes (only register if marketplace service is available)
 	if a.service.MarketplaceService != nil {
 		marketplaceHandlers := NewMarketplaceHandlers(a.service.MarketplaceService)

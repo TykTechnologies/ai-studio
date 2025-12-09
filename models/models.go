@@ -47,6 +47,11 @@ func InitModels(db *gorm.DB) error {
 		&InstalledPluginVersion{}, // Installed plugin version tracking
 		&MarketplaceConfig{},      // Marketplace configuration
 		&BrandingSettings{},       // UI branding customization
+		// Model Router Models (Enterprise)
+		&ModelRouter{},  // Model router configurations
+		&ModelPool{},    // Model pools with patterns
+		&PoolVendor{},   // Pool-LLM vendor associations
+		&ModelMapping{}, // Model name mappings
 		// Scheduler Models
 		&PluginSchedule{},          // Plugin scheduled tasks
 		&PluginScheduleExecution{}, // Schedule execution history

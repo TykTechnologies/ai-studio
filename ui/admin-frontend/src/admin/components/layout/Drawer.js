@@ -70,6 +70,9 @@ const Drawer = () => {
       subItems: [
         { id: 'llms', text: 'LLM providers', path: '/admin/llms' },
         { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices' },
+        ...(features.feature_model_router
+          ? [{ id: 'model-routers', text: 'Model Routers', path: '/admin/model-routers' }]
+          : []),
       ],
     },
     {

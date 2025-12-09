@@ -172,6 +172,17 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	pluginManager.SetManagementServer(managementServer)
 	log.Debug().Msg("Management server connected to plugin manager")
 
+	// Initialize Model Router Service (Enterprise feature)
+	modelRouterService := NewModelRouterService(db)
+	// Load routers from database - namespace will be used for edge filtering
+	namespace := cfg.HubSpoke.EdgeNamespace
+	if err := modelRouterService.LoadRouters(namespace); err != nil {
+		log.Warn().Err(err).Msg("Failed to load model routers (Enterprise feature may not be enabled)")
+		// Don't fail - model routers are optional
+	} else {
+		log.Debug().Int("router_count", modelRouterService.GetRouterCount()).Msg("Model routers loaded in hub-spoke container")
+	}
+
 	return &ServiceContainer{
 		DB:         db,
 		Repository: repo,
@@ -188,7 +199,12 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		AuthProvider: authProvider,
 		Crypto:       crypto,
 
-		PluginManager: pluginManager,
+		PluginManager:      pluginManager,
+		ModelRouterService: modelRouterService,
+
+		// Edge identity from config
+		EdgeID:        cfg.HubSpoke.EdgeID,
+		EdgeNamespace: cfg.HubSpoke.EdgeNamespace,
 	}, nil
 }
 

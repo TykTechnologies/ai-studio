@@ -47,16 +47,17 @@ func RequestIDMiddleware() gin.HandlerFunc {
 
 // RouterConfig holds configuration for the API router
 type RouterConfig struct {
-	AuthProvider      auth.AuthProvider
-	Services          *services.ServiceContainer
-	Gateway           aigateway.Gateway
-	PluginManager     PluginManagerInterface
-	ReloadCoordinator *services.ReloadCoordinator
-	EnableSwagger     bool
-	EnableMetrics     bool
-	Version           string
-	BuildHash         string
-	BuildTime         string
+	AuthProvider       auth.AuthProvider
+	Services           *services.ServiceContainer
+	Gateway            aigateway.Gateway
+	PluginManager      PluginManagerInterface
+	ReloadCoordinator  *services.ReloadCoordinator
+	ModelRouterService *services.ModelRouterService // Enterprise: Model router service
+	EnableSwagger      bool
+	EnableMetrics      bool
+	Version            string
+	BuildHash          string
+	BuildTime          string
 }
 
 // SetupRouter configures and returns the main application router
@@ -229,6 +230,22 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/ai/*path", gin.WrapH(config.Gateway.Handler()))
+
+		// Model Router endpoints (Enterprise)
+		// Routes requests to LLM vendors based on model name patterns
+		if config.ModelRouterService != nil {
+			log.Debug().Msg("Mounting Model Router handler (Enterprise)")
+			modelRouterHandler := services.NewModelRouterHandler(
+				config.ModelRouterService,
+				func(w http.ResponseWriter, r *http.Request) {
+					// Forward to the gateway handler - the mux.SetURLVars has already set routeId
+					config.Gateway.Handler().ServeHTTP(w, r)
+				},
+			)
+			// Mount router endpoints - OpenAI-compatible format (uses GinHandler for proper param extraction)
+			gateway.POST("/router/:routerSlug/v1/chat/completions", modelRouterHandler.GinHandler())
+			gateway.POST("/router/:routerSlug/v1/completions", modelRouterHandler.GinHandler())
+		}
 	}
 
 	// Metrics endpoint if enabled

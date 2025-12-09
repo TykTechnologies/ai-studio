@@ -71,7 +71,12 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		return fmt.Errorf("failed to sync ModelPrices: %w", err)
 	}
 
-	// 5. Commit transaction
+	// 5. Sync Model Routers (Enterprise feature)
+	if err := s.syncModelRouters(tx, config.ModelRouters); err != nil {
+		return fmt.Errorf("failed to sync ModelRouters: %w", err)
+	}
+
+	// 6. Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("failed to commit sync transaction: %w", err)
 	}
@@ -120,6 +125,20 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 
 	if err := tx.Exec("DELETE FROM model_prices WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear model_prices: %w", err)
+	}
+
+	// Clear Model Router tables (cascade from routers to pools to vendors/mappings)
+	if err := tx.Exec("DELETE FROM model_mappings WHERE pool_id IN (SELECT id FROM model_pools WHERE router_id IN (SELECT id FROM model_routers WHERE namespace = ? OR namespace = ''))", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear model_mappings (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM pool_vendors WHERE pool_id IN (SELECT id FROM model_pools WHERE router_id IN (SELECT id FROM model_routers WHERE namespace = ? OR namespace = ''))", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear pool_vendors (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM model_pools WHERE router_id IN (SELECT id FROM model_routers WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear model_pools (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM model_routers WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear model_routers (table may not exist)")
 	}
 
 	log.Debug().Msg("Existing configuration data cleared")
@@ -402,6 +421,90 @@ func (s *EdgeSyncService) syncModelPrices(tx *gorm.DB, modelPrices []*pb.ModelPr
 			Str("vendor", pbPrice.Vendor).
 			Str("model", pbPrice.ModelName).
 			Msg("Model price synced to SQLite")
+	}
+
+	return nil
+}
+
+// syncModelRouters syncs ModelRouter entities (Enterprise feature)
+func (s *EdgeSyncService) syncModelRouters(tx *gorm.DB, modelRouters []*pb.ModelRouterConfig) error {
+	log.Debug().Int("count", len(modelRouters)).Msg("Syncing Model Routers to local SQLite")
+
+	for _, pbRouter := range modelRouters {
+		// Insert ModelRouter record
+		router := &database.ModelRouter{
+			ID:          uint(pbRouter.Id),
+			Name:        pbRouter.Name,
+			Slug:        pbRouter.Slug,
+			Description: pbRouter.Description,
+			APICompat:   pbRouter.ApiCompat,
+			IsActive:    pbRouter.IsActive,
+			Namespace:   pbRouter.Namespace,
+			CreatedAt:   pbRouter.CreatedAt.AsTime(),
+			UpdatedAt:   pbRouter.UpdatedAt.AsTime(),
+		}
+
+		if err := tx.Create(router).Error; err != nil {
+			return fmt.Errorf("failed to insert ModelRouter %d: %w", pbRouter.Id, err)
+		}
+
+		// Insert pools for this router
+		for _, pbPool := range pbRouter.Pools {
+			pool := &database.ModelPool{
+				ID:                 uint(pbPool.Id),
+				RouterID:           uint(pbRouter.Id),
+				Name:               pbPool.Name,
+				ModelPattern:       pbPool.ModelPattern,
+				SelectionAlgorithm: pbPool.SelectionAlgorithm,
+				Priority:           int(pbPool.Priority),
+				CreatedAt:          time.Now(),
+				UpdatedAt:          time.Now(),
+			}
+
+			if err := tx.Create(pool).Error; err != nil {
+				return fmt.Errorf("failed to insert ModelPool %d for router %d: %w", pbPool.Id, pbRouter.Id, err)
+			}
+
+			// Insert vendors for this pool
+			for _, pbVendor := range pbPool.Vendors {
+				vendor := &database.PoolVendor{
+					ID:        uint(pbVendor.Id),
+					PoolID:    uint(pbPool.Id),
+					LLMID:     uint(pbVendor.LlmId),
+					LLMSlug:   pbVendor.LlmSlug,
+					Weight:    int(pbVendor.Weight),
+					IsActive:  pbVendor.IsActive,
+					CreatedAt: time.Now(),
+					UpdatedAt: time.Now(),
+				}
+
+				if err := tx.Create(vendor).Error; err != nil {
+					return fmt.Errorf("failed to insert PoolVendor %d for pool %d: %w", pbVendor.Id, pbPool.Id, err)
+				}
+			}
+
+			// Insert mappings for this pool
+			for _, pbMapping := range pbPool.Mappings {
+				mapping := &database.ModelMapping{
+					ID:          uint(pbMapping.Id),
+					PoolID:      uint(pbPool.Id),
+					SourceModel: pbMapping.SourceModel,
+					TargetModel: pbMapping.TargetModel,
+					CreatedAt:   time.Now(),
+					UpdatedAt:   time.Now(),
+				}
+
+				if err := tx.Create(mapping).Error; err != nil {
+					return fmt.Errorf("failed to insert ModelMapping %d for pool %d: %w", pbMapping.Id, pbPool.Id, err)
+				}
+			}
+		}
+
+		log.Debug().
+			Uint32("router_id", pbRouter.Id).
+			Str("router_slug", pbRouter.Slug).
+			Int("pool_count", len(pbRouter.Pools)).
+			Msg("Model Router synced to SQLite")
 	}
 
 	return nil

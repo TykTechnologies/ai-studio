@@ -44,6 +44,9 @@ type ServiceContainer struct {
 	PluginManager         *plugins.PluginManager
 	PluginSecurityService plugin_security.Service
 
+	// Model Router (Enterprise feature)
+	ModelRouterService *ModelRouterService
+
 	// Edge identity (populated in edge mode)
 	EdgeID        string
 	EdgeNamespace string
@@ -157,6 +160,16 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	pluginManager.SetManagementServer(managementServer)
 	log.Debug().Msg("✅ Management server connected to plugin manager - plugins can now access service API")
 
+	// Initialize Model Router Service (Enterprise feature)
+	modelRouterService := NewModelRouterService(db)
+	// Load routers from database - namespace will be empty for standalone mode
+	if err := modelRouterService.LoadRouters(cfg.HubSpoke.EdgeNamespace); err != nil {
+		log.Warn().Err(err).Msg("Failed to load model routers (Enterprise feature may not be enabled)")
+		// Don't fail - model routers are optional
+	} else {
+		log.Debug().Int("router_count", modelRouterService.GetRouterCount()).Msg("Model routers loaded")
+	}
+
 	return &ServiceContainer{
 		DB:         db,
 		Repository: repo,
@@ -175,6 +188,9 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 		PluginManager:         pluginManager,
 		PluginSecurityService: pluginSecurityService,
+
+		// Model Router (Enterprise feature)
+		ModelRouterService: modelRouterService,
 
 		// Edge identity from config (populated in edge mode)
 		EdgeID:        cfg.HubSpoke.EdgeID,

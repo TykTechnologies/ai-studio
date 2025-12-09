@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/group_access"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
+	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"gorm.io/gorm"
 )
 
@@ -41,6 +42,8 @@ type Service struct {
 	SystemEvents *SystemEventEmitter
 	// Licensing (set after creation via SetLicensingService)
 	LicensingService licensing.Service
+	// Model Router (Enterprise)
+	ModelRouterService model_router.Service
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -52,6 +55,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	notificationService := NewNotificationService(db, "", "", 0, "", "", nil) // SMTP will be configured when needed
 	budgetSvc := budget.NewService(db, notificationService)
 	groupAccessSvc := group_access.NewService(db)
+	modelRouterSvc := model_router.NewService(db)
 
 	// Initialize log export service with storage path from environment
 	exportStoragePath := os.Getenv("EXPORT_STORAGE_PATH")
@@ -154,6 +158,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		MarketplaceService:    marketplaceService,
 		HookRegistry:          hookRegistry,
 		HookManager:           hookManager,
+		ModelRouterService:    modelRouterSvc,
 	}
 
 	// Wire service reference to AI Studio plugin manager for proper service provider injection

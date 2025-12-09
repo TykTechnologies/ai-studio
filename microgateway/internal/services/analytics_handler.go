@@ -511,6 +511,23 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 		// All set to zero/empty until ChatRecord enriches this event
 	}
 
+	// Check for router metadata (if request came through model router)
+	// Try multiple timestamp keys since there may be slight timing variance
+	routerMetaKey := fmt.Sprintf("router_%d_%d", 0, proxyLog.TimeStamp.Unix())
+	if routerMeta := GetRouterMetadataStore().GetMetadata(routerMetaKey); routerMeta != nil {
+		event.RouterSlug = routerMeta.RouterSlug
+		event.RouterPoolName = routerMeta.PoolName
+		event.RouterSourceModel = routerMeta.SourceModel
+		event.RouterTargetModel = routerMeta.TargetModel
+		event.RouterSelectionAlgo = routerMeta.SelectionAlgo
+		log.Debug().
+			Str("router_slug", routerMeta.RouterSlug).
+			Str("pool", routerMeta.PoolName).
+			Str("source_model", routerMeta.SourceModel).
+			Str("target_model", routerMeta.TargetModel).
+			Msg("Added router metadata to analytics event")
+	}
+
 	// Create the analytics event and store for potential merge with ChatRecord
 	if err := h.db.Create(event).Error; err != nil {
 		log.Error().Err(err).Msg("Failed to create analytics event from proxy log")

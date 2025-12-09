@@ -22,8 +22,21 @@ import (
 // getInternalLLMBaseURL returns the internal /llm/call/ URL for SDK endpoint hijacking.
 // When the /ai/ endpoint routes requests through /llm/, this URL points to the local proxy.
 // The SDK handles vendor-specific path suffixes automatically (e.g., /v1/messages for Anthropic).
-func (p *Proxy) getInternalLLMBaseURL(slug string) string {
-	return fmt.Sprintf("http://127.0.0.1:%d/llm/call/%s", p.config.Port, slug)
+// IMPORTANT: Different SDKs expect different base URL formats:
+// - OpenAI SDK expects base URL with /v1 (e.g., http://host/llm/call/openai/v1) and appends /chat/completions
+// - Anthropic SDK expects base URL without version (e.g., http://host/llm/call/claude) and appends /v1/messages
+func (p *Proxy) getInternalLLMBaseURL(slug string, vendor models.Vendor) string {
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d/llm/call/%s", p.config.Port, slug)
+
+	// OpenAI and OpenAI-compatible SDKs expect the base URL to include /v1
+	// They then append /chat/completions or /completions directly
+	switch vendor {
+	case models.OPENAI, models.OLLAMA:
+		return baseURL + "/v1"
+	default:
+		// Other vendors (Anthropic, Google, etc.) handle their own path construction
+		return baseURL
+	}
 }
 
 // Handlers
@@ -149,7 +162,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	// The SDK will route to /llm/call/{slug} instead of the external vendor
 	llmSlug := slug.Make(conf.Name)
 	internalConf := *conf // Copy config
-	internalConf.APIEndpoint = p.getInternalLLMBaseURL(llmSlug)
+	internalConf.APIEndpoint = p.getInternalLLMBaseURL(llmSlug, conf.Vendor)
 	// Set a dummy API key to satisfy SDK validation (actual auth handled by /llm/)
 	// The InternalRoutingTransport strips SDK-set auth headers and passes client auth instead
 	internalConf.APIKey = "internal-routing-dummy-key"
@@ -392,7 +405,7 @@ func (p *Proxy) handleChatCompletionStream(
 	// Create a modified LLM config with internal endpoint
 	llmSlug := slug.Make(conf.Name)
 	internalConf := *conf // Copy config
-	internalConf.APIEndpoint = p.getInternalLLMBaseURL(llmSlug)
+	internalConf.APIEndpoint = p.getInternalLLMBaseURL(llmSlug, conf.Vendor)
 	// Set a dummy API key to satisfy SDK validation (actual auth handled by /llm/)
 	// The InternalRoutingTransport strips SDK-set auth headers and passes client auth instead
 	internalConf.APIKey = "internal-routing-dummy-key"

@@ -988,12 +988,13 @@ func (s *ControlServer) authenticate(ctx context.Context) error {
 // getConfigurationSnapshot generates a complete configuration snapshot for an edge namespace
 func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.ConfigurationSnapshot, error) {
 	snapshot := &pb.ConfigurationSnapshot{
-		Version:     fmt.Sprintf("%d", time.Now().Unix()),
-		Llms:        []*pb.LLMConfig{},
-		Apps:        []*pb.AppConfig{},
-		ModelPrices: []*pb.ModelPriceConfig{},
-		Filters:     []*pb.FilterConfig{},
-		Plugins:     []*pb.PluginConfig{},
+		Version:      fmt.Sprintf("%d", time.Now().Unix()),
+		Llms:         []*pb.LLMConfig{},
+		Apps:         []*pb.AppConfig{},
+		ModelPrices:  []*pb.ModelPriceConfig{},
+		Filters:      []*pb.FilterConfig{},
+		Plugins:      []*pb.PluginConfig{},
+		ModelRouters: []*pb.ModelRouterConfig{},
 	}
 
 	// Get LLMs for namespace with preloaded relationships
@@ -1368,6 +1369,82 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 	}
 
+	// Get Model Routers for namespace (Enterprise feature)
+	var modelRouters []models.ModelRouter
+	routerQuery := s.db.Preload("Pools.Vendors.LLM").Preload("Pools.Mappings").Where("active = ?", true)
+	if namespace == "" {
+		routerQuery = routerQuery.Where("namespace = ''")
+	} else {
+		routerQuery = routerQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+
+	if err := routerQuery.Find(&modelRouters).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to get Model Routers (Enterprise feature may not be enabled)")
+		// Don't fail - model routers are optional Enterprise feature
+	}
+
+	// Convert Model Routers to protobuf
+	for _, router := range modelRouters {
+		pbRouter := &pb.ModelRouterConfig{
+			Id:          uint32(router.ID),
+			Name:        router.Name,
+			Slug:        router.Slug,
+			Description: router.Description,
+			ApiCompat:   router.APICompat,
+			IsActive:    router.Active,
+			Namespace:   router.Namespace,
+			CreatedAt:   timestamppb.New(router.CreatedAt),
+			UpdatedAt:   timestamppb.New(router.UpdatedAt),
+		}
+
+		// Convert pools
+		for _, pool := range router.Pools {
+			pbPool := &pb.ModelPoolConfig{
+				Id:                 uint32(pool.ID),
+				Name:               pool.Name,
+				ModelPattern:       pool.ModelPattern,
+				SelectionAlgorithm: string(pool.SelectionAlgorithm),
+				Priority:           int32(pool.Priority),
+			}
+
+			// Convert vendors
+			for _, vendor := range pool.Vendors {
+				llmSlug := ""
+				if vendor.LLM != nil {
+					llmSlug = strings.ToLower(strings.ReplaceAll(vendor.LLM.Name, " ", "-"))
+				}
+				pbVendor := &pb.PoolVendorConfig{
+					Id:       uint32(vendor.ID),
+					LlmId:    uint32(vendor.LLMID),
+					LlmSlug:  llmSlug,
+					Weight:   int32(vendor.Weight),
+					IsActive: vendor.Active,
+				}
+				pbPool.Vendors = append(pbPool.Vendors, pbVendor)
+			}
+
+			// Convert mappings
+			for _, mapping := range pool.Mappings {
+				pbMapping := &pb.ModelMappingConfig{
+					Id:          uint32(mapping.ID),
+					SourceModel: mapping.SourceModel,
+					TargetModel: mapping.TargetModel,
+				}
+				pbPool.Mappings = append(pbPool.Mappings, pbMapping)
+			}
+
+			pbRouter.Pools = append(pbRouter.Pools, pbPool)
+		}
+
+		snapshot.ModelRouters = append(snapshot.ModelRouters, pbRouter)
+
+		log.Debug().
+			Uint("router_id", router.ID).
+			Str("router_slug", router.Slug).
+			Int("pool_count", len(router.Pools)).
+			Msg("Model Router synced to snapshot")
+	}
+
 	log.Debug().
 		Str("namespace", namespace).
 		Int("llm_count", len(snapshot.Llms)).
@@ -1375,6 +1452,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		Int("filter_count", len(snapshot.Filters)).
 		Int("price_count", len(snapshot.ModelPrices)).
 		Int("plugin_count", len(snapshot.Plugins)).
+		Int("model_router_count", len(snapshot.ModelRouters)).
 		Msg("Generated configuration snapshot for edge")
 
 	return snapshot, nil

@@ -124,6 +124,47 @@ message PluginConfig {
   repeated string hook_types = 14; // NEW: All hook types this plugin supports (for hybrid plugins)
 }
 
+// ModelRouterConfig represents a model router configuration (Enterprise)
+message ModelRouterConfig {
+  uint32 id = 1;
+  string name = 2;
+  string slug = 3;
+  string description = 4;
+  string api_compat = 5; // API compatibility format (e.g., "openai")
+  bool is_active = 6;
+  string namespace = 7;
+  repeated ModelPoolConfig pools = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+// ModelPoolConfig represents a pool within a model router
+message ModelPoolConfig {
+  uint32 id = 1;
+  string name = 2;
+  string model_pattern = 3; // Glob pattern for model matching (e.g., "claude-*")
+  string selection_algorithm = 4; // "round_robin" or "weighted"
+  int32 priority = 5; // Higher priority pools are checked first
+  repeated PoolVendorConfig vendors = 6;
+  repeated ModelMappingConfig mappings = 7;
+}
+
+// PoolVendorConfig represents an LLM vendor within a pool
+message PoolVendorConfig {
+  uint32 id = 1;
+  uint32 llm_id = 2;
+  string llm_slug = 3; // Denormalized for quick lookup
+  int32 weight = 4; // Used for weighted selection
+  bool is_active = 5;
+}
+
+// ModelMappingConfig represents a model name mapping within a pool
+message ModelMappingConfig {
+  uint32 id = 1;
+  string source_model = 2; // Model name from request
+  string target_model = 3; // Model name to send to vendor
+}
+
 // ConfigurationSnapshot represents a complete configuration state
 message ConfigurationSnapshot {
   string version = 1; // NEW: Configuration version for tracking
@@ -135,6 +176,7 @@ message ConfigurationSnapshot {
   repeated PluginConfig plugins = 6;
   string edge_namespace = 7; // Namespace this snapshot is filtered for
   google.protobuf.Timestamp snapshot_time = 8;
+  repeated ModelRouterConfig model_routers = 9; // Enterprise: Model router configurations
 }
 
 // ConfigurationChange represents a single configuration change
@@ -152,6 +194,7 @@ message ConfigurationChange {
     MODEL_PRICE = 3;
     FILTER = 4;
     PLUGIN = 5;
+    MODEL_ROUTER = 6;
   }
   
   ChangeType change_type = 1;

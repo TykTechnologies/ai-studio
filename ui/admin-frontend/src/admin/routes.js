@@ -75,6 +75,10 @@ import Marketplace from "./components/marketplace/Marketplace";
 import MarketplaceSettings from "./pages/MarketplaceSettings";
 import BrandingSettings from "./pages/BrandingSettings";
 
+import ModelRouterList from "./pages/ModelRouterList";
+import ModelRouterDetails from "./components/model-routers/ModelRouterDetails";
+import ModelRouterForm from "./components/model-routers/ModelRouterForm";
+
 const mainAdminRoutes = (
   <>
     <Route index element={<Overview />} />
@@ -184,5 +188,15 @@ const catalogRoutes = (
   </>
 );
 
-export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes };
+// Model Router routes (Enterprise only - requires feature_model_router)
+const modelRouterRoutes = (
+  <>
+    <Route path="model-routers" element={<ModelRouterList />} />
+    <Route path="model-routers/:id" element={<ModelRouterDetails />} />
+    <Route path="model-routers/edit/:id" element={<ModelRouterForm />} />
+    <Route path="model-routers/new" element={<ModelRouterForm />} />
+  </>
+);
+
+export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes };
 export default mainAdminRoutes;
