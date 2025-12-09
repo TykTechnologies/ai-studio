@@ -146,7 +146,7 @@ message ModelPoolConfig {
   string selection_algorithm = 4; // "round_robin" or "weighted"
   int32 priority = 5; // Higher priority pools are checked first
   repeated PoolVendorConfig vendors = 6;
-  repeated ModelMappingConfig mappings = 7;
+  reserved 7; // Was: mappings (moved to PoolVendorConfig for vendor-specific mappings)
 }
 
 // PoolVendorConfig represents an LLM vendor within a pool
@@ -156,13 +156,14 @@ message PoolVendorConfig {
   string llm_slug = 3; // Denormalized for quick lookup
   int32 weight = 4; // Used for weighted selection
   bool is_active = 5;
+  repeated ModelMappingConfig mappings = 6; // Vendor-specific model name mappings
 }
 
-// ModelMappingConfig represents a model name mapping within a pool
+// ModelMappingConfig represents a model name mapping for a vendor
 message ModelMappingConfig {
   uint32 id = 1;
   string source_model = 2; // Model name from request
-  string target_model = 3; // Model name to send to vendor
+  string target_model = 3; // Model name to send to this vendor
 }
 
 // ConfigurationSnapshot represents a complete configuration state

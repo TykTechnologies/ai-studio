@@ -160,7 +160,7 @@ func (s *ModelRouterService) LoadRouters(namespace string) error {
 	log.Debug().Str("namespace", namespace).Msg("Loading model routers from database")
 
 	var routers []database.ModelRouter
-	query := s.db.Preload("Pools.Vendors.LLM").Preload("Pools.Mappings").
+	query := s.db.Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").
 		Where("is_active = ?", true)
 
 	if namespace != "" {
@@ -289,15 +289,16 @@ func (s *ModelRouterService) SelectVendor(routerSlug string, modelName string) (
 		selectedVendor = s.selectRoundRobinVendor(matchedPool, activeVendors)
 	}
 
-	// Apply model mapping if present
+	// Apply vendor-specific model mapping if present
 	targetModel := modelName
-	for _, mapping := range matchedPool.Pool.Mappings {
+	for _, mapping := range selectedVendor.Mappings {
 		if mapping.SourceModel == modelName {
 			targetModel = mapping.TargetModel
 			log.Debug().
 				Str("source", modelName).
 				Str("target", targetModel).
-				Msg("Applied model mapping")
+				Str("vendor", selectedVendor.LLMSlug).
+				Msg("Applied vendor-specific model mapping")
 			break
 		}
 	}

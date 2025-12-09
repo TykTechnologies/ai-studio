@@ -27,19 +27,19 @@ type ModelRouterInput struct {
 
 // ModelPoolInput represents a pool in the input
 type ModelPoolInput struct {
-	Name               string              `json:"name"`
-	ModelPattern       string              `json:"model_pattern"`
-	SelectionAlgorithm string              `json:"selection_algorithm"`
-	Priority           int                 `json:"priority"`
-	Vendors            []PoolVendorInput   `json:"vendors"`
-	Mappings           []ModelMappingInput `json:"mappings"`
+	Name               string            `json:"name"`
+	ModelPattern       string            `json:"model_pattern"`
+	SelectionAlgorithm string            `json:"selection_algorithm"`
+	Priority           int               `json:"priority"`
+	Vendors            []PoolVendorInput `json:"vendors"`
 }
 
 // PoolVendorInput represents a vendor in the input
 type PoolVendorInput struct {
-	LLMID  uint `json:"llm_id"`
-	Weight int  `json:"weight"`
-	Active bool `json:"active"`
+	LLMID    uint                `json:"llm_id"`
+	Weight   int                 `json:"weight"`
+	Active   bool                `json:"active"`
+	Mappings []ModelMappingInput `json:"mappings"`
 }
 
 // ModelMappingInput represents a mapping in the input
@@ -371,7 +371,6 @@ func (a *API) inputToModelRouter(input *ModelRouterInput) *models.ModelRouter {
 			SelectionAlgorithm: models.SelectionAlgorithm(poolInput.SelectionAlgorithm),
 			Priority:           poolInput.Priority,
 			Vendors:            make([]*models.PoolVendor, len(poolInput.Vendors)),
-			Mappings:           make([]*models.ModelMapping, len(poolInput.Mappings)),
 		}
 
 		if pool.SelectionAlgorithm == "" {
@@ -379,21 +378,25 @@ func (a *API) inputToModelRouter(input *ModelRouterInput) *models.ModelRouter {
 		}
 
 		for j, vendorInput := range poolInput.Vendors {
-			pool.Vendors[j] = &models.PoolVendor{
-				LLMID:  vendorInput.LLMID,
-				Weight: vendorInput.Weight,
-				Active: vendorInput.Active,
+			vendor := &models.PoolVendor{
+				LLMID:    vendorInput.LLMID,
+				Weight:   vendorInput.Weight,
+				Active:   vendorInput.Active,
+				Mappings: make([]*models.ModelMapping, len(vendorInput.Mappings)),
 			}
-			if pool.Vendors[j].Weight == 0 {
-				pool.Vendors[j].Weight = 1
+			if vendor.Weight == 0 {
+				vendor.Weight = 1
 			}
-		}
 
-		for j, mappingInput := range poolInput.Mappings {
-			pool.Mappings[j] = &models.ModelMapping{
-				SourceModel: mappingInput.SourceModel,
-				TargetModel: mappingInput.TargetModel,
+			// Add vendor-specific mappings
+			for k, mappingInput := range vendorInput.Mappings {
+				vendor.Mappings[k] = &models.ModelMapping{
+					SourceModel: mappingInput.SourceModel,
+					TargetModel: mappingInput.TargetModel,
+				}
 			}
+
+			pool.Vendors[j] = vendor
 		}
 
 		router.Pools[i] = pool
@@ -408,11 +411,22 @@ func (a *API) serializeModelRouter(router *models.ModelRouter) map[string]interf
 	for i, pool := range router.Pools {
 		vendors := make([]map[string]interface{}, len(pool.Vendors))
 		for j, vendor := range pool.Vendors {
+			// Serialize vendor-specific mappings
+			mappings := make([]map[string]interface{}, len(vendor.Mappings))
+			for k, mapping := range vendor.Mappings {
+				mappings[k] = map[string]interface{}{
+					"id":           mapping.ID,
+					"source_model": mapping.SourceModel,
+					"target_model": mapping.TargetModel,
+				}
+			}
+
 			vendorData := map[string]interface{}{
-				"id":      vendor.ID,
-				"llm_id":  vendor.LLMID,
-				"weight":  vendor.Weight,
-				"active":  vendor.Active,
+				"id":       vendor.ID,
+				"llm_id":   vendor.LLMID,
+				"weight":   vendor.Weight,
+				"active":   vendor.Active,
+				"mappings": mappings,
 			}
 			if vendor.LLM != nil {
 				vendorData["llm"] = map[string]interface{}{
@@ -425,15 +439,6 @@ func (a *API) serializeModelRouter(router *models.ModelRouter) map[string]interf
 			vendors[j] = vendorData
 		}
 
-		mappings := make([]map[string]interface{}, len(pool.Mappings))
-		for j, mapping := range pool.Mappings {
-			mappings[j] = map[string]interface{}{
-				"id":           mapping.ID,
-				"source_model": mapping.SourceModel,
-				"target_model": mapping.TargetModel,
-			}
-		}
-
 		pools[i] = map[string]interface{}{
 			"id":                  pool.ID,
 			"name":                pool.Name,
@@ -441,7 +446,6 @@ func (a *API) serializeModelRouter(router *models.ModelRouter) map[string]interf
 			"selection_algorithm": pool.SelectionAlgorithm,
 			"priority":            pool.Priority,
 			"vendors":             vendors,
-			"mappings":            mappings,
 		}
 	}
 

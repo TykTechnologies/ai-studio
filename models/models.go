@@ -6,6 +6,19 @@ import (
 )
 
 func InitModels(db *gorm.DB) error {
+	// Migration: model_mappings moved from pool_id to vendor_id
+	// Drop the old pool_id column if it exists (this is a breaking schema change)
+	if db.Migrator().HasColumn(&ModelMapping{}, "pool_id") {
+		// First, clear any existing mappings that reference pool_id
+		// (they're orphaned now since we changed to vendor_id)
+		db.Exec("DELETE FROM model_mappings WHERE vendor_id IS NULL OR vendor_id = 0")
+		// Then drop the old column
+		if err := db.Migrator().DropColumn(&ModelMapping{}, "pool_id"); err != nil {
+			// Log but don't fail - column might already be dropped
+			// or this might be a fresh install
+		}
+	}
+
 	if err := db.AutoMigrate(
 		&User{},      //Done
 		&Group{},     //Done

@@ -128,7 +128,8 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 	}
 
 	// Clear Model Router tables (cascade from routers to pools to vendors/mappings)
-	if err := tx.Exec("DELETE FROM model_mappings WHERE pool_id IN (SELECT id FROM model_pools WHERE router_id IN (SELECT id FROM model_routers WHERE namespace = ? OR namespace = ''))", s.namespace).Error; err != nil {
+	// Note: model_mappings now reference vendor_id, so delete via pool_vendors
+	if err := tx.Exec("DELETE FROM model_mappings WHERE vendor_id IN (SELECT id FROM pool_vendors WHERE pool_id IN (SELECT id FROM model_pools WHERE router_id IN (SELECT id FROM model_routers WHERE namespace = ? OR namespace = '')))", s.namespace).Error; err != nil {
 		log.Warn().Err(err).Msg("Failed to clear model_mappings (table may not exist)")
 	}
 	if err := tx.Exec("DELETE FROM pool_vendors WHERE pool_id IN (SELECT id FROM model_pools WHERE router_id IN (SELECT id FROM model_routers WHERE namespace = ? OR namespace = ''))", s.namespace).Error; err != nil {
@@ -465,7 +466,7 @@ func (s *EdgeSyncService) syncModelRouters(tx *gorm.DB, modelRouters []*pb.Model
 				return fmt.Errorf("failed to insert ModelPool %d for router %d: %w", pbPool.Id, pbRouter.Id, err)
 			}
 
-			// Insert vendors for this pool
+			// Insert vendors for this pool (with their mappings)
 			for _, pbVendor := range pbPool.Vendors {
 				vendor := &database.PoolVendor{
 					ID:        uint(pbVendor.Id),
@@ -481,21 +482,21 @@ func (s *EdgeSyncService) syncModelRouters(tx *gorm.DB, modelRouters []*pb.Model
 				if err := tx.Create(vendor).Error; err != nil {
 					return fmt.Errorf("failed to insert PoolVendor %d for pool %d: %w", pbVendor.Id, pbPool.Id, err)
 				}
-			}
 
-			// Insert mappings for this pool
-			for _, pbMapping := range pbPool.Mappings {
-				mapping := &database.ModelMapping{
-					ID:          uint(pbMapping.Id),
-					PoolID:      uint(pbPool.Id),
-					SourceModel: pbMapping.SourceModel,
-					TargetModel: pbMapping.TargetModel,
-					CreatedAt:   time.Now(),
-					UpdatedAt:   time.Now(),
-				}
+				// Insert vendor-specific mappings
+				for _, pbMapping := range pbVendor.Mappings {
+					mapping := &database.ModelMapping{
+						ID:          uint(pbMapping.Id),
+						VendorID:    uint(pbVendor.Id),
+						SourceModel: pbMapping.SourceModel,
+						TargetModel: pbMapping.TargetModel,
+						CreatedAt:   time.Now(),
+						UpdatedAt:   time.Now(),
+					}
 
-				if err := tx.Create(mapping).Error; err != nil {
-					return fmt.Errorf("failed to insert ModelMapping %d for pool %d: %w", pbMapping.Id, pbPool.Id, err)
+					if err := tx.Create(mapping).Error; err != nil {
+						return fmt.Errorf("failed to insert ModelMapping %d for vendor %d: %w", pbMapping.Id, pbVendor.Id, err)
+					}
 				}
 			}
 		}

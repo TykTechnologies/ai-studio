@@ -1371,7 +1371,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Get Model Routers for namespace (Enterprise feature)
 	var modelRouters []models.ModelRouter
-	routerQuery := s.db.Preload("Pools.Vendors.LLM").Preload("Pools.Mappings").Where("active = ?", true)
+	routerQuery := s.db.Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").Where("active = ?", true)
 	if namespace == "" {
 		routerQuery = routerQuery.Where("namespace = ''")
 	} else {
@@ -1407,7 +1407,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				Priority:           int32(pool.Priority),
 			}
 
-			// Convert vendors
+			// Convert vendors with their mappings
 			for _, vendor := range pool.Vendors {
 				llmSlug := ""
 				if vendor.LLM != nil {
@@ -1420,17 +1420,18 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 					Weight:   int32(vendor.Weight),
 					IsActive: vendor.Active,
 				}
-				pbPool.Vendors = append(pbPool.Vendors, pbVendor)
-			}
 
-			// Convert mappings
-			for _, mapping := range pool.Mappings {
-				pbMapping := &pb.ModelMappingConfig{
-					Id:          uint32(mapping.ID),
-					SourceModel: mapping.SourceModel,
-					TargetModel: mapping.TargetModel,
+				// Convert vendor-specific mappings
+				for _, mapping := range vendor.Mappings {
+					pbMapping := &pb.ModelMappingConfig{
+						Id:          uint32(mapping.ID),
+						SourceModel: mapping.SourceModel,
+						TargetModel: mapping.TargetModel,
+					}
+					pbVendor.Mappings = append(pbVendor.Mappings, pbMapping)
 				}
-				pbPool.Mappings = append(pbPool.Mappings, pbMapping)
+
+				pbPool.Vendors = append(pbPool.Vendors, pbVendor)
 			}
 
 			pbRouter.Pools = append(pbRouter.Pools, pbPool)

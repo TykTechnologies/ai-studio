@@ -1235,7 +1235,6 @@ type ModelPoolConfig struct {
 	SelectionAlgorithm string                 `protobuf:"bytes,4,opt,name=selection_algorithm,json=selectionAlgorithm,proto3" json:"selection_algorithm,omitempty"` // "round_robin" or "weighted"
 	Priority           int32                  `protobuf:"varint,5,opt,name=priority,proto3" json:"priority,omitempty"`                                              // Higher priority pools are checked first
 	Vendors            []*PoolVendorConfig    `protobuf:"bytes,6,rep,name=vendors,proto3" json:"vendors,omitempty"`
-	Mappings           []*ModelMappingConfig  `protobuf:"bytes,7,rep,name=mappings,proto3" json:"mappings,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -1312,13 +1311,6 @@ func (x *ModelPoolConfig) GetVendors() []*PoolVendorConfig {
 	return nil
 }
 
-func (x *ModelPoolConfig) GetMappings() []*ModelMappingConfig {
-	if x != nil {
-		return x.Mappings
-	}
-	return nil
-}
-
 // PoolVendorConfig represents an LLM vendor within a pool
 type PoolVendorConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1327,6 +1319,7 @@ type PoolVendorConfig struct {
 	LlmSlug       string                 `protobuf:"bytes,3,opt,name=llm_slug,json=llmSlug,proto3" json:"llm_slug,omitempty"` // Denormalized for quick lookup
 	Weight        int32                  `protobuf:"varint,4,opt,name=weight,proto3" json:"weight,omitempty"`                 // Used for weighted selection
 	IsActive      bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	Mappings      []*ModelMappingConfig  `protobuf:"bytes,6,rep,name=mappings,proto3" json:"mappings,omitempty"` // Vendor-specific model name mappings
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1396,12 +1389,19 @@ func (x *PoolVendorConfig) GetIsActive() bool {
 	return false
 }
 
-// ModelMappingConfig represents a model name mapping within a pool
+func (x *PoolVendorConfig) GetMappings() []*ModelMappingConfig {
+	if x != nil {
+		return x.Mappings
+	}
+	return nil
+}
+
+// ModelMappingConfig represents a model name mapping for a vendor
 type ModelMappingConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	SourceModel   string                 `protobuf:"bytes,2,opt,name=source_model,json=sourceModel,proto3" json:"source_model,omitempty"` // Model name from request
-	TargetModel   string                 `protobuf:"bytes,3,opt,name=target_model,json=targetModel,proto3" json:"target_model,omitempty"` // Model name to send to vendor
+	TargetModel   string                 `protobuf:"bytes,3,opt,name=target_model,json=targetModel,proto3" json:"target_model,omitempty"` // Model name to send to this vendor
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1864,21 +1864,21 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x9f\x02\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe7\x01\n" +
 	"\x0fModelPoolConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12#\n" +
 	"\rmodel_pattern\x18\x03 \x01(\tR\fmodelPattern\x12/\n" +
 	"\x13selection_algorithm\x18\x04 \x01(\tR\x12selectionAlgorithm\x12\x1a\n" +
 	"\bpriority\x18\x05 \x01(\x05R\bpriority\x128\n" +
-	"\avendors\x18\x06 \x03(\v2\x1e.microgateway.PoolVendorConfigR\avendors\x12<\n" +
-	"\bmappings\x18\a \x03(\v2 .microgateway.ModelMappingConfigR\bmappings\"\x89\x01\n" +
+	"\avendors\x18\x06 \x03(\v2\x1e.microgateway.PoolVendorConfigR\avendorsJ\x04\b\a\x10\b\"\xc7\x01\n" +
 	"\x10PoolVendorConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x19\n" +
 	"\bllm_slug\x18\x03 \x01(\tR\allmSlug\x12\x16\n" +
 	"\x06weight\x18\x04 \x01(\x05R\x06weight\x12\x1b\n" +
-	"\tis_active\x18\x05 \x01(\bR\bisActive\"j\n" +
+	"\tis_active\x18\x05 \x01(\bR\bisActive\x12<\n" +
+	"\bmappings\x18\x06 \x03(\v2 .microgateway.ModelMappingConfigR\bmappings\"j\n" +
 	"\x12ModelMappingConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12!\n" +
 	"\fsource_model\x18\x02 \x01(\tR\vsourceModel\x12!\n" +
@@ -1986,7 +1986,7 @@ var file_proto_common_proto_depIdxs = []int32{
 	17, // 13: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
 	17, // 14: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
 	11, // 15: microgateway.ModelPoolConfig.vendors:type_name -> microgateway.PoolVendorConfig
-	12, // 16: microgateway.ModelPoolConfig.mappings:type_name -> microgateway.ModelMappingConfig
+	12, // 16: microgateway.PoolVendorConfig.mappings:type_name -> microgateway.ModelMappingConfig
 	3,  // 17: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
 	4,  // 18: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
 	6,  // 19: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig

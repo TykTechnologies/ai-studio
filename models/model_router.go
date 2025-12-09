@@ -47,7 +47,6 @@ type ModelPool struct {
 	SelectionAlgorithm SelectionAlgorithm `json:"selection_algorithm" gorm:"default:'round_robin'"`
 	Priority           int                `json:"priority" gorm:"default:0"` // Higher priority pools are checked first
 	Vendors            []*PoolVendor      `json:"vendors" gorm:"foreignKey:PoolID;constraint:OnDelete:CASCADE"`
-	Mappings           []*ModelMapping    `json:"mappings" gorm:"foreignKey:PoolID;constraint:OnDelete:CASCADE"`
 }
 
 type ModelPools []ModelPool
@@ -56,24 +55,25 @@ type ModelPools []ModelPool
 // Weight is used for weighted selection algorithm
 type PoolVendor struct {
 	gorm.Model
-	ID     uint `json:"id" gorm:"primaryKey"`
-	PoolID uint `json:"pool_id" gorm:"not null;index:idx_vendor_pool"`
-	LLMID  uint `json:"llm_id" gorm:"not null;index:idx_vendor_llm"`
-	Weight int  `json:"weight" gorm:"default:1"` // Used for weighted selection
-	Active bool `json:"active" gorm:"default:true"`
-	LLM    *LLM `json:"llm,omitempty" gorm:"foreignKey:LLMID"`
+	ID       uint            `json:"id" gorm:"primaryKey"`
+	PoolID   uint            `json:"pool_id" gorm:"not null;index:idx_vendor_pool"`
+	LLMID    uint            `json:"llm_id" gorm:"not null;index:idx_vendor_llm"`
+	Weight   int             `json:"weight" gorm:"default:1"` // Used for weighted selection
+	Active   bool            `json:"active" gorm:"default:true"`
+	LLM      *LLM            `json:"llm,omitempty" gorm:"foreignKey:LLMID"`
+	Mappings []*ModelMapping `json:"mappings" gorm:"foreignKey:VendorID;constraint:OnDelete:CASCADE"`
 }
 
 type PoolVendors []PoolVendor
 
-// ModelMapping allows renaming models within a pool
-// e.g., map "claude-opus-4-5" to "claude-sonnet-4-5" for cost optimization
+// ModelMapping allows renaming models for a specific vendor
+// e.g., map "gpt-4" to "claude-3-opus" when routing to Anthropic vendor
 type ModelMapping struct {
 	gorm.Model
 	ID          uint   `json:"id" gorm:"primaryKey"`
-	PoolID      uint   `json:"pool_id" gorm:"not null;index:idx_mapping_pool"`
+	VendorID    uint   `json:"vendor_id" gorm:"not null;index:idx_mapping_vendor"`
 	SourceModel string `json:"source_model" gorm:"not null"` // Model name from request
-	TargetModel string `json:"target_model" gorm:"not null"` // Model name to send to vendor
+	TargetModel string `json:"target_model" gorm:"not null"` // Model name to send to this vendor
 }
 
 type ModelMappings []ModelMapping
@@ -85,12 +85,12 @@ func NewModelRouter() *ModelRouter {
 
 // Get retrieves a ModelRouter by ID with all relationships
 func (r *ModelRouter) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Mappings").First(r, id).Error
+	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").First(r, id).Error
 }
 
 // GetBySlug retrieves a ModelRouter by slug within a namespace
 func (r *ModelRouter) GetBySlug(db *gorm.DB, slug string, namespace string) error {
-	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Mappings").
+	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").
 		Where("slug = ? AND namespace = ?", slug, namespace).First(r).Error
 }
 
@@ -146,15 +146,15 @@ func (r *ModelRouter) Update(db *gorm.DB) error {
 	for _, pool := range r.Pools {
 		pool.ID = 0 // Clear pool ID to force INSERT
 		pool.RouterID = r.ID
-		// Clear nested vendor IDs
+		// Clear nested vendor IDs and their mapping IDs
 		for i := range pool.Vendors {
 			pool.Vendors[i].ID = 0
 			pool.Vendors[i].PoolID = 0 // Will be set by GORM after pool is created
-		}
-		// Clear nested mapping IDs
-		for i := range pool.Mappings {
-			pool.Mappings[i].ID = 0
-			pool.Mappings[i].PoolID = 0 // Will be set by GORM after pool is created
+			// Clear nested mapping IDs for this vendor
+			for j := range pool.Vendors[i].Mappings {
+				pool.Vendors[i].Mappings[j].ID = 0
+				pool.Vendors[i].Mappings[j].VendorID = 0 // Will be set by GORM after vendor is created
+			}
 		}
 		if err := tx.Create(pool).Error; err != nil {
 			tx.Rollback()
@@ -173,7 +173,7 @@ func (r *ModelRouter) Delete(db *gorm.DB) error {
 // GetAll retrieves all ModelRouters with pagination
 func (r *ModelRouters) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
 	var totalCount int64
-	query := db.Model(&ModelRouter{}).Preload("Pools.Vendors.LLM").Preload("Pools.Mappings")
+	query := db.Model(&ModelRouter{}).Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings")
 
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
@@ -198,19 +198,19 @@ func (r *ModelRouters) GetAll(db *gorm.DB, pageSize int, pageNumber int, all boo
 
 // GetByNamespace retrieves all ModelRouters for a specific namespace
 func (r *ModelRouters) GetByNamespace(db *gorm.DB, namespace string) error {
-	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Mappings").
+	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").
 		Where("namespace = ?", namespace).Find(r).Error
 }
 
 // GetActiveRouters retrieves all active ModelRouters
 func (r *ModelRouters) GetActiveRouters(db *gorm.DB) error {
-	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Mappings").
+	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").
 		Where("active = ?", true).Find(r).Error
 }
 
 // GetActiveRoutersByNamespace retrieves all active ModelRouters for a namespace
 func (r *ModelRouters) GetActiveRoutersByNamespace(db *gorm.DB, namespace string) error {
-	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Mappings").
+	return db.Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings").
 		Where("active = ? AND namespace = ?", true, namespace).Find(r).Error
 }
 
@@ -221,12 +221,12 @@ func NewModelPool() *ModelPool {
 
 // Get retrieves a ModelPool by ID with relationships
 func (p *ModelPool) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Vendors.LLM").Preload("Mappings").First(p, id).Error
+	return db.Preload("Vendors.LLM").Preload("Vendors.Mappings").First(p, id).Error
 }
 
 // GetByRouterID retrieves all pools for a router, ordered by priority
 func (p *ModelPools) GetByRouterID(db *gorm.DB, routerID uint) error {
-	return db.Preload("Vendors.LLM").Preload("Mappings").
+	return db.Preload("Vendors.LLM").Preload("Vendors.Mappings").
 		Where("router_id = ?", routerID).
 		Order("priority DESC").Find(p).Error
 }
@@ -236,14 +236,14 @@ func NewPoolVendor() *PoolVendor {
 	return &PoolVendor{}
 }
 
-// Get retrieves a PoolVendor by ID with LLM relationship
+// Get retrieves a PoolVendor by ID with LLM and Mappings relationships
 func (v *PoolVendor) Get(db *gorm.DB, id uint) error {
-	return db.Preload("LLM").First(v, id).Error
+	return db.Preload("LLM").Preload("Mappings").First(v, id).Error
 }
 
 // GetActiveVendorsByPoolID retrieves all active vendors for a pool
 func (v *PoolVendors) GetActiveVendorsByPoolID(db *gorm.DB, poolID uint) error {
-	return db.Preload("LLM").
+	return db.Preload("LLM").Preload("Mappings").
 		Where("pool_id = ? AND active = ?", poolID, true).Find(v).Error
 }
 
@@ -257,12 +257,12 @@ func (m *ModelMapping) Get(db *gorm.DB, id uint) error {
 	return db.First(m, id).Error
 }
 
-// GetByPoolID retrieves all mappings for a pool
-func (m *ModelMappings) GetByPoolID(db *gorm.DB, poolID uint) error {
-	return db.Where("pool_id = ?", poolID).Find(m).Error
+// GetByVendorID retrieves all mappings for a vendor
+func (m *ModelMappings) GetByVendorID(db *gorm.DB, vendorID uint) error {
+	return db.Where("vendor_id = ?", vendorID).Find(m).Error
 }
 
-// GetMappingForModel finds a mapping for a specific source model in a pool
-func (m *ModelMapping) GetMappingForModel(db *gorm.DB, poolID uint, sourceModel string) error {
-	return db.Where("pool_id = ? AND source_model = ?", poolID, sourceModel).First(m).Error
+// GetMappingForModel finds a mapping for a specific source model for a vendor
+func (m *ModelMapping) GetMappingForModel(db *gorm.DB, vendorID uint, sourceModel string) error {
+	return db.Where("vendor_id = ? AND source_model = ?", vendorID, sourceModel).First(m).Error
 }

@@ -145,7 +145,6 @@ const ModelRouterForm = () => {
           selection_algorithm: "round_robin",
           priority: prev.pools.length,
           vendors: [],
-          mappings: [],
         },
       ],
     }));
@@ -177,7 +176,7 @@ const ModelRouterForm = () => {
               ...pool,
               vendors: [
                 ...pool.vendors,
-                { llm_id: "", llm_slug: "", weight: 1, is_active: true },
+                { llm_id: "", llm_slug: "", weight: 1, is_active: true, mappings: [] },
               ],
             }
           : pool
@@ -227,44 +226,65 @@ const ModelRouterForm = () => {
     }));
   };
 
-  // Model mapping management
-  const addMapping = (poolIndex) => {
+  // Vendor-specific model mapping management
+  const addVendorMapping = (poolIndex, vendorIndex) => {
     setRouter((prev) => ({
       ...prev,
       pools: prev.pools.map((pool, i) =>
         i === poolIndex
           ? {
               ...pool,
-              mappings: [...pool.mappings, { source_model: "", target_model: "" }],
+              vendors: pool.vendors.map((vendor, vi) =>
+                vi === vendorIndex
+                  ? {
+                      ...vendor,
+                      mappings: [...(vendor.mappings || []), { source_model: "", target_model: "" }],
+                    }
+                  : vendor
+              ),
             }
           : pool
       ),
     }));
   };
 
-  const removeMapping = (poolIndex, mappingIndex) => {
+  const removeVendorMapping = (poolIndex, vendorIndex, mappingIndex) => {
     setRouter((prev) => ({
       ...prev,
       pools: prev.pools.map((pool, i) =>
         i === poolIndex
           ? {
               ...pool,
-              mappings: pool.mappings.filter((_, mi) => mi !== mappingIndex),
+              vendors: pool.vendors.map((vendor, vi) =>
+                vi === vendorIndex
+                  ? {
+                      ...vendor,
+                      mappings: (vendor.mappings || []).filter((_, mi) => mi !== mappingIndex),
+                    }
+                  : vendor
+              ),
             }
           : pool
       ),
     }));
   };
 
-  const updateMapping = (poolIndex, mappingIndex, field, value) => {
+  const updateVendorMapping = (poolIndex, vendorIndex, mappingIndex, field, value) => {
     setRouter((prev) => ({
       ...prev,
       pools: prev.pools.map((pool, i) =>
         i === poolIndex
           ? {
               ...pool,
-              mappings: pool.mappings.map((mapping, mi) =>
-                mi === mappingIndex ? { ...mapping, [field]: value } : mapping
+              vendors: pool.vendors.map((vendor, vi) =>
+                vi === vendorIndex
+                  ? {
+                      ...vendor,
+                      mappings: (vendor.mappings || []).map((mapping, mi) =>
+                        mi === mappingIndex ? { ...mapping, [field]: value } : mapping
+                      ),
+                    }
+                  : vendor
               ),
             }
           : pool
@@ -329,10 +349,10 @@ const ModelRouterForm = () => {
                 llm_slug: v.llm_slug,
                 weight: parseInt(v.weight) || 1,
                 is_active: v.is_active !== false,
+                mappings: (v.mappings || []).filter(
+                  (m) => m.source_model && m.target_model
+                ),
               })),
-              mappings: pool.mappings.filter(
-                (m) => m.source_model && m.target_model
-              ),
             })),
           },
         },
@@ -591,121 +611,126 @@ const ModelRouterForm = () => {
                           </Alert>
                         )}
                         {pool.vendors.map((vendor, vendorIndex) => (
-                          <Box
+                          <Card
                             key={vendorIndex}
-                            sx={{
-                              display: "flex",
-                              gap: 2,
-                              alignItems: "center",
-                              mb: 1,
-                              p: 1,
-                              bgcolor: "grey.50",
-                              borderRadius: 1,
-                            }}
+                            variant="outlined"
+                            sx={{ mb: 2, bgcolor: "grey.50" }}
                           >
-                            <FormControl sx={{ minWidth: 200 }} size="small">
-                              <InputLabel>LLM</InputLabel>
-                              <Select
-                                value={vendor.llm_id || ""}
-                                onChange={(e) => updateVendor(poolIndex, vendorIndex, "llm_id", e.target.value)}
-                                label="LLM"
+                            <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  gap: 2,
+                                  alignItems: "center",
+                                  mb: 1,
+                                }}
                               >
-                                {availableLLMs.map((llm) => (
-                                  <MenuItem key={llm.id} value={llm.id}>
-                                    {llm.attributes.name}
-                                  </MenuItem>
-                                ))}
-                              </Select>
-                            </FormControl>
-                            {pool.selection_algorithm === "weighted" && (
-                              <TextField
-                                label="Weight"
-                                type="number"
-                                value={vendor.weight}
-                                onChange={(e) => updateVendor(poolIndex, vendorIndex, "weight", e.target.value)}
-                                size="small"
-                                sx={{ width: 100 }}
-                              />
-                            )}
-                            <FormControlLabel
-                              control={
-                                <Switch
-                                  checked={vendor.is_active !== false}
-                                  onChange={(e) => updateVendor(poolIndex, vendorIndex, "is_active", e.target.checked)}
-                                  size="small"
+                                <FormControl sx={{ minWidth: 200 }} size="small">
+                                  <InputLabel>LLM</InputLabel>
+                                  <Select
+                                    value={vendor.llm_id || ""}
+                                    onChange={(e) => updateVendor(poolIndex, vendorIndex, "llm_id", e.target.value)}
+                                    label="LLM"
+                                  >
+                                    {availableLLMs.map((llm) => (
+                                      <MenuItem key={llm.id} value={llm.id}>
+                                        {llm.attributes.name}
+                                      </MenuItem>
+                                    ))}
+                                  </Select>
+                                </FormControl>
+                                {pool.selection_algorithm === "weighted" && (
+                                  <TextField
+                                    label="Weight"
+                                    type="number"
+                                    value={vendor.weight}
+                                    onChange={(e) => updateVendor(poolIndex, vendorIndex, "weight", e.target.value)}
+                                    size="small"
+                                    sx={{ width: 100 }}
+                                  />
+                                )}
+                                <FormControlLabel
+                                  control={
+                                    <Switch
+                                      checked={vendor.is_active !== false}
+                                      onChange={(e) => updateVendor(poolIndex, vendorIndex, "is_active", e.target.checked)}
+                                      size="small"
+                                    />
+                                  }
+                                  label="Active"
                                 />
-                              }
-                              label="Active"
-                            />
-                            <IconButton
-                              color="error"
-                              onClick={() => removeVendor(poolIndex, vendorIndex)}
-                              size="small"
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </Box>
+                                <IconButton
+                                  color="error"
+                                  onClick={() => removeVendor(poolIndex, vendorIndex)}
+                                  size="small"
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              </Box>
+
+                              {/* Vendor-specific Model Mappings */}
+                              <StyledAccordion sx={{ mt: 1 }}>
+                                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                  <Typography variant="caption">
+                                    Model Mappings ({(vendor.mappings || []).length})
+                                  </Typography>
+                                </AccordionSummary>
+                                <AccordionDetails>
+                                  <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
+                                    Rename models when routing to this vendor (e.g., map "gpt-4" to "claude-3-opus")
+                                  </Typography>
+                                  <Button
+                                    size="small"
+                                    startIcon={<AddIcon />}
+                                    onClick={() => addVendorMapping(poolIndex, vendorIndex)}
+                                    sx={{ mb: 1 }}
+                                  >
+                                    Add Mapping
+                                  </Button>
+                                  {(vendor.mappings || []).map((mapping, mappingIndex) => (
+                                    <Box
+                                      key={mappingIndex}
+                                      sx={{
+                                        display: "flex",
+                                        gap: 1,
+                                        alignItems: "center",
+                                        mb: 1,
+                                      }}
+                                    >
+                                      <TextField
+                                        label="Source"
+                                        value={mapping.source_model}
+                                        onChange={(e) => updateVendorMapping(poolIndex, vendorIndex, mappingIndex, "source_model", e.target.value)}
+                                        size="small"
+                                        placeholder="gpt-4"
+                                        sx={{ width: 150 }}
+                                      />
+                                      <Typography variant="body2">→</Typography>
+                                      <TextField
+                                        label="Target"
+                                        value={mapping.target_model}
+                                        onChange={(e) => updateVendorMapping(poolIndex, vendorIndex, mappingIndex, "target_model", e.target.value)}
+                                        size="small"
+                                        placeholder="claude-3-opus"
+                                        sx={{ width: 150 }}
+                                      />
+                                      <IconButton
+                                        color="error"
+                                        onClick={() => removeVendorMapping(poolIndex, vendorIndex, mappingIndex)}
+                                        size="small"
+                                      >
+                                        <DeleteIcon />
+                                      </IconButton>
+                                    </Box>
+                                  ))}
+                                </AccordionDetails>
+                              </StyledAccordion>
+                            </CardContent>
+                          </Card>
                         ))}
                       </Box>
                     </Grid>
 
-                    {/* Model Mappings */}
-                    <Grid item xs={12}>
-                      <StyledAccordion>
-                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                          <Typography variant="body2">
-                            Model Mappings ({pool.mappings.length})
-                          </Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                          <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: "block" }}>
-                            Rename models before sending to vendors (e.g., map "claude-opus-4-5" to "claude-sonnet-4-5")
-                          </Typography>
-                          <Button
-                            size="small"
-                            startIcon={<AddIcon />}
-                            onClick={() => addMapping(poolIndex)}
-                            sx={{ mb: 2 }}
-                          >
-                            Add Mapping
-                          </Button>
-                          {pool.mappings.map((mapping, mappingIndex) => (
-                            <Box
-                              key={mappingIndex}
-                              sx={{
-                                display: "flex",
-                                gap: 2,
-                                alignItems: "center",
-                                mb: 1,
-                              }}
-                            >
-                              <TextField
-                                label="Source Model"
-                                value={mapping.source_model}
-                                onChange={(e) => updateMapping(poolIndex, mappingIndex, "source_model", e.target.value)}
-                                size="small"
-                                placeholder="claude-opus-4-5"
-                              />
-                              <Typography>→</Typography>
-                              <TextField
-                                label="Target Model"
-                                value={mapping.target_model}
-                                onChange={(e) => updateMapping(poolIndex, mappingIndex, "target_model", e.target.value)}
-                                size="small"
-                                placeholder="claude-sonnet-4-5"
-                              />
-                              <IconButton
-                                color="error"
-                                onClick={() => removeMapping(poolIndex, mappingIndex)}
-                                size="small"
-                              >
-                                <DeleteIcon />
-                              </IconButton>
-                            </Box>
-                          ))}
-                        </AccordionDetails>
-                      </StyledAccordion>
-                    </Grid>
                   </Grid>
                 </CardContent>
               </Card>

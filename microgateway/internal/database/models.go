@@ -401,17 +401,16 @@ type ModelRouter struct {
 
 // ModelPool groups vendors that handle specific model patterns
 type ModelPool struct {
-	ID                 uint            `gorm:"primaryKey" json:"id"`
-	RouterID           uint            `gorm:"not null;index:idx_pool_router" json:"router_id"`
-	Name               string          `gorm:"not null" json:"name"`
-	ModelPattern       string          `gorm:"not null" json:"model_pattern"` // Glob pattern, e.g., "claude-*"
-	SelectionAlgorithm string          `gorm:"default:'round_robin'" json:"selection_algorithm"` // "round_robin" or "weighted"
-	Priority           int             `gorm:"default:0" json:"priority"` // Higher priority pools are checked first
-	Vendors            []PoolVendor    `gorm:"foreignKey:PoolID;constraint:OnDelete:CASCADE" json:"vendors"`
-	Mappings           []ModelMapping  `gorm:"foreignKey:PoolID;constraint:OnDelete:CASCADE" json:"mappings"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
-	DeletedAt          gorm.DeletedAt  `gorm:"index" json:"deleted_at,omitempty"`
+	ID                 uint           `gorm:"primaryKey" json:"id"`
+	RouterID           uint           `gorm:"not null;index:idx_pool_router" json:"router_id"`
+	Name               string         `gorm:"not null" json:"name"`
+	ModelPattern       string         `gorm:"not null" json:"model_pattern"` // Glob pattern, e.g., "claude-*"
+	SelectionAlgorithm string         `gorm:"default:'round_robin'" json:"selection_algorithm"` // "round_robin" or "weighted"
+	Priority           int            `gorm:"default:0" json:"priority"` // Higher priority pools are checked first
+	Vendors            []PoolVendor   `gorm:"foreignKey:PoolID;constraint:OnDelete:CASCADE" json:"vendors"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 // PoolVendor represents an LLM vendor within a pool
@@ -423,17 +422,18 @@ type PoolVendor struct {
 	Weight    int            `gorm:"default:1" json:"weight"`  // Used for weighted selection
 	IsActive  bool           `gorm:"default:true" json:"is_active"`
 	LLM       *LLM           `gorm:"foreignKey:LLMID" json:"llm,omitempty"`
+	Mappings  []ModelMapping `gorm:"foreignKey:VendorID;constraint:OnDelete:CASCADE" json:"mappings"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
-// ModelMapping allows renaming models within a pool
+// ModelMapping allows renaming models for a specific vendor
 type ModelMapping struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
-	PoolID      uint           `gorm:"not null;index:idx_mapping_pool" json:"pool_id"`
+	VendorID    uint           `gorm:"not null;index:idx_mapping_vendor" json:"vendor_id"`
 	SourceModel string         `gorm:"not null" json:"source_model"` // Model name from request
-	TargetModel string         `gorm:"not null" json:"target_model"` // Model name to send to vendor
+	TargetModel string         `gorm:"not null" json:"target_model"` // Model name to send to this vendor
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`

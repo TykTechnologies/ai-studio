@@ -37,10 +37,11 @@ export default defineConfig({
           { text: 'AI Gateway', link: '/docs/proxy' }, // Renamed from Proxy & API Gateway
           { text: 'AI Portal', link: '/docs/ai-portal' }, // New
           { text: 'Chat Interface', link: '/docs/chat-interface' }, // Moved up
-          { text: 'LLM Management', link: '/docs/llm-management' }, 
-          { text: 'Tools & Extensibility', link: '/docs/tools' }, 
-          { text: 'Data Sources & RAG', link: '/docs/datasources-rag' }, 
-          { text: 'Filters & Policies', link: '/docs/filters' } 
+          { text: 'LLM Management', link: '/docs/llm-management' },
+          { text: 'Model Router (Enterprise)', link: '/docs/model-router' }, // Enterprise model routing
+          { text: 'Tools & Extensibility', link: '/docs/tools' },
+          { text: 'Data Sources & RAG', link: '/docs/datasources-rag' },
+          { text: 'Filters & Policies', link: '/docs/filters' }
         ]
       },
       {

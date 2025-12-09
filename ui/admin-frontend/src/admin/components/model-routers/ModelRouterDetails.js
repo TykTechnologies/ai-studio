@@ -16,7 +16,6 @@ import {
   TableHead,
   TableRow,
   TableCell,
-  Divider,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
@@ -251,11 +250,12 @@ const ModelRouterDetails = () => {
                         <TableHead>
                           <TableRow>
                             <TableCell>LLM</TableCell>
-                            <TableCell>Slug</TableCell>
+                            <TableCell>Vendor</TableCell>
                             {pool.selection_algorithm === "weighted" && (
                               <TableCell>Weight</TableCell>
                             )}
                             <TableCell>Status</TableCell>
+                            <TableCell>Mappings</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -265,7 +265,7 @@ const ModelRouterDetails = () => {
                                 {vendor.llm?.name || `LLM #${vendor.llm_id}`}
                               </TableCell>
                               <TableCell>
-                                <Chip label={vendor.llm_slug} size="small" />
+                                <Chip label={vendor.llm?.vendor || "unknown"} size="small" />
                               </TableCell>
                               {pool.selection_algorithm === "weighted" && (
                                 <TableCell>{vendor.weight}</TableCell>
@@ -276,14 +276,29 @@ const ModelRouterDetails = () => {
                                     <FiberManualRecordIcon
                                       sx={{
                                         fontSize: 10,
-                                        color: vendor.is_active ? "green" : "red",
+                                        color: vendor.active ? "green" : "red",
                                       }}
                                     />
                                   }
-                                  label={vendor.is_active ? "Active" : "Inactive"}
+                                  label={vendor.active ? "Active" : "Inactive"}
                                   size="small"
                                   variant="outlined"
                                 />
+                              </TableCell>
+                              <TableCell>
+                                {vendor.mappings?.length > 0 ? (
+                                  <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                                    {vendor.mappings.map((mapping, mIndex) => (
+                                      <Box key={mIndex} sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+                                        <Chip label={mapping.source_model} size="small" sx={{ fontSize: "0.7rem" }} />
+                                        <Typography variant="caption">→</Typography>
+                                        <Chip label={mapping.target_model} size="small" color="primary" sx={{ fontSize: "0.7rem" }} />
+                                      </Box>
+                                    ))}
+                                  </Box>
+                                ) : (
+                                  <Typography variant="caption" color="text.secondary">None</Typography>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -291,22 +306,6 @@ const ModelRouterDetails = () => {
                       </Table>
                     </Grid>
 
-                    {/* Mappings */}
-                    {pool.mappings?.length > 0 && (
-                      <Grid item xs={12}>
-                        <Divider sx={{ my: 1 }} />
-                        <Typography variant="body2" color="text.secondary" gutterBottom>
-                          Model Mappings ({pool.mappings.length})
-                        </Typography>
-                        {pool.mappings.map((mapping, mIndex) => (
-                          <Box key={mIndex} sx={{ display: "flex", gap: 1, alignItems: "center", mb: 0.5 }}>
-                            <Chip label={mapping.source_model} size="small" />
-                            <Typography variant="body2">→</Typography>
-                            <Chip label={mapping.target_model} size="small" color="primary" />
-                          </Box>
-                        ))}
-                      </Grid>
-                    )}
                   </Grid>
                 </CardContent>
               </Card>
