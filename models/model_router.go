@@ -166,8 +166,58 @@ func (r *ModelRouter) Update(db *gorm.DB) error {
 }
 
 // Delete removes a ModelRouter (cascades to pools, vendors, mappings)
+// Note: GORM soft delete does not trigger DB-level CASCADE constraints,
+// so we must manually delete children for soft delete cascade behavior
 func (r *ModelRouter) Delete(db *gorm.DB) error {
-	return db.Delete(r).Error
+	tx := db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	// Get all pools for this router to find their vendors
+	var pools []ModelPool
+	if err := tx.Where("router_id = ?", r.ID).Find(&pools).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Delete mappings and vendors for each pool
+	for _, pool := range pools {
+		// Get vendors for this pool
+		var vendors []PoolVendor
+		if err := tx.Where("pool_id = ?", pool.ID).Find(&vendors).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		// Delete mappings for each vendor
+		for _, vendor := range vendors {
+			if err := tx.Where("vendor_id = ?", vendor.ID).Delete(&ModelMapping{}).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+
+		// Delete vendors for this pool
+		if err := tx.Where("pool_id = ?", pool.ID).Delete(&PoolVendor{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	// Delete pools
+	if err := tx.Where("router_id = ?", r.ID).Delete(&ModelPool{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Delete the router itself
+	if err := tx.Delete(r).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 // GetAll retrieves all ModelRouters with pagination
@@ -231,6 +281,45 @@ func (p *ModelPools) GetByRouterID(db *gorm.DB, routerID uint) error {
 		Order("priority DESC").Find(p).Error
 }
 
+// Delete removes a ModelPool and cascades to vendors and mappings
+// Note: GORM soft delete does not trigger DB-level CASCADE constraints,
+// so we must manually delete children
+func (p *ModelPool) Delete(db *gorm.DB) error {
+	tx := db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	// Get vendors for this pool
+	var vendors []PoolVendor
+	if err := tx.Where("pool_id = ?", p.ID).Find(&vendors).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Delete mappings for each vendor
+	for _, vendor := range vendors {
+		if err := tx.Where("vendor_id = ?", vendor.ID).Delete(&ModelMapping{}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	// Delete vendors
+	if err := tx.Where("pool_id = ?", p.ID).Delete(&PoolVendor{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Delete the pool itself
+	if err := tx.Delete(p).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
+}
+
 // NewPoolVendor creates a new PoolVendor instance
 func NewPoolVendor() *PoolVendor {
 	return &PoolVendor{}
@@ -245,6 +334,30 @@ func (v *PoolVendor) Get(db *gorm.DB, id uint) error {
 func (v *PoolVendors) GetActiveVendorsByPoolID(db *gorm.DB, poolID uint) error {
 	return db.Preload("LLM").Preload("Mappings").
 		Where("pool_id = ? AND active = ?", poolID, true).Find(v).Error
+}
+
+// Delete removes a PoolVendor and cascades to mappings
+// Note: GORM soft delete does not trigger DB-level CASCADE constraints,
+// so we must manually delete children
+func (v *PoolVendor) Delete(db *gorm.DB) error {
+	tx := db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	// Delete mappings for this vendor
+	if err := tx.Where("vendor_id = ?", v.ID).Delete(&ModelMapping{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Delete the vendor itself
+	if err := tx.Delete(v).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 // NewModelMapping creates a new ModelMapping instance
