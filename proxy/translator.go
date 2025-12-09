@@ -126,8 +126,12 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 
 	// Handle streaming if requested
 	if req.Stream != nil && *req.Stream {
-		respondWithOAIError(w, http.StatusBadRequest, "streaming not supported", nil, false)
-		return
+		// Fall back to non-streaming if tools are present (tool streaming is complex)
+		if len(req.Tools) == 0 {
+			p.handleChatCompletionStream(w, r, conf, app, &req, reqBody)
+			return
+		}
+		// Continue to non-streaming path when tools are present
 	}
 
 	// Check budget before processing request
@@ -302,6 +306,148 @@ func (p *Proxy) recordTranslatorAnalytics(
 	if statusCode == http.StatusOK && contentResp != nil {
 		recordTranslatorChatAnalytics(p.gatewayService, llm, app, contentResp, r, timestamp)
 	}
+}
+
+// handleChatCompletionStream handles streaming chat completion requests with OpenAI-compatible SSE format
+func (p *Proxy) handleChatCompletionStream(
+	w http.ResponseWriter,
+	r *http.Request,
+	conf *models.LLM,
+	app *models.App,
+	req *ChatCompletionRequest,
+	reqBody []byte,
+) {
+	timestamp := time.Now()
+
+	// Check budget before processing request
+	if _, _, err := p.budgetService.CheckBudget(app, conf); err != nil {
+		errorBody := []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error()))
+		go p.recordTranslatorAnalytics(conf, app, http.StatusForbidden, errorBody, reqBody, r, nil, timestamp)
+		respondWithOAIError(w, http.StatusForbidden, "Budget limit exceeded", err, false)
+		return
+	}
+
+	// Set SSE headers before any writes
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	// Check if we can flush
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		respondWithOAIError(w, http.StatusInternalServerError, "Streaming not supported", nil, false)
+		return
+	}
+
+	// Generate completion ID and timestamp for all chunks
+	completionID := "chatcmpl-" + uuid.New().String()
+	created := time.Now().Unix()
+	isFirstChunk := true
+
+	// Create streaming callback that formats chunks as OpenAI SSE events
+	streamingFunc := func(ctx context.Context, chunk []byte) error {
+		chunkResp := ChatCompletionChunk{
+			ID:      completionID,
+			Object:  "chat.completion.chunk",
+			Created: created,
+			Model:   req.Model,
+			Choices: []ChatCompletionChunkChoice{{
+				Index:        0,
+				Delta:        ChatCompletionDelta{},
+				FinishReason: nil,
+			}},
+		}
+
+		// First chunk includes role
+		if isFirstChunk {
+			chunkResp.Choices[0].Delta.Role = "assistant"
+			isFirstChunk = false
+		}
+
+		// Add content to delta
+		chunkResp.Choices[0].Delta.Content = string(chunk)
+
+		// Marshal and send
+		jsonBytes, err := json.Marshal(chunkResp)
+		if err != nil {
+			return fmt.Errorf("failed to marshal chunk: %w", err)
+		}
+
+		fmt.Fprintf(w, "data: %s\n\n", jsonBytes)
+		flusher.Flush()
+		return nil
+	}
+
+	// Create LLM driver with streaming callback
+	llmDriver, err := switches.FetchDriver(conf, nil, nil, streamingFunc)
+	if err != nil {
+		p.sendStreamError(w, flusher, "Failed to create LLM client", "server_error")
+		errorBody := []byte(fmt.Sprintf(`{"error":"Failed to create LLM client: %s"}`, err.Error()))
+		go p.recordTranslatorAnalytics(conf, app, http.StatusInternalServerError, errorBody, reqBody, r, nil, timestamp)
+		return
+	}
+
+	ctx := context.Background()
+	opts := req.ToLangchainOptions(conf)
+	// Add streaming function to options
+	opts = append(opts, llms.WithStreamingFunc(streamingFunc))
+	messages := req.GetMessages()
+
+	// Call LLM - streaming happens via callback
+	resp, err := llmDriver.GenerateContent(ctx, messages, opts...)
+	if err != nil {
+		p.sendStreamError(w, flusher, fmt.Sprintf("LLM call failed: %s", err.Error()), "server_error")
+		errorBody := []byte(fmt.Sprintf(`{"error":"LLM call failed: %s"}`, err.Error()))
+		go p.recordTranslatorAnalytics(conf, app, http.StatusInternalServerError, errorBody, reqBody, r, nil, timestamp)
+		return
+	}
+
+	// Send final chunk with finish_reason and usage
+	usage := extractTokenUsageFromContentResponse(resp, conf.Vendor)
+	finishReason := "stop"
+	if len(resp.Choices) > 0 && resp.Choices[0].StopReason != "" {
+		finishReason = convertFinishReason(resp.Choices[0].StopReason)
+	}
+
+	finalChunk := ChatCompletionChunk{
+		ID:      completionID,
+		Object:  "chat.completion.chunk",
+		Created: created,
+		Model:   req.Model,
+		Choices: []ChatCompletionChunkChoice{{
+			Index:        0,
+			Delta:        ChatCompletionDelta{}, // Empty delta for final chunk
+			FinishReason: &finishReason,
+		}},
+		Usage: &usage,
+	}
+
+	jsonBytes, err := json.Marshal(finalChunk)
+	if err == nil {
+		fmt.Fprintf(w, "data: %s\n\n", jsonBytes)
+		flusher.Flush()
+	}
+
+	// Send [DONE] marker
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
+
+	// Record analytics (async)
+	go p.recordTranslatorAnalytics(conf, app, http.StatusOK, nil, reqBody, r, resp, timestamp)
+}
+
+// sendStreamError sends an error in SSE format
+func (p *Proxy) sendStreamError(w http.ResponseWriter, flusher http.Flusher, message, errorType string) {
+	errResp := ChatCompletionStreamError{
+		Error: ChatCompletionErrorDetail{
+			Message: message,
+			Type:    errorType,
+		},
+	}
+	jsonBytes, _ := json.Marshal(errResp)
+	fmt.Fprintf(w, "data: %s\n\n", jsonBytes)
+	flusher.Flush()
 }
 
 // recordTranslatorChatAnalytics records detailed chat analytics for /ai/ endpoint requests
