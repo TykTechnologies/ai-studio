@@ -227,6 +227,7 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
+		gateway.Any("/ai/*path", gin.WrapH(config.Gateway.Handler()))
 	}
 
 	// Metrics endpoint if enabled
