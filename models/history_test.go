@@ -164,6 +164,12 @@ func TestSearchChatHistoryRecords(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
+	// Create CMessage records for each session (need >1 per session for SearchChatHistoryRecords)
+	for _, sessionID := range []string{"s1", "s2", "s3"} {
+		db.Create(&CMessage{Session: sessionID, Content: []byte("msg1")})
+		db.Create(&CMessage{Session: sessionID, Content: []byte("msg2")})
+	}
+
 	results, _, _, err := SearchChatHistoryRecords(db, 1, "Beta", 10, 1, true)
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)

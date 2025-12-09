@@ -72,7 +72,12 @@ import AgentDetail from "./components/agents/AgentDetail";
 import AgentForm from "./components/agents/AgentForm";
 
 import Marketplace from "./components/marketplace/Marketplace";
+import MarketplaceSettings from "./pages/MarketplaceSettings";
 import BrandingSettings from "./pages/BrandingSettings";
+
+import ModelRouterList from "./pages/ModelRouterList";
+import ModelRouterDetails from "./components/model-routers/ModelRouterDetails";
+import ModelRouterForm from "./components/model-routers/ModelRouterForm";
 
 const mainAdminRoutes = (
   <>
@@ -85,11 +90,6 @@ const mainAdminRoutes = (
     <Route path="users/:id/chat-log/:sessionId" element={<UserMessageLog />} />
     <Route path="users/edit/:id" element={<UserForm />} />
     <Route path="users/new" element={<UserForm />} />
-
-    <Route path="groups" element={<Groups />} />
-    <Route path="groups/:id" element={<GroupDetail />} />
-    <Route path="groups/edit/:id" element={<GroupForm />} />
-    <Route path="groups/new" element={<GroupForm />} />
 
     <Route path="llms" element={<LLMList />} />
     <Route path="llms/:id" element={<LLMDetails />} />
@@ -104,6 +104,7 @@ const mainAdminRoutes = (
     <Route path="plugins/*" element={<PluginsPage />} />
 
     <Route path="marketplace" element={<Marketplace />} />
+    <Route path="marketplace-settings" element={<MarketplaceSettings />} />
 
     <Route path="model-prices" element={<ModelPriceList />} />
     <Route path="model-prices/:id" element={<ModelPriceDetail />} />
@@ -119,24 +120,6 @@ const mainAdminRoutes = (
     <Route path="tools/:id" element={<ToolDetails />} />
     <Route path="tools/edit/:id" element={<ToolForm />} />
     <Route path="tools/new" element={<ToolForm />} />
-
-    <Route path="catalogs/llms" element={<CatalogueList />} />
-    <Route path="catalogs/llms/:id" element={<CatalogueDetails />} />
-    <Route path="catalogs/llms/edit/:id" element={<CatalogueForm />} />
-    <Route path="catalogs/llms/new" element={<CatalogueForm />} />
-    <Route path="catalogs/data" element={<DataCatalogList />} />
-    <Route path="catalogs/data/:id" element={<DataCatalogDetail />} />
-    <Route path="catalogs/data/edit/:id" element={<DataCatalogForm />} />
-    <Route path="catalogs/data/new" element={<DataCatalogForm />} />
-    <Route path="catalogs/tools" element={<ToolCatalogueList />} />
-    <Route path="catalogs/tools/:id" element={<ToolCatalogueDetails />} />
-    <Route path="catalogs/tools/edit/:id" element={<ToolCatalogueForm />} />
-    <Route path="catalogs/tools/new" element={<ToolCatalogueForm />} />
-
-    <Route path="filters" element={<FilterList />} />
-    <Route path="filters/:id" element={<FilterDetails />} />
-    <Route path="filters/edit/:id" element={<FilterForm />} />
-    <Route path="filters/new" element={<FilterForm />} />
 
     <Route path="apps" element={<AppList />} />
     <Route path="apps/:id" element={<AppDetails />} />
@@ -159,6 +142,11 @@ const mainAdminRoutes = (
     <Route path="secrets/:id" element={<SecretDetails />} />
     <Route path="secrets/edit/:id" element={<SecretForm />} />
     <Route path="secrets/new" element={<SecretForm />} />
+
+    <Route path="filters" element={<FilterList />} />
+    <Route path="filters/:id" element={<FilterDetails />} />
+    <Route path="filters/edit/:id" element={<FilterForm />} />
+    <Route path="filters/new" element={<FilterForm />} />
   </>
 );
 
@@ -172,5 +160,43 @@ const ssoRoutes = (
   </>
 );
 
-export { mainAdminRoutes, ssoRoutes };
+// Group routes that will be conditionally rendered based on features.feature_groups (ENT only)
+const groupRoutes = (
+  <>
+    <Route path="groups" element={<Groups />} />
+    <Route path="groups/:id" element={<GroupDetail />} />
+    <Route path="groups/edit/:id" element={<GroupForm />} />
+    <Route path="groups/new" element={<GroupForm />} />
+  </>
+);
+
+// Catalog routes that will be conditionally rendered based on features.feature_groups (ENT only)
+const catalogRoutes = (
+  <>
+    <Route path="catalogs/llms" element={<CatalogueList />} />
+    <Route path="catalogs/llms/:id" element={<CatalogueDetails />} />
+    <Route path="catalogs/llms/edit/:id" element={<CatalogueForm />} />
+    <Route path="catalogs/llms/new" element={<CatalogueForm />} />
+    <Route path="catalogs/data" element={<DataCatalogList />} />
+    <Route path="catalogs/data/:id" element={<DataCatalogDetail />} />
+    <Route path="catalogs/data/edit/:id" element={<DataCatalogForm />} />
+    <Route path="catalogs/data/new" element={<DataCatalogForm />} />
+    <Route path="catalogs/tools" element={<ToolCatalogueList />} />
+    <Route path="catalogs/tools/:id" element={<ToolCatalogueDetails />} />
+    <Route path="catalogs/tools/edit/:id" element={<ToolCatalogueForm />} />
+    <Route path="catalogs/tools/new" element={<ToolCatalogueForm />} />
+  </>
+);
+
+// Model Router routes (Enterprise only - requires feature_model_router)
+const modelRouterRoutes = (
+  <>
+    <Route path="model-routers" element={<ModelRouterList />} />
+    <Route path="model-routers/:id" element={<ModelRouterDetails />} />
+    <Route path="model-routers/edit/:id" element={<ModelRouterForm />} />
+    <Route path="model-routers/new" element={<ModelRouterForm />} />
+  </>
+);
+
+export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes };
 export default mainAdminRoutes;

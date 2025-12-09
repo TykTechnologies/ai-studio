@@ -62,7 +62,7 @@ const ToolCatalogueList = memo(() => {
           page_size: pageSize,
         },
       });
-      setToolCatalogues(response.data || []);
+      setToolCatalogues(response.data?.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
       updatePaginationData(totalCount, totalPages);

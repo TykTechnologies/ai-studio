@@ -1,3 +1,6 @@
+//go:build enterprise
+// +build enterprise
+
 package proxy
 
 import (
@@ -17,6 +20,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 func TestBudgetCheck(t *testing.T) {
@@ -27,7 +31,7 @@ func TestBudgetCheck(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 
 	// Clear the budget service cache before starting

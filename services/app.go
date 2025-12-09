@@ -104,6 +104,12 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 	if err := finalApp.Get(s.DB, app.ID); err != nil {
 		return nil, fmt.Errorf("failed to fetch final app state for app ID %d: %w", app.ID, err)
 	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitAppCreated(finalApp, finalApp.ID, userID)
+	}
+
 	return finalApp, nil
 }
 
@@ -168,6 +174,12 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 	if err := finalApp.Get(s.DB, app.ID); err != nil {
 		return nil, fmt.Errorf("failed to fetch final app state for app ID %d: %w", app.ID, err)
 	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitAppCreated(finalApp, finalApp.ID, userID)
+	}
+
 	return finalApp, nil
 }
 
@@ -215,6 +227,12 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	if err != nil {
 		return nil, fmt.Errorf("failed to reload app: %w", err)
 	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitAppUpdated(app, app.ID, userID)
+	}
+
 	return app, nil
 }
 
@@ -387,7 +405,16 @@ func (s *Service) DeleteApp(id uint) error {
 		return fmt.Errorf("failed to clear app tools association: %w", err)
 	}
 
-	return app.Delete(s.DB)
+	if err := app.Delete(s.DB); err != nil {
+		return err
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitAppDeleted(id, 0)
+	}
+
+	return nil
 }
 
 // GetAppsByUserID retrieves all apps for a specific user
@@ -412,7 +439,16 @@ func (s *Service) ActivateAppCredential(appID uint) error {
 		return err
 	}
 
-	return app.ActivateCredential(s.DB)
+	if err := app.ActivateCredential(s.DB); err != nil {
+		return err
+	}
+
+	// Emit app approved event (credential activated)
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitAppApproved(app, app.ID, 0)
+	}
+
+	return nil
 }
 
 // DeactivateAppCredential deactivates the credential associated with an app

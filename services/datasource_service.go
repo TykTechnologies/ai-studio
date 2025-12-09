@@ -68,6 +68,12 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 		return nil, err
 	}
 
+	// Auto-assign to Default data catalogue if not in any catalogue
+	if err := s.ensureDatasourceInDefaultCatalogue(datasource); err != nil {
+		// Log but don't fail - this is a convenience feature
+		logger.Warn(fmt.Sprintf("Failed to add datasource to default catalogue: %v", err))
+	}
+
 	// Execute "after_create" hooks
 	if s.HookManager != nil {
 		_, err := s.HookManager.ExecuteHooks(
@@ -81,6 +87,11 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 			// Log but don't fail the operation
 			logger.Warn(fmt.Sprintf("After-create hooks failed: %v", err))
 		}
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitDatasourceCreated(datasource, datasource.ID, userID)
 	}
 
 	return datasource, nil
@@ -98,31 +109,43 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	datasource.Icon = icon
 	datasource.Url = url
 	datasource.PrivacyScore = privacyScore
-	datasource.DBConnString = dbConnString
-	datasource.DBSourceType = dbSourceType
+
+	// Smart connection string update - preserve if empty
+	if dbConnString != "" {
+		datasource.DBConnString = dbConnString
+	}
+	if dbSourceType != "" {
+		datasource.DBSourceType = dbSourceType
+	}
+
 	// Smart DB connection API key update logic
 	if dbConnAPIKey == "[redacted]" {
 		// Don't update API key if it's the redacted placeholder
-	} else if dbConnAPIKey == "" {
-		// Clear API key if empty string is provided
-		datasource.DBConnAPIKey = ""
 	} else {
-		// Update to new API key value
+		// Empty string clears the key, any other value updates it
 		datasource.DBConnAPIKey = dbConnAPIKey
 	}
-	datasource.EmbedVendor = models.Vendor(embedVendor)
-	datasource.EmbedUrl = embedUrl
+
+	if embedVendor != "" {
+		datasource.EmbedVendor = models.Vendor(embedVendor)
+	}
+
+	// Smart embed URL update - preserve if empty
+	if embedUrl != "" {
+		datasource.EmbedUrl = embedUrl
+	}
+
 	// Smart embed API key update logic
 	if embedAPIKey == "[redacted]" {
 		// Don't update API key if it's the redacted placeholder
-	} else if embedAPIKey == "" {
-		// Clear API key if empty string is provided
-		datasource.EmbedAPIKey = ""
 	} else {
-		// Update to new API key value
+		// Empty string clears the key, any other value updates it
 		datasource.EmbedAPIKey = embedAPIKey
 	}
-	datasource.EmbedModel = embedModel
+
+	if embedModel != "" {
+		datasource.EmbedModel = embedModel
+	}
 	datasource.DBName = dbName
 	datasource.Active = active
 	datasource.UserID = userID
@@ -190,6 +213,11 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitDatasourceUpdated(datasource, datasource.ID, userID)
+	}
+
 	return datasource, nil
 }
 
@@ -248,7 +276,58 @@ func (s *Service) DeleteDatasource(id uint) error {
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitDatasourceDeleted(id, datasource.UserID)
+	}
+
 	return nil
+}
+
+// CloneDatasource creates a copy of an existing datasource with all configuration including API keys
+func (s *Service) CloneDatasource(sourceDatasourceID uint) (*models.Datasource, error) {
+	// Get source datasource with all relationships
+	source, err := s.GetDatasourceByID(sourceDatasourceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get source datasource: %w", err)
+	}
+
+	// Extract tag names for re-association
+	tagNames := make([]string, len(source.Tags))
+	for i, tag := range source.Tags {
+		tagNames[i] = tag.Name
+	}
+
+	// Create cloned datasource with "Copy of" prefix and inactive status
+	// IMPORTANT: This preserves API keys (DBConnAPIKey, EmbedAPIKey)
+	cloned, err := s.CreateDatasource(
+		fmt.Sprintf("Copy of %s", source.Name), // New name
+		source.ShortDescription,
+		source.LongDescription,
+		source.Icon,
+		source.Url,
+		source.PrivacyScore,
+		source.UserID,
+		tagNames,
+		source.DBConnString,
+		source.DBSourceType,
+		source.DBConnAPIKey, // API key preserved
+		source.DBName,
+		string(source.EmbedVendor), // Convert Vendor to string
+		source.EmbedUrl,
+		source.EmbedAPIKey, // API key preserved
+		source.EmbedModel,
+		false, // Start inactive for safety
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cloned datasource: %w", err)
+	}
+
+	logger.Info(fmt.Sprintf("Datasource cloned successfully: source_id=%d, cloned_id=%d, cloned_name=%s",
+		sourceDatasourceID, cloned.ID, cloned.Name))
+
+	return cloned, nil
 }
 
 func (s *Service) GetAllDatasources(pageSize int, pageNumber int, all bool) (models.Datasources, int64, int, error) {
@@ -369,6 +448,29 @@ func (s *Service) RemoveFileFromDatasource(dsID uint, fileStoreID uint) error {
 	}
 
 	return ds.RemoveFileStore(s.DB, fileStore)
+}
+
+// ensureDatasourceInDefaultCatalogue adds a datasource to the Default data catalogue if it's not in any catalogue
+func (s *Service) ensureDatasourceInDefaultCatalogue(datasource *models.Datasource) error {
+	// Check if datasource is in any catalogue
+	count := s.DB.Model(datasource).Association("DataCatalogues").Count()
+
+	if count == 0 {
+		// Get or create default data catalogue
+		defaultCatalogue, err := models.GetOrCreateDefaultDataCatalogue(s.DB)
+		if err != nil {
+			return fmt.Errorf("failed to get default data catalogue: %w", err)
+		}
+
+		// Add datasource to default catalogue
+		if err := s.DB.Model(defaultCatalogue).Association("Datasources").Append(datasource); err != nil {
+			return fmt.Errorf("failed to add datasource to default catalogue: %w", err)
+		}
+
+		logger.Infof("Auto-assigned datasource '%s' (ID: %d) to Default data catalogue", datasource.Name, datasource.ID)
+	}
+
+	return nil
 }
 
 // TODO:

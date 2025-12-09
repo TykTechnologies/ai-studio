@@ -10,6 +10,7 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,7 +30,7 @@ func TestNotify(t *testing.T) {
 		service := &services.Service{
 			DB:                  db,
 			NotificationService: notificationService,
-			Budget:              services.NewBudgetService(db, notificationService),
+			Budget:              budget.NewService(db, notificationService),
 		}
 
 		// Create admin users with different notification settings
@@ -128,7 +129,7 @@ func TestNotify(t *testing.T) {
 		service := &services.Service{
 			DB:                  db,
 			NotificationService: notificationService,
-			Budget:              services.NewBudgetService(db, notificationService),
+			Budget:              budget.NewService(db, notificationService),
 		}
 
 		// Create admin users with different notification settings

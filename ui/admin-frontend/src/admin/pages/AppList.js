@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDebounce } from "use-debounce";
 import apiClient from "../utils/apiClient";
 import { deactivateCredential } from "../services/appService";
+import SearchInput from "../components/common/SearchInput";
 import {
   Table,
   TableBody,
@@ -56,6 +58,9 @@ const AppList = () => {
   });
   const [sortField, setSortField] = useState("id");
   const [sortOrder, setSortOrder] = useState("desc");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
+  const isFirstRender = useRef(true);
 
   const {
     page,
@@ -69,7 +74,7 @@ const AppList = () => {
   const fetchApps = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       // Handle special sort fields that need custom handling
       let sortParam = sortField;
       if (sortField === "approval_status") {
@@ -79,14 +84,19 @@ const AppList = () => {
         // Use the correct field name for the API
         sortParam = "monthly_budget";
       }
-      
-      const response = await apiClient.get("/apps", {
-        params: {
-          page,
-          page_size: pageSize,
-          sort: `${sortOrder === "desc" ? "-" : ""}${sortParam}`,
-        },
-      });
+
+      const params = {
+        page,
+        page_size: pageSize,
+        sort: `${sortOrder === "desc" ? "-" : ""}${sortParam}`,
+      };
+
+      // Only include search param if 2+ characters entered
+      if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
+        params.search = debouncedSearchTerm;
+      }
+
+      const response = await apiClient.get("/apps", { params });
       
       let appsData = response.data.data || [];
       
@@ -115,11 +125,24 @@ const AppList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortField, sortOrder, updatePaginationData, credentials]);
+  }, [page, pageSize, sortField, sortOrder, updatePaginationData, credentials, debouncedSearchTerm]);
 
   useEffect(() => {
     fetchApps();
   }, [fetchApps]);
+
+  // Reset to page 1 when search term changes (but not on initial render)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    handlePageChange(1);
+  }, [debouncedSearchTerm, handlePageChange]);
+
+  const handleSearch = useCallback((value) => {
+    setSearchTerm(value);
+  }, []);
 
   useEffect(() => {
     fetchUsers();
@@ -302,7 +325,14 @@ const AppList = () => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>
         </Box>
         <ContentBox>
-          {apps.length === 0 ? (
+          <Box sx={{ mb: 2, maxWidth: 400 }}>
+            <SearchInput
+              value={searchTerm}
+              onChange={handleSearch}
+              placeholder="Search by name, description, or user..."
+            />
+          </Box>
+          {apps.length === 0 && !debouncedSearchTerm ? (
             <EmptyStateWidget
               title="No apps configured yet"
               description="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search data sources. Click the button below to add a new app configuration."
@@ -373,35 +403,43 @@ const AppList = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {apps.map((app) => (
-                    <StyledTableRow
-                      key={app.id}
-                      onClick={() => handleAppClick(app)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <StyledTableCell>{app.id}</StyledTableCell>
-                      <StyledTableCell>{app.attributes.name}</StyledTableCell>
-                      <StyledTableCell>{app.attributes.description}</StyledTableCell>
-                      <StyledTableCell>
-                        {getUserDisplay(app)}
+                  {apps.length === 0 && debouncedSearchTerm ? (
+                    <TableRow>
+                      <StyledTableCell colSpan={7} align="center">
+                        No apps found matching "{debouncedSearchTerm}"
                       </StyledTableCell>
-                      <StyledTableCell>
-                        {getApprovalStatus(app)}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {app.attributes.monthly_budget ? 
-                          `$${parseFloat(app.attributes.monthly_budget).toFixed(2)}` : 
-                          "Not set"}
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, app)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))}
+                    </TableRow>
+                  ) : (
+                    apps.map((app) => (
+                      <StyledTableRow
+                        key={app.id}
+                        onClick={() => handleAppClick(app)}
+                        sx={{ cursor: "pointer" }}
+                      >
+                        <StyledTableCell>{app.id}</StyledTableCell>
+                        <StyledTableCell>{app.attributes.name}</StyledTableCell>
+                        <StyledTableCell>{app.attributes.description}</StyledTableCell>
+                        <StyledTableCell>
+                          {getUserDisplay(app)}
+                        </StyledTableCell>
+                        <StyledTableCell>
+                          {getApprovalStatus(app)}
+                        </StyledTableCell>
+                        <StyledTableCell>
+                          {app.attributes.monthly_budget ?
+                            `$${parseFloat(app.attributes.monthly_budget).toFixed(2)}` :
+                            "Not set"}
+                        </StyledTableCell>
+                        <StyledTableCell align="right">
+                          <IconButton
+                            onClick={(event) => handleMenuOpen(event, app)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </StyledTableCell>
+                      </StyledTableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
               <PaginationControls

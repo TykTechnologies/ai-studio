@@ -18,6 +18,7 @@ import {
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import EnterpriseFeatureBadge from "../components/common/EnterpriseFeatureBadge";
 import {
   StyledPaper,
   TitleBox,
@@ -29,9 +30,11 @@ import {
 } from "../styles/sharedStyles";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import useAdminData from "../hooks/useAdminData";
 
 const FilterList = memo(() => {
   const navigate = useNavigate();
+  const { config, loading: configLoading } = useAdminData();
   const [filters, setFilters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -134,12 +137,34 @@ const FilterList = memo(() => {
     navigate("/admin/filters/new");
   }, [navigate]);
 
+  // Wait for config to load before checking enterprise status
+  if (configLoading) {
+    return <CircularProgress />;
+  }
+
   if (loading && filters.length === 0) {
     return <CircularProgress />;
   }
 
   if (error && filters.length === 0) {
     return <Alert severity="error">{error}</Alert>;
+  }
+
+  // Show enterprise badge if not enterprise edition
+  if (config && !config.is_enterprise) {
+    return (
+      <>
+        <TitleBox top="64px">
+          <Typography variant="headingXLarge">Filters</Typography>
+        </TitleBox>
+        <ContentBox>
+          <EnterpriseFeatureBadge
+            feature="Advanced Request Filtering & Scripting"
+            description="Create custom filters and middleware using Tengo scripting to process and modify data before it reaches the LLM or after tool execution. Remove PII, enforce policies, and transform data with powerful scripting capabilities."
+          />
+        </ContentBox>
+      </>
+    );
   }
 
   return (
@@ -156,7 +181,7 @@ const FilterList = memo(() => {
           </PrimaryButton>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>  
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>
         </Box>
         <ContentBox>
           {filters.length === 0 ? (
@@ -176,6 +201,7 @@ const FilterList = memo(() => {
                       Name
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Type</StyledTableHeaderCell>
                     <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
@@ -188,6 +214,9 @@ const FilterList = memo(() => {
                     >
                       <StyledTableCell>{filter.attributes.name}</StyledTableCell>
                       <StyledTableCell>{filter.attributes.description}</StyledTableCell>
+                      <StyledTableCell>
+                        {filter.attributes.response_filter ? "Response" : "Request"}
+                      </StyledTableCell>
                       <StyledTableCell align="right">
                         <IconButton
                           onClick={(event) => handleMenuOpen(event, filter)}

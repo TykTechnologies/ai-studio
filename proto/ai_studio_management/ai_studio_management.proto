@@ -21,6 +21,7 @@ service AIStudioManagementService {
     rpc CreateLLM(CreateLLMRequest) returns (CreateLLMResponse);
     rpc UpdateLLM(UpdateLLMRequest) returns (UpdateLLMResponse);
     rpc DeleteLLM(DeleteLLMRequest) returns (DeleteLLMResponse);
+    rpc UpdateLLMPlugins(UpdateLLMPluginsRequest) returns (UpdateLLMPluginsResponse);
 
     // Analytics Operations (with caching)
     rpc GetAnalyticsSummary(GetAnalyticsSummaryRequest) returns (GetAnalyticsSummaryResponse);
@@ -56,8 +57,21 @@ service AIStudioManagementService {
     rpc CreateDatasource(CreateDatasourceRequest) returns (CreateDatasourceResponse);
     rpc UpdateDatasource(UpdateDatasourceRequest) returns (UpdateDatasourceResponse);
     rpc DeleteDatasource(DeleteDatasourceRequest) returns (DeleteDatasourceResponse);
+    rpc CloneDatasource(CloneDatasourceRequest) returns (CloneDatasourceResponse);
     rpc SearchDatasources(SearchDatasourcesRequest) returns (SearchDatasourcesResponse);
     rpc ProcessDatasourceEmbeddings(ProcessEmbeddingsRequest) returns (ProcessEmbeddingsResponse);
+
+    // RAG/Embedding Operations for Plugins
+    rpc GenerateEmbedding(GenerateEmbeddingRequest) returns (GenerateEmbeddingResponse);
+    rpc StoreDocuments(StoreDocumentsRequest) returns (StoreDocumentsResponse);
+    rpc ProcessAndStoreDocuments(ProcessAndStoreRequest) returns (ProcessAndStoreResponse);
+    rpc QueryDatasourceByVector(QueryByVectorRequest) returns (QueryDatasourceResponse);
+
+    // Advanced Datasource Operations - Metadata and Namespace Management
+    rpc DeleteDocumentsByMetadata(DeleteDocumentsByMetadataRequest) returns (DeleteDocumentsByMetadataResponse);
+    rpc QueryByMetadataOnly(QueryByMetadataOnlyRequest) returns (QueryByMetadataOnlyResponse);
+    rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+    rpc DeleteNamespace(DeleteNamespaceRequest) returns (DeleteNamespaceResponse);
 
     // Data Catalogues Management Operations (Phase 1.2)
     rpc ListDataCatalogues(ListDataCataloguesRequest) returns (ListDataCataloguesResponse);
@@ -103,6 +117,17 @@ service AIStudioManagementService {
     rpc ExecuteTool(ExecuteToolRequest) returns (ExecuteToolResponse);
     rpc QueryDatasource(QueryDatasourceRequest) returns (QueryDatasourceResponse);
     rpc CallLLM(CallLLMRequest) returns (stream CallLLMResponse);
+
+    // Schedule Management Operations
+    rpc CreateSchedule(CreateScheduleRequest) returns (CreateScheduleResponse);
+    rpc GetSchedule(GetScheduleRequest) returns (GetScheduleResponse);
+    rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
+    rpc UpdateSchedule(UpdateScheduleRequest) returns (UpdateScheduleResponse);
+    rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
+
+    // License Information (Enterprise)
+    // Allows plugins to check license status and entitlements at runtime
+    rpc GetLicenseInfo(GetLicenseInfoRequest) returns (GetLicenseInfoResponse);
 }
 
 // Common request context for all operations
@@ -263,6 +288,7 @@ message UpdateLLMRequest {
     string default_model = 11;
     repeated string allowed_models = 12;
     optional double monthly_budget = 13;
+    string namespace = 14; // Enterprise: Multi-tenant namespace support
 }
 
 message UpdateLLMResponse {
@@ -277,6 +303,20 @@ message DeleteLLMRequest {
 message DeleteLLMResponse {
     bool success = 1;
     string message = 2;
+}
+
+// UpdateLLMPlugins - Add or update plugin associations for an LLM
+message UpdateLLMPluginsRequest {
+    PluginContext context = 1;
+    uint32 llm_id = 2;
+    repeated uint32 plugin_ids = 3;  // List of plugin IDs to associate with this LLM
+    bool append = 4;                  // If true, adds to existing plugins; if false, replaces all
+}
+
+message UpdateLLMPluginsResponse {
+    bool success = 1;
+    string message = 2;
+    repeated uint32 plugin_ids = 3;  // Final list of plugin IDs after update
 }
 
 // Analytics Messages
@@ -666,6 +706,15 @@ message DeleteDatasourceResponse {
     string message = 2;
 }
 
+message CloneDatasourceRequest {
+    PluginContext context = 1;
+    uint32 source_datasource_id = 2;
+}
+
+message CloneDatasourceResponse {
+    DatasourceInfo datasource = 1;
+}
+
 message SearchDatasourcesRequest {
     PluginContext context = 1;
     string query = 2;
@@ -685,6 +734,133 @@ message ProcessEmbeddingsResponse {
     string message = 2;
     string job_id = 3; // For tracking async processing
 }
+
+// === RAG/Embedding Operation Messages ===
+
+// GenerateEmbedding - Generate embeddings for text without storing
+message GenerateEmbeddingRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;    // Use this datasource's embedder configuration
+    repeated string texts = 3;    // Texts to generate embeddings for
+}
+
+message GenerateEmbeddingResponse {
+    bool success = 1;
+    repeated EmbeddingVector vectors = 2;
+    string error_message = 3;
+}
+
+message EmbeddingVector {
+    repeated float values = 1;    // The embedding vector
+}
+
+// StoreDocuments - Store pre-vectorized documents in vector store
+message StoreDocumentsRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    repeated DocumentWithEmbedding documents = 3;
+}
+
+message DocumentWithEmbedding {
+    string content = 1;
+    repeated float embedding = 2;
+    map<string, string> metadata = 3;
+}
+
+message StoreDocumentsResponse {
+    bool success = 1;
+    int32 stored_count = 2;
+    string error_message = 3;
+}
+
+// ProcessAndStoreDocuments - Generate embeddings and store in one step
+message ProcessAndStoreRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    repeated DocumentChunk chunks = 3;
+}
+
+message DocumentChunk {
+    string content = 1;
+    map<string, string> metadata = 2;
+}
+
+message ProcessAndStoreResponse {
+    bool success = 1;
+    int32 processed_count = 2;
+    string error_message = 3;
+}
+
+// === Advanced Datasource Operations - Metadata and Namespace Management ===
+
+// DeleteDocumentsByMetadata - Delete chunks by metadata filter
+message DeleteDocumentsByMetadataRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    map<string, string> metadata_filter = 3;  // e.g., {"file_path": "src/main.go"}
+    string filter_mode = 4;  // "AND" or "OR" (default: AND)
+    bool dry_run = 5;  // If true, return count without deleting
+}
+
+message DeleteDocumentsByMetadataResponse {
+    bool success = 1;
+    int32 deleted_count = 2;  // Number of documents deleted (or would be deleted if dry_run)
+    string message = 3;
+}
+
+// QueryByMetadataOnly - Query documents by metadata (no vector similarity)
+message QueryByMetadataOnlyRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    map<string, string> metadata_filter = 3;
+    string filter_mode = 4;  // "AND" or "OR" (default: AND)
+    int32 limit = 5;  // Max results (default: 10, max: 100)
+    int32 offset = 6;  // Pagination offset (default: 0)
+}
+
+message QueryByMetadataOnlyResponse {
+    repeated DatasourceResult results = 1;
+    int32 total_count = 2;  // Total matching documents (for pagination)
+}
+
+// ListNamespaces - List all namespaces/collections in vector store
+message ListNamespacesRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+}
+
+message ListNamespacesResponse {
+    repeated NamespaceInfo namespaces = 1;
+}
+
+message NamespaceInfo {
+    string name = 1;
+    int32 document_count = 2;  // -1 if not supported by vector store
+}
+
+// DeleteNamespace - Delete entire namespace/collection
+message DeleteNamespaceRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    string namespace = 3;
+    bool confirm = 4;  // Must be true to actually delete (safety check)
+}
+
+message DeleteNamespaceResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// QueryDatasourceByVector - Query with pre-computed embedding vector
+message QueryByVectorRequest {
+    PluginContext context = 1;
+    uint32 datasource_id = 2;
+    repeated float embedding = 3;
+    int32 max_results = 4;
+    double similarity_threshold = 5;
+}
+
+// Note: QueryDatasourceResponse is reused from the existing QueryDatasource RPC
 
 message DatasourceInfo {
     uint32 id = 1;
@@ -1059,6 +1235,8 @@ message CreateFilterRequest {
     string name = 2;
     string description = 3;
     string script = 4; // Filter script content
+    bool response_filter = 5; // true = response filter, false = request filter
+    string namespace = 6;
 }
 
 message CreateFilterResponse {
@@ -1071,6 +1249,8 @@ message UpdateFilterRequest {
     string name = 3;
     string description = 4;
     string script = 5;
+    bool response_filter = 6; // true = response filter, false = request filter
+    string namespace = 7;
 }
 
 message UpdateFilterResponse {
@@ -1098,6 +1278,7 @@ message FilterInfo {
     repeated uint32 llm_ids = 8;
     google.protobuf.Timestamp created_at = 9;
     google.protobuf.Timestamp updated_at = 10;
+    bool response_filter = 11; // true = response filter, false = request filter
 }
 
 // Vendor Information Messages
@@ -1261,4 +1442,98 @@ message LLMUsage {
     int32 total_tokens = 3;
     int32 cache_read_tokens = 4;
     int32 cache_write_tokens = 5;
+}
+
+// Schedule Management Messages
+
+message CreateScheduleRequest {
+    PluginContext context = 1;
+    string schedule_id = 2;       // Unique identifier for this schedule (e.g., "hourly-sync")
+    string name = 3;              // Human-readable name
+    string cron_expr = 4;         // Cron expression (5-field format: "* * * * *")
+    string timezone = 5;          // Timezone (e.g., "UTC", "America/New_York")
+    int32 timeout_seconds = 6;    // Max execution time in seconds
+    string config_json = 7;       // JSON config passed to ExecuteScheduledTask
+    bool enabled = 8;             // Whether schedule is enabled
+}
+
+message CreateScheduleResponse {
+    ScheduleInfo schedule = 1;
+}
+
+message GetScheduleRequest {
+    PluginContext context = 1;
+    string schedule_id = 2;       // The manifest_schedule_id (not database ID)
+}
+
+message GetScheduleResponse {
+    ScheduleInfo schedule = 1;
+}
+
+message ListSchedulesRequest {
+    PluginContext context = 1;
+    // Lists all schedules for the calling plugin
+}
+
+message ListSchedulesResponse {
+    repeated ScheduleInfo schedules = 1;
+    int64 total_count = 2;
+}
+
+message UpdateScheduleRequest {
+    PluginContext context = 1;
+    string schedule_id = 2;       // The manifest_schedule_id to update
+
+    // Optional fields - only update if provided
+    optional string name = 3;
+    optional string cron_expr = 4;
+    optional string timezone = 5;
+    optional int32 timeout_seconds = 6;
+    optional string config_json = 7;
+    optional bool enabled = 8;
+}
+
+message UpdateScheduleResponse {
+    ScheduleInfo schedule = 1;
+}
+
+message DeleteScheduleRequest {
+    PluginContext context = 1;
+    string schedule_id = 2;       // The manifest_schedule_id to delete
+}
+
+message DeleteScheduleResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message ScheduleInfo {
+    uint32 id = 1;                // Database ID
+    uint32 plugin_id = 2;
+    string schedule_id = 3;       // Manifest schedule ID (unique per plugin)
+    string name = 4;
+    string cron_expr = 5;
+    string timezone = 6;
+    bool enabled = 7;
+    string config = 8;            // JSON config
+    int32 timeout_seconds = 9;
+    google.protobuf.Timestamp last_run = 10;
+    google.protobuf.Timestamp next_run = 11;
+    google.protobuf.Timestamp created_at = 12;
+    google.protobuf.Timestamp updated_at = 13;
+}
+
+// License Information Messages
+
+message GetLicenseInfoRequest {
+    PluginContext context = 1;
+}
+
+message GetLicenseInfoResponse {
+    bool license_valid = 1;           // True if a valid enterprise license is present
+    int32 days_remaining = 2;         // Days until license expires (-1 for community/never expires)
+    string license_type = 3;          // "community" or "enterprise"
+    repeated string entitlements = 4; // List of enabled features/entitlements
+    string organization = 5;          // Licensed organization name (enterprise only)
+    google.protobuf.Timestamp expires_at = 6; // License expiration timestamp (nil for community)
 }

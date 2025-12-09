@@ -496,4 +496,7 @@ const (
 
 	// Key-Value storage scopes
 	ServiceScopeKVReadWrite = "kv.readwrite" // Plugin key-value storage access
+
+	// Scheduler management scopes
+	ServiceScopeSchedulerManage = "scheduler.manage" // Manage plugin schedules
 )

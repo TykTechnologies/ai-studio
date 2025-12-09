@@ -15,9 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/TykTechnologies/midsommar/v2/config" // Added import
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 const (
@@ -169,7 +170,7 @@ func TestProxySetup(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	config := &Config{Port: 8080}
 	p := NewProxy(service, config, budgetService)
@@ -182,7 +183,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 
 	var wg sync.WaitGroup
@@ -204,7 +205,7 @@ func TestHandleToolRequest_ValidGET(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc) // Added budgetService
+	budgetService := budget.NewService(db, notificationSvc) // Added budgetService
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "test@example.com",
@@ -321,7 +322,7 @@ func TestHandleToolRequest_ValidPOST(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "testpost@example.com",
@@ -432,7 +433,7 @@ func TestHandleToolRequest_InvalidRequestBody(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "testinvalidbody@example.com",
@@ -564,20 +565,20 @@ func TestHandleOAuthProtectedResourceMetadata(t *testing.T) {
 	handler := http.HandlerFunc(p.handleOAuthProtectedResourceMetadata)
 
 	// Backup and defer restore of original config values
-	originalAuthServerURL := config.Get().AuthServerURL
-	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
-	originalProxyURL := config.Get().ProxyURL
+	originalAuthServerURL := config.Get("").AuthServerURL
+	originalProxyOAuthMetaURL := config.Get("").ProxyOAuthMetadataURL
+	originalProxyURL := config.Get("").ProxyURL
 
 	defer func() {
-		config.Get().AuthServerURL = originalAuthServerURL
-		config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL
-		config.Get().ProxyURL = originalProxyURL
+		config.Get("").AuthServerURL = originalAuthServerURL
+		config.Get("").ProxyOAuthMetadataURL = originalProxyOAuthMetaURL
+		config.Get("").ProxyURL = originalProxyURL
 	}()
 
 	// Set test config values
-	config.Get().AuthServerURL = "http://auth.example.com"
-	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
-	config.Get().ProxyURL = "http://proxy.example.com"
+	config.Get("").AuthServerURL = "http://auth.example.com"
+	config.Get("").ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
+	config.Get("").ProxyURL = "http://proxy.example.com"
 
 	req := httptest.NewRequest("GET", "/.well-known/oauth-protected-resource", nil)
 	rr := httptest.NewRecorder()
@@ -612,10 +613,10 @@ func TestRespondWithError_WWWAuthenticate(t *testing.T) {
 	rr := httptest.NewRecorder()
 
 	// Backup and defer restore
-	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
-	defer func() { config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
+	originalProxyOAuthMetaURL := config.Get("").ProxyOAuthMetadataURL
+	defer func() { config.Get("").ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
 
-	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
+	config.Get("").ProxyOAuthMetadataURL = "http://proxy.example.com/.well-known/oauth-protected-resource"
 
 	respondWithError(rr, http.StatusUnauthorized, "test auth error", nil, true)
 
@@ -639,10 +640,10 @@ func TestRespondWithError_WWWAuthenticate(t *testing.T) {
 func TestRespondWithOAIError_WWWAuthenticate(t *testing.T) {
 	rr := httptest.NewRecorder()
 
-	originalProxyOAuthMetaURL := config.Get().ProxyOAuthMetadataURL
-	defer func() { config.Get().ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
+	originalProxyOAuthMetaURL := config.Get("").ProxyOAuthMetadataURL
+	defer func() { config.Get("").ProxyOAuthMetadataURL = originalProxyOAuthMetaURL }()
 
-	config.Get().ProxyOAuthMetadataURL = "http://proxy.example.com/oai/.well-known/oauth-protected-resource"
+	config.Get("").ProxyOAuthMetadataURL = "http://proxy.example.com/oai/.well-known/oauth-protected-resource"
 
 	respondWithOAIError(rr, http.StatusUnauthorized, "test oai auth error", nil, true)
 
@@ -667,7 +668,7 @@ func TestHandleToolRequest_ToolNotFound(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	// First create a tool to create a valid credential
 	mockHttpServer, mockTeardown := newMockServer(t, &mockServerConfig{})
@@ -753,7 +754,7 @@ func TestHandleToolRequest_OperationNotFound(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "testopnotfound@example.com",
@@ -850,7 +851,7 @@ func TestHandleToolRequest_BackendServerError(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	user, err := service.CreateUser(services.UserDTO{
 		Email:                "testuser-servererror",

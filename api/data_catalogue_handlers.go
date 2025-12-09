@@ -1,9 +1,13 @@
+//go:build enterprise
+// +build enterprise
+
 package api
 
 import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
@@ -162,6 +166,18 @@ func (a *API) deleteDataCatalogue(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: "Invalid data catalogue ID"}},
 		})
+		return
+	}
+
+	// Prevent deletion of Default data catalogue
+	dataCatalogue, err := a.service.GetDataCatalogueByID(uint(id))
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewNotFoundError("Data catalogue not found"))
+		return
+	}
+
+	if dataCatalogue.IsDefault() {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Cannot delete the Default data catalogue"))
 		return
 	}
 
@@ -558,48 +574,4 @@ func serializeDataCatalogue(dataCatalogue *models.DataCatalogue) DataCatalogueRe
 	}
 }
 
-func serializeDataCatalogues(dataCatalogues models.DataCatalogues) []DataCatalogueResponse {
-	result := make([]DataCatalogueResponse, len(dataCatalogues))
-	for i, dataCatalogue := range dataCatalogues {
-		// Serialize datasources inline to avoid N+1 queries
-		datasourceResponses := make([]DatasourceResponse, len(dataCatalogue.Datasources))
-		for j, datasource := range dataCatalogue.Datasources {
-			datasourceResponses[j] = serializeDatasource(&datasource) // Note: this may still have N+1 if it accesses relationships
-		}
-
-		// Serialize tags inline to avoid N+1 queries
-		tagResponses := make([]TagResponse, len(dataCatalogue.Tags))
-		for j, tag := range dataCatalogue.Tags {
-			tagResponses[j] = TagResponse{
-				Type: "tags",
-				ID:   strconv.FormatUint(uint64(tag.ID), 10),
-				Attributes: struct {
-					Name string `json:"name"`
-				}{
-					Name: tag.Name,
-				},
-			}
-		}
-
-		result[i] = DataCatalogueResponse{
-			Type: "data-catalogues",
-			ID:   strconv.FormatUint(uint64(dataCatalogue.ID), 10),
-			Attributes: struct {
-				Name             string               `json:"name"`
-				ShortDescription string               `json:"short_description"`
-				LongDescription  string               `json:"long_description"`
-				Icon             string               `json:"icon"`
-				Datasources      []DatasourceResponse `json:"datasources"`
-				Tags             []TagResponse        `json:"tags"`
-			}{
-				Name:             dataCatalogue.Name,
-				ShortDescription: dataCatalogue.ShortDescription,
-				LongDescription:  dataCatalogue.LongDescription,
-				Icon:             dataCatalogue.Icon,
-				Datasources:      datasourceResponses,
-				Tags:             tagResponses,
-			},
-		}
-	}
-	return result
-}
+// serializeDataCatalogues is now in common_serializers.go (available in both CE and ENT)

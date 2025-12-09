@@ -1,0 +1,71 @@
+// Comprehensive PII Redaction Filter
+// This script redacts multiple types of personally identifiable information
+
+tyk := import("tyk")
+
+// Step 1: Redact email addresses
+step1 := tyk.redact_pattern(
+    input,
+    "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+    "[EMAIL]"
+)
+
+// Step 2: Parse the result and redact phone numbers
+// For chaining, we need to rebuild the input object
+json := import("json")
+parsed := json.decode(step1)
+
+// Extract messages from the modified payload
+temp_messages := []
+if parsed.messages {
+    for msg in parsed.messages {
+        temp_messages = append(temp_messages, msg)
+    }
+}
+
+// Build temp input for second redaction
+temp_input := {
+    raw_input: step1,
+    messages: temp_messages,
+    vendor_name: input.vendor_name,
+    model_name: input.model_name,
+    is_chat: input.is_chat,
+    context: input.context
+}
+
+// Step 2: Redact phone numbers
+step2 := tyk.redact_pattern(
+    temp_input,
+    "\\(?\\d{3}\\)?[\\s.-]?\\d{3}[\\s.-]?\\d{4}",
+    "[PHONE]"
+)
+
+// Step 3: Redact SSN (Social Security Numbers)
+parsed2 := json.decode(step2)
+temp_messages2 := []
+if parsed2.messages {
+    for msg in parsed2.messages {
+        temp_messages2 = append(temp_messages2, msg)
+    }
+}
+
+temp_input2 := {
+    raw_input: step2,
+    messages: temp_messages2,
+    vendor_name: input.vendor_name,
+    model_name: input.model_name,
+    is_chat: input.is_chat,
+    context: input.context
+}
+
+final_payload := tyk.redact_pattern(
+    temp_input2,
+    "\\d{3}-\\d{2}-\\d{4}",
+    "[SSN]"
+)
+
+output := {
+    block: false,
+    payload: final_payload,
+    message: "PII redacted"
+}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 func TestAnalyzeResponse(t *testing.T) {
@@ -21,7 +22,7 @@ func TestAnalyzeResponse(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 	require.NotNil(t, proxy)
 
@@ -106,7 +107,7 @@ func TestAnalyzeStreamingResponse(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 	require.NotNil(t, proxy)
 
@@ -236,7 +237,7 @@ func TestAnalyzeCompletionResponseWithCache(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 	require.NotNil(t, proxy)
 
@@ -321,7 +322,7 @@ func TestAnalyzeCompletionResponse(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 	require.NotNil(t, proxy)
 

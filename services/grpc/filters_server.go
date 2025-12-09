@@ -112,6 +112,8 @@ func (s *FiltersServer) CreateFilter(ctx context.Context, req *pb.CreateFilterRe
 		req.GetName(),
 		req.GetDescription(),
 		[]byte(req.GetScript()),
+		req.GetResponseFilter(),
+		req.GetNamespace(),
 	)
 	if err != nil {
 		log.Error().Err(err).
@@ -148,6 +150,8 @@ func (s *FiltersServer) UpdateFilter(ctx context.Context, req *pb.UpdateFilterRe
 		req.GetName(),
 		req.GetDescription(),
 		[]byte(req.GetScript()),
+		req.GetResponseFilter(),
+		req.GetNamespace(),
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -208,16 +212,17 @@ func convertFilterToPB(filter *models.Filter) *pb.FilterInfo {
 	}
 
 	return &pb.FilterInfo{
-		Id:          uint32(filter.ID),
-		Name:        filter.Name,
-		Description: filter.Description,
-		Script:      script,
-		IsActive:    true, // Main Filter model doesn't have IsActive field - assume true since filter exists
-		OrderIndex:  0,    // Main Filter model doesn't have OrderIndex field - set to 0 as default
-		Namespace:   filter.Namespace,
-		LlmIds:      []uint32{}, // Main Filter model doesn't have direct LLM relationship - would need separate query
-		CreatedAt:   timestamppb.New(filter.CreatedAt),
-		UpdatedAt:   timestamppb.New(filter.UpdatedAt),
+		Id:             uint32(filter.ID),
+		Name:           filter.Name,
+		Description:    filter.Description,
+		Script:         script,
+		IsActive:       true, // Main Filter model doesn't have IsActive field - assume true since filter exists
+		OrderIndex:     0,    // Main Filter model doesn't have OrderIndex field - set to 0 as default
+		Namespace:      filter.Namespace,
+		LlmIds:         []uint32{}, // Main Filter model doesn't have direct LLM relationship - would need separate query
+		CreatedAt:      timestamppb.New(filter.CreatedAt),
+		UpdatedAt:      timestamppb.New(filter.UpdatedAt),
+		ResponseFilter: filter.ResponseFilter,
 	}
 }
 
@@ -245,15 +250,16 @@ func (s *FiltersServer) convertFilterToPBWithLLMs(filter *models.Filter) *pb.Fil
 	}
 
 	return &pb.FilterInfo{
-		Id:          uint32(filter.ID),
-		Name:        filter.Name,
-		Description: filter.Description,
-		Script:      script,
-		IsActive:    true, // Main Filter model doesn't have IsActive field - assume true since filter exists
-		OrderIndex:  0,    // Main Filter model doesn't have OrderIndex field - set to 0 as default
-		Namespace:   filter.Namespace,
-		LlmIds:      llmIds, // Now properly queried from database
-		CreatedAt:   timestamppb.New(filter.CreatedAt),
-		UpdatedAt:   timestamppb.New(filter.UpdatedAt),
+		Id:             uint32(filter.ID),
+		Name:           filter.Name,
+		Description:    filter.Description,
+		Script:         script,
+		IsActive:       true, // Main Filter model doesn't have IsActive field - assume true since filter exists
+		OrderIndex:     0,    // Main Filter model doesn't have OrderIndex field - set to 0 as default
+		Namespace:      filter.Namespace,
+		LlmIds:         llmIds, // Now properly queried from database
+		CreatedAt:      timestamppb.New(filter.CreatedAt),
+		UpdatedAt:      timestamppb.New(filter.UpdatedAt),
+		ResponseFilter: filter.ResponseFilter,
 	}
 }

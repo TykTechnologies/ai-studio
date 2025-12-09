@@ -160,6 +160,30 @@ const DatasourceList = () => {
     handleMenuClose();
   };
 
+  const handleCloneDatasource = async (datasource) => {
+    try {
+      // Use server-side clone endpoint that preserves API keys
+      const response = await apiClient.post(`/datasources/${datasource.id}/clone`);
+      const newDatasourceId = response.data.data.id;
+
+      setSnackbar({
+        open: true,
+        message: "Datasource cloned successfully",
+        severity: "success",
+      });
+
+      navigate(`/admin/datasources/edit/${newDatasourceId}`);
+    } catch (error) {
+      console.error("Error cloning datasource:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to clone datasource",
+        severity: "error",
+      });
+    }
+    handleMenuClose();
+  };
+
   const handleDatasourceClick = (datasource) => {
     navigate(`/admin/datasources/${datasource.id}`);
   };
@@ -352,6 +376,9 @@ const DatasourceList = () => {
           }
         >
           Edit data source
+        </MenuItem>
+        <MenuItem onClick={() => handleCloneDatasource(selectedDatasource)}>
+          Clone data source
         </MenuItem>
         <MenuItem onClick={() => handleDelete(selectedDatasource?.id)}>
           Delete data source

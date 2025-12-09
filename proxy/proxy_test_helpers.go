@@ -224,7 +224,7 @@ func waitForRecordWithCost(t *testing.T, db *gorm.DB) *models.LLMChatRecord {
 }
 
 // waitForCacheFlush waits for cache operations to complete
-func waitForCacheFlush(t *testing.T, budgetService *services.BudgetService) {
+func waitForCacheFlush(t *testing.T, budgetService services.BudgetService) {
 	// Clear cache and wait for it to propagate
 	budgetService.ClearCache()
 	time.Sleep(100 * time.Millisecond)
@@ -260,7 +260,7 @@ func waitForDatabaseSync(t *testing.T, db *gorm.DB) {
 }
 
 // waitForSpendingValue waits for spending to reach a specific value with retry logic
-func waitForSpendingValue(t *testing.T, budgetService *services.BudgetService, appID uint, start, end time.Time, expectedSpent float64) {
+func waitForSpendingValue(t *testing.T, budgetService services.BudgetService, appID uint, start, end time.Time, expectedSpent float64) {
 	deadline := time.Now().Add(10000 * time.Millisecond) // Increased to 10s for very reliable testing
 	var lastSpent float64
 
@@ -302,7 +302,7 @@ func waitForSpendingValue(t *testing.T, budgetService *services.BudgetService, a
 }
 
 // waitForSpendingUpdate waits for spending to be updated to an expected value
-func waitForSpendingUpdate(t *testing.T, budgetService *services.BudgetService, appID uint, llmID uint, start, end time.Time, expectedSpent float64) {
+func waitForSpendingUpdate(t *testing.T, budgetService services.BudgetService, appID uint, llmID uint, start, end time.Time, expectedSpent float64) {
 	deadline := time.Now().Add(3000 * time.Millisecond) // Increased from 1.5s to 3s for more reliable testing
 	for time.Now().Before(deadline) {
 		budgetService.ClearCache()

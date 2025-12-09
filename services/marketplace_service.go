@@ -56,7 +56,7 @@ func NewMarketplaceService(
 
 // Start begins background marketplace sync
 func (s *MarketplaceService) Start(ctx context.Context) {
-	log.Info().
+	log.Debug().
 		Str("default_index_url", s.defaultIndexURL).
 		Dur("sync_interval", s.syncInterval).
 		Msg("Starting marketplace service")
@@ -93,7 +93,7 @@ func (s *MarketplaceService) Stop() {
 
 // SyncAll syncs all active marketplace indexes
 func (s *MarketplaceService) SyncAll(ctx context.Context) error {
-	log.Info().Msg("Syncing all marketplace indexes")
+	log.Debug().Msg("Syncing all marketplace indexes")
 
 	indexes, err := models.GetAllActiveMarketplaceIndexes(s.db)
 	if err != nil {
@@ -104,14 +104,21 @@ func (s *MarketplaceService) SyncAll(ctx context.Context) error {
 	if len(indexes) == 0 && s.defaultIndexURL != "" {
 		log.Info().Str("url", s.defaultIndexURL).Msg("Creating default marketplace index")
 		defaultIndex := &models.MarketplaceIndex{
-			SourceURL: s.defaultIndexURL,
-			IsDefault: true,
-			IsActive:  true,
+			SourceURL:    s.defaultIndexURL,
+			IsDefault:    true,
+			IsActive:     true,
+			SyncStatus:   "pending",
+			APIVersion:   "",
+			PluginCount:  0,
+			LastSynced:   time.Time{},
+			LastModified: time.Time{},
+			ETag:         "",
 		}
 		if err := s.db.Create(defaultIndex).Error; err != nil {
 			return fmt.Errorf("failed to create default index: %w", err)
 		}
 		indexes = append(indexes, defaultIndex)
+		log.Info().Uint("id", defaultIndex.ID).Msg("Default marketplace index created")
 	}
 
 	// Sync each index
@@ -139,7 +146,7 @@ func (s *MarketplaceService) SyncAll(ctx context.Context) error {
 func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.MarketplaceIndex) error {
 	startTime := time.Now()
 
-	log.Info().
+	log.Debug().
 		Uint("index_id", idx.ID).
 		Str("source_url", idx.SourceURL).
 		Msg("Syncing marketplace index")
@@ -149,6 +156,9 @@ func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.Marketpl
 	s.db.Save(idx)
 
 	// Fetch index with conditional request
+	// For first-time sync (no ETag), always fetch and process
+	isFirstSync := idx.ETag == ""
+
 	index, metadata, modified, err := s.fetcher.FetchIndexConditional(
 		ctx,
 		idx.SourceURL,
@@ -163,8 +173,8 @@ func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.Marketpl
 		return fmt.Errorf("failed to fetch index: %w", err)
 	}
 
-	// Not modified - still update last synced time
-	if !modified {
+	// Not modified - still update last synced time (unless it's the first sync)
+	if !modified && !isFirstSync {
 		idx.SyncStatus = "success"
 		idx.LastSynced = time.Now()
 		idx.SyncError = ""
@@ -273,6 +283,42 @@ func (s *MarketplaceService) processIndex(ctx context.Context, index *marketplac
 		}
 	}
 
+	// Remove stale plugins that are no longer in the index
+	// Build a set of all plugin:version keys from the current index
+	indexPluginVersions := make(map[string]bool)
+	for pluginID, versions := range index.Plugins {
+		for _, v := range versions {
+			key := fmt.Sprintf("%s:%s", pluginID, v.Version)
+			indexPluginVersions[key] = true
+		}
+	}
+
+	// Find and delete plugins from this source that are no longer in the index
+	var stalePlugins []models.MarketplacePlugin
+	if err := s.db.Where("synced_from_url = ?", sourceURL).Find(&stalePlugins).Error; err != nil {
+		log.Error().Err(err).Msg("Failed to query existing marketplace plugins for cleanup")
+	} else {
+		for _, stale := range stalePlugins {
+			key := fmt.Sprintf("%s:%s", stale.PluginID, stale.Version)
+			if !indexPluginVersions[key] {
+				if err := s.db.Delete(&stale).Error; err != nil {
+					log.Error().
+						Err(err).
+						Str("plugin_id", stale.PluginID).
+						Str("version", stale.Version).
+						Msg("Failed to delete stale marketplace plugin")
+					result.Errors = append(result.Errors, fmt.Sprintf("Failed to delete stale %s@%s: %v", stale.PluginID, stale.Version, err))
+				} else {
+					result.PluginsRemoved++
+					log.Debug().
+						Str("plugin_id", stale.PluginID).
+						Str("version", stale.Version).
+						Msg("Removed stale marketplace plugin")
+				}
+			}
+		}
+	}
+
 	return result, nil
 }
 
@@ -303,6 +349,21 @@ func (s *MarketplaceService) indexedPluginToModel(indexed *marketplace.IndexedPl
 		RequiredUI:       indexed.RequiredUI,
 		LastSynced:       time.Now(),
 		SyncedFromURL:    sourceURL,
+		// Additional fields
+		License:           indexed.License,
+		Keywords:          indexed.Keywords,
+		Hooks:             indexed.Hooks,
+		Screenshots:       indexed.Screenshots,
+		APIVersions:       indexed.APIVersions,
+		Dependencies:      indexed.Dependencies,
+		DocumentationURL:  indexed.DocumentationURL,
+		RepositoryURL:     indexed.RepositoryURL,
+		SupportURL:        indexed.SupportURL,
+		HomepageURL:       indexed.HomepageURL,
+		IssuesURL:         indexed.IssuesURL,
+		DeprecatedMessage: indexed.DeprecatedMessage,
+		ReplacementPlugin: indexed.Replacement,
+		EnterpriseOnly:    indexed.EnterpriseOnly,
 	}
 }
 

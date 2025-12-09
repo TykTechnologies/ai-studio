@@ -42,6 +42,9 @@ type Config struct {
 
 	// Hub-and-Spoke Configuration
 	HubSpoke HubSpokeConfig
+
+	// Control Payload Configuration (for edge-to-control plugin data)
+	ControlPayload ControlPayloadConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -126,6 +129,24 @@ type HubSpokeConfig struct {
 	TokenCacheCleanupInt time.Duration `env:"EDGE_TOKEN_CACHE_CLEANUP_INTERVAL" envDefault:"1m"`
 }
 
+// ControlPayloadConfig holds configuration for edge-to-control plugin data transmission
+type ControlPayloadConfig struct {
+	// Enabled controls whether plugin control payloads are sent to control
+	Enabled bool `env:"CONTROL_PAYLOAD_ENABLED" envDefault:"true"`
+
+	// MaxPayloadSizeBytes is the maximum size of a single payload (default 1MB)
+	MaxPayloadSizeBytes int64 `env:"CONTROL_PAYLOAD_MAX_PAYLOAD_SIZE" envDefault:"1048576"`
+
+	// MaxBatchSizeBytes is the maximum total size of a batch (default 10MB)
+	MaxBatchSizeBytes int64 `env:"CONTROL_PAYLOAD_MAX_BATCH_SIZE" envDefault:"10485760"`
+
+	// BatchThreshold is the number of payloads that triggers an immediate send
+	BatchThreshold int `env:"CONTROL_PAYLOAD_BATCH_THRESHOLD" envDefault:"100"`
+
+	// RetentionHours is how long to keep sent payloads in the database
+	RetentionHours int `env:"CONTROL_PAYLOAD_RETENTION_HOURS" envDefault:"24"`
+}
+
 // AnalyticsConfig holds analytics configuration
 type AnalyticsConfig struct {
 	Enabled             bool          `env:"ANALYTICS_ENABLED" envDefault:"true"`
@@ -154,7 +175,7 @@ type SecurityConfig struct {
 // ObservabilityConfig holds logging, metrics, and monitoring configuration
 type ObservabilityConfig struct {
 	LogLevel        string `env:"LOG_LEVEL" envDefault:"info"`
-	LogFormat       string `env:"LOG_FORMAT" envDefault:"json"` // json or text
+	LogFormat       string `env:"LOG_FORMAT" envDefault:"text"` // json or text
 	EnableMetrics   bool   `env:"ENABLE_METRICS" envDefault:"true"`
 	MetricsPath     string `env:"METRICS_PATH" envDefault:"/metrics"`
 	EnableTracing   bool   `env:"ENABLE_TRACING" envDefault:"false"`
@@ -316,7 +337,7 @@ func (c *Config) LoadPluginConfig(ctx context.Context) error {
 	
 	c.Plugins.DataCollectionPlugins = plugins
 	
-	log.Info().Int("count", len(plugins)).Msg("Loaded plugin configurations")
+	log.Debug().Int("count", len(plugins)).Msg("Loaded plugin configurations")
 	return nil
 }
 

@@ -25,6 +25,22 @@ coverage.html
 node_modules
 docs/site/package-lock.json
 *.key
+
+# Enterprise submodule - ignore contents but git will track the submodule reference
+/enterprise/*
+
+# Keep submodule config and git reference visible
+!/.gitmodules
+!/enterprise
+
+# Prevent accidental enterprise commits
+*-ent-*
+*-ENT-*
+*.enterprise
+/bin
+/bin/midsommar-ent*
+/bin/mgw-ent*
+/microgateway/bin/*-ent*
 examples/file-based-demo/file-based-demo
 examples/file-based-demo/demo
 examples/file-based-demo/analytics/*.json
@@ -98,3 +114,9 @@ examples/plugins/gateway/legacy-collectors/elasticsearch_collector/elasticsearch
 examples/plugins/gateway/legacy-collectors/file_analytics_collector/file_analytics_collector
 examples/plugins/gateway/legacy-collectors/file_budget_collector/file_budget_collector
 examples/plugins/gateway/legacy-collectors/file_proxy_collector/file_proxy_collector
+examples/plugins/studio/scheduler-demo/scheduler-demo
+data/exports
+data/exports/*
+keys/*
+*.test
+*.out

@@ -1,3 +1,6 @@
+//go:build enterprise
+// +build enterprise
+
 package api
 
 import (
@@ -87,7 +90,7 @@ func (a *API) createToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusCreated, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Get a tool catalogue by ID
@@ -125,7 +128,7 @@ func (a *API) getToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Update a tool catalogue
@@ -181,7 +184,7 @@ func (a *API) updateToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Delete a tool catalogue
@@ -200,6 +203,22 @@ func (a *API) deleteToolCatalogue(c *gin.Context) {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{"Bad Request", "Invalid ID format"}}})
+		return
+	}
+
+	// Prevent deletion of Default tool catalogue
+	toolCatalogue, err := a.service.GetToolCatalogueByID(uint(id))
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			helpers.SendErrorResponse(c, helpers.NewNotFoundError("Tool catalogue not found"))
+			return
+		}
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		return
+	}
+
+	if toolCatalogue.IsDefault() {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Cannot delete the Default tool catalogue"))
 		return
 	}
 
@@ -243,7 +262,7 @@ func (a *API) listToolCatalogues(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, toToolCatalogueResponses(toolCatalogues))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponses(toolCatalogues)})
 }
 
 // @Summary Search tool catalogues
@@ -274,7 +293,7 @@ func (a *API) searchToolCatalogues(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponses(toolCatalogues))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponses(toolCatalogues)})
 }
 
 // Helper functions to convert models to responses
@@ -464,7 +483,7 @@ func (a *API) addToolToToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Remove a tool from a tool catalogue
@@ -715,7 +734,7 @@ func (a *API) addTagToToolCatalogue(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toToolCatalogueResponse(toolCatalogue))
+	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
 }
 
 // @Summary Remove a tag from a tool catalogue

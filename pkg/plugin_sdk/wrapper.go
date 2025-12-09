@@ -2,8 +2,12 @@ package plugin_sdk
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	stdlog "log"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
@@ -32,7 +36,7 @@ func (w *pluginServerWrapper) createPluginContext(baseCtx context.Context, pbCtx
 		pbCtx = &pb.PluginContext{}
 	}
 
-	return Context{
+	ctx := Context{
 		Runtime:      w.runtime,
 		RequestID:    pbCtx.RequestId,
 		AppID:        pbCtx.AppId,
@@ -45,6 +49,18 @@ func (w *pluginServerWrapper) createPluginContext(baseCtx context.Context, pbCtx
 		Services:     w.services,
 		Context:      baseCtx,
 	}
+
+	// Populate edge info from metadata if available (set by microgateway)
+	if pbCtx.Metadata != nil {
+		if edgeID, ok := pbCtx.Metadata["edge_id"]; ok {
+			ctx.EdgeID = edgeID
+		}
+		if edgeNamespace, ok := pbCtx.Metadata["edge_namespace"]; ok {
+			ctx.EdgeNamespace = edgeNamespace
+		}
+	}
+
+	return ctx
 }
 
 // Initialize is implemented in serve.go to handle service broker setup
@@ -60,6 +76,14 @@ func (w *pluginServerWrapper) Ping(ctx context.Context, req *pb.PingRequest) (*p
 // Shutdown implements pb.PluginServiceServer
 func (w *pluginServerWrapper) Shutdown(ctx context.Context, req *pb.ShutdownRequest) (*pb.ShutdownResponse, error) {
 	pluginCtx := w.createPluginContext(ctx, nil)
+
+	// Close any active session
+	CloseSession("shutdown")
+
+	// Cleanup service broker resources (event subscriptions, etc.)
+	if broker, ok := w.services.(*defaultServiceBroker); ok {
+		broker.Cleanup()
+	}
 
 	err := w.plugin.Shutdown(pluginCtx)
 	if err != nil {
@@ -188,6 +212,20 @@ func (w *pluginServerWrapper) OnBeforeWrite(ctx context.Context, req *pb.Respons
 
 	pluginCtx := w.createPluginContext(ctx, req.Context)
 	return handler.OnBeforeWrite(pluginCtx, req)
+}
+
+// OnStreamComplete implements pb.PluginServiceServer
+// This is called after a streaming response has finished, providing the accumulated response.
+func (w *pluginServerWrapper) OnStreamComplete(ctx context.Context, req *pb.StreamCompleteRequest) (*pb.StreamCompleteResponse, error) {
+	// Check if plugin implements StreamCompleteHandler
+	handler, ok := w.plugin.(StreamCompleteHandler)
+	if !ok {
+		// Plugin doesn't handle stream complete, return unhandled
+		return &pb.StreamCompleteResponse{Handled: false}, nil
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	return handler.OnStreamComplete(pluginCtx, req)
 }
 
 // HandleProxyLog implements pb.PluginServiceServer
@@ -352,8 +390,14 @@ func (w *pluginServerWrapper) Call(ctx context.Context, req *pb.CallRequest) (*p
 		}, nil
 	}
 
-	// Note: The server already injects the broker ID into the payload JSON
-	// We just pass it through to the plugin's RPC handler
+	// Set service broker ID if provided (for service API access)
+	// In AI Studio, each RPC call may get a per-request broker ID that should
+	// be used for service API calls during this RPC.
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		stdlog.Printf("[Call] Setting ai_studio_sdk broker ID to %d for RPC method %s", req.ServiceBrokerId, req.Method)
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
 	payload := []byte(req.Payload)
 
 	// Call the plugin's RPC handler
@@ -444,4 +488,226 @@ func (w *pluginServerWrapper) HandleObjectHook(ctx context.Context, req *pb.Obje
 
 	pluginCtx := w.createPluginContext(ctx, req.Context)
 	return handler.HandleObjectHook(pluginCtx, req)
+}
+
+// ExecuteScheduledTask implements pb.PluginServiceServer
+func (w *pluginServerWrapper) ExecuteScheduledTask(ctx context.Context, req *pb.ExecuteScheduledTaskRequest) (*pb.ExecuteScheduledTaskResponse, error) {
+	// Check if plugin implements SchedulerPlugin
+	scheduler, ok := w.plugin.(SchedulerPlugin)
+	if !ok {
+		return &pb.ExecuteScheduledTaskResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not implement SchedulerPlugin",
+		}, fmt.Errorf("plugin does not implement SchedulerPlugin")
+	}
+
+	// Set service broker ID if provided (for service API access)
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	// Build plugin context
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+
+	// Convert protobuf schedule to SDK schedule
+	var configMap map[string]interface{}
+	if req.Schedule.ConfigJson != "" {
+		// Parse JSON config
+		if err := json.Unmarshal([]byte(req.Schedule.ConfigJson), &configMap); err != nil {
+			return &pb.ExecuteScheduledTaskResponse{
+				Success:      false,
+				ErrorMessage: fmt.Sprintf("failed to parse schedule config: %v", err),
+			}, fmt.Errorf("failed to parse schedule config: %w", err)
+		}
+	}
+
+	schedule := &Schedule{
+		ID:             req.Schedule.Id,
+		Name:           req.Schedule.Name,
+		Cron:           req.Schedule.Cron,
+		Timezone:       req.Schedule.Timezone,
+		Enabled:        req.Schedule.Enabled,
+		TimeoutSeconds: int(req.Schedule.TimeoutSeconds),
+		Config:         configMap,
+	}
+
+	// Execute scheduled task
+	err := scheduler.ExecuteScheduledTask(pluginCtx, schedule)
+
+	if err != nil {
+		return &pb.ExecuteScheduledTaskResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil // Don't return gRPC error - just mark as failed
+	}
+
+	return &pb.ExecuteScheduledTaskResponse{
+		Success: true,
+	}, nil
+}
+
+// AcceptEdgePayload implements pb.PluginServiceServer
+// This is called when a payload arrives from an edge (microgateway) instance
+func (w *pluginServerWrapper) AcceptEdgePayload(ctx context.Context, req *pb.EdgePayloadRequest) (*pb.EdgePayloadResponse, error) {
+	// Check if plugin implements EdgePayloadReceiver
+	receiver, ok := w.plugin.(EdgePayloadReceiver)
+	if !ok {
+		// Plugin doesn't handle edge payloads
+		return &pb.EdgePayloadResponse{
+			Success: false,
+			Handled: false,
+			ErrorMessage: "plugin does not implement EdgePayloadReceiver",
+		}, nil
+	}
+
+	// Set service broker ID if provided (for service API access)
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	// Build plugin context
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+
+	// Convert proto to SDK EdgePayload
+	edgePayload := &EdgePayload{
+		Payload:           req.Payload,
+		EdgeID:            req.EdgeId,
+		EdgeNamespace:     req.EdgeNamespace,
+		CorrelationID:     req.CorrelationId,
+		Metadata:          req.Metadata,
+		EdgeTimestamp:     req.EdgeTimestamp,
+		ReceivedTimestamp: req.ReceivedTimestamp,
+	}
+
+	// Call the plugin's AcceptEdgePayload handler
+	handled, err := receiver.AcceptEdgePayload(pluginCtx, edgePayload)
+	if err != nil {
+		return &pb.EdgePayloadResponse{
+			Success:      false,
+			Handled:      handled,
+			ErrorMessage: err.Error(),
+		}, nil // Don't return gRPC error - mark as failed
+	}
+
+	return &pb.EdgePayloadResponse{
+		Success: true,
+		Handled: handled,
+	}, nil
+}
+
+// OpenSession implements pb.PluginServiceServer
+// This is the key method for session-based broker management.
+// It blocks until timeout or CloseSession is called, keeping the broker alive.
+//
+// The SDK automatically handles all broker setup - plugins don't need to do anything.
+// Service APIs (ai_studio_sdk, microgateway SDK) will "just work" after this is called.
+func (w *pluginServerWrapper) OpenSession(ctx context.Context, req *pb.OpenSessionRequest) (*pb.OpenSessionResponse, error) {
+	// Generate a session ID
+	sessionID := fmt.Sprintf("session-%d-%d", req.PluginId, req.ServiceBrokerId)
+
+	stdlog.Printf("[OpenSession] Starting: sessionID=%s, pluginID=%d, brokerID=%d", sessionID, req.PluginId, req.ServiceBrokerId)
+
+	// Get the stored broker and verify it's valid
+	broker := GetStoredBroker()
+
+	// Initialize session state
+	firstSession, err := InitSession(sessionID, req.ServiceBrokerId, broker)
+	if err != nil {
+		stdlog.Printf("[OpenSession] InitSession failed: %v", err)
+		return &pb.OpenSessionResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	// ========================================================================
+	// CRITICAL: Set broker IDs for ALL SDKs so service APIs work automatically
+	// This is the key to good DX - plugins don't need to know about broker IDs
+	// ========================================================================
+
+	// Set event service broker ID
+	SetEventServiceBrokerID(req.ServiceBrokerId)
+
+	// Set AI Studio SDK broker ID (for studio runtime)
+	ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	ai_studio_sdk.SetPluginID(req.PluginId)
+
+	// Set Microgateway SDK broker ID (for gateway runtime)
+	// This is done via the build-tag-controlled functions
+	setBrokerIDForMicrogatewaySDK(req.ServiceBrokerId)
+	setPluginIDForMicrogatewaySDK(req.PluginId)
+
+	stdlog.Printf("[OpenSession] SDK broker IDs configured: brokerID=%d, pluginID=%d", req.ServiceBrokerId, req.PluginId)
+
+	// If this is the first session, notify plugin if it implements SessionAware (optional)
+	// IMPORTANT: Run this in a goroutine because:
+	// 1. OnSessionReady may call broker.Dial() for event subscriptions
+	// 2. broker.Dial() blocks until the broker server accepts the connection
+	// 3. The broker server can't accept new connections while we're blocking in this RPC handler
+	// By running async, we allow this RPC to proceed to WaitForClose, which lets the broker serve.
+	stdlog.Printf("[OpenSession] firstSession=%v, checking if plugin implements SessionAware", firstSession)
+	stdlog.Printf("[OpenSession] Plugin type: %T", w.plugin)
+	if firstSession {
+		if aware, ok := w.plugin.(SessionAware); ok {
+			stdlog.Printf("[OpenSession] Plugin implements SessionAware (type assertion succeeded), will call OnSessionReady in 500ms")
+			pluginCtx := w.createPluginContext(ctx, nil)
+			go func() {
+				// Delay to ensure:
+				// 1. This RPC handler returns and WaitForClose can proceed
+				// 2. The host's AcceptAndServe has time to start listening
+				// The host starts AcceptAndServe before calling OpenSession, but the
+				// listener setup is async. 500ms should be sufficient.
+				time.Sleep(500 * time.Millisecond)
+				stdlog.Printf("[OpenSession] Calling OnSessionReady now")
+				aware.OnSessionReady(pluginCtx)
+				stdlog.Printf("[OpenSession] OnSessionReady returned")
+			}()
+		} else {
+			stdlog.Printf("[OpenSession] Plugin does NOT implement SessionAware interface")
+		}
+	}
+
+	// Block until timeout or CloseSession
+	// This is where the broker becomes available for dial operations
+	reason := WaitForClose(req.TimeoutMs)
+
+	// Map reason to proto enum
+	closeReason := pb.OpenSessionResponse_UNKNOWN
+	switch reason {
+	case "timeout":
+		closeReason = pb.OpenSessionResponse_TIMEOUT
+	case "explicit_close", "shutdown", "unload":
+		closeReason = pb.OpenSessionResponse_EXPLICIT_CLOSE
+	default:
+		if reason != "" {
+			closeReason = pb.OpenSessionResponse_PLUGIN_ERROR
+		}
+	}
+
+	return &pb.OpenSessionResponse{
+		Success:     true,
+		SessionId:   sessionID,
+		CloseReason: closeReason,
+	}, nil
+}
+
+// CloseSession implements pb.PluginServiceServer
+// This explicitly closes an active session before timeout.
+func (w *pluginServerWrapper) CloseSession(ctx context.Context, req *pb.CloseSessionRequest) (*pb.CloseSessionResponse, error) {
+	// Notify plugin if it implements SessionAware
+	if aware, ok := w.plugin.(SessionAware); ok {
+		pluginCtx := w.createPluginContext(ctx, nil)
+		aware.OnSessionClosing(pluginCtx)
+	}
+
+	// Close the session
+	reason := req.Reason
+	if reason == "" {
+		reason = "explicit_close"
+	}
+	CloseSession(reason)
+
+	return &pb.CloseSessionResponse{
+		Success: true,
+	}, nil
 }

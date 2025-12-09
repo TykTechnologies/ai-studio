@@ -56,6 +56,80 @@ When RAG is enabled for a Chat Experience:
 6.  The LLM generates a response based on both the query and the provided context.
 7.  The response is streamed back to the user.
 
+## Advanced Data Source Management (Plugin Service API)
+
+Plugins can perform advanced data source operations through the Service API for managing vector store data programmatically:
+
+### Delete Documents by Metadata
+
+Remove specific chunks from vector stores using metadata filters:
+
+```go
+// Delete all chunks for a specific file
+metadata := map[string]string{"file_path": "src/main.go"}
+count, err := ai_studio_sdk.DeleteDocumentsByMetadata(ctx, datasourceID, metadata, "AND", false)
+```
+
+**Features:**
+- AND/OR filter modes for multiple conditions
+- Dry-run mode to preview deletions without actually removing data
+- Works with Chroma, PGVector, Pinecone, Weaviate
+
+**Use cases:**
+- Clean up orphaned chunks when files are deleted
+- Remove outdated documentation chunks
+- Selective data cleanup based on metadata tags
+
+### Query by Metadata Only
+
+Find documents using metadata without vector similarity search:
+
+```go
+// Find all chunks from a specific source
+metadata := map[string]string{"source": "github", "repo": "myrepo"}
+results, totalCount, err := ai_studio_sdk.QueryByMetadataOnly(ctx, datasourceID, metadata, "AND", 10, 0)
+```
+
+**Features:**
+- Pagination with limit and offset parameters
+- AND/OR filter modes for complex queries
+- Returns total count for pagination UI
+
+**Use cases:**
+- List all chunks from a specific source
+- Find documents by file path or document ID
+- Audit what data is stored in the vector store
+
+### Namespace Management
+
+List and manage vector store namespaces/collections:
+
+```go
+// List all namespaces with document counts
+namespaces, err := ai_studio_sdk.ListNamespaces(ctx, datasourceID)
+for _, ns := range namespaces {
+    fmt.Printf("Namespace: %s, Documents: %d\n", ns.Name, ns.DocumentCount)
+}
+
+// Delete entire namespace (requires confirmation for safety)
+err := ai_studio_sdk.DeleteNamespace(ctx, datasourceID, "old-namespace", true)
+```
+
+**Features:**
+- List all namespaces/collections in a vector store
+- Get document counts per namespace
+- Bulk deletion with safety confirmation requirement
+
+**Use cases:**
+- Manage multi-tenant vector stores
+- Clean up entire repositories when projects are deleted
+- Monitor storage usage across namespaces
+
+**Vector Store Support:**
+- ✅ Full support: Chroma, PGVector, Pinecone, Weaviate
+- ⚠️ Limited: Redis (basic operations only)
+- ⚠️ Partial: Qdrant (namespace management only)
+
 ## Creating & Managing Data Sources (Admin)
 
 Administrators configure Data Sources via the UI or API:

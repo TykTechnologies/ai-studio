@@ -10,7 +10,7 @@ The Unified SDK (`pkg/plugin_sdk`) is the modern, recommended approach for all p
 - **Automatic Runtime Detection**: SDK detects the execution environment
 - **Capability-Based Design**: Implement only what you need
 - **Type-Safe**: Clean Go types, no manual proto handling
-- **Service Access**: Built-in KV storage, logging, and management APIs
+- **Service Access**: Built-in KV storage, logging, events, and management APIs
 - **Context-Rich**: Access to app, user, LLM metadata in every call
 
 ### Installation
@@ -51,7 +51,7 @@ func main() {
 
 ## Plugin Capabilities
 
-Plugins implement one or more capability interfaces. The SDK supports 10 distinct capabilities:
+Plugins implement one or more capability interfaces. The SDK supports 12 distinct capabilities:
 
 | Capability | Interface | Where It Works | Purpose |
 |------------|-----------|----------------|---------|
@@ -65,6 +65,8 @@ Plugins implement one or more capability interfaces. The SDK supports 10 distinc
 | **Manifest Provider** | `ManifestProvider` | Gateway only | Provide plugin manifest (gateway-only plugins) |
 | **Agent** | `AgentPlugin` | Studio only | Conversational AI agent with streaming |
 | **Object Hooks** | `ObjectHookHandler` | Studio only | Intercept CRUD operations on objects |
+| **Scheduler** | `SchedulerPlugin` | Studio only | Execute tasks on cron-based schedules |
+| **Edge Payload** | `EdgePayloadReceiver` | Studio only | Receive data from edge (gateway) plugins |
 
 ### Multi-Capability Plugins
 
@@ -325,6 +327,81 @@ type ManifestProvider interface {
 }
 ```
 
+### 11. SchedulerPlugin
+
+Execute tasks on cron-based schedules.
+
+```go
+type SchedulerPlugin interface {
+    ExecuteScheduledTask(ctx Context, schedule *Schedule) error
+}
+
+type Schedule struct {
+    ID             string                 // Unique identifier from manifest
+    Name           string                 // Human-readable name
+    Cron           string                 // Cron expression (e.g., "0 * * * *")
+    Timezone       string                 // Timezone for cron evaluation
+    Enabled        bool                   // Whether schedule is currently enabled
+    TimeoutSeconds int                    // Maximum execution time
+    Config         map[string]interface{} // Schedule-specific configuration
+}
+```
+
+**Example:**
+```go
+func (p *MyPlugin) ExecuteScheduledTask(ctx plugin_sdk.Context, schedule *plugin_sdk.Schedule) error {
+    ctx.Services.Logger().Info("Running scheduled task",
+        "schedule_id", schedule.ID,
+        "schedule_name", schedule.Name,
+    )
+
+    // Perform scheduled work
+    return p.runCleanup(ctx)
+}
+```
+
+### 12. EdgePayloadReceiver
+
+Receive data from edge (Microgateway) plugins. This enables the hub-and-spoke communication pattern where edge plugins can send data back to the control plane. See [Edge-to-Control Communication](plugins-edge-to-control.md) for complete details.
+
+```go
+type EdgePayloadReceiver interface {
+    AcceptEdgePayload(ctx Context, payload *EdgePayload) (handled bool, err error)
+}
+
+type EdgePayload struct {
+    Payload           []byte            // Raw payload data from edge plugin
+    EdgeID            string            // Edge instance identifier
+    EdgeNamespace     string            // Namespace of the edge instance
+    CorrelationID     string            // Correlation ID for tracking
+    Metadata          map[string]string // Key-value metadata
+    EdgeTimestamp     int64             // Unix timestamp when generated at edge
+    ReceivedTimestamp int64             // Unix timestamp when received at control
+}
+```
+
+**Example:**
+```go
+func (p *MyPlugin) AcceptEdgePayload(ctx plugin_sdk.Context, payload *plugin_sdk.EdgePayload) (bool, error) {
+    // Check if this payload is for us
+    if payload.Metadata["type"] != "my-plugin-data" {
+        return false, nil // Not our payload
+    }
+
+    ctx.Services.Logger().Info("Received edge payload",
+        "edge_id", payload.EdgeID,
+        "correlation_id", payload.CorrelationID,
+    )
+
+    // Process the payload
+    if err := p.processEdgeData(payload.Payload); err != nil {
+        return true, err
+    }
+
+    return true, nil
+}
+```
+
 ## Context and Services
 
 Every handler receives a `Context` that provides access to runtime information and services.
@@ -392,6 +469,30 @@ ctx.Services.Logger().Warn("Warning", "error", err)
 ctx.Services.Logger().Error("Error", "details", details)
 ctx.Services.Logger().Debug("Debug info", "data", data)
 ```
+
+**Events:**
+```go
+// Publish an event (flows up from edge to control)
+err := ctx.Services.Events().Publish(ctx, "cache.invalidate", payload, plugin_sdk.DirUp)
+
+// Subscribe to events on a specific topic
+subscriptionID, err := ctx.Services.Events().Subscribe("cache.invalidate", func(ev plugin_sdk.Event) {
+    // Handle event
+})
+
+// Subscribe to all events
+subscriptionID, err := ctx.Services.Events().SubscribeAll(func(ev plugin_sdk.Event) {
+    // Handle any event
+})
+
+// Unsubscribe when done
+err := ctx.Services.Events().Unsubscribe(subscriptionID)
+```
+
+**Note on Events:**
+- Events enable real-time communication between plugins and across the hub-spoke architecture
+- Direction controls routing: `DirLocal` (stays local), `DirUp` (edge→control), `DirDown` (control→edge)
+- See [Service API Reference](plugins-service-api.md#event-service) for complete documentation
 
 #### Runtime-Specific Services
 
@@ -644,6 +745,8 @@ See working examples in [`examples/plugins/`](../../../examples/plugins/) for in
 - Use context timeouts for external calls
 - Cache frequently accessed data in KV storage
 - Handle service errors gracefully
+- Use Events for cross-plugin and edge-to-control communication
+- Unsubscribe from events in `Shutdown()` to prevent leaks
 
 ### Performance
 - Minimize Service API calls in request path
@@ -663,6 +766,179 @@ See working examples in [`examples/plugins/`](../../../examples/plugins/) for in
 - Use secure defaults
 - Follow least privilege principle
 
+## Session-Based Broker Pattern
+
+Plugins running in AI Studio use a **session-based broker pattern** for Service API access. Understanding this pattern is critical for plugins that need to call host APIs (like `ai_studio_sdk.CreateLLM()`, `ai_studio_sdk.ListApps()`, etc.).
+
+### How It Works
+
+1. **Plugin loads**: The host creates a long-lived gRPC broker connection
+2. **Session opens**: The host calls `OpenSession` on the plugin, providing the broker ID
+3. **OnSessionReady callback**: For plugins implementing `SessionAware`, this signals the broker is ready
+4. **Service API available**: The plugin can now dial the broker and call host APIs
+
+### The SessionAware Interface
+
+Plugins that need early access to Service APIs should implement `SessionAware`:
+
+```go
+type SessionAware interface {
+    OnSessionReady(ctx Context)    // Called when broker connection is established
+    OnSessionClosing(ctx Context)  // Called before session closes
+}
+```
+
+### Connection Warmup Pattern (Critical!)
+
+**Important**: The go-plugin broker only accepts **ONE connection per broker ID**. If your plugin uses both the Event Service and the Management Service API, whichever dials first will succeed, and the connection must be shared.
+
+The SDK handles this automatically, but you should **warm up the connection early** in `OnSessionReady` to ensure it's established before any RPC calls come in:
+
+```go
+type MyPlugin struct {
+    plugin_sdk.BasePlugin
+    services plugin_sdk.ServiceBroker
+}
+
+func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    p.services = ctx.Services
+    return nil
+}
+
+// OnSessionReady implements plugin_sdk.SessionAware
+// This is called when the session-based broker connection is established.
+func (p *MyPlugin) OnSessionReady(ctx plugin_sdk.Context) {
+    log.Printf("Session ready - warming up service API connection...")
+
+    // Eagerly establish the broker connection by making a simple API call.
+    // This "warms up" the connection so subsequent RPC calls don't need to dial.
+    if ai_studio_sdk.IsInitialized() {
+        // Make a lightweight API call to establish the connection
+        _, err := ai_studio_sdk.GetPluginsCount(context.Background())
+        if err != nil {
+            log.Printf("Service API warmup failed: %v", err)
+        } else {
+            log.Printf("Service API connection established successfully")
+        }
+    }
+}
+
+// OnSessionClosing implements plugin_sdk.SessionAware
+func (p *MyPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+    log.Printf("Session closing - cleaning up resources")
+}
+```
+
+### Why Warmup Is Important
+
+Without warmup, you may encounter "timeout waiting for connection info" errors when your plugin tries to use the Service API during an RPC call. This happens because:
+
+1. The broker connection is time-sensitive
+2. Dialing late (during RPC) may fail if the broker has timed out
+3. Event subscriptions and Service API calls share the same connection
+
+### Complete Example: Plugin with Service API and Events
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+
+    "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type MyServicePlugin struct {
+    plugin_sdk.BasePlugin
+    services      plugin_sdk.ServiceBroker
+    eventSubID    string
+}
+
+func NewMyServicePlugin() *MyServicePlugin {
+    return &MyServicePlugin{
+        BasePlugin: plugin_sdk.NewBasePlugin("my-service-plugin", "1.0.0", "Plugin using Service API"),
+    }
+}
+
+func (p *MyServicePlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    p.services = ctx.Services
+    log.Printf("Initialized in %s runtime", ctx.Runtime)
+    return nil
+}
+
+// OnSessionReady - warm up connections and set up subscriptions
+func (p *MyServicePlugin) OnSessionReady(ctx plugin_sdk.Context) {
+    log.Printf("Session ready")
+
+    // 1. Warm up Service API connection
+    if ai_studio_sdk.IsInitialized() {
+        _, err := ai_studio_sdk.GetPluginsCount(context.Background())
+        if err != nil {
+            log.Printf("Service API warmup failed: %v", err)
+        } else {
+            log.Printf("Service API connection ready")
+        }
+    }
+
+    // 2. Set up event subscriptions (uses same connection)
+    if p.services != nil {
+        events := p.services.Events()
+        if events != nil {
+            subID, err := events.Subscribe("config.updated", p.handleConfigUpdate)
+            if err != nil {
+                log.Printf("Failed to subscribe to events: %v", err)
+            } else {
+                p.eventSubID = subID
+                log.Printf("Subscribed to config.updated events")
+            }
+        }
+    }
+}
+
+func (p *MyServicePlugin) handleConfigUpdate(ev plugin_sdk.Event) {
+    log.Printf("Received config update: %s", ev.Topic)
+    // Handle the event...
+}
+
+func (p *MyServicePlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+    // Clean up event subscription
+    if p.eventSubID != "" && p.services != nil {
+        p.services.Events().Unsubscribe(p.eventSubID)
+    }
+}
+
+// HandleRPC - called from UI, Service API is already warmed up
+func (p *MyServicePlugin) HandleRPC(method string, payload []byte) ([]byte, error) {
+    // Service API calls will work because connection was warmed up in OnSessionReady
+    llms, err := ai_studio_sdk.ListLLMs(context.Background(), 1, 10)
+    if err != nil {
+        return nil, err
+    }
+    // Process llms...
+    return []byte(`{"success": true}`), nil
+}
+
+func main() {
+    plugin_sdk.Serve(NewMyServicePlugin())
+}
+```
+
+### Troubleshooting Connection Issues
+
+**Error: "timeout waiting for connection info"**
+- Plugin is trying to dial the broker too late
+- Solution: Implement `SessionAware` and warm up the connection in `OnSessionReady`
+
+**Error: "service broker ID not set"**
+- The broker ID wasn't extracted from config
+- Solution: The SDK handles this automatically via `OpenSession`, but verify your plugin isn't overriding the broker setup
+
+**Error: "SDK not initialized"**
+- `ai_studio_sdk.Initialize()` wasn't called or failed
+- Solution: Check logs for initialization errors during plugin startup
+
 ## Migration from Old SDKs
 
 If you have existing plugins using the old Microgateway SDK (`microgateway/plugins/sdk`) or AI Studio SDK (`pkg/ai_studio_sdk`), see the [Migration Guide](plugins-migration-guide.md) for step-by-step instructions.
@@ -673,6 +949,7 @@ If you have existing plugins using the old Microgateway SDK (`microgateway/plugi
 - [Microgateway Plugins Guide](plugins-microgateway.md) - Gateway-specific patterns
 - [AI Studio UI Plugins Guide](plugins-studio-ui.md) - Build plugin UIs
 - [AI Studio Agent Plugins Guide](plugins-studio-agent.md) - Build conversational agents
+- [Edge-to-Control Communication](plugins-edge-to-control.md) - Send data from edge to control plane
 - [Service API Reference](plugins-service-api.md) - Complete API documentation
 - [Plugin Examples](plugins-examples.md) - Browse working examples
 - [Best Practices Guide](plugins-best-practices.md) - Advanced patterns

@@ -65,7 +65,7 @@ func CreatePlugin(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 		}
 
 		// Perform API-level security validation on the command field
-		if err := validatePluginCommand(req.Command); err != nil {
+		if err := validatePluginCommand(req.Command, serviceContainer.PluginSecurityService); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Security validation failed",
 				"message": err.Error(),
@@ -154,7 +154,7 @@ func UpdatePlugin(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 
 		// Perform API-level security validation on the command field if it's being updated
 		if req.Command != nil {
-			if err := validatePluginCommand(*req.Command); err != nil {
+			if err := validatePluginCommand(*req.Command, serviceContainer.PluginSecurityService); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error":   "Security validation failed",
 					"message": err.Error(),

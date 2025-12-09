@@ -9,15 +9,17 @@ import {
 	IconButton,
 	ListItemSecondaryAction,
 	Box,
+	Button,
 } from '@mui/material';
 import NotificationMarkdown from './NotificationMarkdown';
 import DoneIcon from '@mui/icons-material/Done';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
 import axios from 'axios';
 import { useNotifications } from '../../context/NotificationContext';
 
 const NotificationList = () => {
 	const [notifications, setNotifications] = useState([]);
-	const { markAsRead } = useNotifications();
+	const { markAsRead, markAllAsRead } = useNotifications();
 
 	const fetchNotifications = async () => {
 		try {
@@ -50,12 +52,37 @@ const NotificationList = () => {
 		}
 	};
 
+	const handleMarkAllAsRead = async () => {
+		const success = await markAllAsRead();
+		if (success) {
+			// Update the local state to mark all notifications as read
+			setNotifications(notifications.map(notification => ({
+				...notification,
+				Read: true
+			})));
+		}
+	};
+
+	const hasUnread = notifications.some(notification => !notification.Read);
+
 	return (
 		<Container maxWidth="md" sx={{ mt: 4 }}>
 			<Paper>
-				<Typography variant="headingXLarge" sx={{ p: 2 }}>
-					Notifications
-				</Typography>
+				<Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+					<Typography variant="headingXLarge">
+						Notifications
+					</Typography>
+					{hasUnread && (
+						<Button
+							variant="outlined"
+							size="small"
+							startIcon={<DoneAllIcon />}
+							onClick={handleMarkAllAsRead}
+						>
+							Mark All as Read
+						</Button>
+					)}
+				</Box>
 				<List>
 					{notifications.map((notification) => (
 						<ListItem

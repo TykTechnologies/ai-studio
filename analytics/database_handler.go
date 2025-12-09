@@ -133,7 +133,7 @@ func (h *DatabaseHandler) startWorker() {
 					Time("timestamp", record.TimeStamp).
 					Msg("Error creating chat record")
 			} else {
-				logger.Log.Info().
+				logger.Log.Debug().
 					Str("model", record.Name).
 					Uint("app_id", record.AppID).
 					Uint("llm_id", record.LLMID).
@@ -177,7 +177,7 @@ func (h *DatabaseHandler) startWorker() {
 					Int64("processing_time_ms", processingTime.Milliseconds()).
 					Msg("Error creating chat record batch")
 			} else {
-				logger.Log.Warn().
+				logger.Log.Debug().
 					Int("count", len(records)).
 					Int64("processing_time_ms", processingTime.Milliseconds()).
 					Float64("records_per_second", float64(len(records))/processingTime.Seconds()).
@@ -199,7 +199,7 @@ func (h *DatabaseHandler) startWorker() {
 					Int64("processing_time_ms", processingTime.Milliseconds()).
 					Msg("Error creating proxy log batch")
 			} else {
-				logger.Log.Warn().
+				logger.Log.Debug().
 					Int("count", len(logs)).
 					Int64("processing_time_ms", processingTime.Milliseconds()).
 					Float64("records_per_second", float64(len(logs))/processingTime.Seconds()).

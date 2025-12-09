@@ -43,7 +43,7 @@ const ToolCatalogueDetails = () => {
   const fetchToolCatalogueDetails = async () => {
     try {
       const response = await apiClient.get(`/tool-catalogues/${id}`);
-      setCatalogue(response.data);
+      setCatalogue(response.data?.data);
       setLoading(false);
     } catch (error) {
       console.error("Error fetching tool catalogue details", error);

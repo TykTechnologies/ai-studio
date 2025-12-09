@@ -3,29 +3,47 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
+	"github.com/TykTechnologies/midsommar/v2/services/group_access"
+	"github.com/TykTechnologies/midsommar/v2/services/licensing"
+	"github.com/TykTechnologies/midsommar/v2/services/log_export"
+	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"gorm.io/gorm"
 )
 
 type Service struct {
-	DB                     *gorm.DB
-	Budget                 *BudgetService
-	NotificationService    *NotificationService
+	DB                  *gorm.DB
+	Budget              budget.Service
+	GroupAccessService  group_access.Service
+	NotificationService *NotificationService
+	LogExportService    log_export.Service
 	// Hub-and-Spoke Services
-	EdgeService            *EdgeService
-	NamespaceService       *NamespaceService
-	PluginService          *PluginService
-	PluginManifestService  *PluginManifestService
-	AIStudioPluginManager  *AIStudioPluginManager
-	PluginMetadataLoader   *PluginMetadataLoader
-	MarketplaceService     *MarketplaceService
+	EdgeService           *EdgeService
+	NamespaceService      *NamespaceService
+	EdgeManagementService edge_management.Service
+	PluginService         *PluginService
+	PluginManifestService *PluginManifestService
+	AIStudioPluginManager *AIStudioPluginManager
+	PluginMetadataLoader  *PluginMetadataLoader
+	MarketplaceService    *MarketplaceService
 	// Object Hooks
-	HookRegistry           *HookRegistry
-	HookManager            *HookManager
+	HookRegistry *HookRegistry
+	HookManager  *HookManager
+	// System Events
+	EventBus     eventbridge.Bus
+	SystemEvents *SystemEventEmitter
+	// Licensing (set after creation via SetLicensingService)
+	LicensingService licensing.Service
+	// Model Router (Enterprise)
+	ModelRouterService model_router.Service
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -35,11 +53,22 @@ func NewService(db *gorm.DB) *Service {
 func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	secrets.SetDBRef(db)
 	notificationService := NewNotificationService(db, "", "", 0, "", "", nil) // SMTP will be configured when needed
-	budgetService := NewBudgetService(db, notificationService)
+	budgetSvc := budget.NewService(db, notificationService)
+	groupAccessSvc := group_access.NewService(db)
+	modelRouterSvc := model_router.NewService(db)
+
+	// Initialize log export service with storage path from environment
+	exportStoragePath := os.Getenv("EXPORT_STORAGE_PATH")
+	if exportStoragePath == "" {
+		exportStoragePath = "./data/exports"
+	}
+	siteURL := os.Getenv("SITE_URL")
+	logExportSvc := log_export.NewService(db, notificationService, exportStoragePath, siteURL)
 
 	// Initialize hub-and-spoke services
 	edgeService := NewEdgeService(db)
 	namespaceService := NewNamespaceService(db, edgeService)
+	edgeManagementService := edge_management.NewService(db)
 
 	// Initialize plugin services with OCI support
 	var pluginService *PluginService
@@ -78,9 +107,9 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	// Wire up plugin manager to plugin service for config schema functionality
 	if pluginService != nil && aiStudioPluginManager != nil {
 		pluginService.SetPluginManager(aiStudioPluginManager)
-		logger.Info("Wired AI Studio plugin manager to plugin service for config schema functionality")
+		logger.Debug("Wired AI Studio plugin manager to plugin service for config schema functionality")
 	} else {
-		logger.Warnf("Failed to wire plugin manager to plugin service (plugin_service_nil: %v, ai_studio_plugin_manager_nil: %v)",
+		logger.Debugf("Failed to wire plugin manager to plugin service (plugin_service_nil: %v, ai_studio_plugin_manager_nil: %v)",
 			pluginService == nil, aiStudioPluginManager == nil)
 	}
 
@@ -88,9 +117,9 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	var pluginMetadataLoader *PluginMetadataLoader
 	if aiStudioPluginManager != nil {
 		pluginMetadataLoader = NewPluginMetadataLoader(db, aiStudioPluginManager)
-		logger.Info("Initialized plugin metadata loader with enhanced config provider support")
+		logger.Debug("Initialized plugin metadata loader with enhanced config provider support")
 	} else {
-		logger.Warn("AI Studio plugin manager not available - plugin metadata loader will not be available")
+		logger.Debug("AI Studio plugin manager not available - plugin metadata loader will not be available")
 	}
 
 	// Initialize marketplace service (will be started separately in main.go)
@@ -99,7 +128,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		// Marketplace requires OCI support
 		// Configuration will be passed from main.go when starting the service
 		marketplaceService = nil // Will be initialized in main.go with proper config
-		logger.Info("Marketplace service will be initialized with configuration from main.go")
+		logger.Debug("Marketplace service will be initialized with configuration from main.go")
 	}
 
 	// Initialize object hooks system
@@ -107,18 +136,21 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	var hookManager *HookManager
 	if aiStudioPluginManager != nil {
 		hookManager = NewHookManager(hookRegistry, aiStudioPluginManager)
-		logger.Info("Initialized object hooks system")
+		logger.Debug("Initialized object hooks system")
 	} else {
-		logger.Warn("AI Studio plugin manager not available - object hooks will not be available")
+		logger.Debug("AI Studio plugin manager not available - object hooks will not be available")
 	}
 
 	// Create service instance
 	service := &Service{
 		DB:                    db,
 		NotificationService:   notificationService,
-		Budget:                budgetService,
+		Budget:                budgetSvc,
+		GroupAccessService:    groupAccessSvc,
+		LogExportService:      logExportSvc,
 		EdgeService:           edgeService,
 		NamespaceService:      namespaceService,
+		EdgeManagementService: edgeManagementService,
 		PluginService:         pluginService,
 		PluginManifestService: pluginManifestService,
 		AIStudioPluginManager: aiStudioPluginManager,
@@ -126,6 +158,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		MarketplaceService:    marketplaceService,
 		HookRegistry:          hookRegistry,
 		HookManager:           hookManager,
+		ModelRouterService:    modelRouterSvc,
 	}
 
 	// Wire service reference to AI Studio plugin manager for proper service provider injection
@@ -135,7 +168,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		// Set global service reference for GRPCServer access
 		SetGlobalServiceReference(service)
 
-		logger.Info("Wired service reference to AI Studio plugin manager for service provider injection")
+		logger.Debug("Wired service reference to AI Studio plugin manager for service provider injection")
 	}
 
 	return service
@@ -165,9 +198,15 @@ func (s *Service) Cleanup() error {
 
 	var errors []error
 
+	// Stop log export service (cleanup goroutine)
+	if s.LogExportService != nil {
+		logger.Info("Stopping log export service...")
+		s.LogExportService.Stop()
+		logger.Info("Log export service stopped")
+	}
+
 	// Shutdown plugin manager first (most critical)
 	if s.AIStudioPluginManager != nil {
-		logger.Info("Shutting down AI Studio plugin manager...")
 		if err := s.AIStudioPluginManager.Shutdown(); err != nil {
 			logger.Errorf("Failed to shutdown plugin manager: %v", err)
 			errors = append(errors, fmt.Errorf("plugin manager shutdown: %w", err))
@@ -229,4 +268,19 @@ func (s *Service) CleanupWithContext(ctx context.Context) error {
 		logger.Warn("Service cleanup timeout exceeded")
 		return fmt.Errorf("cleanup timeout: %w", ctx.Err())
 	}
+}
+
+// SetEventBus sets the event bus and initializes the system event emitter
+func (s *Service) SetEventBus(bus eventbridge.Bus) {
+	s.EventBus = bus
+	if bus != nil {
+		s.SystemEvents = NewSystemEventEmitter(bus, "control")
+		logger.Debug("Initialized system event emitter")
+	}
+}
+
+// SetLicensingService sets the licensing service for plugin license checks
+func (s *Service) SetLicensingService(svc licensing.Service) {
+	s.LicensingService = svc
+	logger.Debug("Licensing service set on main service")
 }

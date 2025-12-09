@@ -598,9 +598,11 @@ type FilterInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			Script      []byte `json:"script"`
+			Name           string `json:"name"`
+			Description    string `json:"description"`
+			Script         []byte `json:"script"`
+			ResponseFilter bool   `json:"response_filter"`
+			Namespace      string `json:"namespace"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -611,10 +613,27 @@ type FilterResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Script      []byte `json:"script"`
+		Name           string `json:"name"`
+		Description    string `json:"description"`
+		Script         []byte `json:"script"`
+		ResponseFilter bool   `json:"response_filter"`
+		Namespace      string `json:"namespace"`
 	} `json:"attributes"`
+}
+
+// FilterTestInput represents the input for testing a filter script
+// @Description Filter test input model
+type FilterTestInput struct {
+	Script string                 `json:"script" binding:"required"`
+	Input  map[string]interface{} `json:"input" binding:"required"`
+}
+
+// FilterTestOutput represents the output of a filter test execution
+// @Description Filter test output model
+type FilterTestOutput struct {
+	Success bool                   `json:"success"`
+	Output  map[string]interface{} `json:"output,omitempty"`
+	Error   string                 `json:"error,omitempty"`
 }
 
 // ChatHistoryRecordInput represents the input for chat history record-related operations
@@ -983,6 +1002,7 @@ type FrontendConfig struct {
 	ProxyURL          string            `json:"proxyURL"`
 	DefaultSignUpMode string            `json:"defaultSignUpMode"`
 	TIBEnabled        bool              `json:"tibEnabled"`
+	IsEnterprise      bool              `json:"is_enterprise"`
 	DocsLinks         map[string]string `json:"docsLinks"`
 	Branding          *BrandingConfig   `json:"branding,omitempty"`
 }

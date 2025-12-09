@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/rs/zerolog/log"
 )
 
@@ -79,6 +80,15 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		}
 
 		// Create plugin context (NO app_id yet - not authenticated)
+		// Include edge identity in metadata for plugin context
+		metadata := make(map[string]interface{})
+		if serviceContainer.EdgeID != "" {
+			metadata["edge_id"] = serviceContainer.EdgeID
+		}
+		if serviceContainer.EdgeNamespace != "" {
+			metadata["edge_namespace"] = serviceContainer.EdgeNamespace
+		}
+
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
@@ -86,7 +96,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 			Vendor:       vendor,
 			AppID:        uint(0), // NOT authenticated yet
 			UserID:       uint(0),
-			Metadata:     make(map[string]interface{}),
+			Metadata:     metadata,
 			TraceContext: make(map[string]string),
 		}
 
@@ -204,11 +214,20 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 		}
 
 		// Create plugin context for auth
+		// Include edge identity in metadata for plugin context
+		authMetadata := make(map[string]interface{})
+		if serviceContainer.EdgeID != "" {
+			authMetadata["edge_id"] = serviceContainer.EdgeID
+		}
+		if serviceContainer.EdgeNamespace != "" {
+			authMetadata["edge_namespace"] = serviceContainer.EdgeNamespace
+		}
+
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
 			LLMSlug:      llmSlug,
-			Metadata:     make(map[string]interface{}),
+			Metadata:     authMetadata,
 			TraceContext: make(map[string]string),
 		}
 
@@ -326,6 +345,15 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		}
 
 		// Create plugin context (NOW with authenticated app_id)
+		// Include edge identity in metadata for plugin context
+		postAuthMetadata := make(map[string]interface{})
+		if serviceContainer.EdgeID != "" {
+			postAuthMetadata["edge_id"] = serviceContainer.EdgeID
+		}
+		if serviceContainer.EdgeNamespace != "" {
+			postAuthMetadata["edge_namespace"] = serviceContainer.EdgeNamespace
+		}
+
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
@@ -333,7 +361,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 			Vendor:       vendor,
 			AppID:        appID, // AUTHENTICATED app_id available!
 			UserID:       uint(0),
-			Metadata:     make(map[string]interface{}),
+			Metadata:     postAuthMetadata,
 			TraceContext: make(map[string]string),
 		}
 
@@ -405,6 +433,19 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 					r.ContentLength = int64(len(pluginResp.Body))
 				}
 			}
+
+			// Apply context updates (e.g., upstream_override for DLB plugin)
+			if len(pluginResp.ContextUpdates) > 0 {
+				ctx := r.Context()
+				for key, value := range pluginResp.ContextUpdates {
+					ctx = context.WithValue(ctx, key, value)
+					log.Debug().
+						Str("key", key).
+						Str("value", value).
+						Msg("Applied plugin context update to request")
+				}
+				*r = *r.WithContext(ctx)
+			}
 		} else if modifiedEnrichedReq, ok := result.(*interfaces.EnrichedRequest); ok {
 			// Handle EnrichedRequest from post-auth chain (new behavior for chained plugins)
 			// Apply modifications from the plugin chain
@@ -418,12 +459,28 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 					r.Body = io.NopCloser(bytes.NewReader(modifiedEnrichedReq.PluginRequest.Body))
 					r.ContentLength = int64(len(modifiedEnrichedReq.PluginRequest.Body))
 
-					log.Info().
+					log.Debug().
 						Int("modified_body_len", len(modifiedEnrichedReq.PluginRequest.Body)).
 						Msg("✅ Applied post-auth plugin chain modifications to request")
 				}
 			}
 		}
+
+		// Apply context updates from plugin context metadata (populated by plugin chain)
+		if pluginCtx != nil && pluginCtx.Metadata != nil {
+			ctx := r.Context()
+			for key, value := range pluginCtx.Metadata {
+				if strVal, ok := value.(string); ok {
+					ctx = context.WithValue(ctx, key, strVal)
+					log.Debug().
+						Str("key", key).
+						Str("value", strVal).
+						Msg("Applied plugin metadata to request context")
+				}
+			}
+			*r = *r.WithContext(ctx)
+		}
+
 		return false // Continue to proxy
 	}
 }

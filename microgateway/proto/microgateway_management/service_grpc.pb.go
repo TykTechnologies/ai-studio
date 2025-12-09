@@ -19,17 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	MicrogatewayManagementService_ListLLMs_FullMethodName           = "/microgateway_management.MicrogatewayManagementService/ListLLMs"
-	MicrogatewayManagementService_GetLLM_FullMethodName             = "/microgateway_management.MicrogatewayManagementService/GetLLM"
-	MicrogatewayManagementService_ListApps_FullMethodName           = "/microgateway_management.MicrogatewayManagementService/ListApps"
-	MicrogatewayManagementService_GetApp_FullMethodName             = "/microgateway_management.MicrogatewayManagementService/GetApp"
-	MicrogatewayManagementService_GetBudgetStatus_FullMethodName    = "/microgateway_management.MicrogatewayManagementService/GetBudgetStatus"
-	MicrogatewayManagementService_ListModelPrices_FullMethodName    = "/microgateway_management.MicrogatewayManagementService/ListModelPrices"
-	MicrogatewayManagementService_GetModelPrice_FullMethodName      = "/microgateway_management.MicrogatewayManagementService/GetModelPrice"
-	MicrogatewayManagementService_ValidateCredential_FullMethodName = "/microgateway_management.MicrogatewayManagementService/ValidateCredential"
-	MicrogatewayManagementService_WritePluginKV_FullMethodName      = "/microgateway_management.MicrogatewayManagementService/WritePluginKV"
-	MicrogatewayManagementService_ReadPluginKV_FullMethodName       = "/microgateway_management.MicrogatewayManagementService/ReadPluginKV"
-	MicrogatewayManagementService_DeletePluginKV_FullMethodName     = "/microgateway_management.MicrogatewayManagementService/DeletePluginKV"
+	MicrogatewayManagementService_ListLLMs_FullMethodName            = "/microgateway_management.MicrogatewayManagementService/ListLLMs"
+	MicrogatewayManagementService_GetLLM_FullMethodName              = "/microgateway_management.MicrogatewayManagementService/GetLLM"
+	MicrogatewayManagementService_ListApps_FullMethodName            = "/microgateway_management.MicrogatewayManagementService/ListApps"
+	MicrogatewayManagementService_GetApp_FullMethodName              = "/microgateway_management.MicrogatewayManagementService/GetApp"
+	MicrogatewayManagementService_GetBudgetStatus_FullMethodName     = "/microgateway_management.MicrogatewayManagementService/GetBudgetStatus"
+	MicrogatewayManagementService_ListModelPrices_FullMethodName     = "/microgateway_management.MicrogatewayManagementService/ListModelPrices"
+	MicrogatewayManagementService_GetModelPrice_FullMethodName       = "/microgateway_management.MicrogatewayManagementService/GetModelPrice"
+	MicrogatewayManagementService_ValidateCredential_FullMethodName  = "/microgateway_management.MicrogatewayManagementService/ValidateCredential"
+	MicrogatewayManagementService_WritePluginKV_FullMethodName       = "/microgateway_management.MicrogatewayManagementService/WritePluginKV"
+	MicrogatewayManagementService_ReadPluginKV_FullMethodName        = "/microgateway_management.MicrogatewayManagementService/ReadPluginKV"
+	MicrogatewayManagementService_DeletePluginKV_FullMethodName      = "/microgateway_management.MicrogatewayManagementService/DeletePluginKV"
+	MicrogatewayManagementService_QueueControlPayload_FullMethodName = "/microgateway_management.MicrogatewayManagementService/QueueControlPayload"
+	MicrogatewayManagementService_GetLicenseInfo_FullMethodName      = "/microgateway_management.MicrogatewayManagementService/GetLicenseInfo"
 )
 
 // MicrogatewayManagementServiceClient is the client API for MicrogatewayManagementService service.
@@ -56,6 +58,10 @@ type MicrogatewayManagementServiceClient interface {
 	WritePluginKV(ctx context.Context, in *WritePluginKVRequest, opts ...grpc.CallOption) (*WritePluginKVResponse, error)
 	ReadPluginKV(ctx context.Context, in *ReadPluginKVRequest, opts ...grpc.CallOption) (*ReadPluginKVResponse, error)
 	DeletePluginKV(ctx context.Context, in *DeletePluginKVRequest, opts ...grpc.CallOption) (*DeletePluginKVResponse, error)
+	// Control Payload Queue Operations (for edge-to-control plugin communication)
+	QueueControlPayload(ctx context.Context, in *QueueControlPayloadRequest, opts ...grpc.CallOption) (*QueueControlPayloadResponse, error)
+	// License Information (No scope required - all plugins can check license status)
+	GetLicenseInfo(ctx context.Context, in *GetLicenseInfoRequest, opts ...grpc.CallOption) (*GetLicenseInfoResponse, error)
 }
 
 type microgatewayManagementServiceClient struct {
@@ -176,6 +182,26 @@ func (c *microgatewayManagementServiceClient) DeletePluginKV(ctx context.Context
 	return out, nil
 }
 
+func (c *microgatewayManagementServiceClient) QueueControlPayload(ctx context.Context, in *QueueControlPayloadRequest, opts ...grpc.CallOption) (*QueueControlPayloadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueueControlPayloadResponse)
+	err := c.cc.Invoke(ctx, MicrogatewayManagementService_QueueControlPayload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *microgatewayManagementServiceClient) GetLicenseInfo(ctx context.Context, in *GetLicenseInfoRequest, opts ...grpc.CallOption) (*GetLicenseInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLicenseInfoResponse)
+	err := c.cc.Invoke(ctx, MicrogatewayManagementService_GetLicenseInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MicrogatewayManagementServiceServer is the server API for MicrogatewayManagementService service.
 // All implementations must embed UnimplementedMicrogatewayManagementServiceServer
 // for forward compatibility.
@@ -200,6 +226,10 @@ type MicrogatewayManagementServiceServer interface {
 	WritePluginKV(context.Context, *WritePluginKVRequest) (*WritePluginKVResponse, error)
 	ReadPluginKV(context.Context, *ReadPluginKVRequest) (*ReadPluginKVResponse, error)
 	DeletePluginKV(context.Context, *DeletePluginKVRequest) (*DeletePluginKVResponse, error)
+	// Control Payload Queue Operations (for edge-to-control plugin communication)
+	QueueControlPayload(context.Context, *QueueControlPayloadRequest) (*QueueControlPayloadResponse, error)
+	// License Information (No scope required - all plugins can check license status)
+	GetLicenseInfo(context.Context, *GetLicenseInfoRequest) (*GetLicenseInfoResponse, error)
 	mustEmbedUnimplementedMicrogatewayManagementServiceServer()
 }
 
@@ -242,6 +272,12 @@ func (UnimplementedMicrogatewayManagementServiceServer) ReadPluginKV(context.Con
 }
 func (UnimplementedMicrogatewayManagementServiceServer) DeletePluginKV(context.Context, *DeletePluginKVRequest) (*DeletePluginKVResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeletePluginKV not implemented")
+}
+func (UnimplementedMicrogatewayManagementServiceServer) QueueControlPayload(context.Context, *QueueControlPayloadRequest) (*QueueControlPayloadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueueControlPayload not implemented")
+}
+func (UnimplementedMicrogatewayManagementServiceServer) GetLicenseInfo(context.Context, *GetLicenseInfoRequest) (*GetLicenseInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetLicenseInfo not implemented")
 }
 func (UnimplementedMicrogatewayManagementServiceServer) mustEmbedUnimplementedMicrogatewayManagementServiceServer() {
 }
@@ -463,6 +499,42 @@ func _MicrogatewayManagementService_DeletePluginKV_Handler(srv interface{}, ctx 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MicrogatewayManagementService_QueueControlPayload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueueControlPayloadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MicrogatewayManagementServiceServer).QueueControlPayload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MicrogatewayManagementService_QueueControlPayload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MicrogatewayManagementServiceServer).QueueControlPayload(ctx, req.(*QueueControlPayloadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MicrogatewayManagementService_GetLicenseInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLicenseInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MicrogatewayManagementServiceServer).GetLicenseInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MicrogatewayManagementService_GetLicenseInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MicrogatewayManagementServiceServer).GetLicenseInfo(ctx, req.(*GetLicenseInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MicrogatewayManagementService_ServiceDesc is the grpc.ServiceDesc for MicrogatewayManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -513,6 +585,14 @@ var MicrogatewayManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeletePluginKV",
 			Handler:    _MicrogatewayManagementService_DeletePluginKV_Handler,
+		},
+		{
+			MethodName: "QueueControlPayload",
+			Handler:    _MicrogatewayManagementService_QueueControlPayload_Handler,
+		},
+		{
+			MethodName: "GetLicenseInfo",
+			Handler:    _MicrogatewayManagementService_GetLicenseInfo_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

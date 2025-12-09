@@ -10,8 +10,8 @@ import (
 type MarketplacePlugin struct {
 	gorm.Model
 	ID              uint      `json:"id" gorm:"primaryKey"`
-	PluginID        string    `json:"plugin_id" gorm:"uniqueIndex:idx_marketplace_plugin_version;not null;size:255"` // e.g. "com.tyk.echo-agent"
-	Version         string    `json:"version" gorm:"uniqueIndex:idx_marketplace_plugin_version;not null;size:100"`
+	PluginID        string    `json:"plugin_id" gorm:"uniqueIndex:idx_marketplace_plugin_version_source;not null;size:255"` // e.g. "com.tyk.echo-agent"
+	Version         string    `json:"version" gorm:"uniqueIndex:idx_marketplace_plugin_version_source;not null;size:100"`
 	Name            string    `json:"name" gorm:"not null;size:255"`
 	Description     string    `json:"description" gorm:"type:text"`
 	Category        string    `json:"category" gorm:"size:100;index:idx_marketplace_category"`
@@ -68,9 +68,12 @@ type MarketplacePlugin struct {
 	DeprecatedMessage string  `json:"deprecated_message" gorm:"type:text"`
 	ReplacementPlugin string  `json:"replacement_plugin" gorm:"size:255"`
 
+	// Enterprise
+	EnterpriseOnly  bool      `json:"enterprise_only" gorm:"default:false;index:idx_marketplace_enterprise"`
+
 	// Cache info
 	LastSynced      time.Time `json:"last_synced"`
-	SyncedFromURL   string    `json:"synced_from_url" gorm:"size:500"`
+	SyncedFromURL   string    `json:"synced_from_url" gorm:"uniqueIndex:idx_marketplace_plugin_version_source;size:500"`
 
 	// Full manifest data (for reference)
 	ManifestData    string    `json:"manifest_data" gorm:"type:text"` // Full YAML/JSON manifest

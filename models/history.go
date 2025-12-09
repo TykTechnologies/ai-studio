@@ -151,12 +151,24 @@ func ListChatHistoryRecordsByUserIDPaginated(db *gorm.DB, userID uint, pageSize 
 }
 
 // SearchChatHistoryRecords searches for ChatHistoryRecords by name for a given UserID with pagination
-func SearchChatHistoryRecords(db *gorm.DB, userID uint, query string, pageSize int, pageNumber int, all bool) ([]ChatHistoryRecord, int64, int, error) {
+func SearchChatHistoryRecords(db *gorm.DB, userID uint, searchTerm string, pageSize int, pageNumber int, all bool) ([]ChatHistoryRecord, int64, int, error) {
 	var records []ChatHistoryRecord
 	var totalCount int64
-	searchQuery := db.Model(&ChatHistoryRecord{}).Where("user_id = ? AND name LIKE ?", userID, "%"+query+"%")
 
-	if err := searchQuery.Count(&totalCount).Error; err != nil {
+	// Subquery to get SessionIDs with more than one CMessage
+	subQuery := db.Model(&CMessage{}).
+		Select("session").
+		Group("session").
+		Having("COUNT(*) > 1")
+
+	// Main query with search filter
+	query := db.Model(&ChatHistoryRecord{}).
+		Where("user_id = ?", userID).
+		Where("session_id IN (?)", subQuery).
+		Where("name LIKE ?", "%"+searchTerm+"%").
+		Order("created_at DESC")
+
+	if err := query.Count(&totalCount).Error; err != nil {
 		return nil, 0, 0, err
 	}
 
@@ -167,10 +179,10 @@ func SearchChatHistoryRecords(db *gorm.DB, userID uint, query string, pageSize i
 
 	if !all {
 		offset := (pageNumber - 1) * pageSize
-		searchQuery = searchQuery.Offset(offset).Limit(pageSize)
+		query = query.Offset(offset).Limit(pageSize)
 	}
 
-	err := searchQuery.Find(&records).Error
+	err := query.Find(&records).Error
 	return records, totalCount, totalPages, err
 }
 

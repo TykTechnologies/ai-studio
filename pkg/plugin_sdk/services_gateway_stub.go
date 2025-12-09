@@ -57,6 +57,14 @@ func (g *gatewayServicesImpl) ValidateCredential(ctx context.Context, secret str
 	return nil, fmt.Errorf("gateway services not available in this context")
 }
 
+func (g *gatewayServicesImpl) SendToControl(ctx context.Context, payload []byte, correlationID string, metadata map[string]string) (int64, error) {
+	return 0, fmt.Errorf("gateway services not available in this context")
+}
+
+func (g *gatewayServicesImpl) SendToControlJSON(ctx context.Context, value interface{}, correlationID string, metadata map[string]string) (int64, error) {
+	return 0, fmt.Errorf("gateway services not available in this context")
+}
+
 // setPluginIDForMicrogatewaySDK stub - no-op when microgateway SDK not available
 func setPluginIDForMicrogatewaySDK(pluginID uint32) {
 	// No-op in Studio-only builds
@@ -73,4 +81,9 @@ func writeKVGateway(ctx context.Context, key string, value []byte, expireAt *tim
 
 func deleteKVGateway(ctx context.Context, key string) (bool, error) {
 	return false, fmt.Errorf("gateway KV not available in this build")
+}
+
+// getLicenseInfoGateway stub - returns error when microgateway SDK not available
+func getLicenseInfoGateway(ctx context.Context) (*LicenseInfo, error) {
+	return nil, fmt.Errorf("gateway license service not available in this build")
 }

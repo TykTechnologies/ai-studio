@@ -62,10 +62,11 @@ type PluginRequest struct {
 
 // PluginResponse represents a plugin's response/modification to a request
 type PluginResponse struct {
-	Modified    bool              `json:"modified"`
-	StatusCode  int               `json:"status_code"`
-	Headers     map[string]string `json:"headers,omitempty"`
-	Body        []byte            `json:"body,omitempty"`
-	Block       bool              `json:"block"`        // Stop processing if true
-	ErrorMessage string           `json:"error_message,omitempty"`
+	Modified       bool              `json:"modified"`
+	StatusCode     int               `json:"status_code"`
+	Headers        map[string]string `json:"headers,omitempty"`
+	Body           []byte            `json:"body,omitempty"`
+	Block          bool              `json:"block"`                    // Stop processing if true
+	ErrorMessage   string            `json:"error_message,omitempty"`
+	ContextUpdates map[string]string `json:"context_updates,omitempty"` // Updates to request context (e.g., upstream_override)
 }

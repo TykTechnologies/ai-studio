@@ -86,3 +86,21 @@ func (h *NotificationHandlers) MarkAsRead(c *gin.Context) {
 
 	c.Status(http.StatusOK)
 }
+
+// MarkAllAsRead handles PUT /api/v1/notifications/read-all
+func (h *NotificationHandlers) MarkAllAsRead(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	currentUser := user.(*models.User)
+	err := h.notificationService.MarkAllAsRead(currentUser.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}

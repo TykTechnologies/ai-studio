@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -29,9 +30,9 @@ type SimpleEdgeClient struct {
 	configCache *pb.ConfigurationSnapshot
 
 	// Build information
-	version    string
-	buildHash  string
-	buildTime  string
+	version   string
+	buildHash string
+	buildTime string
 
 	// Bidirectional streaming
 	stream       pb.ConfigurationSyncService_SubscribeToChangesClient
@@ -44,6 +45,9 @@ type SimpleEdgeClient struct {
 	// Reload handling (use interface to avoid import cycle)
 	reloadHandler interface{}
 
+	// Control payload queue for edge-to-control plugin communication
+	controlPayloadQueue *ControlPayloadQueue
+
 	// Connection state
 	connected bool
 
@@ -52,23 +56,34 @@ type SimpleEdgeClient struct {
 	reconnectAttempts int
 	maxReconnects     int
 	reconnectInterval time.Duration
+
+	// Event bridge components
+	eventBus      eventbridge.Bus
+	streamAdapter *eventbridge.StreamAdapter
+	eventBridge   *eventbridge.Bridge
+	bridgeCtx     context.Context
+	bridgeCancel  context.CancelFunc
 }
 
 // NewSimpleEdgeClient creates a basic edge client
 func NewSimpleEdgeClient(cfg *config.Config, version, buildHash, buildTime string) *SimpleEdgeClient {
-	return &SimpleEdgeClient{
+	client := &SimpleEdgeClient{
 		config:            cfg,
 		version:           version,
 		buildHash:         buildHash,
 		buildTime:         buildTime,
-		maxReconnects:     -1,                // Unlimited reconnections
-		reconnectInterval: 5 * time.Second,   // 5 second retry interval
+		maxReconnects:     -1,              // Unlimited reconnections
+		reconnectInterval: 5 * time.Second, // 5 second retry interval
+		eventBus:          eventbridge.NewBus(),
 	}
+
+	log.Debug().Msg("Event bridge bus initialized for edge client")
+	return client
 }
 
 // Start connects to the control server and gets initial configuration
 func (c *SimpleEdgeClient) Start() error {
-	log.Info().
+	log.Debug().
 		Str("control_endpoint", c.config.HubSpoke.ControlEndpoint).
 		Str("edge_id", c.config.HubSpoke.EdgeID).
 		Msg("Connecting to control server")
@@ -82,6 +97,11 @@ func (c *SimpleEdgeClient) Start() error {
 	c.conn = conn
 	c.client = pb.NewConfigurationSyncServiceClient(conn)
 
+	// Wire the control payload queue's gRPC client if set
+	if c.controlPayloadQueue != nil {
+		c.controlPayloadQueue.SetGRPCClient(c.client, c.createAuthContext)
+	}
+
 	// Test basic connectivity and register
 	if err := c.registerWithControl(); err != nil {
 		conn.Close()
@@ -94,7 +114,7 @@ func (c *SimpleEdgeClient) Start() error {
 		return fmt.Errorf("failed to establish streaming: %w", err)
 	}
 
-	log.Info().Msg("Successfully connected to control server with streaming")
+	log.Debug().Msg("Successfully connected to control server with streaming")
 	return nil
 }
 
@@ -132,7 +152,7 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 
 	// Store initial configuration if provided
 	if resp.InitialConfig != nil {
-		log.Info().
+		log.Debug().
 			Str("version", resp.InitialConfig.Version).
 			Int32("llm_count", int32(len(resp.InitialConfig.Llms))).
 			Int32("app_count", int32(len(resp.InitialConfig.Apps))).
@@ -146,7 +166,7 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Str("session_id", resp.SessionId).
 		Msg("Successfully registered with control server")
 
@@ -168,6 +188,13 @@ func (c *SimpleEdgeClient) GetCurrentConfiguration() *pb.ConfigurationSnapshot {
 	return c.configCache
 }
 
+// GetEventBus returns the edge client's event bus for subscribing to events.
+// This allows other microgateway components to subscribe to events from control
+// and publish events to control.
+func (c *SimpleEdgeClient) GetEventBus() eventbridge.Bus {
+	return c.eventBus
+}
+
 // ValidateTokenOnDemand validates a token by calling the control instance
 func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidationResponse, error) {
 	if c.conn == nil || c.client == nil {
@@ -179,7 +206,7 @@ func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidat
 		tokenPrefix = token[:8]
 	}
 
-	log.Info().Str("token_prefix", tokenPrefix).Msg("SimpleEdgeClient: making on-demand token validation request to control")
+	log.Debug().Str("token_prefix", tokenPrefix).Msg("SimpleEdgeClient: making on-demand token validation request to control")
 
 	ctx := context.Background()
 
@@ -194,11 +221,11 @@ func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidat
 	authCtx := c.createAuthContext(ctx)
 	resp, err := c.client.ValidateToken(authCtx, req)
 	if err != nil {
-		log.Info().Err(err).Str("token_prefix", tokenPrefix).Msg("SimpleEdgeClient: token validation gRPC call failed")
+		log.Debug().Err(err).Str("token_prefix", tokenPrefix).Msg("SimpleEdgeClient: token validation gRPC call failed")
 		return nil, fmt.Errorf("token validation failed: %w", err)
 	}
 
-	log.Info().
+	log.Debug().
 		Str("token_prefix", tokenPrefix).
 		Bool("valid", resp.Valid).
 		Uint32("app_id", resp.AppId).
@@ -210,7 +237,17 @@ func (c *SimpleEdgeClient) ValidateTokenOnDemand(token string) (*pb.TokenValidat
 // SetReloadHandler sets the reload handler for processing reload requests
 func (c *SimpleEdgeClient) SetReloadHandler(handler interface{}) {
 	c.reloadHandler = handler
-	log.Info().Msg("Reload handler set for edge client")
+	log.Debug().Msg("Reload handler set for edge client")
+}
+
+// SetControlPayloadQueue sets the control payload queue for edge-to-control plugin communication
+func (c *SimpleEdgeClient) SetControlPayloadQueue(queue *ControlPayloadQueue) {
+	c.controlPayloadQueue = queue
+	// Wire the queue's gRPC client and auth context
+	if c.client != nil {
+		queue.SetGRPCClient(c.client, c.createAuthContext)
+	}
+	log.Debug().Msg("Control payload queue set for edge client")
 }
 
 // GetGRPCClient returns the gRPC client for use by pulse manager
@@ -230,7 +267,7 @@ func (c *SimpleEdgeClient) GetEdgeNamespace() string {
 
 // RequestFullSync requests a full configuration sync from control (for reload operations)
 func (c *SimpleEdgeClient) RequestFullSync() error {
-	log.Info().Msg("Requesting full configuration sync from control")
+	log.Debug().Msg("Requesting full configuration sync from control")
 
 	// Check if client is connected
 	if c.client == nil {
@@ -254,7 +291,7 @@ func (c *SimpleEdgeClient) RequestFullSync() error {
 		c.onConfigChange(resp)
 	}
 
-	log.Info().
+	log.Debug().
 		Str("version", resp.Version).
 		Int("llm_count", len(resp.Llms)).
 		Int("app_count", len(resp.Apps)).
@@ -265,7 +302,7 @@ func (c *SimpleEdgeClient) RequestFullSync() error {
 
 // establishStream establishes bidirectional streaming with control server
 func (c *SimpleEdgeClient) establishStream() error {
-	log.Info().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Establishing bidirectional stream with control")
+	log.Debug().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Establishing bidirectional stream with control")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	c.streamCtx = ctx
@@ -280,6 +317,9 @@ func (c *SimpleEdgeClient) establishStream() error {
 	}
 
 	c.stream = stream
+
+	// Setup event bridge for this connection
+	c.setupEventBridge()
 
 	// Send initial registration via stream to establish connection
 	regMsg := &pb.EdgeMessage{
@@ -315,8 +355,52 @@ func (c *SimpleEdgeClient) establishStream() error {
 
 	c.connected = true
 
-	log.Info().Msg("Bidirectional stream established successfully")
+	log.Debug().Msg("Bidirectional stream established successfully")
 	return nil
+}
+
+// setupEventBridge creates and starts the event bridge for the current stream
+func (c *SimpleEdgeClient) setupEventBridge() {
+	// Create bridge context
+	c.bridgeCtx, c.bridgeCancel = context.WithCancel(context.Background())
+
+	// Create stream adapter that sends events to control
+	c.streamAdapter = eventbridge.NewStreamAdapter(func(frame *eventbridge.EventFrame) error {
+		return c.stream.Send(&pb.EdgeMessage{
+			Message: &pb.EdgeMessage_Event{
+				Event: &pb.EventFrame{
+					Id:      frame.ID,
+					Topic:   frame.Topic,
+					Origin:  frame.Origin,
+					Dir:     frame.Dir,
+					Payload: frame.Payload,
+				},
+			},
+		})
+	}, 100)
+
+	// Create and start bridge (edge node, not control)
+	c.eventBridge = eventbridge.NewBridge(eventbridge.BridgeConfig{
+		NodeID:    c.config.HubSpoke.EdgeID,
+		IsControl: false,
+	}, c.eventBus, c.streamAdapter)
+	c.eventBridge.Start(c.bridgeCtx)
+
+	log.Debug().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Event bridge started for edge client")
+}
+
+// stopEventBridge stops the event bridge and cleans up resources
+func (c *SimpleEdgeClient) stopEventBridge() {
+	if c.bridgeCancel != nil {
+		c.bridgeCancel()
+	}
+	if c.eventBridge != nil {
+		c.eventBridge.Stop()
+	}
+	if c.streamAdapter != nil {
+		c.streamAdapter.Close()
+	}
+	log.Debug().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Event bridge stopped for edge client")
 }
 
 // handleIncomingMessages processes messages from control server with comprehensive error recovery
@@ -328,6 +412,10 @@ func (c *SimpleEdgeClient) handleIncomingMessages() {
 		}
 
 		c.connected = false
+
+		// Stop event bridge before cancelling stream context
+		c.stopEventBridge()
+
 		if c.streamCancel != nil {
 			c.streamCancel()
 		}
@@ -418,15 +506,51 @@ func (c *SimpleEdgeClient) processControlMessage(msg *pb.ControlMessage) error {
 	case *pb.ControlMessage_ReloadRequest:
 		return c.handleReloadRequest(m.ReloadRequest)
 
+	case *pb.ControlMessage_Event:
+		return c.handleEventMessage(m.Event)
+
 	default:
 		log.Warn().Msg("Unknown control message type received")
 		return nil
 	}
 }
 
+// handleEventMessage handles event bridge messages from control
+func (c *SimpleEdgeClient) handleEventMessage(event *pb.EventFrame) error {
+	if event == nil {
+		log.Debug().Msg("handleEventMessage called with nil event")
+		return nil
+	}
+
+	log.Debug().
+		Str("event_id", event.Id).
+		Str("topic", event.Topic).
+		Str("origin", event.Origin).
+		Int32("direction", event.Dir).
+		Int("payload_len", len(event.Payload)).
+		Msg("Edge received event from control")
+
+	// Enqueue the event for the bridge to process
+	if c.streamAdapter != nil {
+		enqueued := c.streamAdapter.EnqueueProtoEvent(event)
+		log.Debug().
+			Str("event_id", event.Id).
+			Str("topic", event.Topic).
+			Bool("enqueued", enqueued).
+			Msg("Edge enqueued event for bridge processing")
+	} else {
+		log.Warn().
+			Str("event_id", event.Id).
+			Str("topic", event.Topic).
+			Msg("Edge streamAdapter is nil - cannot enqueue event")
+	}
+
+	return nil
+}
+
 // handleRegistrationResponse processes registration responses
 func (c *SimpleEdgeClient) handleRegistrationResponse(resp *pb.EdgeRegistrationResponse) error {
-	log.Info().
+	log.Debug().
 		Bool("success", resp.Success).
 		Str("message", resp.Message).
 		Msg("Received stream registration response")
@@ -440,7 +564,7 @@ func (c *SimpleEdgeClient) handleRegistrationResponse(resp *pb.EdgeRegistrationR
 
 // handleConfigurationUpdate processes configuration updates
 func (c *SimpleEdgeClient) handleConfigurationUpdate(config *pb.ConfigurationSnapshot) error {
-	log.Info().
+	log.Debug().
 		Str("version", config.Version).
 		Int("llm_count", len(config.Llms)).
 		Int("app_count", len(config.Apps)).
@@ -458,7 +582,7 @@ func (c *SimpleEdgeClient) handleConfigurationUpdate(config *pb.ConfigurationSna
 
 // handleConfigurationChange processes incremental configuration changes
 func (c *SimpleEdgeClient) handleConfigurationChange(change *pb.ConfigurationChange) error {
-	log.Info().
+	log.Debug().
 		Str("change_type", change.ChangeType.String()).
 		Str("entity_type", change.EntityType.String()).
 		Uint32("entity_id", change.EntityId).
@@ -480,12 +604,12 @@ func (c *SimpleEdgeClient) handleHeartbeatResponse(resp *pb.HeartbeatResponse) e
 
 	// Handle control directives
 	if resp.RequestFullSync {
-		log.Info().Msg("Control server requested full configuration sync")
+		log.Debug().Msg("Control server requested full configuration sync")
 		return c.RequestFullSync()
 	}
 
 	if resp.ShutdownRequested {
-		log.Info().Msg("Control server requested graceful shutdown")
+		log.Debug().Msg("Control server requested graceful shutdown")
 		// Initiate graceful shutdown
 		go c.Stop()
 	}
@@ -512,7 +636,7 @@ func (c *SimpleEdgeClient) handleControlError(errMsg *pb.ErrorMessage) error {
 
 // handleReloadRequest processes reload requests from control server
 func (c *SimpleEdgeClient) handleReloadRequest(req *pb.ConfigurationReloadRequest) error {
-	log.Info().
+	log.Debug().
 		Str("operation_id", req.OperationId).
 		Str("target_namespace", req.TargetNamespace).
 		Msg("Received reload request via stream")
@@ -528,7 +652,7 @@ func (c *SimpleEdgeClient) SendReloadStatus(response *pb.ConfigurationReloadResp
 		return fmt.Errorf("no stream available for sending reload status")
 	}
 
-	log.Info().
+	log.Debug().
 		Str("operation_id", response.OperationId).
 		Str("phase", response.Phase.String()).
 		Bool("success", response.Success).
@@ -550,7 +674,7 @@ func (c *SimpleEdgeClient) SendReloadStatus(response *pb.ConfigurationReloadResp
 
 // HandleReloadRequest processes reload requests (to be called when reload messages are received)
 func (c *SimpleEdgeClient) HandleReloadRequest(req *pb.ConfigurationReloadRequest) {
-	log.Info().
+	log.Debug().
 		Str("operation_id", req.OperationId).
 		Msg("SimpleEdgeClient received reload request")
 
@@ -567,7 +691,7 @@ func (c *SimpleEdgeClient) HandleReloadRequest(req *pb.ConfigurationReloadReques
 
 // Stop closes the connection to control server
 func (c *SimpleEdgeClient) Stop() error {
-	log.Info().Msg("Stopping SimpleEdgeClient")
+	log.Debug().Msg("Stopping SimpleEdgeClient")
 
 	// Cancel stream context
 	if c.streamCancel != nil {
@@ -576,7 +700,7 @@ func (c *SimpleEdgeClient) Stop() error {
 
 	// Close connection
 	if c.conn != nil {
-		log.Info().Msg("Closing connection to control server")
+		log.Debug().Msg("Closing connection to control server")
 		return c.conn.Close()
 	}
 
@@ -588,7 +712,7 @@ func (c *SimpleEdgeClient) heartbeatWorker() {
 	ticker := time.NewTicker(c.config.HubSpoke.HeartbeatInterval)
 	defer ticker.Stop()
 
-	log.Info().
+	log.Debug().
 		Dur("interval", c.config.HubSpoke.HeartbeatInterval).
 		Msg("Starting heartbeat worker")
 
@@ -604,7 +728,7 @@ func (c *SimpleEdgeClient) heartbeatWorker() {
 					Msg("Skipping heartbeat - not connected or stream is nil")
 			}
 		case <-c.streamCtx.Done():
-			log.Info().Msg("Heartbeat worker stopping")
+			log.Debug().Msg("Heartbeat worker stopping")
 			return
 		}
 	}
@@ -635,6 +759,40 @@ func (c *SimpleEdgeClient) sendHeartbeat() {
 			Str("edge_id", c.config.HubSpoke.EdgeID).
 			Msg("Heartbeat sent successfully")
 	}
+
+	// Send pending control payloads (piggybacking on heartbeat interval)
+	c.sendPendingControlPayloads()
+}
+
+// sendPendingControlPayloads sends pending plugin control payloads to the control server
+func (c *SimpleEdgeClient) sendPendingControlPayloads() {
+	if c.controlPayloadQueue == nil {
+		return
+	}
+
+	// Check if there are pending payloads
+	pendingCount := c.controlPayloadQueue.GetPendingCount()
+	if pendingCount == 0 {
+		return
+	}
+
+	log.Debug().
+		Int64("pending_count", pendingCount).
+		Msg("Sending pending control payloads to control server")
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Send the batch
+	if err := c.controlPayloadQueue.SendPendingBatch(ctx); err != nil {
+		log.Error().Err(err).Msg("Failed to send control payload batch")
+	}
+
+	// Run periodic cleanup of old payloads
+	if err := c.controlPayloadQueue.CleanupOldPayloads(); err != nil {
+		log.Warn().Err(err).Msg("Failed to cleanup old control payloads")
+	}
 }
 
 // collectBasicMetrics gathers basic runtime metrics for heartbeat
@@ -661,7 +819,7 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 		c.reconnecting = false
 	}()
 
-	log.Info().Msg("Starting automatic reconnection to control server with exponential backoff")
+	log.Debug().Msg("Starting automatic reconnection to control server with exponential backoff")
 
 	// Initial backoff parameters
 	baseDelay := c.reconnectInterval
@@ -684,7 +842,7 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 		// Calculate exponential backoff with jitter
 		backoffDelay := c.calculateBackoffDelay(baseDelay, maxDelay, backoffMultiplier, jitterFactor, c.reconnectAttempts)
 
-		log.Info().
+		log.Debug().
 			Int("attempt", c.reconnectAttempts).
 			Dur("backoff_delay", backoffDelay).
 			Msg("Attempting to reconnect to control server")
@@ -694,13 +852,13 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 		case <-time.After(backoffDelay):
 			// Continue with reconnection attempt
 		case <-c.streamCtx.Done():
-			log.Info().Msg("Reconnection cancelled due to context cancellation")
+			log.Debug().Msg("Reconnection cancelled due to context cancellation")
 			return
 		}
 
 		// Check if we should stop (connection was manually closed)
 		if c.conn == nil {
-			log.Info().Msg("Connection manually closed, stopping reconnection attempts")
+			log.Debug().Msg("Connection manually closed, stopping reconnection attempts")
 			return
 		}
 
@@ -715,7 +873,7 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 		}
 
 		// Success!
-		log.Info().
+		log.Debug().
 			Int("attempts", c.reconnectAttempts).
 			Msg("Successfully reconnected to control server")
 
@@ -769,6 +927,11 @@ func (c *SimpleEdgeClient) reconnectWithRetry() error {
 	c.conn = conn
 	c.client = pb.NewConfigurationSyncServiceClient(conn)
 
+	// Re-wire the control payload queue's gRPC client if set
+	if c.controlPayloadQueue != nil {
+		c.controlPayloadQueue.SetGRPCClient(c.client, c.createAuthContext)
+	}
+
 	// Test connectivity by registering with control
 	if err := c.registerWithControl(); err != nil {
 		conn.Close()
@@ -785,7 +948,7 @@ func (c *SimpleEdgeClient) reconnectWithRetry() error {
 		return fmt.Errorf("failed to re-establish stream: %w", err)
 	}
 
-	log.Info().Msg("Successfully reconnected to control server")
+	log.Debug().Msg("Successfully reconnected to control server")
 	return nil
 }
 
@@ -826,7 +989,7 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 		}
 
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
-		log.Info().Bool("skip_verify", c.config.HubSpoke.SkipTLSVerify).Msg("✅ Using secure TLS credentials for gRPC connection")
+		log.Debug().Bool("skip_verify", c.config.HubSpoke.SkipTLSVerify).Msg("Using secure TLS credentials for gRPC connection")
 	} else {
 		// Security: Require explicit opt-in for insecure connections
 		if !c.config.HubSpoke.AllowInsecure {

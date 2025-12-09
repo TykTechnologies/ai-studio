@@ -1,3 +1,6 @@
+//go:build enterprise
+// +build enterprise
+
 // internal/api/handlers/budget_handlers.go
 package handlers
 

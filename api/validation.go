@@ -2,12 +2,12 @@ package api
 
 import (
 	"fmt"
-	"net"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
 // Security validation patterns and limits for API input parameters
@@ -100,7 +100,8 @@ func sanitizeStringForLogging(input string) string {
 
 // validatePluginCommand performs API-level security validation on plugin commands
 // This replicates key validations from the service layer to catch attacks at source
-func validatePluginCommand(command string) error {
+// securityService is used for enterprise features like GRPC host whitelisting
+func validatePluginCommand(command string, securityService plugin_security.Service) error {
 	if command == "" {
 		return fmt.Errorf("🔒 SECURITY: plugin command cannot be empty")
 	}
@@ -182,10 +183,12 @@ func validatePluginCommand(command string) error {
 					return fmt.Errorf("🔒 SECURITY: plugin command contains invalid URL: %s", sanitizeStringForLogging(command))
 				}
 
-				// Check for internal/private network addresses (bypass with ALLOW_INTERNAL_NETWORK_ACCESS=true)
+				// Check for internal/private network addresses using plugin security service
+				// ENT: Blocks internal IPs unless development bypass is enabled
+				// CE: Always allows (no-op)
 				if parsedURL.Hostname() != "" {
 					host := parsedURL.Hostname()
-					if isInternalIP(host) && os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") != "true" {
+					if err := securityService.ValidateGRPCHost(host); err != nil {
 						return fmt.Errorf("🔒 SECURITY: plugin command targets internal network address: %s", sanitizeStringForLogging(command))
 					}
 				}
@@ -207,45 +210,4 @@ func validatePluginCommand(command string) error {
 	}
 
 	return nil
-}
-
-// isInternalIP checks if a hostname/IP is internal/private using proper CIDR validation
-func isInternalIP(host string) bool {
-	// Handle localhost variations
-	lowerHost := strings.ToLower(host)
-	if lowerHost == "localhost" || lowerHost == "::1" {
-		return true
-	}
-
-	// Parse the IP address
-	ip := net.ParseIP(host)
-	if ip == nil {
-		// If not an IP, could be a hostname - check for localhost patterns
-		return strings.Contains(lowerHost, "localhost")
-	}
-
-	// Define private IP CIDR ranges
-	privateCIDRs := []string{
-		"10.0.0.0/8",        // Private Class A
-		"172.16.0.0/12",     // Private Class B
-		"192.168.0.0/16",    // Private Class C
-		"127.0.0.0/8",       // IPv4 loopback
-		"169.254.0.0/16",    // IPv4 link-local
-		"::1/128",           // IPv6 loopback
-		"fc00::/7",          // IPv6 unique local addresses
-		"fe80::/10",         // IPv6 link-local
-	}
-
-	// Check if IP falls within any private CIDR range
-	for _, cidrStr := range privateCIDRs {
-		_, cidr, err := net.ParseCIDR(cidrStr)
-		if err != nil {
-			continue
-		}
-		if cidr.Contains(ip) {
-			return true
-		}
-	}
-
-	return false
 }

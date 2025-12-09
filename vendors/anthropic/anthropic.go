@@ -56,7 +56,9 @@ func (v *Anthropic) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl,
 
 func (v *Anthropic) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
 	var response models.ITokenResponse
-	if strings.Contains(strings.ToLower(r.URL.Path), AnthropicCompletionsEndpoint) {
+	pathLower := strings.ToLower(r.URL.Path)
+	// Check for both /v1/messages (direct API calls) and /messages suffix (SDK internal routing via /ai/)
+	if strings.Contains(pathLower, AnthropicCompletionsEndpoint) || strings.HasSuffix(pathLower, "/messages") {
 		response = &responses.AnthropicResponse{}
 		err := json.Unmarshal(body, response)
 		if err != nil {

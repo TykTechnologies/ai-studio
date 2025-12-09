@@ -268,9 +268,9 @@ func ensureUserInDB(t *testing.T, db *gorm.DB, user *models.User) *models.User {
 
 func TestHandleOAuthMetadata(t *testing.T) {
 	_, router, _, _, _, _, _ := setupTestAPIWithMocks(t)
-	originalAuthServerURL := config.Get().AuthServerURL
-	config.Get().AuthServerURL = "http://auth.example.com"
-	defer func() { config.Get().AuthServerURL = originalAuthServerURL }()
+	originalAuthServerURL := config.Get("").AuthServerURL
+	config.Get("").AuthServerURL = "http://auth.example.com"
+	defer func() { config.Get("").AuthServerURL = originalAuthServerURL }()
 
 	w := performOAuthRequest(router, "GET", "/.well-known/oauth-authorization-server", nil, nil)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -345,7 +345,7 @@ func TestHandleOAuthAuthorize_SuccessRedirectsToConsent(t *testing.T) {
 	testClient, _, err := clientSvc.CreateClient("AuthzTestClient", []string{"http://client.example.com/callback"}, &currentUser.ID, "mcp")
 	require.NoError(t, err)
 
-	appConf := config.Get()
+	appConf := config.Get("")
 	originalSiteURL := appConf.SiteURL
 	appConf.SiteURL = "http://dashboard.example.com"
 	defer func() { appConf.SiteURL = originalSiteURL }()

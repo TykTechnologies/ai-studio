@@ -265,7 +265,7 @@ func (a *API) createPlugin(c *gin.Context) {
 	}
 
 	// Perform API-level security validation on the command field
-	if err := validatePluginCommand(req.Command); err != nil {
+	if err := validatePluginCommand(req.Command, a.pluginSecurityService); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -446,7 +446,7 @@ func (a *API) updatePlugin(c *gin.Context) {
 
 	// Perform API-level security validation on the command field if it's being updated
 	if req.Command != nil {
-		if err := validatePluginCommand(*req.Command); err != nil {
+		if err := validatePluginCommand(*req.Command, a.pluginSecurityService); err != nil {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`

@@ -15,14 +15,29 @@ import (
 	"gorm.io/gorm"
 )
 
+// ControlPayloadQueueInterface defines the interface for queuing control payloads
+type ControlPayloadQueueInterface interface {
+	QueuePayload(pluginID uint, payload []byte, correlationID string, metadata map[string]string) error
+	GetPendingCount() int64
+}
+
+// LicensingServiceInterface defines the interface for license checking
+// This is a minimal interface to avoid circular imports with the licensing package
+type LicensingServiceInterface interface {
+	IsValid() bool
+	DaysLeft() int
+}
+
 // MicrogatewayManagementServer implements the gRPC service for plugin-to-host communication
 type MicrogatewayManagementServer struct {
 	pb.UnimplementedMicrogatewayManagementServiceServer
-	db                *gorm.DB
-	gatewayService    GatewayServiceInterface
-	budgetService     BudgetServiceInterface
-	managementService ManagementServiceInterface
-	cryptoService     CryptoServiceInterface
+	db                    *gorm.DB
+	gatewayService        GatewayServiceInterface
+	budgetService         BudgetServiceInterface
+	managementService     ManagementServiceInterface
+	cryptoService         CryptoServiceInterface
+	controlPayloadQueue   ControlPayloadQueueInterface
+	licensingService      LicensingServiceInterface
 }
 
 // NewMicrogatewayManagementServer creates a new service broker server
@@ -40,6 +55,16 @@ func NewMicrogatewayManagementServer(
 		managementService: managementService,
 		cryptoService:     cryptoService,
 	}
+}
+
+// SetControlPayloadQueue sets the control payload queue for edge-to-control communication
+func (s *MicrogatewayManagementServer) SetControlPayloadQueue(queue ControlPayloadQueueInterface) {
+	s.controlPayloadQueue = queue
+}
+
+// SetLicensingService sets the licensing service for license info queries
+func (s *MicrogatewayManagementServer) SetLicensingService(svc LicensingServiceInterface) {
+	s.licensingService = svc
 }
 
 // validatePluginScope validates that the calling plugin has the required scope
@@ -228,6 +253,11 @@ func (s *MicrogatewayManagementServer) GetBudgetStatus(ctx context.Context, req 
 		return nil, err
 	}
 
+	// Budget service may not be available in CE edition
+	if s.budgetService == nil {
+		return nil, status.Errorf(codes.Unavailable, "budget service not available in this edition")
+	}
+
 	var llmID *uint
 	if req.LlmId != nil {
 		id := uint(*req.LlmId)
@@ -238,6 +268,11 @@ func (s *MicrogatewayManagementServer) GetBudgetStatus(ctx context.Context, req 
 	if err != nil {
 		log.Error().Err(err).Uint32("app_id", req.AppId).Msg("Failed to get budget status")
 		return nil, status.Errorf(codes.Internal, "failed to get budget status: %v", err)
+	}
+
+	// Budget status may be nil in CE edition (CommunityBudgetService returns nil, nil)
+	if budgetStatus == nil {
+		return nil, status.Errorf(codes.Unavailable, "budget tracking not available in this edition")
 	}
 
 	var pbLLMID *uint32
@@ -452,6 +487,114 @@ func (s *MicrogatewayManagementServer) DeletePluginKV(ctx context.Context, req *
 	return &pb.DeletePluginKVResponse{
 		Deleted: result.RowsAffected > 0,
 	}, nil
+}
+
+// Control Payload Queue Operations
+
+// QueueControlPayload queues a payload for transmission to the AI Studio control plane
+// This enables plugins running on edge (microgateway) instances to send data back to control
+func (s *MicrogatewayManagementServer) QueueControlPayload(ctx context.Context, req *pb.QueueControlPayloadRequest) (*pb.QueueControlPayloadResponse, error) {
+	// Validate plugin has control.send scope
+	plugin, err := s.validatePluginScope(ctx, req.Context, "control.send")
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if control payload queue is available
+	if s.controlPayloadQueue == nil {
+		log.Warn().
+			Uint("plugin_id", plugin.ID).
+			Str("plugin_name", plugin.Name).
+			Msg("Control payload queue not available - edge mode may not be enabled")
+		return &pb.QueueControlPayloadResponse{
+			Success:      false,
+			ErrorMessage: "control payload queue not available (edge mode may not be enabled)",
+			PendingCount: 0,
+		}, nil
+	}
+
+	// Queue the payload
+	err = s.controlPayloadQueue.QueuePayload(
+		plugin.ID,
+		req.Payload,
+		req.CorrelationId,
+		req.Metadata,
+	)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Uint("plugin_id", plugin.ID).
+			Str("plugin_name", plugin.Name).
+			Int("payload_size", len(req.Payload)).
+			Msg("Failed to queue control payload")
+		return &pb.QueueControlPayloadResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+			PendingCount: s.controlPayloadQueue.GetPendingCount(),
+		}, nil
+	}
+
+	pendingCount := s.controlPayloadQueue.GetPendingCount()
+
+	log.Debug().
+		Uint("plugin_id", plugin.ID).
+		Str("plugin_name", plugin.Name).
+		Int("payload_size", len(req.Payload)).
+		Str("correlation_id", req.CorrelationId).
+		Int64("pending_count", pendingCount).
+		Msg("Control payload queued successfully")
+
+	return &pb.QueueControlPayloadResponse{
+		Success:      true,
+		PendingCount: pendingCount,
+	}, nil
+}
+
+// GetLicenseInfo returns license information for plugins to check enterprise features
+// This is a special RPC that doesn't require scope validation - all plugins can check license status
+func (s *MicrogatewayManagementServer) GetLicenseInfo(ctx context.Context, req *pb.GetLicenseInfoRequest) (*pb.GetLicenseInfoResponse, error) {
+	// Validate that we have a valid plugin context (but no scope required)
+	if req.Context == nil || req.Context.PluginId == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "plugin context required")
+	}
+
+	// If no licensing service is configured, we're in community mode
+	if s.licensingService == nil {
+		log.Debug().
+			Uint32("plugin_id", req.Context.PluginId).
+			Msg("GetLicenseInfo called but no licensing service configured (community mode)")
+		return &pb.GetLicenseInfoResponse{
+			LicenseValid:   true, // Community is always "valid"
+			DaysRemaining:  -1,   // -1 means never expires
+			LicenseType:    "community",
+			Entitlements:   []string{},
+			Organization:   "",
+			ExpiresAt:      nil,
+		}, nil
+	}
+
+	// Get license info from the licensing service
+	isValid := s.licensingService.IsValid()
+	daysLeft := s.licensingService.DaysLeft()
+
+	// Build response for enterprise mode
+	resp := &pb.GetLicenseInfoResponse{
+		LicenseValid:   isValid,
+		DaysRemaining:  int32(daysLeft),
+		LicenseType:    "enterprise",
+		Entitlements:   []string{"advanced-llm-cache"}, // Enterprise features
+		Organization:   "",                              // Not currently exposed by licensing service
+		ExpiresAt:      nil,                             // Could be calculated from daysLeft if needed
+	}
+
+	log.Debug().
+		Uint32("plugin_id", req.Context.PluginId).
+		Bool("license_valid", resp.LicenseValid).
+		Int32("days_remaining", resp.DaysRemaining).
+		Str("license_type", resp.LicenseType).
+		Msg("GetLicenseInfo called by plugin")
+
+	return resp, nil
 }
 
 // Helper conversion functions

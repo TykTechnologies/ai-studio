@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/performance/framework"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 // setupBenchmarkGateway creates an AI Gateway with test data for benchmarking
@@ -22,7 +23,7 @@ func setupBenchmarkGateway(b *testing.B) (Gateway, *framework.BenchmarkDB, *fram
 
 	// Create services
 	service := services.NewService(benchDB.GetDB())
-	budgetService := services.NewBudgetService(benchDB.DB, nil)
+	budgetService := budget.NewService(benchDB.DB, nil)
 
 	// Create mock LLM server
 	mockServer := framework.NewMockLLMServer()
@@ -45,7 +46,7 @@ func BenchmarkGatewayInitialization(b *testing.B) {
 	benchDB.SetupTestData(b)
 
 	service := services.NewService(benchDB.GetDB())
-	budgetService := services.NewBudgetService(benchDB.DB, nil)
+	budgetService := budget.NewService(benchDB.DB, nil)
 
 	ctx := context.Background()
 	analytics.InitDefault(ctx, benchDB.DB)
@@ -386,7 +387,7 @@ func BenchmarkGatewayStartStop(b *testing.B) {
 	benchDB.SetupTestData(b)
 
 	service := services.NewService(benchDB.GetDB())
-	budgetService := services.NewBudgetService(benchDB.DB, nil)
+	budgetService := budget.NewService(benchDB.DB, nil)
 
 	ctx := context.Background()
 	analytics.InitDefault(ctx, benchDB.DB)

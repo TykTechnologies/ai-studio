@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +24,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -34,6 +35,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/pb33f/libopenapi"
+	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/schema"
 )
 
@@ -80,22 +82,24 @@ type MCPServerCache struct {
 }
 
 type Proxy struct {
-	gatewayService      services.ServiceInterface
-	budgetService       services.BudgetServiceInterface
-	server              *http.Server
-	llms                map[string]*models.LLM
-	datasources         map[string]*models.Datasource
-	mu                  sync.RWMutex
-	config              *Config
-	credValidator       *CredentialValidator
-	modelValidator      *ModelValidator
-	filters             []*models.Filter
-	authService         *auth.AuthService
-	mcpServers          map[string]*MCPServerCache
-	mcpServersMu        sync.RWMutex
-	openAPICache        map[string]*OpenAPICache
-	openAPICacheMu      sync.RWMutex
-	responseHookManager ResponseHookManager // REST-only response hooks
+	gatewayService          services.ServiceInterface
+	budgetService           services.BudgetServiceInterface
+	server                  *http.Server
+	llms                    map[string]*models.LLM
+	datasources             map[string]*models.Datasource
+	mu                      sync.RWMutex
+	config                  *Config
+	credValidator              *CredentialValidator
+	modelValidator             *ModelValidator
+	messageExtractorRegistry   *MessageExtractorRegistry
+	messageReconstructorRegistry *MessageReconstructorRegistry
+	filters                    []*models.Filter
+	authService             *auth.AuthService
+	mcpServers              map[string]*MCPServerCache
+	mcpServersMu            sync.RWMutex
+	openAPICache            map[string]*OpenAPICache
+	openAPICacheMu          sync.RWMutex
+	responseHookManager     ResponseHookManager // REST-only response hooks
 }
 
 type Config struct {
@@ -138,12 +142,30 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	modelVal.RegisterExtractor(strings.ToLower(string(models.MOCK_VENDOR)), OpenAIModelExtractor)
 	p.modelValidator = modelVal
 
+	// Initialize message extractor registry for filter scripts
+	messageExtractorRegistry := NewMessageExtractorRegistry()
+	messageExtractorRegistry.Register(&OpenAIMessageExtractor{})
+	messageExtractorRegistry.Register(&AnthropicMessageExtractor{})
+	messageExtractorRegistry.Register(&GoogleAIMessageExtractor{})
+	messageExtractorRegistry.Register(&VertexMessageExtractor{})
+	messageExtractorRegistry.Register(&OllamaMessageExtractor{})
+	p.messageExtractorRegistry = messageExtractorRegistry
+
+	// Initialize message reconstructor registry for message modification
+	messageReconstructorRegistry := NewMessageReconstructorRegistry()
+	messageReconstructorRegistry.Register(&OpenAIMessageReconstructor{})
+	messageReconstructorRegistry.Register(&AnthropicMessageReconstructor{})
+	messageReconstructorRegistry.Register(&GoogleAIMessageReconstructor{})
+	messageReconstructorRegistry.Register(&VertexMessageReconstructor{})
+	messageReconstructorRegistry.Register(&OllamaMessageReconstructor{})
+	p.messageReconstructorRegistry = messageReconstructorRegistry
+
 	return p
 }
 
 // NewProxy creates a new Proxy instance using the existing concrete services.
 // This is the legacy constructor that maintains backward compatibility.
-func NewProxy(service *services.Service, cfg *Config, budgetService *services.BudgetService) *Proxy {
+func NewProxy(service *services.Service, cfg *Config, budgetService services.BudgetServiceInterface) *Proxy {
 	// Use the new unified interface constructor
 	return New(service, budgetService, cfg)
 }
@@ -183,7 +205,7 @@ func (p *Proxy) Start() error {
 		WriteTimeout: 600 * time.Second,
 		IdleTimeout:  300 * time.Second,
 	}
-	log.Printf("Starting proxy server on port %d", p.config.Port)
+	logger.Infof("Starting proxy server on port %d", p.config.Port)
 	return p.server.ListenAndServe()
 }
 
@@ -202,7 +224,7 @@ func (p *Proxy) Stop(ctx context.Context) error { return p.server.Shutdown(ctx) 
 func (p *Proxy) Reload() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	fmt.Println("proxy reloading resources...")
+	logger.Debug("proxy reloading resources")
 	return p.loadResources()
 }
 
@@ -249,6 +271,7 @@ func fixDoubleSlash(next http.Handler) http.Handler {
 
 
 func (p *Proxy) createHandler() http.Handler {
+	// Main router for authenticated routes
 	r := mux.NewRouter()
 	r.HandleFunc("/.well-known/oauth-protected-resource", p.handleOAuthProtectedResourceMetadata).Methods("GET", "OPTIONS")
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleLLMRequest)))
@@ -259,21 +282,35 @@ func (p *Proxy) createHandler() http.Handler {
 			p.modelValidationMiddleware(
 				http.HandlerFunc(p.handleUnifiedLLMRequest))))
 
-	// OpenAI-compatible translation endpoints
-	r.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
-	r.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
-
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}", p.handleToolRequest).Methods("GET", "POST", "PUT", "DELETE")
 	r.HandleFunc("/tools/{toolSlug}/mcp", p.handleMCPToolStreamable).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}/mcp/sse", p.handleMCPToolSSE).Methods("GET")
 	r.HandleFunc("/tools/{toolSlug}/mcp/message", p.handleMCPToolMessage).Methods("POST")
+
+	// Wrap authenticated routes with credential validator
+	authenticatedHandler := p.credValidator.Middleware(r)
+
+	// OpenAI-compatible translation endpoints - these are PURE BRIDGE HANDLERS
+	// They do NOT need auth/plugins/filters - all of that happens on the internal /llm/call/ hop
+	// These handlers route through /llm/call/ internally where auth is performed
+	aiRouter := mux.NewRouter()
+	aiRouter.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
+	aiRouter.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
+
+	// Combine routers: /ai/ routes bypass auth, everything else goes through auth
+	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, "/ai/") {
+			aiRouter.ServeHTTP(w, req)
+		} else {
+			authenticatedHandler.ServeHTTP(w, req)
+		}
+	})
+
 	// Middleware chain (innermost to outermost):
-	// 1. requestIDMiddleware - Generate canonical request ID (MUST BE FIRST)
-	// 2. credValidator.Middleware - Authenticate requests
-	// 3. outboundRequestMiddleware - Prepare outbound requests
-	// 4. cloudflareHeadersMiddleware - Add Cloudflare headers
-	return p.cloudflareHeadersMiddleware(p.outboundRequestMiddleware(p.credValidator.Middleware(r)))
+	// 1. combinedHandler - Route /ai/ separately from authenticated routes
+	// 2. cloudflareHeadersMiddleware - Add Cloudflare headers
+	return p.cloudflareHeadersMiddleware(combinedHandler)
 }
 
 func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
@@ -289,7 +326,7 @@ func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *h
 		return
 	}
 
-	appConf := config.Get()
+	appConf := config.Get("")
 	if appConf == nil {
 		respondWithError(w, http.StatusInternalServerError, "Server configuration not loaded", nil, false)
 		return
@@ -335,27 +372,6 @@ func (p *Proxy) AddFilter(filter *models.Filter) {
 	p.filters = append(p.filters, filter)
 }
 
-func (p *Proxy) outboundRequestMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		bodyBytes, err := io.ReadAll(r.Body)
-		if err != nil {
-			respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err, false)
-			return
-		}
-		r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		for _, filter := range p.filters {
-			runner := scripting.NewScriptRunner(filter.Script)
-			// Note: For now, we'll pass nil since the scripting doesn't depend on the service interface methods
-			// This should be refactored if the scripting needs access to data
-			if err := runner.RunFilter(string(bodyBytes), nil); err != nil {
-				respondWithError(w, http.StatusForbidden, fmt.Sprintf("Policy error: %s", filter.Name), nil, false)
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
 func (p *Proxy) cloudflareHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Connection", "keep-alive")
@@ -373,7 +389,7 @@ func respondWithError(w http.ResponseWriter, status int, message string, err err
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if status == http.StatusUnauthorized && wwwAuthenticate {
-		appConf := config.Get()
+		appConf := config.Get("")
 		metadataURL := appConf.ProxyOAuthMetadataURL
 		if metadataURL != "" {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer realm=\"MCPResources\", resource_metadata_uri=\"%s\"", metadataURL))
@@ -395,7 +411,7 @@ func respondWithOAIError(w http.ResponseWriter, status int, message string, err 
 	response := OAIErrorResponse{Error: apiError}
 	w.Header().Set("Content-Type", "application/json")
 	if status == http.StatusUnauthorized && wwwAuthenticate {
-		appConf := config.Get()
+		appConf := config.Get("")
 		metadataURL := appConf.ProxyOAuthMetadataURL
 		if metadataURL != "" {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer realm=\"MCPResources\", resource_metadata_uri=\"%s\"", metadataURL))
@@ -442,7 +458,17 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
-	upstreamURL, err := url.Parse(llm.APIEndpoint)
+
+	// Check for upstream override from plugins (e.g., DLB load balancer)
+	upstreamEndpoint := llm.APIEndpoint
+	if override := r.Context().Value("upstream_override"); override != nil {
+		if overrideURL, ok := override.(string); ok && overrideURL != "" {
+			logger.Debugf("Using upstream override from plugin: %s", overrideURL)
+			upstreamEndpoint = overrideURL
+		}
+	}
+
+	upstreamURL, err := url.Parse(upstreamEndpoint)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL", err, false)
 		return
@@ -451,23 +477,64 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	proxyDirector := func(req *http.Request) {
 		req.URL.Scheme = upstreamURL.Scheme
 		req.URL.Host = upstreamURL.Host
-		req.URL.Path = strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
+		// Strip the gateway prefix to get the remaining path
+		remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
+		// Only combine with upstream base path if remaining path doesn't already include it
+		// e.g., /ai/ sends "/messages" which needs upstream "/v1" → "/v1/messages"
+		// but /call/ sends "/v1/messages" which already has the base path
+		if upstreamURL.Path != "" && !strings.HasPrefix(remainingPath, upstreamURL.Path) {
+			req.URL.Path = path.Join(upstreamURL.Path, remainingPath)
+			logger.Debugf("REST proxy path join: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, req.URL.Path)
+		} else {
+			req.URL.Path = remainingPath
+			logger.Debugf("REST proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
+		}
 		req.Host = upstreamURL.Host
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
-			log.Printf("ERROR setting vendor auth header in director: %v", err)
+			logger.Errorf("ERROR setting vendor auth header in director: %v", err)
 			// Cannot write http error from director. This needs robust handling or pre-flight check.
 		}
 	}
 	httpProxy := &httputil.ReverseProxy{Director: proxyDirector} // Renamed variable
 
-	// Use buffered response capture only if hooks are actually configured
-	if p.responseHookManager != nil && p.hasResponseHooks() {
+	// Check if we need to buffer the response (for hooks or response filters)
+	hasResponseFilters := p.hasResponseFilters(llm)
+	needsBuffering := (p.responseHookManager != nil && p.hasResponseHooks()) || hasResponseFilters
+
+	if needsBuffering {
 		bufferedCapture := newBufferedResponseCapture(w)
 		httpProxy.ServeHTTP(bufferedCapture, r)
 
 		// Execute REST-only response hooks (hooks modify the buffered response in-place)
-		if err := p.executeBufferedResponseHooks(bufferedCapture, llm, app, r); err != nil {
-			log.Printf("Response hook execution failed: %v", err)
+		if p.responseHookManager != nil && p.hasResponseHooks() {
+			if err := p.executeBufferedResponseHooks(bufferedCapture, llm, app, r); err != nil {
+				logger.Errorf("Response hook execution failed: %v", err)
+			}
+		}
+
+		// Execute response filters (block-only, after hooks)
+		if hasResponseFilters {
+			blocked, blockMsg, err := ExecuteResponseFilters(
+				llm,
+				p.gatewayService,
+				bufferedCapture.buffer.Bytes(),
+				bufferedCapture.statusCode,
+				false, // isStreaming
+				false, // isChunk
+				0,     // chunkIndex
+				"",    // currentBuffer (not used for non-streaming)
+				r,
+			)
+			if err != nil {
+				logger.Errorf("Response filter execution failed: %v", err)
+				// Fail open on error - allow response through
+			} else if blocked {
+				// Response was blocked by filter - return error instead
+				respondWithError(w, http.StatusBadRequest, blockMsg, nil, false)
+				// Still analyze for logging purposes
+				go p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
+				return
+			}
 		}
 
 		// AI Gateway proxy writes the final (potentially modified) response to client
@@ -568,6 +635,16 @@ func (p *Proxy) hasResponseHooks() bool {
 	return false
 }
 
+// hasResponseFilters checks if the LLM has any response filters configured
+func (p *Proxy) hasResponseFilters(llm *models.LLM) bool {
+	for _, filter := range llm.Filters {
+		if filter.ResponseFilter {
+			return true
+		}
+	}
+	return false
+}
+
 // AddResponseHook adds a response hook to the proxy (for embeddable AI Gateway)
 func (p *Proxy) AddResponseHook(hook ResponseHook) {
 	if p.responseHookManager == nil {
@@ -576,7 +653,7 @@ func (p *Proxy) AddResponseHook(hook ResponseHook) {
 
 	if manager, ok := p.responseHookManager.(*DefaultResponseHookManager); ok {
 		manager.AddHook(hook)
-		log.Printf("Added response hook: %s", hook.GetName())
+		logger.Debugf("Added response hook: %s", hook.GetName())
 	}
 }
 
@@ -706,15 +783,34 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
-	upstreamURL, err := url.Parse(llm.APIEndpoint)
+
+	// Check for upstream override from plugins (e.g., DLB load balancer)
+	upstreamEndpoint := llm.APIEndpoint
+	if override := r.Context().Value("upstream_override"); override != nil {
+		if overrideURL, ok := override.(string); ok && overrideURL != "" {
+			logger.Debugf("Using upstream override from plugin for streaming: %s", overrideURL)
+			upstreamEndpoint = overrideURL
+		}
+	}
+
+	upstreamURL, err := url.Parse(upstreamEndpoint)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL for streaming", err, false)
 		return
 	}
 
-	// Strip the gateway prefix and use the remaining path directly (consistent with REST handler)
-	upstreamPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
-	upstreamURL.Path = upstreamPath
+	// Strip the gateway prefix to get the remaining path
+	remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
+	// Only combine with upstream base path if remaining path doesn't already include it
+	// e.g., /ai/ sends "/messages" which needs upstream "/v1" → "/v1/messages"
+	// but /call/ sends "/v1/messages" which already has the base path
+	if upstreamURL.Path != "" && !strings.HasPrefix(remainingPath, upstreamURL.Path) {
+		upstreamURL.Path = path.Join(upstreamURL.Path, remainingPath)
+		logger.Debugf("Stream proxy path join: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, upstreamURL.Path)
+	} else {
+		upstreamURL.Path = remainingPath
+		logger.Debugf("Stream proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
+	}
 	upstreamURL.RawQuery = r.URL.RawQuery
 
 	// Use r.Body directly as CopyRequestBody has already replaced it with a readable one.
@@ -749,9 +845,13 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	var fullResponse bytes.Buffer
+	var textBuffer strings.Builder // Accumulate extracted text for response filters
 	buffer := make([]byte, 1024)
 	var responses [][]byte
 	isErr := false
+	chunkIndex := 0
+	hasResponseFilters := p.hasResponseFilters(llm)
+
 	for {
 		n, readErr := resp.Body.Read(buffer)
 		if n > 0 {
@@ -759,6 +859,45 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			copy(chunk, buffer[:n])
 			responses = append(responses, chunk)
 			fullResponse.Write(chunk)
+
+			// Execute response filters on each chunk (if configured)
+			if hasResponseFilters {
+				// Extract text from this chunk and add to text buffer
+				chunkText := switches.ExtractStreamingChunkText(llm.Vendor, chunk)
+				if chunkText != "" {
+					textBuffer.WriteString(chunkText)
+				}
+
+				blocked, blockMsg, filterErr := ExecuteResponseFilters(
+					llm,
+					p.gatewayService,
+					chunk,
+					resp.StatusCode,
+					true,                   // isStreaming
+					true,                   // isChunk
+					chunkIndex,             // chunkIndex
+					textBuffer.String(),    // currentBuffer (accumulated EXTRACTED TEXT)
+					r,
+				)
+				if filterErr != nil {
+					logger.Errorf("Response filter execution error on chunk %d: %v", chunkIndex, filterErr)
+					// Fail open on error - continue streaming
+				} else if blocked {
+					// Response blocked mid-stream - send error chunk and stop
+					logger.Warnf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
+					errorChunk := []byte(fmt.Sprintf(`{"error":"Response blocked by filter: %s"}`, blockMsg))
+					w.Write(errorChunk)
+					if f, ok := w.(http.Flusher); ok {
+						f.Flush()
+					}
+					isErr = true
+					// Analyze partial response
+					go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now())
+					return
+				}
+			}
+
+			// Filter passed or no filters - write chunk to client
 			if _, werr := w.Write(chunk); werr != nil {
 				isErr = true
 				break
@@ -766,6 +905,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
 			}
+			chunkIndex++
 		}
 		if readErr == io.EOF {
 			break
@@ -777,6 +917,62 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	if !isErr {
 		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now())
+
+		// Execute OnStreamComplete hook for plugins (e.g., caching)
+		if p.responseHookManager != nil && p.hasResponseHooks() {
+			go p.executeOnStreamComplete(r, resp, llm, app, fullResponse.Bytes(), reqBody, chunkIndex)
+		}
+	}
+}
+
+// executeOnStreamComplete calls the OnStreamComplete hook for streaming responses
+func (p *Proxy) executeOnStreamComplete(r *http.Request, resp *http.Response, llm *models.LLM, app *models.App, accumulatedResponse []byte, reqBody []byte, chunkCount int) {
+	// Get canonical request ID from context
+	requestID := ""
+	if reqID := r.Context().Value("request_id"); reqID != nil {
+		requestID = reqID.(string)
+	}
+
+	// Create plugin context
+	pluginCtx := &PluginContext{
+		RequestID: requestID,
+		LLMSlug:   llm.Name,
+		LLMID:     llm.ID,
+		AppID:     app.ID,
+		UserID:    app.UserID,
+		Metadata:  make(map[string]string),
+	}
+
+	// Add vendor to metadata for SSE format detection
+	pluginCtx.Metadata["vendor"] = string(llm.Vendor)
+
+	// Convert response headers to map
+	headers := make(map[string]string)
+	for key, values := range resp.Header {
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
+	}
+
+	// Create stream complete request
+	streamReq := &StreamCompleteRequest{
+		AccumulatedResponse: accumulatedResponse,
+		Headers:             headers,
+		StatusCode:          resp.StatusCode,
+		Context:             pluginCtx,
+		ChunkCount:          chunkCount,
+		RequestBody:         reqBody,
+	}
+
+	ctx := context.Background()
+	streamResp, err := p.responseHookManager.ExecuteOnStreamComplete(ctx, streamReq)
+	if err != nil {
+		logger.Errorf("Stream complete hook failed: %v", err)
+		return
+	}
+
+	if streamResp.Cached {
+		logger.Debugf("Streaming response cached for request %s", requestID)
 	}
 }
 
@@ -838,15 +1034,88 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	if err != nil {
 		return err
 	}
+
+	// Extract model from context (set by modelValidationMiddleware)
+	modelName, _ := r.Context().Value("model_name").(string)
+
+	// Extract messages using the message extractor registry
+	messages, err := p.messageExtractorRegistry.Extract(string(llm.Vendor), r, bodyBytes)
+	if err != nil {
+		slog.Warn("Failed to extract messages for filter", "vendor", llm.Vendor, "error", err)
+		messages = []llms.MessageContent{} // Continue with empty messages
+	}
+
+	// Get app from context if available
+	var appID uint
+	if app, ok := r.Context().Value("app").(*models.App); ok {
+		appID = app.ID
+	}
+
+	// Build script input with rich context
+	scriptInput := &scripting.ScriptInput{
+		RawInput:   string(bodyBytes),
+		Messages:   messages,
+		VendorName: string(llm.Vendor),
+		ModelName:  modelName,
+		Context: map[string]interface{}{
+			"llm_id":     int64(llm.ID),    // Convert uint to int64 for Tengo
+			"app_id":     int64(appID),      // Convert uint to int64 for Tengo
+			"request_id": r.Header.Get("X-Request-ID"),
+		},
+		IsChat: false,
+	}
+
+	// Run REQUEST filters in chain (exclude response filters)
 	for _, filter := range llm.Filters {
+		// Skip response filters - they only execute on responses
+		if filter.ResponseFilter {
+			continue
+		}
+
 		runner := scripting.NewScriptRunner(filter.Script)
-		// Note: Filter scripts need to be updated to work with interface
-		// For now, passing nil to avoid compilation errors
-		err := runner.RunFilter(string(bodyBytes), nil)
+		output, err := runner.RunScript(scriptInput, p.gatewayService)
 		if err != nil {
-			return fmt.Errorf("Policy error: %s", filter.Name)
+			return fmt.Errorf("script error in filter '%s': %v", filter.Name, err)
+		}
+
+		// Check if request should be blocked
+		if output.Block {
+			msg := output.Message
+			if msg == "" {
+				msg = "blocked by policy"
+			}
+			return fmt.Errorf("Policy error: %s - %s", filter.Name, msg)
+		}
+
+		// Apply modifications to the request body for next filter
+		// Prefer Messages array if provided, otherwise use Payload
+		if len(output.Messages) > 0 {
+			// Use message reconstructor to rebuild vendor-specific JSON
+			reconstructed, err := p.messageReconstructorRegistry.Reconstruct(string(llm.Vendor), output.Messages, bodyBytes)
+			if err != nil {
+				return fmt.Errorf("failed to reconstruct request in filter '%s': %v", filter.Name, err)
+			}
+			scriptInput.RawInput = string(reconstructed)
+			bodyBytes = reconstructed
+
+			// Re-extract messages from reconstructed payload for next filter
+			if newMessages, err := p.messageExtractorRegistry.Extract(string(llm.Vendor), r, bodyBytes); err == nil {
+				scriptInput.Messages = newMessages
+			}
+		} else if output.Payload != "" && output.Payload != scriptInput.RawInput {
+			scriptInput.RawInput = output.Payload
+			bodyBytes = []byte(output.Payload)
+
+			// Re-extract messages from modified payload for next filter
+			if newMessages, err := p.messageExtractorRegistry.Extract(string(llm.Vendor), r, bodyBytes); err == nil {
+				scriptInput.Messages = newMessages
+			}
 		}
 	}
+
+	// Update request body with final modified payload
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	r.ContentLength = int64(len(bodyBytes))
 
 	v, ok := switches.VendorMap[llm.Vendor]
 	if !ok {
@@ -1100,7 +1369,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 			return cache, nil
 		}
 		// Tool has changed, we'll recreate the server below
-		log.Printf("Tool %s (ID: %d) has changed, recreating MCP server", toolModel.Name, toolModel.ID)
+		logger.Debugf("Tool %s (ID: %d) has changed, recreating MCP server", toolModel.Name, toolModel.ID)
 	}
 
 	// Create new MCP server if it doesn't exist or if tool has changed

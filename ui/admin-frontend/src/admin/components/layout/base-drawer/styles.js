@@ -17,8 +17,10 @@ export const StyledDrawer = styled(MuiDrawer, {
     }),
     '& .MuiList-root': {
       padding: 0,
-      overflow: 'hidden',
+      overflowY: open ? 'auto' : 'hidden',
+      overflowX: 'hidden',
       position: 'relative',
+      maxHeight: 'calc(100vh - 64px)',
       '& .MuiListItemText-root, & .MuiSvgIcon-root:not(.MuiListItemIcon-root svg)': {
         opacity: open ? 1 : 0,
         transition: theme.transitions.create('opacity', {
@@ -66,11 +68,16 @@ export const ToggleButton = styled(MuiIconButton)(({ theme }) => ({
   }
 }));
 
-export const MenuList = styled('div')(({ customMarginTop }) => ({
+export const MenuList = styled('div', {
+  shouldForwardProp: prop => !['customMarginTop', 'open'].includes(prop),
+})(({ customMarginTop, open }) => ({
   position: 'relative',
   marginTop: customMarginTop || 0,
   zIndex: 1,
-  overflow: 'hidden',
+  overflowY: open ? 'auto' : 'hidden',
+  overflowX: 'hidden',
+  flex: 1,
+  minHeight: 0,
 }));
 
 export const ParentListItem = styled(ListItemButton, {

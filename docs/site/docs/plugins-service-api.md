@@ -35,13 +35,72 @@ func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedReques
 }
 ```
 
-## Initialization
+## Initialization and Connection Warmup
 
-For Service API access, plugins must extract the broker ID during initialization:
+For Service API access in AI Studio, plugins use a **session-based broker pattern**. The SDK handles most of the setup automatically, but there's a critical pattern you must follow for reliable Service API access.
+
+### The Connection Warmup Pattern
+
+**Critical**: The go-plugin broker only accepts **ONE connection per broker ID**. If your plugin uses both the Event Service and the Management Service API, whichever service dials first will succeed, and the connection is shared between them.
+
+To ensure reliable Service API access, implement `SessionAware` and **warm up the connection in `OnSessionReady`**:
+
+```go
+import (
+    "context"
+    "log"
+
+    "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type MyPlugin struct {
+    plugin_sdk.BasePlugin
+    services plugin_sdk.ServiceBroker
+}
+
+func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    p.services = ctx.Services
+    return nil
+}
+
+// OnSessionReady implements plugin_sdk.SessionAware
+// CRITICAL: Warm up the Service API connection here!
+func (p *MyPlugin) OnSessionReady(ctx plugin_sdk.Context) {
+    log.Printf("Session ready - warming up service API connection...")
+
+    // Eagerly establish the broker connection by making a lightweight API call.
+    // This ensures the connection is ready before any RPC calls come in.
+    if ai_studio_sdk.IsInitialized() {
+        _, err := ai_studio_sdk.GetPluginsCount(context.Background())
+        if err != nil {
+            log.Printf("Service API warmup failed: %v", err)
+        } else {
+            log.Printf("Service API connection established successfully")
+        }
+    }
+}
+
+func (p *MyPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+    log.Printf("Session closing")
+}
+```
+
+### Why Warmup Is Required
+
+Without the warmup pattern, you may encounter **"timeout waiting for connection info"** errors when your plugin tries to use the Service API during an RPC call. This happens because:
+
+1. The broker connection is time-sensitive and must be established early
+2. Dialing late (during an RPC call from the UI) may fail if timing is off
+3. Event subscriptions and Service API calls share the same underlying connection
+
+### Legacy Pattern (Still Supported)
+
+The older pattern of extracting the broker ID manually during `Initialize` still works but is not recommended:
 
 ```go
 func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
-    // Extract broker ID for Service API access
+    // Extract broker ID for Service API access (automatic with SessionAware)
     brokerIDStr := ""
     if id, ok := config["_service_broker_id"]; ok {
         brokerIDStr = id
@@ -58,6 +117,8 @@ func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) 
     return nil
 }
 ```
+
+**Note**: The SDK now handles broker ID extraction automatically via `OpenSession`. You only need to implement `SessionAware` and warm up the connection.
 
 ## Universal Services
 
@@ -174,6 +235,403 @@ func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedReques
     return &pb.PluginResponse{Modified: false}, nil
 }
 ```
+
+### Event Service
+
+The Event Service enables plugins to publish and subscribe to events using the Event Bridge system. This allows plugins to communicate across the distributed architecture (edge ↔ control) using a pub/sub pattern.
+
+**Key Features:**
+- Publish events to the local event bus
+- Subscribe to events by topic or all events
+- Events can flow across the hub-spoke architecture based on direction
+- Automatic cleanup of subscriptions when plugin disconnects
+
+#### Event Directions
+
+Events have a direction that controls routing:
+
+| Direction | Constant | Description |
+|-----------|----------|-------------|
+| Local | `plugin_sdk.DirLocal` | Stays on local bus only, never forwarded |
+| Up | `plugin_sdk.DirUp` | Flows from edge (Microgateway) to control (AI Studio) |
+| Down | `plugin_sdk.DirDown` | Flows from control (AI Studio) to edge(s) |
+
+#### Publish Event
+
+Publish an event with a JSON-serializable payload:
+
+```go
+err := ctx.Services.Events().Publish(ctx, "my.topic", payload, plugin_sdk.DirUp)
+```
+
+Example:
+```go
+// Publish a cache hit event to the local bus only
+cacheEvent := map[string]interface{}{
+    "key":       "user:123",
+    "hit":       true,
+    "timestamp": time.Now().Unix(),
+}
+err := ctx.Services.Events().Publish(ctx, "cache.hit", cacheEvent, plugin_sdk.DirLocal)
+if err != nil {
+    ctx.Services.Logger().Error("Failed to publish cache event", "error", err)
+}
+
+// Publish metrics from edge to control
+metrics := map[string]interface{}{
+    "requests_per_second": 1500,
+    "avg_latency_ms":      25,
+    "error_rate":          0.02,
+}
+err = ctx.Services.Events().Publish(ctx, "metrics.report", metrics, plugin_sdk.DirUp)
+```
+
+#### Publish Raw Event
+
+Publish an event with pre-serialized JSON payload (avoids double-serialization):
+
+```go
+err := ctx.Services.Events().PublishRaw(ctx, "my.topic", jsonBytes, plugin_sdk.DirUp)
+```
+
+Example:
+```go
+// When you already have JSON bytes
+jsonPayload := []byte(`{"status": "ready", "version": "1.0.0"}`)
+err := ctx.Services.Events().PublishRaw(ctx, "plugin.status", jsonPayload, plugin_sdk.DirLocal)
+```
+
+#### Subscribe to Events
+
+Subscribe to events on a specific topic:
+
+```go
+subscriptionID, err := ctx.Services.Events().Subscribe("my.topic", func(ev plugin_sdk.Event) {
+    // Handle event
+    fmt.Printf("Received: %s from %s\n", ev.Topic, ev.Origin)
+})
+```
+
+Example:
+```go
+// Subscribe to configuration updates
+subID, err := ctx.Services.Events().Subscribe("config.updated", func(ev plugin_sdk.Event) {
+    ctx.Services.Logger().Info("Configuration updated",
+        "event_id", ev.ID,
+        "origin", ev.Origin,
+    )
+
+    // Parse payload
+    var config map[string]interface{}
+    if err := json.Unmarshal(ev.Payload, &config); err != nil {
+        ctx.Services.Logger().Error("Failed to parse config", "error", err)
+        return
+    }
+
+    // Apply new configuration
+    p.applyConfig(config)
+})
+if err != nil {
+    ctx.Services.Logger().Error("Failed to subscribe", "error", err)
+}
+
+// Store subscription ID to unsubscribe later
+p.configSubID = subID
+```
+
+#### Subscribe to All Events
+
+Subscribe to all events regardless of topic:
+
+```go
+subscriptionID, err := ctx.Services.Events().SubscribeAll(func(ev plugin_sdk.Event) {
+    // Handle all events
+})
+```
+
+Example:
+```go
+// Monitor all events for debugging
+subID, err := ctx.Services.Events().SubscribeAll(func(ev plugin_sdk.Event) {
+    ctx.Services.Logger().Debug("Event observed",
+        "id", ev.ID,
+        "topic", ev.Topic,
+        "origin", ev.Origin,
+        "direction", ev.Dir,
+    )
+})
+```
+
+#### Unsubscribe
+
+Remove a subscription:
+
+```go
+err := ctx.Services.Events().Unsubscribe(subscriptionID)
+```
+
+Example:
+```go
+// Clean up subscription in Shutdown
+func (p *MyPlugin) Shutdown(ctx plugin_sdk.Context) error {
+    if p.configSubID != "" {
+        if err := ctx.Services.Events().Unsubscribe(p.configSubID); err != nil {
+            ctx.Services.Logger().Warn("Failed to unsubscribe", "error", err)
+        }
+    }
+    return nil
+}
+```
+
+**Note:** Subscriptions are automatically cleaned up when the plugin process terminates, but it's good practice to explicitly unsubscribe in `Shutdown()`.
+
+#### Event Structure
+
+Events have the following fields:
+
+```go
+type Event struct {
+    ID      string           // UUID for deduplication and tracing
+    Topic   string           // Logical topic name (e.g., "config.update")
+    Origin  string           // Node/plugin that created the event
+    Dir     Direction        // Routing direction
+    Payload json.RawMessage  // JSON payload
+}
+```
+
+#### Complete Example: Event-Driven Cache Invalidation
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type CachePlugin struct {
+    plugin_sdk.BasePlugin
+    cache           map[string][]byte
+    invalidationSub string
+}
+
+func (p *CachePlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    p.cache = make(map[string][]byte)
+
+    // Subscribe to cache invalidation events from control
+    subID, err := ctx.Services.Events().Subscribe("cache.invalidate", func(ev plugin_sdk.Event) {
+        var req struct {
+            Keys []string `json:"keys"`
+        }
+        if err := json.Unmarshal(ev.Payload, &req); err != nil {
+            return
+        }
+
+        for _, key := range req.Keys {
+            delete(p.cache, key)
+        }
+
+        ctx.Services.Logger().Info("Cache invalidated",
+            "keys", len(req.Keys),
+            "origin", ev.Origin,
+        )
+    })
+    if err != nil {
+        return err
+    }
+    p.invalidationSub = subID
+
+    return nil
+}
+
+func (p *CachePlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    cacheKey := req.Path
+
+    // Check cache
+    if data, ok := p.cache[cacheKey]; ok {
+        // Publish cache hit event (local only for metrics)
+        ctx.Services.Events().Publish(ctx, "cache.hit", map[string]interface{}{
+            "key": cacheKey,
+        }, plugin_sdk.DirLocal)
+
+        // Return cached response...
+    }
+
+    // Cache miss - continue to upstream
+    return &pb.PluginResponse{Modified: false}, nil
+}
+
+func (p *CachePlugin) Shutdown(ctx plugin_sdk.Context) error {
+    if p.invalidationSub != "" {
+        ctx.Services.Events().Unsubscribe(p.invalidationSub)
+    }
+    return nil
+}
+```
+
+#### Event Service Best Practices
+
+1. **Use Appropriate Directions**:
+   - `DirLocal` for metrics and debugging within a single node
+   - `DirUp` for edge plugins sending data to control
+   - `DirDown` for control pushing updates to edges
+
+2. **Handle Payload Parsing Errors**: Always validate and handle JSON unmarshaling errors in event handlers.
+
+3. **Avoid Blocking in Handlers**: Event handlers should be fast. For heavy processing, spawn a goroutine or queue work.
+
+4. **Clean Up Subscriptions**: Unsubscribe in `Shutdown()` for explicit cleanup.
+
+5. **Use Meaningful Topics**: Use dot-separated topic names for clarity (e.g., `cache.invalidate`, `config.updated`, `metrics.report`).
+
+6. **Include Context in Payloads**: Add timestamps, correlation IDs, or source info to payloads for debugging.
+
+### System CRUD Events
+
+AI Studio emits built-in system events when core objects are created, updated, or deleted. These events are published to the local event bus (control-plane only) and can be subscribed to by any plugin.
+
+#### Available System Events
+
+| Topic | Object Type | Action | Description |
+|-------|-------------|--------|-------------|
+| `system.llm.created` | LLM | created | Emitted when an LLM is created |
+| `system.llm.updated` | LLM | updated | Emitted when an LLM is updated |
+| `system.llm.deleted` | LLM | deleted | Emitted when an LLM is deleted |
+| `system.app.created` | App | created | Emitted when an App is created |
+| `system.app.updated` | App | updated | Emitted when an App is updated |
+| `system.app.deleted` | App | deleted | Emitted when an App is deleted |
+| `system.app.approved` | App | approved | Emitted when an App's credential is activated |
+| `system.datasource.created` | Datasource | created | Emitted when a Datasource is created |
+| `system.datasource.updated` | Datasource | updated | Emitted when a Datasource is updated |
+| `system.datasource.deleted` | Datasource | deleted | Emitted when a Datasource is deleted |
+| `system.user.created` | User | created | Emitted when a User is created |
+| `system.user.updated` | User | updated | Emitted when a User is updated |
+| `system.user.deleted` | User | deleted | Emitted when a User is deleted |
+| `system.group.created` | Group | created | Emitted when a Group is created |
+| `system.group.updated` | Group | updated | Emitted when a Group is updated |
+| `system.group.deleted` | Group | deleted | Emitted when a Group is deleted |
+| `system.tool.created` | Tool | created | Emitted when a Tool is created |
+| `system.tool.updated` | Tool | updated | Emitted when a Tool is updated |
+| `system.tool.deleted` | Tool | deleted | Emitted when a Tool is deleted |
+
+#### Event Payload Structure
+
+All system CRUD events use a consistent payload structure:
+
+```go
+type ObjectEventPayload struct {
+    ObjectType string      `json:"object_type"`  // "llm", "app", "datasource", "user", "group", "tool"
+    Action     string      `json:"action"`       // "created", "updated", "deleted", "approved"
+    ObjectID   uint        `json:"object_id"`    // ID of the affected object
+    UserID     uint        `json:"user_id"`      // User who performed the action (0 if system/unknown)
+    Timestamp  time.Time   `json:"timestamp"`    // When the event occurred
+    Object     interface{} `json:"object"`       // The full object (for create/update, nil for delete)
+}
+```
+
+#### Subscribing to System Events
+
+```go
+// Subscribe to all App events using wildcard
+subID, err := ctx.Services.Events().Subscribe("system.app.*", func(ev plugin_sdk.Event) {
+    var payload struct {
+        ObjectType string      `json:"object_type"`
+        Action     string      `json:"action"`
+        ObjectID   uint        `json:"object_id"`
+        UserID     uint        `json:"user_id"`
+        Timestamp  time.Time   `json:"timestamp"`
+        Object     interface{} `json:"object"`
+    }
+
+    if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+        ctx.Services.Logger().Error("Failed to parse event payload", "error", err)
+        return
+    }
+
+    ctx.Services.Logger().Info("App event received",
+        "action", payload.Action,
+        "object_id", payload.ObjectID,
+        "user_id", payload.UserID,
+    )
+})
+
+// Or subscribe to a specific event
+subID, err := ctx.Services.Events().Subscribe("system.user.created", func(ev plugin_sdk.Event) {
+    // Handle new user creation
+})
+```
+
+#### Example: Audit Log Plugin
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "time"
+
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type AuditLogPlugin struct {
+    plugin_sdk.BasePlugin
+    subscriptions []string
+}
+
+func (p *AuditLogPlugin) OnSessionReady(ctx plugin_sdk.Context) {
+    // Subscribe to all system events
+    topics := []string{
+        "system.llm.created", "system.llm.updated", "system.llm.deleted",
+        "system.app.created", "system.app.updated", "system.app.deleted", "system.app.approved",
+        "system.datasource.created", "system.datasource.updated", "system.datasource.deleted",
+        "system.user.created", "system.user.updated", "system.user.deleted",
+        "system.group.created", "system.group.updated", "system.group.deleted",
+        "system.tool.created", "system.tool.updated", "system.tool.deleted",
+    }
+
+    for _, topic := range topics {
+        subID, err := ctx.Services.Events().Subscribe(topic, func(ev plugin_sdk.Event) {
+            p.logAuditEvent(ctx, ev)
+        })
+        if err != nil {
+            ctx.Services.Logger().Error("Failed to subscribe to event", "topic", topic, "error", err)
+            continue
+        }
+        p.subscriptions = append(p.subscriptions, subID)
+    }
+}
+
+func (p *AuditLogPlugin) logAuditEvent(ctx plugin_sdk.Context, ev plugin_sdk.Event) {
+    var payload struct {
+        ObjectType string    `json:"object_type"`
+        Action     string    `json:"action"`
+        ObjectID   uint      `json:"object_id"`
+        UserID     uint      `json:"user_id"`
+        Timestamp  time.Time `json:"timestamp"`
+    }
+
+    if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+        return
+    }
+
+    // Log to external audit system, KV storage, etc.
+    ctx.Services.Logger().Info("AUDIT",
+        "object_type", payload.ObjectType,
+        "action", payload.Action,
+        "object_id", payload.ObjectID,
+        "user_id", payload.UserID,
+        "timestamp", payload.Timestamp,
+    )
+}
+
+func (p *AuditLogPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+    for _, subID := range p.subscriptions {
+        ctx.Services.Events().Unsubscribe(subID)
+    }
+}
+```
+
+**Note**: System events are published with `DirLocal` direction, meaning they stay on the control plane and are not forwarded to edge instances.
 
 ## Studio Services
 
@@ -861,17 +1319,663 @@ llmsResp, err := ai_studio_sdk.ListLLMs(ctx, 1, 10)
 | ListPlugins, GetPlugin | `plugins.read` |
 | ReadPluginKV, ListPluginKVKeys | `kv.read` |
 | WritePluginKV, DeletePluginKV | `kv.readwrite` |
+| ListDatasources, GetDatasource | `datasources.read` |
+| CreateDatasource, UpdateDatasource, DeleteDatasource | `datasources.write` |
+| GenerateEmbedding, StoreDocuments, ProcessAndStoreDocuments | `datasources.embeddings` |
+| QueryDatasource, QueryDatasourceByVector | `datasources.query` |
+| CreateSchedule, GetSchedule, ListSchedules, UpdateSchedule, DeleteSchedule | `scheduler.manage` |
+
+## RAG & Embedding Services
+
+AI Studio provides comprehensive RAG (Retrieval-Augmented Generation) capabilities through the Service API, enabling plugins to build custom document ingestion and semantic search workflows.
+
+### Overview
+
+The RAG Service APIs allow plugins to:
+- Generate embeddings using configured embedders (OpenAI, Ollama, Vertex, etc.)
+- Store pre-computed embeddings with custom chunking strategies
+- Query vector stores with semantic search
+- Build complex ingestion plugins (GitHub, Confluence, custom document processors)
+
+**Key Benefit**: Plugins have **full control** over chunking, embedding generation, and storage - no forced workflows.
+
+### Core RAG APIs
+
+#### GenerateEmbedding
+
+Generate embeddings for text chunks without storing them.
+
+```go
+resp, err := ai_studio_sdk.GenerateEmbedding(ctx, datasourceID, []string{
+    "First chunk of text",
+    "Second chunk of text",
+    "Third chunk of text",
+})
+
+if err != nil || !resp.Success {
+    return err
+}
+
+// resp.Vectors contains the embedding vectors
+for i, vector := range resp.Vectors {
+    fmt.Printf("Chunk %d embedding dimensions: %d\n", i, len(vector.Values))
+}
+```
+
+**Required Scope**: `datasources.embeddings`
+
+**Use Case**: Custom chunking workflows where you generate embeddings first, then decide what to store.
+
+#### StoreDocuments
+
+Store pre-computed embeddings in the vector store without regenerating them.
+
+```go
+documents := make([]*mgmtpb.DocumentWithEmbedding, len(chunks))
+for i, chunk := range chunks {
+    documents[i] = &mgmtpb.DocumentWithEmbedding{
+        Content:   chunk,
+        Embedding: preComputedEmbeddings[i],
+        Metadata: map[string]string{
+            "source":      "github",
+            "repo":        "my-repo",
+            "file":        "README.md",
+            "chunk_index": fmt.Sprintf("%d", i),
+        },
+    }
+}
+
+resp, err := ai_studio_sdk.StoreDocuments(ctx, datasourceID, documents)
+if err != nil || !resp.Success {
+    return err
+}
+
+fmt.Printf("Stored %d documents\n", resp.StoredCount)
+```
+
+**Required Scope**: `datasources.embeddings`
+
+**Use Case**: Complete control over embeddings - use custom models, external services, or cached embeddings.
+
+**Supported Vector Stores**:
+- ✅ Pinecone
+- ✅ PGVector
+- ✅ Chroma (v0.2.5+)
+- ✅ Weaviate
+- ⚠️ Qdrant (requires SDK installation)
+- ⚠️ Redis (requires RediSearch configuration)
+
+#### ProcessAndStoreDocuments
+
+Convenience method that generates embeddings and stores in one step.
+
+```go
+chunks := make([]*mgmtpb.DocumentChunk, len(texts))
+for i, text := range texts {
+    chunks[i] = &mgmtpb.DocumentChunk{
+        Content: text,
+        Metadata: map[string]string{
+            "source": "api",
+            "index":  fmt.Sprintf("%d", i),
+        },
+    }
+}
+
+resp, err := ai_studio_sdk.ProcessAndStoreDocuments(ctx, datasourceID, chunks)
+if err != nil || !resp.Success {
+    return err
+}
+
+fmt.Printf("Processed %d documents\n", resp.ProcessedCount)
+```
+
+**Required Scope**: `datasources.embeddings`
+
+**Use Case**: Simplified workflow when you don't need to inspect or cache embeddings.
+
+#### QueryDatasource
+
+Semantic search using a text query (embedding generated automatically).
+
+```go
+resp, err := ai_studio_sdk.QueryDatasource(ctx, datasourceID,
+    "How do I configure RAG in AI Studio?",
+    10,   // maxResults
+    0.75, // similarityThreshold
+)
+
+if err != nil || !resp.Success {
+    return err
+}
+
+for _, result := range resp.Results {
+    fmt.Printf("Score: %.2f | Content: %s\n",
+        result.SimilarityScore,
+        result.Content)
+    // Access metadata
+    for k, v := range result.Metadata {
+        fmt.Printf("  %s: %s\n", k, v)
+    }
+}
+```
+
+**Required Scope**: `datasources.query`
+
+**Use Case**: Standard semantic search - plugin provides text, system handles embedding.
+
+#### QueryDatasourceByVector
+
+Semantic search using a pre-computed embedding vector.
+
+```go
+// Generate query embedding
+queryResp, _ := ai_studio_sdk.GenerateEmbedding(ctx, datasourceID, []string{"search query"})
+queryVector := queryResp.Vectors[0].Values
+
+// Search with the pre-computed vector
+resp, err := ai_studio_sdk.QueryDatasourceByVector(ctx, datasourceID,
+    queryVector,
+    10,   // maxResults
+    0.75, // similarityThreshold
+)
+
+for _, result := range resp.Results {
+    fmt.Printf("Match: %s (score: %.2f)\n", result.Content, result.SimilarityScore)
+}
+```
+
+**Required Scope**: `datasources.query`
+
+**Use Case**: Advanced workflows with custom query embeddings or hybrid search strategies.
+
+**Supported Vector Stores**:
+- ✅ Pinecone
+- ✅ PGVector
+- ✅ Chroma
+- ✅ Weaviate
+- ⚠️ Qdrant (requires SDK)
+- ⚠️ Redis (requires RediSearch)
+
+### Complete Custom Ingestion Example
+
+Building a GitHub repository documentation ingestion plugin:
+
+```go
+func (p *GitHubDocsPlugin) IngestRepository(ctx plugin_sdk.Context, repo string, datasourceID uint32) error {
+    // Step 1: Fetch markdown files from GitHub
+    files, err := p.fetchMarkdownFiles(repo)
+    if err != nil {
+        return err
+    }
+
+    // Step 2: Custom chunking strategy (semantic chunking by headers)
+    var allChunks []string
+    var allMetadata []map[string]string
+
+    for _, file := range files {
+        chunks := p.semanticChunker(file.Content) // Your custom logic
+        for i, chunk := range chunks {
+            allChunks = append(allChunks, chunk)
+            allMetadata = append(allMetadata, map[string]string{
+                "source":      "github",
+                "repo":        repo,
+                "file":        file.Path,
+                "chunk_index": fmt.Sprintf("%d", i),
+                "updated_at":  file.UpdatedAt,
+            })
+        }
+    }
+
+    // Step 3: Generate embeddings for all chunks
+    embResp, err := ai_studio_sdk.GenerateEmbedding(ctx, datasourceID, allChunks)
+    if err != nil || !embResp.Success {
+        return fmt.Errorf("embedding generation failed: %v", err)
+    }
+
+    // Step 4: Store with pre-computed embeddings
+    documents := make([]*mgmtpb.DocumentWithEmbedding, len(allChunks))
+    for i := range allChunks {
+        documents[i] = &mgmtpb.DocumentWithEmbedding{
+            Content:   allChunks[i],
+            Embedding: embResp.Vectors[i].Values,
+            Metadata:  allMetadata[i],
+        }
+    }
+
+    storeResp, err := ai_studio_sdk.StoreDocuments(ctx, datasourceID, documents)
+    if err != nil || !storeResp.Success {
+        return fmt.Errorf("storage failed: %v", err)
+    }
+
+    ctx.Services.Logger().Info("Successfully ingested repository",
+        "repo", repo,
+        "chunks", storeResp.StoredCount)
+
+    return nil
+}
+```
+
+### Datasource Configuration
+
+For RAG APIs to work, datasources must be configured with:
+
+**Embedder Configuration**:
+- `EmbedVendor`: Embedder provider (`"openai"`, `"ollama"`, `"vertex"`, `"googleai"`)
+- `EmbedModel`: Model name (e.g., `"text-embedding-3-small"` for OpenAI, `"nomic-embed-text"` for Ollama)
+- `EmbedAPIKey`: API key if required by embedder
+- `EmbedUrl`: Embedder endpoint URL
+
+**Vector Store Configuration**:
+- `DBSourceType`: Vector store type (`"pinecone"`, `"chroma"`, `"pgvector"`, `"qdrant"`, `"redis"`, `"weaviate"`)
+- `DBConnString`: Connection URL for vector store
+- `DBConnAPIKey`: API key if required
+- `DBName`: Collection/namespace/table name
+
+**Important**: `EmbedModel` must be the actual model name (e.g., `"text-embedding-3-small"`), NOT the vendor name!
+
+### RAG Workflow Patterns
+
+#### Pattern 1: Separate Generate & Store (Full Control)
+
+```go
+// Generate embeddings
+embeddings, _ := ai_studio_sdk.GenerateEmbedding(ctx, dsID, customChunks)
+
+// Store with pre-computed embeddings (no re-embedding!)
+ai_studio_sdk.StoreDocuments(ctx, dsID, documentsWithEmbeddings)
+```
+
+**Best for**: Custom chunking algorithms, caching embeddings, using external embedding services.
+
+#### Pattern 2: Process & Store (Convenience)
+
+```go
+// Generate and store in one step
+ai_studio_sdk.ProcessAndStoreDocuments(ctx, dsID, chunks)
+```
+
+**Best for**: Simple ingestion when you don't need to inspect or cache embeddings.
+
+#### Pattern 3: Hybrid Search
+
+```go
+// Generate embeddings for multiple query variants
+variants := []string{"original query", "rephrased query", "expanded query"}
+embeddings, _ := ai_studio_sdk.GenerateEmbedding(ctx, dsID, variants)
+
+// Search with each variant and merge results
+allResults := []Result{}
+for _, emb := range embeddings.Vectors {
+    results, _ := ai_studio_sdk.QueryDatasourceByVector(ctx, dsID, emb.Values, 5, 0.7)
+    allResults = append(allResults, results.Results...)
+}
+
+// Deduplicate and rank
+finalResults := deduplicateAndRank(allResults)
+```
+
+**Best for**: Advanced search strategies, query expansion, multi-vector search.
+
+### Datasource Management APIs
+
+For managing datasources programmatically:
+
+```go
+// List all datasources
+datasources, err := ai_studio_sdk.ListDatasources(ctx, 1, 100, nil, "")
+
+// Get specific datasource
+ds, err := ai_studio_sdk.GetDatasource(ctx, datasourceID)
+
+// Create datasource with full configuration
+ds, err := ai_studio_sdk.CreateDatasourceWithEmbedder(ctx,
+    "My RAG Datasource",
+    "Short description",
+    "Long description",
+    "",                      // URL
+    "http://localhost:8000", // Chroma connection
+    "chroma",                // Vector store type
+    "",                      // DB API key
+    "my-collection",         // Collection name
+    "openai",                // Embedder vendor
+    "https://api.openai.com/v1/embeddings", // Embedder URL
+    "sk-...",                // Embed API key
+    "text-embedding-3-small", // Embed model
+    5, 1, true,
+)
+
+// Update datasource
+ds, err := ai_studio_sdk.UpdateDatasource(ctx, datasourceID, name, ...)
+
+// Delete datasource
+err := ai_studio_sdk.DeleteDatasource(ctx, datasourceID)
+
+// Search datasources
+results, err := ai_studio_sdk.SearchDatasources(ctx, "query")
+```
+
+**Required Scopes**: `datasources.read` (list/get/search), `datasources.write` (create/update/delete)
+
+### Error Handling
+
+```go
+resp, err := ai_studio_sdk.GenerateEmbedding(ctx, dsID, chunks)
+if err != nil {
+    // gRPC communication error
+    return fmt.Errorf("gRPC error: %w", err)
+}
+
+if !resp.Success {
+    // Server-side validation or processing error
+    ctx.Services.Logger().Error("Embedding generation failed",
+        "error", resp.ErrorMessage,
+        "datasource_id", dsID)
+    return fmt.Errorf("embedding failed: %s", resp.ErrorMessage)
+}
+
+// Success - use resp.Vectors
+```
+
+**Common Errors**:
+- `"datasource does not have embedder configured"` - Set EmbedVendor/EmbedModel/EmbedAPIKey
+- `"datasource does not have vector store configured"` - Set DBSourceType/DBConnString/DBName
+- `"failed to generate embeddings with openai/openai"` - EmbedModel should be model name, not vendor!
+- `"vector store connection failed"` - Ensure vector store is running and accessible
+
+### Advanced Datasource Operations
+
+These operations provide fine-grained control over vector store data through metadata filtering and namespace management.
+
+#### Delete Documents by Metadata
+
+Delete specific documents from vector stores using metadata filters:
+
+```go
+// Delete all chunks for a specific file
+count, err := ai_studio_sdk.DeleteDocumentsByMetadata(
+    ctx,
+    datasourceID,
+    map[string]string{"file_path": "old-file.md"},
+    "AND",  // filter mode: "AND" or "OR"
+    false,  // dry_run: set true to preview without deleting
+)
+
+// Example with OR mode (delete documents matching any condition)
+count, err := ai_studio_sdk.DeleteDocumentsByMetadata(
+    ctx,
+    datasourceID,
+    map[string]string{
+        "status": "archived",
+        "expired": "true",
+    },
+    "OR",   // Matches documents with status=archived OR expired=true
+    false,
+)
+```
+
+**Parameters:**
+- `metadataFilter`: map of metadata key-value pairs to match
+- `filterMode`: `"AND"` (all conditions must match) or `"OR"` (any condition matches)
+- `dryRun`: if `true`, returns count without deleting
+
+**Returns:** Number of documents deleted (or would be deleted if dry-run)
+
+**Scope Required**: `datasources.write`
+
+#### Query by Metadata Only
+
+Query documents using only metadata filters (no vector similarity):
+
+```go
+results, totalCount, err := ai_studio_sdk.QueryByMetadataOnly(
+    ctx,
+    datasourceID,
+    map[string]string{"source": "internal-docs"},
+    "AND",
+    10,  // limit
+    0,   // offset
+)
+
+// Process results
+for _, result := range results {
+    fmt.Printf("Content: %s\nMetadata: %v\n", result.Content, result.Metadata)
+}
+fmt.Printf("Total matching documents: %d\n", totalCount)
+```
+
+**Parameters:**
+- `metadataFilter`: metadata key-value pairs to match
+- `filterMode`: `"AND"` or `"OR"`
+- `limit`: max results per page (1-100, default: 10)
+- `offset`: pagination offset
+
+**Returns:** Array of results and total count (for pagination)
+
+**Scope Required**: `datasources.query`
+
+#### List Namespaces
+
+List all namespaces/collections in a vector store:
+
+```go
+namespaces, err := ai_studio_sdk.ListNamespaces(ctx, datasourceID)
+for _, ns := range namespaces {
+    fmt.Printf("Namespace: %s, Documents: %d\n", ns.Name, ns.DocumentCount)
+}
+```
+
+**Returns:** Array of namespace info with document counts
+
+**Scope Required**: `datasources.read`
+
+**Note:** Document count may be `-1` if not supported by the vector store.
+
+#### Delete Namespace
+
+Delete an entire namespace/collection (bulk operation):
+
+```go
+// Requires confirm=true for safety
+err := ai_studio_sdk.DeleteNamespace(ctx, datasourceID, "old-namespace", true)
+```
+
+**Parameters:**
+- `namespace`: namespace/collection name to delete
+- `confirm`: must be `true` to proceed (safety check)
+
+**Scope Required**: `datasources.write`
+
+**Warning:** This is a destructive operation that deletes all documents in the namespace. Use with caution.
+
+**Supported Vector Stores:**
+- ✅ Full support: Chroma, PGVector, Pinecone, Weaviate
+- ⚠️ Limited: Redis (delete/query by metadata not fully supported)
+- ⚠️ Partial: Qdrant (namespace management only)
+
+## Schedule Management
+
+**Scope Required**: `scheduler.manage`
+**Available in**: AI Studio only
+
+Plugins can programmatically manage their scheduled tasks using the Schedule Management API. This complements manifest-based schedule declarations.
+
+### Overview
+
+Schedules can be created in two ways:
+1. **Manifest Schedules**: Declared in `plugin.manifest.json`, auto-registered when plugin loads
+2. **API Schedules**: Created programmatically via SDK during `Initialize()` or at runtime
+
+Both types execute via the `ExecuteScheduledTask()` capability method.
+
+### CreateSchedule
+
+Create a new schedule for your plugin:
+
+```go
+schedule, err := ai_studio_sdk.CreateSchedule(
+    ctx,
+    "hourly-sync",              // Schedule ID (unique per plugin)
+    "Hourly Data Sync",         // Human-readable name
+    "0 * * * *",                // Cron expression (5-field format)
+    "UTC",                      // Timezone
+    120,                        // Timeout in seconds
+    map[string]interface{}{     // Config passed to ExecuteScheduledTask
+        "batch_size": 100,
+    },
+    true,                       // Enabled
+)
+```
+
+**Returns**: `*mgmtpb.ScheduleInfo` with schedule details
+**Errors**: `AlreadyExists` if schedule_id already exists for this plugin
+
+### GetSchedule
+
+Retrieve schedule details by manifest schedule ID:
+
+```go
+schedule, err := ai_studio_sdk.GetSchedule(ctx, "hourly-sync")
+```
+
+**Returns**: `*mgmtpb.ScheduleInfo`
+**Errors**: `NotFound` if schedule doesn't exist
+
+### ListSchedules
+
+Get all schedules for your plugin:
+
+```go
+schedules, err := ai_studio_sdk.ListSchedules(ctx)
+```
+
+**Returns**: `[]*mgmtpb.ScheduleInfo` array
+
+### UpdateSchedule
+
+Update schedule fields (all fields optional):
+
+```go
+enabled := false
+timeout := int32(180)
+
+schedule, err := ai_studio_sdk.UpdateSchedule(ctx, "hourly-sync", ai_studio_sdk.UpdateScheduleOptions{
+    Name:           stringPtr("Updated Sync Task"),
+    CronExpr:       stringPtr("30 * * * *"),  // Every hour at :30
+    Timezone:       stringPtr("America/New_York"),
+    TimeoutSeconds: &timeout,
+    Enabled:        &enabled,
+    Config: map[string]interface{}{
+        "batch_size": 200,
+    },
+})
+```
+
+**Returns**: `*mgmtpb.ScheduleInfo` with updated schedule
+**Errors**: `NotFound` if schedule doesn't exist
+
+### DeleteSchedule
+
+Remove a schedule:
+
+```go
+err := ai_studio_sdk.DeleteSchedule(ctx, "hourly-sync")
+```
+
+**Errors**: `NotFound` if schedule doesn't exist
+
+### Complete Example
+
+```go
+package main
+
+import (
+    "context"
+    "github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+)
+
+type MyPlugin struct {
+    plugin_sdk.BasePlugin
+}
+
+// Initialize creates API-managed schedules
+func (p *MyPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    if ctx.Runtime != plugin_sdk.RuntimeStudio {
+        return nil
+    }
+
+    apiCtx := context.Background()
+
+    // Check if schedule exists (idempotent)
+    if _, err := ai_studio_sdk.GetSchedule(apiCtx, "data-refresh"); err != nil {
+        // Create new schedule
+        _, err := ai_studio_sdk.CreateSchedule(
+            apiCtx,
+            "data-refresh",
+            "Refresh External Data",
+            "*/15 * * * *",  // Every 15 minutes
+            "UTC",
+            300,  // 5 minute timeout
+            map[string]interface{}{
+                "api_endpoint": "https://api.example.com/data",
+            },
+            true,
+        )
+        if err != nil {
+            return fmt.Errorf("failed to create schedule: %w", err)
+        }
+    }
+
+    return nil
+}
+
+// ExecuteScheduledTask handles all scheduled executions
+func (p *MyPlugin) ExecuteScheduledTask(ctx plugin_sdk.Context, schedule *plugin_sdk.Schedule) error {
+    switch schedule.ID {
+    case "data-refresh":
+        return p.refreshData(ctx, schedule)
+    default:
+        return fmt.Errorf("unknown schedule: %s", schedule.ID)
+    }
+}
+
+func (p *MyPlugin) refreshData(ctx plugin_sdk.Context, schedule *plugin_sdk.Schedule) error {
+    // Access config from schedule
+    endpoint := schedule.Config["api_endpoint"].(string)
+
+    // Perform sync logic...
+    ctx.Services.Logger().Info("Refreshing data", "endpoint", endpoint)
+
+    return nil
+}
+```
+
+### Manifest vs API Schedules
+
+**Use Manifest When**:
+- Schedule is core to plugin functionality
+- Configuration is static
+- Want schedules registered automatically
+
+**Use API When**:
+- Schedules are dynamic (based on external data)
+- Need runtime modification
+- Want conditional schedule creation
+- Building schedule management UI
+
+**Example**: Plugin manifest declares one immutable daily report, creates hourly syncs via API based on configured data sources.
 
 ## Best Practices Summary
 
-1. **Runtime Detection**: Always check `ctx.Runtime` before calling runtime-specific services
-2. **Type Assertions**: Gateway and Studio services return `interface{}`, type assert to correct response types
-3. **Error Handling**: Always check errors from Service API calls
-4. **Logging**: Use `ctx.Services.Logger()` for consistent structured logging
-5. **KV Storage**: Understand storage differences between Studio (durable) and Gateway (ephemeral)
-6. **Broker ID**: Extract and set broker ID during plugin initialization for Service API access
-7. **Context Timeouts**: Use context timeouts for external calls
-8. **Caching**: Cache frequently accessed data in KV storage to reduce API calls
+1. **Connection Warmup**: Implement `SessionAware` and warm up Service API in `OnSessionReady` - this is critical for reliable API access
+2. **Runtime Detection**: Always check `ctx.Runtime` before calling runtime-specific services
+3. **Type Assertions**: Gateway and Studio services return `interface{}`, type assert to correct response types
+4. **Error Handling**: Always check errors from Service API calls
+5. **Logging**: Use `ctx.Services.Logger()` for consistent structured logging
+6. **KV Storage**: Understand storage differences between Studio (durable) and Gateway (ephemeral)
+7. **Shared Connections**: Event Service and Management Service API share the same broker connection - one warmup establishes both
+8. **Context Timeouts**: Use context timeouts for external calls
+9. **Caching**: Cache frequently accessed data in KV storage to reduce API calls
 
 ## Complete Examples
 
@@ -879,6 +1983,7 @@ For complete working examples of Service API usage:
 - **Studio**: `examples/plugins/studio/service-api-test/` - Comprehensive Studio Services testing
 - **Gateway**: `examples/plugins/gateway/gateway-service-test/` - Gateway Services examples
 - **Rate Limiter**: `examples/plugins/studio/llm-rate-limiter-multiphase/` - Multi-capability plugin with KV storage
+- **Scheduler**: `examples/plugins/studio/scheduler-demo/` - Scheduled tasks with manifest and API patterns
 
 ## Next Steps
 

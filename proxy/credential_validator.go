@@ -131,15 +131,17 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					}
 
 					ctx := context.WithValue(r.Context(), "app", app)
+					// Update request with context BEFORE calling hook so hook modifications persist
+					r = r.WithContext(ctx)
 
 					// === HOOK POINT: POST-AUTH (Custom Auth Plugin) ===
 					if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
-						if blocked := cv.authHooks.PostAuth(w, r.WithContext(ctx), appID); blocked {
+						if blocked := cv.authHooks.PostAuth(w, r, appID); blocked {
 							return // Post-auth hook blocked the request
 						}
 					}
 
-					next.ServeHTTP(w, r.WithContext(ctx))
+					next.ServeHTTP(w, r)
 					return
 				}
 				// Auth plugin said not authenticated, fall through to standard validation
@@ -181,23 +183,26 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 
 						ctx = context.WithValue(ctx, "tool", tool)
 						ctx = context.WithValue(ctx, "toolSlug", toolSlug)
-						
+
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
 					}
 
 					// Not a tool request - continue with LLM request
+					// Update request with context BEFORE calling hook so hook modifications persist
+					r = r.WithContext(ctx)
+
 					// === HOOK POINT: POST-AUTH (Bearer Token with App Secret) ===
 					if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
 						log.Debug().Uint("app_id", app.ID).Msg("Bearer token auth: Calling post-auth hook")
-						if blocked := cv.authHooks.PostAuth(w, r.WithContext(ctx), app.ID); blocked {
+						if blocked := cv.authHooks.PostAuth(w, r, app.ID); blocked {
 							log.Debug().Msg("Bearer token auth: Post-auth hook blocked the request")
 							return // Post-auth hook blocked the request
 						}
 						log.Debug().Msg("Bearer token auth: Post-auth hook completed")
 					}
 
-					next.ServeHTTP(w, r.WithContext(ctx))
+					next.ServeHTTP(w, r)
 					return
 				}
 			}
@@ -381,15 +386,15 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, routeID, toolSlug string, r *http.Request) (bool, *http.Request) {
 	cred, err := cv.service.GetCredentialBySecret(apiKey) // API Key is the 'secret'
 	if err != nil {
-		log.Info().Err(err).Str("api_key_prefix", apiKey[:min(len(apiKey), 8)]).Msg("CheckAPICredential: GetCredentialBySecret failed")
+		log.Debug().Err(err).Str("api_key_prefix", apiKey[:min(len(apiKey), 8)]).Msg("CheckAPICredential: GetCredentialBySecret failed")
 		return false, r
 	}
 	if !cred.Active {
-		log.Info().Uint("cred_id", cred.ID).Msg("CheckAPICredential: Credential is inactive")
+		log.Debug().Uint("cred_id", cred.ID).Msg("CheckAPICredential: Credential is inactive")
 		return false, r
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("cred_id", cred.ID).
 		Int("cred_id_signed", int(cred.ID)).
 		Str("key_id", cred.KeyID).
@@ -397,11 +402,11 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 
 	app, err := cv.service.GetAppByCredentialID(cred.ID)
 	if err != nil {
-		log.Info().Err(err).Uint("cred_id", cred.ID).Int("cred_id_signed", int(cred.ID)).Msg("CheckAPICredential: GetAppByCredentialID failed")
+		log.Debug().Err(err).Uint("cred_id", cred.ID).Int("cred_id_signed", int(cred.ID)).Msg("CheckAPICredential: GetAppByCredentialID failed")
 		return false, r
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("app_id", app.ID).
 		Str("app_name", app.Name).
 		Int("llm_count", len(app.LLMs)).
@@ -431,10 +436,10 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	if llmSlug != "" {
 		llm, ok := cv.p.GetLLM(llmSlug)
 		if !ok {
-			log.Info().Str("llm_slug", llmSlug).Msg("CheckAPICredential: LLM not found in proxy cache")
+			log.Debug().Str("llm_slug", llmSlug).Msg("CheckAPICredential: LLM not found in proxy cache")
 			return false, r
 		}
-		log.Info().
+		log.Debug().
 			Uint("llm_id", llm.ID).
 			Str("llm_slug", llmSlug).
 			Uint("app_id", app.ID).
@@ -442,13 +447,13 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 			Msg("CheckAPICredential: Checking if app has access to LLM")
 
 		for i, l := range app.LLMs {
-			log.Info().Int("index", i).Uint("app_llm_id", l.ID).Uint("required_llm_id", llm.ID).Msg("CheckAPICredential: Comparing LLM IDs")
+			log.Debug().Int("index", i).Uint("app_llm_id", l.ID).Uint("required_llm_id", llm.ID).Msg("CheckAPICredential: Comparing LLM IDs")
 			if l.ID == llm.ID {
-				log.Info().Msg("CheckAPICredential: App has access to LLM - validation PASSED")
+				log.Debug().Msg("CheckAPICredential: App has access to LLM - validation PASSED")
 				return true, r
 			}
 		}
-		log.Info().
+		log.Debug().
 			Uint("app_id", app.ID).
 			Uint("required_llm_id", llm.ID).
 			Str("llm_slug", llmSlug).

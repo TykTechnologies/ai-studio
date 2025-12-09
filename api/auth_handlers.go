@@ -14,9 +14,16 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
+	"github.com/TykTechnologies/midsommar/v2/services/group_access"
+	"github.com/TykTechnologies/midsommar/v2/services/model_router"
+	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+const appVersion = "v1.0" // Imported from version.go
 
 // @Summary Get system feature set
 // @Description Returns the current system feature set from licensing
@@ -33,12 +40,25 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet["feature_chat"] = true
 	featureSet["feature_gateway"] = true
 
-	if cfg := config.Get(); cfg != nil {
+	// Enterprise-only features
+	featureSet["hub_spoke_multi_tenant"] = edge_management.IsEnterpriseAvailable()
+	featureSet["feature_groups"] = group_access.IsFilteringEnabled()
+	featureSet["feature_model_router"] = model_router.IsEnterpriseAvailable()
+
+	if cfg := config.Get(""); cfg != nil {
 		featureSet["docs_url"] = cfg.DocsURL
+	}
+
+	// Determine edition
+	edition := "community"
+	if budget.IsEnterpriseAvailable() {
+		edition = "enterprise"
 	}
 
 	response := gin.H{
 		"features": featureSet,
+		"edition":  edition,
+		"version":  appVersion,
 	}
 
 	// No license expiry to check anymore
@@ -391,7 +411,7 @@ func (a *API) handleMe(c *gin.Context) {
 
 	response.Attributes.UIOptions.ShowChat = u.ShowChat
 	response.Attributes.UIOptions.ShowPortal = u.ShowPortal
-	response.Attributes.UIOptions.ShowSSOConfig = u.IsAdmin && u.AccessToSSOConfig
+	response.Attributes.UIOptions.ShowSSOConfig = u.IsAdmin && u.AccessToSSOConfig && sso.IsEnterpriseAvailable()
 	response.Attributes.UIOptions.SkipQuickStart = u.SkipQuickStart
 	response.Attributes.Entitlements.Catalogues = serializeCatalogues(entitlements.Catalogues)
 	response.Attributes.Entitlements.DataCatalogues = serializeDataCatalogues(entitlements.DataCatalogues)
@@ -665,7 +685,7 @@ func (a *API) handleOAuthAuthorize(c *gin.Context) {
 		return
 	}
 
-	appConf := config.Get()
+	appConf := config.Get("")
 	consentPageBaseURL, err_parse_site_url := url.Parse(appConf.SiteURL)
 	if err_parse_site_url != nil {
 		log.Printf("Error parsing SiteURL '%s' for consent redirect: %v", appConf.SiteURL, err_parse_site_url)
@@ -1214,7 +1234,7 @@ func (a *API) handleOAuthMetadata(c *gin.Context) {
 		return
 	}
 
-	appConf := config.Get()
+	appConf := config.Get("")
 	baseURL, err := url.Parse(appConf.AuthServerURL)
 	if err != nil {
 		log.Printf("Error parsing AuthServerURL '%s': %v", appConf.AuthServerURL, err)

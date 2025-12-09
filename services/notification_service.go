@@ -214,6 +214,18 @@ func (s *NotificationService) GetUnreadCount(userID uint) (int64, error) {
 	return count, nil
 }
 
+// MarkAllAsRead marks all unread notifications as read for a user
+func (s *NotificationService) MarkAllAsRead(userID uint) error {
+	result := s.db.Model(&models.Notification{}).
+		Where("user_id = ? AND read = ?", userID, false).
+		Update("read", true)
+
+	if result.Error != nil {
+		return fmt.Errorf("error marking all notifications as read: %v", result.Error)
+	}
+	return nil
+}
+
 // GetMailer returns the mailer for testing purposes
 func (s *NotificationService) GetMailer() notifications.Mailer {
 	return s.mailer

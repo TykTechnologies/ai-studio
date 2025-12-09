@@ -37,7 +37,6 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		ResponseCode: statusCode,
 	}
 
-	log.Printf("🔍 ANALYTICS DEBUG: Creating ProxyLog - AppID=%d, UserID=%d (from app.UserID)", app.ID, app.UserID)
 	analytics.RecordProxyLog(l)
 	AnalyzeCompletionResponse(service, llm, app, response, r, time.Now())
 }
@@ -127,7 +126,6 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 		InteractionType: models.ProxyInteraction,
 	}
 
-	log.Printf("🔍 ANALYTICS DEBUG: Creating LLMChatRecord - AppID=%d, UserID=%d (from app.UserID)", app.ID, app.UserID)
 	// Record the chat record with retries
 	analytics.RecordChatRecord(rec)
 	// time.Sleep(200 * time.Millisecond) // Removed: Unreliable fixed sleep. Test should handle waiting.
@@ -136,7 +134,7 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 	if s, ok := service.(*services.Service); ok && s.Budget != nil {
 		s.Budget.AnalyzeBudgetUsage(app, llm)
 	} else if budgetService, ok := service.(interface {
-		GetBudgetService() *services.BudgetService
+		GetBudgetService() services.BudgetService
 	}); ok {
 		if bs := budgetService.GetBudgetService(); bs != nil {
 			bs.AnalyzeBudgetUsage(app, llm)

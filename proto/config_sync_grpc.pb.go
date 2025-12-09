@@ -20,13 +20,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ConfigurationSyncService_RegisterEdge_FullMethodName         = "/microgateway.ConfigurationSyncService/RegisterEdge"
-	ConfigurationSyncService_GetFullConfiguration_FullMethodName = "/microgateway.ConfigurationSyncService/GetFullConfiguration"
-	ConfigurationSyncService_SubscribeToChanges_FullMethodName   = "/microgateway.ConfigurationSyncService/SubscribeToChanges"
-	ConfigurationSyncService_SendHeartbeat_FullMethodName        = "/microgateway.ConfigurationSyncService/SendHeartbeat"
-	ConfigurationSyncService_UnregisterEdge_FullMethodName       = "/microgateway.ConfigurationSyncService/UnregisterEdge"
-	ConfigurationSyncService_ValidateToken_FullMethodName        = "/microgateway.ConfigurationSyncService/ValidateToken"
-	ConfigurationSyncService_SendAnalyticsPulse_FullMethodName   = "/microgateway.ConfigurationSyncService/SendAnalyticsPulse"
+	ConfigurationSyncService_RegisterEdge_FullMethodName           = "/microgateway.ConfigurationSyncService/RegisterEdge"
+	ConfigurationSyncService_GetFullConfiguration_FullMethodName   = "/microgateway.ConfigurationSyncService/GetFullConfiguration"
+	ConfigurationSyncService_SubscribeToChanges_FullMethodName     = "/microgateway.ConfigurationSyncService/SubscribeToChanges"
+	ConfigurationSyncService_SendHeartbeat_FullMethodName          = "/microgateway.ConfigurationSyncService/SendHeartbeat"
+	ConfigurationSyncService_UnregisterEdge_FullMethodName         = "/microgateway.ConfigurationSyncService/UnregisterEdge"
+	ConfigurationSyncService_ValidateToken_FullMethodName          = "/microgateway.ConfigurationSyncService/ValidateToken"
+	ConfigurationSyncService_SendAnalyticsPulse_FullMethodName     = "/microgateway.ConfigurationSyncService/SendAnalyticsPulse"
+	ConfigurationSyncService_SendPluginControlBatch_FullMethodName = "/microgateway.ConfigurationSyncService/SendPluginControlBatch"
 )
 
 // ConfigurationSyncServiceClient is the client API for ConfigurationSyncService service.
@@ -49,6 +50,9 @@ type ConfigurationSyncServiceClient interface {
 	ValidateToken(ctx context.Context, in *TokenValidationRequest, opts ...grpc.CallOption) (*TokenValidationResponse, error)
 	// SendAnalyticsPulse sends batched analytics data from edge to control (NEW)
 	SendAnalyticsPulse(ctx context.Context, in *AnalyticsPulse, opts ...grpc.CallOption) (*AnalyticsPulseResponse, error)
+	// SendPluginControlBatch sends batched plugin control payloads from edge to control
+	// This allows plugins running on edge instances to send arbitrary data back to control
+	SendPluginControlBatch(ctx context.Context, in *PluginControlBatch, opts ...grpc.CallOption) (*PluginControlBatchResponse, error)
 }
 
 type configurationSyncServiceClient struct {
@@ -132,6 +136,16 @@ func (c *configurationSyncServiceClient) SendAnalyticsPulse(ctx context.Context,
 	return out, nil
 }
 
+func (c *configurationSyncServiceClient) SendPluginControlBatch(ctx context.Context, in *PluginControlBatch, opts ...grpc.CallOption) (*PluginControlBatchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginControlBatchResponse)
+	err := c.cc.Invoke(ctx, ConfigurationSyncService_SendPluginControlBatch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConfigurationSyncServiceServer is the server API for ConfigurationSyncService service.
 // All implementations must embed UnimplementedConfigurationSyncServiceServer
 // for forward compatibility.
@@ -152,6 +166,9 @@ type ConfigurationSyncServiceServer interface {
 	ValidateToken(context.Context, *TokenValidationRequest) (*TokenValidationResponse, error)
 	// SendAnalyticsPulse sends batched analytics data from edge to control (NEW)
 	SendAnalyticsPulse(context.Context, *AnalyticsPulse) (*AnalyticsPulseResponse, error)
+	// SendPluginControlBatch sends batched plugin control payloads from edge to control
+	// This allows plugins running on edge instances to send arbitrary data back to control
+	SendPluginControlBatch(context.Context, *PluginControlBatch) (*PluginControlBatchResponse, error)
 	mustEmbedUnimplementedConfigurationSyncServiceServer()
 }
 
@@ -182,6 +199,9 @@ func (UnimplementedConfigurationSyncServiceServer) ValidateToken(context.Context
 }
 func (UnimplementedConfigurationSyncServiceServer) SendAnalyticsPulse(context.Context, *AnalyticsPulse) (*AnalyticsPulseResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendAnalyticsPulse not implemented")
+}
+func (UnimplementedConfigurationSyncServiceServer) SendPluginControlBatch(context.Context, *PluginControlBatch) (*PluginControlBatchResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendPluginControlBatch not implemented")
 }
 func (UnimplementedConfigurationSyncServiceServer) mustEmbedUnimplementedConfigurationSyncServiceServer() {
 }
@@ -320,6 +340,24 @@ func _ConfigurationSyncService_SendAnalyticsPulse_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConfigurationSyncService_SendPluginControlBatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginControlBatch)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConfigurationSyncServiceServer).SendPluginControlBatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ConfigurationSyncService_SendPluginControlBatch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConfigurationSyncServiceServer).SendPluginControlBatch(ctx, req.(*PluginControlBatch))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ConfigurationSyncService_ServiceDesc is the grpc.ServiceDesc for ConfigurationSyncService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -350,6 +388,10 @@ var ConfigurationSyncService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendAnalyticsPulse",
 			Handler:    _ConfigurationSyncService_SendAnalyticsPulse_Handler,
+		},
+		{
+			MethodName: "SendPluginControlBatch",
+			Handler:    _ConfigurationSyncService_SendPluginControlBatch_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

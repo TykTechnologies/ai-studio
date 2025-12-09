@@ -68,18 +68,19 @@ func (x ConfigurationChange_ChangeType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConfigurationChange_ChangeType.Descriptor instead.
 func (ConfigurationChange_ChangeType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{7, 0}
+	return file_proto_common_proto_rawDescGZIP(), []int{11, 0}
 }
 
 type ConfigurationChange_EntityType int32
 
 const (
-	ConfigurationChange_LLM         ConfigurationChange_EntityType = 0
-	ConfigurationChange_APP         ConfigurationChange_EntityType = 1
-	ConfigurationChange_TOKEN       ConfigurationChange_EntityType = 2
-	ConfigurationChange_MODEL_PRICE ConfigurationChange_EntityType = 3
-	ConfigurationChange_FILTER      ConfigurationChange_EntityType = 4
-	ConfigurationChange_PLUGIN      ConfigurationChange_EntityType = 5
+	ConfigurationChange_LLM          ConfigurationChange_EntityType = 0
+	ConfigurationChange_APP          ConfigurationChange_EntityType = 1
+	ConfigurationChange_TOKEN        ConfigurationChange_EntityType = 2
+	ConfigurationChange_MODEL_PRICE  ConfigurationChange_EntityType = 3
+	ConfigurationChange_FILTER       ConfigurationChange_EntityType = 4
+	ConfigurationChange_PLUGIN       ConfigurationChange_EntityType = 5
+	ConfigurationChange_MODEL_ROUTER ConfigurationChange_EntityType = 6
 )
 
 // Enum value maps for ConfigurationChange_EntityType.
@@ -91,14 +92,16 @@ var (
 		3: "MODEL_PRICE",
 		4: "FILTER",
 		5: "PLUGIN",
+		6: "MODEL_ROUTER",
 	}
 	ConfigurationChange_EntityType_value = map[string]int32{
-		"LLM":         0,
-		"APP":         1,
-		"TOKEN":       2,
-		"MODEL_PRICE": 3,
-		"FILTER":      4,
-		"PLUGIN":      5,
+		"LLM":          0,
+		"APP":          1,
+		"TOKEN":        2,
+		"MODEL_PRICE":  3,
+		"FILTER":       4,
+		"PLUGIN":       5,
+		"MODEL_ROUTER": 6,
 	}
 )
 
@@ -126,7 +129,7 @@ func (x ConfigurationChange_EntityType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConfigurationChange_EntityType.Descriptor instead.
 func (ConfigurationChange_EntityType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{7, 1}
+	return file_proto_common_proto_rawDescGZIP(), []int{11, 1}
 }
 
 type HealthStatus_Status int32
@@ -175,7 +178,7 @@ func (x HealthStatus_Status) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use HealthStatus_Status.Descriptor instead.
 func (HealthStatus_Status) EnumDescriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{8, 0}
+	return file_proto_common_proto_rawDescGZIP(), []int{12, 0}
 }
 
 // LLMConfig represents an LLM configuration with embedded relationships
@@ -834,19 +837,20 @@ func (x *ModelPriceConfig) GetUpdatedAt() *timestamppb.Timestamp {
 
 // FilterConfig represents a filter configuration
 type FilterConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Script        string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
-	IsActive      bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
-	OrderIndex    int32                  `protobuf:"varint,6,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
-	Namespace     string                 `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`                 // NEW: Namespace for filtering
-	LlmIds        []uint32               `protobuf:"varint,8,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"` // Associated LLM IDs
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description    string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Script         string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
+	IsActive       bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	OrderIndex     int32                  `protobuf:"varint,6,opt,name=order_index,json=orderIndex,proto3" json:"order_index,omitempty"`
+	Namespace      string                 `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`                 // NEW: Namespace for filtering
+	LlmIds         []uint32               `protobuf:"varint,8,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"` // Associated LLM IDs
+	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ResponseFilter bool                   `protobuf:"varint,11,opt,name=response_filter,json=responseFilter,proto3" json:"response_filter,omitempty"` // true = response filter, false = request filter
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *FilterConfig) Reset() {
@@ -947,6 +951,13 @@ func (x *FilterConfig) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *FilterConfig) GetResponseFilter() bool {
+	if x != nil {
+		return x.ResponseFilter
+	}
+	return false
 }
 
 // PluginConfig represents a plugin configuration
@@ -1098,6 +1109,354 @@ func (x *PluginConfig) GetHookTypes() []string {
 	return nil
 }
 
+// ModelRouterConfig represents a model router configuration (Enterprise)
+type ModelRouterConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	ApiCompat     string                 `protobuf:"bytes,5,opt,name=api_compat,json=apiCompat,proto3" json:"api_compat,omitempty"` // API compatibility format (e.g., "openai")
+	IsActive      bool                   `protobuf:"varint,6,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	Namespace     string                 `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Pools         []*ModelPoolConfig     `protobuf:"bytes,8,rep,name=pools,proto3" json:"pools,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelRouterConfig) Reset() {
+	*x = ModelRouterConfig{}
+	mi := &file_proto_common_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelRouterConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelRouterConfig) ProtoMessage() {}
+
+func (x *ModelRouterConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelRouterConfig.ProtoReflect.Descriptor instead.
+func (*ModelRouterConfig) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ModelRouterConfig) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ModelRouterConfig) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ModelRouterConfig) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *ModelRouterConfig) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ModelRouterConfig) GetApiCompat() string {
+	if x != nil {
+		return x.ApiCompat
+	}
+	return ""
+}
+
+func (x *ModelRouterConfig) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *ModelRouterConfig) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *ModelRouterConfig) GetPools() []*ModelPoolConfig {
+	if x != nil {
+		return x.Pools
+	}
+	return nil
+}
+
+func (x *ModelRouterConfig) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *ModelRouterConfig) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+// ModelPoolConfig represents a pool within a model router
+type ModelPoolConfig struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Id                 uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name               string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	ModelPattern       string                 `protobuf:"bytes,3,opt,name=model_pattern,json=modelPattern,proto3" json:"model_pattern,omitempty"`                   // Glob pattern for model matching (e.g., "claude-*")
+	SelectionAlgorithm string                 `protobuf:"bytes,4,opt,name=selection_algorithm,json=selectionAlgorithm,proto3" json:"selection_algorithm,omitempty"` // "round_robin" or "weighted"
+	Priority           int32                  `protobuf:"varint,5,opt,name=priority,proto3" json:"priority,omitempty"`                                              // Higher priority pools are checked first
+	Vendors            []*PoolVendorConfig    `protobuf:"bytes,6,rep,name=vendors,proto3" json:"vendors,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ModelPoolConfig) Reset() {
+	*x = ModelPoolConfig{}
+	mi := &file_proto_common_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelPoolConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelPoolConfig) ProtoMessage() {}
+
+func (x *ModelPoolConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelPoolConfig.ProtoReflect.Descriptor instead.
+func (*ModelPoolConfig) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ModelPoolConfig) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ModelPoolConfig) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ModelPoolConfig) GetModelPattern() string {
+	if x != nil {
+		return x.ModelPattern
+	}
+	return ""
+}
+
+func (x *ModelPoolConfig) GetSelectionAlgorithm() string {
+	if x != nil {
+		return x.SelectionAlgorithm
+	}
+	return ""
+}
+
+func (x *ModelPoolConfig) GetPriority() int32 {
+	if x != nil {
+		return x.Priority
+	}
+	return 0
+}
+
+func (x *ModelPoolConfig) GetVendors() []*PoolVendorConfig {
+	if x != nil {
+		return x.Vendors
+	}
+	return nil
+}
+
+// PoolVendorConfig represents an LLM vendor within a pool
+type PoolVendorConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	LlmId         uint32                 `protobuf:"varint,2,opt,name=llm_id,json=llmId,proto3" json:"llm_id,omitempty"`
+	LlmSlug       string                 `protobuf:"bytes,3,opt,name=llm_slug,json=llmSlug,proto3" json:"llm_slug,omitempty"` // Denormalized for quick lookup
+	Weight        int32                  `protobuf:"varint,4,opt,name=weight,proto3" json:"weight,omitempty"`                 // Used for weighted selection
+	IsActive      bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	Mappings      []*ModelMappingConfig  `protobuf:"bytes,6,rep,name=mappings,proto3" json:"mappings,omitempty"` // Vendor-specific model name mappings
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PoolVendorConfig) Reset() {
+	*x = PoolVendorConfig{}
+	mi := &file_proto_common_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PoolVendorConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PoolVendorConfig) ProtoMessage() {}
+
+func (x *PoolVendorConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PoolVendorConfig.ProtoReflect.Descriptor instead.
+func (*PoolVendorConfig) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *PoolVendorConfig) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *PoolVendorConfig) GetLlmId() uint32 {
+	if x != nil {
+		return x.LlmId
+	}
+	return 0
+}
+
+func (x *PoolVendorConfig) GetLlmSlug() string {
+	if x != nil {
+		return x.LlmSlug
+	}
+	return ""
+}
+
+func (x *PoolVendorConfig) GetWeight() int32 {
+	if x != nil {
+		return x.Weight
+	}
+	return 0
+}
+
+func (x *PoolVendorConfig) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *PoolVendorConfig) GetMappings() []*ModelMappingConfig {
+	if x != nil {
+		return x.Mappings
+	}
+	return nil
+}
+
+// ModelMappingConfig represents a model name mapping for a vendor
+type ModelMappingConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	SourceModel   string                 `protobuf:"bytes,2,opt,name=source_model,json=sourceModel,proto3" json:"source_model,omitempty"` // Model name from request
+	TargetModel   string                 `protobuf:"bytes,3,opt,name=target_model,json=targetModel,proto3" json:"target_model,omitempty"` // Model name to send to this vendor
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelMappingConfig) Reset() {
+	*x = ModelMappingConfig{}
+	mi := &file_proto_common_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelMappingConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelMappingConfig) ProtoMessage() {}
+
+func (x *ModelMappingConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelMappingConfig.ProtoReflect.Descriptor instead.
+func (*ModelMappingConfig) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ModelMappingConfig) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ModelMappingConfig) GetSourceModel() string {
+	if x != nil {
+		return x.SourceModel
+	}
+	return ""
+}
+
+func (x *ModelMappingConfig) GetTargetModel() string {
+	if x != nil {
+		return x.TargetModel
+	}
+	return ""
+}
+
 // ConfigurationSnapshot represents a complete configuration state
 type ConfigurationSnapshot struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
@@ -1110,13 +1469,14 @@ type ConfigurationSnapshot struct {
 	Plugins       []*PluginConfig        `protobuf:"bytes,6,rep,name=plugins,proto3" json:"plugins,omitempty"`
 	EdgeNamespace string                 `protobuf:"bytes,7,opt,name=edge_namespace,json=edgeNamespace,proto3" json:"edge_namespace,omitempty"` // Namespace this snapshot is filtered for
 	SnapshotTime  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=snapshot_time,json=snapshotTime,proto3" json:"snapshot_time,omitempty"`
+	ModelRouters  []*ModelRouterConfig   `protobuf:"bytes,9,rep,name=model_routers,json=modelRouters,proto3" json:"model_routers,omitempty"` // Enterprise: Model router configurations
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConfigurationSnapshot) Reset() {
 	*x = ConfigurationSnapshot{}
-	mi := &file_proto_common_proto_msgTypes[6]
+	mi := &file_proto_common_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1128,7 +1488,7 @@ func (x *ConfigurationSnapshot) String() string {
 func (*ConfigurationSnapshot) ProtoMessage() {}
 
 func (x *ConfigurationSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[6]
+	mi := &file_proto_common_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1141,7 +1501,7 @@ func (x *ConfigurationSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigurationSnapshot.ProtoReflect.Descriptor instead.
 func (*ConfigurationSnapshot) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{6}
+	return file_proto_common_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ConfigurationSnapshot) GetVersion() string {
@@ -1200,6 +1560,13 @@ func (x *ConfigurationSnapshot) GetSnapshotTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *ConfigurationSnapshot) GetModelRouters() []*ModelRouterConfig {
+	if x != nil {
+		return x.ModelRouters
+	}
+	return nil
+}
+
 // ConfigurationChange represents a single configuration change
 type ConfigurationChange struct {
 	state         protoimpl.MessageState         `protogen:"open.v1"`
@@ -1215,7 +1582,7 @@ type ConfigurationChange struct {
 
 func (x *ConfigurationChange) Reset() {
 	*x = ConfigurationChange{}
-	mi := &file_proto_common_proto_msgTypes[7]
+	mi := &file_proto_common_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1227,7 +1594,7 @@ func (x *ConfigurationChange) String() string {
 func (*ConfigurationChange) ProtoMessage() {}
 
 func (x *ConfigurationChange) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[7]
+	mi := &file_proto_common_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1240,7 +1607,7 @@ func (x *ConfigurationChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigurationChange.ProtoReflect.Descriptor instead.
 func (*ConfigurationChange) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{7}
+	return file_proto_common_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ConfigurationChange) GetChangeType() ConfigurationChange_ChangeType {
@@ -1298,7 +1665,7 @@ type HealthStatus struct {
 
 func (x *HealthStatus) Reset() {
 	*x = HealthStatus{}
-	mi := &file_proto_common_proto_msgTypes[8]
+	mi := &file_proto_common_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1310,7 +1677,7 @@ func (x *HealthStatus) String() string {
 func (*HealthStatus) ProtoMessage() {}
 
 func (x *HealthStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_common_proto_msgTypes[8]
+	mi := &file_proto_common_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1323,7 +1690,7 @@ func (x *HealthStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthStatus.ProtoReflect.Descriptor instead.
 func (*HealthStatus) Descriptor() ([]byte, []int) {
-	return file_proto_common_proto_rawDescGZIP(), []int{8}
+	return file_proto_common_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *HealthStatus) GetStatus() HealthStatus_Status {
@@ -1447,7 +1814,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xd7\x02\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x80\x03\n" +
 	"\fFilterConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1462,7 +1829,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xcf\x03\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
+	"\x0fresponse_filter\x18\v \x01(\bR\x0eresponseFilter\"\xcf\x03\n" +
 	"\fPluginConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1481,7 +1849,40 @@ const file_proto_common_proto_rawDesc = "" +
 	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12%\n" +
 	"\x0eservice_scopes\x18\r \x03(\tR\rserviceScopes\x12\x1d\n" +
 	"\n" +
-	"hook_types\x18\x0e \x03(\tR\thookTypes\"\xa2\x03\n" +
+	"hook_types\x18\x0e \x03(\tR\thookTypes\"\xf2\x02\n" +
+	"\x11ModelRouterConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x1d\n" +
+	"\n" +
+	"api_compat\x18\x05 \x01(\tR\tapiCompat\x12\x1b\n" +
+	"\tis_active\x18\x06 \x01(\bR\bisActive\x12\x1c\n" +
+	"\tnamespace\x18\a \x01(\tR\tnamespace\x123\n" +
+	"\x05pools\x18\b \x03(\v2\x1d.microgateway.ModelPoolConfigR\x05pools\x129\n" +
+	"\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe7\x01\n" +
+	"\x0fModelPoolConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12#\n" +
+	"\rmodel_pattern\x18\x03 \x01(\tR\fmodelPattern\x12/\n" +
+	"\x13selection_algorithm\x18\x04 \x01(\tR\x12selectionAlgorithm\x12\x1a\n" +
+	"\bpriority\x18\x05 \x01(\x05R\bpriority\x128\n" +
+	"\avendors\x18\x06 \x03(\v2\x1e.microgateway.PoolVendorConfigR\avendorsJ\x04\b\a\x10\b\"\xc7\x01\n" +
+	"\x10PoolVendorConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x15\n" +
+	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x19\n" +
+	"\bllm_slug\x18\x03 \x01(\tR\allmSlug\x12\x16\n" +
+	"\x06weight\x18\x04 \x01(\x05R\x06weight\x12\x1b\n" +
+	"\tis_active\x18\x05 \x01(\bR\bisActive\x12<\n" +
+	"\bmappings\x18\x06 \x03(\v2 .microgateway.ModelMappingConfigR\bmappings\"j\n" +
+	"\x12ModelMappingConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12!\n" +
+	"\fsource_model\x18\x02 \x01(\tR\vsourceModel\x12!\n" +
+	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\xe8\x03\n" +
 	"\x15ConfigurationSnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12+\n" +
 	"\x04llms\x18\x02 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +
@@ -1490,7 +1891,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\afilters\x18\x05 \x03(\v2\x1a.microgateway.FilterConfigR\afilters\x124\n" +
 	"\aplugins\x18\x06 \x03(\v2\x1a.microgateway.PluginConfigR\aplugins\x12%\n" +
 	"\x0eedge_namespace\x18\a \x01(\tR\redgeNamespace\x12?\n" +
-	"\rsnapshot_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\fsnapshotTime\"\xcf\x03\n" +
+	"\rsnapshot_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\fsnapshotTime\x12D\n" +
+	"\rmodel_routers\x18\t \x03(\v2\x1f.microgateway.ModelRouterConfigR\fmodelRouters\"\xe1\x03\n" +
 	"\x13ConfigurationChange\x12M\n" +
 	"\vchange_type\x18\x01 \x01(\x0e2,.microgateway.ConfigurationChange.ChangeTypeR\n" +
 	"changeType\x12M\n" +
@@ -1508,7 +1910,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"\x06UPDATE\x10\x01\x12\n" +
 	"\n" +
-	"\x06DELETE\x10\x02\"R\n" +
+	"\x06DELETE\x10\x02\"d\n" +
 	"\n" +
 	"EntityType\x12\a\n" +
 	"\x03LLM\x10\x00\x12\a\n" +
@@ -1518,7 +1920,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"\x06FILTER\x10\x04\x12\n" +
 	"\n" +
-	"\x06PLUGIN\x10\x05\"\xd0\x02\n" +
+	"\x06PLUGIN\x10\x05\x12\x10\n" +
+	"\fMODEL_ROUTER\x10\x06\"\xd0\x02\n" +
 	"\fHealthStatus\x129\n" +
 	"\x06status\x18\x01 \x01(\x0e2!.microgateway.HealthStatus.StatusR\x06status\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x128\n" +
@@ -1545,7 +1948,7 @@ func file_proto_common_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_proto_common_proto_goTypes = []any{
 	(ConfigurationChange_ChangeType)(0), // 0: microgateway.ConfigurationChange.ChangeType
 	(ConfigurationChange_EntityType)(0), // 1: microgateway.ConfigurationChange.EntityType
@@ -1556,42 +1959,52 @@ var file_proto_common_proto_goTypes = []any{
 	(*ModelPriceConfig)(nil),            // 6: microgateway.ModelPriceConfig
 	(*FilterConfig)(nil),                // 7: microgateway.FilterConfig
 	(*PluginConfig)(nil),                // 8: microgateway.PluginConfig
-	(*ConfigurationSnapshot)(nil),       // 9: microgateway.ConfigurationSnapshot
-	(*ConfigurationChange)(nil),         // 10: microgateway.ConfigurationChange
-	(*HealthStatus)(nil),                // 11: microgateway.HealthStatus
-	nil,                                 // 12: microgateway.HealthStatus.MetricsEntry
-	(*timestamppb.Timestamp)(nil),       // 13: google.protobuf.Timestamp
+	(*ModelRouterConfig)(nil),           // 9: microgateway.ModelRouterConfig
+	(*ModelPoolConfig)(nil),             // 10: microgateway.ModelPoolConfig
+	(*PoolVendorConfig)(nil),            // 11: microgateway.PoolVendorConfig
+	(*ModelMappingConfig)(nil),          // 12: microgateway.ModelMappingConfig
+	(*ConfigurationSnapshot)(nil),       // 13: microgateway.ConfigurationSnapshot
+	(*ConfigurationChange)(nil),         // 14: microgateway.ConfigurationChange
+	(*HealthStatus)(nil),                // 15: microgateway.HealthStatus
+	nil,                                 // 16: microgateway.HealthStatus.MetricsEntry
+	(*timestamppb.Timestamp)(nil),       // 17: google.protobuf.Timestamp
 }
 var file_proto_common_proto_depIdxs = []int32{
-	13, // 0: microgateway.LLMConfig.created_at:type_name -> google.protobuf.Timestamp
-	13, // 1: microgateway.LLMConfig.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 2: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
-	13, // 3: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 4: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
-	13, // 5: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 6: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
-	13, // 7: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 8: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
-	13, // 9: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 10: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
-	13, // 11: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
-	3,  // 12: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
-	4,  // 13: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
-	6,  // 14: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
-	7,  // 15: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
-	8,  // 16: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
-	13, // 17: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
-	0,  // 18: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
-	1,  // 19: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
-	13, // 20: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
-	2,  // 21: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
-	13, // 22: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
-	12, // 23: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
-	24, // [24:24] is the sub-list for method output_type
-	24, // [24:24] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	17, // 0: microgateway.LLMConfig.created_at:type_name -> google.protobuf.Timestamp
+	17, // 1: microgateway.LLMConfig.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 2: microgateway.AppConfig.created_at:type_name -> google.protobuf.Timestamp
+	17, // 3: microgateway.AppConfig.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 4: microgateway.TokenConfig.created_at:type_name -> google.protobuf.Timestamp
+	17, // 5: microgateway.TokenConfig.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 6: microgateway.ModelPriceConfig.created_at:type_name -> google.protobuf.Timestamp
+	17, // 7: microgateway.ModelPriceConfig.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 8: microgateway.FilterConfig.created_at:type_name -> google.protobuf.Timestamp
+	17, // 9: microgateway.FilterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 10: microgateway.PluginConfig.created_at:type_name -> google.protobuf.Timestamp
+	17, // 11: microgateway.PluginConfig.updated_at:type_name -> google.protobuf.Timestamp
+	10, // 12: microgateway.ModelRouterConfig.pools:type_name -> microgateway.ModelPoolConfig
+	17, // 13: microgateway.ModelRouterConfig.created_at:type_name -> google.protobuf.Timestamp
+	17, // 14: microgateway.ModelRouterConfig.updated_at:type_name -> google.protobuf.Timestamp
+	11, // 15: microgateway.ModelPoolConfig.vendors:type_name -> microgateway.PoolVendorConfig
+	12, // 16: microgateway.PoolVendorConfig.mappings:type_name -> microgateway.ModelMappingConfig
+	3,  // 17: microgateway.ConfigurationSnapshot.llms:type_name -> microgateway.LLMConfig
+	4,  // 18: microgateway.ConfigurationSnapshot.apps:type_name -> microgateway.AppConfig
+	6,  // 19: microgateway.ConfigurationSnapshot.model_prices:type_name -> microgateway.ModelPriceConfig
+	7,  // 20: microgateway.ConfigurationSnapshot.filters:type_name -> microgateway.FilterConfig
+	8,  // 21: microgateway.ConfigurationSnapshot.plugins:type_name -> microgateway.PluginConfig
+	17, // 22: microgateway.ConfigurationSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
+	9,  // 23: microgateway.ConfigurationSnapshot.model_routers:type_name -> microgateway.ModelRouterConfig
+	0,  // 24: microgateway.ConfigurationChange.change_type:type_name -> microgateway.ConfigurationChange.ChangeType
+	1,  // 25: microgateway.ConfigurationChange.entity_type:type_name -> microgateway.ConfigurationChange.EntityType
+	17, // 26: microgateway.ConfigurationChange.timestamp:type_name -> google.protobuf.Timestamp
+	2,  // 27: microgateway.HealthStatus.status:type_name -> microgateway.HealthStatus.Status
+	17, // 28: microgateway.HealthStatus.timestamp:type_name -> google.protobuf.Timestamp
+	16, // 29: microgateway.HealthStatus.metrics:type_name -> microgateway.HealthStatus.MetricsEntry
+	30, // [30:30] is the sub-list for method output_type
+	30, // [30:30] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_proto_common_proto_init() }
@@ -1605,7 +2018,7 @@ func file_proto_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_common_proto_rawDesc), len(file_proto_common_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   10,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

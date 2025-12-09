@@ -5,13 +5,16 @@ import (
 	"log"
 )
 
-// ResponseHookManager defines the interface for managing response hooks (REST-only)
+// ResponseHookManager defines the interface for managing response hooks
 type ResponseHookManager interface {
 	// ExecuteOnBeforeWriteHeaders is called before response headers are written
 	ExecuteOnBeforeWriteHeaders(ctx context.Context, req *HeadersRequest) (*HeadersResponse, error)
-	
-	// ExecuteOnBeforeWrite is called before response body is written
+
+	// ExecuteOnBeforeWrite is called before response body is written (REST-only)
 	ExecuteOnBeforeWrite(ctx context.Context, req *ResponseWriteRequest) (*ResponseWriteResponse, error)
+
+	// ExecuteOnStreamComplete is called after a streaming response finishes (streaming-only)
+	ExecuteOnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error)
 }
 
 // HeadersRequest represents a request to modify response headers
@@ -41,6 +44,23 @@ type ResponseWriteResponse struct {
 	Headers  map[string]string `json:"headers"`
 }
 
+// StreamCompleteRequest represents a request to process a completed streaming response
+type StreamCompleteRequest struct {
+	AccumulatedResponse []byte            `json:"accumulated_response"` // Full SSE response (all chunks concatenated)
+	Headers             map[string]string `json:"headers"`              // Response headers from upstream
+	StatusCode          int               `json:"status_code"`          // HTTP status code
+	Context             *PluginContext    `json:"context"`              // Plugin context with request metadata
+	ChunkCount          int               `json:"chunk_count"`          // Number of chunks received
+	RequestBody         []byte            `json:"request_body"`         // Original request body (for cache key generation)
+}
+
+// StreamCompleteResponse represents the response from stream complete hooks
+type StreamCompleteResponse struct {
+	Handled      bool   `json:"handled"`       // Plugin processed the response
+	Cached       bool   `json:"cached"`        // Response was cached (for metrics/logging)
+	ErrorMessage string `json:"error_message"` // Error description if any
+}
+
 // PluginContext provides context information for hooks
 type PluginContext struct {
 	RequestID string            `json:"request_id"`
@@ -55,10 +75,13 @@ type PluginContext struct {
 type ResponseHook interface {
 	// OnBeforeWriteHeaders is called before response headers are written
 	OnBeforeWriteHeaders(ctx context.Context, req *HeadersRequest) (*HeadersResponse, error)
-	
-	// OnBeforeWrite is called before response body is written
+
+	// OnBeforeWrite is called before response body is written (REST-only)
 	OnBeforeWrite(ctx context.Context, req *ResponseWriteRequest) (*ResponseWriteResponse, error)
-	
+
+	// OnStreamComplete is called after a streaming response finishes (streaming-only)
+	OnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error)
+
 	// GetName returns the name of this response hook
 	GetName() string
 }
@@ -157,6 +180,35 @@ func (m *DefaultResponseHookManager) ExecuteOnBeforeWrite(ctx context.Context, r
 			result.Headers = hookResp.Headers
 		}
 	}
-	
+
+	return result, nil
+}
+
+// ExecuteOnStreamComplete executes all registered stream complete hooks
+func (m *DefaultResponseHookManager) ExecuteOnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	result := &StreamCompleteResponse{
+		Handled: false,
+	}
+
+	// Execute each hook in sequence
+	for _, hook := range m.hooks {
+		hookResp, err := hook.OnStreamComplete(ctx, req)
+		if err != nil {
+			// Log error but continue with other hooks
+			log.Printf("Stream complete hook %s failed: %v", hook.GetName(), err)
+			continue
+		}
+
+		if hookResp.Handled {
+			result.Handled = true
+		}
+		if hookResp.Cached {
+			result.Cached = true
+		}
+		if hookResp.ErrorMessage != "" && result.ErrorMessage == "" {
+			result.ErrorMessage = hookResp.ErrorMessage
+		}
+	}
+
 	return result, nil
 }

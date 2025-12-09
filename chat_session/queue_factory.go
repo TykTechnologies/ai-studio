@@ -25,7 +25,7 @@ func CreateQueueFactory(cfg config.QueueConfig) (QueueFactory, error) {
 
 // CreateQueueFactoryFromConfig creates queue factory from global configuration
 func CreateQueueFactoryFromConfig() (QueueFactory, error) {
-	cfg := config.Get()
+	cfg := config.Get("")
 	return CreateQueueFactory(cfg.QueueConfig)
 }
 
@@ -217,7 +217,7 @@ func createSharedPostgreSQLQueueFactory(cfg config.QueueConfig, db *gorm.DB) (Qu
 
 // CreateDefaultQueueFactory creates the default queue factory based on global configuration
 func CreateDefaultQueueFactory() QueueFactory {
-	cfg := config.Get()
+	cfg := config.Get("")
 
 	factory, err := CreateQueueFactory(cfg.QueueConfig)
 	if err != nil {
@@ -246,7 +246,7 @@ func CreateQueueFactoryWithSharedDB(cfg config.QueueConfig, db *gorm.DB) (QueueF
 
 // CreateDefaultQueueFactoryWithSharedDB creates the default queue factory with shared database
 func CreateDefaultQueueFactoryWithSharedDB(db *gorm.DB) QueueFactory {
-	cfg := config.Get()
+	cfg := config.Get("")
 
 	factory, err := CreateQueueFactoryWithSharedDB(cfg.QueueConfig, db)
 	if err != nil {

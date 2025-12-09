@@ -16,12 +16,13 @@ import (
 
 // Global SDK state for service API access
 var (
-	serviceClient   pb.MicrogatewayManagementServiceClient
-	pluginID        uint32
-	serviceBrokerID uint32
-	initialized     bool
-	initMutex       sync.Mutex
-	grpcBroker      *goplugin.GRPCBroker
+	serviceClient      pb.MicrogatewayManagementServiceClient
+	pluginID           uint32
+	serviceBrokerID    uint32
+	initialized        bool
+	initMutex          sync.Mutex
+	grpcBroker         *goplugin.GRPCBroker
+	sharedBrokerConn   *grpc.ClientConn // Shared connection for other services (e.g., event service)
 )
 
 // Initialize sets up the SDK with broker access
@@ -30,17 +31,26 @@ func InitializeServiceAPI(server *grpc.Server, broker *goplugin.GRPCBroker, plug
 	initMutex.Lock()
 	defer initMutex.Unlock()
 
-	if initialized {
-		log.Debug().Msg("Service API SDK already initialized")
-		return nil
+	// Always update broker reference - handles both initial setup and plugin reloads
+	// If broker changed, invalidate any cached client
+	if grpcBroker != broker {
+		if serviceClient != nil {
+			log.Info().Msg("Broker changed, invalidating cached service client")
+			serviceClient = nil
+		}
+		serviceBrokerID = 0 // Reset broker ID so it must be set again
 	}
 
 	// Store broker for service API access
 	grpcBroker = broker
-	pluginID = pluginIDVal // May be 0 initially, updated later
+	pluginID = pluginIDVal // May be 0 initially, updated later via SetPluginID
 	initialized = true
 
-	log.Info().Uint32("plugin_id", pluginID).Msg("✅ Microgateway service API SDK initialized with broker access")
+	log.Info().
+		Uint32("plugin_id", pluginID).
+		Bool("broker_is_nil", broker == nil).
+		Str("broker_ptr", fmt.Sprintf("%p", broker)).
+		Msg("✅ Microgateway service API SDK initialized with broker access (PLUGIN SIDE)")
 	return nil
 }
 
@@ -50,8 +60,22 @@ func SetServiceBrokerID(brokerID uint32) {
 	initMutex.Lock()
 	defer initMutex.Unlock()
 
+	// If broker ID changed, invalidate the cached service client
+	// This handles plugin reloads where a new broker session is established
+	if serviceBrokerID != brokerID && serviceClient != nil {
+		log.Info().
+			Uint32("old_broker_id", serviceBrokerID).
+			Uint32("new_broker_id", brokerID).
+			Msg("Broker ID changed, invalidating cached service client")
+		serviceClient = nil
+	}
+
 	serviceBrokerID = brokerID
-	log.Info().Uint32("broker_id", brokerID).Msg("✅ Service broker ID set for host service access")
+	log.Info().
+		Uint32("broker_id", brokerID).
+		Bool("initialized", initialized).
+		Bool("has_broker", grpcBroker != nil).
+		Msg("✅ Service broker ID set for host service access")
 }
 
 // ExtractBrokerIDFromConfig extracts the broker ID from plugin config
@@ -85,13 +109,21 @@ func SetPluginID(id uint32) {
 }
 
 // getServiceClient creates and returns the service client, creating it if necessary
+// Includes retry logic to handle race conditions where the broker server may not be ready yet
 func getServiceClient(ctx context.Context) (pb.MicrogatewayManagementServiceClient, error) {
 	if serviceClient != nil {
 		return serviceClient, nil
 	}
 
+	log.Debug().
+		Bool("initialized", initialized).
+		Bool("has_broker", grpcBroker != nil).
+		Uint32("broker_id", serviceBrokerID).
+		Str("broker_ptr", fmt.Sprintf("%p", grpcBroker)).
+		Msg("getServiceClient: checking prerequisites (PLUGIN SIDE dial attempt)")
+
 	if !initialized || grpcBroker == nil {
-		return nil, fmt.Errorf("SDK not initialized - call InitializeServiceAPI() first")
+		return nil, fmt.Errorf("SDK not initialized - call InitializeServiceAPI() first (initialized=%v, broker=%v)", initialized, grpcBroker != nil)
 	}
 
 	if serviceBrokerID == 0 {
@@ -99,10 +131,32 @@ func getServiceClient(ctx context.Context) (pb.MicrogatewayManagementServiceClie
 	}
 
 	// Dial the brokered server where microgateway management services are registered
-	conn, err := grpcBroker.Dial(serviceBrokerID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial service broker ID %d: %w", serviceBrokerID, err)
+	// Retry with backoff to handle race conditions where server may not be ready yet
+	var conn *grpc.ClientConn
+	var err error
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		conn, err = grpcBroker.Dial(serviceBrokerID)
+		if err == nil {
+			break
+		}
+		if i < maxRetries-1 {
+			backoff := time.Duration(50*(i+1)) * time.Millisecond
+			log.Debug().
+				Int("attempt", i+1).
+				Dur("backoff", backoff).
+				Err(err).
+				Msg("Broker dial failed, retrying...")
+			time.Sleep(backoff)
+		}
 	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial service broker ID %d after %d attempts: %w", serviceBrokerID, maxRetries, err)
+	}
+
+	// Store the shared connection for other services (e.g., event service) to reuse
+	// The go-plugin broker only allows ONE connection per broker ID, so we must share
+	sharedBrokerConn = conn
 
 	// Create service client from the brokered connection
 	serviceClient = pb.NewMicrogatewayManagementServiceClient(conn)
@@ -128,6 +182,23 @@ func IsInitialized() bool {
 	initMutex.Lock()
 	defer initMutex.Unlock()
 	return initialized && serviceBrokerID != 0
+}
+
+// GetSharedBrokerConnection returns the shared gRPC connection to the host's brokered server.
+// This allows other services (like the event service) to reuse the same connection.
+// The go-plugin broker only allows ONE connection per broker ID.
+func GetSharedBrokerConnection() *grpc.ClientConn {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	return sharedBrokerConn
+}
+
+// SetSharedBrokerConnection stores a pre-dialed gRPC connection for shared use.
+// This is called by services that dial the broker first.
+func SetSharedBrokerConnection(conn *grpc.ClientConn) {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	sharedBrokerConn = conn
 }
 
 // LLM Management Functions
@@ -369,4 +440,98 @@ func GetAppsCount(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return int(resp.TotalCount), nil
+}
+
+// Control Payload Functions (for edge-to-control plugin communication)
+
+// SendToControl queues a payload to be sent to the AI Studio control plane
+// This is used by plugins running on edge (microgateway) instances to send
+// arbitrary data back to the control plane where it will be routed to the
+// corresponding plugin via AcceptEdgePayload.
+//
+// Parameters:
+//   - ctx: Context for the RPC call
+//   - payload: Arbitrary binary data (max 1MB)
+//   - correlationID: Optional correlation ID for tracking (can be empty)
+//   - metadata: Optional key-value metadata (can be nil)
+//
+// Returns:
+//   - pendingCount: Number of payloads currently pending in the queue
+//   - error: Error if the payload could not be queued
+func SendToControl(ctx context.Context, payload []byte, correlationID string, metadata map[string]string) (int64, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.QueueControlPayload(ctx, &pb.QueueControlPayloadRequest{
+		Context:       createPluginContext("control.send"),
+		Payload:       payload,
+		CorrelationId: correlationID,
+		Metadata:      metadata,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to queue control payload: %w", err)
+	}
+
+	if !resp.Success {
+		return resp.PendingCount, fmt.Errorf("control payload rejected: %s", resp.ErrorMessage)
+	}
+
+	return resp.PendingCount, nil
+}
+
+// SendToControlJSON is a convenience function that JSON-encodes a value and sends it to control
+func SendToControlJSON(ctx context.Context, value interface{}, correlationID string, metadata map[string]string) (int64, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+	return SendToControl(ctx, data, correlationID, metadata)
+}
+
+// License Information Functions
+
+// LicenseInfo contains license information returned by GetLicenseInfo
+type LicenseInfo struct {
+	Valid        bool     // Whether license is currently valid
+	DaysLeft     int      // Days until license expires (-1 = never expires)
+	Type         string   // "community" or "enterprise"
+	Entitlements []string // List of enabled features/entitlements
+	Organization string   // Organization name from license (if any)
+}
+
+// GetLicenseInfo returns license information from the host
+// This can be used by plugins to check if enterprise features are available
+// All plugins can call this without requiring special scopes
+func GetLicenseInfo(ctx context.Context) (*LicenseInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.GetLicenseInfo(ctx, &pb.GetLicenseInfoRequest{
+		Context: createPluginContext(""), // No scope required
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get license info: %w", err)
+	}
+
+	return &LicenseInfo{
+		Valid:        resp.LicenseValid,
+		DaysLeft:     int(resp.DaysRemaining),
+		Type:         resp.LicenseType,
+		Entitlements: resp.Entitlements,
+		Organization: resp.Organization,
+	}, nil
+}
+
+// IsEnterprise returns true if the microgateway is running in enterprise mode
+// This is a convenience function that checks if license type is "enterprise"
+func IsEnterprise(ctx context.Context) (bool, error) {
+	info, err := GetLicenseInfo(ctx)
+	if err != nil {
+		return false, err
+	}
+	return info.Type == "enterprise", nil
 }

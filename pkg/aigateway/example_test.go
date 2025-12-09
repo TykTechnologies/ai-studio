@@ -10,7 +10,7 @@ import (
 func UsageExample_New() {
 	// Assume you have an existing database and services set up
 	// service := services.NewService(db)
-	// budgetService := services.NewBudgetService(db, service)
+	// budgetService := budget.NewService(db, service)
 
 	// Create a gateway instance
 	// gateway := aigateway.New(service, &proxy.Config{Port: 9090}, budgetService)
@@ -35,7 +35,7 @@ func UsageExample_Handler() {
 
 	// Assume services are initialized
 	// service := services.NewService(db)
-	// budgetService := services.NewBudgetService(db, service)
+	// budgetService := budget.NewService(db, service)
 	// gateway := aigateway.New(service, &proxy.Config{Port: 9090}, budgetService)
 
 	// Create a new HTTP server with the gateway mounted at a path
@@ -61,7 +61,7 @@ func UsageExample_Handler() {
 // This is kept for documentation purposes but not run as a test.
 func UsageExample_Reload() {
 	// service := services.NewService(db)
-	// budgetService := services.NewBudgetService(db, service)
+	// budgetService := budget.NewService(db, service)
 	// gateway := aigateway.New(service, &proxy.Config{Port: 9090}, budgetService)
 
 	// Start the gateway in a goroutine

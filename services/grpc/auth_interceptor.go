@@ -113,9 +113,10 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/ListLLMs":      models.ServiceScopeLLMsRead,
 		"/ai_studio_management.AIStudioManagementService/GetLLM":        models.ServiceScopeLLMsRead,
 		"/ai_studio_management.AIStudioManagementService/GetLLMPlugins": models.ServiceScopeLLMsRead,
-		"/ai_studio_management.AIStudioManagementService/CreateLLM":     models.ServiceScopeLLMsWrite,
-		"/ai_studio_management.AIStudioManagementService/UpdateLLM":     models.ServiceScopeLLMsWrite,
-		"/ai_studio_management.AIStudioManagementService/DeleteLLM":     models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/CreateLLM":       models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateLLM":       models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteLLM":       models.ServiceScopeLLMsWrite,
+		"/ai_studio_management.AIStudioManagementService/UpdateLLMPlugins": models.ServiceScopeLLMsWrite,
 
 		// Analytics methods
 		"/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary": models.ServiceScopeAnalyticsRead,
@@ -153,6 +154,18 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/DeleteDatasource":      models.ServiceScopeDatasourcesWrite,
 		"/ai_studio_management.AIStudioManagementService/SearchDatasources":     models.ServiceScopeDatasourcesRead,
 		"/ai_studio_management.AIStudioManagementService/ProcessDatasourceEmbeddings": models.ServiceScopeDatasourcesEmbeddings,
+
+		// RAG/Embedding operations
+		"/ai_studio_management.AIStudioManagementService/GenerateEmbedding":          models.ServiceScopeDatasourcesEmbeddings,
+		"/ai_studio_management.AIStudioManagementService/StoreDocuments":             models.ServiceScopeDatasourcesEmbeddings,
+		"/ai_studio_management.AIStudioManagementService/ProcessAndStoreDocuments":   models.ServiceScopeDatasourcesEmbeddings,
+		"/ai_studio_management.AIStudioManagementService/QueryDatasourceByVector":    models.ServiceScopeDatasourcesQuery,
+
+		// Advanced datasource operations - metadata and namespace management
+		"/ai_studio_management.AIStudioManagementService/DeleteDocumentsByMetadata": models.ServiceScopeDatasourcesWrite,
+		"/ai_studio_management.AIStudioManagementService/QueryByMetadataOnly":       models.ServiceScopeDatasourcesQuery,
+		"/ai_studio_management.AIStudioManagementService/ListNamespaces":            models.ServiceScopeDatasourcesRead,
+		"/ai_studio_management.AIStudioManagementService/DeleteNamespace":           models.ServiceScopeDatasourcesWrite,
 
 		// Data catalogues management methods
 		"/ai_studio_management.AIStudioManagementService/ListDataCatalogues":   models.ServiceScopeDataCataloguesRead,
@@ -193,6 +206,13 @@ func extractScopeFromMethod(fullMethod string) string {
 		"/ai_studio_management.AIStudioManagementService/WritePluginKV":  models.ServiceScopeKVReadWrite,
 		"/ai_studio_management.AIStudioManagementService/ReadPluginKV":   models.ServiceScopeKVReadWrite,
 		"/ai_studio_management.AIStudioManagementService/DeletePluginKV": models.ServiceScopeKVReadWrite,
+
+		// Schedule management methods
+		"/ai_studio_management.AIStudioManagementService/CreateSchedule": models.ServiceScopeSchedulerManage,
+		"/ai_studio_management.AIStudioManagementService/GetSchedule":    models.ServiceScopeSchedulerManage,
+		"/ai_studio_management.AIStudioManagementService/ListSchedules":  models.ServiceScopeSchedulerManage,
+		"/ai_studio_management.AIStudioManagementService/UpdateSchedule": models.ServiceScopeSchedulerManage,
+		"/ai_studio_management.AIStudioManagementService/DeleteSchedule": models.ServiceScopeSchedulerManage,
 	}
 
 	return scopeMap[fullMethod]
@@ -243,4 +263,14 @@ func GetPluginFromContext(ctx context.Context) (*models.Plugin, bool) {
 		return plugin, true
 	}
 	return nil, false
+}
+
+// CreatePluginIDInterceptor creates an interceptor that injects plugin ID into all requests
+// Used for brokered servers to ensure plugin authentication context is available
+func CreatePluginIDInterceptor(pluginID uint) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		// Inject plugin ID into context
+		ctx = SetPluginIDInContext(ctx, pluginID)
+		return handler(ctx, req)
+	}
 }

@@ -17,9 +17,12 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 )
@@ -30,7 +33,8 @@ type PluginServiceInterface interface {
 	GetPlugin(id uint) (PluginData, error)
 	GetPluginsByLLMID(llmID uint) ([]PluginData, error)
 	GetPluginsForLLM(llmID uint) ([]PluginData, error)
-	GetAllPlugins() ([]PluginData, error) // New method for pre-warming
+	GetAllPlugins() ([]PluginData, error)
+	GetAllLLMIDs() ([]uint, error) // Get all LLM IDs for pre-warming plugins
 }
 
 // PluginData represents plugin data from database (minimal interface)
@@ -134,6 +138,10 @@ type PluginManager struct {
 
 	// Service broker for bidirectional plugin communication
 	managementServer interface{} // MicrogatewayManagementServiceServer (interface to avoid import cycle)
+	eventServer      interface{} // PluginEventServiceServer for plugin pub/sub (interface to avoid import cycle)
+
+	// Session management for long-lived broker connections
+	pluginSessions map[uint]context.CancelFunc // Plugin ID -> session cancel function
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -143,6 +151,16 @@ var HandshakeConfig = plugin.HandshakeConfig{
 	ProtocolVersion:  1,
 	MagicCookieKey:   "AI_STUDIO_PLUGIN",
 	MagicCookieValue: "v1",
+}
+
+// pluginLogger creates an hclog logger for go-plugin
+// Using Debug level to see plugin output including OnSessionReady and event subscription logs
+func pluginLogger() hclog.Logger {
+	return hclog.New(&hclog.LoggerOptions{
+		Name:   "plugin",
+		Level:  hclog.Debug, // Show Debug level to see plugin logs
+		Output: os.Stderr,   // Output to stderr so we can see plugin logs
+	})
 }
 
 // NewPluginManager creates a new plugin manager instance
@@ -162,6 +180,7 @@ func NewPluginManager(pluginService PluginServiceInterface) *PluginManager {
 		ociClient:               nil, // Will be initialized when needed
 		pluginHealth:            make(map[uint]*PluginHealthStatus),
 		preWarmingInProgress:    make(map[uint]bool),
+		pluginSessions:          make(map[uint]context.CancelFunc),
 	}
 }
 
@@ -179,6 +198,16 @@ func NewPluginManagerWithOCI(pluginService PluginServiceInterface, ociConfig *oc
 	}
 
 	return pm, nil
+}
+
+// SetSecurityService sets the enterprise security service for OCI signature verification
+func (pm *PluginManager) SetSecurityService(securityService ociplugins.SecurityService) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	if pm.ociClient != nil {
+		pm.ociClient.SetSecurityService(securityService)
+	}
 }
 
 // LoadPlugin loads a plugin by ID
@@ -274,7 +303,6 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		}
 	}
 
-	// Initialize plugin
 	// Convert config values to strings for gRPC transport
 	// For complex types (arrays, objects), JSON-encode them so plugins can parse them
 	configStrings := make(map[string]string)
@@ -299,6 +327,51 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		}
 	}
 
+	// Add plugin ID to config
+	configStrings["_plugin_id"] = fmt.Sprintf("%d", pluginID)
+
+	// Setup service broker BEFORE Initialize (like AI Studio does)
+	// This way the broker ID is available in the first and only Initialize call
+	if pm.managementServer != nil {
+		if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
+			// Use SetupServiceBrokerWithEvents if event server is available
+			var setupBrokerID uint32
+			var err error
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Bool("has_event_server", pm.eventServer != nil).
+				Msg("Setting up service broker for plugin")
+			if pm.eventServer != nil {
+				setupBrokerID, err = clientWrapper.SetupServiceBrokerWithEvents(pm.managementServer, pm.eventServer)
+			} else {
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Msg("eventServer is nil - plugin will NOT be able to subscribe to events")
+				setupBrokerID, err = clientWrapper.SetupServiceBroker(pm.managementServer)
+			}
+			if err != nil {
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Err(err).
+					Msg("Failed to setup service broker for plugin - service API will not be available")
+			} else {
+				log.Debug().
+					Uint("plugin_id", pluginID).
+					Uint32("broker_id", setupBrokerID).
+					Bool("has_event_server", pm.eventServer != nil).
+					Msg("Service broker setup complete")
+
+				// Add broker ID to config so plugin receives it in Initialize
+				configStrings["_service_broker_id"] = fmt.Sprintf("%d", setupBrokerID)
+			}
+		}
+	} else {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Msg("managementServer is nil - skipping service broker setup")
+	}
+
+	// Initialize plugin with config (including broker ID if available)
 	initResp, err := grpcClient.Initialize(context.Background(), &pb.InitRequest{
 		Config: configStrings,
 	})
@@ -313,44 +386,6 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		err := fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
 		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, err
-	}
-
-	// Setup service broker if management server is available
-	var brokerID uint32
-	if pm.managementServer != nil {
-		// Check if this is a MicrogatewayPluginClient that supports broker setup
-		if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
-			// Use type assertion without checking specific methods - the interface is defined elsewhere
-			// Setup the service broker - this creates bidirectional gRPC channel
-			setupBrokerID, err := clientWrapper.SetupServiceBroker(pm.managementServer)
-			if err != nil {
-				log.Warn().
-					Uint("plugin_id", pluginID).
-					Err(err).
-					Msg("Failed to setup service broker for plugin - service API will not be available")
-			} else {
-				brokerID = setupBrokerID
-				log.Info().
-					Uint("plugin_id", pluginID).
-					Uint32("broker_id", brokerID).
-					Msg("✅ Service broker setup complete - plugin can now access host services")
-
-				// Add broker ID to config so plugin can use it
-				configStrings["_service_broker_id"] = fmt.Sprintf("%d", brokerID)
-				configStrings["_plugin_id"] = fmt.Sprintf("%d", pluginID)
-
-				// Send updated config to plugin with broker ID
-				_, err = grpcClient.Initialize(context.Background(), &pb.InitRequest{
-					Config: configStrings,
-				})
-				if err != nil {
-					log.Warn().
-						Uint("plugin_id", pluginID).
-						Err(err).
-						Msg("Failed to reinitialize plugin with broker ID")
-				}
-			}
-		}
 	}
 
 	// Create loaded plugin instance
@@ -372,13 +407,29 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	// Start health monitoring
 	go pm.monitorPluginHealth(pluginID)
 
+	// Start session loop for long-lived broker access
+	// Only if we have a client wrapper with session support
+	if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
+		brokerIDUint, _ := strconv.ParseUint(configStrings["_service_broker_id"], 10, 32)
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Uint64("broker_id", brokerIDUint).
+			Msg("Starting session loop for plugin")
+		go pm.runPluginSessionLoop(pluginID, clientWrapper, uint32(brokerIDUint))
+	} else {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("raw_type", fmt.Sprintf("%T", raw)).
+			Msg("⚠️ Plugin does NOT support session loop (not a MicrogatewayPluginClient)")
+	}
+
 	// Mark as ready (success) - call safe version after releasing lock
 	loadTime := time.Since(startTime)
 	pm.mu.Unlock()
 	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusReady, nil, loadTime)
 	pm.mu.Lock()
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("plugin_name", pluginData.Name).
 		Str("hook_type", pluginData.HookType).
@@ -396,6 +447,16 @@ func (pm *PluginManager) UnloadPlugin(pluginID uint) error {
 	loadedPlugin, exists := pm.loadedPlugins[pluginID]
 	if !exists {
 		return fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	// Close session first (before Shutdown) to allow cleanup
+	// Try to get client wrapper for session close
+	if loadedPlugin.GRPCClient != nil {
+		if clientWrapper, ok := loadedPlugin.GRPCClient.(*MicrogatewayPluginClient); ok {
+			pm.mu.Unlock() // Release lock for session close
+			pm.closePluginSession(pluginID, clientWrapper)
+			pm.mu.Lock() // Re-acquire lock
+		}
 	}
 
 	// Shutdown plugin gracefully
@@ -435,7 +496,7 @@ func (pm *PluginManager) UnloadPlugin(pluginID uint) error {
 		pm.llmPluginMap[llmID] = newPluginIDs
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("plugin_name", loadedPlugin.Name).
 		Msg("Plugin unloaded successfully")
@@ -582,7 +643,7 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 				return nil, fmt.Errorf("invalid input type for post-auth hook: got %T, expected *interfaces.EnrichedRequest", result)
 			}
 
-			log.Info().
+			log.Debug().
 				Str("plugin_name", plugin.Name).
 				Int("input_body_len", len(enrichedReq.PluginRequest.Body)).
 				Msg("🔗 Executing post-auth plugin in chain")
@@ -605,7 +666,7 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 			if resp.Modified {
 				// For post-auth hooks, update the enriched request with modifications
 				// Don't convert to PluginResponse - keep it as EnrichedRequest for the next plugin in the chain
-				log.Info().
+				log.Debug().
 					Str("plugin_name", plugin.Name).
 					Bool("resp_modified", resp.Modified).
 					Int("original_body_len", len(enrichedReq.PluginRequest.Body)).
@@ -620,6 +681,21 @@ func (pm *PluginManager) ExecutePluginChain(llmID uint, hookType interfaces.Hook
 					enrichedReq.PluginRequest.Body = resp.Body
 				}
 				// result stays as enrichedReq for the next plugin
+			}
+
+			// Apply context updates from plugin (e.g., upstream_override for DLB)
+			if len(resp.ContextUpdates) > 0 {
+				if pluginCtx.Metadata == nil {
+					pluginCtx.Metadata = make(map[string]interface{})
+				}
+				for key, value := range resp.ContextUpdates {
+					pluginCtx.Metadata[key] = value
+					log.Debug().
+						Str("plugin_name", plugin.Name).
+						Str("key", key).
+						Str("value", value).
+						Msg("📝 Plugin set context update")
+				}
 			}
 
 		case interfaces.HookTypeOnResponse:
@@ -677,7 +753,7 @@ func (pm *PluginManager) monitorPluginHealth(pluginID uint) {
 			pm.mu.Unlock()
 
 			// Attempt to restart the plugin after health check failure
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("plugin_name", loadedPlugin.Name).
 				Msg("Attempting automatic plugin restart")
@@ -689,7 +765,7 @@ func (pm *PluginManager) monitorPluginHealth(pluginID uint) {
 					Err(restartErr).
 					Msg("Failed to restart plugin automatically")
 			} else {
-				log.Info().
+				log.Debug().
 					Uint("plugin_id", pluginID).
 					Str("plugin_name", loadedPlugin.Name).
 					Msg("Plugin restarted successfully after health check failure")
@@ -740,12 +816,12 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 
 	// Shutdown OCI client if available
 	if pm.ociClient != nil {
-		log.Info().Msg("Shutting down OCI plugin client...")
+		log.Debug().Msg("Shutting down OCI plugin client...")
 		if err := pm.ociClient.Close(); err != nil {
 			log.Error().Err(err).Msg("Failed to shutdown OCI plugin client")
 			errors = append(errors, fmt.Errorf("failed to shutdown OCI client: %w", err))
 		} else {
-			log.Info().Msg("OCI plugin client shutdown completed")
+			log.Debug().Msg("OCI plugin client shutdown completed")
 		}
 	}
 
@@ -773,7 +849,7 @@ func (pm *PluginManager) SaveReattachConfig(pluginID uint) error {
 
 	pm.reattachConfigs[pluginID] = reattachConfig
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Msg("Reattach config saved for plugin")
 
@@ -830,7 +906,7 @@ func validatePluginPath(cmdPath string) error {
 		return fmt.Errorf("🔒 SECURITY: Plugin file is not executable: %s", absPath)
 	}
 
-	log.Info().
+	log.Debug().
 		Str("plugin_path", absPath).
 		Msg("✅ Plugin path security validation passed")
 
@@ -876,7 +952,7 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 			return nil, fmt.Errorf("failed to parse gRPC address: %w", err)
 		}
 
-		log.Info().
+		log.Debug().
 			Str("command", command).
 			Str("address", reattachConfig.Addr.String()).
 			Msg("Creating client for external gRPC plugin")
@@ -886,6 +962,7 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 			Plugins:          pm.pluginMap,
 			Reattach:         reattachConfig,
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+			Logger:           pluginLogger(),
 		}), nil
 	} else {
 		// Local executable - use exec.Command with security validation
@@ -899,7 +976,7 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 			return nil, fmt.Errorf("plugin security validation failed: %w", err)
 		}
 
-		log.Info().
+		log.Debug().
 			Str("command", command).
 			Str("path", cmdPath).
 			Msg("✅ Creating client for validated local plugin executable")
@@ -909,6 +986,9 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 			Plugins:          pm.pluginMap,
 			Cmd:              exec.Command(cmdPath),
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+			Logger:           pluginLogger(),
+			SyncStdout:       os.Stdout, // Forward plugin stdout to microgateway
+			SyncStderr:       os.Stderr, // Forward plugin stderr to microgateway
 		}), nil
 	}
 }
@@ -948,7 +1028,7 @@ func (pm *PluginManager) createOCIPluginClient(command string) (*plugin.Client, 
 
 	// If not cached or cache retrieval failed, fetch from registry
 	if localPlugin == nil {
-		log.Info().
+		log.Debug().
 			Str("command", command).
 			Str("registry", ref.Registry).
 			Str("repository", ref.Repository).
@@ -961,7 +1041,7 @@ func (pm *PluginManager) createOCIPluginClient(command string) (*plugin.Client, 
 			return nil, fmt.Errorf("failed to fetch OCI plugin: %w", err)
 		}
 
-		log.Info().
+		log.Debug().
 			Str("command", command).
 			Str("local_path", localPlugin.ExecutablePath).
 			Bool("verified", localPlugin.Verified).
@@ -980,6 +1060,9 @@ func (pm *PluginManager) createOCIPluginClient(command string) (*plugin.Client, 
 		Plugins:          pm.pluginMap,
 		Cmd:              exec.Command(localPlugin.ExecutablePath),
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+		Logger:           pluginLogger(),
+		SyncStdout:       os.Stdout, // Forward plugin stdout to microgateway
+		SyncStderr:       os.Stderr, // Forward plugin stderr to microgateway
 	}), nil
 }
 
@@ -1036,7 +1119,7 @@ func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string)
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
-			log.Info().
+			log.Debug().
 				Str("command", command).
 				Int("attempt", attempt+1).
 				Int("max_retries", maxRetries).
@@ -1094,7 +1177,7 @@ func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string)
 			continue
 		}
 
-		log.Info().
+		log.Debug().
 			Str("command", command).
 			Int("attempt", attempt+1).
 			Msg("Successfully connected to external gRPC plugin")
@@ -1127,6 +1210,7 @@ func (pm *PluginManager) ReattachPlugin(pluginID uint, config *plugin.ReattachCo
 		Plugins:          pm.pluginMap,
 		Reattach:         config,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+		Logger:           pluginLogger(),
 	})
 
 	// Connect via gRPC
@@ -1178,7 +1262,7 @@ func (pm *PluginManager) ReattachPlugin(pluginID uint, config *plugin.ReattachCo
 	// Start health monitoring
 	go pm.monitorPluginHealth(pluginID)
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("plugin_name", pluginData.Name).
 		Msg("Plugin reattached successfully")
@@ -1252,7 +1336,7 @@ func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectio
 		if cfg.Name == "analytics_pulse" {
 			// Skip built-in analytics pulse plugin during initial load
 			// It will be loaded later when edge client is available
-			log.Info().Str("plugin", cfg.Name).Msg("Deferring built-in analytics pulse plugin load until edge client is available")
+			log.Debug().Str("plugin", cfg.Name).Msg("Deferring built-in analytics pulse plugin load until edge client is available")
 			continue
 		} else {
 			// Load external plugin from path
@@ -1272,7 +1356,7 @@ func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectio
 		pm.globalDataPlugins[cfg.Name] = globalPlugin
 		pm.dataCollectionHookTypes[cfg.Name] = cfg.HookTypes
 
-		log.Info().
+		log.Debug().
 			Str("plugin", cfg.Name).
 			Strs("hook_types", cfg.HookTypes).
 			Bool("replace_database", cfg.ReplaceDatabase).
@@ -1362,7 +1446,7 @@ func (pm *PluginManager) SetEdgeClient(edgeClient interface{}) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	pm.edgeClient = edgeClient
-	log.Info().Msg("Edge client set for plugin manager built-in plugins")
+	log.Debug().Msg("Edge client set for plugin manager built-in plugins")
 }
 
 // SetManagementServer sets the management server for service broker setup
@@ -1370,7 +1454,55 @@ func (pm *PluginManager) SetManagementServer(server interface{}) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	pm.managementServer = server
-	log.Info().Msg("Management server set for plugin manager service broker")
+	log.Debug().Msg("Management server set for plugin manager service broker")
+}
+
+// GetManagementServer returns the management server for external wiring
+// This is used to wire the control payload queue from main.go
+func (pm *PluginManager) GetManagementServer() interface{} {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return pm.managementServer
+}
+
+// SetEventServer sets the plugin event server for pub/sub support
+func (pm *PluginManager) SetEventServer(server interface{}) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	pm.eventServer = server
+	log.Debug().Msg("Event server set for plugin manager service broker")
+}
+
+// GetEventServer returns the plugin event server
+func (pm *PluginManager) GetEventServer() interface{} {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return pm.eventServer
+}
+
+// SetEventBus creates a PluginEventServer from the given event bus and node ID.
+// This is a convenience method that creates the server internally.
+// The bus should implement eventbridge.Bus interface.
+func (pm *PluginManager) SetEventBus(bus interface{}, nodeID string) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	if bus == nil {
+		log.Warn().Msg("SetEventBus: bus is nil")
+		return
+	}
+
+	// Cast to eventbridge.Bus
+	eventBus, ok := bus.(eventbridge.Bus)
+	if !ok {
+		log.Warn().Msg("SetEventBus: provided bus does not implement eventbridge.Bus interface")
+		return
+	}
+
+	pm.eventServer = sdk.NewPluginEventServer(eventBus, nodeID)
+	log.Debug().
+		Str("node_id", nodeID).
+		Msg("Plugin event server created from event bus")
 }
 
 // LoadDeferredBuiltinPlugins loads any built-in plugins that were deferred during initial load
@@ -1385,7 +1517,7 @@ func (pm *PluginManager) LoadDeferredBuiltinPlugins(configs []DataCollectionPlug
 
 		// Only load analytics_pulse plugin that was deferred
 		if cfg.Name == "analytics_pulse" {
-			log.Info().Str("plugin", cfg.Name).Msg("Loading deferred built-in analytics pulse plugin")
+			log.Debug().Str("plugin", cfg.Name).Msg("Loading deferred built-in analytics pulse plugin")
 
 			globalPlugin, err := pm.loadBuiltinAnalyticsPulsePlugin(cfg)
 			if err != nil {
@@ -1400,7 +1532,7 @@ func (pm *PluginManager) LoadDeferredBuiltinPlugins(configs []DataCollectionPlug
 			pm.globalDataPlugins[cfg.Name] = globalPlugin
 			pm.dataCollectionHookTypes[cfg.Name] = cfg.HookTypes
 
-			log.Info().
+			log.Debug().
 				Str("plugin", cfg.Name).
 				Strs("hook_types", cfg.HookTypes).
 				Msg("Deferred built-in analytics pulse plugin loaded successfully")
@@ -1469,7 +1601,7 @@ func (pm *PluginManager) loadBuiltinAnalyticsPulsePlugin(cfg DataCollectionPlugi
 	// Store reference to built-in plugin for execution
 	globalPlugin.LoadedPlugin.BuiltinPlugin = pulsePlugin
 
-	log.Info().
+	log.Debug().
 		Str("plugin", cfg.Name).
 		Str("edge_id", edgeID).
 		Str("edge_namespace", edgeNamespace).
@@ -1746,7 +1878,7 @@ func (pm *PluginManager) UnloadGlobalPlugins() {
 		if plugin.Client != nil {
 			plugin.Client.Kill()
 		}
-		log.Info().Str("plugin", name).Msg("Unloaded global data collection plugin")
+		log.Debug().Str("plugin", name).Msg("Unloaded global data collection plugin")
 	}
 
 	pm.globalDataPlugins = make(map[string]*GlobalPlugin)
@@ -1877,16 +2009,111 @@ func (pm *PluginManager) PreFetchOCIPlugin(command string) error {
 		return fmt.Errorf("failed to pre-fetch OCI plugin: %w", err)
 	}
 
-	log.Info().
+	log.Debug().
 		Str("reference", ref.FullReference()).
 		Msg("OCI plugin pre-fetched successfully")
 
 	return nil
 }
 
+// PrewarmAllPlugins loads plugins assigned to LLMs at startup to establish event subscriptions.
+// This is called after SetEventBus to ensure plugins can subscribe to events.
+// Only plugins that are actually assigned to LLMs on this edge are loaded.
+func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
+	log.Debug().Msg("Starting plugin pre-warming for event subscriptions")
+
+	// Get all LLM IDs on this edge
+	llmIDs, err := pm.service.GetAllLLMIDs()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get LLM IDs for pre-warming")
+		return fmt.Errorf("failed to get LLM IDs for pre-warming: %w", err)
+	}
+
+	log.Debug().Int("llm_count", len(llmIDs)).Msg("Found LLMs for plugin pre-warming")
+
+	// Collect unique plugins from all LLMs
+	pluginsSeen := make(map[uint]bool)
+	var pluginsToLoad []PluginData
+
+	for _, llmID := range llmIDs {
+		plugins, err := pm.service.GetPluginsForLLM(llmID)
+		if err != nil {
+			log.Warn().Uint("llm_id", llmID).Err(err).Msg("Failed to get plugins for LLM")
+			continue
+		}
+
+		for _, plugin := range plugins {
+			if !pluginsSeen[plugin.ID] {
+				pluginsSeen[plugin.ID] = true
+				pluginsToLoad = append(pluginsToLoad, plugin)
+			}
+		}
+	}
+
+	log.Debug().Int("unique_plugins", len(pluginsToLoad)).Msg("Found unique plugins to pre-warm")
+
+	var loadedCount int
+	var preWarmErrors []error
+
+	for _, plugin := range pluginsToLoad {
+		// Skip plugins that are already loaded
+		pm.mu.RLock()
+		_, exists := pm.loadedPlugins[plugin.ID]
+		pm.mu.RUnlock()
+
+		if exists {
+			log.Debug().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Msg("Plugin already loaded, skipping pre-warm")
+			continue
+		}
+
+		log.Debug().
+			Uint("plugin_id", plugin.ID).
+			Str("plugin_name", plugin.Name).
+			Str("command", plugin.Command).
+			Msg("Pre-warming plugin for event subscriptions")
+
+		// Load the plugin - this will start the session loop and trigger OnSessionReady
+		startTime := time.Now()
+		_, err := pm.LoadPlugin(plugin.ID)
+		if err != nil {
+			log.Error().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Err(err).
+				Msg("Failed to pre-warm plugin")
+			preWarmErrors = append(preWarmErrors, fmt.Errorf("plugin %d (%s): %w", plugin.ID, plugin.Name, err))
+		} else {
+			loadedCount++
+			log.Debug().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Dur("load_time", time.Since(startTime)).
+				Msg("Plugin pre-warmed successfully")
+		}
+	}
+
+	if len(preWarmErrors) > 0 {
+		log.Warn().
+			Int("total_plugins", len(pluginsToLoad)).
+			Int("loaded_plugins", loadedCount).
+			Int("failed_plugins", len(preWarmErrors)).
+			Msg("Plugin pre-warming completed with some errors")
+	} else {
+		log.Info().
+			Int("plugins_prewarmed", loadedCount).
+			Int("llms_checked", len(llmIDs)).
+			Msg("Plugin pre-warming completed successfully - event subscriptions should be active")
+	}
+
+	return nil
+}
+
 // PreWarmOCIPlugins pre-warms all OCI plugins found in the database
 func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
-	log.Info().Msg("Starting OCI plugin pre-warming")
+	log.Debug().Msg("Starting OCI plugin pre-warming")
 
 	if pm.ociClient == nil {
 		log.Debug().Msg("OCI client not available, skipping OCI plugin pre-warming")
@@ -1911,7 +2138,7 @@ func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
 
 		ociPluginCount++
 
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", plugin.ID).
 			Str("plugin_name", plugin.Name).
 			Str("command", plugin.Command).
@@ -1932,7 +2159,7 @@ func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
 			pm.updatePluginHealthSafe(plugin.ID, plugin, PluginStatusFailed, err, time.Since(startTime))
 			preWarmErrors = append(preWarmErrors, fmt.Errorf("plugin %d (%s): %w", plugin.ID, plugin.Name, err))
 		} else {
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
 				Dur("pre_warm_time", time.Since(startTime)).
@@ -1950,7 +2177,7 @@ func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
 		return fmt.Errorf("failed to pre-warm %d out of %d OCI plugins", len(preWarmErrors), ociPluginCount)
 	}
 
-	log.Info().
+	log.Debug().
 		Int("oci_plugins_prewarmed", ociPluginCount).
 		Msg("OCI plugin pre-warming completed successfully")
 
@@ -2073,4 +2300,155 @@ func (pm *PluginManager) GetPluginHealthSummary() map[string]interface{} {
 	summary["all_ready"] = summary["failed_plugins"].(int) == 0 && summary["loading_plugins"].(int) == 0
 
 	return summary
+}
+
+// runPluginSessionLoop runs the session loop for a plugin.
+// This keeps calling OpenSession in a loop to maintain broker connectivity.
+// The loop exits when the session is explicitly closed or the plugin is unloaded.
+func (pm *PluginManager) runPluginSessionLoop(pluginID uint, client *MicrogatewayPluginClient, brokerID uint32) {
+	// Create a cancellable context for this session
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Store cancel function for cleanup during unload
+	pm.mu.Lock()
+	pm.pluginSessions[pluginID] = cancel
+	pm.mu.Unlock()
+
+	defer func() {
+		pm.mu.Lock()
+		delete(pm.pluginSessions, pluginID)
+		pm.mu.Unlock()
+	}()
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Uint32("broker_id", brokerID).
+		Msg("Starting plugin session loop")
+
+	sessionTimeoutMs := int32(30000) // 30 second sessions
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Msg("Plugin session loop cancelled")
+			return
+		default:
+		}
+
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Uint32("broker_id", brokerID).
+			Msg("Calling OpenSession RPC on plugin")
+
+		// Call OpenSession - this blocks until timeout or explicit close
+		resp, err := client.OpenSession(ctx, &pb.OpenSessionRequest{
+			ServiceBrokerId: brokerID,
+			PluginId:        uint32(pluginID),
+			TimeoutMs:       sessionTimeoutMs,
+		})
+
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Bool("resp_nil", resp == nil).
+			Bool("err_nil", err == nil).
+			Msg("OpenSession RPC returned")
+
+		if err != nil {
+			// Check if context was cancelled
+			select {
+			case <-ctx.Done():
+				log.Debug().
+					Uint("plugin_id", pluginID).
+					Msg("Plugin session loop cancelled during OpenSession")
+				return
+			default:
+			}
+
+			log.Error().
+				Uint("plugin_id", pluginID).
+				Err(err).
+				Msg("❌ OpenSession failed, retrying after delay")
+
+			// Wait before retrying on error
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
+			continue
+		}
+
+		// Check close reason
+		switch resp.CloseReason {
+		case pb.OpenSessionResponse_TIMEOUT:
+			// Normal timeout - immediately re-open session
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Str("session_id", resp.SessionId).
+				Msg("Plugin session timed out, renewing")
+			continue
+
+		case pb.OpenSessionResponse_EXPLICIT_CLOSE:
+			// Session was explicitly closed - exit loop
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Str("session_id", resp.SessionId).
+				Msg("Plugin session explicitly closed, exiting session loop")
+			return
+
+		case pb.OpenSessionResponse_PLUGIN_ERROR:
+			// Plugin error - log and retry
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("session_id", resp.SessionId).
+				Str("error", resp.ErrorMessage).
+				Msg("Plugin session error, retrying after delay")
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+			}
+			continue
+
+		default:
+			// Unknown reason - log and continue
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Str("session_id", resp.SessionId).
+				Int32("close_reason", int32(resp.CloseReason)).
+				Msg("Plugin session closed with unknown reason, renewing")
+			continue
+		}
+	}
+}
+
+// closePluginSession closes the session for a plugin during unload
+func (pm *PluginManager) closePluginSession(pluginID uint, client *MicrogatewayPluginClient) {
+	// Cancel the session loop context
+	pm.mu.Lock()
+	if cancel, exists := pm.pluginSessions[pluginID]; exists {
+		cancel()
+	}
+	pm.mu.Unlock()
+
+	// Call CloseSession to notify the plugin
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := client.CloseSession(ctx, &pb.CloseSessionRequest{
+		Reason: "unload",
+	})
+	if err != nil {
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Err(err).
+			Msg("Failed to close plugin session (may have already ended)")
+	} else {
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Msg("Plugin session closed")
+	}
 }

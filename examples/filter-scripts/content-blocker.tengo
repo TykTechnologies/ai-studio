@@ -1,0 +1,32 @@
+// Content Blocker Filter
+// This script blocks requests containing sensitive keywords
+
+text := import("text")
+
+// Define sensitive keywords to block
+sensitive_keywords := ["password", "secret", "api_key", "token", "credit card"]
+
+// Check all user messages for sensitive content
+should_block := false
+found_keyword := ""
+
+for msg in input.messages {
+    if msg.role == "user" {
+        for keyword in sensitive_keywords {
+            if text.contains(msg.content, keyword) {
+                should_block = true
+                found_keyword = keyword
+                break
+            }
+        }
+        if should_block {
+            break
+        }
+    }
+}
+
+output := {
+    block: should_block,
+    payload: input.raw_input,
+    message: should_block ? "Blocked: message contains '" + found_keyword + "'" : ""
+}

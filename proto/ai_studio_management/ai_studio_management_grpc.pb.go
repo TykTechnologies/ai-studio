@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: ai_studio_management/ai_studio_management.proto
+// source: proto/ai_studio_management/ai_studio_management.proto
 
 package ai_studio_management
 
@@ -28,6 +28,7 @@ const (
 	AIStudioManagementService_CreateLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/CreateLLM"
 	AIStudioManagementService_UpdateLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateLLM"
 	AIStudioManagementService_DeleteLLM_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteLLM"
+	AIStudioManagementService_UpdateLLMPlugins_FullMethodName            = "/ai_studio_management.AIStudioManagementService/UpdateLLMPlugins"
 	AIStudioManagementService_GetAnalyticsSummary_FullMethodName         = "/ai_studio_management.AIStudioManagementService/GetAnalyticsSummary"
 	AIStudioManagementService_GetUsageStatistics_FullMethodName          = "/ai_studio_management.AIStudioManagementService/GetUsageStatistics"
 	AIStudioManagementService_GetCostAnalysis_FullMethodName             = "/ai_studio_management.AIStudioManagementService/GetCostAnalysis"
@@ -53,8 +54,17 @@ const (
 	AIStudioManagementService_CreateDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/CreateDatasource"
 	AIStudioManagementService_UpdateDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/UpdateDatasource"
 	AIStudioManagementService_DeleteDatasource_FullMethodName            = "/ai_studio_management.AIStudioManagementService/DeleteDatasource"
+	AIStudioManagementService_CloneDatasource_FullMethodName             = "/ai_studio_management.AIStudioManagementService/CloneDatasource"
 	AIStudioManagementService_SearchDatasources_FullMethodName           = "/ai_studio_management.AIStudioManagementService/SearchDatasources"
 	AIStudioManagementService_ProcessDatasourceEmbeddings_FullMethodName = "/ai_studio_management.AIStudioManagementService/ProcessDatasourceEmbeddings"
+	AIStudioManagementService_GenerateEmbedding_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GenerateEmbedding"
+	AIStudioManagementService_StoreDocuments_FullMethodName              = "/ai_studio_management.AIStudioManagementService/StoreDocuments"
+	AIStudioManagementService_ProcessAndStoreDocuments_FullMethodName    = "/ai_studio_management.AIStudioManagementService/ProcessAndStoreDocuments"
+	AIStudioManagementService_QueryDatasourceByVector_FullMethodName     = "/ai_studio_management.AIStudioManagementService/QueryDatasourceByVector"
+	AIStudioManagementService_DeleteDocumentsByMetadata_FullMethodName   = "/ai_studio_management.AIStudioManagementService/DeleteDocumentsByMetadata"
+	AIStudioManagementService_QueryByMetadataOnly_FullMethodName         = "/ai_studio_management.AIStudioManagementService/QueryByMetadataOnly"
+	AIStudioManagementService_ListNamespaces_FullMethodName              = "/ai_studio_management.AIStudioManagementService/ListNamespaces"
+	AIStudioManagementService_DeleteNamespace_FullMethodName             = "/ai_studio_management.AIStudioManagementService/DeleteNamespace"
 	AIStudioManagementService_ListDataCatalogues_FullMethodName          = "/ai_studio_management.AIStudioManagementService/ListDataCatalogues"
 	AIStudioManagementService_GetDataCatalogue_FullMethodName            = "/ai_studio_management.AIStudioManagementService/GetDataCatalogue"
 	AIStudioManagementService_CreateDataCatalogue_FullMethodName         = "/ai_studio_management.AIStudioManagementService/CreateDataCatalogue"
@@ -86,6 +96,12 @@ const (
 	AIStudioManagementService_ExecuteTool_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/ExecuteTool"
 	AIStudioManagementService_QueryDatasource_FullMethodName             = "/ai_studio_management.AIStudioManagementService/QueryDatasource"
 	AIStudioManagementService_CallLLM_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/CallLLM"
+	AIStudioManagementService_CreateSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/CreateSchedule"
+	AIStudioManagementService_GetSchedule_FullMethodName                 = "/ai_studio_management.AIStudioManagementService/GetSchedule"
+	AIStudioManagementService_ListSchedules_FullMethodName               = "/ai_studio_management.AIStudioManagementService/ListSchedules"
+	AIStudioManagementService_UpdateSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/UpdateSchedule"
+	AIStudioManagementService_DeleteSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/DeleteSchedule"
+	AIStudioManagementService_GetLicenseInfo_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetLicenseInfo"
 )
 
 // AIStudioManagementServiceClient is the client API for AIStudioManagementService service.
@@ -106,6 +122,7 @@ type AIStudioManagementServiceClient interface {
 	CreateLLM(ctx context.Context, in *CreateLLMRequest, opts ...grpc.CallOption) (*CreateLLMResponse, error)
 	UpdateLLM(ctx context.Context, in *UpdateLLMRequest, opts ...grpc.CallOption) (*UpdateLLMResponse, error)
 	DeleteLLM(ctx context.Context, in *DeleteLLMRequest, opts ...grpc.CallOption) (*DeleteLLMResponse, error)
+	UpdateLLMPlugins(ctx context.Context, in *UpdateLLMPluginsRequest, opts ...grpc.CallOption) (*UpdateLLMPluginsResponse, error)
 	// Analytics Operations (with caching)
 	GetAnalyticsSummary(ctx context.Context, in *GetAnalyticsSummaryRequest, opts ...grpc.CallOption) (*GetAnalyticsSummaryResponse, error)
 	GetUsageStatistics(ctx context.Context, in *GetUsageStatisticsRequest, opts ...grpc.CallOption) (*GetUsageStatisticsResponse, error)
@@ -136,8 +153,19 @@ type AIStudioManagementServiceClient interface {
 	CreateDatasource(ctx context.Context, in *CreateDatasourceRequest, opts ...grpc.CallOption) (*CreateDatasourceResponse, error)
 	UpdateDatasource(ctx context.Context, in *UpdateDatasourceRequest, opts ...grpc.CallOption) (*UpdateDatasourceResponse, error)
 	DeleteDatasource(ctx context.Context, in *DeleteDatasourceRequest, opts ...grpc.CallOption) (*DeleteDatasourceResponse, error)
+	CloneDatasource(ctx context.Context, in *CloneDatasourceRequest, opts ...grpc.CallOption) (*CloneDatasourceResponse, error)
 	SearchDatasources(ctx context.Context, in *SearchDatasourcesRequest, opts ...grpc.CallOption) (*SearchDatasourcesResponse, error)
 	ProcessDatasourceEmbeddings(ctx context.Context, in *ProcessEmbeddingsRequest, opts ...grpc.CallOption) (*ProcessEmbeddingsResponse, error)
+	// RAG/Embedding Operations for Plugins
+	GenerateEmbedding(ctx context.Context, in *GenerateEmbeddingRequest, opts ...grpc.CallOption) (*GenerateEmbeddingResponse, error)
+	StoreDocuments(ctx context.Context, in *StoreDocumentsRequest, opts ...grpc.CallOption) (*StoreDocumentsResponse, error)
+	ProcessAndStoreDocuments(ctx context.Context, in *ProcessAndStoreRequest, opts ...grpc.CallOption) (*ProcessAndStoreResponse, error)
+	QueryDatasourceByVector(ctx context.Context, in *QueryByVectorRequest, opts ...grpc.CallOption) (*QueryDatasourceResponse, error)
+	// Advanced Datasource Operations - Metadata and Namespace Management
+	DeleteDocumentsByMetadata(ctx context.Context, in *DeleteDocumentsByMetadataRequest, opts ...grpc.CallOption) (*DeleteDocumentsByMetadataResponse, error)
+	QueryByMetadataOnly(ctx context.Context, in *QueryByMetadataOnlyRequest, opts ...grpc.CallOption) (*QueryByMetadataOnlyResponse, error)
+	ListNamespaces(ctx context.Context, in *ListNamespacesRequest, opts ...grpc.CallOption) (*ListNamespacesResponse, error)
+	DeleteNamespace(ctx context.Context, in *DeleteNamespaceRequest, opts ...grpc.CallOption) (*DeleteNamespaceResponse, error)
 	// Data Catalogues Management Operations (Phase 1.2)
 	ListDataCatalogues(ctx context.Context, in *ListDataCataloguesRequest, opts ...grpc.CallOption) (*ListDataCataloguesResponse, error)
 	GetDataCatalogue(ctx context.Context, in *GetDataCatalogueRequest, opts ...grpc.CallOption) (*GetDataCatalogueResponse, error)
@@ -176,6 +204,15 @@ type AIStudioManagementServiceClient interface {
 	ExecuteTool(ctx context.Context, in *ExecuteToolRequest, opts ...grpc.CallOption) (*ExecuteToolResponse, error)
 	QueryDatasource(ctx context.Context, in *QueryDatasourceRequest, opts ...grpc.CallOption) (*QueryDatasourceResponse, error)
 	CallLLM(ctx context.Context, in *CallLLMRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CallLLMResponse], error)
+	// Schedule Management Operations
+	CreateSchedule(ctx context.Context, in *CreateScheduleRequest, opts ...grpc.CallOption) (*CreateScheduleResponse, error)
+	GetSchedule(ctx context.Context, in *GetScheduleRequest, opts ...grpc.CallOption) (*GetScheduleResponse, error)
+	ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error)
+	UpdateSchedule(ctx context.Context, in *UpdateScheduleRequest, opts ...grpc.CallOption) (*UpdateScheduleResponse, error)
+	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
+	// License Information (Enterprise)
+	// Allows plugins to check license status and entitlements at runtime
+	GetLicenseInfo(ctx context.Context, in *GetLicenseInfoRequest, opts ...grpc.CallOption) (*GetLicenseInfoResponse, error)
 }
 
 type aIStudioManagementServiceClient struct {
@@ -270,6 +307,16 @@ func (c *aIStudioManagementServiceClient) DeleteLLM(ctx context.Context, in *Del
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteLLMResponse)
 	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteLLM_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateLLMPlugins(ctx context.Context, in *UpdateLLMPluginsRequest, opts ...grpc.CallOption) (*UpdateLLMPluginsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateLLMPluginsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateLLMPlugins_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -526,6 +573,16 @@ func (c *aIStudioManagementServiceClient) DeleteDatasource(ctx context.Context, 
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) CloneDatasource(ctx context.Context, in *CloneDatasourceRequest, opts ...grpc.CallOption) (*CloneDatasourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloneDatasourceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CloneDatasource_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *aIStudioManagementServiceClient) SearchDatasources(ctx context.Context, in *SearchDatasourcesRequest, opts ...grpc.CallOption) (*SearchDatasourcesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SearchDatasourcesResponse)
@@ -540,6 +597,86 @@ func (c *aIStudioManagementServiceClient) ProcessDatasourceEmbeddings(ctx contex
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ProcessEmbeddingsResponse)
 	err := c.cc.Invoke(ctx, AIStudioManagementService_ProcessDatasourceEmbeddings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GenerateEmbedding(ctx context.Context, in *GenerateEmbeddingRequest, opts ...grpc.CallOption) (*GenerateEmbeddingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GenerateEmbeddingResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GenerateEmbedding_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) StoreDocuments(ctx context.Context, in *StoreDocumentsRequest, opts ...grpc.CallOption) (*StoreDocumentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StoreDocumentsResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_StoreDocuments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ProcessAndStoreDocuments(ctx context.Context, in *ProcessAndStoreRequest, opts ...grpc.CallOption) (*ProcessAndStoreResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProcessAndStoreResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ProcessAndStoreDocuments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) QueryDatasourceByVector(ctx context.Context, in *QueryByVectorRequest, opts ...grpc.CallOption) (*QueryDatasourceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryDatasourceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_QueryDatasourceByVector_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteDocumentsByMetadata(ctx context.Context, in *DeleteDocumentsByMetadataRequest, opts ...grpc.CallOption) (*DeleteDocumentsByMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteDocumentsByMetadataResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteDocumentsByMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) QueryByMetadataOnly(ctx context.Context, in *QueryByMetadataOnlyRequest, opts ...grpc.CallOption) (*QueryByMetadataOnlyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryByMetadataOnlyResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_QueryByMetadataOnly_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListNamespaces(ctx context.Context, in *ListNamespacesRequest, opts ...grpc.CallOption) (*ListNamespacesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListNamespacesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListNamespaces_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteNamespace(ctx context.Context, in *DeleteNamespaceRequest, opts ...grpc.CallOption) (*DeleteNamespaceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteNamespaceResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteNamespace_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -865,6 +1002,66 @@ func (c *aIStudioManagementServiceClient) CallLLM(ctx context.Context, in *CallL
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AIStudioManagementService_CallLLMClient = grpc.ServerStreamingClient[CallLLMResponse]
 
+func (c *aIStudioManagementServiceClient) CreateSchedule(ctx context.Context, in *CreateScheduleRequest, opts ...grpc.CallOption) (*CreateScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateScheduleResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetSchedule(ctx context.Context, in *GetScheduleRequest, opts ...grpc.CallOption) (*GetScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetScheduleResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ListSchedules(ctx context.Context, in *ListSchedulesRequest, opts ...grpc.CallOption) (*ListSchedulesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSchedulesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ListSchedules_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) UpdateSchedule(ctx context.Context, in *UpdateScheduleRequest, opts ...grpc.CallOption) (*UpdateScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateScheduleResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_UpdateSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteScheduleResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetLicenseInfo(ctx context.Context, in *GetLicenseInfoRequest, opts ...grpc.CallOption) (*GetLicenseInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLicenseInfoResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetLicenseInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AIStudioManagementServiceServer is the server API for AIStudioManagementService service.
 // All implementations must embed UnimplementedAIStudioManagementServiceServer
 // for forward compatibility.
@@ -883,6 +1080,7 @@ type AIStudioManagementServiceServer interface {
 	CreateLLM(context.Context, *CreateLLMRequest) (*CreateLLMResponse, error)
 	UpdateLLM(context.Context, *UpdateLLMRequest) (*UpdateLLMResponse, error)
 	DeleteLLM(context.Context, *DeleteLLMRequest) (*DeleteLLMResponse, error)
+	UpdateLLMPlugins(context.Context, *UpdateLLMPluginsRequest) (*UpdateLLMPluginsResponse, error)
 	// Analytics Operations (with caching)
 	GetAnalyticsSummary(context.Context, *GetAnalyticsSummaryRequest) (*GetAnalyticsSummaryResponse, error)
 	GetUsageStatistics(context.Context, *GetUsageStatisticsRequest) (*GetUsageStatisticsResponse, error)
@@ -913,8 +1111,19 @@ type AIStudioManagementServiceServer interface {
 	CreateDatasource(context.Context, *CreateDatasourceRequest) (*CreateDatasourceResponse, error)
 	UpdateDatasource(context.Context, *UpdateDatasourceRequest) (*UpdateDatasourceResponse, error)
 	DeleteDatasource(context.Context, *DeleteDatasourceRequest) (*DeleteDatasourceResponse, error)
+	CloneDatasource(context.Context, *CloneDatasourceRequest) (*CloneDatasourceResponse, error)
 	SearchDatasources(context.Context, *SearchDatasourcesRequest) (*SearchDatasourcesResponse, error)
 	ProcessDatasourceEmbeddings(context.Context, *ProcessEmbeddingsRequest) (*ProcessEmbeddingsResponse, error)
+	// RAG/Embedding Operations for Plugins
+	GenerateEmbedding(context.Context, *GenerateEmbeddingRequest) (*GenerateEmbeddingResponse, error)
+	StoreDocuments(context.Context, *StoreDocumentsRequest) (*StoreDocumentsResponse, error)
+	ProcessAndStoreDocuments(context.Context, *ProcessAndStoreRequest) (*ProcessAndStoreResponse, error)
+	QueryDatasourceByVector(context.Context, *QueryByVectorRequest) (*QueryDatasourceResponse, error)
+	// Advanced Datasource Operations - Metadata and Namespace Management
+	DeleteDocumentsByMetadata(context.Context, *DeleteDocumentsByMetadataRequest) (*DeleteDocumentsByMetadataResponse, error)
+	QueryByMetadataOnly(context.Context, *QueryByMetadataOnlyRequest) (*QueryByMetadataOnlyResponse, error)
+	ListNamespaces(context.Context, *ListNamespacesRequest) (*ListNamespacesResponse, error)
+	DeleteNamespace(context.Context, *DeleteNamespaceRequest) (*DeleteNamespaceResponse, error)
 	// Data Catalogues Management Operations (Phase 1.2)
 	ListDataCatalogues(context.Context, *ListDataCataloguesRequest) (*ListDataCataloguesResponse, error)
 	GetDataCatalogue(context.Context, *GetDataCatalogueRequest) (*GetDataCatalogueResponse, error)
@@ -953,6 +1162,15 @@ type AIStudioManagementServiceServer interface {
 	ExecuteTool(context.Context, *ExecuteToolRequest) (*ExecuteToolResponse, error)
 	QueryDatasource(context.Context, *QueryDatasourceRequest) (*QueryDatasourceResponse, error)
 	CallLLM(*CallLLMRequest, grpc.ServerStreamingServer[CallLLMResponse]) error
+	// Schedule Management Operations
+	CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error)
+	GetSchedule(context.Context, *GetScheduleRequest) (*GetScheduleResponse, error)
+	ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error)
+	UpdateSchedule(context.Context, *UpdateScheduleRequest) (*UpdateScheduleResponse, error)
+	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
+	// License Information (Enterprise)
+	// Allows plugins to check license status and entitlements at runtime
+	GetLicenseInfo(context.Context, *GetLicenseInfoRequest) (*GetLicenseInfoResponse, error)
 	mustEmbedUnimplementedAIStudioManagementServiceServer()
 }
 
@@ -989,6 +1207,9 @@ func (UnimplementedAIStudioManagementServiceServer) UpdateLLM(context.Context, *
 }
 func (UnimplementedAIStudioManagementServiceServer) DeleteLLM(context.Context, *DeleteLLMRequest) (*DeleteLLMResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteLLM not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateLLMPlugins(context.Context, *UpdateLLMPluginsRequest) (*UpdateLLMPluginsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateLLMPlugins not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) GetAnalyticsSummary(context.Context, *GetAnalyticsSummaryRequest) (*GetAnalyticsSummaryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAnalyticsSummary not implemented")
@@ -1065,11 +1286,38 @@ func (UnimplementedAIStudioManagementServiceServer) UpdateDatasource(context.Con
 func (UnimplementedAIStudioManagementServiceServer) DeleteDatasource(context.Context, *DeleteDatasourceRequest) (*DeleteDatasourceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteDatasource not implemented")
 }
+func (UnimplementedAIStudioManagementServiceServer) CloneDatasource(context.Context, *CloneDatasourceRequest) (*CloneDatasourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloneDatasource not implemented")
+}
 func (UnimplementedAIStudioManagementServiceServer) SearchDatasources(context.Context, *SearchDatasourcesRequest) (*SearchDatasourcesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchDatasources not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) ProcessDatasourceEmbeddings(context.Context, *ProcessEmbeddingsRequest) (*ProcessEmbeddingsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ProcessDatasourceEmbeddings not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GenerateEmbedding(context.Context, *GenerateEmbeddingRequest) (*GenerateEmbeddingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GenerateEmbedding not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) StoreDocuments(context.Context, *StoreDocumentsRequest) (*StoreDocumentsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StoreDocuments not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ProcessAndStoreDocuments(context.Context, *ProcessAndStoreRequest) (*ProcessAndStoreResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProcessAndStoreDocuments not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) QueryDatasourceByVector(context.Context, *QueryByVectorRequest) (*QueryDatasourceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryDatasourceByVector not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteDocumentsByMetadata(context.Context, *DeleteDocumentsByMetadataRequest) (*DeleteDocumentsByMetadataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteDocumentsByMetadata not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) QueryByMetadataOnly(context.Context, *QueryByMetadataOnlyRequest) (*QueryByMetadataOnlyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryByMetadataOnly not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListNamespaces(context.Context, *ListNamespacesRequest) (*ListNamespacesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListNamespaces not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteNamespace(context.Context, *DeleteNamespaceRequest) (*DeleteNamespaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteNamespace not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) ListDataCatalogues(context.Context, *ListDataCataloguesRequest) (*ListDataCataloguesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDataCatalogues not implemented")
@@ -1163,6 +1411,24 @@ func (UnimplementedAIStudioManagementServiceServer) QueryDatasource(context.Cont
 }
 func (UnimplementedAIStudioManagementServiceServer) CallLLM(*CallLLMRequest, grpc.ServerStreamingServer[CallLLMResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method CallLLM not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CreateSchedule(context.Context, *CreateScheduleRequest) (*CreateScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateSchedule not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetSchedule(context.Context, *GetScheduleRequest) (*GetScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSchedule not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ListSchedules(context.Context, *ListSchedulesRequest) (*ListSchedulesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListSchedules not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) UpdateSchedule(context.Context, *UpdateScheduleRequest) (*UpdateScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateSchedule not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteSchedule not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetLicenseInfo(context.Context, *GetLicenseInfoRequest) (*GetLicenseInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetLicenseInfo not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) mustEmbedUnimplementedAIStudioManagementServiceServer() {
 }
@@ -1344,6 +1610,24 @@ func _AIStudioManagementService_DeleteLLM_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AIStudioManagementServiceServer).DeleteLLM(ctx, req.(*DeleteLLMRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateLLMPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLLMPluginsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateLLMPlugins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateLLMPlugins_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateLLMPlugins(ctx, req.(*UpdateLLMPluginsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1798,6 +2082,24 @@ func _AIStudioManagementService_DeleteDatasource_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_CloneDatasource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloneDatasourceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CloneDatasource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CloneDatasource_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CloneDatasource(ctx, req.(*CloneDatasourceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AIStudioManagementService_SearchDatasources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SearchDatasourcesRequest)
 	if err := dec(in); err != nil {
@@ -1830,6 +2132,150 @@ func _AIStudioManagementService_ProcessDatasourceEmbeddings_Handler(srv interfac
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AIStudioManagementServiceServer).ProcessDatasourceEmbeddings(ctx, req.(*ProcessEmbeddingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GenerateEmbedding_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GenerateEmbeddingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GenerateEmbedding(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GenerateEmbedding_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GenerateEmbedding(ctx, req.(*GenerateEmbeddingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_StoreDocuments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StoreDocumentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).StoreDocuments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_StoreDocuments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).StoreDocuments(ctx, req.(*StoreDocumentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ProcessAndStoreDocuments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProcessAndStoreRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ProcessAndStoreDocuments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ProcessAndStoreDocuments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ProcessAndStoreDocuments(ctx, req.(*ProcessAndStoreRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_QueryDatasourceByVector_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryByVectorRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).QueryDatasourceByVector(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_QueryDatasourceByVector_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).QueryDatasourceByVector(ctx, req.(*QueryByVectorRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteDocumentsByMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteDocumentsByMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteDocumentsByMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteDocumentsByMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteDocumentsByMetadata(ctx, req.(*DeleteDocumentsByMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_QueryByMetadataOnly_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryByMetadataOnlyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).QueryByMetadataOnly(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_QueryByMetadataOnly_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).QueryByMetadataOnly(ctx, req.(*QueryByMetadataOnlyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListNamespaces_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListNamespacesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListNamespaces(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListNamespaces_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListNamespaces(ctx, req.(*ListNamespacesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteNamespace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteNamespaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteNamespace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteNamespace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteNamespace(ctx, req.(*DeleteNamespaceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2385,6 +2831,114 @@ func _AIStudioManagementService_CallLLM_Handler(srv interface{}, stream grpc.Ser
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AIStudioManagementService_CallLLMServer = grpc.ServerStreamingServer[CallLLMResponse]
 
+func _AIStudioManagementService_CreateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateSchedule(ctx, req.(*CreateScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetSchedule(ctx, req.(*GetScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ListSchedules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSchedulesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ListSchedules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ListSchedules_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ListSchedules(ctx, req.(*ListSchedulesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_UpdateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).UpdateSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_UpdateSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).UpdateSchedule(ctx, req.(*UpdateScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteSchedule(ctx, req.(*DeleteScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetLicenseInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLicenseInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetLicenseInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetLicenseInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetLicenseInfo(ctx, req.(*GetLicenseInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AIStudioManagementService_ServiceDesc is the grpc.ServiceDesc for AIStudioManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2427,6 +2981,10 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteLLM",
 			Handler:    _AIStudioManagementService_DeleteLLM_Handler,
+		},
+		{
+			MethodName: "UpdateLLMPlugins",
+			Handler:    _AIStudioManagementService_UpdateLLMPlugins_Handler,
 		},
 		{
 			MethodName: "GetAnalyticsSummary",
@@ -2529,12 +3087,48 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AIStudioManagementService_DeleteDatasource_Handler,
 		},
 		{
+			MethodName: "CloneDatasource",
+			Handler:    _AIStudioManagementService_CloneDatasource_Handler,
+		},
+		{
 			MethodName: "SearchDatasources",
 			Handler:    _AIStudioManagementService_SearchDatasources_Handler,
 		},
 		{
 			MethodName: "ProcessDatasourceEmbeddings",
 			Handler:    _AIStudioManagementService_ProcessDatasourceEmbeddings_Handler,
+		},
+		{
+			MethodName: "GenerateEmbedding",
+			Handler:    _AIStudioManagementService_GenerateEmbedding_Handler,
+		},
+		{
+			MethodName: "StoreDocuments",
+			Handler:    _AIStudioManagementService_StoreDocuments_Handler,
+		},
+		{
+			MethodName: "ProcessAndStoreDocuments",
+			Handler:    _AIStudioManagementService_ProcessAndStoreDocuments_Handler,
+		},
+		{
+			MethodName: "QueryDatasourceByVector",
+			Handler:    _AIStudioManagementService_QueryDatasourceByVector_Handler,
+		},
+		{
+			MethodName: "DeleteDocumentsByMetadata",
+			Handler:    _AIStudioManagementService_DeleteDocumentsByMetadata_Handler,
+		},
+		{
+			MethodName: "QueryByMetadataOnly",
+			Handler:    _AIStudioManagementService_QueryByMetadataOnly_Handler,
+		},
+		{
+			MethodName: "ListNamespaces",
+			Handler:    _AIStudioManagementService_ListNamespaces_Handler,
+		},
+		{
+			MethodName: "DeleteNamespace",
+			Handler:    _AIStudioManagementService_DeleteNamespace_Handler,
 		},
 		{
 			MethodName: "ListDataCatalogues",
@@ -2656,6 +3250,30 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "QueryDatasource",
 			Handler:    _AIStudioManagementService_QueryDatasource_Handler,
 		},
+		{
+			MethodName: "CreateSchedule",
+			Handler:    _AIStudioManagementService_CreateSchedule_Handler,
+		},
+		{
+			MethodName: "GetSchedule",
+			Handler:    _AIStudioManagementService_GetSchedule_Handler,
+		},
+		{
+			MethodName: "ListSchedules",
+			Handler:    _AIStudioManagementService_ListSchedules_Handler,
+		},
+		{
+			MethodName: "UpdateSchedule",
+			Handler:    _AIStudioManagementService_UpdateSchedule_Handler,
+		},
+		{
+			MethodName: "DeleteSchedule",
+			Handler:    _AIStudioManagementService_DeleteSchedule_Handler,
+		},
+		{
+			MethodName: "GetLicenseInfo",
+			Handler:    _AIStudioManagementService_GetLicenseInfo_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -2664,5 +3282,5 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "ai_studio_management/ai_studio_management.proto",
+	Metadata: "proto/ai_studio_management/ai_studio_management.proto",
 }

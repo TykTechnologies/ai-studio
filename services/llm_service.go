@@ -84,6 +84,12 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 		return nil, err
 	}
 
+	// Auto-assign to Default catalogue if not in any catalogue
+	if err := s.ensureLLMInDefaultCatalogue(llm); err != nil {
+		// Log but don't fail - this is a convenience feature
+		logger.Warn(fmt.Sprintf("Failed to add LLM to default catalogue: %v", err))
+	}
+
 	// Execute "after_create" hooks (for notifications, etc.)
 	if s.HookManager != nil {
 		_, err := s.HookManager.ExecuteHooks(
@@ -97,6 +103,11 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 			// Log but don't fail the operation
 			logger.Warn(fmt.Sprintf("After-create hooks failed: %v", err))
 		}
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitLLMCreated(llm, llm.ID, 0)
 	}
 
 	return llm, nil
@@ -161,6 +172,12 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 		return nil, err
 	}
 
+	// Auto-assign to Default catalogue if not in any catalogue
+	if err := s.ensureLLMInDefaultCatalogue(llm); err != nil {
+		// Log but don't fail - this is a convenience feature
+		logger.Warn(fmt.Sprintf("Failed to add LLM to default catalogue: %v", err))
+	}
+
 	// Execute "after_create" hooks (for notifications, etc.)
 	if s.HookManager != nil {
 		_, err := s.HookManager.ExecuteHooks(
@@ -176,6 +193,11 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitLLMCreated(llm, llm.ID, 0)
+	}
+
 	return llm, nil
 }
 
@@ -183,7 +205,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	privacyScore int, shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time) (*models.LLM, error) {
+	budgetStartDate *time.Time, namespace string) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -212,6 +234,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	llm.AllowedModels = allowedModels
 	llm.MonthlyBudget = monthlyBudget
 	llm.BudgetStartDate = budgetStartDate
+	llm.Namespace = namespace
 
 	// Execute "before_update" hooks
 	if s.HookManager != nil {
@@ -261,6 +284,11 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 			// Log but don't fail the operation
 			logger.Warn(fmt.Sprintf("After-update hooks failed: %v", err))
 		}
+	}
+
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitLLMUpdated(llm, llm.ID, 0)
 	}
 
 	return llm, nil
@@ -395,6 +423,11 @@ func (s *Service) DeleteLLM(id uint) error {
 		}
 	}
 
+	// Emit system event
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitLLMDeleted(id, 0)
+	}
+
 	return nil
 }
 
@@ -512,4 +545,27 @@ func (s *Service) GetLLMsByPrivacyScoreRange(min, max int) (models.LLMs, error) 
 		return nil, err
 	}
 	return llms, nil
+}
+
+// ensureLLMInDefaultCatalogue adds an LLM to the Default catalogue if it's not in any catalogue
+func (s *Service) ensureLLMInDefaultCatalogue(llm *models.LLM) error {
+	// Check if LLM is in any catalogue
+	count := s.DB.Model(llm).Association("Catalogues").Count()
+
+	if count == 0 {
+		// Get or create default catalogue
+		defaultCatalogue, err := models.GetOrCreateDefaultCatalogue(s.DB)
+		if err != nil {
+			return fmt.Errorf("failed to get default catalogue: %w", err)
+		}
+
+		// Add LLM to default catalogue
+		if err := s.DB.Model(defaultCatalogue).Association("LLMs").Append(llm); err != nil {
+			return fmt.Errorf("failed to add LLM to default catalogue: %w", err)
+		}
+
+		logger.Infof("Auto-assigned LLM '%s' (ID: %d) to Default catalogue", llm.Name, llm.ID)
+	}
+
+	return nil
 }

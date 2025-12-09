@@ -133,16 +133,31 @@ const PluginCreationWizard = () => {
         // All plugins must show their manifest for user review (hook types, capabilities, permissions)
         handleNext(); // Go to scope approval step (activeStep becomes 1)
       } catch (metadataErr) {
-        // If metadata loading fails, log but continue to configuration step
-        console.warn('Failed to load plugin metadata:', metadataErr);
-        setMetadata({
-          configSchema: null,
-          manifest: null,
-          scopes: [],
-          status: 'ready',
-        });
-        setWorkflowState(WORKFLOW_STATES.READY);
-        handleNext(); // Go to configuration step (activeStep becomes 1)
+        // Metadata loading failed - this could be a signature verification error or other issue
+        // We must NOT silently continue as this is a security concern
+        console.error('Failed to load plugin metadata:', metadataErr);
+
+        // Extract error message from response
+        const errorMessage =
+          metadataErr.response?.data?.errors?.[0]?.detail ||
+          metadataErr.message ||
+          'Failed to load plugin metadata';
+
+        // Show error to user
+        setError(errorMessage);
+
+        // Clean up: delete the plugin that was just created since we can't proceed
+        try {
+          if (createdPlugin?.id) {
+            await pluginService.deletePlugin(createdPlugin.id);
+          }
+        } catch (deleteErr) {
+          console.warn('Failed to cleanup plugin after metadata error:', deleteErr);
+        }
+
+        // Stay on current step - don't proceed
+        setWorkflowState(WORKFLOW_STATES.CREATED);
+        return; // Don't call handleNext()
       } finally {
         setMetadataLoading(false);
       }

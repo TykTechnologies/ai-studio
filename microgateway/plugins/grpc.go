@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"net/rpc"
 
-	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	mgmtpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -65,6 +66,13 @@ type MicrogatewayPluginClient struct {
 // SetupServiceBroker creates a long-lived brokered server for microgateway services
 // Returns the broker ID that the plugin can use to dial back to host services
 func (c *MicrogatewayPluginClient) SetupServiceBroker(managementServer interface{}) (uint32, error) {
+	return c.SetupServiceBrokerWithEvents(managementServer, nil)
+}
+
+// SetupServiceBrokerWithEvents creates a long-lived brokered server for microgateway services
+// including the plugin event service for pub/sub.
+// Returns the broker ID that the plugin can use to dial back to host services.
+func (c *MicrogatewayPluginClient) SetupServiceBrokerWithEvents(managementServer interface{}, eventServer interface{}) (uint32, error) {
 	if c.broker == nil {
 		return 0, fmt.Errorf("broker not available")
 	}
@@ -79,22 +87,47 @@ func (c *MicrogatewayPluginClient) SetupServiceBroker(managementServer interface
 		return 0, fmt.Errorf("invalid management server type - does not implement MicrogatewayManagementServiceServer")
 	}
 
+	// Cast event server if provided
+	var evtServer eventpb.PluginEventServiceServer
+	if eventServer != nil {
+		evtServer, ok = eventServer.(eventpb.PluginEventServiceServer)
+		if !ok {
+			return 0, fmt.Errorf("invalid event server type - does not implement PluginEventServiceServer")
+		}
+	}
+
 	// Allocate broker ID and start brokered server
 	brokerID := c.broker.NextId()
 
-	log.Info().
+	log.Debug().
 		Uint32("broker_id", brokerID).
+		Bool("has_event_server", evtServer != nil).
 		Msg("Setting up long-lived brokered server for microgateway service API access")
 
 	// Start brokered server with microgateway management services
+	// Note: AcceptAndServe blocks, so we run it in a goroutine.
+	// The go-plugin broker handles synchronization internally - the plugin
+	// will wait for connection info when it calls Dial().
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
 		s := grpc.NewServer(opts...)
 
 		// Register microgateway management services on brokered server
 		mgmtpb.RegisterMicrogatewayManagementServiceServer(s, mgmtServer)
-		log.Info().
+		log.Debug().
 			Uint32("broker_id", brokerID).
-			Msg("✅ Microgateway management services registered on long-lived brokered server")
+			Msg("Microgateway management services registered on brokered server")
+
+		// Register plugin event service if provided
+		if evtServer != nil {
+			eventpb.RegisterPluginEventServiceServer(s, evtServer)
+			log.Debug().
+				Uint32("broker_id", brokerID).
+				Msg("Plugin event service registered on brokered server")
+		} else {
+			log.Warn().
+				Uint32("broker_id", brokerID).
+				Msg("No event server provided - plugins will NOT be able to subscribe to events")
+		}
 
 		return s
 	})
@@ -163,6 +196,10 @@ func (c *MicrogatewayPluginClient) OnBeforeWrite(ctx context.Context, req *pb.Re
 	return c.pluginStub.OnBeforeWrite(ctx, req, opts...)
 }
 
+func (c *MicrogatewayPluginClient) OnStreamComplete(ctx context.Context, req *pb.StreamCompleteRequest, opts ...grpc.CallOption) (*pb.StreamCompleteResponse, error) {
+	return c.pluginStub.OnStreamComplete(ctx, req, opts...)
+}
+
 func (c *MicrogatewayPluginClient) HandleProxyLog(ctx context.Context, req *pb.ProxyLogRequest, opts ...grpc.CallOption) (*pb.DataCollectionResponse, error) {
 	return c.pluginStub.HandleProxyLog(ctx, req, opts...)
 }
@@ -185,4 +222,23 @@ func (c *MicrogatewayPluginClient) GetObjectHookRegistrations(ctx context.Contex
 
 func (c *MicrogatewayPluginClient) HandleObjectHook(ctx context.Context, req *pb.ObjectHookRequest, opts ...grpc.CallOption) (*pb.ObjectHookResponse, error) {
 	return c.pluginStub.HandleObjectHook(ctx, req, opts...)
+}
+
+func (c *MicrogatewayPluginClient) ExecuteScheduledTask(ctx context.Context, req *pb.ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*pb.ExecuteScheduledTaskResponse, error) {
+	return c.pluginStub.ExecuteScheduledTask(ctx, req, opts...)
+}
+
+func (c *MicrogatewayPluginClient) AcceptEdgePayload(ctx context.Context, req *pb.EdgePayloadRequest, opts ...grpc.CallOption) (*pb.EdgePayloadResponse, error) {
+	return c.pluginStub.AcceptEdgePayload(ctx, req, opts...)
+}
+
+// OpenSession opens a long-lived session for broker access.
+// This blocks until timeout or CloseSession is called.
+func (c *MicrogatewayPluginClient) OpenSession(ctx context.Context, req *pb.OpenSessionRequest, opts ...grpc.CallOption) (*pb.OpenSessionResponse, error) {
+	return c.pluginStub.OpenSession(ctx, req, opts...)
+}
+
+// CloseSession explicitly closes an active session.
+func (c *MicrogatewayPluginClient) CloseSession(ctx context.Context, req *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
+	return c.pluginStub.CloseSession(ctx, req, opts...)
 }

@@ -158,8 +158,8 @@ func TestSendAnalyticsPulse_BatchProcessing(t *testing.T) {
 	err = db.Find(&proxyLogs).Error
 	require.NoError(t, err)
 
-	// Check that costs were properly converted (0.005 * 10000 = 50, etc.)
-	expectedCosts := []float64{50, 40, 100} // Converted to cents * 10000
+	// Check that costs were properly stored in dollars
+	expectedCosts := []float64{0.005, 0.004, 0.01} // Stored in dollars
 	for i, record := range chatRecords {
 		assert.Equal(t, expectedCosts[i], record.Cost)
 		assert.Equal(t, models.ProxyInteraction, record.InteractionType)

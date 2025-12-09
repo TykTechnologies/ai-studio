@@ -1,0 +1,21 @@
+{{if .Success}}
+Your proxy log export for {{.SourceType}} "{{.SourceName}}" is ready for download.
+
+**Export Details:**
+- Date Range: {{.StartDate}} to {{.EndDate}}
+- Total Records: {{.TotalRecords}}
+- File Size: {{.FileSize}}
+- Export ID: {{.ExportID}}
+
+Download your export file: {{.DownloadURL}}
+
+*Important: This download link will expire on {{.ExpiresAt}}. Please download your file before it expires.*
+{{else}}
+Your proxy log export for {{.SourceType}} "{{.SourceName}}" has failed.
+
+**Error:** {{.ErrorMessage}}
+
+Export ID: {{.ExportID}}
+
+Please try again or contact support if the issue persists.
+{{end}}

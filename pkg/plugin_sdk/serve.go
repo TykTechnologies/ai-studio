@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ai_studio_sdk"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	goplugin "github.com/hashicorp/go-plugin"
+	"github.com/hashicorp/go-hclog"
 	"google.golang.org/grpc"
 )
 
@@ -38,6 +40,14 @@ func Serve(userPlugin Plugin) {
 		services: nil, // Will be set in Initialize
 	}
 
+	// Create hclog logger that outputs to stderr
+	// This ensures plugin logs are captured by the host's SyncStderr
+	pluginLogger := hclog.New(&hclog.LoggerOptions{
+		Name:   userPlugin.GetInfo().Name,
+		Level:  hclog.Debug,
+		Output: os.Stderr,
+	})
+
 	// Serve using go-plugin
 	// Register both "plugin" and "config" services for full and config-only loading
 	goplugin.Serve(&goplugin.ServeConfig{
@@ -51,6 +61,7 @@ func Serve(userPlugin Plugin) {
 			"config": &configPluginImpl{wrapper: wrapper},
 		},
 		GRPCServer: goplugin.DefaultGRPCServer,
+		Logger:     pluginLogger,
 	})
 }
 
@@ -61,8 +72,21 @@ type grpcPluginImpl struct {
 	wrapper *pluginServerWrapper
 }
 
+// storedBroker holds the gRPC broker reference for session management.
+// This is set during GRPCServer initialization and used by OpenSession.
+var storedBroker *goplugin.GRPCBroker
+
+// GetStoredBroker returns the stored broker reference.
+// Used by the session management to access the broker during OpenSession.
+func GetStoredBroker() *goplugin.GRPCBroker {
+	return storedBroker
+}
+
 // GRPCServer registers the plugin service with the gRPC server
 func (p *grpcPluginImpl) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server) error {
+	// Store broker reference for session management
+	storedBroker = broker
+
 	// Register the proto service
 	pb.RegisterPluginServiceServer(s, p.wrapper)
 
@@ -73,6 +97,9 @@ func (p *grpcPluginImpl) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Server)
 	runtime := detectRuntime()
 	// IMPORTANT: Cannot use fmt.Printf during plugin startup - breaks go-plugin handshake
 	// Use log.Printf which goes to hclog and doesn't interfere
+
+	// Store broker for event service access (works in both contexts)
+	SetEventServiceBroker(broker)
 
 	if runtime == RuntimeGateway {
 		// Gateway context - use Microgateway SDK
@@ -255,6 +282,16 @@ func (w *pluginServerWrapper) Initialize(ctx context.Context, req *pb.InitReques
 					ai_studio_sdk.SetServiceBrokerID(uint32(brokerID))
 					log.Printf("Set AI Studio service broker ID: %d", brokerID)
 				}
+
+				// Also set broker ID for event service (works in both contexts)
+				SetEventServiceBrokerID(uint32(brokerID))
+				log.Printf("Set event service broker ID: %d", brokerID)
+
+				// NOTE: Do NOT eagerly initialize event service client here.
+				// The host's AcceptAndServe goroutine may not have sent the connection info yet
+				// (there's a race between the goroutine calling Accept() and us calling Initialize).
+				// Let the event service initialize lazily on first use (like AI Studio SDK does).
+				// The lazy initialization in lazyEventService.getInner() will handle this correctly.
 			}
 		}
 	}

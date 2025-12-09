@@ -1,7 +1,12 @@
+//go:build enterprise
+// +build enterprise
+
 package handlers
 
 import (
 	"testing"
+
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
 func TestMicrogatewayValidatePluginCommand(t *testing.T) {
@@ -44,9 +49,14 @@ func TestMicrogatewayValidatePluginCommand(t *testing.T) {
 		},
 	}
 
+	// Use enterprise plugin security service for validation
+	securityService := plugin_security.NewService(&plugin_security.Config{
+		AllowInternalNetworkAccess: false, // Enterprise mode - block internal IPs
+	})
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validatePluginCommand(tc.command)
+			err := validatePluginCommand(tc.command, securityService)
 
 			if tc.shouldError {
 				if err == nil {
@@ -95,11 +105,18 @@ func TestMicrogatewayIsInternalIP(t *testing.T) {
 		{"Edge 11.0.0.1", "11.0.0.1", false},
 	}
 
+	// Use enterprise plugin security service for internal IP validation
+	securityService := plugin_security.NewService(&plugin_security.Config{
+		AllowInternalNetworkAccess: false, // Enterprise mode - block internal IPs
+	})
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := isInternalIP(tc.host)
+			err := securityService.ValidateGRPCHost(tc.host)
+			result := (err != nil) // If validation fails, it's internal
+
 			if result != tc.isInternal {
-				t.Errorf("Expected isInternalIP(%q) = %v, got %v", tc.host, tc.isInternal, result)
+				t.Errorf("Expected ValidateGRPCHost(%q) blocked = %v, got %v", tc.host, tc.isInternal, result)
 			}
 		})
 	}

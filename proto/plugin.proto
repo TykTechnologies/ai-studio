@@ -27,6 +27,9 @@ service PluginService {
     // Response hooks (new clean interface)
     rpc OnBeforeWriteHeaders(HeadersRequest) returns (HeadersResponse);
     rpc OnBeforeWrite(ResponseWriteRequest) returns (ResponseWriteResponse);
+
+    // Streaming response hook - called after a streaming response completes
+    rpc OnStreamComplete(StreamCompleteRequest) returns (StreamCompleteResponse);
     
     // Data collection hooks
     rpc HandleProxyLog(ProxyLogRequest) returns (DataCollectionResponse);
@@ -50,6 +53,19 @@ service PluginService {
     // Object Hook Methods (for AI Studio plugins)
     rpc GetObjectHookRegistrations(GetObjectHookRegistrationsRequest) returns (GetObjectHookRegistrationsResponse);
     rpc HandleObjectHook(ObjectHookRequest) returns (ObjectHookResponse);
+
+    // Scheduler Methods (for AI Studio plugins)
+    rpc ExecuteScheduledTask(ExecuteScheduledTaskRequest) returns (ExecuteScheduledTaskResponse);
+
+    // Edge Payload Methods (for plugins that receive data from edge instances)
+    // Called when an edge plugin sends data via SendToControl
+    rpc AcceptEdgePayload(EdgePayloadRequest) returns (EdgePayloadResponse);
+
+    // Session management for long-lived broker access
+    // OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
+    // Host should call this in a loop after Initialize() to maintain broker connectivity
+    rpc OpenSession(OpenSessionRequest) returns (OpenSessionResponse);
+    rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);
 }
 
 // Common messages
@@ -107,6 +123,7 @@ message PluginResponse {
     bytes body = 4;
     bool block = 5;  // Stop processing if true
     string error_message = 6;
+    map<string, string> context_updates = 7;  // Updates to request context (e.g., upstream_override)
 }
 
 message AuthRequest {
@@ -153,6 +170,22 @@ message ResponseWriteResponse {
     bool modified = 1;
     bytes body = 2;
     map<string, string> headers = 3;
+}
+
+// Streaming response hook messages - for caching/processing complete streaming responses
+message StreamCompleteRequest {
+    bytes accumulated_response = 1;      // Full SSE response (all chunks concatenated)
+    map<string, string> headers = 2;     // Response headers from upstream
+    int32 status_code = 3;               // HTTP status code
+    PluginContext context = 4;           // Plugin context with request metadata
+    int32 chunk_count = 5;               // Number of chunks received
+    bytes request_body = 6;              // Original request body (for cache key generation)
+}
+
+message StreamCompleteResponse {
+    bool handled = 1;                    // Plugin processed the response
+    bool cached = 2;                     // Response was cached (for metrics/logging)
+    string error_message = 3;            // Error description if any
 }
 
 // Auth plugin context methods
@@ -426,4 +459,90 @@ message ObjectHookResponse {
     // Additional response metadata
     string message = 30;  // Optional message to log
     bool modified = 31;   // Whether the plugin modified the object
+}
+
+// Scheduler Messages
+
+message ExecuteScheduledTaskRequest {
+    PluginContext context = 1;           // Plugin context (with synthetic request ID)
+    ScheduleDefinition schedule = 2;     // Schedule definition
+    uint32 service_broker_id = 3;        // Broker ID for service API access during execution
+}
+
+message ExecuteScheduledTaskResponse {
+    bool success = 1;
+    string error_message = 2;
+}
+
+message ScheduleDefinition {
+    string id = 1;                       // Schedule ID from manifest
+    string name = 2;                     // Human-readable name
+    string cron = 3;                     // Cron expression
+    string timezone = 4;                 // Timezone for cron evaluation
+    bool enabled = 5;                    // Whether schedule is enabled
+    int32 timeout_seconds = 6;           // Maximum execution time
+    string config_json = 7;              // Schedule config as JSON string
+}
+
+// Edge Payload Messages
+// These enable plugins on the control plane to receive data from edge instances
+
+// EdgePayloadRequest is sent to a plugin when data arrives from an edge instance
+// via the SendToControl mechanism
+message EdgePayloadRequest {
+    bytes payload = 1;                           // The arbitrary payload data from edge
+    string edge_id = 2;                          // Edge instance that sent this payload
+    string edge_namespace = 3;                   // Edge namespace
+    string correlation_id = 4;                   // Optional correlation ID for tracking
+    map<string, string> metadata = 5;            // Optional key-value metadata from edge
+    int64 edge_timestamp = 6;                    // Unix timestamp when generated at edge
+    int64 received_timestamp = 7;                // Unix timestamp when received at control
+    PluginContext context = 8;                   // Plugin context
+    uint32 service_broker_id = 9;                // Broker ID for service API access
+}
+
+// EdgePayloadResponse is returned by the plugin after processing edge payload
+message EdgePayloadResponse {
+    bool success = 1;                            // Whether processing succeeded
+    bool handled = 2;                            // Whether plugin actually processed this payload
+    string error_message = 3;                    // Error description if success=false
+    map<string, string> metadata = 4;            // Optional response metadata
+}
+
+// Session Management Messages
+// These enable long-lived broker connections for plugins that need background services
+
+// OpenSessionRequest is sent to a plugin to establish a long-lived broker session
+// The plugin should block until timeout or CloseSession is called
+message OpenSessionRequest {
+    uint32 service_broker_id = 1;                // Broker ID where host services are registered
+    uint32 plugin_id = 2;                        // Plugin ID for tracking
+    map<string, string> metadata = 3;            // Optional metadata (edge_id, etc.)
+    int32 timeout_ms = 4;                        // Session timeout in ms (default: 30000)
+}
+
+// OpenSessionResponse is returned when the session ends (timeout or explicit close)
+message OpenSessionResponse {
+    bool success = 1;
+    string error_message = 2;
+    string session_id = 3;                       // Session ID generated by plugin
+
+    enum CloseReason {
+        UNKNOWN = 0;
+        TIMEOUT = 1;                             // Normal timeout, host should re-open
+        EXPLICIT_CLOSE = 2;                      // CloseSession was called
+        PLUGIN_ERROR = 3;                        // Plugin encountered an error
+    }
+    CloseReason close_reason = 4;
+}
+
+// CloseSessionRequest is sent to explicitly close a session before timeout
+message CloseSessionRequest {
+    string reason = 1;                           // Reason for closing (e.g., "shutdown", "unload")
+}
+
+// CloseSessionResponse confirms session closure
+message CloseSessionResponse {
+    bool success = 1;
+    string error_message = 2;
 }

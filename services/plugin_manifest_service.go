@@ -86,12 +86,12 @@ func (s *PluginManifestService) ParsePluginManifest(plugin *models.Plugin) (*mod
 
 // RegisterPluginUI registers plugin UI components in the system
 func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest *models.PluginManifest) error {
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", plugin.ID).
 		Str("plugin_name", plugin.Name).
 		Msg("Registering plugin UI components")
 
-	log.Info().
+	log.Debug().
 		Uint("received_plugin_id", plugin.ID).
 		Msg("DEBUG: Plugin ID received in RegisterPluginUI")
 
@@ -101,7 +101,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 		return fmt.Errorf("plugin ID %d not found in database: %w", plugin.ID, err)
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("verified_plugin_id", dbPlugin.ID).
 		Msg("DEBUG: Plugin verified in database")
 
@@ -132,7 +132,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 
 	if !registeredPluginExists {
 		// Create new registered plugin
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", plugin.ID).
 			Str("manifest_version", manifest.Version).
 			Msg("Creating new registered plugin record")
@@ -152,15 +152,12 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 			AssetPaths:      manifest.Assets,
 		}
 
-		log.Info().
+		log.Debug().
 			Uint("about_to_insert_plugin_id", registeredPlugin.PluginID).
 			Uint("original_plugin_id", plugin.ID).
 			Uint("db_plugin_id", dbPlugin.ID).
 			Uint("pluginID_var", pluginID).
 			Msg("About to insert registered plugin")
-
-		// Debug: Print the struct before insertion
-		log.Printf("DEBUG: RegisteredPlugin struct before GORM insert: ID=%d, PluginID=%d", registeredPlugin.ID, registeredPlugin.PluginID)
 
 		// Use correct GORM struct creation
 		registeredPlugin = models.RegisteredPlugin{
@@ -175,7 +172,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 			return fmt.Errorf("failed to create registered plugin: %w", err)
 		}
 
-		log.Info().
+		log.Debug().
 			Uint("inserted_plugin_id", registeredPlugin.PluginID).
 			Msg("Successfully created registered plugin")
 	} else {
@@ -200,7 +197,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 		for _, slot := range manifest.UI.Slots {
 			for _, item := range slot.Items {
 				if item.Type == "route" {
-					log.Info().
+					log.Debug().
 						Uint("plugin_id", plugin.ID).
 						Str("original_path", item.Path).
 						Str("item_title", item.Title).
@@ -232,7 +229,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 						return fmt.Errorf("failed to register UI component: %w", err)
 					}
 
-					log.Info().
+					log.Debug().
 						Uint("plugin_id", plugin.ID).
 						Str("stored_route_pattern", uiEntry.RoutePattern).
 						Str("component_tag", uiEntry.ComponentTag).
@@ -250,7 +247,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", plugin.ID).
 		Str("plugin_name", plugin.Name).
 		Str("manifest_version", manifest.Version).

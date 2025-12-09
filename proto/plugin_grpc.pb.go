@@ -29,6 +29,7 @@ const (
 	PluginService_ProcessPostAuth_FullMethodName            = "/plugin.PluginService/ProcessPostAuth"
 	PluginService_OnBeforeWriteHeaders_FullMethodName       = "/plugin.PluginService/OnBeforeWriteHeaders"
 	PluginService_OnBeforeWrite_FullMethodName              = "/plugin.PluginService/OnBeforeWrite"
+	PluginService_OnStreamComplete_FullMethodName           = "/plugin.PluginService/OnStreamComplete"
 	PluginService_HandleProxyLog_FullMethodName             = "/plugin.PluginService/HandleProxyLog"
 	PluginService_HandleAnalytics_FullMethodName            = "/plugin.PluginService/HandleAnalytics"
 	PluginService_HandleBudgetUsage_FullMethodName          = "/plugin.PluginService/HandleBudgetUsage"
@@ -40,6 +41,10 @@ const (
 	PluginService_HandleAgentMessage_FullMethodName         = "/plugin.PluginService/HandleAgentMessage"
 	PluginService_GetObjectHookRegistrations_FullMethodName = "/plugin.PluginService/GetObjectHookRegistrations"
 	PluginService_HandleObjectHook_FullMethodName           = "/plugin.PluginService/HandleObjectHook"
+	PluginService_ExecuteScheduledTask_FullMethodName       = "/plugin.PluginService/ExecuteScheduledTask"
+	PluginService_AcceptEdgePayload_FullMethodName          = "/plugin.PluginService/AcceptEdgePayload"
+	PluginService_OpenSession_FullMethodName                = "/plugin.PluginService/OpenSession"
+	PluginService_CloseSession_FullMethodName               = "/plugin.PluginService/CloseSession"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -64,6 +69,8 @@ type PluginServiceClient interface {
 	// Response hooks (new clean interface)
 	OnBeforeWriteHeaders(ctx context.Context, in *HeadersRequest, opts ...grpc.CallOption) (*HeadersResponse, error)
 	OnBeforeWrite(ctx context.Context, in *ResponseWriteRequest, opts ...grpc.CallOption) (*ResponseWriteResponse, error)
+	// Streaming response hook - called after a streaming response completes
+	OnStreamComplete(ctx context.Context, in *StreamCompleteRequest, opts ...grpc.CallOption) (*StreamCompleteResponse, error)
 	// Data collection hooks
 	HandleProxyLog(ctx context.Context, in *ProxyLogRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
 	HandleAnalytics(ctx context.Context, in *AnalyticsRequest, opts ...grpc.CallOption) (*DataCollectionResponse, error)
@@ -81,6 +88,16 @@ type PluginServiceClient interface {
 	// Object Hook Methods (for AI Studio plugins)
 	GetObjectHookRegistrations(ctx context.Context, in *GetObjectHookRegistrationsRequest, opts ...grpc.CallOption) (*GetObjectHookRegistrationsResponse, error)
 	HandleObjectHook(ctx context.Context, in *ObjectHookRequest, opts ...grpc.CallOption) (*ObjectHookResponse, error)
+	// Scheduler Methods (for AI Studio plugins)
+	ExecuteScheduledTask(ctx context.Context, in *ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*ExecuteScheduledTaskResponse, error)
+	// Edge Payload Methods (for plugins that receive data from edge instances)
+	// Called when an edge plugin sends data via SendToControl
+	AcceptEdgePayload(ctx context.Context, in *EdgePayloadRequest, opts ...grpc.CallOption) (*EdgePayloadResponse, error)
+	// Session management for long-lived broker access
+	// OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
+	// Host should call this in a loop after Initialize() to maintain broker connectivity
+	OpenSession(ctx context.Context, in *OpenSessionRequest, opts ...grpc.CallOption) (*OpenSessionResponse, error)
+	CloseSession(ctx context.Context, in *CloseSessionRequest, opts ...grpc.CallOption) (*CloseSessionResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -185,6 +202,16 @@ func (c *pluginServiceClient) OnBeforeWrite(ctx context.Context, in *ResponseWri
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResponseWriteResponse)
 	err := c.cc.Invoke(ctx, PluginService_OnBeforeWrite_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) OnStreamComplete(ctx context.Context, in *StreamCompleteRequest, opts ...grpc.CallOption) (*StreamCompleteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StreamCompleteResponse)
+	err := c.cc.Invoke(ctx, PluginService_OnStreamComplete_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -310,6 +337,46 @@ func (c *pluginServiceClient) HandleObjectHook(ctx context.Context, in *ObjectHo
 	return out, nil
 }
 
+func (c *pluginServiceClient) ExecuteScheduledTask(ctx context.Context, in *ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*ExecuteScheduledTaskResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExecuteScheduledTaskResponse)
+	err := c.cc.Invoke(ctx, PluginService_ExecuteScheduledTask_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) AcceptEdgePayload(ctx context.Context, in *EdgePayloadRequest, opts ...grpc.CallOption) (*EdgePayloadResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EdgePayloadResponse)
+	err := c.cc.Invoke(ctx, PluginService_AcceptEdgePayload_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) OpenSession(ctx context.Context, in *OpenSessionRequest, opts ...grpc.CallOption) (*OpenSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OpenSessionResponse)
+	err := c.cc.Invoke(ctx, PluginService_OpenSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) CloseSession(ctx context.Context, in *CloseSessionRequest, opts ...grpc.CallOption) (*CloseSessionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseSessionResponse)
+	err := c.cc.Invoke(ctx, PluginService_CloseSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -332,6 +399,8 @@ type PluginServiceServer interface {
 	// Response hooks (new clean interface)
 	OnBeforeWriteHeaders(context.Context, *HeadersRequest) (*HeadersResponse, error)
 	OnBeforeWrite(context.Context, *ResponseWriteRequest) (*ResponseWriteResponse, error)
+	// Streaming response hook - called after a streaming response completes
+	OnStreamComplete(context.Context, *StreamCompleteRequest) (*StreamCompleteResponse, error)
 	// Data collection hooks
 	HandleProxyLog(context.Context, *ProxyLogRequest) (*DataCollectionResponse, error)
 	HandleAnalytics(context.Context, *AnalyticsRequest) (*DataCollectionResponse, error)
@@ -349,6 +418,16 @@ type PluginServiceServer interface {
 	// Object Hook Methods (for AI Studio plugins)
 	GetObjectHookRegistrations(context.Context, *GetObjectHookRegistrationsRequest) (*GetObjectHookRegistrationsResponse, error)
 	HandleObjectHook(context.Context, *ObjectHookRequest) (*ObjectHookResponse, error)
+	// Scheduler Methods (for AI Studio plugins)
+	ExecuteScheduledTask(context.Context, *ExecuteScheduledTaskRequest) (*ExecuteScheduledTaskResponse, error)
+	// Edge Payload Methods (for plugins that receive data from edge instances)
+	// Called when an edge plugin sends data via SendToControl
+	AcceptEdgePayload(context.Context, *EdgePayloadRequest) (*EdgePayloadResponse, error)
+	// Session management for long-lived broker access
+	// OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
+	// Host should call this in a loop after Initialize() to maintain broker connectivity
+	OpenSession(context.Context, *OpenSessionRequest) (*OpenSessionResponse, error)
+	CloseSession(context.Context, *CloseSessionRequest) (*CloseSessionResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -389,6 +468,9 @@ func (UnimplementedPluginServiceServer) OnBeforeWriteHeaders(context.Context, *H
 func (UnimplementedPluginServiceServer) OnBeforeWrite(context.Context, *ResponseWriteRequest) (*ResponseWriteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBeforeWrite not implemented")
 }
+func (UnimplementedPluginServiceServer) OnStreamComplete(context.Context, *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OnStreamComplete not implemented")
+}
 func (UnimplementedPluginServiceServer) HandleProxyLog(context.Context, *ProxyLogRequest) (*DataCollectionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HandleProxyLog not implemented")
 }
@@ -421,6 +503,18 @@ func (UnimplementedPluginServiceServer) GetObjectHookRegistrations(context.Conte
 }
 func (UnimplementedPluginServiceServer) HandleObjectHook(context.Context, *ObjectHookRequest) (*ObjectHookResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HandleObjectHook not implemented")
+}
+func (UnimplementedPluginServiceServer) ExecuteScheduledTask(context.Context, *ExecuteScheduledTaskRequest) (*ExecuteScheduledTaskResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExecuteScheduledTask not implemented")
+}
+func (UnimplementedPluginServiceServer) AcceptEdgePayload(context.Context, *EdgePayloadRequest) (*EdgePayloadResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AcceptEdgePayload not implemented")
+}
+func (UnimplementedPluginServiceServer) OpenSession(context.Context, *OpenSessionRequest) (*OpenSessionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OpenSession not implemented")
+}
+func (UnimplementedPluginServiceServer) CloseSession(context.Context, *CloseSessionRequest) (*CloseSessionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CloseSession not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -623,6 +717,24 @@ func _PluginService_OnBeforeWrite_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_OnStreamComplete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StreamCompleteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).OnStreamComplete(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_OnStreamComplete_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).OnStreamComplete(ctx, req.(*StreamCompleteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginService_HandleProxyLog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ProxyLogRequest)
 	if err := dec(in); err != nil {
@@ -814,6 +926,78 @@ func _PluginService_HandleObjectHook_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_ExecuteScheduledTask_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecuteScheduledTaskRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).ExecuteScheduledTask(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_ExecuteScheduledTask_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).ExecuteScheduledTask(ctx, req.(*ExecuteScheduledTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_AcceptEdgePayload_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EdgePayloadRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).AcceptEdgePayload(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_AcceptEdgePayload_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).AcceptEdgePayload(ctx, req.(*EdgePayloadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_OpenSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpenSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).OpenSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_OpenSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).OpenSession(ctx, req.(*OpenSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_CloseSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseSessionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).CloseSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_CloseSession_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).CloseSession(ctx, req.(*CloseSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -862,6 +1046,10 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _PluginService_OnBeforeWrite_Handler,
 		},
 		{
+			MethodName: "OnStreamComplete",
+			Handler:    _PluginService_OnStreamComplete_Handler,
+		},
+		{
 			MethodName: "HandleProxyLog",
 			Handler:    _PluginService_HandleProxyLog_Handler,
 		},
@@ -900,6 +1088,22 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "HandleObjectHook",
 			Handler:    _PluginService_HandleObjectHook_Handler,
+		},
+		{
+			MethodName: "ExecuteScheduledTask",
+			Handler:    _PluginService_ExecuteScheduledTask_Handler,
+		},
+		{
+			MethodName: "AcceptEdgePayload",
+			Handler:    _PluginService_AcceptEdgePayload_Handler,
+		},
+		{
+			MethodName: "OpenSession",
+			Handler:    _PluginService_OpenSession_Handler,
+		},
+		{
+			MethodName: "CloseSession",
+			Handler:    _PluginService_CloseSession_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

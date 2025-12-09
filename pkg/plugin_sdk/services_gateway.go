@@ -51,6 +51,14 @@ func (g *gatewayServicesImpl) ValidateCredential(ctx context.Context, secret str
 	return mgwsdk.ValidateCredential(ctx, secret)
 }
 
+func (g *gatewayServicesImpl) SendToControl(ctx context.Context, payload []byte, correlationID string, metadata map[string]string) (int64, error) {
+	return mgwsdk.SendToControl(ctx, payload, correlationID, metadata)
+}
+
+func (g *gatewayServicesImpl) SendToControlJSON(ctx context.Context, value interface{}, correlationID string, metadata map[string]string) (int64, error) {
+	return mgwsdk.SendToControlJSON(ctx, value, correlationID, metadata)
+}
+
 // setBrokerIDForMicrogatewaySDK sets the broker ID for the Microgateway SDK
 func setBrokerIDForMicrogatewaySDK(brokerID uint32) {
 	mgwsdk.SetServiceBrokerID(brokerID)
@@ -76,4 +84,20 @@ func writeKVGateway(ctx context.Context, key string, value []byte, expireAt *tim
 // deleteKVGateway wraps the Microgateway SDK's KV delete
 func deleteKVGateway(ctx context.Context, key string) (bool, error) {
 	return mgwsdk.DeletePluginKV(ctx, key)
+}
+
+// getLicenseInfoGateway retrieves license info from the Microgateway
+func getLicenseInfoGateway(ctx context.Context) (*LicenseInfo, error) {
+	info, err := mgwsdk.GetLicenseInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &LicenseInfo{
+		Valid:         info.Valid,
+		DaysRemaining: info.DaysLeft,
+		Type:          info.Type,
+		Entitlements:  info.Entitlements,
+		Organization:  info.Organization,
+		// Note: Microgateway SDK doesn't include ExpiresAt, so it stays as zero value
+	}, nil
 }

@@ -3,27 +3,232 @@
 # Variables
 ADMIN_FRONTEND_DIR := ui/admin-frontend
 FORCE_BUILD := false
+SKIP_FRONTEND := false
+
+# Detect if enterprise submodule exists and is initialized
+ENTERPRISE_EXISTS := $(shell test -f enterprise/.git && echo "yes" || echo "no")
+
+ifeq ($(ENTERPRISE_EXISTS),yes)
+    BUILD_TAGS := -tags enterprise
+    EDITION := ent
+    $(info 🏢 Building Enterprise Edition)
+else
+    BUILD_TAGS :=
+    EDITION := ce
+    $(info 🌍 Building Community Edition)
+endif
+
+# Build flags for production (optimized, stripped)
+PROD_LDFLAGS := -ldflags="-w -s" -trimpath
 
 # Default target
+.DEFAULT_GOAL := help
 all: build
 
-# Build target
-build: build-frontend build-binaries
+# Help target
+help:
+	@echo "Tyk AI Studio Build Targets"
+	@echo ""
+	@echo "Current edition: $(EDITION)"
+	@echo ""
+	@echo "Development (single platform, fast):"
+	@echo "  make build-native       - Build for current platform with CGO (auto-detect edition)"
+	@echo "  make build-native-ce    - Build CE for current platform with CGO"
+	@echo "  make build-native-ent   - Build ENT for current platform with CGO"
+	@echo "  make build-local        - Alias for build-native (backward compatible)"
+	@echo ""
+	@echo "Development flags:"
+	@echo "  SKIP_FRONTEND=true      - Skip frontend build (for faster iteration)"
+	@echo "  Example: make build-native-ce SKIP_FRONTEND=true"
+	@echo ""
+	@echo "Production (multi-platform, optimized, CGO-enabled):"
+	@echo "  make build-prod         - Build all platforms with CGO (auto-detect edition)"
+	@echo "  make build-prod-ce      - Build CE for all platforms with CGO"
+	@echo "  make build-prod-ent     - Build ENT for all platforms with CGO"
+	@echo ""
+	@echo "Platform-specific (CGO-enabled):"
+	@echo "  make build-linux-amd64  - Linux AMD64 with CGO"
+	@echo "  make build-linux-arm64  - Linux ARM64 with CGO (requires cross-compiler)"
+	@echo "  make build-darwin-amd64 - Darwin AMD64 with CGO"
+	@echo "  make build-darwin-arm64 - Darwin ARM64 with CGO"
+	@echo ""
+	@echo "Other targets:"
+	@echo "  make plugins            - Build all plugins"
+	@echo "  make test               - Run tests"
+	@echo "  make clean              - Clean build artifacts"
+	@echo "  make show-edition       - Show current edition info"
+	@echo ""
+	@echo "Integration Tests (requires Docker):"
+	@echo "  make test-integration                      - Run all integration tests"
+	@echo "  make test-integration-plugin-cache         - Run cache plugin integration tests"
+	@echo "  make test-integration-plugin-cache-full    - Run all cache plugin tests (with cluster+syslog)"
+	@echo "  make test-integration-plugin-cache-coverage - Run with coverage report"
+	@echo "  make test-integration-plugin-github-rag    - Run github-rag-ingest Vault integration tests"
+	@echo ""
 
-# Build frontend
+# Build target (default to production multi-platform builds)
+build: build-prod
+
+# Build frontend (can be skipped with SKIP_FRONTEND=true)
 build-frontend:
+ifeq ($(SKIP_FRONTEND),true)
+	@echo "⏭️  Skipping frontend build (SKIP_FRONTEND=true)"
+else
+	@echo "🔨 Building frontend..."
 	cd $(ADMIN_FRONTEND_DIR) && npm run build
+endif
 
-# Build Go binaries for all architectures
-build-binaries:
-	GOOS=linux GOARCH=amd64 go build -o midsommar-amd64
-	GOOS=linux GOARCH=arm64 go build -o midsommar-arm64
-	chmod +x midsommar-*
+# ============================================================================
+# Development Builds (single platform, fast, CGO enabled)
+# ============================================================================
 
-# Build for local development (single architecture)
-build-local:
-	cd $(ADMIN_FRONTEND_DIR) && npm run build
-	go build -o midsommar
+# Build for native platform (auto-detect edition)
+build-native: build-frontend
+	@echo "🔨 Building $(EDITION) for native platform with CGO..."
+	@mkdir -p bin
+	CGO_ENABLED=1 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)
+	cd microgateway && $(MAKE) build
+	cp microgateway/dist/microgateway-$(EDITION) bin/mgw-$(EDITION)
+	chmod +x bin/*
+	@echo "✅ Native build complete: bin/midsommar-$(EDITION) and bin/mgw-$(EDITION)"
+
+# Build CE for native platform
+build-native-ce: build-frontend
+	@echo "🔨 Building CE for native platform with CGO..."
+	@mkdir -p bin
+	CGO_ENABLED=1 go build -o bin/midsommar-ce
+	cd microgateway && $(MAKE) build-community
+	cp microgateway/dist/microgateway-ce bin/mgw-ce
+	chmod +x bin/*
+	@echo "✅ Native CE build complete"
+
+# Build ENT for native platform
+build-native-ent: build-frontend
+	@if [ ! -f enterprise/.git ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized."; \
+		echo "Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "🔨 Building ENT for native platform with CGO..."
+	@mkdir -p bin
+	CGO_ENABLED=1 go build -tags enterprise -o bin/midsommar-ent
+	cd microgateway && $(MAKE) build-enterprise
+	cp microgateway/dist/microgateway-ent bin/mgw-ent
+	chmod +x bin/*
+	@echo "✅ Native ENT build complete"
+
+# ============================================================================
+# Production Builds (multi-platform, optimized, CGO enabled)
+# ============================================================================
+
+# Build production artifacts for all platforms (auto-detect edition)
+build-prod: build-frontend
+	@echo "🏗️  Building production $(EDITION) artifacts..."
+	@mkdir -p bin
+	$(MAKE) build-linux-amd64 EDITION=$(EDITION) BUILD_TAGS="$(BUILD_TAGS)"
+	$(MAKE) build-linux-arm64 EDITION=$(EDITION) BUILD_TAGS="$(BUILD_TAGS)"
+	$(MAKE) build-darwin-amd64 EDITION=$(EDITION) BUILD_TAGS="$(BUILD_TAGS)"
+	$(MAKE) build-darwin-arm64 EDITION=$(EDITION) BUILD_TAGS="$(BUILD_TAGS)"
+	cd microgateway && $(MAKE) build-prod EDITION=$(EDITION)
+	cp microgateway/dist/microgateway-$(EDITION)-linux-amd64 bin/mgw-$(EDITION)-linux-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-$(EDITION)-linux-arm64 bin/mgw-$(EDITION)-linux-arm64 2>/dev/null || true
+	cp microgateway/dist/microgateway-$(EDITION)-darwin-amd64 bin/mgw-$(EDITION)-darwin-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-$(EDITION)-darwin-arm64 bin/mgw-$(EDITION)-darwin-arm64 2>/dev/null || true
+	chmod +x bin/* 2>/dev/null || true
+	@echo "✅ Production build complete"
+
+# Build production CE for all platforms
+build-prod-ce: build-frontend
+	@echo "🏗️  Building production CE artifacts..."
+	@mkdir -p bin
+	$(MAKE) build-linux-amd64 EDITION=ce BUILD_TAGS=""
+	$(MAKE) build-linux-arm64 EDITION=ce BUILD_TAGS=""
+	$(MAKE) build-darwin-amd64 EDITION=ce BUILD_TAGS=""
+	$(MAKE) build-darwin-arm64 EDITION=ce BUILD_TAGS=""
+	cd microgateway && $(MAKE) build-prod-ce
+	cp microgateway/dist/microgateway-ce-linux-amd64 bin/mgw-ce-linux-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ce-linux-arm64 bin/mgw-ce-linux-arm64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ce-darwin-amd64 bin/mgw-ce-darwin-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ce-darwin-arm64 bin/mgw-ce-darwin-arm64 2>/dev/null || true
+	chmod +x bin/* 2>/dev/null || true
+	@echo "✅ Production CE build complete"
+
+# Build production ENT for all platforms
+build-prod-ent: build-frontend
+	@if [ ! -f enterprise/.git ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized."; \
+		echo "Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "🏗️  Building production ENT artifacts..."
+	@mkdir -p bin
+	$(MAKE) build-linux-amd64 EDITION=ent BUILD_TAGS="-tags enterprise"
+	$(MAKE) build-linux-arm64 EDITION=ent BUILD_TAGS="-tags enterprise"
+	$(MAKE) build-darwin-amd64 EDITION=ent BUILD_TAGS="-tags enterprise"
+	$(MAKE) build-darwin-arm64 EDITION=ent BUILD_TAGS="-tags enterprise"
+	cd microgateway && $(MAKE) build-prod-ent
+	cp microgateway/dist/microgateway-ent-linux-amd64 bin/mgw-ent-linux-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ent-linux-arm64 bin/mgw-ent-linux-arm64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ent-darwin-amd64 bin/mgw-ent-darwin-amd64 2>/dev/null || true
+	cp microgateway/dist/microgateway-ent-darwin-arm64 bin/mgw-ent-darwin-arm64 2>/dev/null || true
+	chmod +x bin/* 2>/dev/null || true
+	@echo "✅ Production ENT build complete"
+
+# ============================================================================
+# Platform-Specific Builds (CGO enabled)
+# ============================================================================
+
+# Linux AMD64 with CGO
+build-linux-amd64:
+	@echo "Building midsommar $(EDITION) for linux/amd64 with CGO..."
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-linux-amd64
+
+# Linux ARM64 with CGO (requires cross-compiler)
+build-linux-arm64:
+	@echo "Building midsommar $(EDITION) for linux/arm64 with CGO..."
+	@if ! which aarch64-linux-gnu-gcc > /dev/null 2>&1; then \
+		echo "⚠️  Warning: aarch64-linux-gnu-gcc not found"; \
+		echo "   Install: sudo apt-get install gcc-aarch64-linux-gnu (Ubuntu/Debian)"; \
+		echo "   Or: brew install FiloSottile/musl-cross/musl-cross (macOS)"; \
+		echo "   Attempting build anyway..."; \
+	fi
+	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
+	CC=aarch64-linux-gnu-gcc \
+	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-linux-arm64
+
+# Darwin AMD64 with CGO
+build-darwin-amd64:
+	@echo "Building midsommar $(EDITION) for darwin/amd64 with CGO..."
+	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
+	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-darwin-amd64
+
+# Darwin ARM64 with CGO
+build-darwin-arm64:
+	@echo "Building midsommar $(EDITION) for darwin/arm64 with CGO..."
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
+	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-darwin-arm64
+
+# ============================================================================
+# Backward Compatibility Targets
+# ============================================================================
+
+# Build for local development (alias for build-native)
+build-local: build-native
+
+# Legacy build-community (now uses explicit CGO builds)
+build-community: build-prod-ce
+	@echo "Note: build-community now builds production artifacts with CGO"
+	@echo "For quick local builds, use: make build-native-ce"
+
+# Legacy build-enterprise (now uses explicit CGO builds)
+build-enterprise: build-prod-ent
+	@echo "Note: build-enterprise now builds production artifacts with CGO"
+	@echo "For quick local builds, use: make build-native-ent"
 
 # Build all plugins
 plugins:
@@ -65,7 +270,58 @@ plugins:
 
 # Test target
 test:
-	go test ./...
+	go test $(BUILD_TAGS) ./...
+	cd microgateway && go test $(BUILD_TAGS) ./...
+
+# ============================================================================
+# Integration Tests (Enterprise)
+# ============================================================================
+# Note: The advanced-llm-cache plugin has its own go.mod, so tests run from
+# within the plugin directory
+
+# Run all enterprise integration tests (requires Docker)
+# Note: -count=1 disables test caching so env vars are respected on each run
+test-integration:
+	@echo "Running all enterprise integration tests..."
+	cd enterprise/plugins/advanced-llm-cache && go test -v -count=1 -tags="integration,enterprise" ./tests/integration/...
+
+# Run integration tests for advanced-llm-cache plugin
+test-integration-plugin-cache:
+	@echo "Running advanced-llm-cache integration tests..."
+	cd enterprise/plugins/advanced-llm-cache && go test -v -count=1 -tags="integration,enterprise" ./tests/integration/...
+
+# Run full integration tests with all optional features enabled
+test-integration-plugin-cache-full:
+	@echo "Running full advanced-llm-cache integration tests (all features)..."
+	cd enterprise/plugins/advanced-llm-cache && INTEGRATION_REDIS_CLUSTER=1 INTEGRATION_SYSLOG=1 \
+		go test -v -count=1 -tags="integration,enterprise" ./tests/integration/...
+
+# Run integration tests with coverage
+test-integration-plugin-cache-coverage:
+	@echo "Running advanced-llm-cache integration tests with coverage..."
+	cd enterprise/plugins/advanced-llm-cache && go test -v -count=1 -tags="integration,enterprise" -coverprofile=integration-coverage.out \
+		./tests/integration/...
+	cd enterprise/plugins/advanced-llm-cache && go tool cover -func=integration-coverage.out | tail -1
+
+# Run integration tests with Redis cluster (slower startup)
+test-integration-plugin-cache-cluster:
+	@echo "Running Redis cluster integration tests..."
+	cd enterprise/plugins/advanced-llm-cache && INTEGRATION_REDIS_CLUSTER=1 \
+		go test -v -count=1 -tags="integration,enterprise" -run ".*Cluster.*" \
+		./tests/integration/...
+
+# Run integration tests with Syslog
+test-integration-plugin-cache-syslog:
+	@echo "Running Syslog audit integration tests..."
+	cd enterprise/plugins/advanced-llm-cache && INTEGRATION_SYSLOG=1 \
+		go test -v -count=1 -tags="integration,enterprise" -run ".*Syslog.*" \
+		./tests/integration/...
+
+# Run Vault integration tests for github-rag-ingest plugin
+test-integration-plugin-github-rag:
+	@echo "Running github-rag-ingest Vault integration tests..."
+	cd community/plugins/github-rag-ingest/server && \
+		go test -v -count=1 -tags=integration ./secrets/...
 
 # Performance testing targets
 perf-test:
@@ -125,7 +381,9 @@ perf-clean:
 # Clean target
 clean:
 	rm -f midsommar*
+	rm -rf bin/
 	rm -rf $(ADMIN_FRONTEND_DIR)/build
+	cd microgateway && rm -rf bin/ dist/
 
 # Development targets
 start-dev: stop-dev
@@ -173,4 +431,56 @@ build-docker-extras:
 	cd extra/reranker && \
 	docker buildx build --platform linux/amd64,linux/arm64 -t tykio/reranker_cpu:latest --push -f dockerfile.cpu .
 
-.PHONY: all build build-frontend build-binaries build-local plugins test clean start-dev stop-dev perf-test perf-profile perf-baseline perf-compare perf-report perf-clean
+# ============================================================================
+# Enterprise Submodule Management
+# ============================================================================
+
+.PHONY: init-enterprise
+init-enterprise:
+	@echo "🔐 Initializing enterprise submodule..."
+	@git submodule init
+	@git submodule update --remote
+	@if [ -f enterprise/.git ]; then \
+		echo "✅ Enterprise edition initialized successfully"; \
+		echo "Run 'make build' to build enterprise edition"; \
+	else \
+		echo "❌ Failed to initialize enterprise submodule"; \
+		echo "You may not have access to the private repository"; \
+		echo "For enterprise access: contact enterprise@tyk.io"; \
+		exit 1; \
+	fi
+
+.PHONY: update-enterprise
+update-enterprise:
+	@if [ ! -f enterprise/.git ]; then \
+		echo "❌ Enterprise submodule not initialized"; \
+		echo "Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "Updating enterprise submodule..."
+	@git submodule update --remote enterprise
+	@git add enterprise
+	@echo "✅ Enterprise submodule updated"
+	@echo "Commit the change: git commit -m 'Update enterprise submodule'"
+
+.PHONY: show-edition
+show-edition:
+	@echo "Current edition: $(EDITION)"
+	@if [ "$(ENTERPRISE_EXISTS)" = "yes" ]; then \
+		echo "Enterprise commit:"; \
+		cd enterprise && git log -1 --oneline; \
+	else \
+		echo "Enterprise submodule: not initialized"; \
+	fi
+
+.PHONY: all build help build-frontend \
+	build-native build-native-ce build-native-ent \
+	build-prod build-prod-ce build-prod-ent \
+	build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 \
+	build-local build-community build-enterprise \
+	plugins test clean start-dev stop-dev \
+	perf-test perf-profile perf-baseline perf-compare perf-report perf-clean \
+	init-enterprise update-enterprise show-edition \
+	test-integration test-integration-plugin-cache test-integration-plugin-cache-full \
+	test-integration-plugin-cache-coverage test-integration-plugin-cache-cluster \
+	test-integration-plugin-cache-syslog test-integration-plugin-github-rag

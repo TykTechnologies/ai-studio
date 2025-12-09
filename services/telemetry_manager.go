@@ -62,9 +62,9 @@ func (tm *TelemetryManager) Start() {
 		return
 	}
 
-	logger.Infof("Telemetry collection started - collecting usage statistics every %v", TelemetryPeriod)
-	logger.Infof("Telemetry data will be sent to: %s", TelemetryURL)
-	logger.Info("To disable telemetry, set environment variable: TELEMETRY_ENABLED=false")
+	logger.Debugf("Telemetry collection started - collecting usage statistics every %v", TelemetryPeriod)
+	logger.Debugf("Telemetry data will be sent to: %s", TelemetryURL)
+	logger.Debug("To disable telemetry, set environment variable: TELEMETRY_ENABLED=false")
 
 	// Send initial telemetry data
 	go tm.collectAndSend()
@@ -98,7 +98,7 @@ func (tm *TelemetryManager) collectAndSend() {
 		return
 	}
 
-	logger.Info("Collecting telemetry data...")
+	logger.Debug("Collecting telemetry data...")
 
 	payload := TelemetryPayload{
 		Timestamp:  time.Now(),
@@ -143,7 +143,7 @@ func (tm *TelemetryManager) collectAndSend() {
 	if err != nil {
 		logger.Infof("Warning: Failed to send telemetry data: %v", err)
 	} else {
-		logger.Info("Telemetry data sent successfully")
+		logger.Debug("Telemetry data sent successfully")
 	}
 }
 

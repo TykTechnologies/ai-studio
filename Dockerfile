@@ -15,10 +15,12 @@ COPY templates ./templates
 # Copy docs_links.json file
 COPY config/docs_links.json ./config/docs_links.json
 
-# Set up architecture-specific binary selection
+# Set up edition and architecture-specific binary selection
+ARG EDITION=ce
 ARG TARGETARCH
 # Copy pre-built binary (static files are embedded)
-COPY tyk-ai-studio-${TARGETARCH} ./tyk-ai-studio
+# Binary naming: tyk-ai-studio-{edition}-{arch} (e.g., tyk-ai-studio-ce-amd64)
+COPY tyk-ai-studio-${EDITION}-${TARGETARCH} ./tyk-ai-studio
 
 # Expose the required ports
 EXPOSE 8080 9090

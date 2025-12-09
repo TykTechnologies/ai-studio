@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
+import { useDebounce } from "use-debounce";
 import apiClient from "../../utils/apiClient";
 import {
   Typography,
@@ -15,6 +16,7 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import DownloadIcon from "@mui/icons-material/Download";
 import {
   StyledPaper,
   TitleBox,
@@ -25,22 +27,31 @@ import {
   PrimaryButton,
   StyledTableHeaderCell,
   StyledTableCell,
-  SecondaryLinkButton
+  SecondaryLinkButton,
+  SecondaryOutlineButton
 } from "../../styles/sharedStyles";
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
+import SearchInput from "../common/SearchInput";
 import { Divider } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { IconButton, Tooltip } from "@mui/material";
+import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
+import { useEdition } from "../../context/EditionContext";
 
 const UserDetails = () => {
+  const { isEnterprise } = useEdition();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userGroups, setUserGroups] = useState([]);
   const [chatHistory, setChatHistory] = useState([]);
   const [showSnackbar, setShowSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [chatSearchTerm, setChatSearchTerm] = useState("");
+  const [debouncedChatSearch] = useDebounce(chatSearchTerm, 500);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const isFirstSearchRender = useRef(true);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -52,6 +63,10 @@ const UserDetails = () => {
     handlePageSizeChange,
     updatePaginationData,
   } = usePagination();
+
+  const handleChatSearch = useCallback((value) => {
+    setChatSearchTerm(value);
+  }, []);
 
   const handleCopyApiKey = async () => {
     try {
@@ -101,13 +116,18 @@ const UserDetails = () => {
 
   const fetchChatHistory = useCallback(async () => {
     try {
-      const response = await apiClient.get(`/chat-history-records`, {
-        params: {
-          user_id: id,
-          page,
-          page_size: pageSize,
-        },
-      });
+      const params = {
+        user_id: id,
+        page,
+        page_size: pageSize,
+      };
+
+      // Only include search param if 2+ characters entered
+      if (debouncedChatSearch && debouncedChatSearch.length >= 2) {
+        params.search = debouncedChatSearch;
+      }
+
+      const response = await apiClient.get(`/chat-history-records`, { params });
       setChatHistory(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -117,7 +137,7 @@ const UserDetails = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, page, pageSize, updatePaginationData]);
+  }, [id, page, pageSize, debouncedChatSearch, updatePaginationData]);
 
   useEffect(() => {
     fetchUserDetails();
@@ -127,6 +147,15 @@ const UserDetails = () => {
   useEffect(() => {
     fetchChatHistory();
   }, [fetchChatHistory]);
+
+  // Reset to page 1 when chat search term changes (but not on initial render)
+  useEffect(() => {
+    if (isFirstSearchRender.current) {
+      isFirstSearchRender.current = false;
+      return;
+    }
+    handlePageChange(1);
+  }, [debouncedChatSearch, handlePageChange]);
 
   if (!user) return <CircularProgress />;
 
@@ -261,15 +290,31 @@ const UserDetails = () => {
           </StyledPaper>
         )}
 
-        <Box mt={4} mb={2}>
+        <Box mt={4} mb={2} display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h5" sx={{ color: "black" }}>
             Chat History
           </Typography>
+          {isEnterprise && (
+            <SecondaryOutlineButton
+              onClick={() => setExportModalOpen(true)}
+              startIcon={<DownloadIcon />}
+              size="small"
+            >
+              Export
+            </SecondaryOutlineButton>
+          )}
         </Box>
         {loading ? (
           <CircularProgress />
         ) : (
           <>
+            <Box sx={{ mb: 2, maxWidth: 400 }}>
+              <SearchInput
+                value={chatSearchTerm}
+                onChange={handleChatSearch}
+                placeholder="Search conversations..."
+              />
+            </Box>
             <StyledPaper>
               <TableContainer>
                 <Table>
@@ -317,6 +362,14 @@ const UserDetails = () => {
             </StyledPaper>
           </>
         )}
+
+        <ExportProxyLogsModal
+          open={exportModalOpen}
+          onClose={() => setExportModalOpen(false)}
+          sourceType="user"
+          sourceId={parseInt(id)}
+          initialSearch={debouncedChatSearch}
+        />
       </ContentBox>
     </>
   );

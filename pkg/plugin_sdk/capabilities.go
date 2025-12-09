@@ -52,6 +52,19 @@ type ResponseHandler interface {
 	OnBeforeWrite(ctx Context, req *pb.ResponseWriteRequest) (*pb.ResponseWriteResponse, error)
 }
 
+// StreamCompleteHandler processes completed streaming responses.
+// Use this when you need to cache, analyze, or process the full response after
+// all streaming chunks have been received and sent to the client.
+// This is called asynchronously after the streaming response completes.
+type StreamCompleteHandler interface {
+	Plugin
+
+	// OnStreamComplete is called after a streaming response has finished.
+	// The accumulated_response contains all SSE chunks concatenated together.
+	// This can be used to cache the complete response for future requests.
+	OnStreamComplete(ctx Context, req *pb.StreamCompleteRequest) (*pb.StreamCompleteResponse, error)
+}
+
 // DataCollector collects telemetry data for analytics, monitoring, or billing.
 // Use this when you need to export data to external systems.
 type DataCollector interface {
@@ -143,6 +156,94 @@ type ObjectHookHandler interface {
 	// req contains: hook type, object type, object data (JSON), user ID, operation ID
 	// Returns: allow/reject decision, optional modified object, plugin metadata
 	HandleObjectHook(ctx Context, req *pb.ObjectHookRequest) (*pb.ObjectHookResponse, error)
+}
+
+// SchedulerPlugin allows plugins to execute tasks on a cron-based schedule.
+// Use this when you need periodic background tasks like data synchronization,
+// cleanup operations, or scheduled processing.
+type SchedulerPlugin interface {
+	Plugin
+
+	// ExecuteScheduledTask is called when a scheduled task needs to run.
+	// ctx provides access to services (KV, logging) but has no request context.
+	// schedule contains the schedule definition including ID, name, cron expression, and custom config.
+	// Returns error if execution failed (will be recorded in execution history).
+	ExecuteScheduledTask(ctx Context, schedule *Schedule) error
+}
+
+// Schedule represents a cron-based task definition.
+type Schedule struct {
+	ID             string                 // Unique identifier from manifest
+	Name           string                 // Human-readable name
+	Cron           string                 // Cron expression (e.g., "0 * * * *")
+	Timezone       string                 // Timezone for cron evaluation (e.g., "America/New_York", "UTC")
+	Enabled        bool                   // Whether schedule is currently enabled
+	TimeoutSeconds int                    // Maximum execution time in seconds
+	Config         map[string]interface{} // Schedule-specific configuration from manifest
+}
+
+// EdgePayloadReceiver handles payloads sent from edge (microgateway) instances.
+// Use this when you need to receive data from plugins running on edge instances
+// that are connected to AI Studio via the hub-and-spoke architecture.
+//
+// Example use case: An llm-cache plugin running on edge instances sends cache
+// statistics or shared cache data back to a central plugin on AI Studio.
+type EdgePayloadReceiver interface {
+	Plugin
+
+	// AcceptEdgePayload is called when a payload arrives from an edge instance.
+	// payload contains the raw data sent by the edge plugin via SendToControl().
+	// edgeID identifies which edge instance sent the payload.
+	// correlationID can be used for request/response matching or tracking.
+	// metadata contains any additional key-value data from the edge plugin.
+	//
+	// Returns:
+	//   - handled: true if this plugin processed the payload
+	//   - error: non-nil if processing failed
+	AcceptEdgePayload(ctx Context, payload *EdgePayload) (handled bool, err error)
+}
+
+// EdgePayload represents data sent from an edge plugin to a control plane plugin
+type EdgePayload struct {
+	Payload           []byte            // Arbitrary payload data from edge plugin
+	EdgeID            string            // Edge instance that sent the payload
+	EdgeNamespace     string            // Namespace of the edge instance
+	CorrelationID     string            // Optional correlation ID for tracking
+	Metadata          map[string]string // Optional key-value metadata
+	EdgeTimestamp     int64             // Unix timestamp when generated at edge
+	ReceivedTimestamp int64             // Unix timestamp when received at control
+}
+
+// SessionAware is an optional interface for plugins that need session lifecycle callbacks.
+// Implement this when your plugin needs to set up or tear down resources tied to the
+// session-based broker connection (e.g., event subscriptions, background tasks).
+//
+// The session pattern keeps go-plugin broker connections alive for plugins that need
+// persistent background services like event pub/sub.
+//
+// Example:
+//
+//	func (p *MyPlugin) OnSessionReady(ctx Context) {
+//	    // Subscribe to events, start background tasks
+//	    p.eventSubID, _ = ctx.Services.Events().Subscribe("my-topic", p.handleEvent)
+//	}
+//
+//	func (p *MyPlugin) OnSessionClosing(ctx Context) {
+//	    // Cleanup subscriptions before session ends
+//	    ctx.Services.Events().Unsubscribe(p.eventSubID)
+//	}
+type SessionAware interface {
+	// OnSessionReady is called when a session is first established.
+	// This is the place to set up event subscriptions, start background goroutines,
+	// or initialize resources that require a live broker connection.
+	// This is only called once per plugin lifetime (on the first OpenSession),
+	// not on session renewals (subsequent OpenSession calls after timeout).
+	OnSessionReady(ctx Context)
+
+	// OnSessionClosing is called before a session is explicitly closed.
+	// This is NOT called on session timeout (timeouts expect the host to re-open).
+	// Use this to clean up resources before the plugin shuts down.
+	OnSessionClosing(ctx Context)
 }
 
 // HookType represents the type of plugin hook (for gateway compatibility)

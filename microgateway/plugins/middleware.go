@@ -20,6 +20,8 @@ import (
 // ServiceContainerInterface defines minimal interface needed to break circular dependency
 type ServiceContainerInterface interface {
 	GetGatewayService() GatewayServiceInterface
+	GetEdgeID() string
+	GetEdgeNamespace() string
 }
 
 // GatewayServiceInterface defines minimal interface for gateway service
@@ -91,6 +93,15 @@ func CreatePluginMiddleware(config *PluginMiddlewareConfig) gin.HandlerFunc {
 		}
 
 		// Create plugin context
+		// Include edge identity in metadata for plugin context
+		middlewareMetadata := make(map[string]interface{})
+		if edgeID := config.Services.GetEdgeID(); edgeID != "" {
+			middlewareMetadata["edge_id"] = edgeID
+		}
+		if edgeNamespace := config.Services.GetEdgeNamespace(); edgeNamespace != "" {
+			middlewareMetadata["edge_namespace"] = edgeNamespace
+		}
+
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context
 			LLMID:        llmID,
@@ -98,7 +109,7 @@ func CreatePluginMiddleware(config *PluginMiddlewareConfig) gin.HandlerFunc {
 			Vendor:       vendor,
 			AppID:        appID,
 			UserID:       userID,
-			Metadata:     make(map[string]interface{}),
+			Metadata:     middlewareMetadata,
 			TraceContext: make(map[string]string),
 		}
 

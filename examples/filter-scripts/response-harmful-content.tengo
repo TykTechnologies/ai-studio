@@ -1,0 +1,46 @@
+// Response Filter: Block Harmful Content
+// This filter prevents LLMs from providing harmful instructions
+
+text := import("text")
+
+// Get response text (works for both streaming and non-streaming)
+response_text := input.is_chunk ? input.current_buffer : input.raw_input
+
+// For streaming: wait for sufficient context before evaluation
+// This threshold can be adjusted based on use case
+min_evaluation_length := 150
+
+// Default output
+output := {
+    block: false,
+    message: ""
+}
+
+// Only evaluate if we have enough context (for non-streaming or streaming with sufficient buffer)
+if !input.is_chunk || len(response_text) >= min_evaluation_length {
+    // Check for harmful instruction patterns
+    harmful_patterns := [
+        "instructions for making",
+        "how to build a weapon",
+        "steps to create explosives",
+        "recipe for making",
+        "how to hack",
+        "bypass security"
+    ]
+
+    is_harmful := false
+    detected_pattern := ""
+
+    for pattern in harmful_patterns {
+        if text.contains(text.to_lower(response_text), pattern) {
+            is_harmful = true
+            detected_pattern = pattern
+            break
+        }
+    }
+
+    output = {
+        block: is_harmful,
+        message: is_harmful ? "Response blocked: Potentially harmful content detected (" + detected_pattern + ")" : ""
+    }
+}

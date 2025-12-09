@@ -36,11 +36,18 @@ func (h *TestResponseHook) OnBeforeWriteHeaders(ctx context.Context, req *Header
 func (h *TestResponseHook) OnBeforeWrite(ctx context.Context, req *ResponseWriteRequest) (*ResponseWriteResponse, error) {
 	// Modify the response body
 	modifiedBody := append(req.Body, []byte(" [MODIFIED]")...)
-	
+
 	return &ResponseWriteResponse{
 		Modified: true,
 		Body:     modifiedBody,
 		Headers:  req.Headers,
+	}, nil
+}
+
+func (h *TestResponseHook) OnStreamComplete(ctx context.Context, req *StreamCompleteRequest) (*StreamCompleteResponse, error) {
+	return &StreamCompleteResponse{
+		Handled: false,
+		Cached:  false,
 	}, nil
 }
 

@@ -26,9 +26,11 @@ import marketplaceService from '../../services/marketplaceService';
 import PluginCard from './PluginCard';
 import PluginDetailModal from './PluginDetailModal';
 import { useNavigate } from 'react-router-dom';
+import useAdminData from '../../hooks/useAdminData';
 
 const Marketplace = () => {
   const navigate = useNavigate();
+  const { config } = useAdminData();
   const [plugins, setPlugins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -174,7 +176,9 @@ const Marketplace = () => {
           </Button>
         </Box>
         <Typography variant="body1" color="text.secondary">
-          Browse and install plugins from the Tyk AI Studio marketplace
+          {config?.is_enterprise
+            ? 'Browse and install plugins from configured marketplace sources'
+            : 'Browse and install plugins from the Tyk AI Studio marketplace'}
         </Typography>
       </Box>
 

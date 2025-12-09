@@ -285,6 +285,21 @@ func (s *PluginService) DeletePlugin(id uint) error {
 			Msg("Keeping config schema - other plugins still use this command")
 	}
 
+	// Clean up plugin schedules and executions (CASCADE should handle this, but be explicit for SQLite)
+	// Delete executions first (child records)
+	if err := s.db.Where("plugin_id = ?", id).Delete(&models.PluginScheduleExecution{}).Error; err != nil {
+		log.Warn().Err(err).Uint("plugin_id", id).Msg("Failed to clean up plugin schedule executions")
+	} else {
+		log.Info().Uint("plugin_id", id).Msg("Cleaned up plugin schedule executions for deleted plugin")
+	}
+
+	// Delete schedules
+	if err := s.db.Where("plugin_id = ?", id).Delete(&models.PluginSchedule{}).Error; err != nil {
+		log.Warn().Err(err).Uint("plugin_id", id).Msg("Failed to clean up plugin schedules")
+	} else {
+		log.Info().Uint("plugin_id", id).Msg("Cleaned up plugin schedules for deleted plugin")
+	}
+
 	if err := plugin.Delete(s.db); err != nil {
 		return fmt.Errorf("failed to delete plugin: %w", err)
 	}

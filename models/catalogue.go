@@ -2,6 +2,8 @@ package models
 
 import "gorm.io/gorm"
 
+const DefaultCatalogueName = "Default"
+
 type Catalogue struct {
 	gorm.Model
 	ID   uint   `json:"id" gorm:"primary_key"`
@@ -78,4 +80,24 @@ func (c *Catalogues) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool)
 
 func (c *Catalogues) GetByNameStub(db *gorm.DB, stub string) error {
 	return db.Preload("LLMs").Where("name LIKE ?", stub+"%").Find(c).Error
+}
+
+// GetOrCreateDefaultCatalogue finds or creates the Default LLM catalogue by name
+// This is safe for databases where auto-increment has been reset or cleared
+func GetOrCreateDefaultCatalogue(db *gorm.DB) (*Catalogue, error) {
+	var catalogue Catalogue
+	err := db.Where("name = ?", DefaultCatalogueName).First(&catalogue).Error
+
+	if err == gorm.ErrRecordNotFound {
+		// Create Default catalogue
+		catalogue = Catalogue{Name: DefaultCatalogueName}
+		err = db.Create(&catalogue).Error
+	}
+
+	return &catalogue, err
+}
+
+// IsDefault checks if this catalogue is the default catalogue
+func (c *Catalogue) IsDefault() bool {
+	return c.Name == DefaultCatalogueName
 }

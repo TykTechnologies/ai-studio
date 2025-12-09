@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -37,7 +37,8 @@ func RequestIDMiddleware() gin.HandlerFunc {
 		// Set as response header for client observability and distributed tracing
 		c.Header("X-Request-ID", requestID)
 
-		log.Info().Str("request_id", requestID).Str("path", c.Request.URL.Path).Msg("🆔 Generated canonical request ID for request")
+		log.Debug().Str("request_id", requestID).Str("path", c.Request.URL.Path).Msg("🆔 Generated canonical request ID for request")
+		log.Debug().Str("body length is", fmt.Sprintf("%d", c.Request.ContentLength)).Msg("📦 Request body length")
 
 		// Continue processing
 		c.Next()
@@ -46,22 +47,29 @@ func RequestIDMiddleware() gin.HandlerFunc {
 
 // RouterConfig holds configuration for the API router
 type RouterConfig struct {
-	AuthProvider     auth.AuthProvider
-	Services         *services.ServiceContainer
-	Gateway          aigateway.Gateway
-	PluginManager    PluginManagerInterface
-	ReloadCoordinator *services.ReloadCoordinator
-	EnableSwagger    bool
-	EnableMetrics    bool
-	Version          string
-	BuildHash        string
-	BuildTime        string
+	AuthProvider       auth.AuthProvider
+	Services           *services.ServiceContainer
+	Gateway            aigateway.Gateway
+	PluginManager      PluginManagerInterface
+	ReloadCoordinator  *services.ReloadCoordinator
+	ModelRouterService *services.ModelRouterService // Enterprise: Model router service
+	EnableSwagger      bool
+	EnableMetrics      bool
+	Version            string
+	BuildHash          string
+	BuildTime          string
 }
 
 // SetupRouter configures and returns the main application router
 func SetupRouter(config *RouterConfig) *gin.Engine {
-	// Use gin.Default() which includes logging and recovery middleware
-	router := gin.Default()
+	// Set Gin to release mode to reduce noise
+	gin.SetMode(gin.ReleaseMode)
+
+	// Use gin.New() instead of gin.Default() to control middleware
+	// gin.Default() adds Logger and Recovery middleware automatically
+	// We only want Recovery (handles panics) - no request logging
+	router := gin.New()
+	router.Use(gin.Recovery())
 
 	// CRITICAL: Add request ID middleware FIRST (before all other routes)
 	// This ensures ALL requests (gateway, API, health checks) get a canonical request ID
@@ -120,14 +128,8 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 			apps.PUT("/:id/llms", handlers.UpdateAppLLMs(config.Services))
 		}
 
-		// Budget management
-		budgets := protected.Group("/budgets")
-		{
-			budgets.GET("", handlers.ListBudgets(config.Services))
-			budgets.GET("/:appId/usage", handlers.GetBudgetUsage(config.Services))
-			budgets.PUT("/:appId", handlers.UpdateBudget(config.Services))
-			budgets.GET("/:appId/history", handlers.GetBudgetHistory(config.Services))
-		}
+		// Budget management (Enterprise only)
+		registerBudgetRoutes(protected, config)
 
 		// Token management
 		tokens := protected.Group("/tokens")
@@ -223,10 +225,27 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	if config.Gateway != nil {
 		gateway := router.Group("/")
 
-		log.Info().Msg("Mounting AI Gateway handler (plugins integrated via hooks)")
+		log.Debug().Msg("Mounting AI Gateway handler (plugins integrated via hooks)")
 		gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
+		gateway.Any("/ai/*path", gin.WrapH(config.Gateway.Handler()))
+
+		// Model Router endpoints (Enterprise)
+		// Routes requests to LLM vendors based on model name patterns
+		if config.ModelRouterService != nil {
+			log.Debug().Msg("Mounting Model Router handler (Enterprise)")
+			modelRouterHandler := services.NewModelRouterHandler(
+				config.ModelRouterService,
+				func(w http.ResponseWriter, r *http.Request) {
+					// Forward to the gateway handler - the mux.SetURLVars has already set routeId
+					config.Gateway.Handler().ServeHTTP(w, r)
+				},
+			)
+			// Mount router endpoints - OpenAI-compatible format (uses GinHandler for proper param extraction)
+			gateway.POST("/router/:routerSlug/v1/chat/completions", modelRouterHandler.GinHandler())
+			gateway.POST("/router/:routerSlug/v1/completions", modelRouterHandler.GinHandler())
+		}
 	}
 
 	// Metrics endpoint if enabled

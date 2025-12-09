@@ -1,8 +1,17 @@
 # Single Sign-On (SSO) Support
 
+**⚠️ ENTERPRISE EDITION ONLY**
+
+SSO integration is available exclusively in Tyk AI Studio Enterprise Edition. Community Edition returns 402 Payment Required for all SSO endpoints and hides SSO configuration in the UI.
+
 ## Introduction
 
 This document provides a comprehensive overview of Midsommar's **Single Sign-On (SSO)** support system, detailing its architecture, components, and integration points across the platform. The SSO system enables authentication with external identity providers while maintaining security and access controls through the embedded Tyk Identity Broker (TIB).
+
+### Edition Availability
+
+- **Community Edition (CE)**: SSO features are not available. API endpoints return 402 Payment Required.
+- **Enterprise Edition (ENT)**: Full SSO functionality including OIDC, SAML, LDAP, and Social providers.
 
 ---
 
@@ -39,16 +48,46 @@ The **Midsommar SSO System** provides a framework for integrating external ident
 
 ## System Architecture
 
-1. **Database Models:**
+### Enterprise/Community Edition Split
+
+The SSO system follows the Enterprise Framework pattern with clear separation between editions:
+
+**Public Interface Layer** (`services/sso/`):
+- `interface.go` - SSO service interface definition
+- `types.go` - Shared types (Config, NonceTokenRequest, etc.)
+- `errors.go` - Error definitions
+- `factory.go` - Factory registration pattern
+- `factory_community.go` - CE factory (build tag: `!enterprise`)
+- `factory_enterprise.go` - ENT factory (build tag: `enterprise`)
+- `community.go` - CE stub (returns enterprise-only errors)
+
+**Enterprise Implementation** (`enterprise/features/sso/`):
+- `service.go` - Full TIB integration and authentication logic
+- `init.go` - Factory registration
+
+**API Handlers:**
+- `api/sso_handlers_community.go` - CE stubs (402 responses)
+- `api/sso_handlers_enterprise.go` - ENT full implementation
+- `api/profile_handlers_community.go` - CE profile stubs
+- `api/profile_handlers_enterprise.go` - ENT profile CRUD
+
+**Edition Detection:**
+- `sso.IsEnterpriseAvailable()` - Runtime check for edition
+- Build tags control compilation
+- Frontend gated by `tibEnabled` config value
+
+### Core Components
+
+1. **Database Models** (Public - shared between editions):
    - `Profile` model ([models/tib_profiles.go](../models/tib_profiles.go)) - Core SSO profile configuration including provider settings, identity handler configuration, and group mappings
    - `GormAuthRegisterBackend` model ([models/tib_backend_store.go](../models/tib_backend_store.go)) - GORM implementation of TIB's AuthRegisterBackend interface for profile storage and retrieval
    - `GormKVStore` model ([models/tib_kv_store.go](../models/tib_kv_store.go)) - Key-value store implementation with dual usage: (1) used internally by the embedded TIB as its configuration handler, and (2) used by the SSO service to store NonceData and authentication tokens, utilizing the `KVPair` struct for database persistence
    - `User` model ([models/user.go](../models/user.go)) - Extended to support SSO authentication and group memberships
    - `StringMap` and `JSONMap` types - Custom types for storing profile configuration as JSON in the database
 
-2. **Services:**
-   - `Service` ([services/profile_service.go](../services/profile_service.go)) - Handles SSO profile CRUD operations with validation
-   - `SSOService` ([services/sso_service.go](../services/sso_service.go)) - Core service that manages SSO authentication flows with the following features:
+2. **Services** (Enterprise Edition only):
+   - `ProfileService` ([services/profile_service.go](../services/profile_service.go)) - Handles SSO profile CRUD operations with validation
+   - `SSOService` ([enterprise/features/sso/service.go](../enterprise/features/sso/service.go)) - Core service that manages SSO authentication flows with the following features:
      - Embeds and initializes Tyk Identity Broker for provider integration
      - Implements nonce token generation and validation using the KV store
      - Manages user creation and group assignment during authentication

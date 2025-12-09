@@ -124,7 +124,7 @@ func NewAnalyticsPulsePlugin(
 		lastPulseTime:  time.Now(),
 	}
 
-	log.Info().
+	log.Debug().
 		Str("edge_id", edgeID).
 		Int("interval_seconds", pluginConfig.IntervalSeconds).
 		Int("max_batch_size", pluginConfig.MaxBatchSize).
@@ -194,14 +194,14 @@ func (p *AnalyticsPulsePlugin) Shutdown() error {
 
 // Initialize initializes the plugin
 func (p *AnalyticsPulsePlugin) Initialize(config map[string]interface{}) error {
-	log.Info().
+	log.Debug().
 		Str("plugin", "analytics_pulse").
 		Msg("Initializing built-in analytics pulse plugin")
 
 	// Start the pulse timer
 	p.schedulePulse()
 
-	log.Info().
+	log.Debug().
 		Int("interval_seconds", p.config.IntervalSeconds).
 		Msg("Analytics pulse plugin initialized successfully")
 
@@ -423,7 +423,7 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.config.TimeoutSeconds)*time.Second)
 	defer cancel()
 
-	log.Info().
+	log.Debug().
 		Uint64("sequence", sequenceNum).
 		Int("analytics_events", len(analyticsSnapshot)).
 		Int("budget_events", len(budgetSnapshot)).
@@ -447,7 +447,7 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 	p.lastPulseTime = time.Now()
 
 	if resp.Success {
-		log.Info().
+		log.Debug().
 			Uint64("sequence", sequenceNum).
 			Uint64("processed_records", resp.ProcessedRecords).
 			Msg("Analytics pulse sent successfully")
@@ -599,7 +599,7 @@ func (p *AnalyticsPulsePlugin) isVendorExcluded(vendor string) bool {
 
 // Stop stops the analytics pulse plugin
 func (p *AnalyticsPulsePlugin) Stop() error {
-	log.Info().Str("plugin", "analytics_pulse").Msg("Stopping analytics pulse plugin")
+	log.Debug().Str("plugin", "analytics_pulse").Msg("Stopping analytics pulse plugin")
 
 	if p.cancel != nil {
 		p.cancel()
@@ -612,7 +612,7 @@ func (p *AnalyticsPulsePlugin) Stop() error {
 	// Send any remaining buffered data
 	p.sendPulseNow()
 
-	log.Info().
+	log.Debug().
 		Uint64("total_pulses_sent", p.totalPulsesSent).
 		Uint64("total_records_sent", p.totalRecordsSent).
 		Msg("Analytics pulse plugin stopped")

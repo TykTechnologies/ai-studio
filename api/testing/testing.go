@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -29,7 +30,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 
 func SetupTestService(db *gorm.DB) *services.Service {
 	notificationService := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationService)
+	budgetSvc := budget.NewService(db, notificationService)
 	
 	// Initialize hub-and-spoke services
 	edgeService := services.NewEdgeService(db)
@@ -39,7 +40,7 @@ func SetupTestService(db *gorm.DB) *services.Service {
 	return &services.Service{
 		DB:                  db,
 		NotificationService: notificationService,
-		Budget:              budgetService,
+		Budget:              budgetSvc,
 		EdgeService:         edgeService,
 		NamespaceService:    namespaceService,
 		PluginService:       pluginService,

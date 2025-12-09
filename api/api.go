@@ -20,10 +20,15 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/licensing"
+	"github.com/TykTechnologies/midsommar/v2/services/marketplace_management"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
+	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
@@ -61,20 +66,23 @@ func (w *bodyLogWriter) Write(b []byte) (int, error) {
 // @name Authorization
 
 type API struct {
-	service             *services.Service
-	router              *gin.Engine
-	server              *http.Server
-	config              *auth.Config
-	disableCORS         bool
-	auth                *auth.AuthService
-	proxy               *proxy.Proxy
-	staticFiles         embed.FS
-	providers           *providers.Registry
-	setupChatRoutesFunc func(*gin.RouterGroup)
-	ssoService          *services.SSOService
+	service                       *services.Service
+	router                        *gin.Engine
+	server                        *http.Server
+	config                        *auth.Config
+	disableCORS                   bool
+	auth                          *auth.AuthService
+	proxy                         *proxy.Proxy
+	staticFiles                   embed.FS
+	providers                     *providers.Registry
+	setupChatRoutesFunc           func(*gin.RouterGroup)
+	ssoService                    sso.Service
+	licensingService              licensing.Service
+	pluginSecurityService         plugin_security.Service
+	marketplaceManagementService  marketplace_management.Service
 }
 
-func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, _ interface{}) *API {
+func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
 	gin.SetMode(gin.ReleaseMode)
 
 	// Initialize provider registry
@@ -86,7 +94,17 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 		log.Printf("Failed to register Tyk provider: %v", err)
 	}
 
-	router := gin.Default()
+	// Use gin.New() instead of gin.Default() to have control over middleware
+	// gin.Default() adds Logger and Recovery middleware automatically
+	router := gin.New()
+
+	// Always add recovery middleware (handles panics)
+	router.Use(gin.Recovery())
+
+	// Only add Gin's request logger if debug logging is enabled
+	if logger.IsDebugEnabled() {
+		router.Use(gin.Logger())
+	}
 
 	// Add debug middleware only if DEBUG_HTTP=true
 	if os.Getenv("DEBUG_HTTP") == "true" {
@@ -129,31 +147,57 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	}
 
 	api := &API{
-		service:     service,
-		router:      router,
-		disableCORS: disableCORS,
-		auth:        authService,
-		config:      config,
-		proxy:       proxy,
-		staticFiles: staticFiles,
-		providers:   providerRegistry,
+		service:          service,
+		router:           router,
+		disableCORS:      disableCORS,
+		auth:             authService,
+		config:           config,
+		proxy:            proxy,
+		staticFiles:      staticFiles,
+		providers:        providerRegistry,
+		licensingService: licensingService,
 	}
 
-	if config.TIBEnabled {
-		logLevel := "info"
-
-		if config.TestMode {
-			logLevel = "debug"
-		}
-
-		ssoConfig := &services.Config{
-			APISecret: config.TIBAPISecret,
-			LogLevel:  logLevel,
-		}
-		api.ssoService = services.NewSSOService(ssoConfig, router, config.DB, service.NotificationService)
-
-		api.ssoService.InitInternalTIB()
+	// Add telemetry middleware (ENT: tracks API actions, CE: no-op)
+	if licensingService != nil {
+		router.Use(licensingService.TelemetryMiddleware())
 	}
+
+	// Initialize SSO service (ENT: full TIB functionality, CE: stub returning enterprise errors)
+	logLevel := "info"
+	if config.TestMode {
+		logLevel = "debug"
+	}
+
+	ssoConfig := &sso.Config{
+		APISecret: config.TIBAPISecret,
+		LogLevel:  logLevel,
+	}
+	api.ssoService = sso.NewService(ssoConfig, router, config.DB, service.NotificationService)
+	if sso.IsEnterpriseAvailable() {
+		if err := api.ssoService.InitInternalTIB(); err != nil {
+			log.Fatalf("Failed to initialize SSO service: %v", err)
+		}
+	}
+
+	// Initialize Plugin Security service (ENT: full security enforcement, CE: stub allowing all operations)
+	var ociLibConfig *ociplugins.OCIConfig
+	if config.OCIConfig != nil {
+		// Convert config.OCIConfig (interface{}) to *ociplugins.OCIConfig
+		// This is set in main.go from appConf.OCIPlugins.ToOCILibConfig()
+		if ociCfg, ok := config.OCIConfig.(*ociplugins.OCIConfig); ok {
+			ociLibConfig = ociCfg
+		}
+	}
+
+	pluginSecurityConfig := &plugin_security.Config{
+		OCIConfig:                  ociLibConfig,
+		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+	}
+	api.pluginSecurityService = plugin_security.NewService(pluginSecurityConfig)
+
+	// Initialize Marketplace Management service (ENT: full CRUD, CE: enterprise-only errors)
+	api.marketplaceManagementService = marketplace_management.NewService(config.DB)
 
 	api.setupChatRoutesFunc = api.SetupChatRoutes
 
@@ -438,6 +482,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/api/v1/notifications", notificationHandlers.ListNotifications)
 	authed.GET("/api/v1/notifications/unread/count", notificationHandlers.UnreadCount)
 	authed.PUT("/api/v1/notifications/:id/read", notificationHandlers.MarkAsRead)
+	authed.PUT("/api/v1/notifications/read-all", notificationHandlers.MarkAllAsRead)
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
@@ -518,6 +563,7 @@ func (a *API) setupRoutes() {
 	v1.POST("/datasources/:id/filestores/:filestore_id", a.addFileStoreToDatasource)
 	v1.DELETE("/datasources/:id/filestores/:filestore_id", a.removeFileStoreFromDatasource)
 	v1.POST("/datasources/:id/process-embeddings", a.ProcessFileEmbeddingHandler)
+	v1.POST("/datasources/:id/clone", a.cloneDatasource)
 
 	// Data Catalogue routes
 	v1.POST("/data-catalogues", a.createDataCatalogue)
@@ -666,6 +712,7 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/filters/:id", a.updateFilter)
 	v1.DELETE("/filters/:id", a.deleteFilter)
 	v1.GET("/filters", a.listFilters)
+	v1.POST("/filters/test", a.testFilter)
 
 	// Plugin routes
 	v1.POST("/plugins", a.createPlugin)
@@ -710,6 +757,14 @@ func (a *API) setupRoutes() {
 	// Plugin cleanup routes
 	v1.POST("/plugins/cleanup-orphaned-registry", a.cleanupOrphanedUIRegistry)
 
+	// Plugin schedule routes
+	v1.POST("/plugins/:id/schedules", a.CreatePluginSchedule)
+	v1.GET("/plugins/:id/schedules", a.GetPluginSchedules)
+	v1.GET("/plugins/:id/schedules/:schedule_id", a.GetPluginScheduleDetail)
+	v1.GET("/plugins/:id/schedules/:schedule_id/executions", a.GetPluginScheduleExecutions)
+	v1.PUT("/plugins/:id/schedules/:schedule_id", a.UpdatePluginSchedule)
+	v1.DELETE("/plugins/:id/schedules/:schedule_id", a.DeletePluginSchedule)
+
 	// Plugin asset serving (outside of v1 group for simpler URLs)
 	v1.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)
 
@@ -720,6 +775,14 @@ func (a *API) setupRoutes() {
 	// LLM-Plugin configuration routes
 	v1.GET("/llms/:id/plugins/:pluginId/config", a.getLLMPluginConfig)
 	v1.PUT("/llms/:id/plugins/:pluginId/config", a.updateLLMPluginConfig)
+
+	// Model Router routes (Enterprise only)
+	v1.POST("/model-routers", a.createModelRouter)
+	v1.GET("/model-routers/:id", a.getModelRouter)
+	v1.PATCH("/model-routers/:id", a.updateModelRouter)
+	v1.DELETE("/model-routers/:id", a.deleteModelRouter)
+	v1.GET("/model-routers", a.listModelRouters)
+	v1.PATCH("/model-routers/:id/toggle", a.toggleModelRouterActive)
 
 	// Marketplace routes (only register if marketplace service is available)
 	if a.service.MarketplaceService != nil {
@@ -734,6 +797,21 @@ func (a *API) setupRoutes() {
 		v1.GET("/marketplace/categories", marketplaceHandlers.GetCategories)
 		v1.GET("/marketplace/publishers", marketplaceHandlers.GetPublishers)
 		v1.GET("/marketplace/stats", marketplaceHandlers.GetStats)
+	}
+
+	// Marketplace Admin routes (ENT: full management, CE: 403 responses)
+	// Admin-only endpoints for managing multiple marketplace sources
+	marketplaceAdmin := v1.Group("/admin/marketplaces")
+	marketplaceAdmin.Use(a.auth.AdminOnly())
+	{
+		adminHandlers := NewMarketplaceAdminHandlers(a.marketplaceManagementService, a.service.MarketplaceService)
+		marketplaceAdmin.POST("", adminHandlers.AddMarketplace)
+		marketplaceAdmin.GET("", adminHandlers.ListMarketplaces)
+		marketplaceAdmin.GET("/:id", adminHandlers.GetMarketplace)
+		marketplaceAdmin.PUT("/:id", adminHandlers.UpdateMarketplace)
+		marketplaceAdmin.DELETE("/:id", adminHandlers.RemoveMarketplace)
+		marketplaceAdmin.POST("/validate", adminHandlers.ValidateMarketplaceURL)
+		marketplaceAdmin.POST("/:id/sync", adminHandlers.SyncMarketplace)
 	}
 
 	// Chat History Record routes
@@ -768,6 +846,11 @@ func (a *API) setupRoutes() {
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", a.getProxyLogsForLLM)
 
+	// Export routes (Enterprise feature)
+	v1.POST("/exports", a.startExport)
+	v1.GET("/exports/:id", a.getExport)
+	v1.GET("/exports/:id/download", a.downloadExport)
+
 	// FileStore routes
 	v1.POST("/filestore", a.createFileStore)
 	v1.GET("/filestore/:id", a.getFileStore)
@@ -797,6 +880,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/edges", a.listEdges)
 	v1.GET("/edges/:edge_id", a.getEdge)
 	v1.POST("/edges/:edge_id/reload", a.triggerEdgeReload)
+	v1.POST("/edges/reload-all", a.reloadAllEdges) // CE: works (single namespace), ENT: works (all namespaces)
 	v1.GET("/edges/reload-operations", a.listReloadOperations)
 	v1.GET("/reload-operations/:operation_id/status", a.getReloadOperationStatus)
 	v1.DELETE("/edges/:edge_id", a.deleteEdge)
@@ -806,30 +890,28 @@ func (a *API) setupRoutes() {
 	v1.POST("/namespaces/:namespace/reload", a.triggerNamespaceReload)
 	v1.GET("/namespaces/:namespace/edges", a.getNamespaceEdges)
 
-	// SSO routes
-	if a.config.TIBEnabled {
-		public.GET("/auth/:id/:provider", a.handleTIBAuth)
-		public.POST("/auth/:id/:provider", a.handleTIBAuth)
-		public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
-		public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
-		public.GET("/auth/:id/saml/metadata", a.handleSAMLMetadata)
-		public.POST("/auth/:id/saml/metadata", a.handleSAMLMetadata)
-		public.GET("/sso", a.handleSSO)
-		public.GET("/login-sso-profile", a.getLoginPageProfile)
+	// SSO routes (ENT: full functionality, CE: returns 402 Payment Required)
+	public.GET("/auth/:id/:provider", a.handleTIBAuth)
+	public.POST("/auth/:id/:provider", a.handleTIBAuth)
+	public.GET("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+	public.POST("/auth/:id/:provider/callback", a.handleTIBAuthCallback)
+	public.GET("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+	public.POST("/auth/:id/saml/metadata", a.handleSAMLMetadata)
+	public.GET("/sso", a.handleSSO)
+	public.GET("/login-sso-profile", a.getLoginPageProfile)
 
-		apiGroup := public.Group("/api")
-		apiGroup.Use(a.SSOAuthMiddleware())
-		apiGroup.POST("/sso", a.handleNonceRequest)
+	apiGroup := public.Group("/api")
+	apiGroup.Use(a.SSOAuthMiddleware())
+	apiGroup.POST("/sso", a.handleNonceRequest)
 
-		profiles := v1.Group("/sso-profiles")
-		profiles.Use(a.auth.SSOOnly())
-		profiles.POST("", a.createProfile)
-		profiles.GET("", a.listProfiles)
-		profiles.GET("/:profile_id", a.getProfile)
-		profiles.PUT("/:profile_id", a.updateProfile)
-		profiles.DELETE("/:profile_id", a.deleteProfile)
-		profiles.POST("/:profile_id/use-in-login-page", a.setProfileUseInLoginPage)
-	}
+	profiles := v1.Group("/sso-profiles")
+	profiles.Use(a.auth.SSOOnly())
+	profiles.POST("", a.createProfile)
+	profiles.GET("", a.listProfiles)
+	profiles.GET("/:profile_id", a.getProfile)
+	profiles.PUT("/:profile_id", a.updateProfile)
+	profiles.DELETE("/:profile_id", a.deleteProfile)
+	profiles.POST("/:profile_id/use-in-login-page", a.setProfileUseInLoginPage)
 
 	// Always enable chat features
 	if a.setupChatRoutesFunc != nil {
@@ -877,33 +959,36 @@ func (a *API) handleGetConfig(c *gin.Context) {
 	apiBaseURL := fmt.Sprintf("%s://%s", scheme, host)
 
 	suMode := "both"
-	if config.Get().DefaultSignupMode != "" {
-		suMode = config.Get().DefaultSignupMode
+	if config.Get("").DefaultSignupMode != "" {
+		suMode = config.Get("").DefaultSignupMode
 	}
 
 	// Get branding settings
 	var brandingConfig *BrandingConfig
-	brandingSettings, err := a.service.GetBrandingSettings()
-	if err == nil {
-		brandingConfig = &BrandingConfig{
-			AppTitle:         brandingSettings.AppTitle,
-			PrimaryColor:     brandingSettings.PrimaryColor,
-			SecondaryColor:   brandingSettings.SecondaryColor,
-			BackgroundColor:  brandingSettings.BackgroundColor,
-			CustomCSS:        brandingSettings.CustomCSS,
-			HasCustomLogo:    brandingSettings.HasCustomLogo(),
-			HasCustomFavicon: brandingSettings.HasCustomFavicon(),
+	if a.service != nil {
+		brandingSettings, err := a.service.GetBrandingSettings()
+		if err == nil {
+			brandingConfig = &BrandingConfig{
+				AppTitle:         brandingSettings.AppTitle,
+				PrimaryColor:     brandingSettings.PrimaryColor,
+				SecondaryColor:   brandingSettings.SecondaryColor,
+				BackgroundColor:  brandingSettings.BackgroundColor,
+				CustomCSS:        brandingSettings.CustomCSS,
+				HasCustomLogo:    brandingSettings.HasCustomLogo(),
+				HasCustomFavicon: brandingSettings.HasCustomFavicon(),
+			}
 		}
 	}
 
-	config := FrontendConfig{
+	cfg := FrontendConfig{
 		APIBaseURL:        apiBaseURL,
-		ProxyURL:          config.Get().ProxyURL,
+		ProxyURL:          config.Get("").ProxyURL,
 		DefaultSignUpMode: suMode,
-		TIBEnabled:        a.config.TIBEnabled,
-		DocsLinks:         config.Get().DocsLinks,
+		TIBEnabled:        sso.IsEnterpriseAvailable(),
+		IsEnterprise:      config.IsEnterprise(), // Detect enterprise edition via build tags
+		DocsLinks:         config.Get("").DocsLinks,
 		Branding:          brandingConfig,
 	}
 
-	c.JSON(http.StatusOK, config)
+	c.JSON(http.StatusOK, cfg)
 }

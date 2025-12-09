@@ -29,7 +29,7 @@ func NewEdgeSyncService(db *gorm.DB, namespace string) *EdgeSyncService {
 
 // SyncConfiguration syncs flattened configuration to local SQLite with join table recreation
 func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) error {
-	log.Info().
+	log.Debug().
 		Str("version", config.Version).
 		Str("namespace", s.namespace).
 		Int("llm_count", len(config.Llms)).
@@ -71,12 +71,17 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		return fmt.Errorf("failed to sync ModelPrices: %w", err)
 	}
 
-	// 5. Commit transaction
+	// 5. Sync Model Routers (Enterprise feature)
+	if err := s.syncModelRouters(tx, config.ModelRouters); err != nil {
+		return fmt.Errorf("failed to sync ModelRouters: %w", err)
+	}
+
+	// 6. Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("failed to commit sync transaction: %w", err)
 	}
 
-	log.Info().
+	log.Debug().
 		Str("version", config.Version).
 		Str("namespace", s.namespace).
 		Msg("Configuration sync to local SQLite completed successfully")
@@ -86,7 +91,7 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 
 // clearExistingData clears existing configuration for this namespace
 func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
-	log.Info().Str("namespace", s.namespace).Msg("Clearing existing configuration data")
+	log.Debug().Str("namespace", s.namespace).Msg("Clearing existing configuration data")
 
 	// Clear join tables first (foreign key constraints)
 	if err := tx.Exec("DELETE FROM app_llms WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
@@ -122,13 +127,28 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 		return fmt.Errorf("failed to clear model_prices: %w", err)
 	}
 
-	log.Info().Msg("Existing configuration data cleared")
+	// Clear Model Router tables (cascade from routers to pools to vendors/mappings)
+	// Note: model_mappings now reference vendor_id, so delete via pool_vendors
+	if err := tx.Exec("DELETE FROM model_mappings WHERE vendor_id IN (SELECT id FROM pool_vendors WHERE pool_id IN (SELECT id FROM model_pools WHERE router_id IN (SELECT id FROM model_routers WHERE namespace = ? OR namespace = '')))", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear model_mappings (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM pool_vendors WHERE pool_id IN (SELECT id FROM model_pools WHERE router_id IN (SELECT id FROM model_routers WHERE namespace = ? OR namespace = ''))", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear pool_vendors (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM model_pools WHERE router_id IN (SELECT id FROM model_routers WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear model_pools (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM model_routers WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear model_routers (table may not exist)")
+	}
+
+	log.Debug().Msg("Existing configuration data cleared")
 	return nil
 }
 
 // syncLLMs syncs LLM entities and their join table relationships
 func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
-	log.Info().Int("count", len(llms)).Msg("Syncing LLMs to local SQLite")
+	log.Debug().Int("count", len(llms)).Msg("Syncing LLMs to local SQLite")
 
 	for _, pbLLM := range llms {
 		// Insert main LLM record
@@ -171,10 +191,25 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 			return fmt.Errorf("failed to insert LLM %d: %w", pbLLM.Id, err)
 		}
 
+		// Create llm_filters join table entries for this LLM
+		for i, filterID := range pbLLM.FilterIds {
+			llmFilter := map[string]interface{}{
+				"llm_id":      pbLLM.Id,
+				"filter_id":   filterID,
+				"is_active":   true,
+				"order_index": i,
+				"created_at":  time.Now(),
+			}
+			if err := tx.Table("llm_filters").Create(llmFilter).Error; err != nil {
+				return fmt.Errorf("failed to create llm_filter for LLM %d, Filter %d: %w", pbLLM.Id, filterID, err)
+			}
+		}
+
 		log.Debug().
 			Uint32("llm_id", pbLLM.Id).
 			Str("llm_slug", pbLLM.Slug).
-			Msg("LLM synced to SQLite")
+			Int("filter_count", len(pbLLM.FilterIds)).
+			Msg("LLM synced to SQLite with filters")
 	}
 
 	return nil
@@ -182,7 +217,7 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 
 // syncApps syncs App entities and recreates app_llms join table - THE CRITICAL PART
 func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
-	log.Info().Int("count", len(apps)).Msg("Syncing Apps to local SQLite")
+	log.Debug().Int("count", len(apps)).Msg("Syncing Apps to local SQLite")
 
 	for _, pbApp := range apps {
 		// Insert main App record
@@ -253,19 +288,20 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 
 // syncFilters syncs Filter entities
 func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) error {
-	log.Info().Int("count", len(filters)).Msg("Syncing Filters to local SQLite")
+	log.Debug().Int("count", len(filters)).Msg("Syncing Filters to local SQLite")
 
 	for _, pbFilter := range filters {
 		filter := &database.Filter{
-			ID:          uint(pbFilter.Id),
-			Name:        pbFilter.Name,
-			Description: pbFilter.Description,
-			Script:      pbFilter.Script,
-			IsActive:    pbFilter.IsActive,
-			OrderIndex:  int(pbFilter.OrderIndex),
-			Namespace:   pbFilter.Namespace,
-			CreatedAt:   pbFilter.CreatedAt.AsTime(),
-			UpdatedAt:   pbFilter.UpdatedAt.AsTime(),
+			ID:             uint(pbFilter.Id),
+			Name:           pbFilter.Name,
+			Description:    pbFilter.Description,
+			Script:         pbFilter.Script,
+			ResponseFilter: pbFilter.ResponseFilter,
+			IsActive:       pbFilter.IsActive,
+			OrderIndex:     int(pbFilter.OrderIndex),
+			Namespace:      pbFilter.Namespace,
+			CreatedAt:      pbFilter.CreatedAt.AsTime(),
+			UpdatedAt:      pbFilter.UpdatedAt.AsTime(),
 		}
 
 		if err := tx.Create(filter).Error; err != nil {
@@ -273,6 +309,7 @@ func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) e
 		}
 
 		// Recreate llm_filters join table relationships
+		// Use FirstOrCreate to avoid duplicate key violations since LLMs may have already created these entries
 		for _, llmID := range pbFilter.LlmIds {
 			llmFilter := &database.LLMFilter{
 				LLMID:      uint(llmID),
@@ -281,7 +318,9 @@ func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) e
 				OrderIndex: int(pbFilter.OrderIndex),
 			}
 
-			if err := tx.Create(llmFilter).Error; err != nil {
+			// Use FirstOrCreate to handle cases where the relationship was already created by LLM sync
+			if err := tx.Where("llm_id = ? AND filter_id = ?", llmID, pbFilter.Id).
+				FirstOrCreate(llmFilter).Error; err != nil {
 				return fmt.Errorf("failed to create llm_filter relationship (llm=%d, filter=%d): %w", llmID, pbFilter.Id, err)
 			}
 		}
@@ -290,9 +329,9 @@ func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) e
 	return nil
 }
 
-// syncPlugins syncs Plugin entities  
+// syncPlugins syncs Plugin entities
 func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) error {
-	log.Info().Int("count", len(plugins)).Msg("Syncing Plugins to local SQLite")
+	log.Debug().Int("count", len(plugins)).Msg("Syncing Plugins to local SQLite")
 
 	for _, pbPlugin := range plugins {
 		plugin := &database.Plugin{
@@ -354,7 +393,7 @@ func (s *EdgeSyncService) syncPlugins(tx *gorm.DB, plugins []*pb.PluginConfig) e
 
 // syncModelPrices syncs ModelPrice entities
 func (s *EdgeSyncService) syncModelPrices(tx *gorm.DB, modelPrices []*pb.ModelPriceConfig) error {
-	log.Info().Int("count", len(modelPrices)).Msg("Syncing Model Prices to local SQLite")
+	log.Debug().Int("count", len(modelPrices)).Msg("Syncing Model Prices to local SQLite")
 
 	for _, pbPrice := range modelPrices {
 		// Insert ModelPrice record
@@ -383,6 +422,90 @@ func (s *EdgeSyncService) syncModelPrices(tx *gorm.DB, modelPrices []*pb.ModelPr
 			Str("vendor", pbPrice.Vendor).
 			Str("model", pbPrice.ModelName).
 			Msg("Model price synced to SQLite")
+	}
+
+	return nil
+}
+
+// syncModelRouters syncs ModelRouter entities (Enterprise feature)
+func (s *EdgeSyncService) syncModelRouters(tx *gorm.DB, modelRouters []*pb.ModelRouterConfig) error {
+	log.Debug().Int("count", len(modelRouters)).Msg("Syncing Model Routers to local SQLite")
+
+	for _, pbRouter := range modelRouters {
+		// Insert ModelRouter record
+		router := &database.ModelRouter{
+			ID:          uint(pbRouter.Id),
+			Name:        pbRouter.Name,
+			Slug:        pbRouter.Slug,
+			Description: pbRouter.Description,
+			APICompat:   pbRouter.ApiCompat,
+			IsActive:    pbRouter.IsActive,
+			Namespace:   pbRouter.Namespace,
+			CreatedAt:   pbRouter.CreatedAt.AsTime(),
+			UpdatedAt:   pbRouter.UpdatedAt.AsTime(),
+		}
+
+		if err := tx.Create(router).Error; err != nil {
+			return fmt.Errorf("failed to insert ModelRouter %d: %w", pbRouter.Id, err)
+		}
+
+		// Insert pools for this router
+		for _, pbPool := range pbRouter.Pools {
+			pool := &database.ModelPool{
+				ID:                 uint(pbPool.Id),
+				RouterID:           uint(pbRouter.Id),
+				Name:               pbPool.Name,
+				ModelPattern:       pbPool.ModelPattern,
+				SelectionAlgorithm: pbPool.SelectionAlgorithm,
+				Priority:           int(pbPool.Priority),
+				CreatedAt:          time.Now(),
+				UpdatedAt:          time.Now(),
+			}
+
+			if err := tx.Create(pool).Error; err != nil {
+				return fmt.Errorf("failed to insert ModelPool %d for router %d: %w", pbPool.Id, pbRouter.Id, err)
+			}
+
+			// Insert vendors for this pool (with their mappings)
+			for _, pbVendor := range pbPool.Vendors {
+				vendor := &database.PoolVendor{
+					ID:        uint(pbVendor.Id),
+					PoolID:    uint(pbPool.Id),
+					LLMID:     uint(pbVendor.LlmId),
+					LLMSlug:   pbVendor.LlmSlug,
+					Weight:    int(pbVendor.Weight),
+					IsActive:  pbVendor.IsActive,
+					CreatedAt: time.Now(),
+					UpdatedAt: time.Now(),
+				}
+
+				if err := tx.Create(vendor).Error; err != nil {
+					return fmt.Errorf("failed to insert PoolVendor %d for pool %d: %w", pbVendor.Id, pbPool.Id, err)
+				}
+
+				// Insert vendor-specific mappings
+				for _, pbMapping := range pbVendor.Mappings {
+					mapping := &database.ModelMapping{
+						ID:          uint(pbMapping.Id),
+						VendorID:    uint(pbVendor.Id),
+						SourceModel: pbMapping.SourceModel,
+						TargetModel: pbMapping.TargetModel,
+						CreatedAt:   time.Now(),
+						UpdatedAt:   time.Now(),
+					}
+
+					if err := tx.Create(mapping).Error; err != nil {
+						return fmt.Errorf("failed to insert ModelMapping %d for vendor %d: %w", pbMapping.Id, pbVendor.Id, err)
+					}
+				}
+			}
+		}
+
+		log.Debug().
+			Uint32("router_id", pbRouter.Id).
+			Str("router_slug", pbRouter.Slug).
+			Int("pool_count", len(pbRouter.Pools)).
+			Msg("Model Router synced to SQLite")
 	}
 
 	return nil

@@ -47,6 +47,7 @@ type AIStudioManagementServer struct {
 	vendorsServer       *VendorsServer
 	modelPricingServer  *ModelPricingServer
 	pluginKVServer      *PluginKVServer
+	schedulerServer     *SchedulerServer
 
 	// Note: Analytics server removed - analytics functionality not available to plugins
 
@@ -121,6 +122,7 @@ func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementS
 		vendorsServer:       NewVendorsServer(service),
 		modelPricingServer:  NewModelPricingServer(service),
 		pluginKVServer:      NewPluginKVServer(pluginKVService),
+		schedulerServer:     NewSchedulerServer(service),
 		service:            service,
 		// Note: Analytics server removed - analytics functionality not available to plugins
 	}
@@ -164,6 +166,10 @@ func (s *AIStudioManagementServer) UpdateLLM(ctx context.Context, req *pb.Update
 
 func (s *AIStudioManagementServer) DeleteLLM(ctx context.Context, req *pb.DeleteLLMRequest) (*pb.DeleteLLMResponse, error) {
 	return s.llmServer.DeleteLLM(ctx, req)
+}
+
+func (s *AIStudioManagementServer) UpdateLLMPlugins(ctx context.Context, req *pb.UpdateLLMPluginsRequest) (*pb.UpdateLLMPluginsResponse, error) {
+	return s.llmServer.UpdateLLMPlugins(ctx, req)
 }
 
 // Analytics Operations are not available to plugins
@@ -495,8 +501,48 @@ func (s *AIStudioManagementServer) DeleteDatasource(ctx context.Context, req *pb
 	return s.datasourcesServer.DeleteDatasource(ctx, req)
 }
 
+func (s *AIStudioManagementServer) CloneDatasource(ctx context.Context, req *pb.CloneDatasourceRequest) (*pb.CloneDatasourceResponse, error) {
+	return s.datasourcesServer.CloneDatasource(ctx, req)
+}
+
 func (s *AIStudioManagementServer) ProcessDatasourceEmbeddings(ctx context.Context, req *pb.ProcessEmbeddingsRequest) (*pb.ProcessEmbeddingsResponse, error) {
 	return s.datasourcesServer.ProcessDatasourceEmbeddings(ctx, req)
+}
+
+// === RAG/Embedding Operations ===
+
+func (s *AIStudioManagementServer) GenerateEmbedding(ctx context.Context, req *pb.GenerateEmbeddingRequest) (*pb.GenerateEmbeddingResponse, error) {
+	return s.datasourcesServer.GenerateEmbedding(ctx, req)
+}
+
+func (s *AIStudioManagementServer) StoreDocuments(ctx context.Context, req *pb.StoreDocumentsRequest) (*pb.StoreDocumentsResponse, error) {
+	return s.datasourcesServer.StoreDocuments(ctx, req)
+}
+
+func (s *AIStudioManagementServer) ProcessAndStoreDocuments(ctx context.Context, req *pb.ProcessAndStoreRequest) (*pb.ProcessAndStoreResponse, error) {
+	return s.datasourcesServer.ProcessAndStoreDocuments(ctx, req)
+}
+
+func (s *AIStudioManagementServer) QueryDatasourceByVector(ctx context.Context, req *pb.QueryByVectorRequest) (*pb.QueryDatasourceResponse, error) {
+	return s.datasourcesServer.QueryDatasourceByVector(ctx, req)
+}
+
+// Advanced Datasource Operations - Metadata and Namespace Management
+
+func (s *AIStudioManagementServer) DeleteDocumentsByMetadata(ctx context.Context, req *pb.DeleteDocumentsByMetadataRequest) (*pb.DeleteDocumentsByMetadataResponse, error) {
+	return s.datasourcesServer.DeleteDocumentsByMetadata(ctx, req)
+}
+
+func (s *AIStudioManagementServer) QueryByMetadataOnly(ctx context.Context, req *pb.QueryByMetadataOnlyRequest) (*pb.QueryByMetadataOnlyResponse, error) {
+	return s.datasourcesServer.QueryByMetadataOnly(ctx, req)
+}
+
+func (s *AIStudioManagementServer) ListNamespaces(ctx context.Context, req *pb.ListNamespacesRequest) (*pb.ListNamespacesResponse, error) {
+	return s.datasourcesServer.ListNamespaces(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteNamespace(ctx context.Context, req *pb.DeleteNamespaceRequest) (*pb.DeleteNamespaceResponse, error) {
+	return s.datasourcesServer.DeleteNamespace(ctx, req)
 }
 
 func (s *AIStudioManagementServer) UpdateDataCatalogue(ctx context.Context, req *pb.UpdateDataCatalogueRequest) (*pb.UpdateDataCatalogueResponse, error) {
@@ -779,36 +825,37 @@ func (s *AIStudioManagementServer) QueryDatasource(ctx context.Context, req *pb.
 		return nil, err
 	}
 
-	// Load agent config for this plugin with App.Datasources preloaded
+	// Try to load agent config for this plugin (for agent plugins)
+	// If not found, allow querying any datasource (for non-agent plugins like service-api-test)
+	datasourceID := req.GetDatasourceId()
 	var agentConfig models.AgentConfig
 	if err := s.service.GetDB().
 		Preload("App.Datasources").
 		Preload("App.Credential").
 		Where("plugin_id = ?", plugin.ID).
-		First(&agentConfig).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, status.Errorf(codes.NotFound, "no agent configuration found for plugin")
+		First(&agentConfig).Error; err == nil {
+		// This is an agent plugin - verify datasource is in app's allowed datasources
+		datasourceAllowed := false
+		for _, ds := range agentConfig.App.Datasources {
+			if ds.ID == uint(datasourceID) {
+				datasourceAllowed = true
+				break
+			}
 		}
+		if !datasourceAllowed {
+			log.Warn().
+				Uint32("datasource_id", datasourceID).
+				Uint("app_id", agentConfig.App.ID).
+				Msg("Datasource not allowed for agent's app")
+			return nil, status.Errorf(codes.PermissionDenied, "datasource not allowed for this agent")
+		}
+		log.Debug().Uint("agent_id", agentConfig.ID).Msg("Agent plugin querying datasource")
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		// Unexpected error loading agent config
 		log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to load agent config")
 		return nil, status.Errorf(codes.Internal, "failed to load agent configuration")
 	}
-
-	// Verify datasource is in app's allowed datasources
-	datasourceID := req.GetDatasourceId()
-	datasourceAllowed := false
-	for _, ds := range agentConfig.App.Datasources {
-		if ds.ID == uint(datasourceID) {
-			datasourceAllowed = true
-			break
-		}
-	}
-	if !datasourceAllowed {
-		log.Warn().
-			Uint32("datasource_id", datasourceID).
-			Uint("app_id", agentConfig.App.ID).
-			Msg("Datasource not allowed for agent's app")
-		return nil, status.Errorf(codes.PermissionDenied, "datasource not allowed for this agent")
-	}
+	// If RecordNotFound, this is a non-agent plugin (like service-api-test) - allow access
 
 	// Load the datasource for RAG query
 	var datasource models.Datasource
@@ -1212,4 +1259,79 @@ func getStringFromMap(m map[string]interface{}, key string) string {
 		}
 	}
 	return ""
+}
+
+// Schedule Management Operations - delegate to scheduler server
+
+func (s *AIStudioManagementServer) CreateSchedule(ctx context.Context, req *pb.CreateScheduleRequest) (*pb.CreateScheduleResponse, error) {
+	return s.schedulerServer.CreateSchedule(ctx, req)
+}
+
+// GetLicenseInfo returns license information for plugins to check enterprise features
+// This is a special RPC that doesn't require scope validation - all plugins can check license status
+func (s *AIStudioManagementServer) GetLicenseInfo(ctx context.Context, req *pb.GetLicenseInfoRequest) (*pb.GetLicenseInfoResponse, error) {
+	// Get licensing service from main service
+	licensingSvc := s.service.LicensingService
+	if licensingSvc == nil {
+		// No licensing service means community edition
+		log.Debug().Msg("GetLicenseInfo called but no licensing service configured (community mode)")
+		return &pb.GetLicenseInfoResponse{
+			LicenseValid:   true, // Community is always "valid"
+			DaysRemaining:  -1,   // -1 means never expires
+			LicenseType:    "community",
+			Entitlements:   []string{},
+			Organization:   "",
+			ExpiresAt:      nil,
+		}, nil
+	}
+
+	// Get license info from the licensing service
+	licenseInfo := licensingSvc.GetLicenseInfo()
+	isValid := licensingSvc.IsValid()
+	daysLeft := licensingSvc.DaysLeft()
+
+	// Build response
+	resp := &pb.GetLicenseInfoResponse{
+		LicenseValid:  isValid,
+		DaysRemaining: int32(daysLeft),
+		LicenseType:   "community", // Default to community
+	}
+
+	if licenseInfo != nil {
+		// Enterprise license present
+		resp.LicenseType = "enterprise"
+		resp.ExpiresAt = timestamppb.New(licenseInfo.ExpiresAt)
+
+		// Extract entitlement names
+		var entitlements []string
+		for name := range licenseInfo.Features {
+			entitlements = append(entitlements, name)
+		}
+		resp.Entitlements = entitlements
+	}
+
+	log.Debug().
+		Bool("license_valid", resp.LicenseValid).
+		Int32("days_remaining", resp.DaysRemaining).
+		Str("license_type", resp.LicenseType).
+		Int("entitlement_count", len(resp.Entitlements)).
+		Msg("GetLicenseInfo called by plugin")
+
+	return resp, nil
+}
+
+func (s *AIStudioManagementServer) GetSchedule(ctx context.Context, req *pb.GetScheduleRequest) (*pb.GetScheduleResponse, error) {
+	return s.schedulerServer.GetSchedule(ctx, req)
+}
+
+func (s *AIStudioManagementServer) ListSchedules(ctx context.Context, req *pb.ListSchedulesRequest) (*pb.ListSchedulesResponse, error) {
+	return s.schedulerServer.ListSchedules(ctx, req)
+}
+
+func (s *AIStudioManagementServer) UpdateSchedule(ctx context.Context, req *pb.UpdateScheduleRequest) (*pb.UpdateScheduleResponse, error) {
+	return s.schedulerServer.UpdateSchedule(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteSchedule(ctx context.Context, req *pb.DeleteScheduleRequest) (*pb.DeleteScheduleResponse, error) {
+	return s.schedulerServer.DeleteSchedule(ctx, req)
 }

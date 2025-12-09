@@ -44,7 +44,7 @@ const BaseDrawer = ({
         <ToggleButton onClick={handleDrawerToggle}>
           {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
         </ToggleButton>
-        <MenuList customMarginTop={customStyles.marginTop}>
+        <MenuList customMarginTop={customStyles.marginTop} open={open}>
           <List>
             {menuItems.map((item, index) => (
               <MenuItem

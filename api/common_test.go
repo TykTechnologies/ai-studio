@@ -126,6 +126,8 @@ func TestCommon_TestGetDataCatalogueDatasources(t *testing.T) {
 }
 
 func TestCommon_TestGetToolCatalogueTools(t *testing.T) {
+	t.Skip("Tool catalogues are enterprise-only - test should be in enterprise-tagged file")
+
 	api, _, _ := setupTestAPIForCommonTests(t)
 
 	// Create a test user and tool catalogue
@@ -650,4 +652,68 @@ func TestCommon_GetUserAppDetailsWithTools(t *testing.T) {
 	assert.Equal(t, createdAppResp.ID, appDetailResp.ID)
 	assert.Contains(t, appDetailResp.Attributes.ToolIDs, toolB.ID)
 	assert.Len(t, appDetailResp.Attributes.ToolIDs, 1)
+}
+
+// Additional test fixtures for edge, plugin, agent, and branding tests
+
+func createTestEdge(t *testing.T, service *services.Service, edgeID, namespace string) *models.EdgeInstance {
+	edge := &models.EdgeInstance{
+		EdgeID:    edgeID,
+		Namespace: namespace,
+		Version:   "1.0.0",
+		BuildHash: "test-hash",
+		Status:    "active",
+	}
+	err := service.DB.Create(edge).Error
+	assert.NoError(t, err)
+	return edge
+}
+
+func createTestPlugin(t *testing.T, service *services.Service, name, hookType string) *models.Plugin {
+	plugin := &models.Plugin{
+		Name:        name,
+		Description: "Test Plugin",
+		Command:     "/usr/bin/test-plugin",
+		HookType:    hookType,
+		IsActive:    true,
+	}
+	err := service.DB.Create(plugin).Error
+	assert.NoError(t, err)
+	return plugin
+}
+
+func createTestApp(t *testing.T, service *services.Service, name string) *models.App {
+	app := &models.App{
+		Name:        name,
+		Description: "Test App",
+		IsActive:    true,
+	}
+	err := service.DB.Create(app).Error
+	assert.NoError(t, err)
+	return app
+}
+
+func createTestAgentConfig(t *testing.T, service *services.Service, pluginID, appID uint) *models.AgentConfig {
+	agent := &models.AgentConfig{
+		Name:        "Test Agent",
+		Description: "Test Agent Config",
+		PluginID:    pluginID,
+		AppID:       appID,
+		IsActive:    true,
+	}
+	err := service.DB.Create(agent).Error
+	assert.NoError(t, err)
+	return agent
+}
+
+func createTestBrandingSettings(t *testing.T, service *services.Service) *models.BrandingSettings {
+	branding := &models.BrandingSettings{
+		AppTitle:        "Test App",
+		PrimaryColor:    "#000000",
+		SecondaryColor:  "#ffffff",
+		BackgroundColor: "#f0f0f0",
+	}
+	err := service.DB.Save(branding).Error
+	assert.NoError(t, err)
+	return branding
 }

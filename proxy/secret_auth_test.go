@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 func TestSecretReferenceInAuthHeader(t *testing.T) {
@@ -28,7 +29,7 @@ func TestSecretReferenceInAuthHeader(t *testing.T) {
 	// Initialize services
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 
 	// Initialize secrets
 	secrets.SetDBRef(db)

@@ -27,7 +27,7 @@ type HubSpokeServiceContainer struct {
 
 // NewHubSpokeServiceContainer creates a service container with hub-and-spoke support
 func NewHubSpokeServiceContainer(db *gorm.DB, cfg *config.Config) (*HubSpokeServiceContainer, error) {
-	log.Info().
+	log.Debug().
 		Str("gateway_mode", cfg.HubSpoke.Mode).
 		Msg("Creating hub-spoke service container")
 
@@ -57,7 +57,7 @@ func NewHubSpokeServiceContainer(db *gorm.DB, cfg *config.Config) (*HubSpokeServ
 		return nil, fmt.Errorf("failed to initialize mode-specific components: %w", err)
 	}
 
-	log.Info().
+	log.Debug().
 		Str("gateway_mode", cfg.HubSpoke.Mode).
 		Str("provider_type", string(configProvider.GetProviderType())).
 		Msg("Hub-spoke service container created successfully")
@@ -87,7 +87,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	filterService = NewFilterService(db, repo)
 	pluginService = NewPluginService(db, repo)
 	
-	log.Info().
+	log.Debug().
 		Str("provider_type", string(configProvider.GetProviderType())).
 		Msg("Using full database services (edge instances now use synced SQLite)")
 
@@ -95,6 +95,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 
 	// Create plugin service adapter
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
+	pluginServiceAdapter.SetManagementService(management) // Enable LLM-based plugin pre-warming
 
 	// Initialize plugin manager with OCI support if configured
 	var pluginManager *plugins.PluginManager
@@ -108,7 +109,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
 			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
 		} else {
-			log.Info().
+			log.Debug().
 				Str("cache_dir", ociConfig.CacheDir).
 				Int("public_keys", len(ociConfig.DefaultPublicKeys)).
 				Bool("require_signature", ociConfig.RequireSignature).
@@ -117,13 +118,13 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	} else {
 		// Standard plugin manager
 		pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
-		log.Info().Msg("OCI plugin support disabled in hub-spoke container")
+		log.Debug().Msg("OCI plugin support disabled in hub-spoke container")
 	}
 	
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
-		log.Info().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins...")
-		
+		log.Debug().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins")
+
 		ctx := context.Background()
 		if err = cfg.LoadPluginConfig(ctx); err != nil {
 			log.Error().Err(err).Msg("Failed to load plugin configuration")
@@ -131,7 +132,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 			if err := pluginManager.LoadGlobalDataCollectionPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
 				log.Error().Err(err).Msg("Failed to load global data collection plugins")
 			} else {
-				log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded")
+				log.Debug().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded")
 			}
 		}
 	}
@@ -151,7 +152,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	} else {
 		// Edge: use HybridGatewayService - DatabaseGatewayService + on-demand token validation
 		gatewayService = NewHybridGatewayService(db, repo, cfg.HubSpoke.EdgeNamespace, cfg.HubSpoke)
-		log.Info().Msg("Edge instance using HybridGatewayService with synced SQLite + on-demand token validation")
+		log.Debug().Msg("Edge instance using HybridGatewayService with synced SQLite + on-demand token validation")
 	}
 	
 	// Always use full database services since edge instances now sync to SQLite
@@ -169,7 +170,18 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 
 	// Connect management server to plugin manager for bidirectional plugin communication
 	pluginManager.SetManagementServer(managementServer)
-	log.Info().Msg("✅ Management server connected to plugin manager - plugins can now access service API")
+	log.Debug().Msg("Management server connected to plugin manager")
+
+	// Initialize Model Router Service (Enterprise feature)
+	modelRouterService := NewModelRouterService(db)
+	// Load routers from database - namespace will be used for edge filtering
+	namespace := cfg.HubSpoke.EdgeNamespace
+	if err := modelRouterService.LoadRouters(namespace); err != nil {
+		log.Warn().Err(err).Msg("Failed to load model routers (Enterprise feature may not be enabled)")
+		// Don't fail - model routers are optional
+	} else {
+		log.Debug().Int("router_count", modelRouterService.GetRouterCount()).Msg("Model routers loaded in hub-spoke container")
+	}
 
 	return &ServiceContainer{
 		DB:         db,
@@ -187,7 +199,12 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		AuthProvider: authProvider,
 		Crypto:       crypto,
 
-		PluginManager: pluginManager,
+		PluginManager:      pluginManager,
+		ModelRouterService: modelRouterService,
+
+		// Edge identity from config
+		EdgeID:        cfg.HubSpoke.EdgeID,
+		EdgeNamespace: cfg.HubSpoke.EdgeNamespace,
 	}, nil
 }
 
@@ -208,26 +225,26 @@ func (h *HubSpokeServiceContainer) initializeModeSpecificComponents(cfg *config.
 
 // initializeControlComponents initializes control instance specific components
 func (h *HubSpokeServiceContainer) initializeControlComponents(cfg *config.Config) error {
-	log.Info().Msg("Initializing control instance components")
+	log.Debug().Msg("Initializing control instance components")
 
 	// Control server will be created and managed at the main application level
-	log.Info().
+	log.Debug().
 		Int("grpc_port", cfg.HubSpoke.GRPCPort).
 		Msg("Control instance components initialized")
 
 	return nil
 }
 
-// initializeEdgeComponents initializes edge instance specific components  
+// initializeEdgeComponents initializes edge instance specific components
 func (h *HubSpokeServiceContainer) initializeEdgeComponents(cfg *config.Config) error {
-	log.Info().Msg("Initializing edge instance components")
+	log.Debug().Msg("Initializing edge instance components")
 
 	// Edge client will be managed at the main application level
 	if _, ok := h.ConfigProvider.(*providers.GRPCProvider); ok {
-		log.Info().Msg("Edge client will be managed at main application level")
+		log.Debug().Msg("Edge client will be managed at main application level")
 	}
 
-	log.Info().
+	log.Debug().
 		Str("control_endpoint", cfg.HubSpoke.ControlEndpoint).
 		Str("edge_namespace", cfg.HubSpoke.EdgeNamespace).
 		Msg("Edge instance components initialized")
@@ -239,14 +256,14 @@ func (h *HubSpokeServiceContainer) initializeEdgeComponents(cfg *config.Config) 
 func (h *HubSpokeServiceContainer) StartHubSpokeServices(ctx context.Context) error {
 	// Hub-and-spoke services are managed at the main application level
 	// to avoid circular import dependencies
-	log.Info().Msg("Hub-spoke service container ready")
+	log.Debug().Msg("Hub-spoke service container ready")
 	return nil
 }
 
 // StopHubSpokeServices stops hub-and-spoke specific services
 func (h *HubSpokeServiceContainer) StopHubSpokeServices() {
 	// Hub-and-spoke services are managed at the main application level
-	log.Info().Msg("Hub-spoke service container stopped")
+	log.Debug().Msg("Hub-spoke service container stopped")
 }
 
 // GetHubSpokeStats returns hub-and-spoke specific statistics

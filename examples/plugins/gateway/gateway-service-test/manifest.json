@@ -14,7 +14,8 @@
       "budget.read",
       "pricing.read",
       "credentials.validate",
-      "kv.readwrite"
+      "kv.readwrite",
+      "control.send"
     ]
   },
   "compat": {

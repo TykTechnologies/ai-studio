@@ -44,6 +44,11 @@ func (a *BudgetServiceAdapter) CheckBudget(app *models.App, llm *models.LLM) (fl
 		return 0, 0, err
 	}
 
+	// Handle nil status (Community Edition returns nil)
+	if status == nil {
+		return 0, 0, nil // No budget enforcement in CE
+	}
+
 	// Return current usage and budget limit
 	currentUsage := status.CurrentUsage
 	budgetLimit := status.MonthlyBudget

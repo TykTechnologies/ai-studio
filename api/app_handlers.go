@@ -560,12 +560,13 @@ func (a *API) deactivateAppCredential(c *gin.Context) {
 }
 
 // @Summary List all apps
-// @Description Get a list of all apps
+// @Description Get a list of all apps, optionally filtered by search term
 // @Tags apps
 // @Accept json
 // @Produce json
 // @Param page query int false "Page number"
 // @Param page_size query int false "Page size"
+// @Param search query string false "Search term (searches name, description, and user)"
 // @Success 200 {array} AppResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /apps [get]
@@ -573,8 +574,19 @@ func (a *API) deactivateAppCredential(c *gin.Context) {
 func (a *API) listApps(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
 	sort := c.Query("sort")
+	searchTerm := c.Query("search")
 
-	apps, totalCount, totalPages, err := a.service.ListAppsWithPagination(pageSize, pageNumber, all, sort)
+	var apps models.Apps
+	var totalCount int64
+	var totalPages int
+	var err error
+
+	if searchTerm != "" {
+		apps, totalCount, totalPages, err = a.service.SearchApps(searchTerm, pageSize, pageNumber, all, sort)
+	} else {
+		apps, totalCount, totalPages, err = a.service.ListAppsWithPagination(pageSize, pageNumber, all, sort)
+	}
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

@@ -12,11 +12,6 @@ func RunToolTests(ctx context.Context) ([]TestResult, []uint32) {
 	return []TestResult{}, []uint32{}
 }
 
-func RunDatasourceTests(ctx context.Context) ([]TestResult, []uint32) {
-	// TODO: Datasources require embedding configuration - needs more setup
-	return []TestResult{}, []uint32{}
-}
-
 func RunDataCatalogueTests(ctx context.Context) ([]TestResult, []uint32) {
 	// TODO: Data Catalogues can be implemented similar to tags
 	return []TestResult{}, []uint32{}

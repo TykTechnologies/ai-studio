@@ -58,6 +58,9 @@ const Drawer = () => {
       subItems: [
         { id: 'marketplace', text: 'Marketplace', path: '/admin/marketplace' },
         { id: 'plugin-list', text: 'Installed Plugins', path: '/admin/plugins' },
+        ...(config?.is_enterprise
+          ? [{ id: 'marketplace-settings', text: 'Marketplace Sources', path: '/admin/marketplace-settings' }]
+          : []),
       ],
     },
     {
@@ -67,6 +70,9 @@ const Drawer = () => {
       subItems: [
         { id: 'llms', text: 'LLM providers', path: '/admin/llms' },
         { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices' },
+        ...(features.feature_model_router
+          ? [{ id: 'model-routers', text: 'Model Routers', path: '/admin/model-routers' }]
+          : []),
       ],
     },
     {
@@ -86,15 +92,17 @@ const Drawer = () => {
       icon: <Icon name="shield" />,
       subItems: [
         { id: 'users', text: 'Users', path: '/admin/users' },
-        ...(!features.feature_gateway ||
+        ...(features.feature_groups && (!features.feature_gateway ||
         features.feature_portal ||
-        features.feature_chat
+        features.feature_chat)
           ? [{ id: 'groups', text: 'Teams', path: '/admin/groups' }]
           : []),
         ...(uiOptions?.show_sso_config && config?.tibEnabled
           ? [{ id: 'sso-profiles', text: 'Identity providers', path: '/admin/sso-profiles' }]
           : []),
-        { id: 'filters', text: 'Filters & Middleware', path: '/admin/filters' },
+        ...(config?.is_enterprise
+          ? [{ id: 'filters', text: 'Filters', path: '/admin/filters' }]
+          : []),
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets' },
         { id: 'branding', text: 'Branding', path: '/admin/branding' },
       ],
@@ -138,7 +146,7 @@ const Drawer = () => {
           },
         ]
       : []),
-    ...((features.feature_portal || features.feature_chat)
+    ...(features.feature_groups && (features.feature_portal || features.feature_chat)
       ? [
           {
             id: 'catalogs',

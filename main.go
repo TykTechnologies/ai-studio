@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"os/signal"
 	"strconv"
@@ -27,8 +28,13 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
+	"github.com/TykTechnologies/midsommar/v2/services/licensing"
+	"github.com/TykTechnologies/midsommar/v2/services/log_export"
+	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
 	"github.com/TykTechnologies/midsommar/v2/startup"
+
 	"github.com/go-mail/mail"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -39,14 +45,18 @@ var staticFiles embed.FS
 
 func printWelcome() {
 	fmt.Printf("Starting Tyk AI Portal %v\n", "v2.0-hub-spoke")
-	fmt.Println("Copyright Tyk Technologies, 2024")
+	fmt.Printf("Copyright Tyk Technologies, %s\n", time.Now().Format("2006"))
 }
 
 func main() {
 	printWelcome()
 
+	// Parse command-line flags
+	envFile := flag.String("env", "", "Path to environment file (default: .env in current directory)")
+	flag.Parse()
+
 	// Get configuration first to initialize logger with correct level
-	appConf := config.Get()
+	appConf := config.Get(*envFile)
 
 	// Initialize logger with configured level
 	logger.Init(appConf.LogLevel)
@@ -67,7 +77,7 @@ func main() {
 		logger.Fatalf("Unsupported database type: %s", appConf.DatabaseType)
 	}
 
-	db, err := gorm.Open(dialector, &gorm.Config{})
+	db, err := gorm.Open(dialector, logger.GetGormConfig())
 	if err != nil {
 		logger.FatalErr("Failed to connect to database", err)
 	}
@@ -89,6 +99,27 @@ func main() {
 		logger.FatalErr("Failed to initialize models", err)
 	}
 
+	// Ensure default group and catalogues exist and are linked
+	if err := ensureDefaults(db); err != nil {
+		logger.FatalErr("Failed to ensure default group and catalogues", err)
+	}
+
+	// Initialize and start licensing service (ENT: validates license, starts periodic checks)
+	licensingConfig := licensing.Config{
+		LicenseKey:           appConf.LicenseKey,
+		TelemetryURL:         appConf.LicenseTelemetryURL,
+		TelemetryPeriod:      appConf.LicenseTelemetryPeriod,
+		TelemetryDisabled:    appConf.LicenseDisableTelemetry,
+		ValidityCheckPeriod:  appConf.LicenseValidityPeriod,
+		TelemetryConcurrency: appConf.LicenseTelemetryConcurrency,
+	}
+	licensingService := licensing.NewService(licensingConfig, db)
+	if err := licensingService.Start(); err != nil {
+		logger.FatalErr("Failed to start licensing service", err)
+	}
+	defer licensingService.Stop()
+	logger.Info("Licensing service initialized")
+
 	// Initialize branding storage directory
 	brandingStoragePath := services.GetBrandingStoragePath()
 	_, err = services.NewBrandingFileStorage(brandingStoragePath)
@@ -102,26 +133,22 @@ func main() {
 	var ociConfig *ociplugins.OCIConfig
 	if appConf.OCIPlugins.IsEnabled() {
 		ociConfig = appConf.OCIPlugins.ToOCILibConfig()
-		logger.Infof("OCI plugin support enabled - cache dir: %s", appConf.OCIPlugins.CacheDir)
+		logger.Debugf("OCI plugin support enabled - cache dir: %s", appConf.OCIPlugins.CacheDir)
 	} else {
-		logger.Info("OCI plugin support disabled - set AI_STUDIO_OCI_CACHE_DIR to enable")
+		logger.Debug("OCI plugin support disabled - set AI_STUDIO_OCI_CACHE_DIR to enable")
 	}
 
 	service := services.NewServiceWithOCI(db, ociConfig)
 
-	// Load AI Studio plugins at startup (UI, Agent, and Object Hooks)
-	if service.AIStudioPluginManager != nil {
-		logger.Info("Loading AI Studio plugins (UI, Agent, Object Hooks)...")
-		if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
-			logger.Warnf("Failed to load some AI Studio plugins: %v", err)
-		} else {
-			logger.Info("AI Studio plugins loaded successfully")
-		}
-	}
+	// Wire licensing service to main service for plugin license checks
+	service.SetLicensingService(licensingService)
+
+	// NOTE: Plugin loading is deferred until after the event bus is wired (see below)
+	// This ensures plugins can subscribe to events during initialization
 
 	// Initialize and start marketplace service if enabled
 	if appConf.MarketplaceEnabled && ociConfig != nil {
-		logger.Info("Initializing marketplace service...")
+		logger.Debug("Initializing marketplace service...")
 
 		// Get OCI client from plugin service
 		var ociClient *ociplugins.OCIPluginClient
@@ -145,7 +172,7 @@ func main() {
 		defer cancel()
 		go service.MarketplaceService.Start(ctx)
 
-		logger.Infof("Marketplace service started - index URL: %s, sync interval: %v",
+		logger.Debugf("Marketplace service started - index URL: %s, sync interval: %v",
 			appConf.MarketplaceIndexURL, appConf.MarketplaceSyncInterval)
 	} else {
 		if !appConf.MarketplaceEnabled {
@@ -153,6 +180,24 @@ func main() {
 		} else if ociConfig == nil {
 			logger.Warn("Marketplace requires OCI support - set AI_STUDIO_OCI_CACHE_DIR to enable")
 		}
+	}
+
+	// Initialize and start scheduler service
+	if service.AIStudioPluginManager != nil {
+		logger.Info("Initializing scheduler service...")
+		schedulerService := scheduler.NewSchedulerService(db, service.AIStudioPluginManager)
+		if err := schedulerService.Start(); err != nil {
+			logger.Errorf("Failed to start scheduler service: %v", err)
+		} else {
+			logger.Info("Scheduler service started successfully")
+		}
+
+		// Ensure scheduler stops on shutdown
+		defer func() {
+			if err := schedulerService.Stop(); err != nil {
+				logger.Errorf("Error stopping scheduler service: %v", err)
+			}
+		}()
 	}
 
 	// Initialize mail service and notification service
@@ -195,6 +240,7 @@ func main() {
 		AllowedRegisterDomains: appConf.FilterSignupDomains,
 		TIBEnabled:             appConf.TIBEnabled,
 		TIBAPISecret:           appConf.TIBAPISecret,
+		OCIConfig:              appConf.OCIPlugins.ToOCILibConfig(), // OCI config for plugin security
 	}
 
 	authService := auth.NewAuthService(config, mailService, service, notificationService)
@@ -203,7 +249,19 @@ func main() {
 	ctx, stopRec := context.WithCancel(context.Background())
 	defer stopRec()
 	analytics.StartRecording(ctx, db)
-	budgetService := services.NewBudgetService(db, notificationService)
+	budgetService := budget.NewService(db, notificationService)
+
+	// Reinitialize LogExportService with the proper notification service (with SMTP configured)
+	// The service created in NewServiceWithOCI has a notification service without SMTP
+	exportStoragePath := os.Getenv("EXPORT_STORAGE_PATH")
+	if exportStoragePath == "" {
+		exportStoragePath = "./data/exports"
+	}
+	// Stop the old service's cleanup goroutine before replacing
+	if service.LogExportService != nil {
+		service.LogExportService.Stop()
+	}
+	service.LogExportService = log_export.NewService(db, notificationService, exportStoragePath, appConf.SiteURL)
 
 	// Initialize and start telemetry
 	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, "v2.0-hub-spoke")
@@ -232,15 +290,39 @@ func main() {
 			AuthToken:     appConf.GRPCAuthToken,
 			NextAuthToken: appConf.GRPCNextAuthToken,
 		}
-		
+
 		controlServer = grpc.NewControlServer(grpcConfig, db)
-		
+
 		// Create reload coordinator and connect it to control server
 		reloadCoordinator = services.NewReloadCoordinator(controlServer)
 		controlServer.SetReloadCoordinator(reloadCoordinator)
-		
+
 		// Connect reload coordinator to namespace service
 		service.NamespaceService.SetReloadCoordinator(reloadCoordinator)
+
+		// Wire plugin manager for edge-to-control payload routing
+		if service.AIStudioPluginManager != nil {
+			controlServer.SetPluginManager(service.AIStudioPluginManager)
+			logger.Info("AI Studio plugin manager connected to control server for edge payload routing")
+
+			// Wire event bus from control server to plugin manager for plugin pub/sub support
+			// This allows AI Studio plugins to subscribe/publish events that flow to/from edge instances
+			// IMPORTANT: This MUST happen BEFORE loading plugins so they can subscribe to events
+			service.AIStudioPluginManager.SetEventBus(controlServer.GetEventBus(), "control")
+			logger.Info("Event bus wired to AI Studio plugin manager for plugin event support")
+
+			// NOW load plugins - after event bus is wired so plugins can subscribe during init
+			logger.Debug("Loading AI Studio plugins (UI, Agent, Object Hooks)...")
+			if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
+				logger.Warnf("Failed to load some AI Studio plugins: %v", err)
+			} else {
+				logger.Debug("AI Studio plugins loaded successfully")
+			}
+		}
+
+		// Wire event bus to service for system CRUD events
+		service.SetEventBus(controlServer.GetEventBus())
+		logger.Info("Event bus wired to service for system CRUD events")
 
 		logger.Info("Reload coordinator created and connected to control server and namespace service")
 
@@ -258,6 +340,17 @@ func main() {
 				controlServer.Stop()
 			}
 		}()
+	} else {
+		// Non-control mode (standalone): Load plugins without event bus support
+		// Plugins will still work but won't be able to use pub/sub events
+		if service.AIStudioPluginManager != nil {
+			logger.Debug("Loading AI Studio plugins (standalone mode - no event bus)...")
+			if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
+				logger.Warnf("Failed to load some AI Studio plugins: %v", err)
+			} else {
+				logger.Debug("AI Studio plugins loaded successfully (standalone mode)")
+			}
+		}
 	}
 
 	noDocsArg := false
@@ -288,7 +381,7 @@ func main() {
 	var apiServer *api.API
 	if !appConf.ProxyOnly {
 		// Create a new API instance
-		apiServer = api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, nil)
+		apiServer = api.NewAPI(service, appConf.DisableCors, authService, config, p, staticFiles, licensingService)
 
 		// Start server in goroutine
 		serverErrors := make(chan error, 1)
@@ -335,6 +428,82 @@ func main() {
 	}
 
 	logger.Info("Application stopped gracefully")
+}
+
+// ensureDefaults ensures default group and catalogues exist and are linked
+func ensureDefaults(db *gorm.DB) error {
+	logger.Info("Ensuring default group and catalogues exist...")
+
+	// Get or create Default group
+	defaultGroup, err := models.GetOrCreateDefaultGroup(db)
+	if err != nil {
+		return fmt.Errorf("failed to ensure default group: %w", err)
+	}
+	logger.Infof("Default group ensured (ID: %d, Name: %s)", defaultGroup.ID, defaultGroup.Name)
+
+	// Get or create Default LLM catalogue
+	defaultCatalogue, err := models.GetOrCreateDefaultCatalogue(db)
+	if err != nil {
+		return fmt.Errorf("failed to ensure default catalogue: %w", err)
+	}
+	logger.Infof("Default LLM catalogue ensured (ID: %d, Name: %s)", defaultCatalogue.ID, defaultCatalogue.Name)
+
+	// Get or create Default data catalogue
+	defaultDataCatalogue, err := models.GetOrCreateDefaultDataCatalogue(db)
+	if err != nil {
+		return fmt.Errorf("failed to ensure default data catalogue: %w", err)
+	}
+	logger.Infof("Default data catalogue ensured (ID: %d, Name: %s)", defaultDataCatalogue.ID, defaultDataCatalogue.Name)
+
+	// Get or create Default tool catalogue
+	defaultToolCatalogue, err := models.GetOrCreateDefaultToolCatalogue(db)
+	if err != nil {
+		return fmt.Errorf("failed to ensure default tool catalogue: %w", err)
+	}
+	logger.Infof("Default tool catalogue ensured (ID: %d, Name: %s)", defaultToolCatalogue.ID, defaultToolCatalogue.Name)
+
+	// Link catalogues to default group if not already linked
+	if err := linkCatalogueToGroup(db, defaultGroup, defaultCatalogue); err != nil {
+		return fmt.Errorf("failed to link LLM catalogue to default group: %w", err)
+	}
+
+	if err := linkDataCatalogueToGroup(db, defaultGroup, defaultDataCatalogue); err != nil {
+		return fmt.Errorf("failed to link data catalogue to default group: %w", err)
+	}
+
+	if err := linkToolCatalogueToGroup(db, defaultGroup, defaultToolCatalogue); err != nil {
+		return fmt.Errorf("failed to link tool catalogue to default group: %w", err)
+	}
+
+	logger.Info("Default group and catalogues successfully initialized and linked")
+	return nil
+}
+
+// linkCatalogueToGroup links an LLM catalogue to a group if not already linked
+func linkCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *models.Catalogue) error {
+	count := db.Model(group).Where("catalogue_id = ?", catalogue.ID).Association("Catalogues").Count()
+	if count == 0 {
+		return db.Model(group).Association("Catalogues").Append(catalogue)
+	}
+	return nil
+}
+
+// linkDataCatalogueToGroup links a data catalogue to a group if not already linked
+func linkDataCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *models.DataCatalogue) error {
+	count := db.Model(group).Where("data_catalogue_id = ?", catalogue.ID).Association("DataCatalogues").Count()
+	if count == 0 {
+		return db.Model(group).Association("DataCatalogues").Append(catalogue)
+	}
+	return nil
+}
+
+// linkToolCatalogueToGroup links a tool catalogue to a group if not already linked
+func linkToolCatalogueToGroup(db *gorm.DB, group *models.Group, catalogue *models.ToolCatalogue) error {
+	count := db.Model(group).Where("tool_catalogue_id = ?", catalogue.ID).Association("ToolCatalogues").Count()
+	if count == 0 {
+		return db.Model(group).Association("ToolCatalogues").Append(catalogue)
+	}
+	return nil
 }
 
 func listEmbeddedFiles(fsys embed.FS) error {

@@ -4,11 +4,13 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-func (s *Service) CreateFilter(name, description string, script []byte) (*models.Filter, error) {
+func (s *Service) CreateFilter(name, description string, script []byte, responseFilter bool, namespace string) (*models.Filter, error) {
 	filter := &models.Filter{
-		Name:        name,
-		Description: description,
-		Script:      script,
+		Name:           name,
+		Description:    description,
+		Script:         script,
+		ResponseFilter: responseFilter,
+		Namespace:      namespace,
 	}
 
 	if err := filter.Create(s.DB); err != nil {
@@ -26,7 +28,7 @@ func (s *Service) GetFilterByID(id uint) (*models.Filter, error) {
 	return filter, nil
 }
 
-func (s *Service) UpdateFilter(id uint, name, description string, script []byte) (*models.Filter, error) {
+func (s *Service) UpdateFilter(id uint, name, description string, script []byte, responseFilter bool, namespace string) (*models.Filter, error) {
 	filter, err := s.GetFilterByID(id)
 	if err != nil {
 		return nil, err
@@ -35,6 +37,8 @@ func (s *Service) UpdateFilter(id uint, name, description string, script []byte)
 	filter.Name = name
 	filter.Description = description
 	filter.Script = script
+	filter.ResponseFilter = responseFilter
+	filter.Namespace = namespace
 
 	if err := filter.Update(s.DB); err != nil {
 		return nil, err

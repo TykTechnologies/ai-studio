@@ -264,6 +264,42 @@ type LogProbs struct {
 	TextOffset    []int                `json:"text_offset"`
 }
 
+// Streaming response types for OpenAI-compatible SSE streaming
+
+// ChatCompletionChunk represents a streaming chunk in OpenAI format
+type ChatCompletionChunk struct {
+	ID      string                      `json:"id"`
+	Object  string                      `json:"object"` // "chat.completion.chunk"
+	Created int64                       `json:"created"`
+	Model   string                      `json:"model"`
+	Choices []ChatCompletionChunkChoice `json:"choices"`
+	Usage   *CompletionUsage            `json:"usage,omitempty"` // Only in final chunk
+}
+
+// ChatCompletionChunkChoice represents a choice in a streaming chunk
+type ChatCompletionChunkChoice struct {
+	Index        int                 `json:"index"`
+	Delta        ChatCompletionDelta `json:"delta"`
+	FinishReason *string             `json:"finish_reason"` // null until final chunk
+}
+
+// ChatCompletionDelta represents the delta content in a streaming chunk
+type ChatCompletionDelta struct {
+	Role    string `json:"role,omitempty"`    // Only in first chunk
+	Content string `json:"content,omitempty"` // Streaming text content
+}
+
+// ChatCompletionStreamError represents an error in SSE format
+type ChatCompletionStreamError struct {
+	Error ChatCompletionErrorDetail `json:"error"`
+}
+
+// ChatCompletionErrorDetail contains error details
+type ChatCompletionErrorDetail struct {
+	Message string `json:"message"`
+	Type    string `json:"type"`
+}
+
 func (r *ChatCompletionRequest) GetMessages() []llms.MessageContent {
 	messages := make([]llms.MessageContent, len(r.Messages))
 

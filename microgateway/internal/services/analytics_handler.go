@@ -25,6 +25,7 @@ type MicrogatewaAnalyticsHandler struct {
 	pendingEvents map[string]uint // Map request ID to event ID for matching
 	mu            sync.RWMutex
 	pluginManager *plugins.PluginManager // For global data collection plugins
+	budgetService BudgetServiceInterface // For recording budget usage
 	// Batch processing channels for async non-blocking batch operations
 	chatRecordBatchChan chan []*models.LLMChatRecord
 	proxyLogBatchChan   chan []*models.ProxyLog
@@ -35,7 +36,7 @@ type MicrogatewaAnalyticsHandler struct {
 }
 
 // NewMicrogatewaAnalyticsHandler creates a new analytics handler for the microgateway
-func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.AnalyticsConfig, pluginManager *plugins.PluginManager) *MicrogatewaAnalyticsHandler {
+func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.AnalyticsConfig, pluginManager *plugins.PluginManager, budgetService BudgetServiceInterface) *MicrogatewaAnalyticsHandler {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	batchBufferSize := 100 // Default batch channel buffer size
@@ -51,6 +52,7 @@ func NewMicrogatewaAnalyticsHandler(db *gorm.DB, analyticsConfig *config.Analyti
 		config:        analyticsConfig,
 		pendingEvents: make(map[string]uint),
 		pluginManager: pluginManager,
+		budgetService: budgetService,
 		chatRecordBatchChan: make(chan []*models.LLMChatRecord, batchBufferSize),
 		proxyLogBatchChan:   make(chan []*models.ProxyLog, batchBufferSize),
 		ctx:                 ctx,
@@ -78,7 +80,7 @@ func (h *MicrogatewaAnalyticsHandler) startBatchWorker() {
 		case logs := <-h.proxyLogBatchChan:
 			h.processProxyLogsBatchSync(logs)
 		case <-h.ctx.Done():
-			log.Info().Msg("Shutting down microgateway analytics batch worker")
+			log.Debug().Msg("Shutting down microgateway analytics batch worker")
 			close(h.chatRecordBatchChan)
 			close(h.proxyLogBatchChan)
 			return
@@ -138,7 +140,7 @@ func (h *MicrogatewaAnalyticsHandler) processChatRecordsBatchSync(records []*mod
 		log.Error().Err(err).Int("count", len(records)).Int64("processing_time_ms", processingTime.Milliseconds()).
 			Msg("Failed to create chat record batch")
 	} else {
-		log.Info().Int("count", len(records)).Int64("processing_time_ms", processingTime.Milliseconds()).
+		log.Debug().Int("count", len(records)).Int64("processing_time_ms", processingTime.Milliseconds()).
 			Float64("records_per_second", float64(len(records))/processingTime.Seconds()).
 			Msg("Created chat record batch successfully")
 	}
@@ -189,7 +191,7 @@ func (h *MicrogatewaAnalyticsHandler) processProxyLogsBatchSync(logs []*models.P
 		log.Error().Err(err).Int("count", len(logs)).Int64("processing_time_ms", processingTime.Milliseconds()).
 			Msg("Failed to create proxy log batch")
 	} else {
-		log.Info().Int("count", len(logs)).Int64("processing_time_ms", processingTime.Milliseconds()).
+		log.Debug().Int("count", len(logs)).Int64("processing_time_ms", processingTime.Milliseconds()).
 			Float64("records_per_second", float64(len(logs))/processingTime.Seconds()).
 			Str("first_vendor", logs[0].Vendor).
 			Msg("Created proxy log batch successfully")
@@ -206,7 +208,7 @@ func (h *MicrogatewaAnalyticsHandler) Stop() {
 // RecordChatRecord implements the midsommar analytics interface
 // Merges ChatRecord data into existing ProxyLog event (deduplication) or creates standalone event
 func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
-	log.Info().
+	log.Debug().
 		Uint("app_id", record.AppID).
 		Uint("llm_id", record.LLMID).
 		Str("model", record.Name).
@@ -220,7 +222,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 
 	if found {
 		// MERGE: Update existing event with ChatRecord data (richer token/cost info)
-		log.Info().
+		log.Debug().
 			Uint("existing_event_id", existingEventID).
 			Str("match_key", matchKey).
 			Msg("Found matching proxy log event - merging chat record data")
@@ -251,13 +253,38 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 			return
 		}
 
-		log.Info().
+		log.Debug().
 			Uint("event_id", existingEventID).
 			Str("model", record.Name).
 			Int("prompt_tokens", record.PromptTokens).
 			Int("response_tokens", record.ResponseTokens).
 			Float64("cost", record.Cost).
 			Msg("Successfully merged chat record into proxy log event")
+
+		// Record budget usage if budget service is available and cost > 0
+		// This must happen AFTER merge, when we have accurate cost/token data from vendor parser
+		if h.budgetService != nil && record.Cost > 0 {
+			if err := h.budgetService.RecordUsage(
+				record.AppID,
+				&record.LLMID,
+				int64(record.TotalTokens),
+				record.Cost,
+				int64(record.PromptTokens),
+				int64(record.ResponseTokens),
+			); err != nil {
+				log.Warn().Err(err).
+					Uint("app_id", record.AppID).
+					Float64("cost", record.Cost).
+					Msg("Failed to record budget usage after merge")
+				// Don't fail analytics recording if budget recording fails
+			} else {
+				log.Debug().
+					Uint("app_id", record.AppID).
+					Float64("cost", record.Cost).
+					Int("total_tokens", record.TotalTokens).
+					Msg("Budget usage recorded successfully after merge")
+			}
+		}
 
 		// NOW execute analytics plugins with the MERGED data for pulse transmission
 		if h.pluginManager != nil {
@@ -297,12 +324,12 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 			}
 		}
 
-		return // Done - event merged and plugins executed
+		return // Done - event merged, budget recorded, and plugins executed
 	}
 
 	// NO MATCH: This is a standalone chat interaction (not via proxy)
 	// Create new analytics event from ChatRecord only
-	log.Info().
+	log.Debug().
 		Str("match_key", matchKey).
 		Msg("No matching proxy log found - creating standalone chat analytics event")
 
@@ -380,12 +407,36 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 	if err := h.db.Create(event).Error; err != nil {
 		log.Error().Err(err).Msg("Failed to create standalone chat analytics event")
 	} else {
-		log.Info().
+		log.Debug().
 			Uint("event_id", event.ID).
 			Str("request_id", event.RequestID).
 			Int("total_tokens", event.TotalTokens).
 			Float64("cost", event.Cost).
 			Msg("Standalone chat analytics event created (no proxy log match)")
+	}
+
+	// Record budget usage for standalone events if budget service is available and cost > 0
+	if h.budgetService != nil && record.Cost > 0 {
+		if err := h.budgetService.RecordUsage(
+			record.AppID,
+			&record.LLMID,
+			int64(record.TotalTokens),
+			record.Cost,
+			int64(record.PromptTokens),
+			int64(record.ResponseTokens),
+		); err != nil {
+			log.Warn().Err(err).
+				Uint("app_id", record.AppID).
+				Float64("cost", record.Cost).
+				Msg("Failed to record budget usage for standalone event")
+			// Don't fail analytics recording if budget recording fails
+		} else {
+			log.Debug().
+				Uint("app_id", record.AppID).
+				Float64("cost", record.Cost).
+				Int("total_tokens", record.TotalTokens).
+				Msg("Budget usage recorded successfully for standalone event")
+		}
 	}
 }
 
@@ -404,7 +455,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatLogEntry(entry *models.LLMChatLo
 // Creates analytics events directly from AI Gateway proxy logs
 // This is called FIRST for each request, creating a pending event that may be enriched by RecordChatRecord
 func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) {
-	log.Info().
+	log.Debug().
 		Uint("app_id", proxyLog.AppID).
 		Uint("user_id", proxyLog.UserID).
 		Str("vendor", proxyLog.Vendor).
@@ -460,6 +511,23 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 		// All set to zero/empty until ChatRecord enriches this event
 	}
 
+	// Check for router metadata (if request came through model router)
+	// Try multiple timestamp keys since there may be slight timing variance
+	routerMetaKey := fmt.Sprintf("router_%d_%d", 0, proxyLog.TimeStamp.Unix())
+	if routerMeta := GetRouterMetadataStore().GetMetadata(routerMetaKey); routerMeta != nil {
+		event.RouterSlug = routerMeta.RouterSlug
+		event.RouterPoolName = routerMeta.PoolName
+		event.RouterSourceModel = routerMeta.SourceModel
+		event.RouterTargetModel = routerMeta.TargetModel
+		event.RouterSelectionAlgo = routerMeta.SelectionAlgo
+		log.Debug().
+			Str("router_slug", routerMeta.RouterSlug).
+			Str("pool", routerMeta.PoolName).
+			Str("source_model", routerMeta.SourceModel).
+			Str("target_model", routerMeta.TargetModel).
+			Msg("Added router metadata to analytics event")
+	}
+
 	// Create the analytics event and store for potential merge with ChatRecord
 	if err := h.db.Create(event).Error; err != nil {
 		log.Error().Err(err).Msg("Failed to create analytics event from proxy log")
@@ -469,15 +537,13 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) 
 	// Store event ID for matching with incoming ChatRecord (uses AppID+Timestamp key)
 	h.storeEventForMatching(fmt.Sprintf("pending_%d_%d", proxyLog.AppID, proxyLog.TimeStamp.Unix()), event.ID)
 
-	log.Info().
+	log.Debug().
 		Uint("event_id", event.ID).
 		Str("request_id", event.RequestID).
 		Msg("Skeleton analytics event created from proxy log (awaiting ChatRecord merge for tokens/cost)")
 
-	// IMPORTANT: We still need to notify analytics plugins about the skeleton event
-	// The pulse plugin will buffer this event (even with zeros) and it will be enriched by pulse plugin
-	// when it reads the updated event from database before sending pulse
-	// NOTE: We'll execute analytics plugins in RecordChatRecord instead, after merge completes
+	// NOTE: Budget recording happens in RecordChatRecord where we have actual cost/token data
+	// ProxyLog creates skeleton events; ChatRecord enriches them with parsed vendor data
 }
 
 // truncateBody truncates request/response bodies to the configured maximum size
@@ -624,7 +690,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLogsBatch(logs []*models.ProxyL
 
 // SetAsGlobalHandler sets this handler as the global midsommar analytics handler
 func (h *MicrogatewaAnalyticsHandler) SetAsGlobalHandler() {
-	log.Info().Msg("Setting microgateway analytics handler as global handler")
+	log.Debug().Msg("Setting microgateway analytics handler as global handler")
 	analytics.SetHandler(h)
 }
 

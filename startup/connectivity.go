@@ -270,7 +270,7 @@ func testPostgreSQLQueueConnectivity(pgConfig config.PostgreSQLQueueConfig) erro
 	logger.Info("Testing PostgreSQL queue connectivity...")
 
 	// PostgreSQL queues require DATABASE_URL environment variable
-	databaseURL := config.Get().DatabaseURL
+	databaseURL := config.Get("").DatabaseURL
 	if databaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required for PostgreSQL queues")
 	}

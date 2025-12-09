@@ -1,3 +1,11 @@
 [submodule "docs/site/themes/hugo-book"]
 	path = docs/site/themes/hugo-book
 	url = https://github.com/alex-shpak/hugo-book
+
+[submodule "enterprise"]
+	path = enterprise
+	url = git@github.com:TykTechnologies/ai-studio-enterprise.git
+	branch = main
+[submodule "community"]
+	path = community
+	url = git@github.com:TykTechnologies/ai-studio-community-plugins.git

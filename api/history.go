@@ -152,6 +152,7 @@ func (a *API) getChatHistoryRecord(c *gin.Context) {
 // @Param page query int false "Page number"
 // @Param page_size query int false "Page size"
 // @Param all query bool false "Retrieve all records"
+// @Param search query string false "Search term for conversation names"
 // @Success 200 {object} ChatHistoryRecordListResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
@@ -167,8 +168,20 @@ func (a *API) listChatHistoryRecords(c *gin.Context) {
 	}
 
 	pageSize, pageNumber, all := getPaginationParams(c)
+	search := c.Query("search")
 
-	records, totalCount, totalPages, err := a.service.ListChatHistoryRecordsByUserIDPaginated(uint(userID), pageSize, pageNumber, all)
+	var records []models.ChatHistoryRecord
+	var totalCount int64
+	var totalPages int
+
+	if search != "" {
+		// Use search function when search term is provided
+		records, totalCount, totalPages, err = a.service.SearchChatHistoryRecords(uint(userID), search, pageSize, pageNumber, all)
+	} else {
+		// Use regular pagination when no search term
+		records, totalCount, totalPages, err = a.service.ListChatHistoryRecordsByUserIDPaginated(uint(userID), pageSize, pageNumber, all)
+	}
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`

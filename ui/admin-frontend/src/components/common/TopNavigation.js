@@ -1,13 +1,14 @@
 import React from "react";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { styled } from "@mui/material/styles";
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, Chip } from "@mui/material";
 import NotificationIcon from "../../admin/components/notifications/NotificationIcon";
 import Icon from "./Icon";
 
 import { logout } from "../../admin/utils/pubClient";
 import { createDocsLinkHandler } from "../../admin/utils/docsLinkUtils";
 import useOverviewData from "../../admin/hooks/useOverviewData";
+import { useEdition } from "../../admin/context/EditionContext";
 import {
   StyledAppBar,
   StyledToolbar,
@@ -42,6 +43,7 @@ const TopNavigation = ({
   onLogout,
 }) => {
   const { licenseDaysLeft, getDocsLink } = useOverviewData();
+  const { version, isEnterprise } = useEdition();
   const tabs = [];
 
   if (showChat) {
@@ -76,9 +78,22 @@ const TopNavigation = ({
             <Logo
               src="/api/v1/branding/logo"
               alt="Logo"
+              title={version ? `Tyk AI Studio ${version}` : "Tyk AI Studio"}
               onError={(e) => {
                 // Fallback to default logo if custom logo fails to load
                 e.target.src = "/logos/tyk-portal-logo.png";
+              }}
+            />
+            <Chip
+              label={isEnterprise ? "Enterprise Edition" : "Community Edition"}
+              size="small"
+              sx={{
+                backgroundColor: isEnterprise ? "#FFD700" : "#424242",
+                color: isEnterprise ? "#000" : "#fff",
+                fontWeight: 600,
+                fontSize: "0.7rem",
+                height: "20px",
+                marginLeft: 1,
               }}
             />
           </LogoContainer>

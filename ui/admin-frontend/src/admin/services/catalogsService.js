@@ -45,11 +45,11 @@ export const getToolCatalogues = async (page = 1, all = false) => {
     const response = await apiClient.get('/tool-catalogues', { params });
 
     if (all) {
-      return response.data;
+      return response.data.data;
     }
 
     return {
-      data: response.data,
+      data: response.data.data,
       totalCount: parseInt(response.headers['x-total-count'] || '0', 10),
       totalPages: parseInt(response.headers['x-total-pages'] || '0', 10)
     };

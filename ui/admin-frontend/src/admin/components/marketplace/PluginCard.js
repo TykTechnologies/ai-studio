@@ -13,9 +13,16 @@ import {
   Verified as VerifiedIcon,
   CheckCircle as CheckCircleIcon,
   Warning as WarningIcon,
+  Star as StarIcon,
 } from '@mui/icons-material';
+import { useEdition } from '../../context/EditionContext';
 
 const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
+  const { isEnterprise, loading } = useEdition();
+
+  // Disable install for enterprise-only plugins when not running enterprise binary
+  // Also disable while loading to prevent flash of enabled state
+  const isInstallDisabled = loading || (plugin.enterprise_only && !isEnterprise);
   const getPublisherColor = (publisher) => {
     switch (publisher) {
       case 'tyk-official':
@@ -114,6 +121,14 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
                   variant="outlined"
                 />
               )}
+              {plugin.enterprise_only && (
+                <Chip
+                  label="Enterprise"
+                  size="small"
+                  color="secondary"
+                  icon={<StarIcon />}
+                />
+              )}
             </Box>
           </Box>
         </Box>
@@ -132,6 +147,23 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
         >
           {plugin.description}
         </Typography>
+
+        {plugin.synced_from_url && (
+          <Box sx={{ mb: 1 }}>
+            <Chip
+              label={`Source: ${new URL(plugin.synced_from_url).hostname}`}
+              size="small"
+              variant="outlined"
+              sx={{
+                fontSize: '0.7rem',
+                height: '20px',
+                '& .MuiChip-label': {
+                  px: 1,
+                }
+              }}
+            />
+          </Box>
+        )}
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="caption" color="text.secondary">
@@ -160,8 +192,9 @@ const PluginCard = ({ plugin, onViewDetails, onInstall }) => {
             onClick={() => onInstall(plugin)}
             fullWidth
             variant="contained"
+            disabled={isInstallDisabled}
           >
-            Install
+            {isInstallDisabled && plugin.enterprise_only ? 'Enterprise Required' : 'Install'}
           </Button>
         )}
       </CardActions>

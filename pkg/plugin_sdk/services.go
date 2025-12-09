@@ -17,6 +17,7 @@ type defaultServiceBroker struct {
 	logger         LogService
 	gatewayService GatewayServices
 	studioService  StudioServices
+	eventService   EventService
 }
 
 // newServiceBroker creates a service broker for the given runtime
@@ -39,6 +40,13 @@ func newServiceBroker(runtime RuntimeType, pluginID uint32) ServiceBroker {
 		broker.studioService = &studioServicesImpl{}
 	}
 
+	// Event service is lazily initialized when first accessed
+	// It needs the gRPC broker connection which is set up during plugin startup
+	broker.eventService = &lazyEventService{
+		runtime:  runtime,
+		pluginID: fmt.Sprintf("%d", pluginID),
+	}
+
 	return broker
 }
 
@@ -56,6 +64,19 @@ func (b *defaultServiceBroker) Gateway() GatewayServices {
 
 func (b *defaultServiceBroker) Studio() StudioServices {
 	return b.studioService
+}
+
+func (b *defaultServiceBroker) Events() EventService {
+	return b.eventService
+}
+
+// Cleanup releases all resources held by the service broker.
+// This should be called during plugin shutdown.
+func (b *defaultServiceBroker) Cleanup() {
+	// Cleanup event service subscriptions
+	if lazy, ok := b.eventService.(*lazyEventService); ok {
+		lazy.Cleanup()
+	}
 }
 
 // ===== KV Service (Runtime-Aware) =====
@@ -117,6 +138,71 @@ func (l *defaultLogService) Error(msg string, fields ...interface{}) {
 	log.Printf("[ERROR] [Plugin %d] %s %v", l.pluginID, msg, fields)
 }
 
+// ===== License Service (Runtime-Aware) =====
+
+// LicenseInfo contains information about the host's license status.
+// This is a unified type that works in both AI Studio and Microgateway contexts.
+type LicenseInfo struct {
+	// Valid indicates whether a valid enterprise license is present
+	Valid bool
+
+	// DaysRemaining is the number of days until license expires (-1 for community/never expires)
+	DaysRemaining int
+
+	// Type is the license type: "community" or "enterprise"
+	Type string
+
+	// Entitlements is a list of enabled features/entitlements
+	Entitlements []string
+
+	// Organization is the licensed organization name (enterprise only)
+	Organization string
+
+	// ExpiresAt is the license expiration timestamp (zero for community licenses)
+	ExpiresAt time.Time
+}
+
+// IsEnterprise returns true if this is an enterprise license
+func (l *LicenseInfo) IsEnterprise() bool {
+	return l.Type == "enterprise" && l.Valid
+}
+
+// HasEntitlement checks if a specific entitlement is enabled
+func (l *LicenseInfo) HasEntitlement(entitlement string) bool {
+	for _, e := range l.Entitlements {
+		if e == entitlement {
+			return true
+		}
+	}
+	return false
+}
+
+// GetLicenseInfo retrieves license information from the host.
+// This is a runtime-aware function that works in both AI Studio and Microgateway contexts.
+// All plugins can call this without requiring special scopes.
+func GetLicenseInfo(ctx context.Context, runtime RuntimeType) (*LicenseInfo, error) {
+	if runtime == RuntimeGateway {
+		return getLicenseInfoGateway(ctx)
+	}
+	return getLicenseInfoStudio(ctx)
+}
+
+// getLicenseInfoStudio retrieves license info from AI Studio
+func getLicenseInfoStudio(ctx context.Context) (*LicenseInfo, error) {
+	info, err := ai_studio_sdk.GetLicenseInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &LicenseInfo{
+		Valid:         info.LicenseValid,
+		DaysRemaining: info.DaysRemaining,
+		Type:          info.LicenseType,
+		Entitlements:  info.Entitlements,
+		Organization:  info.Organization,
+		ExpiresAt:     info.ExpiresAt,
+	}, nil
+}
+
 // ===== Gateway Services Implementation =====
 
 
@@ -158,4 +244,20 @@ func (s *studioServicesImpl) ListTools(ctx context.Context, page, limit int32) (
 func (s *studioServicesImpl) CallLLM(ctx context.Context, llmID uint32, model string, messages interface{}, temperature float64, maxTokens int32) (interface{}, error) {
 	// TODO: Implement CallLLM wrapper when needed for agent plugins
 	return nil, fmt.Errorf("CallLLM not yet implemented in unified SDK")
+}
+
+func (s *studioServicesImpl) UpdatePluginConfig(ctx context.Context, pluginID uint32, configJSON string) (bool, string, error) {
+	resp, err := ai_studio_sdk.UpdatePluginConfig(ctx, pluginID, configJSON)
+	if err != nil {
+		return false, "", err
+	}
+	return resp.Success, resp.Message, nil
+}
+
+func (s *studioServicesImpl) UpdateLLMPlugins(ctx context.Context, llmID uint32, pluginIDs []uint32, appendMode bool) (bool, string, []uint32, error) {
+	resp, err := ai_studio_sdk.UpdateLLMPlugins(ctx, llmID, pluginIDs, appendMode)
+	if err != nil {
+		return false, "", nil, err
+	}
+	return resp.Success, resp.Message, resp.PluginIds, nil
 }

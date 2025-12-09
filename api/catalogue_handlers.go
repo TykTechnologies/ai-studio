@@ -1,9 +1,13 @@
+//go:build enterprise
+// +build enterprise
+
 package api
 
 import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
@@ -151,6 +155,18 @@ func (a *API) deleteCatalogue(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: "Invalid catalogue ID"}},
 		})
+		return
+	}
+
+	// Prevent deletion of Default catalogue
+	catalogue, err := a.service.GetCatalogueByID(uint(id))
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewNotFoundError("Catalogue not found"))
+		return
+	}
+
+	if catalogue.IsDefault() {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Cannot delete the Default catalogue"))
 		return
 	}
 
@@ -393,30 +409,6 @@ func serializeCatalogue(catalogue *models.Catalogue) CatalogueResponse {
 			LLMNames: catalogue.LLMNames(),
 		},
 	}
-}
-
-func serializeCatalogues(catalogues models.Catalogues) []CatalogueResponse {
-	result := make([]CatalogueResponse, len(catalogues))
-	for i, catalogue := range catalogues {
-		// Extract LLM names from preloaded relationship to avoid N+1 queries
-		llmNames := make([]string, len(catalogue.LLMs))
-		for j, llm := range catalogue.LLMs {
-			llmNames[j] = llm.Name
-		}
-
-		result[i] = CatalogueResponse{
-			Type: "catalogues",
-			ID:   strconv.FormatUint(uint64(catalogue.ID), 10),
-			Attributes: struct {
-				Name     string   `json:"name"`
-				LLMNames []string `json:"llm_names"`
-			}{
-				Name:     catalogue.Name,
-				LLMNames: llmNames,
-			},
-		}
-	}
-	return result
 }
 
 // @Summary Search catalogues by name stub

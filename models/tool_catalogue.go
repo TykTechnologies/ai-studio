@@ -2,6 +2,8 @@ package models
 
 import "gorm.io/gorm"
 
+const DefaultToolCatalogueName = "Default"
+
 type ToolCatalogue struct {
 	gorm.Model
 	ID               uint   `json:"id" gorm:"primaryKey"`
@@ -105,4 +107,24 @@ func (tc *ToolCatalogues) GetByTool(db *gorm.DB, toolID uint) error {
 		Joins("JOIN tool_catalogue_tools ON tool_catalogue_tools.tool_catalogue_id = tool_catalogues.id").
 		Where("tool_catalogue_tools.tool_id = ?", toolID).
 		Find(tc).Error
+}
+
+// GetOrCreateDefaultToolCatalogue finds or creates the Default tool catalogue by name
+// This is safe for databases where auto-increment has been reset or cleared
+func GetOrCreateDefaultToolCatalogue(db *gorm.DB) (*ToolCatalogue, error) {
+	var catalogue ToolCatalogue
+	err := db.Where("name = ?", DefaultToolCatalogueName).First(&catalogue).Error
+
+	if err == gorm.ErrRecordNotFound {
+		// Create Default tool catalogue
+		catalogue = ToolCatalogue{Name: DefaultToolCatalogueName}
+		err = db.Create(&catalogue).Error
+	}
+
+	return &catalogue, err
+}
+
+// IsDefault checks if this tool catalogue is the default tool catalogue
+func (tc *ToolCatalogue) IsDefault() bool {
+	return tc.Name == DefaultToolCatalogueName
 }

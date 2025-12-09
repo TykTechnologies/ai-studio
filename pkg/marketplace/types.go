@@ -144,6 +144,28 @@ type IndexedPlugin struct {
 	Deprecated       bool      `yaml:"deprecated" json:"deprecated"`
 	ManifestURL      string    `yaml:"manifest_url" json:"manifest_url"` // URL to full manifest.yaml
 
+	// Additional metadata
+	License           string   `yaml:"license" json:"license"`
+	Keywords          []string `yaml:"keywords" json:"keywords"`
+	Hooks             []string `yaml:"hooks" json:"hooks"`
+	Screenshots       []string `yaml:"screenshots" json:"screenshots"`
+	APIVersions       []string `yaml:"api_versions" json:"api_versions"`
+	Dependencies      []string `yaml:"dependencies" json:"dependencies"`
+
+	// Links
+	DocumentationURL string `yaml:"documentation_url" json:"documentation_url"`
+	RepositoryURL    string `yaml:"repository_url" json:"repository_url"`
+	SupportURL       string `yaml:"support_url" json:"support_url"`
+	HomepageURL      string `yaml:"homepage_url" json:"homepage_url"`
+	IssuesURL        string `yaml:"issues_url" json:"issues_url"`
+
+	// Deprecation
+	DeprecatedMessage string `yaml:"deprecated_message" json:"deprecated_message"`
+	Replacement       string `yaml:"replacement" json:"replacement"`
+
+	// Enterprise
+	EnterpriseOnly bool `yaml:"enterprise_only" json:"enterprise_only"`
+
 	// Permissions
 	RequiredServices []string `yaml:"required_services" json:"required_services"`
 	RequiredKV       []string `yaml:"required_kv" json:"required_kv"`

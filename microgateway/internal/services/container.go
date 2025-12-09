@@ -4,12 +4,15 @@ package services
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -36,9 +39,17 @@ type ServiceContainer struct {
 
 	// Utilities
 	Crypto CryptoServiceInterface
-	
+
 	// Plugin management
-	PluginManager *plugins.PluginManager
+	PluginManager         *plugins.PluginManager
+	PluginSecurityService plugin_security.Service
+
+	// Model Router (Enterprise feature)
+	ModelRouterService *ModelRouterService
+
+	// Edge identity (populated in edge mode)
+	EdgeID        string
+	EdgeNamespace string
 }
 
 // NewServiceContainer creates a new service container with essential dependencies only
@@ -58,8 +69,19 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	filterService := NewFilterService(db, repo)
 	pluginService := NewPluginService(db, repo)
 
+	// Initialize Plugin Security service (ENT: full security enforcement, CE: stub allowing all operations)
+	var ociLibConfig *ociplugins.OCIConfig
+	if cfg.OCIPlugins.CacheDir != "" {
+		ociLibConfig = cfg.OCIPlugins.ToOCIConfig()
+	}
+	pluginSecurityService := plugin_security.NewService(&plugin_security.Config{
+		OCIConfig:                  ociLibConfig,
+		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+	})
+
 	// Create plugin service adapter to break circular dependency
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
+	pluginServiceAdapter.SetManagementService(management) // Enable LLM-based plugin pre-warming
 
 	// Initialize plugin manager with OCI support if configured
 	var pluginManager *plugins.PluginManager
@@ -73,7 +95,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
 			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
 		} else {
-			log.Info().
+			log.Debug().
 				Str("cache_dir", ociConfig.CacheDir).
 				Int("public_keys", len(ociConfig.DefaultPublicKeys)).
 				Bool("require_signature", ociConfig.RequireSignature).
@@ -82,33 +104,36 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	} else {
 		// Standard plugin manager
 		pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
-		log.Info().Msg("OCI plugin support disabled - using standard plugin manager")
+		log.Debug().Msg("OCI plugin support disabled - using standard plugin manager")
 	}
-	
+
+	// Set enterprise security service on plugin manager for OCI signature verification
+	pluginManager.SetSecurityService(pluginSecurityService)
+
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
-		log.Info().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins in service container...")
+		log.Debug().Str("config_path", cfg.Plugins.ConfigPath).Msg("Loading global data collection plugins in service container...")
 		
 		// Load plugin configuration
 		ctx := context.Background()
 		if err = cfg.LoadPluginConfig(ctx); err != nil {
 			log.Error().Err(err).Msg("Failed to load plugin configuration")
 		} else {
-			log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Plugin configurations loaded in service container")
+			log.Debug().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Plugin configurations loaded in service container")
 			
 			if len(cfg.Plugins.DataCollectionPlugins) > 0 {
 				// Load global plugins
 				if err := pluginManager.LoadGlobalDataCollectionPlugins(cfg.Plugins.DataCollectionPlugins); err != nil {
 					log.Error().Err(err).Msg("Failed to load global data collection plugins")
 				} else {
-					log.Info().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded in service container")
+					log.Debug().Int("count", len(cfg.Plugins.DataCollectionPlugins)).Msg("Global data collection plugins loaded in service container")
 				}
 			} else {
-				log.Info().Msg("No data collection plugins configured")
+				log.Debug().Msg("No data collection plugins configured")
 			}
 		}
 	} else {
-		log.Info().Msg("No plugin configuration specified - skipping data collection plugins")
+		log.Debug().Msg("No plugin configuration specified - skipping data collection plugins")
 	}
 
 	// Pre-warm OCI plugins during startup
@@ -133,7 +158,17 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 	// Connect management server to plugin manager for bidirectional plugin communication
 	pluginManager.SetManagementServer(managementServer)
-	log.Info().Msg("✅ Management server connected to plugin manager - plugins can now access service API")
+	log.Debug().Msg("✅ Management server connected to plugin manager - plugins can now access service API")
+
+	// Initialize Model Router Service (Enterprise feature)
+	modelRouterService := NewModelRouterService(db)
+	// Load routers from database - namespace will be empty for standalone mode
+	if err := modelRouterService.LoadRouters(cfg.HubSpoke.EdgeNamespace); err != nil {
+		log.Warn().Err(err).Msg("Failed to load model routers (Enterprise feature may not be enabled)")
+		// Don't fail - model routers are optional
+	} else {
+		log.Debug().Int("router_count", modelRouterService.GetRouterCount()).Msg("Model routers loaded")
+	}
 
 	return &ServiceContainer{
 		DB:         db,
@@ -150,14 +185,22 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 
 		AuthProvider: authProvider,
 		Crypto:       crypto,
-		
-		PluginManager: pluginManager,
+
+		PluginManager:         pluginManager,
+		PluginSecurityService: pluginSecurityService,
+
+		// Model Router (Enterprise feature)
+		ModelRouterService: modelRouterService,
+
+		// Edge identity from config (populated in edge mode)
+		EdgeID:        cfg.HubSpoke.EdgeID,
+		EdgeNamespace: cfg.HubSpoke.EdgeNamespace,
 	}, nil
 }
 
 // StartBackgroundTasks starts minimal essential tasks only
 func (sc *ServiceContainer) StartBackgroundTasks(ctx context.Context) {
-	log.Info().Msg("Starting essential background tasks")
+	log.Debug().Msg("Starting essential background tasks")
 	
 	// Only start token cleanup (essential for security)
 	if tokenAuthProvider, ok := sc.AuthProvider.(*auth.TokenAuthProvider); ok {
@@ -166,21 +209,36 @@ func (sc *ServiceContainer) StartBackgroundTasks(ctx context.Context) {
 		}()
 	}
 
-	log.Info().Msg("Essential background tasks started")
+	log.Debug().Msg("Essential background tasks started")
 }
 
 // StopBackgroundTasks stops background tasks gracefully  
 func (sc *ServiceContainer) StopBackgroundTasks() {
-	log.Info().Msg("Stopping background tasks")
+	log.Debug().Msg("Stopping background tasks")
 	// Token cleanup will stop when context is cancelled
 }
 
 // Cleanup performs final cleanup of all services
 func (sc *ServiceContainer) Cleanup() {
-	log.Info().Msg("Starting service container cleanup")
+	log.Debug().Msg("Starting service container cleanup")
 
 	// Simple cleanup - no complex operations needed
-	log.Info().Msg("Service container cleanup completed")
+	log.Debug().Msg("Service container cleanup completed")
+}
+
+// GetEdgeID returns the edge ID (for plugin context)
+func (sc *ServiceContainer) GetEdgeID() string {
+	return sc.EdgeID
+}
+
+// GetEdgeNamespace returns the edge namespace (for plugin context)
+func (sc *ServiceContainer) GetEdgeNamespace() string {
+	return sc.EdgeNamespace
+}
+
+// GetGatewayService returns the gateway service (for plugin middleware interface)
+func (sc *ServiceContainer) GetGatewayService() GatewayServiceInterface {
+	return sc.GatewayService
 }
 
 // Health checks all service health including plugins

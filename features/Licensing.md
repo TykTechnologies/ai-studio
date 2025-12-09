@@ -1,10 +1,10 @@
-# Licensing System (REMOVED)
+# Licensing System (ENTERPRISE EDITION ONLY)
 
 ## Introduction
 
-**NOTE: The licensing system has been removed from the codebase. All features are now available by default without requiring a license.**
+**NOTE: Licensing is an Enterprise Edition feature. Community Edition has no licensing requirements - all features are available by default.**
 
-This document is kept for historical reference only. The previous licensing system included feature control, license validation, and usage telemetry.
+The Enterprise Edition licensing system provides JWT-based license validation, periodic license checks, feature entitlements, and usage telemetry. This document describes how the licensing system works in the Enterprise Edition.
 
 ---
 
@@ -22,32 +22,57 @@ This document is kept for historical reference only. The previous licensing syst
 
 ---
 
+## Edition Comparison
+
+### Community Edition
+- ✅ No license required
+- ✅ All features available by default
+- ✅ No periodic validation checks
+- ✅ Optional telemetry (via `TELEMETRY_ENABLED`)
+- ✅ No license expiry concerns
+
+### Enterprise Edition
+- ✅ JWT-based license validation
+- ✅ License check at boot (exits if invalid)
+- ✅ Periodic re-validation every 24 hours (configurable)
+- ✅ Exits with fatal error if license invalid/expired
+- ✅ Usage telemetry collection and transmission
+- ✅ Feature entitlements (future use)
+
+---
+
 ## Overview
 
-The **Midsommar Licensing System** provides a framework for validating licenses, controlling feature access, and collecting usage telemetry. Its core objectives are:
+The **Enterprise Edition Licensing System** provides a framework for validating licenses, controlling feature access, and collecting usage telemetry. Its core objectives are:
 
 - **License Validation:** Verify license authenticity using JWT-based signatures and enforce expiration dates
-- **Feature Control:** Enable or disable specific platform features based on license entitlements
+- **Boot-Time Check:** Validate license at startup - process exits if invalid or expired
+- **Periodic Verification:** Re-validate every 24 hours - process exits if validation fails
 - **Usage Telemetry:** Collect anonymized usage statistics to understand platform utilization
-- **Security:** Protect sensitive license information and ensure secure validation
-- **Periodic Verification:** Regularly check license validity to ensure continued compliance
-- **Integration:** Seamlessly integrate with other Midsommar components to enforce licensing constraints
+- **Security:** Protect sensitive license information with RSA signature verification
+- **Privacy:** License keys are hashed (SHA256) before transmission
 
 ---
 
 ## System Architecture
 
-1. **Core Components:**
-   - `Licenser` ([licensing/licensing.go](../licensing/licensing.go)) - Central component that manages license validation, feature access, and telemetry
-   - `LicenseInfo` ([licensing/types.go](../licensing/types.go)) - Represents the parsed license with features and metadata
-   - `Feature` ([licensing/features.go](../licensing/features.go)) - Represents individual feature entitlements with typed values
-   - `Client` ([licensing/telemetry.go](../licensing/telemetry.go)) - Handles telemetry data collection and transmission
-   - `TelemetryService` ([services/telemetry_service.go](../services/telemetry_service.go)) - Collects usage statistics from the database
+1. **Public Interface (Community + Enterprise):**
+   - `licensing.Service` ([services/licensing/interface.go](../services/licensing/interface.go)) - License service interface
+   - `licensing.Config` ([services/licensing/types.go](../services/licensing/types.go)) - Configuration types
+   - `licensing.Factory` ([services/licensing/factory.go](../services/licensing/factory.go)) - Factory pattern for edition selection
+   - `Community Stub` ([services/licensing/community.go](../services/licensing/community.go)) - CE implementation (always valid)
 
-2. **Integration Points:**
-   - **API Middleware** ([licensing/middleware.go](../licensing/middleware.go)) - Integrates with the API to track usage and enforce license constraints
-   - **Configuration** ([config/config.go](../config/config.go)) - Provides license key and telemetry settings
-   - **Database** - Stores usage data that feeds into telemetry reports
+2. **Enterprise Implementation (Private Submodule):**
+   - `EnterpriseService` ([enterprise/features/licensing/service.go](../enterprise/features/licensing/service.go)) - JWT validation and periodic checks
+   - `TelemetryClient` ([enterprise/features/licensing/telemetry.go](../enterprise/features/licensing/telemetry.go)) - Stats collection and transmission
+   - `Middleware` ([enterprise/features/licensing/middleware.go](../enterprise/features/licensing/middleware.go)) - API action tracking
+   - `RSA Public Key` ([enterprise/features/licensing/pubkey.go](../enterprise/features/licensing/pubkey.go)) - JWT signature verification
+
+3. **Integration Points:**
+   - **main.go** - Initializes licensing service at boot
+   - **api.go** - Adds telemetry middleware for request tracking
+   - **config.go** - License configuration from environment variables
+   - **main_enterprise.go** - Conditional import with build tag
 
 3. **Data Flow:**
    - License validation occurs at startup and periodically during operation
@@ -281,25 +306,50 @@ The licensing system integrates with the API through middleware:
 
 ## Configuration Requirements
 
-1. **Environment Variables:**
-   - `TYK_AI_LICENSE` - The license key (JWT token) for the application
-   - `LICENSE_DISABLE_TELEMETRY` - Set to "true" or "1" to disable telemetry collection
-   - `LICENSE_TELEMETRY_URL` - Custom URL for the telemetry service (default: https://telemetry.tyk.technology)
-   - `LICENSE_TELEMETRY_PERIOD` - Custom duration for telemetry collection interval (e.g., "1h", "30m")
+### Enterprise Edition Only
 
-2. **Configuration in [config/config.go](../config/config.go):**
+1. **Required Environment Variable:**
+   ```bash
+   TYK_AI_LICENSE=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+   ```
+   - **REQUIRED** for Enterprise Edition
+   - Process will exit at boot if missing or invalid
+   - Must be a valid JWT token signed with the enterprise RSA private key
+
+2. **Optional Environment Variables:**
+   ```bash
+   # Telemetry configuration
+   LICENSE_TELEMETRY_URL=https://telemetry.tyk.technology/api/track  # Default endpoint
+   LICENSE_TELEMETRY_PERIOD=1h                  # How often to send telemetry (default: 1h)
+   LICENSE_VALIDITY_CHECK_PERIOD=24h            # How often to re-validate license (default: 24h)
+   LICENSE_DISABLE_TELEMETRY=false              # Set to true to disable telemetry
+   LICENSE_TELEMETRY_CONCURRENCY=20             # Max concurrent telemetry requests (default: 20)
+   ```
+
+3. **Configuration in [config/config.go](../config/config.go):**
    ```go
    type AppConf struct {
-       // Other fields...
-       LicenseKey              string        // From TYK_AI_LICENSE
-       LicenseTelemetryPeriod  time.Duration // From LICENSE_TELEMETRY_PERIOD
-       LicenseDisableTelemetry bool          // From LICENSE_DISABLE_TELEMETRY
-       LicenseTelemetryURL     string        // From LICENSE_TELEMETRY_URL
+       // Enterprise Edition licensing
+       LicenseKey                  string        // From TYK_AI_LICENSE
+       LicenseTelemetryPeriod      time.Duration // From LICENSE_TELEMETRY_PERIOD (default: 1h)
+       LicenseDisableTelemetry     bool          // From LICENSE_DISABLE_TELEMETRY (default: false)
+       LicenseTelemetryURL         string        // From LICENSE_TELEMETRY_URL
+       LicenseValidityPeriod       time.Duration // From LICENSE_VALIDITY_CHECK_PERIOD (default: 24h)
+       LicenseTelemetryConcurrency int           // From LICENSE_TELEMETRY_CONCURRENCY (default: 20)
    }
    ```
 
-3. **Default Values:**
-   - `LicenseKey` - No default, must be provided
+4. **Default Values:**
+   - `LicenseKey` - No default, REQUIRED for ENT
+   - `LicenseTelemetryURL` - `https://telemetry.tyk.technology/api/track`
+   - `LicenseTelemetryPeriod` - `1h`
+   - `LicenseValidityPeriod` - `24h`
+   - `LicenseDisableTelemetry` - `false`
+   - `LicenseTelemetryConcurrency` - `20`
+
+### Community Edition
+- No licensing configuration required
+- All license environment variables are ignored
    - `LicenseTelemetryPeriod` - Default: 1 hour
    - `LicenseDisableTelemetry` - Default: false
    - `LicenseTelemetryURL` - Default: https://telemetry.tyk.technology

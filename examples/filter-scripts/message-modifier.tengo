@@ -1,0 +1,32 @@
+// Message Modifier Filter
+// This script modifies messages using the messages array approach
+
+text := import("text")
+
+// Build modified messages array
+modified := []
+
+for msg in input.messages {
+    new_msg := {
+        role: msg.role,
+        content: msg.content
+    }
+
+    // Add safety prefix to system prompts
+    if msg.role == "system" {
+        new_msg.content = "[SAFETY MODE ENABLED] " + msg.content
+    }
+
+    // Redact email addresses from user messages
+    if msg.role == "user" {
+        new_msg.content = text.replace(msg.content, "@", "[AT]", -1)
+    }
+
+    modified = append(modified, new_msg)
+}
+
+output := {
+    block: false,
+    messages: modified,  // System reconstructs vendor-specific JSON
+    message: "Content modified"
+}

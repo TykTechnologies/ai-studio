@@ -5,9 +5,14 @@ const usePagination = (initialPage = 1, initialPageSize = 10) => {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  const handlePageChange = (event, newPage) => {
-    setPage(newPage);
-  };
+  const handlePageChange = useCallback((eventOrPage, newPage) => {
+    // Support both (event, page) from MUI Pagination and (page) for direct calls
+    if (typeof eventOrPage === 'number') {
+      setPage(eventOrPage);
+    } else {
+      setPage(newPage);
+    }
+  }, []);
 
   const handlePageSizeChange = (event) => {
     setPageSize(event.target.value);

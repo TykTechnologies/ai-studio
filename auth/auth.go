@@ -40,6 +40,7 @@ type Config struct {
 	AllowedRegisterDomains []string
 	TIBAPISecret           string
 	TIBEnabled             bool
+	OCIConfig              interface{} // Holds OCI configuration for plugin security
 }
 
 // Ensure AuthService implements models.EmailSender

@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react"; // Add useState and useEffec
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
 import LogoutIcon from "@mui/icons-material/Logout";
 import LaunchIcon from "@mui/icons-material/Launch";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
-import { useNavigate } from "react-router-dom";
 import { styled } from "@mui/material/styles";
 import { StyledIconButton } from "../../styles/sharedStyles";
 import pubClient, { logout } from "../../utils/pubClient";
+import { useEdition } from "../../context/EditionContext";
 
 const StyledLink = styled("a")(({ theme }) => ({
   color: "white",
@@ -20,8 +21,8 @@ const StyledLink = styled("a")(({ theme }) => ({
 }));
 
 const MyAppBar = () => {
-  const navigate = useNavigate();
   const [docsUrl, setDocsUrl] = useState(""); // Add state for docs URL
+  const { version, isEnterprise } = useEdition(); // Get edition info
 
   // Fetch system settings when component mounts
   useEffect(() => {
@@ -50,9 +51,22 @@ const MyAppBar = () => {
           <img
             src="/logos/tyk-portal-logo.png"
             alt="Midsommar Logo"
+            title={version ? `Tyk AI Studio ${version}` : "Tyk AI Studio"}
             style={{
               height: "25px",
-              marginRight: "5px",
+              marginRight: "10px",
+              cursor: "pointer",
+            }}
+          />
+          <Chip
+            label={isEnterprise ? "Enterprise Edition" : "Community Edition"}
+            size="small"
+            sx={{
+              backgroundColor: isEnterprise ? "#FFD700" : "#424242",
+              color: isEnterprise ? "#000" : "#fff",
+              fontWeight: 600,
+              fontSize: "0.7rem",
+              height: "20px",
             }}
           />
         </Box>

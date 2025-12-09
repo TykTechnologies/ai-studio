@@ -1,3 +1,5 @@
+//go:build enterprise
+
 package api
 
 import (
@@ -17,20 +19,26 @@ func TestFilterEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				Script      []byte `json:"script"`
+				Name           string `json:"name"`
+				Description    string `json:"description"`
+				Script         []byte `json:"script"`
+				ResponseFilter bool   `json:"response_filter"`
+				Namespace      string `json:"namespace"`
 			} `json:"attributes"`
 		}{
 			Type: "filters",
 			Attributes: struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				Script      []byte `json:"script"`
+				Name           string `json:"name"`
+				Description    string `json:"description"`
+				Script         []byte `json:"script"`
+				ResponseFilter bool   `json:"response_filter"`
+				Namespace      string `json:"namespace"`
 			}{
-				Name:        "Test Filter",
-				Description: "A test filter",
-				Script:      []byte("function testFilter() { return true; }"),
+				Name:           "Test Filter",
+				Description:    "A test filter",
+				Script:         []byte("function testFilter() { return true; }"),
+				ResponseFilter: false,
+				Namespace:      "",
 			},
 		},
 	}
@@ -54,20 +62,26 @@ func TestFilterEndpoints(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				Script      []byte `json:"script"`
+				Name           string `json:"name"`
+				Description    string `json:"description"`
+				Script         []byte `json:"script"`
+				ResponseFilter bool   `json:"response_filter"`
+				Namespace      string `json:"namespace"`
 			} `json:"attributes"`
 		}{
 			Type: "filters",
 			Attributes: struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				Script      []byte `json:"script"`
+				Name           string `json:"name"`
+				Description    string `json:"description"`
+				Script         []byte `json:"script"`
+				ResponseFilter bool   `json:"response_filter"`
+				Namespace      string `json:"namespace"`
 			}{
-				Name:        "Updated Filter",
-				Description: "An updated test filter",
-				Script:      []byte("function updatedTestFilter() { return false; }"),
+				Name:           "Updated Filter",
+				Description:    "An updated test filter",
+				Script:         []byte("function updatedTestFilter() { return false; }"),
+				ResponseFilter: false,
+				Namespace:      "",
 			},
 		},
 	}
@@ -107,20 +121,26 @@ func TestFilterEndpointsErrors(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				Script      []byte `json:"script"`
+				Name           string `json:"name"`
+				Description    string `json:"description"`
+				Script         []byte `json:"script"`
+				ResponseFilter bool   `json:"response_filter"`
+				Namespace      string `json:"namespace"`
 			} `json:"attributes"`
 		}{
 			Type: "filters",
 			Attributes: struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				Script      []byte `json:"script"`
+				Name           string `json:"name"`
+				Description    string `json:"description"`
+				Script         []byte `json:"script"`
+				ResponseFilter bool   `json:"response_filter"`
+				Namespace      string `json:"namespace"`
 			}{
-				Name:        "Updated Filter",
-				Description: "An updated test filter",
-				Script:      []byte("function updatedTestFilter() { return false; }"),
+				Name:           "Updated Filter",
+				Description:    "An updated test filter",
+				Script:         []byte("function updatedTestFilter() { return false; }"),
+				ResponseFilter: false,
+				Namespace:      "",
 			},
 		},
 	}
@@ -136,20 +156,26 @@ func TestFilterEndpointsErrors(t *testing.T) {
 		Data: struct {
 			Type       string `json:"type"`
 			Attributes struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				Script      []byte `json:"script"`
+				Name           string `json:"name"`
+				Description    string `json:"description"`
+				Script         []byte `json:"script"`
+				ResponseFilter bool   `json:"response_filter"`
+				Namespace      string `json:"namespace"`
 			} `json:"attributes"`
 		}{
 			Type: "filters",
 			Attributes: struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-				Script      []byte `json:"script"`
+				Name           string `json:"name"`
+				Description    string `json:"description"`
+				Script         []byte `json:"script"`
+				ResponseFilter bool   `json:"response_filter"`
+				Namespace      string `json:"namespace"`
 			}{
-				Name:        "",
-				Description: "",
-				Script:      []byte{},
+				Name:           "",
+				Description:    "",
+				Script:         []byte{},
+				ResponseFilter: false,
+				Namespace:      "",
 			},
 		},
 	}

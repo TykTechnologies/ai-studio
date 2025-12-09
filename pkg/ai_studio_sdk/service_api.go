@@ -22,6 +22,7 @@ var (
 	initialized     bool
 	initMutex       sync.Mutex
 	grpcBroker      *goplugin.GRPCBroker
+	brokerConn      *grpc.ClientConn // Shared connection for all services on this broker
 )
 
 // Initialize sets up the SDK with broker access
@@ -51,7 +52,12 @@ func SetServiceBrokerID(brokerID uint32) {
 	defer initMutex.Unlock()
 
 	serviceBrokerID = brokerID
-	log.Info().Uint32("broker_id", brokerID).Msg("✅ Service broker ID set for host service access")
+	log.Info().
+		Uint32("broker_id", brokerID).
+		Bool("sdk_initialized", initialized).
+		Bool("has_grpc_broker", grpcBroker != nil).
+		Str("broker_ptr", fmt.Sprintf("%p", grpcBroker)).
+		Msg("✅ AI Studio SDK: Service broker ID set")
 }
 
 // ExtractBrokerIDFromPayload extracts the broker ID from RPC request payload
@@ -79,14 +85,30 @@ func SetPluginID(id uint32) {
 	log.Info().Uint32("plugin_id", pluginID).Msg("✅ Plugin ID updated in SDK")
 }
 
+// GetPluginID returns the current plugin ID
+// This can be used by plugins to get their own ID for API calls
+func GetPluginID() uint32 {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	return pluginID
+}
+
 // getServiceClient creates and returns the service client, creating it if necessary
+// Includes retry logic to handle race conditions where the broker server may not be ready yet
 func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClient, error) {
 	if serviceClient != nil {
 		return serviceClient, nil
 	}
 
+	log.Debug().
+		Bool("initialized", initialized).
+		Bool("has_broker", grpcBroker != nil).
+		Uint32("broker_id", serviceBrokerID).
+		Str("broker_ptr", fmt.Sprintf("%p", grpcBroker)).
+		Msg("getServiceClient: checking prerequisites (AI STUDIO SDK dial attempt)")
+
 	if !initialized || grpcBroker == nil {
-		return nil, fmt.Errorf("SDK not initialized - call ai_studio_sdk.Initialize() first")
+		return nil, fmt.Errorf("SDK not initialized - call ai_studio_sdk.Initialize() first (initialized=%v, broker=%v)", initialized, grpcBroker != nil)
 	}
 
 	if serviceBrokerID == 0 {
@@ -94,11 +116,31 @@ func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClie
 	}
 
 	// Dial the brokered server where AI Studio management services are registered
-	// This follows the go-plugin bidirectional pattern
-	conn, err := grpcBroker.Dial(serviceBrokerID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial service broker ID %d: %w", serviceBrokerID, err)
+	// Retry with backoff to handle race conditions where server may not be ready yet
+	var conn *grpc.ClientConn
+	var err error
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		conn, err = grpcBroker.Dial(serviceBrokerID)
+		if err == nil {
+			break
+		}
+		if i < maxRetries-1 {
+			backoff := time.Duration(50*(i+1)) * time.Millisecond
+			log.Debug().
+				Int("attempt", i+1).
+				Dur("backoff", backoff).
+				Err(err).
+				Msg("Broker dial failed, retrying...")
+			time.Sleep(backoff)
+		}
 	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial service broker ID %d after %d attempts: %w", serviceBrokerID, maxRetries, err)
+	}
+
+	// Store connection for sharing with other services (e.g., EventService)
+	brokerConn = conn
 
 	// Create service client from the brokered connection
 	serviceClient = mgmtpb.NewAIStudioManagementServiceClient(conn)
@@ -109,6 +151,30 @@ func getServiceClient(ctx context.Context) (mgmtpb.AIStudioManagementServiceClie
 		Msg("✅ Service client created via broker dial - plugin can now call host services")
 
 	return serviceClient, nil
+}
+
+// GetSharedBrokerConnection returns the shared gRPC connection to the host's brokered server.
+// This allows other services (like EventService) to create clients on the same connection
+// without dialing again. Returns nil if no connection has been established yet.
+func GetSharedBrokerConnection() *grpc.ClientConn {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	return brokerConn
+}
+
+// SetSharedBrokerConnection stores a pre-dialed gRPC connection for shared use.
+// This is called by the event service when it dials first, so ai_studio_sdk can reuse
+// the same connection instead of trying to dial again (which would fail since
+// go-plugin broker only accepts ONE connection per broker ID).
+func SetSharedBrokerConnection(conn *grpc.ClientConn) {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+	if brokerConn == nil && conn != nil {
+		brokerConn = conn
+		// Also create the service client immediately since we have the connection
+		serviceClient = mgmtpb.NewAIStudioManagementServiceClient(conn)
+		log.Info().Msg("✅ AI Studio SDK: Shared broker connection set from external source")
+	}
 }
 
 // createPluginContext creates the authentication context for service API calls
@@ -143,6 +209,21 @@ func GetPlugin(ctx context.Context, pluginID uint32) (*mgmtpb.GetPluginResponse,
 	return client.GetPlugin(ctx, &mgmtpb.GetPluginRequest{
 		Context:  createPluginContext(AvailableScopes.PluginsRead),
 		PluginId: pluginID,
+	})
+}
+
+// UpdatePluginConfig updates the configuration of a specific plugin
+// The configJSON parameter should be a valid JSON string containing the full configuration
+func UpdatePluginConfig(ctx context.Context, pluginID uint32, configJSON string) (*mgmtpb.UpdatePluginConfigResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdatePluginConfig(ctx, &mgmtpb.UpdatePluginConfigRequest{
+		Context:    createPluginContext(AvailableScopes.PluginsWrite),
+		PluginId:   pluginID,
+		ConfigJson: configJSON,
 	})
 }
 
@@ -241,11 +322,12 @@ func GetToolsCount(ctx context.Context) (int, error) {
 	return int(resp.TotalCount), nil
 }
 
-// IsInitialized returns whether the SDK has been initialized
+// IsInitialized returns whether the SDK has been initialized AND has a broker ID set.
+// Both conditions must be true for service API calls to work.
 func IsInitialized() bool {
 	initMutex.Lock()
 	defer initMutex.Unlock()
-	return initialized
+	return initialized && serviceBrokerID != 0
 }
 
 // Reset clears the SDK state (for testing)
@@ -397,6 +479,22 @@ func DeleteLLM(ctx context.Context, llmID uint32) error {
 	}
 
 	return nil
+}
+
+// UpdateLLMPlugins updates the plugin associations for an LLM
+// If append is true, plugins are added to existing associations; otherwise they replace all
+func UpdateLLMPlugins(ctx context.Context, llmID uint32, pluginIDs []uint32, append bool) (*mgmtpb.UpdateLLMPluginsResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateLLMPlugins(ctx, &mgmtpb.UpdateLLMPluginsRequest{
+		Context:   createPluginContext(AvailableScopes.LLMsWrite),
+		LlmId:     llmID,
+		PluginIds: pluginIDs,
+		Append:    append,
+	})
 }
 
 // === App CRUD Operations ===
@@ -793,6 +891,22 @@ func DeleteModelPrice(ctx context.Context, modelPriceID uint32) error {
 
 // === Datasource CRUD Operations ===
 
+// ListDatasources retrieves all datasources with optional filtering and pagination
+func ListDatasources(ctx context.Context, page, limit int32, isActive *bool, userID string) (*mgmtpb.ListDatasourcesResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.ListDatasources(ctx, &mgmtpb.ListDatasourcesRequest{
+		Context:  createPluginContext(AvailableScopes.DatasourcesRead),
+		Page:     page,
+		Limit:    limit,
+		IsActive: isActive,
+		UserId:   userID,
+	})
+}
+
 // GetDatasource retrieves a specific datasource
 func GetDatasource(ctx context.Context, datasourceID uint32) (*mgmtpb.GetDatasourceResponse, error) {
 	client, err := getServiceClient(ctx)
@@ -806,7 +920,7 @@ func GetDatasource(ctx context.Context, datasourceID uint32) (*mgmtpb.GetDatasou
 	})
 }
 
-// CreateDatasource creates a new datasource
+// CreateDatasource creates a new datasource with full configuration
 func CreateDatasource(ctx context.Context, name, shortDesc, longDesc, url, dbSourceType string, privacyScore int32, userID uint32, active bool) (*mgmtpb.CreateDatasourceResponse, error) {
 	client, err := getServiceClient(ctx)
 	if err != nil {
@@ -820,6 +934,38 @@ func CreateDatasource(ctx context.Context, name, shortDesc, longDesc, url, dbSou
 		LongDescription:  longDesc,
 		Url:              url,
 		DbSourceType:     dbSourceType,
+		PrivacyScore:     privacyScore,
+		UserId:           userID,
+		Active:           active,
+	})
+}
+
+// CreateDatasourceWithEmbedder creates a new datasource with full embedder configuration
+// This is the complete version that includes vector store and embedder setup for RAG
+func CreateDatasourceWithEmbedder(ctx context.Context, name, shortDesc, longDesc, url string,
+	dbConnString, dbSourceType, dbConnAPIKey, dbName string,
+	embedVendor, embedURL, embedAPIKey, embedModel string,
+	privacyScore int32, userID uint32, active bool) (*mgmtpb.CreateDatasourceResponse, error) {
+
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateDatasource(ctx, &mgmtpb.CreateDatasourceRequest{
+		Context:          createPluginContext(AvailableScopes.DatasourcesWrite),
+		Name:             name,
+		ShortDescription: shortDesc,
+		LongDescription:  longDesc,
+		Url:              url,
+		DbConnString:     dbConnString,
+		DbSourceType:     dbSourceType,
+		DbConnApiKey:     dbConnAPIKey,
+		DbName:           dbName,
+		EmbedVendor:      embedVendor,
+		EmbedUrl:         embedURL,
+		EmbedApiKey:      embedAPIKey,
+		EmbedModel:       embedModel,
 		PrivacyScore:     privacyScore,
 		UserId:           userID,
 		Active:           active,
@@ -847,6 +993,40 @@ func UpdateDatasource(ctx context.Context, datasourceID uint32, name, shortDesc,
 	})
 }
 
+// UpdateDatasourceWithEmbedder updates an existing datasource with full embedder configuration
+func UpdateDatasourceWithEmbedder(ctx context.Context, datasourceID uint32,
+	name, shortDesc, longDesc, url string,
+	dbConnString, dbSourceType, dbConnAPIKey, dbName string,
+	embedVendor, embedURL, embedAPIKey, embedModel string,
+	privacyScore int32, userID uint32, active bool, tagNames []string) (*mgmtpb.UpdateDatasourceResponse, error) {
+
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.UpdateDatasource(ctx, &mgmtpb.UpdateDatasourceRequest{
+		Context:          createPluginContext(AvailableScopes.DatasourcesWrite),
+		DatasourceId:     datasourceID,
+		Name:             name,
+		ShortDescription: shortDesc,
+		LongDescription:  longDesc,
+		Url:              url,
+		DbConnString:     dbConnString,
+		DbSourceType:     dbSourceType,
+		DbConnApiKey:     dbConnAPIKey,
+		DbName:           dbName,
+		EmbedVendor:      embedVendor,
+		EmbedUrl:         embedURL,
+		EmbedApiKey:      embedAPIKey,
+		EmbedModel:       embedModel,
+		PrivacyScore:     privacyScore,
+		UserId:           userID,
+		Active:           active,
+		TagNames:         tagNames,
+	})
+}
+
 // DeleteDatasource deletes a datasource
 func DeleteDatasource(ctx context.Context, datasourceID uint32) error {
 	client, err := getServiceClient(ctx)
@@ -869,6 +1049,19 @@ func DeleteDatasource(ctx context.Context, datasourceID uint32) error {
 	return nil
 }
 
+// CloneDatasource clones an existing datasource with all configuration including API keys
+func CloneDatasource(ctx context.Context, sourceDatasourceID uint32) (*mgmtpb.CloneDatasourceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CloneDatasource(ctx, &mgmtpb.CloneDatasourceRequest{
+		Context:            createPluginContext(AvailableScopes.DatasourcesWrite),
+		SourceDatasourceId: sourceDatasourceID,
+	})
+}
+
 // SearchDatasources searches datasources
 func SearchDatasources(ctx context.Context, query string) (*mgmtpb.SearchDatasourcesResponse, error) {
 	client, err := getServiceClient(ctx)
@@ -880,6 +1073,178 @@ func SearchDatasources(ctx context.Context, query string) (*mgmtpb.SearchDatasou
 		Context: createPluginContext(AvailableScopes.DatasourcesRead),
 		Query:   query,
 	})
+}
+
+// QueryDatasource performs a semantic search on a datasource using a text query
+// The query text is automatically converted to an embedding and used to search the vector store
+func QueryDatasource(ctx context.Context, datasourceID uint32, query string, maxResults int32, similarityThreshold float64) (*mgmtpb.QueryDatasourceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.QueryDatasource(ctx, &mgmtpb.QueryDatasourceRequest{
+		Context:             createPluginContext(AvailableScopes.DatasourcesQuery),
+		DatasourceId:        datasourceID,
+		Query:               query,
+		MaxResults:          maxResults,
+		SimilarityThreshold: similarityThreshold,
+	})
+}
+
+// ProcessDatasourceEmbeddings triggers async processing of all files in a datasource
+// This generates embeddings for file content and stores them in the configured vector store
+func ProcessDatasourceEmbeddings(ctx context.Context, datasourceID uint32) (*mgmtpb.ProcessEmbeddingsResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.ProcessDatasourceEmbeddings(ctx, &mgmtpb.ProcessEmbeddingsRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesEmbeddings),
+		DatasourceId: datasourceID,
+	})
+}
+
+// GenerateEmbedding generates embeddings for text using the datasource's embedder configuration
+func GenerateEmbedding(ctx context.Context, datasourceID uint32, texts []string) (*mgmtpb.GenerateEmbeddingResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GenerateEmbedding(ctx, &mgmtpb.GenerateEmbeddingRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesEmbeddings),
+		DatasourceId: datasourceID,
+		Texts:        texts,
+	})
+}
+
+// StoreDocuments stores pre-vectorized documents in the datasource's vector store
+func StoreDocuments(ctx context.Context, datasourceID uint32, documents []*mgmtpb.DocumentWithEmbedding) (*mgmtpb.StoreDocumentsResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.StoreDocuments(ctx, &mgmtpb.StoreDocumentsRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesEmbeddings),
+		DatasourceId: datasourceID,
+		Documents:    documents,
+	})
+}
+
+// ProcessAndStoreDocuments generates embeddings and stores documents in one step
+func ProcessAndStoreDocuments(ctx context.Context, datasourceID uint32, chunks []*mgmtpb.DocumentChunk) (*mgmtpb.ProcessAndStoreResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.ProcessAndStoreDocuments(ctx, &mgmtpb.ProcessAndStoreRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesEmbeddings),
+		DatasourceId: datasourceID,
+		Chunks:       chunks,
+	})
+}
+
+// QueryDatasourceByVector performs similarity search using a pre-computed embedding vector
+func QueryDatasourceByVector(ctx context.Context, datasourceID uint32, embedding []float32, maxResults int32, similarityThreshold float64) (*mgmtpb.QueryDatasourceResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.QueryDatasourceByVector(ctx, &mgmtpb.QueryByVectorRequest{
+		Context:             createPluginContext(AvailableScopes.DatasourcesQuery),
+		DatasourceId:        datasourceID,
+		Embedding:           embedding,
+		MaxResults:          maxResults,
+		SimilarityThreshold: similarityThreshold,
+	})
+}
+
+// === Advanced Datasource Operations - Metadata and Namespace Management ===
+
+// DeleteDocumentsByMetadata deletes documents matching metadata filter
+func DeleteDocumentsByMetadata(ctx context.Context, datasourceID uint32, metadataFilter map[string]string, filterMode string, dryRun bool) (int32, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteDocumentsByMetadata(ctx, &mgmtpb.DeleteDocumentsByMetadataRequest{
+		Context:        createPluginContext(AvailableScopes.DatasourcesWrite),
+		DatasourceId:   datasourceID,
+		MetadataFilter: metadataFilter,
+		FilterMode:     filterMode,
+		DryRun:         dryRun,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete documents: %w", err)
+	}
+
+	return resp.DeletedCount, nil
+}
+
+// QueryByMetadataOnly queries documents using only metadata filters
+func QueryByMetadataOnly(ctx context.Context, datasourceID uint32, metadataFilter map[string]string, filterMode string, limit, offset int32) ([]*mgmtpb.DatasourceResult, int32, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.QueryByMetadataOnly(ctx, &mgmtpb.QueryByMetadataOnlyRequest{
+		Context:        createPluginContext(AvailableScopes.DatasourcesQuery),
+		DatasourceId:   datasourceID,
+		MetadataFilter: metadataFilter,
+		FilterMode:     filterMode,
+		Limit:          limit,
+		Offset:         offset,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query by metadata: %w", err)
+	}
+
+	return resp.Results, resp.TotalCount, nil
+}
+
+// ListNamespaces lists all namespaces/collections in the vector store
+func ListNamespaces(ctx context.Context, datasourceID uint32) ([]*mgmtpb.NamespaceInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.ListNamespaces(ctx, &mgmtpb.ListNamespacesRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesRead),
+		DatasourceId: datasourceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list namespaces: %w", err)
+	}
+
+	return resp.Namespaces, nil
+}
+
+// DeleteNamespace deletes an entire namespace/collection
+func DeleteNamespace(ctx context.Context, datasourceID uint32, namespace string, confirm bool) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	_, err = client.DeleteNamespace(ctx, &mgmtpb.DeleteNamespaceRequest{
+		Context:      createPluginContext(AvailableScopes.DatasourcesWrite),
+		DatasourceId: datasourceID,
+		Namespace:    namespace,
+		Confirm:      confirm,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete namespace: %w", err)
+	}
+
+	return nil
 }
 
 // === Data Catalogue CRUD Operations ===
@@ -1001,4 +1366,228 @@ func CallLLMSimple(ctx context.Context, llmID uint32, model string, messages []*
 	}
 
 	return resp.Content, nil
+}
+
+// ===========================
+// Schedule Management Methods
+// ===========================
+
+// CreateSchedule creates a new schedule for the calling plugin
+func CreateSchedule(ctx context.Context, scheduleID, name, cronExpr, timezone string, timeoutSeconds int32, config map[string]interface{}, enabled bool) (*mgmtpb.ScheduleInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	// Convert config map to JSON string
+	configJSON := "{}"
+	if len(config) > 0 {
+		if configBytes, err := json.Marshal(config); err == nil {
+			configJSON = string(configBytes)
+		} else {
+			return nil, fmt.Errorf("failed to marshal config: %w", err)
+		}
+	}
+
+	resp, err := client.CreateSchedule(ctx, &mgmtpb.CreateScheduleRequest{
+		Context:        createPluginContext(AvailableScopes.SchedulerManage),
+		ScheduleId:     scheduleID,
+		Name:           name,
+		CronExpr:       cronExpr,
+		Timezone:       timezone,
+		TimeoutSeconds: timeoutSeconds,
+		ConfigJson:     configJSON,
+		Enabled:        enabled,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create schedule: %w", err)
+	}
+
+	return resp.Schedule, nil
+}
+
+// GetSchedule retrieves a specific schedule by manifest_schedule_id
+func GetSchedule(ctx context.Context, scheduleID string) (*mgmtpb.ScheduleInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.GetSchedule(ctx, &mgmtpb.GetScheduleRequest{
+		Context:    createPluginContext(AvailableScopes.SchedulerManage),
+		ScheduleId: scheduleID,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get schedule: %w", err)
+	}
+
+	return resp.Schedule, nil
+}
+
+// ListSchedules lists all schedules for the calling plugin
+func ListSchedules(ctx context.Context) ([]*mgmtpb.ScheduleInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.ListSchedules(ctx, &mgmtpb.ListSchedulesRequest{
+		Context: createPluginContext(AvailableScopes.SchedulerManage),
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to list schedules: %w", err)
+	}
+
+	return resp.Schedules, nil
+}
+
+// UpdateScheduleOptions provides optional fields for updating a schedule
+type UpdateScheduleOptions struct {
+	Name           *string
+	CronExpr       *string
+	Timezone       *string
+	TimeoutSeconds *int32
+	Config         map[string]interface{}
+	Enabled        *bool
+}
+
+// UpdateSchedule updates an existing schedule with optional fields
+func UpdateSchedule(ctx context.Context, scheduleID string, opts UpdateScheduleOptions) (*mgmtpb.ScheduleInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	req := &mgmtpb.UpdateScheduleRequest{
+		Context:    createPluginContext(AvailableScopes.SchedulerManage),
+		ScheduleId: scheduleID,
+	}
+
+	// Set optional fields
+	if opts.Name != nil {
+		req.Name = opts.Name
+	}
+	if opts.CronExpr != nil {
+		req.CronExpr = opts.CronExpr
+	}
+	if opts.Timezone != nil {
+		req.Timezone = opts.Timezone
+	}
+	if opts.TimeoutSeconds != nil {
+		req.TimeoutSeconds = opts.TimeoutSeconds
+	}
+	if opts.Enabled != nil {
+		req.Enabled = opts.Enabled
+	}
+	if opts.Config != nil {
+		if configBytes, err := json.Marshal(opts.Config); err == nil {
+			configJSON := string(configBytes)
+			req.ConfigJson = &configJSON
+		} else {
+			return nil, fmt.Errorf("failed to marshal config: %w", err)
+		}
+	}
+
+	resp, err := client.UpdateSchedule(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update schedule: %w", err)
+	}
+
+	return resp.Schedule, nil
+}
+
+// DeleteSchedule deletes a schedule
+func DeleteSchedule(ctx context.Context, scheduleID string) error {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.DeleteSchedule(ctx, &mgmtpb.DeleteScheduleRequest{
+		Context:    createPluginContext(AvailableScopes.SchedulerManage),
+		ScheduleId: scheduleID,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to delete schedule: %w", err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("delete schedule failed: %s", resp.Message)
+	}
+
+	return nil
+}
+
+// ===========================
+// License Information Methods
+// ===========================
+
+// LicenseInfo represents license information returned from the host
+type LicenseInfo struct {
+	LicenseValid  bool      // True if a valid enterprise license is present
+	DaysRemaining int       // Days until license expires (-1 for community/never expires)
+	LicenseType   string    // "community" or "enterprise"
+	Entitlements  []string  // List of enabled features/entitlements
+	Organization  string    // Licensed organization name (enterprise only)
+	ExpiresAt     time.Time // License expiration timestamp (zero for community)
+}
+
+// GetLicenseInfo retrieves license information from the AI Studio host
+// This allows plugins to check if they're running in enterprise mode and what features are available
+// Note: This doesn't require any special scope - all plugins can check license status
+func GetLicenseInfo(ctx context.Context) (*LicenseInfo, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	resp, err := client.GetLicenseInfo(ctx, &mgmtpb.GetLicenseInfoRequest{
+		Context: createPluginContext(""), // No scope required for license check
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get license info: %w", err)
+	}
+
+	info := &LicenseInfo{
+		LicenseValid:  resp.LicenseValid,
+		DaysRemaining: int(resp.DaysRemaining),
+		LicenseType:   resp.LicenseType,
+		Entitlements:  resp.Entitlements,
+		Organization:  resp.Organization,
+	}
+
+	// Convert timestamp if present
+	if resp.ExpiresAt != nil {
+		info.ExpiresAt = resp.ExpiresAt.AsTime()
+	}
+
+	return info, nil
+}
+
+// IsEnterpriseMode is a helper that checks if the host has an enterprise license
+func IsEnterpriseMode(ctx context.Context) (bool, error) {
+	info, err := GetLicenseInfo(ctx)
+	if err != nil {
+		return false, err
+	}
+	return info.LicenseType == "enterprise" && info.LicenseValid, nil
+}
+
+// HasEntitlement checks if a specific feature entitlement is enabled
+func HasEntitlement(ctx context.Context, entitlement string) (bool, error) {
+	info, err := GetLicenseInfo(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	for _, e := range info.Entitlements {
+		if e == entitlement {
+			return true, nil
+		}
+	}
+	return false, nil
 }

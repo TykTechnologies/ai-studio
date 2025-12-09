@@ -59,10 +59,10 @@ const ToolCatalogueForm = () => {
     try {
       const response = await apiClient.get(`/tool-catalogues/${id}`);
       console.log("Catalogue details response:", response.data);
-      if (response.data && response.data.attributes) {
-        setCatalogue(response.data.attributes);
-        setTools(response.data.attributes.tools || []);
-        setTags(response.data.attributes.tags || []);
+      if (response.data?.data?.attributes) {
+        setCatalogue(response.data.data.attributes);
+        setTools(response.data.data.attributes.tools || []);
+        setTags(response.data.data.attributes.tags || []);
       } else {
         throw new Error("Unexpected API response structure");
       }
@@ -117,13 +117,13 @@ const ToolCatalogueForm = () => {
 
       console.log("API Response:", response.data);
 
-      if (!response.data || !response.data.id) {
+      if (!response.data?.data?.id) {
         throw new Error(
           `Unexpected API response structure: ${JSON.stringify(response.data)}`,
         );
       }
 
-      const newCatalogueId = response.data.id;
+      const newCatalogueId = response.data.data.id;
 
       // Update tools and tags
       await updateTools(newCatalogueId);

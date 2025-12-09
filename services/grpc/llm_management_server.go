@@ -228,6 +228,12 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 		return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
 	}
 
+	// Determine namespace: use from request if provided, otherwise preserve existing
+	namespace := req.GetNamespace()
+	if namespace == "" {
+		namespace = existingLLM.Namespace
+	}
+
 	// Call existing service method with preserved vendor
 	llm, err := s.service.UpdateLLM(
 		uint(llmID),
@@ -244,7 +250,8 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 		req.GetDefaultModel(),
 		req.GetAllowedModels(),
 		req.MonthlyBudget,
-		nil, // BudgetStartDate
+		nil,       // BudgetStartDate
+		namespace, // Support namespace updates via gRPC
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -289,6 +296,85 @@ func (s *LLMManagementServer) DeleteLLM(ctx context.Context, req *pb.DeleteLLMRe
 		Success: true,
 		Message: "LLM deleted successfully",
 	}, nil
+}
+
+// UpdateLLMPlugins updates plugin associations for an LLM
+func (s *LLMManagementServer) UpdateLLMPlugins(ctx context.Context, req *pb.UpdateLLMPluginsRequest) (*pb.UpdateLLMPluginsResponse, error) {
+	llmID := req.GetLlmId()
+	if llmID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "llm_id is required")
+	}
+
+	// Convert plugin IDs from uint32 to uint
+	newPluginIDs := make([]uint, len(req.GetPluginIds()))
+	for i, id := range req.GetPluginIds() {
+		newPluginIDs[i] = uint(id)
+	}
+
+	var finalPluginIDs []uint
+
+	if req.GetAppend() {
+		// Append mode: get existing plugins and merge with new ones
+		existingPlugins, err := s.service.PluginService.GetPluginsForLLM(uint(llmID))
+		if err != nil {
+			log.Error().Err(err).Uint32("llm_id", llmID).Msg("Failed to get existing LLM plugins")
+			return nil, status.Errorf(codes.Internal, "failed to get existing plugins: %v", err)
+		}
+
+		// Build set of existing plugin IDs
+		existingSet := make(map[uint]bool)
+		for _, p := range existingPlugins {
+			existingSet[p.ID] = true
+			finalPluginIDs = append(finalPluginIDs, p.ID)
+		}
+
+		// Add new plugins that aren't already associated
+		for _, newID := range newPluginIDs {
+			if !existingSet[newID] {
+				finalPluginIDs = append(finalPluginIDs, newID)
+			}
+		}
+	} else {
+		// Replace mode: use new plugin IDs directly
+		finalPluginIDs = newPluginIDs
+	}
+
+	// Update the LLM-plugin associations
+	err := s.service.PluginService.UpdateLLMPlugins(uint(llmID), finalPluginIDs)
+	if err != nil {
+		log.Error().Err(err).
+			Uint32("llm_id", llmID).
+			Ints("plugin_ids", toIntSlice(finalPluginIDs)).
+			Msg("Failed to update LLM plugins via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to update LLM plugins: %v", err)
+	}
+
+	// Convert final plugin IDs back to uint32
+	resultPluginIDs := make([]uint32, len(finalPluginIDs))
+	for i, id := range finalPluginIDs {
+		resultPluginIDs[i] = uint32(id)
+	}
+
+	log.Info().
+		Uint32("llm_id", llmID).
+		Ints("plugin_ids", toIntSlice(finalPluginIDs)).
+		Bool("append_mode", req.GetAppend()).
+		Msg("Updated LLM plugins via gRPC")
+
+	return &pb.UpdateLLMPluginsResponse{
+		Success:   true,
+		Message:   "LLM plugins updated successfully",
+		PluginIds: resultPluginIDs,
+	}, nil
+}
+
+// toIntSlice converts []uint to []int for logging
+func toIntSlice(uints []uint) []int {
+	ints := make([]int, len(uints))
+	for i, u := range uints {
+		ints[i] = int(u)
+	}
+	return ints
 }
 
 // convertLLMToPB converts a models.LLM to protobuf LLMInfo

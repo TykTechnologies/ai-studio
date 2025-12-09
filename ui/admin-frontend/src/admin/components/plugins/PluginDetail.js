@@ -31,6 +31,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import pluginService, { PluginService } from '../../services/pluginService';
 import agentService from '../../services/agentService';
 import { isAgentPlugin } from '../../constants/agentTypes';
+import PluginSchedules from './PluginSchedules';
 import {
   TitleBox,
   ContentBox,
@@ -567,6 +568,19 @@ const PluginDetail = () => {
               </Card>
             </Grid>
           )}
+
+          {/* Scheduled Tasks */}
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Scheduled Tasks
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+                <PluginSchedules pluginId={plugin.id} pluginIsActive={plugin.isActive} />
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
 
         <Box

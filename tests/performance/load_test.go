@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/performance/framework"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 // setupLoadTestProxy creates a proxy for load testing
@@ -24,7 +25,7 @@ func setupLoadTestProxy(b *testing.B) (*proxy.Proxy, *framework.BenchmarkDB, *fr
 
 	// Create services
 	service := services.NewService(benchDB.GetDB())
-	budgetService := services.NewBudgetService(benchDB.DB, nil)
+	budgetService := budget.NewService(benchDB.DB, nil)
 
 	// Initialize analytics
 	ctx := context.Background()

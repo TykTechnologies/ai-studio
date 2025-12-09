@@ -7,6 +7,7 @@ Welcome to Tyk AI Studio! Before diving into specific features, understanding th
 Tyk AI Studio is designed as a secure, observable, and extensible gateway for interacting with Large Language Models (LLMs) and other AI services. Key architectural pillars include:
 
 *   **[AI Gateway](./proxy.md):** The central gateway managing all interactions between your applications and various LLM providers. It enforces policies, logs activity, and handles vendor abstraction.
+*   **[Model Router](./model-router.md) (Enterprise):** Intelligent request routing across multiple LLM vendors based on model name patterns, with support for load balancing, failover, and model name translation.
 *   **AI Portal:** Empowers developers with a curated catalog of AI tools and services for faster innovation.
 *   **[Chat](./chat-interface.md):** Provides a secure and interactive environment for users to engage with LLMs, leveraging integrated tools and data sources.
 *   **[User Management & RBAC](./user-management.md):** Securely manages users, groups, and permissions. Access to resources like LLMs, Tools, and Data Sources is controlled via group memberships.

@@ -22,24 +22,39 @@ WORKDIR /build/microgateway
 # Download dependencies (now the replace directive can find the parent)
 RUN go mod download
 
-# Build arguments for version information
+# Build arguments for version information and edition
 ARG VERSION=dev
 ARG BUILD_HASH=unknown
 ARG BUILD_TIME=unknown
+ARG EDITION=ce
 
-# Build both microgateway server and CLI with optimized flags
-# Note: Not setting GOOS/GOARCH explicitly - Docker Buildx will use native arch for each platform
-RUN CGO_ENABLED=1 go build \
-    -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildHash=${BUILD_HASH} -X main.BuildTime=${BUILD_TIME}" \
-    -trimpath \
-    -o microgateway \
-    ./cmd/microgateway
+# Set build tags based on edition
+# For CE: no build tags
+# For ENT: -tags enterprise
+RUN if [ "$EDITION" = "ent" ]; then \
+        BUILD_TAGS="-tags enterprise"; \
+    else \
+        BUILD_TAGS=""; \
+    fi && \
+    echo "Building microgateway $EDITION edition with tags: $BUILD_TAGS" && \
+    CGO_ENABLED=1 go build \
+        $BUILD_TAGS \
+        -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildHash=${BUILD_HASH} -X main.BuildTime=${BUILD_TIME}" \
+        -trimpath \
+        -o microgateway \
+        ./cmd/microgateway
 
-RUN CGO_ENABLED=1 go build \
-    -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildHash=${BUILD_HASH} -X main.BuildTime=${BUILD_TIME}" \
-    -trimpath \
-    -o mgw \
-    ./cmd/mgw
+RUN if [ "$EDITION" = "ent" ]; then \
+        BUILD_TAGS="-tags enterprise"; \
+    else \
+        BUILD_TAGS=""; \
+    fi && \
+    CGO_ENABLED=1 go build \
+        $BUILD_TAGS \
+        -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildHash=${BUILD_HASH} -X main.BuildTime=${BUILD_TIME}" \
+        -trimpath \
+        -o mgw \
+        ./cmd/mgw
 
 # Runtime stage
 FROM alpine:3.19

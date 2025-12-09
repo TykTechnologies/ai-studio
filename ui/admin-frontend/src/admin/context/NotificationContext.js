@@ -27,8 +27,20 @@ export const NotificationProvider = ({ children }) => {
 		}
 	}, [fetchUnreadCount]);
 
+	const markAllAsRead = useCallback(async () => {
+		try {
+			await axios.put('/common/api/v1/notifications/read-all');
+			// Update the unread count
+			fetchUnreadCount();
+			return true;
+		} catch (error) {
+			console.error('Error marking all notifications as read:', error);
+			return false;
+		}
+	}, [fetchUnreadCount]);
+
 	return (
-		<NotificationContext.Provider value={{ unreadCount, fetchUnreadCount, markAsRead }}>
+		<NotificationContext.Provider value={{ unreadCount, fetchUnreadCount, markAsRead, markAllAsRead }}>
 			{children}
 		</NotificationContext.Provider>
 	);

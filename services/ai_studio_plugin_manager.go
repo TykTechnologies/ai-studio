@@ -13,11 +13,13 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
-	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
+	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
+	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -28,6 +30,9 @@ import (
 // This is set when the service is created to avoid circular dependencies
 var globalServiceReference *Service
 
+// Global event server reference for plugin pub/sub
+var globalEventServerReference *PluginEventServer
+
 // NewAIStudioManagementServerFunc is a factory function for creating AIStudioManagementServer
 // This is set by the grpc package to avoid circular imports
 var NewAIStudioManagementServerFunc func(*Service) interface{}
@@ -35,7 +40,13 @@ var NewAIStudioManagementServerFunc func(*Service) interface{}
 // SetGlobalServiceReference sets the global service reference for GRPCServer access
 func SetGlobalServiceReference(service *Service) {
 	globalServiceReference = service
-	logger.Info("Global service reference set for plugin GRPCServer access")
+	logger.Debug("Global service reference set for plugin GRPCServer access")
+}
+
+// SetGlobalEventServer sets the global event server for plugin pub/sub access
+func SetGlobalEventServer(server *PluginEventServer) {
+	globalEventServerReference = server
+	logger.Debug("Global event server set for plugin pub/sub access")
 }
 
 
@@ -55,6 +66,12 @@ type AIStudioPluginManager struct {
 	// Plugin configuration
 	handshakeConfig goplugin.HandshakeConfig
 	pluginMap       map[string]goplugin.Plugin
+
+	// Event server for plugin pub/sub
+	eventServer *PluginEventServer
+
+	// Session management for long-lived broker connections
+	pluginSessions map[uint]context.CancelFunc // plugin_id -> session cancel function
 }
 
 // LoadedAIStudioPlugin represents a loaded AI Studio plugin
@@ -67,6 +84,7 @@ type LoadedAIStudioPlugin struct {
 	Client          *goplugin.Client
 	GRPCClient      pb.PluginServiceClient
 	ServiceProvider plugin_services.AIStudioServiceProvider // Injected service provider
+	SessionBrokerID uint32                                  // Long-lived broker ID for session-based service API access
 	LoadTime        time.Time
 	IsHealthy       bool
 	LastPing        time.Time
@@ -80,6 +98,7 @@ func NewAIStudioPluginManager(db *gorm.DB, ociClient *ociplugins.OCIPluginClient
 		manifestService: nil, // Will be set later to avoid circular dependency
 		loadedPlugins:   make(map[uint]*LoadedAIStudioPlugin),
 		pluginClients:   make(map[uint]*goplugin.Client),
+		pluginSessions:  make(map[uint]context.CancelFunc),
 		handshakeConfig: goplugin.HandshakeConfig{
 			ProtocolVersion:  1,
 			MagicCookieKey:   "AI_STUDIO_PLUGIN",
@@ -105,6 +124,32 @@ func (m *AIStudioPluginManager) SetService(service *Service) {
 	m.service = service
 }
 
+// SetEventBus creates a PluginEventServer from the given event bus and node ID.
+// This enables plugin pub/sub functionality.
+func (m *AIStudioPluginManager) SetEventBus(bus eventbridge.Bus, nodeID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if bus == nil {
+		return
+	}
+
+	m.eventServer = NewPluginEventServer(bus, nodeID)
+	// Also set the global reference for GRPCClient access
+	SetGlobalEventServer(m.eventServer)
+
+	log.Debug().
+		Str("node_id", nodeID).
+		Msg("Plugin event server created for AI Studio plugin manager")
+}
+
+// GetEventServer returns the plugin event server
+func (m *AIStudioPluginManager) GetEventServer() *PluginEventServer {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.eventServer
+}
+
 // AIStudioPluginGRPC implements the goplugin.Plugin interface for gRPC
 type AIStudioPluginGRPC struct {
 	goplugin.NetRPCUnsupportedPlugin
@@ -118,17 +163,19 @@ func (p *AIStudioPluginGRPC) GRPCServer(broker *goplugin.GRPCBroker, s *grpc.Ser
 func (p *AIStudioPluginGRPC) GRPCClient(ctx context.Context, broker *goplugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	// Return client wrapper that stores broker for host-side service setup
 	return &AIStudioPluginClient{
-		broker:     broker,
-		pluginStub: pb.NewPluginServiceClient(c),
-		service:    globalServiceReference,
+		broker:      broker,
+		pluginStub:  pb.NewPluginServiceClient(c),
+		service:     globalServiceReference,
+		eventServer: globalEventServerReference,
 	}, nil
 }
 
 // AIStudioPluginClient wraps the plugin client with broker access for host service setup
 type AIStudioPluginClient struct {
-	broker     *goplugin.GRPCBroker
-	pluginStub pb.PluginServiceClient
-	service    *Service // Reference to AI Studio service for brokered servers
+	broker      *goplugin.GRPCBroker
+	pluginStub  pb.PluginServiceClient
+	service     *Service             // Reference to AI Studio service for brokered servers
+	eventServer *PluginEventServer   // Reference to plugin event server for pub/sub
 }
 
 // SetupServiceBroker creates a long-lived brokered server for AI Studio services
@@ -141,9 +188,13 @@ func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
 	// Allocate broker ID and start brokered server
 	brokerID := c.broker.NextId()
 
-	log.Info().
+	log.Debug().
 		Uint32("broker_id", brokerID).
+		Bool("has_event_server", c.eventServer != nil).
 		Msg("Setting up long-lived brokered server for AI Studio service API access")
+
+	// Capture event server reference for closure
+	evtServer := c.eventServer
 
 	// Start brokered server with AI Studio management services
 	go c.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
@@ -155,12 +206,20 @@ func (c *AIStudioPluginClient) SetupServiceBroker() (uint32, error) {
 			aiStudioServer := NewAIStudioManagementServerFunc(c.service)
 			if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
 				mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-				log.Info().
+				log.Debug().
 					Uint32("broker_id", brokerID).
-					Msg("✅ AI Studio management services registered on long-lived brokered server")
+					Msg("AI Studio management services registered on long-lived brokered server")
 			}
 		} else {
 			log.Error().Msg("NewAIStudioManagementServerFunc not set - cannot create service server")
+		}
+
+		// Register plugin event service if available
+		if evtServer != nil {
+			eventpb.RegisterPluginEventServiceServer(s, evtServer)
+			log.Debug().
+				Uint32("broker_id", brokerID).
+				Msg("Plugin event service registered on long-lived brokered server")
 		}
 
 		return s
@@ -226,6 +285,10 @@ func (c *AIStudioPluginClient) OnBeforeWrite(ctx context.Context, req *pb.Respon
 	return c.pluginStub.OnBeforeWrite(ctx, req, opts...)
 }
 
+func (c *AIStudioPluginClient) OnStreamComplete(ctx context.Context, req *pb.StreamCompleteRequest, opts ...grpc.CallOption) (*pb.StreamCompleteResponse, error) {
+	return c.pluginStub.OnStreamComplete(ctx, req, opts...)
+}
+
 func (c *AIStudioPluginClient) HandleProxyLog(ctx context.Context, req *pb.ProxyLogRequest, opts ...grpc.CallOption) (*pb.DataCollectionResponse, error) {
 	return c.pluginStub.HandleProxyLog(ctx, req, opts...)
 }
@@ -252,6 +315,25 @@ func (c *AIStudioPluginClient) GetObjectHookRegistrations(ctx context.Context, r
 
 func (c *AIStudioPluginClient) HandleObjectHook(ctx context.Context, req *pb.ObjectHookRequest, opts ...grpc.CallOption) (*pb.ObjectHookResponse, error) {
 	return c.pluginStub.HandleObjectHook(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) ExecuteScheduledTask(ctx context.Context, req *pb.ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*pb.ExecuteScheduledTaskResponse, error) {
+	return c.pluginStub.ExecuteScheduledTask(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) AcceptEdgePayload(ctx context.Context, req *pb.EdgePayloadRequest, opts ...grpc.CallOption) (*pb.EdgePayloadResponse, error) {
+	return c.pluginStub.AcceptEdgePayload(ctx, req, opts...)
+}
+
+// OpenSession opens a long-lived session for broker access.
+// This blocks until timeout or CloseSession is called.
+func (c *AIStudioPluginClient) OpenSession(ctx context.Context, req *pb.OpenSessionRequest, opts ...grpc.CallOption) (*pb.OpenSessionResponse, error) {
+	return c.pluginStub.OpenSession(ctx, req, opts...)
+}
+
+// CloseSession explicitly closes an active session.
+func (c *AIStudioPluginClient) CloseSession(ctx context.Context, req *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
+	return c.pluginStub.CloseSession(ctx, req, opts...)
 }
 
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
@@ -334,12 +416,12 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	// Set service reference in client wrapper for per-request broker setup
 	clientWrapper.service = m.service
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", plugin.ID).
 		Str("plugin_name", plugin.Name).
 		Bool("has_broker", clientWrapper.broker != nil).
 		Bool("has_service", clientWrapper.service != nil).
-		Msg("✅ Plugin client wrapper connected with broker access")
+		Msg("Plugin client wrapper connected with broker access")
 
 	// Initialize plugin with config
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -369,9 +451,80 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		}
 	}
 
-	// Add plugin ID to config (broker ID will be passed per-request)
+	// Add plugin ID to config
 	configMap["plugin_id"] = fmt.Sprintf("%d", plugin.ID)
 	configMap["has_service_api"] = "true"
+
+	// Set up LONG-LIVED service broker that persists for the plugin's lifetime.
+	// This broker is used for both Initialize() and subsequent event service access.
+	// The plugin SDK stores this broker ID and uses it to dial back for pub/sub.
+	var serviceBrokerID uint32
+	if clientWrapper.broker != nil && m.service != nil {
+		// Create brokered server for service API access (persists for plugin lifetime)
+		brokerID := clientWrapper.broker.NextId()
+
+		// Capture references for closure
+		evtServer := clientWrapper.eventServer
+		pluginID := plugin.ID
+
+		// Use a channel to ensure server is ready before proceeding
+		serverReady := make(chan struct{})
+
+		// Start broker server in background - this stays alive for the plugin's lifetime
+		go func() {
+			clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+				// Create server with plugin ID context for authentication
+				// Use inline interceptor to avoid import cycle with services/grpc
+				pluginIDInterceptor := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+					// Inject plugin ID into context using the exported constant
+					ctx = context.WithValue(ctx, "midsommar:plugin:id", pluginID)
+					return handler(ctx, req)
+				}
+
+				// Add interceptor to options
+				opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
+				s := grpc.NewServer(opts...)
+
+				// Register AI Studio management service server using factory function
+				if NewAIStudioManagementServerFunc != nil {
+					serverImpl := NewAIStudioManagementServerFunc(m.service)
+					if mgmtServer, ok := serverImpl.(mgmtpb.AIStudioManagementServiceServer); ok {
+						mgmtpb.RegisterAIStudioManagementServiceServer(s, mgmtServer)
+					}
+				}
+
+				// Register plugin event service if available (for pub/sub support)
+				if evtServer != nil {
+					eventpb.RegisterPluginEventServiceServer(s, evtServer)
+					log.Debug().
+						Uint32("broker_id", brokerID).
+						Uint("plugin_id", pluginID).
+						Msg("Plugin event service registered on long-lived service broker")
+				}
+
+				// Signal that the server is ready
+				close(serverReady)
+
+				return s
+			})
+		}()
+
+		// Wait for server to be ready before continuing (with timeout)
+		select {
+		case <-serverReady:
+			log.Debug().Uint32("broker_id", brokerID).Msg("Long-lived brokered server ready for plugin")
+		case <-time.After(500 * time.Millisecond):
+			log.Warn().Uint32("broker_id", brokerID).Msg("Long-lived brokered server setup timeout - proceeding anyway")
+		}
+
+		serviceBrokerID = brokerID
+		configMap["service_broker_id"] = fmt.Sprintf("%d", serviceBrokerID)
+
+		log.Debug().
+			Uint("plugin_id", plugin.ID).
+			Uint32("broker_id", serviceBrokerID).
+			Msg("Long-lived service broker set up for plugin")
+	}
 
 	initResp, err := clientWrapper.Initialize(ctx, &pb.InitRequest{
 		Config: configMap,
@@ -386,15 +539,25 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		return nil, fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
 	}
 
+	// Start session loop for plugins that need persistent broker connections (e.g., event pub/sub)
+	// This runs in a background goroutine and maintains a long-polling session
+	if serviceBrokerID > 0 {
+		go m.runPluginSessionLoop(pluginID, clientWrapper, serviceBrokerID)
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Uint32("broker_id", serviceBrokerID).
+			Msg("Started plugin session loop for persistent broker connection")
+	}
+
 	// Create service provider for this plugin (if main service is available)
 	var serviceProvider plugin_services.AIStudioServiceProvider
 	if m.service != nil {
 		// Create working service provider adapter
 		serviceProvider = plugin_services.NewWorkingServiceProviderAdapter(m.service, plugin.ID)
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", plugin.ID).
 			Str("plugin_name", plugin.Name).
-			Msg("✅ Created working service provider for plugin - real analytics available")
+			Msg("Created working service provider for plugin")
 	} else {
 		log.Warn().
 			Uint("plugin_id", plugin.ID).
@@ -412,6 +575,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 		Client:          client,
 		GRPCClient:      clientWrapper, // Use client wrapper with broker access
 		ServiceProvider: serviceProvider,
+		SessionBrokerID: serviceBrokerID, // Store the long-lived session broker ID
 		LoadTime:        time.Now(),
 		IsHealthy:       true,
 		LastPing:        time.Now(),
@@ -430,20 +594,20 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 				Str("plugin_name", plugin.Name).
 				Msg("Failed to inject service provider into plugin")
 		} else {
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
-				Msg("✅ Service provider injected into plugin successfully")
+				Msg("Service provider injected into plugin")
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("plugin_name", plugin.Name).
 		Str("command", plugin.Command).
 		Bool("is_oci", plugin.IsOCIPlugin()).
 		Bool("has_service_provider", serviceProvider != nil).
-		Msg("AI Studio plugin loaded successfully")
+		Msg("AI Studio plugin loaded")
 
 	// Register object hooks if plugin implements ObjectHookHandler
 	if m.service != nil && m.service.HookRegistry != nil {
@@ -460,21 +624,21 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 					Err(err).
 					Msg("Failed to register object hooks")
 			} else {
-				log.Info().
+				log.Debug().
 					Uint("plugin_id", pluginID).
 					Str("plugin_name", plugin.Name).
 					Int("hook_count", len(regs.Registrations)).
-					Msg("✅ Registered object hooks for plugin")
+					Msg("Registered object hooks for plugin")
 			}
 		}
 	}
 
 	// Auto-fetch and register manifest (new streamlined workflow)
 	go func() {
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", pluginID).
 			Str("plugin_name", plugin.Name).
-			Msg("Auto-fetching manifest for loaded AI Studio plugin")
+			Msg("Auto-fetching manifest for AI Studio plugin")
 
 		// Give plugin a moment to fully initialize
 		time.Sleep(1 * time.Second)
@@ -527,11 +691,11 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 					Err(updateErr).
 					Msg("Failed to update plugin hook types from manifest")
 			} else {
-				log.Info().
+				log.Debug().
 					Uint("plugin_id", pluginID).
 					Str("plugin_name", pluginForUI.Name).
 					Strs("hooks", pluginForUI.HookTypes).
-					Msg("✅ Auto-populated hook types from manifest")
+					Msg("Auto-populated hook types from manifest")
 			}
 		}
 
@@ -546,19 +710,79 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 				return
 			}
 
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("plugin_name", plugin.Name).
 				Str("manifest_id", manifest.ID).
 				Str("manifest_version", manifest.Version).
-				Msg("✅ Auto-fetched manifest and registered UI components")
+				Msg("Auto-fetched manifest and registered UI components")
 		} else {
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", pluginID).
 				Str("plugin_name", plugin.Name).
 				Str("manifest_id", manifest.ID).
 				Str("manifest_version", manifest.Version).
-				Msg("Auto-fetched manifest successfully - manifest service not available for UI registration")
+				Msg("Auto-fetched manifest - manifest service not available for UI registration")
+		}
+
+		// Register schedules from manifest
+		if len(manifest.Schedules) > 0 {
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Int("schedule_count", len(manifest.Schedules)).
+				Msg("Registering scheduled tasks from manifest")
+
+			for _, scheduleDef := range manifest.Schedules {
+				// Set defaults
+				timezone := scheduleDef.Timezone
+				if timezone == "" {
+					timezone = "UTC"
+				}
+
+				timeoutSeconds := scheduleDef.TimeoutSeconds
+				if timeoutSeconds == 0 {
+					timeoutSeconds = 60
+				}
+
+				// Convert config to JSON
+				configJSON := "{}"
+				if len(scheduleDef.Config) > 0 {
+					if configBytes, err := json.Marshal(scheduleDef.Config); err == nil {
+						configJSON = string(configBytes)
+					}
+				}
+
+				// Create or update schedule in database
+				schedule := models.PluginSchedule{
+					PluginID:           pluginID,
+					ManifestScheduleID: scheduleDef.ID,
+					Name:               scheduleDef.Name,
+					CronExpr:           scheduleDef.Cron,
+					Timezone:           timezone,
+					Enabled:            scheduleDef.Enabled,
+					TimeoutSeconds:     timeoutSeconds,
+					Config:             configJSON,
+				}
+
+				// Upsert schedule (update if exists, create if not)
+				if err := m.db.Where("plugin_id = ? AND manifest_schedule_id = ?", pluginID, scheduleDef.ID).
+					Assign(schedule).
+					FirstOrCreate(&schedule).Error; err != nil {
+					log.Warn().
+						Uint("plugin_id", pluginID).
+						Str("schedule_id", scheduleDef.ID).
+						Err(err).
+						Msg("Failed to register schedule")
+				} else {
+					log.Debug().
+						Uint("plugin_id", pluginID).
+						Str("schedule_id", scheduleDef.ID).
+						Str("schedule_name", scheduleDef.Name).
+						Str("cron", scheduleDef.Cron).
+						Msg("Registered schedule")
+				}
+			}
 		}
 	}()
 
@@ -576,10 +800,10 @@ func (m *AIStudioPluginManager) injectServiceProvider(loadedPlugin *LoadedAIStud
 	}
 
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", loadedPlugin.ID).
 		Str("plugin_name", loadedPlugin.Name).
-		Msg("✅ Service provider injected and available for plugin access")
+		Msg("Service provider injected and available for plugin access")
 
 	return nil
 }
@@ -611,11 +835,33 @@ func (m *AIStudioPluginManager) GetServiceProvider(pluginID uint) (plugin_servic
 // UnloadPlugin unloads an AI Studio plugin
 func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	loadedPlugin, exists := m.loadedPlugins[pluginID]
 	if !exists {
+		m.mu.Unlock()
 		return fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	// Get client wrapper while holding lock
+	clientWrapper, hasClient := loadedPlugin.GRPCClient.(*AIStudioPluginClient)
+
+	// Release lock before closing session (closePluginSession needs the lock)
+	m.mu.Unlock()
+
+	// Close plugin session before shutdown (stops the session loop goroutine)
+	// This must be done without holding the lock to avoid deadlock
+	if hasClient {
+		m.closePluginSession(pluginID, clientWrapper)
+	}
+
+	// Re-acquire lock for the rest of the cleanup
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Re-check that plugin still exists (could have been unloaded by another goroutine)
+	loadedPlugin, exists = m.loadedPlugins[pluginID]
+	if !exists {
+		return nil // Already unloaded
 	}
 
 	// Shutdown plugin gracefully
@@ -637,7 +883,7 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 	// Unregister object hooks if registry is available
 	if m.service != nil && m.service.HookRegistry != nil {
 		m.service.HookRegistry.UnregisterPlugin(uint32(pluginID))
-		log.Info().
+		log.Debug().
 			Uint("plugin_id", pluginID).
 			Str("plugin_name", loadedPlugin.Name).
 			Msg("Unregistered object hooks for plugin")
@@ -652,12 +898,132 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 	delete(m.loadedPlugins, pluginID)
 	delete(m.pluginClients, pluginID)
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("plugin_name", loadedPlugin.Name).
-		Msg("AI Studio plugin unloaded successfully")
+		Msg("AI Studio plugin unloaded")
 
 	return nil
+}
+
+// runPluginSessionLoop maintains a long-lived session for plugins that need persistent
+// broker connections (e.g., for event pub/sub). Uses long-polling pattern where sessions
+// timeout after 30 seconds and are automatically re-opened.
+func (m *AIStudioPluginManager) runPluginSessionLoop(pluginID uint, client *AIStudioPluginClient, brokerID uint32) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Store cancel function for cleanup
+	m.mu.Lock()
+	m.pluginSessions[pluginID] = cancel
+	m.mu.Unlock()
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Uint32("broker_id", brokerID).
+		Msg("Starting plugin session loop")
+
+	defer func() {
+		m.mu.Lock()
+		delete(m.pluginSessions, pluginID)
+		m.mu.Unlock()
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Msg("Plugin session loop ended")
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Msg("Session loop cancelled")
+			return
+		default:
+			// Open session with 30 second timeout (long-polling pattern)
+			resp, err := client.OpenSession(ctx, &pb.OpenSessionRequest{
+				ServiceBrokerId: brokerID,
+				PluginId:        uint32(pluginID),
+				TimeoutMs:       30000, // 30 second timeout
+			})
+			if err != nil {
+				// Check if context was cancelled
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					log.Warn().
+						Uint("plugin_id", pluginID).
+						Err(err).
+						Msg("Session open failed, retrying in 1 second")
+					time.Sleep(1 * time.Second)
+					continue
+				}
+			}
+
+			// Handle session close reason
+			switch resp.CloseReason {
+			case pb.OpenSessionResponse_TIMEOUT:
+				// Normal timeout, re-open session
+				log.Trace().
+					Uint("plugin_id", pluginID).
+					Msg("Session timed out, re-opening")
+				continue
+
+			case pb.OpenSessionResponse_EXPLICIT_CLOSE:
+				// Host or plugin requested close
+				log.Debug().
+					Uint("plugin_id", pluginID).
+					Msg("Session explicitly closed")
+				return
+
+			case pb.OpenSessionResponse_PLUGIN_ERROR:
+				// Plugin error, log and retry
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Str("error", resp.ErrorMessage).
+					Msg("Session closed due to plugin error, retrying")
+				time.Sleep(1 * time.Second)
+				continue
+
+			default:
+				// Unknown reason, retry
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Int32("reason", int32(resp.CloseReason)).
+					Msg("Session closed with unknown reason, retrying")
+				time.Sleep(1 * time.Second)
+				continue
+			}
+		}
+	}
+}
+
+// closePluginSession closes an active session for a plugin
+func (m *AIStudioPluginManager) closePluginSession(pluginID uint, client *AIStudioPluginClient) {
+	m.mu.Lock()
+	cancelFunc, exists := m.pluginSessions[pluginID]
+	m.mu.Unlock()
+
+	if !exists {
+		return
+	}
+
+	// Send explicit close to plugin
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := client.CloseSession(ctx, &pb.CloseSessionRequest{
+		Reason: "plugin_unload",
+	})
+	if err != nil {
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Err(err).
+			Msg("Failed to send session close to plugin (may already be closed)")
+	}
+
+	// Cancel the session loop goroutine
+	cancelFunc()
 }
 
 // GetPluginAsset retrieves an asset from a loaded plugin via gRPC
@@ -784,89 +1150,25 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 		return nil, fmt.Errorf("failed to marshal RPC payload: %w", err)
 	}
 
-	// Set up per-request broker for service API access (if plugin needs it)
-	var serviceBrokerID uint32
-	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
-		if clientWrapper.broker != nil && clientWrapper.service != nil {
-			// Set up per-request brokered server for this call
-			brokerID := clientWrapper.broker.NextId()
+	// Use the long-lived session broker ID (set up during plugin load)
+	// The session broker is already running and serves all RPC calls for this plugin
+	serviceBrokerID := loadedPlugin.SessionBrokerID
 
-			log.Info().
-				Uint("plugin_id", pluginID).
-				Str("method", method).
-				Uint32("broker_id", brokerID).
-				Msg("Setting up per-request broker for service API access")
-
-			// Start brokered server for this request
-			// Use a channel to ensure server is ready before proceeding
-			serverReady := make(chan struct{})
-			go func() {
-				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
-					// Inject plugin ID into context for all requests on this brokered server
-					pluginIDInterceptor := CreatePluginIDInterceptor(pluginID)
-					opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
-
-					s := grpc.NewServer(opts...)
-
-					// Register AI Studio management services with full implementation
-					// Use factory function to avoid circular import (set by grpc package)
-					if NewAIStudioManagementServerFunc != nil {
-						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
-						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
-							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
-							log.Debug().
-								Uint32("broker_id", brokerID).
-								Uint("plugin_id", pluginID).
-								Msg("AI Studio services registered on per-request brokered server with plugin ID context")
-						}
-					} else {
-						log.Error().Msg("NewAIStudioManagementServerFunc not set - cannot create service server")
-					}
-
-					// Signal that server is ready
-					close(serverReady)
-
-					return s
-				})
-			}()
-
-			// Wait for server to be ready before proceeding (with timeout)
-			select {
-			case <-serverReady:
-				log.Debug().Uint32("broker_id", brokerID).Msg("Brokered server ready for plugin calls")
-			case <-time.After(100 * time.Millisecond):
-				log.Warn().Uint32("broker_id", brokerID).Msg("Brokered server setup timeout - proceeding anyway")
-			}
-
-			serviceBrokerID = brokerID
-		}
-	}
-
-	// Add broker ID to payload if available
-	if serviceBrokerID != 0 {
-		// Add broker ID to the payload so plugin can access it
-		if payload == nil {
-			payload = make(map[string]interface{})
-		}
-		payload["_service_broker_id"] = serviceBrokerID
-
-		// Re-marshal payload with broker ID
-		payloadBytes, err = json.Marshal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal RPC payload with broker ID: %w", err)
-		}
-	}
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("method", method).
+		Uint32("session_broker_id", serviceBrokerID).
+		Msg("Using session broker for RPC call")
 
 	// Call plugin's Call gRPC method
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("method", method).
 		Uint32("service_broker_id", serviceBrokerID).
-		Str("payload", string(payloadBytes)).
-		Msg("🔥 Calling plugin RPC with broker ID")
+		Msg("Calling plugin RPC")
 
 	resp, err := loadedPlugin.GRPCClient.Call(ctx, &pb.CallRequest{
 		Method:           method,
@@ -874,13 +1176,12 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 		ServiceBrokerId:  serviceBrokerID,
 	})
 
-	log.Info().
+	log.Debug().
 		Uint("plugin_id", pluginID).
 		Str("method", method).
 		Bool("success", resp != nil && resp.Success).
-		Str("error_message", func() string { if resp != nil { return resp.ErrorMessage } else { return "" } }()).
 		Err(err).
-		Msg("🔥 Plugin RPC returned")
+		Msg("Plugin RPC returned")
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to call plugin RPC method: %w", err)
@@ -937,7 +1238,7 @@ func (m *AIStudioPluginManager) createOCIPluginClient(command string) (*goplugin
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Str("command", command).
 		Str("executable_path", localPlugin.ExecutablePath).
 		Bool("verified", localPlugin.Verified).
@@ -960,7 +1261,7 @@ func (m *AIStudioPluginManager) createLocalPluginClient(command string) (*goplug
 		cmdPath = strings.TrimPrefix(command, "file://")
 	}
 
-	log.Info().
+	log.Debug().
 		Str("command", command).
 		Str("path", cmdPath).
 		Msg("Creating client for local plugin executable")
@@ -979,7 +1280,7 @@ func (m *AIStudioPluginManager) createGRPCPluginClient(command string) (*goplugi
 	// Parse gRPC URL: grpc://host:port
 	address := strings.TrimPrefix(command, "grpc://")
 
-	log.Info().
+	log.Debug().
 		Str("command", command).
 		Str("address", address).
 		Msg("Creating client for external gRPC plugin")
@@ -1126,7 +1427,7 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 		return fmt.Errorf("failed to get plugins: %w", err)
 	}
 
-	log.Info().Int("total_plugins", len(plugins)).Msg("Checking plugins for AI Studio support (UI/Agent/Object Hooks)")
+	log.Debug().Int("total_plugins", len(plugins)).Msg("Checking plugins for AI Studio support")
 
 	var loadErrors []string
 	loadedCount := 0
@@ -1188,15 +1489,15 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 			loadErrors = append(loadErrors, fmt.Sprintf("Plugin %s (ID %d): %v", plugin.Name, plugin.ID, err))
 		} else {
 			loadedCount++
-			log.Info().
+			log.Debug().
 				Uint("plugin_id", plugin.ID).
 				Str("plugin_name", plugin.Name).
 				Strs("hooks", plugin.GetAllHookTypes()).
-				Msg("Successfully loaded AI Studio plugin")
+				Msg("Loaded AI Studio plugin")
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Int("loaded", loadedCount).
 		Int("skipped", skippedCount).
 		Int("failed", len(loadErrors)).
@@ -1211,10 +1512,27 @@ func (m *AIStudioPluginManager) LoadAllUIAndAgentPlugins() error {
 
 // Shutdown gracefully shuts down all loaded plugins
 func (m *AIStudioPluginManager) Shutdown() error {
+	log.Info().Msg("Shutting down AI Studio plugin manager")
+
+	// First, close all plugin sessions (without holding the main lock)
+	// This stops the session loop goroutines and allows clean shutdown
+	m.mu.Lock()
+	sessionsToClose := make(map[uint]*AIStudioPluginClient)
+	for pluginID, loadedPlugin := range m.loadedPlugins {
+		if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+			sessionsToClose[pluginID] = clientWrapper
+		}
+	}
+	m.mu.Unlock()
+
+	// Close sessions without holding the lock (closePluginSession needs the lock internally)
+	for pluginID, client := range sessionsToClose {
+		m.closePluginSession(pluginID, client)
+	}
+
+	// Now unload all plugins
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	log.Info().Msg("Shutting down AI Studio plugin manager")
 
 	for pluginID := range m.loadedPlugins {
 		if err := m.unloadPluginUnsafe(pluginID); err != nil {
@@ -1417,6 +1735,108 @@ type AssetInfo struct {
 	Size     int64  `json:"size"`
 }
 
+// ExecuteScheduledTask executes a scheduled task on a plugin via gRPC
+func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, pluginID uint, contextProto *pb.PluginContext, scheduleProto *pb.ScheduleDefinition) (*pb.ExecuteScheduledTaskResponse, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if !loadedPlugin.IsHealthy {
+		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	}
+
+	// Set up per-request broker for service API access
+	var serviceBrokerID uint32
+	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+		if clientWrapper.broker != nil && clientWrapper.service != nil {
+			brokerID := clientWrapper.broker.NextId()
+
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Str("schedule_id", scheduleProto.Id).
+				Uint32("broker_id", brokerID).
+				Msg("Setting up broker for scheduled task execution")
+
+			// Start brokered server for this scheduled task
+			serverReady := make(chan struct{})
+			go func() {
+				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+					// Inject plugin ID into context
+					pluginIDInterceptor := CreatePluginIDInterceptor(pluginID)
+					opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
+
+					s := grpc.NewServer(opts...)
+
+					// Register AI Studio management services
+					if NewAIStudioManagementServerFunc != nil {
+						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
+						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
+							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
+							log.Debug().
+								Uint32("broker_id", brokerID).
+								Uint("plugin_id", pluginID).
+								Msg("AI Studio services registered for scheduled task")
+						}
+					}
+
+					// Register plugin event service if available (for pub/sub support)
+					if clientWrapper.eventServer != nil {
+						eventpb.RegisterPluginEventServiceServer(s, clientWrapper.eventServer)
+						log.Debug().
+							Uint32("broker_id", brokerID).
+							Uint("plugin_id", pluginID).
+							Msg("Plugin event service registered for scheduled task")
+					}
+
+					close(serverReady)
+					return s
+				})
+			}()
+
+			// Wait for server to be ready (with timeout)
+			select {
+			case <-serverReady:
+				log.Debug().Uint32("broker_id", brokerID).Msg("Brokered server ready for scheduled task")
+			case <-time.After(100 * time.Millisecond):
+				log.Warn().Uint32("broker_id", brokerID).Msg("Brokered server setup timeout - proceeding anyway")
+			}
+
+			serviceBrokerID = brokerID
+		}
+	}
+
+	// Call plugin's ExecuteScheduledTask gRPC method
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("schedule_id", scheduleProto.Id).
+		Str("schedule_name", scheduleProto.Name).
+		Uint32("service_broker_id", serviceBrokerID).
+		Msg("Executing scheduled task on plugin")
+
+	resp, err := loadedPlugin.GRPCClient.ExecuteScheduledTask(ctx, &pb.ExecuteScheduledTaskRequest{
+		Context:          contextProto,
+		Schedule:         scheduleProto,
+		ServiceBrokerId:  serviceBrokerID,
+	})
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("schedule_id", scheduleProto.Id).
+		Bool("success", resp != nil && resp.Success).
+		Err(err).
+		Msg("Scheduled task execution returned")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute scheduled task: %w", err)
+	}
+
+	return resp, nil
+}
+
 // DetectMimeType detects MIME type from file extension
 func DetectMimeType(filename string) string {
 	ext := filepath.Ext(filename)
@@ -1437,4 +1857,147 @@ func DetectMimeType(filename string) string {
 		}
 	}
 	return mimeType
+}
+
+// RouteEdgePayload routes a payload from an edge instance to the corresponding AI Studio plugin
+// This implements the EdgePayloadRouter interface required by the control server
+func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *pb.PluginControlPayload) error {
+	pluginID := uint(payload.PluginId)
+
+	m.mu.RLock()
+	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	m.mu.RUnlock()
+
+	if !exists {
+		// Try to load the plugin
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Msg("Plugin not loaded, attempting to load for edge payload routing")
+
+		var err error
+		loadedPlugin, err = m.LoadPlugin(pluginID)
+		if err != nil {
+			return fmt.Errorf("plugin %d is not loaded and could not be loaded: %w", pluginID, err)
+		}
+	}
+
+	if !loadedPlugin.IsHealthy {
+		return fmt.Errorf("plugin %d is not healthy", pluginID)
+	}
+
+	// Set up per-request broker for service API access
+	var serviceBrokerID uint32
+	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+		if clientWrapper.broker != nil && clientWrapper.service != nil {
+			brokerID := clientWrapper.broker.NextId()
+
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Str("edge_id", payload.EdgeId).
+				Uint32("broker_id", brokerID).
+				Msg("Setting up broker for edge payload routing")
+
+			// Start brokered server for this edge payload call
+			serverReady := make(chan struct{})
+			go func() {
+				clientWrapper.broker.AcceptAndServe(brokerID, func(opts []grpc.ServerOption) *grpc.Server {
+					// Inject plugin ID into context
+					pluginIDInterceptor := CreatePluginIDInterceptor(pluginID)
+					opts = append(opts, grpc.UnaryInterceptor(pluginIDInterceptor))
+
+					s := grpc.NewServer(opts...)
+
+					// Register AI Studio management services
+					if NewAIStudioManagementServerFunc != nil {
+						aiStudioServer := NewAIStudioManagementServerFunc(clientWrapper.service)
+						if serverImpl, ok := aiStudioServer.(mgmtpb.AIStudioManagementServiceServer); ok {
+							mgmtpb.RegisterAIStudioManagementServiceServer(s, serverImpl)
+							log.Debug().
+								Uint32("broker_id", brokerID).
+								Uint("plugin_id", pluginID).
+								Msg("AI Studio services registered for edge payload routing")
+						}
+					}
+
+					// Register plugin event service if available (for pub/sub support)
+					if clientWrapper.eventServer != nil {
+						eventpb.RegisterPluginEventServiceServer(s, clientWrapper.eventServer)
+						log.Debug().
+							Uint32("broker_id", brokerID).
+							Uint("plugin_id", pluginID).
+							Msg("Plugin event service registered for edge payload routing")
+					}
+
+					close(serverReady)
+					return s
+				})
+			}()
+
+			// Wait for server to be ready (with timeout)
+			select {
+			case <-serverReady:
+				log.Debug().Uint32("broker_id", brokerID).Msg("Brokered server ready for edge payload")
+			case <-time.After(100 * time.Millisecond):
+				log.Warn().Uint32("broker_id", brokerID).Msg("Brokered server setup timeout - proceeding anyway")
+			}
+
+			serviceBrokerID = brokerID
+		}
+	}
+
+	// Create the edge payload request
+	edgePayloadReq := &pb.EdgePayloadRequest{
+		Payload:           payload.Payload,
+		EdgeId:            payload.EdgeId,
+		EdgeNamespace:     payload.EdgeNamespace,
+		CorrelationId:     payload.CorrelationId,
+		Metadata:          payload.Metadata,
+		EdgeTimestamp:     payload.Timestamp.AsTime().Unix(),
+		ReceivedTimestamp: time.Now().Unix(),
+		Context: &pb.PluginContext{
+			RequestId: payload.CorrelationId,
+			Metadata: map[string]string{
+				"edge_id":        payload.EdgeId,
+				"edge_namespace": payload.EdgeNamespace,
+			},
+		},
+		ServiceBrokerId: serviceBrokerID,
+	}
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("edge_id", payload.EdgeId).
+		Str("correlation_id", payload.CorrelationId).
+		Int("payload_size", len(payload.Payload)).
+		Uint32("service_broker_id", serviceBrokerID).
+		Msg("Routing edge payload to plugin")
+
+	// Call plugin's AcceptEdgePayload gRPC method
+	resp, err := loadedPlugin.GRPCClient.AcceptEdgePayload(ctx, edgePayloadReq)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Uint("plugin_id", pluginID).
+			Str("edge_id", payload.EdgeId).
+			Msg("Failed to call AcceptEdgePayload on plugin")
+		return fmt.Errorf("failed to route edge payload to plugin %d: %w", pluginID, err)
+	}
+
+	if !resp.Success {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("edge_id", payload.EdgeId).
+			Str("error", resp.ErrorMessage).
+			Bool("handled", resp.Handled).
+			Msg("Plugin rejected edge payload")
+		return fmt.Errorf("plugin %d rejected edge payload: %s", pluginID, resp.ErrorMessage)
+	}
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("edge_id", payload.EdgeId).
+		Bool("handled", resp.Handled).
+		Msg("Edge payload successfully routed to plugin")
+
+	return nil
 }

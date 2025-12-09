@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
+	"github.com/tmc/langchaingo/schema"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -270,6 +272,36 @@ func (s *DatasourcesServer) DeleteDatasource(ctx context.Context, req *pb.Delete
 	}, nil
 }
 
+// CloneDatasource clones an existing datasource with all configuration
+func (s *DatasourcesServer) CloneDatasource(ctx context.Context, req *pb.CloneDatasourceRequest) (*pb.CloneDatasourceResponse, error) {
+	sourceDatasourceID := req.GetSourceDatasourceId()
+	if sourceDatasourceID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "source_datasource_id is required")
+	}
+
+	// Call service layer to clone
+	datasource, err := s.service.CloneDatasource(uint(sourceDatasourceID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "source datasource not found: %d", sourceDatasourceID)
+		}
+		log.Error().Err(err).
+			Uint32("source_id", sourceDatasourceID).
+			Msg("Failed to clone datasource via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to clone datasource: %v", err)
+	}
+
+	log.Info().
+		Uint32("source_datasource_id", sourceDatasourceID).
+		Uint("cloned_datasource_id", datasource.ID).
+		Str("cloned_datasource_name", datasource.Name).
+		Msg("Cloned datasource via gRPC")
+
+	return &pb.CloneDatasourceResponse{
+		Datasource: convertDatasourceToPB(datasource),
+	}, nil
+}
+
 // ProcessDatasourceEmbeddings processes embeddings for a datasource
 func (s *DatasourcesServer) ProcessDatasourceEmbeddings(ctx context.Context, req *pb.ProcessEmbeddingsRequest) (*pb.ProcessEmbeddingsResponse, error) {
 	datasourceID := req.GetDatasourceId()
@@ -318,14 +350,19 @@ func (s *DatasourcesServer) ProcessDatasourceEmbeddings(ctx context.Context, req
 		}
 	}()
 
+	// Generate job ID for tracking
+	jobID := fmt.Sprintf("embed-%d-%d", datasourceID, time.Now().Unix())
+
 	log.Info().
 		Uint32("datasource_id", datasourceID).
 		Str("datasource_name", datasource.Name).
+		Str("job_id", jobID).
 		Msg("Started real embedding processing for datasource via gRPC")
 
 	return &pb.ProcessEmbeddingsResponse{
 		Success: true,
 		Message: "Embedding processing started successfully",
+		JobId:   jobID,
 	}, nil
 }
 
@@ -379,4 +416,520 @@ func convertDatasourceToPB(datasource *models.Datasource) *pb.DatasourceInfo {
 		UpdatedAt:        timestamppb.New(datasource.UpdatedAt),
 		Metadata:         metadata, // Plugin-stored data
 	}
+}
+
+// === RAG/Embedding Operation Handlers ===
+
+// GenerateEmbedding generates embeddings for text using the datasource's embedder configuration
+func (s *DatasourcesServer) GenerateEmbedding(ctx context.Context, req *pb.GenerateEmbeddingRequest) (*pb.GenerateEmbeddingResponse, error) {
+	// Validate datasource exists
+	datasource, err := s.service.GetDatasourceByID(uint(req.DatasourceId))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %v", err)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)
+	}
+
+	// Check if datasource has embedder configured
+	if datasource.EmbedVendor == "" || datasource.EmbedModel == "" {
+		return &pb.GenerateEmbeddingResponse{
+			Success:      false,
+			ErrorMessage: "datasource does not have embedder configured",
+		}, nil
+	}
+
+	// Create data session with this datasource
+	datasources := map[uint]*models.Datasource{
+		datasource.ID: datasource,
+	}
+	dataSession := data_session.NewDataSession(datasources)
+
+	// Generate embeddings
+	embeddings, err := dataSession.CreateEmbedding(datasource.ID, req.Texts)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("embed_vendor", string(datasource.EmbedVendor)).
+			Str("embed_model", datasource.EmbedModel).
+			Str("embed_url", datasource.EmbedUrl).
+			Msg("Failed to generate embeddings")
+		return &pb.GenerateEmbeddingResponse{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("failed to generate embeddings with %s/%s: %v", datasource.EmbedVendor, datasource.EmbedModel, err),
+		}, nil
+	}
+
+	// Convert to protobuf format
+	vectors := make([]*pb.EmbeddingVector, len(embeddings))
+	for i, emb := range embeddings {
+		vectors[i] = &pb.EmbeddingVector{
+			Values: emb,
+		}
+	}
+
+	return &pb.GenerateEmbeddingResponse{
+		Success: true,
+		Vectors: vectors,
+	}, nil
+}
+
+// StoreDocuments stores pre-vectorized documents in the datasource's vector store
+// This method uses pre-computed embeddings and bypasses the embedder to allow custom chunking
+func (s *DatasourcesServer) StoreDocuments(ctx context.Context, req *pb.StoreDocumentsRequest) (*pb.StoreDocumentsResponse, error) {
+	// Validate datasource exists
+	datasource, err := s.service.GetDatasourceByID(uint(req.DatasourceId))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %v", err)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)
+	}
+
+	// Check if datasource has vector store configured
+	if datasource.DBSourceType == "" || datasource.DBName == "" {
+		return &pb.StoreDocumentsResponse{
+			Success:      false,
+			ErrorMessage: "datasource does not have vector store configured",
+		}, nil
+	}
+
+	// Create data session with this datasource
+	datasources := map[uint]*models.Datasource{
+		datasource.ID: datasource,
+	}
+	dataSession := data_session.NewDataSession(datasources)
+
+	// Extract data from proto documents
+	contents := make([]string, len(req.Documents))
+	vectors := make([][]float32, len(req.Documents))
+	metadatas := make([]map[string]any, len(req.Documents))
+
+	for i, doc := range req.Documents {
+		contents[i] = doc.Content
+		vectors[i] = doc.Embedding
+
+		// Convert map[string]string to map[string]any
+		metadata := make(map[string]any)
+		for k, v := range doc.Metadata {
+			metadata[k] = v
+		}
+		metadatas[i] = metadata
+	}
+
+	// Store documents with pre-computed vectors
+	// This uses vendor-specific APIs to bypass the embedder
+	err = dataSession.StoreDocumentsWithVectors(datasource.ID, contents, vectors, metadatas)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to store documents with pre-computed vectors")
+		return &pb.StoreDocumentsResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.StoreDocumentsResponse{
+		Success:     true,
+		StoredCount: int32(len(req.Documents)),
+	}, nil
+}
+
+// ProcessAndStoreDocuments generates embeddings and stores documents in one step
+func (s *DatasourcesServer) ProcessAndStoreDocuments(ctx context.Context, req *pb.ProcessAndStoreRequest) (*pb.ProcessAndStoreResponse, error) {
+	// Validate datasource exists
+	datasource, err := s.service.GetDatasourceByID(uint(req.DatasourceId))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %v", err)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)
+	}
+
+	// Check if datasource has both embedder and vector store configured
+	if datasource.EmbedVendor == "" || datasource.EmbedModel == "" {
+		return &pb.ProcessAndStoreResponse{
+			Success:      false,
+			ErrorMessage: "datasource does not have embedder configured",
+		}, nil
+	}
+	if datasource.DBSourceType == "" || datasource.DBName == "" {
+		return &pb.ProcessAndStoreResponse{
+			Success:      false,
+			ErrorMessage: "datasource does not have vector store configured",
+		}, nil
+	}
+
+	// Create data session with this datasource
+	datasources := map[uint]*models.Datasource{
+		datasource.ID: datasource,
+	}
+	dataSession := data_session.NewDataSession(datasources)
+
+	// Convert to documents (embeddings will be generated by StoreEmbedding)
+	docs := make([]schema.Document, len(req.Chunks))
+	for i, chunk := range req.Chunks {
+		metadata := make(map[string]any)
+		for k, v := range chunk.Metadata {
+			metadata[k] = v
+		}
+		docs[i] = schema.Document{
+			PageContent: chunk.Content,
+			Metadata:    metadata,
+			Score:       0,
+		}
+	}
+
+	// Store documents (StoreEmbedding will automatically generate embeddings)
+	err = dataSession.StoreEmbedding(datasource.ID, docs)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to store documents")
+		return &pb.ProcessAndStoreResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.ProcessAndStoreResponse{
+		Success:        true,
+		ProcessedCount: int32(len(docs)),
+	}, nil
+}
+
+// QueryDatasourceByVector performs similarity search using a pre-computed embedding vector
+func (s *DatasourcesServer) QueryDatasourceByVector(ctx context.Context, req *pb.QueryByVectorRequest) (*pb.QueryDatasourceResponse, error) {
+	// Validate datasource exists
+	datasource, err := s.service.GetDatasourceByID(uint(req.DatasourceId))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %v", err)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)
+	}
+
+	// Check if datasource has vector store configured
+	if datasource.DBSourceType == "" || datasource.DBName == "" {
+		return &pb.QueryDatasourceResponse{
+			Success:      false,
+			ErrorMessage: "datasource does not have vector store configured",
+		}, nil
+	}
+
+	// Create data session with this datasource
+	datasources := map[uint]*models.Datasource{
+		datasource.ID: datasource,
+	}
+	dataSession := data_session.NewDataSession(datasources)
+
+	// Perform vector similarity search
+	maxResults := int(req.MaxResults)
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+
+	docs, err := dataSession.SearchByVector(datasource.ID, req.Embedding, maxResults)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to search by vector")
+		return &pb.QueryDatasourceResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	// Filter by similarity threshold if specified
+	var filteredDocs []schema.Document
+	if req.SimilarityThreshold > 0 {
+		for _, doc := range docs {
+			if doc.Score >= float32(req.SimilarityThreshold) {
+				filteredDocs = append(filteredDocs, doc)
+			}
+		}
+	} else {
+		filteredDocs = docs
+	}
+
+	// Convert to protobuf results
+	pbResults := make([]*pb.DatasourceResult, len(filteredDocs))
+	for i, doc := range filteredDocs {
+		// Convert metadata map[string]any to map[string]string
+		metadata := make(map[string]string)
+		for k, v := range doc.Metadata {
+			if str, ok := v.(string); ok {
+				metadata[k] = str
+			} else {
+				// Convert non-string values to JSON strings
+				if jsonBytes, err := json.Marshal(v); err == nil {
+					metadata[k] = string(jsonBytes)
+				}
+			}
+		}
+
+		pbResults[i] = &pb.DatasourceResult{
+			Content:         doc.PageContent,
+			SimilarityScore: float64(doc.Score),
+			Metadata:        metadata,
+		}
+	}
+
+	return &pb.QueryDatasourceResponse{
+		Success: true,
+		Results: pbResults,
+	}, nil
+}
+
+// DeleteDocumentsByMetadata deletes documents by metadata filter
+func (s *DatasourcesServer) DeleteDocumentsByMetadata(ctx context.Context, req *pb.DeleteDocumentsByMetadataRequest) (*pb.DeleteDocumentsByMetadataResponse, error) {
+	datasourceID := req.GetDatasourceId()
+	if datasourceID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "datasource_id is required")
+	}
+
+	if len(req.GetMetadataFilter()) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "metadata_filter cannot be empty")
+	}
+
+	// Get datasource
+	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)
+	}
+
+	// Create DataSession
+	sources := make(map[uint]*models.Datasource)
+	sources[datasource.ID] = datasource
+	ds := data_session.NewDataSession(sources)
+
+	// Set filter mode (default to AND)
+	filterMode := req.GetFilterMode()
+	if filterMode == "" {
+		filterMode = "AND"
+	}
+
+	// Delete documents
+	count, err := ds.DeleteDocumentsByMetadata(
+		uint(datasourceID),
+		req.GetMetadataFilter(),
+		filterMode,
+		req.GetDryRun(),
+	)
+	if err != nil {
+		log.Error().Err(err).
+			Uint32("datasource_id", datasourceID).
+			Interface("filter", req.GetMetadataFilter()).
+			Msg("Failed to delete documents by metadata")
+		return nil, status.Errorf(codes.Internal, "failed to delete documents: %v", err)
+	}
+
+	message := fmt.Sprintf("Deleted %d document(s)", count)
+	if req.GetDryRun() {
+		message = fmt.Sprintf("Would delete %d document(s) (dry run)", count)
+	}
+
+	log.Info().
+		Uint32("datasource_id", datasourceID).
+		Int("count", count).
+		Bool("dry_run", req.GetDryRun()).
+		Msg("Deleted documents by metadata")
+
+	return &pb.DeleteDocumentsByMetadataResponse{
+		Success:      true,
+		DeletedCount: int32(count),
+		Message:      message,
+	}, nil
+}
+
+// QueryByMetadataOnly queries documents by metadata only
+func (s *DatasourcesServer) QueryByMetadataOnly(ctx context.Context, req *pb.QueryByMetadataOnlyRequest) (*pb.QueryByMetadataOnlyResponse, error) {
+	datasourceID := req.GetDatasourceId()
+	if datasourceID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "datasource_id is required")
+	}
+
+	if len(req.GetMetadataFilter()) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "metadata_filter cannot be empty")
+	}
+
+	// Get datasource
+	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)
+	}
+
+	// Create DataSession
+	sources := make(map[uint]*models.Datasource)
+	sources[datasource.ID] = datasource
+	ds := data_session.NewDataSession(sources)
+
+	// Set defaults
+	limit := req.GetLimit()
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	offset := req.GetOffset()
+	if offset < 0 {
+		offset = 0
+	}
+
+	filterMode := req.GetFilterMode()
+	if filterMode == "" {
+		filterMode = "AND"
+	}
+
+	// Query documents
+	docs, totalCount, err := ds.QueryByMetadataOnly(
+		uint(datasourceID),
+		req.GetMetadataFilter(),
+		filterMode,
+		int(limit),
+		int(offset),
+	)
+	if err != nil {
+		log.Error().Err(err).
+			Uint32("datasource_id", datasourceID).
+			Interface("filter", req.GetMetadataFilter()).
+			Msg("Failed to query by metadata")
+		return nil, status.Errorf(codes.Internal, "failed to query by metadata: %v", err)
+	}
+
+	// Convert to protobuf results (reuse existing conversion pattern)
+	results := make([]*pb.DatasourceResult, len(docs))
+	for i, doc := range docs {
+		// Convert metadata map[string]any to map[string]string
+		metadata := make(map[string]string)
+		for k, v := range doc.Metadata {
+			if str, ok := v.(string); ok {
+				metadata[k] = str
+			} else {
+				// Convert non-string values to JSON strings
+				if jsonBytes, err := json.Marshal(v); err == nil {
+					metadata[k] = string(jsonBytes)
+				}
+			}
+		}
+
+		results[i] = &pb.DatasourceResult{
+			Content:         doc.PageContent,
+			SimilarityScore: 0.0, // N/A for metadata-only query
+			Metadata:        metadata,
+		}
+	}
+
+	log.Info().
+		Uint32("datasource_id", datasourceID).
+		Int("result_count", len(docs)).
+		Int("total_count", totalCount).
+		Msg("Queried documents by metadata")
+
+	return &pb.QueryByMetadataOnlyResponse{
+		Results:    results,
+		TotalCount: int32(totalCount),
+	}, nil
+}
+
+// ListNamespaces lists all namespaces in vector store
+func (s *DatasourcesServer) ListNamespaces(ctx context.Context, req *pb.ListNamespacesRequest) (*pb.ListNamespacesResponse, error) {
+	datasourceID := req.GetDatasourceId()
+	if datasourceID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "datasource_id is required")
+	}
+
+	// Get datasource
+	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)
+	}
+
+	// Create DataSession
+	sources := make(map[uint]*models.Datasource)
+	sources[datasource.ID] = datasource
+	ds := data_session.NewDataSession(sources)
+
+	// List namespaces
+	namespaces, err := ds.ListNamespaces(uint(datasourceID))
+	if err != nil {
+		log.Error().Err(err).
+			Uint32("datasource_id", datasourceID).
+			Msg("Failed to list namespaces")
+		return nil, status.Errorf(codes.Internal, "failed to list namespaces: %v", err)
+	}
+
+	// Convert to protobuf
+	pbNamespaces := make([]*pb.NamespaceInfo, len(namespaces))
+	for i, ns := range namespaces {
+		pbNamespaces[i] = &pb.NamespaceInfo{
+			Name:          ns.Name,
+			DocumentCount: int32(ns.DocumentCount),
+		}
+	}
+
+	log.Info().
+		Uint32("datasource_id", datasourceID).
+		Int("namespace_count", len(namespaces)).
+		Msg("Listed namespaces")
+
+	return &pb.ListNamespacesResponse{
+		Namespaces: pbNamespaces,
+	}, nil
+}
+
+// DeleteNamespace deletes an entire namespace
+func (s *DatasourcesServer) DeleteNamespace(ctx context.Context, req *pb.DeleteNamespaceRequest) (*pb.DeleteNamespaceResponse, error) {
+	datasourceID := req.GetDatasourceId()
+	if datasourceID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "datasource_id is required")
+	}
+
+	if req.GetNamespace() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "namespace is required")
+	}
+
+	if !req.GetConfirm() {
+		return nil, status.Errorf(codes.InvalidArgument, "confirm must be true to delete namespace (safety check)")
+	}
+
+	// Get datasource
+	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get datasource: %v", err)
+	}
+
+	// Create DataSession
+	sources := make(map[uint]*models.Datasource)
+	sources[datasource.ID] = datasource
+	ds := data_session.NewDataSession(sources)
+
+	// Delete namespace
+	err = ds.DeleteNamespace(uint(datasourceID), req.GetNamespace())
+	if err != nil {
+		log.Error().Err(err).
+			Uint32("datasource_id", datasourceID).
+			Str("namespace", req.GetNamespace()).
+			Msg("Failed to delete namespace")
+		return nil, status.Errorf(codes.Internal, "failed to delete namespace: %v", err)
+	}
+
+	log.Warn().
+		Uint32("datasource_id", datasourceID).
+		Str("namespace", req.GetNamespace()).
+		Msg("Deleted namespace")
+
+	return &pb.DeleteNamespaceResponse{
+		Success: true,
+		Message: fmt.Sprintf("Namespace '%s' deleted successfully", req.GetNamespace()),
+	}, nil
 }

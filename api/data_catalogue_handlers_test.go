@@ -1,3 +1,6 @@
+//go:build enterprise
+// +build enterprise
+
 package api
 
 import (
@@ -168,8 +171,17 @@ func TestDataCatalogueEndpoints(t *testing.T) {
 	var datasourceResponse map[string][]DataCatalogueResponse
 	err = json.Unmarshal(w.Body.Bytes(), &datasourceResponse)
 	assert.NoError(t, err)
-	assert.Len(t, datasourceResponse["data"], 1)
-	assert.Equal(t, "Updated Data Catalogue", datasourceResponse["data"][0].Attributes.Name)
+	// Note: Datasource is auto-assigned to "Default" catalogue when created
+	assert.Len(t, datasourceResponse["data"], 2) // Test catalogue + Default catalogue
+	// Verify our updated catalogue is in the results
+	var foundUpdated bool
+	for _, dc := range datasourceResponse["data"] {
+		if dc.Attributes.Name == "Updated Data Catalogue" {
+			foundUpdated = true
+			break
+		}
+	}
+	assert.True(t, foundUpdated, "Updated Data Catalogue should be in datasource's catalogues")
 
 	// Test Remove Datasource from DataCatalogue
 	w = performRequest(api.router, "DELETE", fmt.Sprintf("/api/v1/data-catalogues/%s/datasources/%d", dataCatalogueID, datasource.ID), nil)
@@ -346,13 +358,14 @@ func TestDataCatalogueEndpoints_MultipleDataCatalogues(t *testing.T) {
 	addDatasourceToDataCatalogue(dc2ID, ds2.ID)
 
 	// Test Get Data Catalogues by Datasource
+	// Note: Datasources are auto-assigned to "Default" catalogue when created
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/data-catalogues/by-datasource?datasourceId=%d", ds1.ID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var ds1Response map[string][]DataCatalogueResponse
 	err = json.Unmarshal(w.Body.Bytes(), &ds1Response)
 	assert.NoError(t, err)
-	assert.Len(t, ds1Response["data"], 2)
+	assert.Len(t, ds1Response["data"], 3) // dc1 + dc2 + Default
 
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/data-catalogues/by-datasource?datasourceId=%d", ds2.ID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -360,5 +373,5 @@ func TestDataCatalogueEndpoints_MultipleDataCatalogues(t *testing.T) {
 	var ds2Response map[string][]DataCatalogueResponse
 	err = json.Unmarshal(w.Body.Bytes(), &ds2Response)
 	assert.NoError(t, err)
-	assert.Len(t, ds2Response["data"], 1)
+	assert.Len(t, ds2Response["data"], 2) // dc2 + Default
 }

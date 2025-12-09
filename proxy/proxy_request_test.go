@@ -17,6 +17,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
 func TestLLMRequestHandling(t *testing.T) {
@@ -25,7 +26,7 @@ func TestLLMRequestHandling(t *testing.T) {
 
 	service := services.NewService(db)
 	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := services.NewBudgetService(db, notificationSvc)
+	budgetService := budget.NewService(db, notificationSvc)
 	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
 	require.NotNil(t, proxy)
 

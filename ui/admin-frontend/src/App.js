@@ -31,6 +31,7 @@ import MainLayout from "./layouts/MainLayout";
 
 // Context providers
 import { NotificationProvider } from "./admin/context/NotificationContext";
+import { EditionProvider } from "./admin/context/EditionContext";
 
 // Lazy loaded routes for code splitting
 const AdminRoutes = React.lazy(() => import("./routes/AdminRoutes"));
@@ -203,9 +204,10 @@ function App() {
 
   return (
     <Router>
-      <NotificationProvider>
-        <ThemeProvider theme={theme}>
-          <CssBaseline />
+      <EditionProvider>
+        <NotificationProvider>
+          <ThemeProvider theme={theme}>
+            <CssBaseline />
           {/* Inject custom CSS if provided */}
           {customCSS && (
             <style dangerouslySetInnerHTML={{ __html: customCSS }} />
@@ -373,6 +375,7 @@ function App() {
           </Routes>
         </ThemeProvider>
       </NotificationProvider>
+      </EditionProvider>
     </Router>
   );
 }
