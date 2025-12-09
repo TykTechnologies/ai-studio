@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -38,6 +38,7 @@ func RequestIDMiddleware() gin.HandlerFunc {
 		c.Header("X-Request-ID", requestID)
 
 		log.Debug().Str("request_id", requestID).Str("path", c.Request.URL.Path).Msg("🆔 Generated canonical request ID for request")
+		log.Debug().Str("body length is", fmt.Sprintf("%d", c.Request.ContentLength)).Msg("📦 Request body length")
 
 		// Continue processing
 		c.Next()
@@ -46,16 +47,16 @@ func RequestIDMiddleware() gin.HandlerFunc {
 
 // RouterConfig holds configuration for the API router
 type RouterConfig struct {
-	AuthProvider     auth.AuthProvider
-	Services         *services.ServiceContainer
-	Gateway          aigateway.Gateway
-	PluginManager    PluginManagerInterface
+	AuthProvider      auth.AuthProvider
+	Services          *services.ServiceContainer
+	Gateway           aigateway.Gateway
+	PluginManager     PluginManagerInterface
 	ReloadCoordinator *services.ReloadCoordinator
-	EnableSwagger    bool
-	EnableMetrics    bool
-	Version          string
-	BuildHash        string
-	BuildTime        string
+	EnableSwagger     bool
+	EnableMetrics     bool
+	Version           string
+	BuildHash         string
+	BuildTime         string
 }
 
 // SetupRouter configures and returns the main application router

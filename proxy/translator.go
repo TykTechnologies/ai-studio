@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -15,8 +14,17 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/gosimple/slug"
+	"github.com/rs/zerolog/log"
 	"github.com/tmc/langchaingo/llms"
 )
+
+// getInternalLLMBaseURL returns the internal /llm/call/ URL for SDK endpoint hijacking.
+// When the /ai/ endpoint routes requests through /llm/, this URL points to the local proxy.
+// The SDK handles vendor-specific path suffixes automatically (e.g., /v1/messages for Anthropic).
+func (p *Proxy) getInternalLLMBaseURL(slug string) string {
+	return fmt.Sprintf("http://127.0.0.1:%d/llm/call/%s", p.config.Port, slug)
+}
 
 // Handlers
 func (p *Proxy) CreateCompletionHandler(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +69,7 @@ func (p *Proxy) CreateCompletionHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// 3. call the LLM
-	slog.Warn(" completions API is deprecated, use the /v1/chat/completions API instead (no analytics stored)")
+	log.Warn().Msg("completions API is deprecated, use the /v1/chat/completions API instead (no analytics stored)")
 	resp, err := llm.Call(ctx, req.Prompt, opts...)
 
 	// convert the response to OpenAI format
@@ -91,19 +99,16 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Capture request body for analytics/proxy logs
+	// Capture request body for decoding
 	reqBody, err := helpers.CopyRequestBody(r)
 	if err != nil {
 		respondWithOAIError(w, http.StatusInternalServerError, "Failed to read request body", err, false)
 		return
 	}
 
-	// Get App context for authentication, analytics, and budget checking
-	app, err := p.getAppFromContext(r, conf)
-	if err != nil {
-		respondWithOAIError(w, http.StatusUnauthorized, "App context not found - authentication required", err, true)
-		return
-	}
+	// NOTE: This is a PURE BRIDGE HANDLER - NO AUTH runs here
+	// Auth, plugins, budget checking, analytics all happen on the internal /llm/call/ hop
+	// We just translate OpenAI format -> vendor format and route internally
 
 	var req ChatCompletionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -111,7 +116,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Validate model
+	// Validate model (keep this here for fast-fail before internal routing)
 	validator := NewModelValidator(conf.AllowedModels)
 	if !validator.IsModelAllowed(req.Model) {
 		respondWithOAIError(w, http.StatusForbidden, fmt.Sprintf("Model '%s' is not allowed", req.Model), nil, false)
@@ -128,39 +133,50 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	if req.Stream != nil && *req.Stream {
 		// Fall back to non-streaming if tools are present (tool streaming is complex)
 		if len(req.Tools) == 0 {
-			p.handleChatCompletionStream(w, r, conf, app, &req, reqBody)
+			p.handleChatCompletionStream(w, r, conf, &req, reqBody)
 			return
 		}
 		// Continue to non-streaming path when tools are present
 	}
 
-	// Check budget before processing request
-	timestamp := time.Now()
-	if _, _, err := p.budgetService.CheckBudget(app, conf); err != nil {
-		// Record budget exceeded analytics
-		errorBody := []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error()))
-		go p.recordTranslatorAnalytics(conf, app, http.StatusForbidden, errorBody, reqBody, r, nil, timestamp)
-		respondWithOAIError(w, http.StatusForbidden, "Budget limit exceeded", err, false)
-		return
-	}
+	// Create internal routing HTTP client
+	// This routes SDK requests through /llm/call/ for plugin hook execution
+	originalAuth := r.Header.Get("Authorization")
+	internalTransport := NewInternalRoutingTransport(originalAuth)
+	internalClient := &http.Client{Transport: internalTransport}
 
-	// create a standard llangchain completion request based on the input
-	llm, err := switches.FetchDriver(conf, nil, nil, func(ctx context.Context, chunk []byte) error { return nil })
+	// Create a modified LLM config with internal endpoint
+	// The SDK will route to /llm/call/{slug} instead of the external vendor
+	llmSlug := slug.Make(conf.Name)
+	internalConf := *conf // Copy config
+	internalConf.APIEndpoint = p.getInternalLLMBaseURL(llmSlug)
+	// Set a dummy API key to satisfy SDK validation (actual auth handled by /llm/)
+	// The InternalRoutingTransport strips SDK-set auth headers and passes client auth instead
+	internalConf.APIKey = "internal-routing-dummy-key"
+
+	// DEBUG: Log the internal routing setup
+	log.Debug().
+		Str("llmSlug", llmSlug).
+		Str("internalEndpoint", internalConf.APIEndpoint).
+		Str("vendor", string(internalConf.Vendor)).
+		Int("messageCount", len(req.Messages)).
+		Msg("CreateChatCompletionHandler internal routing")
+
+	// Create LLM driver with internal routing HTTP client
+	llm, err := switches.FetchDriver(&internalConf, nil, nil, func(ctx context.Context, chunk []byte) error { return nil }, switches.WithHTTPClient(internalClient))
 	if err != nil {
-		errorBody := []byte(fmt.Sprintf(`{"error":"Failed to create LLM client: %s"}`, err.Error()))
-		go p.recordTranslatorAnalytics(conf, app, http.StatusInternalServerError, errorBody, reqBody, r, nil, timestamp)
 		respondWithOAIError(w, http.StatusInternalServerError, "Failed to create LLM client", err, false)
 		return
 	}
 
 	ctx := context.Background()
-	opts := req.ToLangchainOptions(conf)
+	opts := req.ToLangchainOptions(&internalConf)
 	messages := req.GetMessages()
 
+	// SDK call routes through /llm/call/ which executes all plugin hooks
+	// Auth, plugins, budget, analytics all happen on the /llm/call/ hop
 	resp, err := llm.GenerateContent(ctx, messages, opts...)
 	if err != nil {
-		errorBody := []byte(fmt.Sprintf(`{"error":"LLM call failed: %s"}`, err.Error()))
-		go p.recordTranslatorAnalytics(conf, app, http.StatusInternalServerError, errorBody, reqBody, r, nil, timestamp)
 		respondWithOAIError(w, http.StatusInternalServerError, "failed to generate content", err, false)
 		return
 	}
@@ -172,15 +188,12 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	response := NewChatCompletionResponse(resp, req.Model)
 	response.Usage = usage
 
-	// Marshal response for analytics
+	// Marshal response
 	respBody, err := json.Marshal(response)
 	if err != nil {
 		respondWithOAIError(w, http.StatusInternalServerError, "Failed to marshal response", err, false)
 		return
 	}
-
-	// Record analytics (async)
-	go p.recordTranslatorAnalytics(conf, app, http.StatusOK, respBody, reqBody, r, resp, timestamp)
 
 	// Send response to client
 	w.Header().Set("Content-Type", "application/json")
@@ -309,24 +322,15 @@ func (p *Proxy) recordTranslatorAnalytics(
 }
 
 // handleChatCompletionStream handles streaming chat completion requests with OpenAI-compatible SSE format
+// NOTE: This is a PURE BRIDGE HANDLER - NO AUTH runs here
+// Auth, plugins, budget checking, analytics all happen on the internal /llm/call/ hop
 func (p *Proxy) handleChatCompletionStream(
 	w http.ResponseWriter,
 	r *http.Request,
 	conf *models.LLM,
-	app *models.App,
 	req *ChatCompletionRequest,
 	reqBody []byte,
 ) {
-	timestamp := time.Now()
-
-	// Check budget before processing request
-	if _, _, err := p.budgetService.CheckBudget(app, conf); err != nil {
-		errorBody := []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error()))
-		go p.recordTranslatorAnalytics(conf, app, http.StatusForbidden, errorBody, reqBody, r, nil, timestamp)
-		respondWithOAIError(w, http.StatusForbidden, "Budget limit exceeded", err, false)
-		return
-	}
-
 	// Set SSE headers before any writes
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache, no-transform")
@@ -379,27 +383,38 @@ func (p *Proxy) handleChatCompletionStream(
 		return nil
 	}
 
-	// Create LLM driver with streaming callback
-	llmDriver, err := switches.FetchDriver(conf, nil, nil, streamingFunc)
+	// Create internal routing HTTP client
+	// This routes SDK requests through /llm/call/ for plugin hook execution
+	originalAuth := r.Header.Get("Authorization")
+	internalTransport := NewInternalRoutingTransport(originalAuth)
+	internalClient := &http.Client{Transport: internalTransport}
+
+	// Create a modified LLM config with internal endpoint
+	llmSlug := slug.Make(conf.Name)
+	internalConf := *conf // Copy config
+	internalConf.APIEndpoint = p.getInternalLLMBaseURL(llmSlug)
+	// Set a dummy API key to satisfy SDK validation (actual auth handled by /llm/)
+	// The InternalRoutingTransport strips SDK-set auth headers and passes client auth instead
+	internalConf.APIKey = "internal-routing-dummy-key"
+
+	// Create LLM driver with internal routing HTTP client and streaming callback
+	llmDriver, err := switches.FetchDriver(&internalConf, nil, nil, streamingFunc, switches.WithHTTPClient(internalClient))
 	if err != nil {
 		p.sendStreamError(w, flusher, "Failed to create LLM client", "server_error")
-		errorBody := []byte(fmt.Sprintf(`{"error":"Failed to create LLM client: %s"}`, err.Error()))
-		go p.recordTranslatorAnalytics(conf, app, http.StatusInternalServerError, errorBody, reqBody, r, nil, timestamp)
 		return
 	}
 
 	ctx := context.Background()
-	opts := req.ToLangchainOptions(conf)
+	opts := req.ToLangchainOptions(&internalConf)
 	// Add streaming function to options
 	opts = append(opts, llms.WithStreamingFunc(streamingFunc))
 	messages := req.GetMessages()
 
-	// Call LLM - streaming happens via callback
+	// SDK call routes through /llm/call/ which executes all plugin hooks
+	// Auth, plugins, budget, analytics all happen on the /llm/call/ hop
 	resp, err := llmDriver.GenerateContent(ctx, messages, opts...)
 	if err != nil {
 		p.sendStreamError(w, flusher, fmt.Sprintf("LLM call failed: %s", err.Error()), "server_error")
-		errorBody := []byte(fmt.Sprintf(`{"error":"LLM call failed: %s"}`, err.Error()))
-		go p.recordTranslatorAnalytics(conf, app, http.StatusInternalServerError, errorBody, reqBody, r, nil, timestamp)
 		return
 	}
 
@@ -432,9 +447,6 @@ func (p *Proxy) handleChatCompletionStream(
 	// Send [DONE] marker
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
-
-	// Record analytics (async)
-	go p.recordTranslatorAnalytics(conf, app, http.StatusOK, nil, reqBody, r, resp, timestamp)
 }
 
 // sendStreamError sends an error in SSE format

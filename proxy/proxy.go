@@ -13,6 +13,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -270,6 +271,7 @@ func fixDoubleSlash(next http.Handler) http.Handler {
 
 
 func (p *Proxy) createHandler() http.Handler {
+	// Main router for authenticated routes
 	r := mux.NewRouter()
 	r.HandleFunc("/.well-known/oauth-protected-resource", p.handleOAuthProtectedResourceMetadata).Methods("GET", "OPTIONS")
 	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", p.handleLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleLLMRequest)))
@@ -280,20 +282,35 @@ func (p *Proxy) createHandler() http.Handler {
 			p.modelValidationMiddleware(
 				http.HandlerFunc(p.handleUnifiedLLMRequest))))
 
-	// OpenAI-compatible translation endpoints
-	r.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
-	r.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
-
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}", p.handleToolRequest).Methods("GET", "POST", "PUT", "DELETE")
 	r.HandleFunc("/tools/{toolSlug}/mcp", p.handleMCPToolStreamable).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}/mcp/sse", p.handleMCPToolSSE).Methods("GET")
 	r.HandleFunc("/tools/{toolSlug}/mcp/message", p.handleMCPToolMessage).Methods("POST")
+
+	// Wrap authenticated routes with credential validator
+	authenticatedHandler := p.credValidator.Middleware(r)
+
+	// OpenAI-compatible translation endpoints - these are PURE BRIDGE HANDLERS
+	// They do NOT need auth/plugins/filters - all of that happens on the internal /llm/call/ hop
+	// These handlers route through /llm/call/ internally where auth is performed
+	aiRouter := mux.NewRouter()
+	aiRouter.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
+	aiRouter.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
+
+	// Combine routers: /ai/ routes bypass auth, everything else goes through auth
+	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, "/ai/") {
+			aiRouter.ServeHTTP(w, req)
+		} else {
+			authenticatedHandler.ServeHTTP(w, req)
+		}
+	})
+
 	// Middleware chain (innermost to outermost):
-	// 1. requestIDMiddleware - Generate canonical request ID (MUST BE FIRST)
-	// 2. credValidator.Middleware - Authenticate requests
-	// 3. cloudflareHeadersMiddleware - Add Cloudflare headers
-	return p.cloudflareHeadersMiddleware(p.credValidator.Middleware(r))
+	// 1. combinedHandler - Route /ai/ separately from authenticated routes
+	// 2. cloudflareHeadersMiddleware - Add Cloudflare headers
+	return p.cloudflareHeadersMiddleware(combinedHandler)
 }
 
 func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
@@ -460,7 +477,18 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	proxyDirector := func(req *http.Request) {
 		req.URL.Scheme = upstreamURL.Scheme
 		req.URL.Host = upstreamURL.Host
-		req.URL.Path = strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
+		// Strip the gateway prefix to get the remaining path
+		remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
+		// Only combine with upstream base path if remaining path doesn't already include it
+		// e.g., /ai/ sends "/messages" which needs upstream "/v1" → "/v1/messages"
+		// but /call/ sends "/v1/messages" which already has the base path
+		if upstreamURL.Path != "" && !strings.HasPrefix(remainingPath, upstreamURL.Path) {
+			req.URL.Path = path.Join(upstreamURL.Path, remainingPath)
+			logger.Debugf("REST proxy path join: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, req.URL.Path)
+		} else {
+			req.URL.Path = remainingPath
+			logger.Debugf("REST proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
+		}
 		req.Host = upstreamURL.Host
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
 			logger.Errorf("ERROR setting vendor auth header in director: %v", err)
@@ -771,9 +799,18 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Strip the gateway prefix and use the remaining path directly (consistent with REST handler)
-	upstreamPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
-	upstreamURL.Path = upstreamPath
+	// Strip the gateway prefix to get the remaining path
+	remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
+	// Only combine with upstream base path if remaining path doesn't already include it
+	// e.g., /ai/ sends "/messages" which needs upstream "/v1" → "/v1/messages"
+	// but /call/ sends "/v1/messages" which already has the base path
+	if upstreamURL.Path != "" && !strings.HasPrefix(remainingPath, upstreamURL.Path) {
+		upstreamURL.Path = path.Join(upstreamURL.Path, remainingPath)
+		logger.Debugf("Stream proxy path join: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, upstreamURL.Path)
+	} else {
+		upstreamURL.Path = remainingPath
+		logger.Debugf("Stream proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
+	}
 	upstreamURL.RawQuery = r.URL.RawQuery
 
 	// Use r.Body directly as CopyRequestBody has already replaced it with a readable one.

@@ -131,15 +131,17 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					}
 
 					ctx := context.WithValue(r.Context(), "app", app)
+					// Update request with context BEFORE calling hook so hook modifications persist
+					r = r.WithContext(ctx)
 
 					// === HOOK POINT: POST-AUTH (Custom Auth Plugin) ===
 					if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
-						if blocked := cv.authHooks.PostAuth(w, r.WithContext(ctx), appID); blocked {
+						if blocked := cv.authHooks.PostAuth(w, r, appID); blocked {
 							return // Post-auth hook blocked the request
 						}
 					}
 
-					next.ServeHTTP(w, r.WithContext(ctx))
+					next.ServeHTTP(w, r)
 					return
 				}
 				// Auth plugin said not authenticated, fall through to standard validation
@@ -181,23 +183,26 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 
 						ctx = context.WithValue(ctx, "tool", tool)
 						ctx = context.WithValue(ctx, "toolSlug", toolSlug)
-						
+
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
 					}
 
 					// Not a tool request - continue with LLM request
+					// Update request with context BEFORE calling hook so hook modifications persist
+					r = r.WithContext(ctx)
+
 					// === HOOK POINT: POST-AUTH (Bearer Token with App Secret) ===
 					if cv.authHooks != nil && cv.authHooks.PostAuth != nil {
 						log.Debug().Uint("app_id", app.ID).Msg("Bearer token auth: Calling post-auth hook")
-						if blocked := cv.authHooks.PostAuth(w, r.WithContext(ctx), app.ID); blocked {
+						if blocked := cv.authHooks.PostAuth(w, r, app.ID); blocked {
 							log.Debug().Msg("Bearer token auth: Post-auth hook blocked the request")
 							return // Post-auth hook blocked the request
 						}
 						log.Debug().Msg("Bearer token auth: Post-auth hook completed")
 					}
 
-					next.ServeHTTP(w, r.WithContext(ctx))
+					next.ServeHTTP(w, r)
 					return
 				}
 			}
