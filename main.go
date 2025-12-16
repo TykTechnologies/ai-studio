@@ -475,6 +475,12 @@ func ensureDefaults(db *gorm.DB) error {
 		return fmt.Errorf("failed to link tool catalogue to default group: %w", err)
 	}
 
+	// Seed default LLM settings if table is empty (for quick start UX)
+	if err := models.GetOrCreateDefaultLLMSettings(db); err != nil {
+		return fmt.Errorf("failed to create default LLM settings: %w", err)
+	}
+	logger.Info("Default LLM settings checked/initialized")
+
 	logger.Info("Default group and catalogues successfully initialized and linked")
 	return nil
 }
