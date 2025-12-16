@@ -17,9 +17,13 @@ const ConfigureTool = ({
   importMethod = PROVIDER_TYPES.DIRECT_IMPORT // default to direct import if not specified
 }) => {
   const handleChange = (field) => (event) => {
+    let value = event.target.value;
+    if (field === 'privacy_score') {
+      value = Math.min(Math.max(parseInt(value) || 0, 0), 100);
+    }
     onConfigChange({
       ...toolConfig,
-      [field]: event.target.value
+      [field]: value
     });
   };
 
@@ -113,8 +117,8 @@ const ConfigureTool = ({
             value={toolConfig.auth_key}
             onChange={handleChange("auth_key")}
             margin="normal"
-            helperText={toolConfig.auth_key ? "API key auto-generated" : "API key or token for authentication"}
-            disabled={toolConfig.auth_key !== ""}
+            helperText={toolConfig.auth_key_prefilled ? "API key auto-generated from provider" : "API key or token for authentication"}
+            disabled={toolConfig.auth_key_prefilled}
             autoComplete="new-password"
             InputProps={{
               autoComplete: "new-password",

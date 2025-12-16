@@ -21,7 +21,7 @@ export const createTool = async (toolData) => {
           description: toolData.description,
           tool_type: toolData.tool_type,
           oas_spec: encodedSpec,
-          privacy_score: toolData.privacy_score,
+          privacy_score: parseInt(toolData.privacy_score) || 0,
           auth_schema_name: toolData.auth_schema_name,
           auth_key: toolData.auth_key,
           operations: toolData.operations || [],

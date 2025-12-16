@@ -41,6 +41,7 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
     privacy_score: 50,
     auth_schema_name: "",
     auth_key: "",
+    auth_key_prefilled: false,
     operations: [],
   });
 
@@ -110,6 +111,7 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
             privacy_score: toolConfig.privacy_score,
             auth_schema_name: selectedAPI.security_details?.name || "",
             auth_key: selectedAPI.auth_key || "",
+            auth_key_prefilled: !!selectedAPI.auth_key,
             operations: selectedAPI.operations || [],
           };
 
@@ -256,6 +258,7 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
       privacy_score: 50,
       auth_schema_name: "",
       auth_key: "",
+      auth_key_prefilled: false,
       operations: [],
     });
     onClose();
