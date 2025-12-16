@@ -3,6 +3,7 @@ const vendorData = {
     name: "OpenAI",
     logo: "/logos/chatgpt-logo.png",
     requiresAccessDetails: true,
+    defaultEndpoint: "https://api.openai.com/v1",
   },
   google_ai: {
     name: "Google AI",
@@ -13,6 +14,7 @@ const vendorData = {
     name: "Anthropic",
     logo: "/logos/anthropic.svg",
     requiresAccessDetails: true,
+    defaultEndpoint: "https://api.anthropic.com/v1/",
   },
   vertex: {
     name: "Vertex AI",
@@ -40,3 +42,5 @@ export const getVendorLogo = (vendorCode) =>
 export const getVendorCodes = () => Object.keys(vendorData);
 export const vendorRequiresAccessDetails = (vendorCode) =>
   vendorData[vendorCode]?.requiresAccessDetails !== false;
+export const getVendorDefaultEndpoint = (vendorCode) =>
+  vendorData[vendorCode]?.defaultEndpoint || "";

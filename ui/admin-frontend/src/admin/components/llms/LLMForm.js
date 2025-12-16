@@ -45,6 +45,7 @@ import {
   getVendorName,
   getVendorLogo,
   getVendorCodes,
+  getVendorDefaultEndpoint,
 } from "../../utils/vendorLogos";
 import { useTheme } from "@mui/material/styles";
 import Stack from "@mui/material/Stack";
@@ -208,6 +209,18 @@ const LLMForm = () => {
       if (id && originalName) {
         setNameChanged(value !== originalName);
       }
+    } else if (name === "vendor") {
+      const defaultEndpoint = getVendorDefaultEndpoint(value);
+      const previousDefaultEndpoint = getVendorDefaultEndpoint(llm.vendor);
+      setLLM((prev) => ({
+        ...prev,
+        vendor: value,
+        // Update endpoint if: empty, or still matches the previous vendor's default
+        api_endpoint:
+          !prev.api_endpoint || prev.api_endpoint === previousDefaultEndpoint
+            ? defaultEndpoint
+            : prev.api_endpoint,
+      }));
     } else {
       setLLM({ ...llm, [name]: value });
     }

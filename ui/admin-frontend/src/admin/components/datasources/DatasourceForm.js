@@ -49,6 +49,8 @@ import {
   getVendorData,
   getVectorStoreHelpText,
   getEmbedderHelpText,
+  getEmbedderDefaultModel,
+  getEmbedderDefaultUrl,
   fetchVendors,
 } from "../../utils/vendorUtils";
 
@@ -234,14 +236,31 @@ const DatasourceForm = () => {
     if (name === "privacy_score") {
       const numValue = Math.min(Math.max(parseInt(value) || 0, 0), 100);
       setDatasource((prev) => ({ ...prev, [name]: numValue }));
+    } else if (name === "embed_vendor") {
+      const defaultModel = getEmbedderDefaultModel(value);
+      const defaultUrl = getEmbedderDefaultUrl(value);
+      const previousDefaultModel = getEmbedderDefaultModel(datasource.embed_vendor);
+      const previousDefaultUrl = getEmbedderDefaultUrl(datasource.embed_vendor);
+      setDatasource((prev) => ({
+        ...prev,
+        embed_vendor: value,
+        // Update if: empty, or still matches the previous vendor's default
+        embed_model:
+          !prev.embed_model || prev.embed_model === previousDefaultModel
+            ? defaultModel
+            : prev.embed_model,
+        embed_url:
+          !prev.embed_url || prev.embed_url === previousDefaultUrl
+            ? defaultUrl
+            : prev.embed_url,
+      }));
+      setEmbedderHelpText(getEmbedderHelpText(value));
     } else {
       setDatasource((prev) => ({ ...prev, [name]: value }));
     }
 
     if (name === "db_source_type") {
       setVectorStoreHelpText(getVectorStoreHelpText(value));
-    } else if (name === "embed_vendor") {
-      setEmbedderHelpText(getEmbedderHelpText(value));
     }
   };
 

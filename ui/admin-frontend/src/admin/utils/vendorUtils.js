@@ -6,6 +6,8 @@ let embedders = [
     name: "OpenAI",
     logo: "/logos/chatgpt-logo.png",
     helpText: "",
+    defaultModel: "text-embedding-3-small",
+    defaultUrl: "https://api.openai.com/v1",
   },
   {
     code: "ollama",
@@ -111,6 +113,16 @@ export const getEmbedderLogo = (code) => {
 export const getEmbedderHelpText = (code) => {
   const embedder = embedders.find((e) => e.code === code);
   return embedder ? embedder.helpText : "No help text available.";
+};
+
+export const getEmbedderDefaultModel = (code) => {
+  const embedder = embedders.find((e) => e.code === code);
+  return embedder?.defaultModel || "";
+};
+
+export const getEmbedderDefaultUrl = (code) => {
+  const embedder = embedders.find((e) => e.code === code);
+  return embedder?.defaultUrl || "";
 };
 
 export const getVectorStoreName = (code) => {
