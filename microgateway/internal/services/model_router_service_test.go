@@ -222,6 +222,84 @@ func TestSelectVendor_PatternMatching_PoolPriority(t *testing.T) {
 		"gpt-4 MUST match fallback wildcard pool")
 }
 
+func TestSelectVendor_PatternMatching_CommaSeparated(t *testing.T) {
+	svc := NewModelRouterService(nil)
+
+	// Setup: Router with comma-separated pattern pool
+	vendors := []database.PoolVendor{createTestVendor("multi-vendor", 1, true, nil)}
+	pool := createTestPool("Multi Model", "gpt-*,claude-*", "round_robin", vendors)
+	router := createTestRouter("test-router", []*CompiledPool{pool})
+
+	svc.routerMutex.Lock()
+	svc.routers["test-router"] = router
+	svc.routerMutex.Unlock()
+
+	// SPECIFICATION: Comma-separated patterns MUST match any of the individual patterns
+	tests := []struct {
+		model   string
+		matches bool
+		desc    string
+	}{
+		{"gpt-4", true, "gpt-* pattern should match gpt-4"},
+		{"gpt-4-turbo", true, "gpt-* pattern should match gpt-4-turbo"},
+		{"gpt-3.5-turbo", true, "gpt-* pattern should match gpt-3.5-turbo"},
+		{"claude-3-opus", true, "claude-* pattern should match claude-3-opus"},
+		{"claude-sonnet-4-5", true, "claude-* pattern should match claude-sonnet-4-5"},
+		{"claude-instant", true, "claude-* pattern should match claude-instant"},
+		{"llama-70b", false, "llama model should NOT match gpt-* or claude-*"},
+		{"mistral-7b", false, "mistral model should NOT match gpt-* or claude-*"},
+		{"o1-preview", false, "o1 model should NOT match gpt-* or claude-*"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			selection, err := svc.SelectVendor("test-router", tt.model)
+			if tt.matches {
+				require.NoError(t, err, tt.desc)
+				assert.Equal(t, "multi-vendor", selection.Vendor.LLMSlug)
+			} else {
+				assert.ErrorIs(t, err, ErrNoMatchingPool, tt.desc)
+			}
+		})
+	}
+}
+
+func TestSelectVendor_PatternMatching_CommaSeparatedWithSpaces(t *testing.T) {
+	svc := NewModelRouterService(nil)
+
+	// Setup: Router with comma-separated pattern with spaces (edge case)
+	vendors := []database.PoolVendor{createTestVendor("multi-vendor", 1, true, nil)}
+	pool := createTestPool("Multi Model Spaces", "gpt-* , claude-* , llama-*", "round_robin", vendors)
+	router := createTestRouter("test-router", []*CompiledPool{pool})
+
+	svc.routerMutex.Lock()
+	svc.routers["test-router"] = router
+	svc.routerMutex.Unlock()
+
+	// SPECIFICATION: Spaces around patterns in comma-separated list MUST be trimmed
+	tests := []struct {
+		model   string
+		matches bool
+	}{
+		{"gpt-4", true},
+		{"claude-3-opus", true},
+		{"llama-70b", true},
+		{"mistral-7b", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			selection, err := svc.SelectVendor("test-router", tt.model)
+			if tt.matches {
+				require.NoError(t, err, "Pattern with spaces should match: %s", tt.model)
+				assert.Equal(t, "multi-vendor", selection.Vendor.LLMSlug)
+			} else {
+				assert.ErrorIs(t, err, ErrNoMatchingPool)
+			}
+		})
+	}
+}
+
 // ============================================================================
 // Round-Robin Selection Tests
 // ============================================================================

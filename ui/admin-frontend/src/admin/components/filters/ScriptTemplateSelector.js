@@ -38,7 +38,7 @@ parsed := json.decode(step1)
 
 // Extract messages from the modified payload
 temp_messages := []
-if parsed.messages {
+if !is_error(parsed) && parsed.messages {
     for msg in parsed.messages {
         temp_messages = append(temp_messages, msg)
     }
@@ -64,7 +64,7 @@ step2 := tyk.redact_pattern(
 // Step 3: Redact SSN (Social Security Numbers)
 parsed2 := json.decode(step2)
 temp_messages2 := []
-if parsed2.messages {
+if !is_error(parsed2) && parsed2.messages {
     for msg in parsed2.messages {
         temp_messages2 = append(temp_messages2, msg)
     }

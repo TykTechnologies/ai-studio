@@ -13,6 +13,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -218,8 +219,8 @@ func (s *ModelRouterService) compileRouter(router *database.ModelRouter) (*Compi
 
 	for i := range pools {
 		pool := &pools[i]
-		// Validate that the pattern is valid for path.Match
-		_, err := path.Match(pool.ModelPattern, "test")
+		// Validate that the pattern is valid (supports comma-separated patterns)
+		_, err := matchModelPattern(pool.ModelPattern, "test")
 		if err != nil {
 			return nil, err
 		}
@@ -232,6 +233,26 @@ func (s *ModelRouterService) compileRouter(router *database.ModelRouter) (*Compi
 	}
 
 	return compiled, nil
+}
+
+// matchModelPattern checks if modelName matches any pattern in a comma-separated pattern string.
+// This allows patterns like "gpt-*,claude-*" to match both GPT and Claude models.
+func matchModelPattern(pattern, modelName string) (bool, error) {
+	patterns := strings.Split(pattern, ",")
+	for _, p := range patterns {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		matched, err := path.Match(p, modelName)
+		if err != nil {
+			return false, err
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // GetRouter returns a compiled router by slug
@@ -252,7 +273,7 @@ func (s *ModelRouterService) SelectVendor(routerSlug string, modelName string) (
 	// Find matching pool
 	var matchedPool *CompiledPool
 	for _, pool := range router.CompiledPools {
-		matched, err := path.Match(pool.Pattern, modelName)
+		matched, err := matchModelPattern(pool.Pattern, modelName)
 		if err != nil {
 			log.Warn().Err(err).Str("pattern", pool.Pattern).Msg("Invalid pattern")
 			continue
