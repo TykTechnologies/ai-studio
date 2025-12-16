@@ -113,7 +113,7 @@ export const setupSSEConnection = ({
       onMessageReceived({
         id: generateTempId(),
         type: "system",
-        payload: "Error: Failed to parse message from server",
+        content: ":::system Error: Failed to parse message from server:::",
         isComplete: true
       });
     }
@@ -150,7 +150,7 @@ export const setupSSEConnection = ({
       onMessageReceived({
         id: generateTempId(),
         type: 'system',
-        payload: messageContent,  // Fixed: Use 'payload' instead of 'content' for consistency
+        content: messageContent,
         isComplete: true
       });
     } catch (error) {
@@ -158,9 +158,15 @@ export const setupSSEConnection = ({
     }
   });
 
-  // Handle error events
+  // Handle error events from the server (SSE events with type 'error')
+  // Note: This is different from connection errors handled by onerror
   eventSourceRef.current.addEventListener('error', (event) => {
     try {
+      // Only process if there's actual data (server-sent error event)
+      // Connection errors trigger onerror, not this handler, but some browsers
+      // may trigger both - we only want to handle events with data here
+      if (!event.data) return;
+
       const errorType = detectErrorType(event.data);
 
       // For LLM config errors, don't attempt reconnection
@@ -171,7 +177,7 @@ export const setupSSEConnection = ({
       onMessageReceived({
         id: generateTempId(),
         type: 'system',
-        payload: `:::system Error: ${event.data}:::`,  // Fixed: Use 'payload' instead of 'content' for consistency
+        content: `:::system Error: ${event.data}:::`,
         errorType: errorType,
         isComplete: true
       });
@@ -190,28 +196,39 @@ export const setupSSEConnection = ({
       onMessageReceived({
         id: generateTempId(),
         type: "system",
-        payload: "Error: Failed to parse message from server",
+        content: ":::system Error: Failed to parse message from server:::",
         isComplete: true
       });
     }
   };
 
+  // Handle connection errors (network failures, disconnects)
+  // Note: This is different from server-sent error events handled by addEventListener('error')
   const handleConnectionError = (error) => {
-    console.error("SSE error:", error);
+    console.error("SSE connection error:", error);
+
     setIsConnected(false);
     isConnectedRef.current = false;
     setIsLoading(false);
 
-    
-    // Check if we have a recent LLM config error
-    const hasLLMError = error?.data && detectErrorType(error.data) === 'llm_config';
+    // If error has data, it was a server-sent error event that was already
+    // handled by addEventListener('error'). This handler is just being called
+    // because the connection dropped after the error was sent.
+    if (error?.data) {
+      // Already handled by the 'error' event listener - don't duplicate the message
+      return;
+    }
 
-    if (!hasLLMError && reconnectAttempts.current < maxReconnectAttempts) {
+    // Check if we've already hit max reconnect attempts (set by LLM config error handler)
+    const isMaxedOut = reconnectAttempts.current >= maxReconnectAttempts;
+
+    if (!isMaxedOut) {
       onMessageReceived({
         id: generateTempId(),
         type: "system",
-        payload: `Connection lost. Attempting to reconnect... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`,
-        errorType: 'connection'
+        content: `Connection lost. Attempting to reconnect... (Attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`,
+        errorType: 'connection',
+        isComplete: true
       });
 
       const delay = initialReconnectDelay * Math.pow(2, reconnectAttempts.current);
@@ -223,36 +240,34 @@ export const setupSSEConnection = ({
           eventSourceRef.current.close();
         }
 
-        // Only update URL if it's a connection error
-        if (!hasLLMError) {
-          setupSSEConnection({
-            eventSourceRef,
-            chatId,
-            continueId: currentSessionId || continueId,
-            onMessageReceived,
-            setIsConnected,
-            setSessionId,
-            setError,
-            setIsLoading,
-            isConnectedRef,
-            reconnectAttempts,
-            loadingTimeoutRef,
-            fetchChatHistory,
-            maxReconnectAttempts,
-            initialReconnectDelay
-          });
-        }
+        setupSSEConnection({
+          eventSourceRef,
+          chatId,
+          continueId: currentSessionId || continueId,
+          onMessageReceived,
+          setIsConnected,
+          setSessionId,
+          setError,
+          setIsLoading,
+          isConnectedRef,
+          reconnectAttempts,
+          loadingTimeoutRef,
+          fetchChatHistory,
+          maxReconnectAttempts,
+          initialReconnectDelay
+        });
       }, delay);
     } else {
-      const message = hasLLMError
-        ? "LLM configuration error. Please check your settings."
-        : "Maximum reconnection attempts reached. Please refresh the page.";
+      // Only show "max attempts" message for connection errors, not LLM errors
+      // LLM errors already have their own message from the server
+      const message = "Maximum reconnection attempts reached. Please refresh the page.";
 
       onMessageReceived({
         id: generateTempId(),
         type: "system",
-        payload: message,
-        errorType: hasLLMError ? 'llm_config' : 'connection'
+        content: message,
+        errorType: 'connection',
+        isComplete: true
       });
       setError(message);
     }

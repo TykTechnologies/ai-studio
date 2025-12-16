@@ -60,7 +60,7 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
           onMessageReceived({
             id: generateTempId(),
             type: "system",
-            payload: "Connection timeout. Please try again.",
+            content: ":::system Connection timeout. Please try again.:::",
             isComplete: true
           });
         }

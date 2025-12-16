@@ -287,7 +287,8 @@ const ChatView = () => {
         });
       }
     } else if (data.type === 'error' || data.type === 'system' || data.type === 'tool') {
-      let messageContent = data.payload;
+      // Support both 'payload' (from some SSE events) and 'content' (normalized)
+      let messageContent = data.payload || data.content;
 
       if (!messageContent) {
         return;
