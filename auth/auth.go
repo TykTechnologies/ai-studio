@@ -30,6 +30,7 @@ type Config struct {
 
 	CookieDomain     string
 	ResetTokenExpiry time.Duration
+	SessionDuration  time.Duration
 	FrontendURL      string
 
 	CookieHTTPOnly         bool
@@ -70,7 +71,11 @@ func (a *AuthService) SetUserSession(c *gin.Context, user *models.User) error {
 		return err
 	}
 
-	expirationTime := time.Now().Add(6 * time.Hour) //TODO: get this from a config
+	sessionDuration := a.Config.SessionDuration
+	if sessionDuration == 0 {
+		sessionDuration = 6 * time.Hour // Default fallback
+	}
+	expirationTime := time.Now().Add(sessionDuration)
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     a.Config.CookieName,
 		Value:    token,

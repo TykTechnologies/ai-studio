@@ -53,8 +53,8 @@ const generateCurlExample = (operation, toolDetails, selectedApiToken = null) =>
   const config = getConfig();
   const currentHost = window.location.hostname;
   const protocol = window.location.protocol; // Get the current protocol (http: or https:)
-  // Use proxyURL from config if available, otherwise use protocol + hostname:9090 (default gateway port)
-  const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+  // Use toolDisplayURL from config if available, otherwise fall back to proxyURL, then default gateway
+  const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
   // The correct URL format is just /tools/{toolSlug} - the operation ID goes in the request body
   let url = `${baseUrl}/tools/${toolSlug}`;
   
@@ -410,7 +410,7 @@ const ToolDocumentationPage = () => {
               const config = getConfig();
               const currentHost = window.location.hostname;
               const protocol = window.location.protocol;
-              const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+              const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
               const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
               return `${baseUrl}/tools/${toolSlug}/mcp`;
             })()}
@@ -455,12 +455,12 @@ const ToolDocumentationPage = () => {
   const config = getConfig();
   const currentHost = window.location.hostname;
   const protocol = window.location.protocol;
-  const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+  const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
   const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
   const toolName = toolDetails?.attributes?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'tool_name';
   const envVarName = toolName.toUpperCase() + '_API_TOKEN';
   const apiToken = getSelectedApiToken() || 'YOUR_API_TOKEN_HERE';
-  
+
   return `{
   "mcpServers": {
     "${toolName}": {
@@ -511,7 +511,7 @@ const transport = new StreamableHTTPClientTransport(
     const config = getConfig();
     const currentHost = window.location.hostname;
     const protocol = window.location.protocol;
-    const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+    const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
     const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
     return `${baseUrl}/tools/${toolSlug}/mcp`;
   })()}'),
@@ -559,7 +559,7 @@ const transport = new SSEClientTransport(
     const config = getConfig();
     const currentHost = window.location.hostname;
     const protocol = window.location.protocol;
-    const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+    const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
     const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
     return `${baseUrl}/tools/${toolSlug}/mcp/sse`;
   })()}'),
@@ -567,7 +567,7 @@ const transport = new SSEClientTransport(
     const config = getConfig();
     const currentHost = window.location.hostname;
     const protocol = window.location.protocol;
-    const baseUrl = config.proxyURL || `${protocol}//${currentHost}:9090`;
+    const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
     const toolSlug = toolDetails?.attributes?.name?.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || 'tool-name';
     return `${baseUrl}/tools/${toolSlug}/mcp/message`;
   })()}'),

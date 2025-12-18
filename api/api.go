@@ -980,14 +980,27 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		}
 	}
 
+	// Get display URLs with fallback to ProxyURL
+	proxyURL := config.Get("").ProxyURL
+	toolDisplayURL := config.Get("").ToolDisplayURL
+	if toolDisplayURL == "" {
+		toolDisplayURL = proxyURL
+	}
+	dataSourceDisplayURL := config.Get("").DataSourceDisplayURL
+	if dataSourceDisplayURL == "" {
+		dataSourceDisplayURL = proxyURL
+	}
+
 	cfg := FrontendConfig{
-		APIBaseURL:        apiBaseURL,
-		ProxyURL:          config.Get("").ProxyURL,
-		DefaultSignUpMode: suMode,
-		TIBEnabled:        sso.IsEnterpriseAvailable(),
-		IsEnterprise:      config.IsEnterprise(), // Detect enterprise edition via build tags
-		DocsLinks:         config.Get("").DocsLinks,
-		Branding:          brandingConfig,
+		APIBaseURL:           apiBaseURL,
+		ProxyURL:             proxyURL,
+		ToolDisplayURL:       toolDisplayURL,
+		DataSourceDisplayURL: dataSourceDisplayURL,
+		DefaultSignUpMode:    suMode,
+		TIBEnabled:           sso.IsEnterpriseAvailable(),
+		IsEnterprise:         config.IsEnterprise(), // Detect enterprise edition via build tags
+		DocsLinks:            config.Get("").DocsLinks,
+		Branding:             brandingConfig,
 	}
 
 	c.JSON(http.StatusOK, cfg)

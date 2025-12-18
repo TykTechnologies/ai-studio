@@ -998,13 +998,15 @@ type PaginatedProxyLogs struct {
 // FrontendConfig holds front-end configuration settings
 // @Description Front-end config model
 type FrontendConfig struct {
-	APIBaseURL        string            `json:"apiBaseURL"`
-	ProxyURL          string            `json:"proxyURL"`
-	DefaultSignUpMode string            `json:"defaultSignUpMode"`
-	TIBEnabled        bool              `json:"tibEnabled"`
-	IsEnterprise      bool              `json:"is_enterprise"`
-	DocsLinks         map[string]string `json:"docsLinks"`
-	Branding          *BrandingConfig   `json:"branding,omitempty"`
+	APIBaseURL           string            `json:"apiBaseURL"`
+	ProxyURL             string            `json:"proxyURL"`
+	ToolDisplayURL       string            `json:"toolDisplayURL"`
+	DataSourceDisplayURL string            `json:"dataSourceDisplayURL"`
+	DefaultSignUpMode    string            `json:"defaultSignUpMode"`
+	TIBEnabled           bool              `json:"tibEnabled"`
+	IsEnterprise         bool              `json:"is_enterprise"`
+	DocsLinks            map[string]string `json:"docsLinks"`
+	Branding             *BrandingConfig   `json:"branding,omitempty"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend

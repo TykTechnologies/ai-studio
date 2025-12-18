@@ -33,9 +33,11 @@ type AppConf struct {
 	FromEmail             string
 	AllowRegistrations    bool
 	AdminEmail            string
-	SiteURL               string
-	ProxyURL              string
-	ServerPort            string
+	SiteURL              string
+	ProxyURL             string
+	ToolDisplayURL       string
+	DataSourceDisplayURL string
+	ServerPort           string
 	CertFile              string
 	KeyFile               string
 	DisableCors           bool
@@ -55,6 +57,9 @@ type AppConf struct {
 	TelemetryEnabled      bool
 	QueueConfig           QueueConfig
 	LogLevel              string
+
+	// Session Configuration
+	SessionDuration       time.Duration
 
 	// OCI Plugin Configuration
 	OCIPlugins            OCIConfig
@@ -291,6 +296,10 @@ func getConfigFromEnv(envFile string) *AppConf {
 		cfgLog.Info().Msg("Warning: PROXY_URL environment variable is not set")
 	}
 
+	// Display URLs for Tools and Datasources (optional, fallback to ProxyURL in API handler)
+	conf.ToolDisplayURL = os.Getenv("TOOL_DISPLAY_URL")
+	conf.DataSourceDisplayURL = os.Getenv("DATASOURCE_DISPLAY_URL")
+
 	conf.DefaultSignupMode = os.Getenv("DEFAULT_SIGNUP_MODE")
 	if conf.DefaultSignupMode == "" {
 		conf.DefaultSignupMode = "both"
@@ -439,6 +448,9 @@ func getConfigFromEnv(envFile string) *AppConf {
 	if conf.LogLevel == "" {
 		conf.LogLevel = "info" // Default to info level
 	}
+
+	// Session duration configuration
+	conf.SessionDuration = parseDurationWithDefault("SESSION_DURATION", 6*time.Hour)
 
 	return conf
 }

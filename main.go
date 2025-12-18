@@ -233,6 +233,7 @@ func main() {
 		CookieSameSite:         http.SameSiteLaxMode, // less restrictive
 		CookieDomain:           "",                   // empty for development to work with localhost
 		ResetTokenExpiry:       time.Hour,
+		SessionDuration:        appConf.SessionDuration,
 		FrontendURL:            appConf.SiteURL,
 		RegistrationAllowed:    appConf.AllowRegistrations,
 		AdminEmail:             appConf.AdminEmail,

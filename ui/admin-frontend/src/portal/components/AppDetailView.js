@@ -88,6 +88,8 @@ const AppDetailView = () => {
   const [showSecret, setShowSecret] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
   const [proxyUrl, setProxyUrl] = useState("");
+  const [toolDisplayUrl, setToolDisplayUrl] = useState("");
+  const [datasourceDisplayUrl, setDatasourceDisplayUrl] = useState("");
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
   const [appInteractionsData, setAppInteractionsData] = useState(null);
@@ -140,8 +142,13 @@ const AppDetailView = () => {
         const apiHost = config.api_host || window.location.origin;
         // Use proxyURL for proxy endpoints if available, otherwise fall back to apiHost
         const proxyUrlValue = config.proxyURL || `${window.location.protocol}//${window.location.hostname}:9090`;
+        // Use separate display URLs for tools and datasources if configured
+        const toolDisplayUrlValue = config.toolDisplayURL || proxyUrlValue;
+        const datasourceDisplayUrlValue = config.dataSourceDisplayURL || proxyUrlValue;
         setBaseUrl(apiHost);
         setProxyUrl(proxyUrlValue);
+        setToolDisplayUrl(toolDisplayUrlValue);
+        setDatasourceDisplayUrl(datasourceDisplayUrlValue);
 
         const app = appResponse.data;
         setApp(app);
@@ -184,8 +191,20 @@ const AppDetailView = () => {
 
   const generateEndpointUrl = (path, name) => {
     const slug = generateSlug(name);
-    // Use proxyUrl for proxy endpoints
+    // Use proxyUrl for LLM proxy endpoints
     return `${proxyUrl}${path}${slug}`;
+  };
+
+  const generateToolEndpointUrl = (path, name) => {
+    const slug = generateSlug(name);
+    // Use toolDisplayUrl for tool endpoints
+    return `${toolDisplayUrl}${path}${slug}`;
+  };
+
+  const generateDatasourceEndpointUrl = (path, name) => {
+    const slug = generateSlug(name);
+    // Use datasourceDisplayUrl for datasource endpoints
+    return `${datasourceDisplayUrl}${path}${slug}`;
   };
 
   const copyToClipboard = (text) => {
@@ -853,12 +872,12 @@ const AppDetailView = () => {
                         flexGrow: 1,
                       }}
                     >
-                      {generateEndpointUrl("/datasource/", datasource.attributes.name)}
+                      {generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name)}
                     </Typography>
                     <IconButton
                       onClick={() =>
                         copyToClipboard(
-                          generateEndpointUrl("/datasource/", datasource.attributes.name)
+                          generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name)
                         )
                       }
                       size="small"
@@ -919,12 +938,12 @@ const AppDetailView = () => {
                         flexGrow: 1,
                       }}
                     >
-                      {generateEndpointUrl("/tools/", tool.attributes.name)}
+                      {generateToolEndpointUrl("/tools/", tool.attributes.name)}
                     </Typography>
                     <IconButton
                       onClick={() =>
                         copyToClipboard(
-                          generateEndpointUrl("/tools/", tool.attributes.name)
+                          generateToolEndpointUrl("/tools/", tool.attributes.name)
                         )
                       }
                       size="small"
