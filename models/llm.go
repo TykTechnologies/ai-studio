@@ -160,3 +160,55 @@ func GetTotalTokensByInteractionType(db *gorm.DB, interactionType InteractionTyp
 
 	return totalTokens, err
 }
+
+// GetOrCreateDefaultLLMs ensures default LLM configurations exist in the database.
+// This function creates OpenAI and Anthropic LLM configurations with secret references
+// if they don't already exist, providing a quick-start experience for new users.
+// Newly created LLMs are also added to the default catalogue if it exists.
+func GetOrCreateDefaultLLMs(db *gorm.DB) error {
+	defaults := []LLM{
+		{
+			Name:         "OpenAI",
+			Vendor:       OPENAI,
+			APIEndpoint:  "https://api.openai.com/v1",
+			APIKey:       "$SECRET/OPENAI_KEY",
+			DefaultModel: "gpt-4o",
+			Active:       true,
+		},
+		{
+			Name:         "Anthropic",
+			Vendor:       ANTHROPIC,
+			APIEndpoint:  "https://api.anthropic.com/v1",
+			APIKey:       "$SECRET/ANTHROPIC_KEY",
+			DefaultModel: "claude-sonnet-4-20250514",
+			Active:       true,
+		},
+	}
+
+	// Get the default catalogue if it exists
+	var defaultCatalogue Catalogue
+	catalogueExists := db.Where("name = ?", DefaultCatalogueName).First(&defaultCatalogue).Error == nil
+
+	for _, llm := range defaults {
+		// Check if LLM with this name already exists
+		var count int64
+		if err := db.Model(&LLM{}).Where("name = ?", llm.Name).Count(&count).Error; err != nil {
+			return err
+		}
+
+		// Only create if it doesn't exist
+		if count == 0 {
+			if err := llm.Create(db); err != nil {
+				return err
+			}
+
+			// Add to default catalogue if it exists
+			if catalogueExists {
+				if err := defaultCatalogue.AddLLM(db, &llm); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}

@@ -150,6 +150,7 @@ func main() {
 	// Initialize hub-spoke service container based on gateway mode
 	var serviceContainer *services.ServiceContainer
 	var hubSpokeContainer *services.HubSpokeServiceContainer
+	var edgeReloadHandler *services.EdgeReloadHandler // For setting gateway reloader after server creation
 
 	// Always use hub-spoke container for control and edge modes
 	if cfg.IsControl() || cfg.IsEdge() {
@@ -234,7 +235,7 @@ func main() {
 
 				// Create and connect edge reload handler for distributed reload operations
 				syncService := services.NewEdgeSyncService(db, cfg.HubSpoke.EdgeNamespace)
-				reloadHandler := services.NewEdgeReloadHandler(
+				edgeReloadHandler = services.NewEdgeReloadHandler(
 					edgeClient,
 					syncService,
 					db,
@@ -245,9 +246,10 @@ func main() {
 							log.Error().Err(err).Msg("Failed to send reload status to control")
 						}
 					},
+					nil, // Gateway reloader will be set after Server is created (srv.Reload)
 				)
-				edgeClient.SetReloadHandler(reloadHandler)
-				log.Debug().Msg("Edge reload handler created and connected to edge client")
+				edgeClient.SetReloadHandler(edgeReloadHandler)
+				log.Debug().Msg("Edge reload handler created - gateway reloader will be set after server creation")
 
 				// Connect edge client to plugin manager for built-in plugins
 				serviceContainer.PluginManager.SetEdgeClient(edgeClient)
@@ -348,6 +350,13 @@ func main() {
 	srv, err := server.New(cfg, serviceContainer, Version, BuildHash, BuildTime)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create server")
+	}
+
+	// Now that server is created, set the gateway reloader on edge reload handler
+	// This enables proper LLM cache refresh after configuration sync
+	if edgeReloadHandler != nil {
+		edgeReloadHandler.SetGatewayReloader(srv.Reload)
+		log.Debug().Msg("Gateway reloader (srv.Reload) set on edge reload handler")
 	}
 
 	// Setup signal handling for graceful shutdown

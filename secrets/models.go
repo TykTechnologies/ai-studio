@@ -173,6 +173,33 @@ func UpdateSecret(db *gorm.DB, settings *Secret) error {
 	return db.Save(settings).Error
 }
 
+// GetOrCreateDefaultSecrets ensures default secrets exist in the database.
+// This function creates OPENAI_KEY and ANTHROPIC_KEY secrets with empty values
+// if they don't already exist, allowing users to fill in their API keys later.
+func GetOrCreateDefaultSecrets(db *gorm.DB) error {
+	defaultSecrets := []string{"OPENAI_KEY", "ANTHROPIC_KEY"}
+
+	for _, name := range defaultSecrets {
+		// Check if secret already exists by name
+		var count int64
+		if err := db.Model(&Secret{}).Where("var_name = ?", name).Count(&count).Error; err != nil {
+			return err
+		}
+
+		// Only create if it doesn't exist
+		if count == 0 {
+			secret := &Secret{
+				VarName: name,
+				Value:   "", // Empty value - user will fill in later
+			}
+			if err := CreateSecret(db, secret); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func ListSecrets(db *gorm.DB, pageSize int, pageNumber int, all bool) ([]Secret, int64, int, error) {
 	var secrets []Secret
 	var totalCount int64

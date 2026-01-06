@@ -32,6 +32,7 @@ import (
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
 	"github.com/TykTechnologies/midsommar/v2/startup"
 
@@ -53,6 +54,7 @@ func main() {
 
 	// Parse command-line flags
 	envFile := flag.String("env", "", "Path to environment file (default: .env in current directory)")
+	noLLMDefaults := flag.Bool("no-llm-defaults", false, "Disable automatic creation of default LLM configurations and secrets")
 	flag.Parse()
 
 	// Get configuration first to initialize logger with correct level
@@ -100,7 +102,7 @@ func main() {
 	}
 
 	// Ensure default group and catalogues exist and are linked
-	if err := ensureDefaults(db); err != nil {
+	if err := ensureDefaults(db, *noLLMDefaults); err != nil {
 		logger.FatalErr("Failed to ensure default group and catalogues", err)
 	}
 
@@ -432,7 +434,7 @@ func main() {
 }
 
 // ensureDefaults ensures default group and catalogues exist and are linked
-func ensureDefaults(db *gorm.DB) error {
+func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
 	logger.Info("Ensuring default group and catalogues exist...")
 
 	// Get or create Default group
@@ -481,6 +483,19 @@ func ensureDefaults(db *gorm.DB) error {
 		return fmt.Errorf("failed to create default LLM settings: %w", err)
 	}
 	logger.Info("Default LLM settings checked/initialized")
+
+	// Seed default secrets and LLM configurations if not disabled
+	if !skipLLMDefaults {
+		if err := secrets.GetOrCreateDefaultSecrets(db); err != nil {
+			return fmt.Errorf("failed to create default secrets: %w", err)
+		}
+		logger.Info("Default secrets checked/initialized")
+
+		if err := models.GetOrCreateDefaultLLMs(db); err != nil {
+			return fmt.Errorf("failed to create default LLM configurations: %w", err)
+		}
+		logger.Info("Default LLM configurations checked/initialized")
+	}
 
 	logger.Info("Default group and catalogues successfully initialized and linked")
 	return nil

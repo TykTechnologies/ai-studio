@@ -29,6 +29,9 @@ type EdgeReloadHandler struct {
 	
 	// Callback to send status updates to control
 	sendStatusUpdate func(*pb.ConfigurationReloadResponse)
+
+	// Callback to reload gateway after config sync
+	gatewayReloader func() error
 }
 
 // NewEdgeReloadHandler creates a new edge reload handler
@@ -38,6 +41,7 @@ func NewEdgeReloadHandler(
 	db *gorm.DB,
 	edgeID string,
 	sendStatusCallback func(*pb.ConfigurationReloadResponse),
+	gatewayReloader func() error,
 ) *EdgeReloadHandler {
 	return &EdgeReloadHandler{
 		edgeClient:       edgeClient,
@@ -45,7 +49,17 @@ func NewEdgeReloadHandler(
 		db:               db,
 		edgeID:           edgeID,
 		sendStatusUpdate: sendStatusCallback,
+		gatewayReloader:  gatewayReloader,
 	}
+}
+
+// SetGatewayReloader sets the gateway reloader callback
+// This allows setting the reloader after the Server is created
+func (h *EdgeReloadHandler) SetGatewayReloader(reloader func() error) {
+	h.reloadMutex.Lock()
+	defer h.reloadMutex.Unlock()
+	h.gatewayReloader = reloader
+	log.Debug().Msg("Gateway reloader callback set for edge reload handler")
 }
 
 // HandleReloadRequest processes a configuration reload request from control
@@ -98,6 +112,16 @@ func (h *EdgeReloadHandler) HandleReloadRequest(req *pb.ConfigurationReloadReque
 	if err := h.safeUpdateSQLite(newConfig); err != nil {
 		h.sendStatus(req.OperationId, pb.ReloadPhase_FAILED, false, fmt.Sprintf("Failed to update SQLite: %v", err), h.currentVersion, "")
 		return
+	}
+
+	// Reload gateway to refresh in-memory LLM cache with new API keys
+	if h.gatewayReloader != nil {
+		if err := h.gatewayReloader(); err != nil {
+			log.Error().Err(err).Msg("Failed to reload gateway after config sync")
+			// Non-fatal: DB is updated, gateway will use fresh data on next restart
+		} else {
+			log.Info().Msg("Gateway reloaded with new configuration")
+		}
 	}
 
 	// Phase 4: UPDATED - Configuration applied to SQLite

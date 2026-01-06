@@ -240,7 +240,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 			"total_tokens":              record.TotalTokens,            // From vendor parser
 			"cache_write_prompt_tokens": record.CacheWritePromptTokens, // From vendor parser
 			"cache_read_prompt_tokens":  record.CacheReadPromptTokens,  // From vendor parser
-			"cost":                      record.Cost,                   // Calculated by embedded gateway
+			"cost":                      record.Cost,                   // Already in AI Studio format (dollars * 10000) from proxy layer
 			"currency":                  record.Currency,               // From pricing lookup
 			"choices":                   record.Choices,                // From vendor parser
 			"tool_calls":                record.ToolCalls,              // From vendor parser
@@ -395,7 +395,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 		CacheReadPromptTokens:  record.CacheReadPromptTokens,
 
 		// Cost and timing
-		Cost:                   record.Cost,
+		Cost:                   record.Cost, // Already in AI Studio format (dollars * 10000) from proxy layer
 		TotalTimeMS:            record.TotalTimeMS,
 
 		ErrorMessage:           "",

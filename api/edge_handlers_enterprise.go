@@ -355,24 +355,24 @@ func (a *API) reloadAllEdges(c *gin.Context) {
 		}
 	}
 
-	// Get all namespaces
-	namespaces, err := a.service.EdgeManagementService.ListNamespaces()
+	// Get namespaces with active edges only
+	namespaces, err := a.service.NamespaceService.GetActiveNamespaces()
 	if err != nil {
 		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to list namespaces: "+err.Error()))
 		return
 	}
 
-	// Trigger reload for each namespace
+	// Trigger reload for each namespace with active edges
 	operations := make([]gin.H, 0)
-	for _, namespace := range namespaces {
-		operation, err := a.service.NamespaceService.TriggerNamespaceReload(namespace, initiatedBy)
+	for _, ns := range namespaces {
+		operation, err := a.service.NamespaceService.TriggerNamespaceReload(ns.Name, initiatedBy)
 		if err != nil {
 			// Log error but continue with other namespaces
 			continue
 		}
 		operations = append(operations, gin.H{
 			"operation_id": operation.OperationID,
-			"namespace":    namespace,
+			"namespace":    ns.Name,
 			"status":       operation.Status,
 		})
 	}

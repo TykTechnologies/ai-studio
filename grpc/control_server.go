@@ -1114,20 +1114,41 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			budgetStartDate = app.BudgetStartDate.Format(time.RFC3339)
 		}
 
+		// Calculate current period usage from llm_chat_records for budget sync to edge
+		var currentPeriodUsage float64
+		if monthlyBudget > 0 {
+			// Calculate budget period start (1st of current month - matches edge budget service logic)
+			now := time.Now()
+			periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+			// Query total cost from llm_chat_records for this app in the current period
+			var totalCostCents float64
+			if err := s.db.Model(&models.LLMChatRecord{}).
+				Select("COALESCE(SUM(cost), 0)").
+				Where("app_id = ? AND time_stamp >= ?", app.ID, periodStart).
+				Scan(&totalCostCents).Error; err != nil {
+				log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to calculate current period usage for app")
+			} else {
+				// Convert from cents*10000 to dollars
+				currentPeriodUsage = totalCostCents / 10000.0
+			}
+		}
+
 		pbApp := &pb.AppConfig{
-			Id:              uint32(app.ID),
-			Name:            app.Name,
-			Description:     app.Description,
-			OwnerEmail:      "", // AI Studio doesn't have owner email field yet
-			IsActive:        app.IsActive,
-			MonthlyBudget:   monthlyBudget,
-			BudgetStartDate: budgetStartDate,
-			Metadata:        metadataJSON,
-			Namespace:       app.Namespace,
-			UserId:          uint32(app.UserID), // Owner user ID for analytics tracking
-			LlmIds:          llmIDs,
-			CreatedAt:       timestamppb.New(app.CreatedAt),
-			UpdatedAt:       timestamppb.New(app.UpdatedAt),
+			Id:                 uint32(app.ID),
+			Name:               app.Name,
+			Description:        app.Description,
+			OwnerEmail:         "", // AI Studio doesn't have owner email field yet
+			IsActive:           app.IsActive,
+			MonthlyBudget:      monthlyBudget,
+			BudgetStartDate:    budgetStartDate,
+			Metadata:           metadataJSON,
+			Namespace:          app.Namespace,
+			UserId:             uint32(app.UserID), // Owner user ID for analytics tracking
+			LlmIds:             llmIDs,
+			CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
+			CreatedAt:          timestamppb.New(app.CreatedAt),
+			UpdatedAt:          timestamppb.New(app.UpdatedAt),
 		}
 		snapshot.Apps = append(snapshot.Apps, pbApp)
 	}

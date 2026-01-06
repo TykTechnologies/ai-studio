@@ -136,12 +136,9 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
                   label="Select Namespace"
                   onChange={(e) => setSelectedNamespace(e.target.value)}
                 >
-                  <MenuItem value="global">Global ({availableNamespaces.find(ns => ns.name === 'global')?.edgeCount || 0} edges)</MenuItem>
-                  {availableNamespaces
-                    .filter(ns => ns.name !== 'global')
-                    .map((namespace) => (
+                  {availableNamespaces.map((namespace) => (
                     <MenuItem key={namespace.name} value={namespace.name}>
-                      {namespace.name} ({namespace.edgeCount} edges)
+                      {namespace.name === 'global' ? 'Global' : namespace.name} ({namespace.edgeCount} edges)
                     </MenuItem>
                   ))}
                 </Select>

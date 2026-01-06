@@ -358,3 +358,189 @@ func TestSimpleEdgeClient_ErrorHandling(t *testing.T) {
 
 // Note: Message handler tests are implemented in the grpc package unit tests
 // since they require access to unexported methods
+
+// TestEdgeSyncService_BudgetUsageSyncOnDBWipe tests that when an edge DB is wiped,
+// the budget usage is correctly restored from the control server's snapshot
+func TestEdgeSyncService_BudgetUsageSyncOnDBWipe(t *testing.T) {
+	// Setup test database for edge (simulating a fresh/wiped DB)
+	edgeDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+
+	// Run migrations on the fresh edge DB
+	err = database.Migrate(edgeDB)
+	require.NoError(t, err)
+
+	namespace := "test-budget-sync"
+	now := time.Now()
+
+	// Simulate a configuration snapshot from control server
+	// This is what the edge would receive after the DB wipe
+	snapshotFromControl := &pb.ConfigurationSnapshot{
+		Version:       "budget-test-v1",
+		EdgeNamespace: namespace,
+		SnapshotTime:  timestamppb.Now(),
+		Apps: []*pb.AppConfig{
+			{
+				Id:                 1,
+				Name:               "App Exceeded Budget",
+				Description:        "App that has exceeded its budget",
+				IsActive:           true,
+				Namespace:          namespace,
+				MonthlyBudget:      50.0,  // $50 budget
+				CurrentPeriodUsage: 75.25, // $75.25 spent - EXCEEDS BUDGET
+				CreatedAt:          timestamppb.New(now),
+				UpdatedAt:          timestamppb.New(now),
+			},
+			{
+				Id:                 2,
+				Name:               "App Within Budget",
+				Description:        "App within its budget",
+				IsActive:           true,
+				Namespace:          namespace,
+				MonthlyBudget:      100.0, // $100 budget
+				CurrentPeriodUsage: 30.50, // $30.50 spent
+				CreatedAt:          timestamppb.New(now),
+				UpdatedAt:          timestamppb.New(now),
+			},
+			{
+				Id:                 3,
+				Name:               "App No Budget",
+				Description:        "App without budget tracking",
+				IsActive:           true,
+				Namespace:          namespace,
+				MonthlyBudget:      0, // No budget
+				CurrentPeriodUsage: 0, // No usage tracking
+				CreatedAt:          timestamppb.New(now),
+				UpdatedAt:          timestamppb.New(now),
+			},
+		},
+	}
+
+	// Create edge sync service and sync the configuration
+	syncService := services.NewEdgeSyncService(edgeDB, namespace)
+	err = syncService.SyncConfiguration(snapshotFromControl)
+	require.NoError(t, err, "Sync should succeed")
+
+	// Verify apps were synced
+	var apps []database.App
+	err = edgeDB.Find(&apps).Error
+	require.NoError(t, err)
+	assert.Len(t, apps, 3, "All 3 apps should be synced")
+
+	// Verify budget usage was initialized from control server
+	// Note: TotalCost is stored as dollars * 10000 for consistency with AI Studio format
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	// App 1: Exceeded budget - should have BudgetUsage with $75.25 * 10000 = 752500
+	var usage1 database.BudgetUsage
+	err = edgeDB.Where("app_id = ? AND period_start = ?", 1, periodStart).First(&usage1).Error
+	assert.NoError(t, err, "App 1 should have BudgetUsage record")
+	assert.InDelta(t, 752500.0, usage1.TotalCost, 1.0, "App 1 usage should be 752500 (75.25 * 10000)")
+
+	// App 2: Within budget - should have BudgetUsage with $30.50 * 10000 = 305000
+	var usage2 database.BudgetUsage
+	err = edgeDB.Where("app_id = ? AND period_start = ?", 2, periodStart).First(&usage2).Error
+	assert.NoError(t, err, "App 2 should have BudgetUsage record")
+	assert.InDelta(t, 305000.0, usage2.TotalCost, 1.0, "App 2 usage should be 305000 (30.50 * 10000)")
+
+	// App 3: No budget - should NOT have BudgetUsage
+	var usage3 database.BudgetUsage
+	err = edgeDB.Where("app_id = ? AND period_start = ?", 3, periodStart).First(&usage3).Error
+	assert.Error(t, err, "App 3 should NOT have BudgetUsage record")
+	assert.Equal(t, gorm.ErrRecordNotFound, err)
+
+	// Simulate budget check for App 1 (exceeded budget)
+	// In a real scenario, the budget service would check this
+	var app1BudgetUsage database.BudgetUsage
+	app1UsageErr := edgeDB.Where("app_id = ? AND period_start = ?", 1, periodStart).First(&app1BudgetUsage).Error
+	assert.NoError(t, app1UsageErr)
+
+	// Verify budget enforcement would work
+	var app1 database.App
+	err = edgeDB.First(&app1, 1).Error
+	require.NoError(t, err)
+	assert.Equal(t, 50.0, app1.MonthlyBudget)
+
+	// The budget is $50, usage is 752500 (stored format) = $75.25 - this should be blocked
+	// Convert for comparison: usage1.TotalCost / 10000 > app1.MonthlyBudget
+	assert.True(t, (usage1.TotalCost / 10000.0) > app1.MonthlyBudget,
+		"App 1 should be over budget: $%.2f spent > $%.2f budget",
+		usage1.TotalCost / 10000.0, app1.MonthlyBudget)
+
+	// App 2 should be within budget
+	var app2 database.App
+	err = edgeDB.First(&app2, 2).Error
+	require.NoError(t, err)
+	assert.True(t, (usage2.TotalCost / 10000.0) < app2.MonthlyBudget,
+		"App 2 should be within budget: $%.2f spent < $%.2f budget",
+		usage2.TotalCost / 10000.0, app2.MonthlyBudget)
+}
+
+// TestEdgeSyncService_BudgetUsagePreservesExistingRecords tests that syncing
+// preserves or updates existing budget usage records correctly
+func TestEdgeSyncService_BudgetUsagePreservesExistingRecords(t *testing.T) {
+	// Setup test database
+	edgeDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+
+	err = database.Migrate(edgeDB)
+	require.NoError(t, err)
+
+	namespace := "test-preserve"
+	now := time.Now()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+
+	// Pre-create budget usage record (simulating edge was running before)
+	// Note: TotalCost is stored as dollars * 10000, so $10.00 = 100000
+	existingUsage := &database.BudgetUsage{
+		AppID:            1,
+		PeriodStart:      periodStart,
+		PeriodEnd:        periodEnd,
+		TotalCost:        100000.0, // Edge tracked $10.00 (stored as dollars * 10000)
+		TokensUsed:       1000,
+		RequestsCount:    5,
+		PromptTokens:     800,
+		CompletionTokens: 200,
+	}
+	err = edgeDB.Create(existingUsage).Error
+	require.NoError(t, err)
+
+	// Sync configuration from control server showing MORE usage
+	// This simulates the control server being the source of truth
+	// Note: CurrentPeriodUsage comes from control server in dollars
+	snapshot := &pb.ConfigurationSnapshot{
+		Version:       "preserve-test-v1",
+		EdgeNamespace: namespace,
+		SnapshotTime:  timestamppb.Now(),
+		Apps: []*pb.AppConfig{
+			{
+				Id:                 1,
+				Name:               "Test App",
+				IsActive:           true,
+				Namespace:          namespace,
+				MonthlyBudget:      100.0,
+				CurrentPeriodUsage: 45.0, // Control server says $45.00 (in dollars)
+				CreatedAt:          timestamppb.New(now),
+				UpdatedAt:          timestamppb.New(now),
+			},
+		},
+	}
+
+	syncService := services.NewEdgeSyncService(edgeDB, namespace)
+	err = syncService.SyncConfiguration(snapshot)
+	require.NoError(t, err)
+
+	// Verify that the budget usage was updated to the control server's value
+	// Note: $45.00 * 10000 = 450000 (stored format)
+	var updatedUsage database.BudgetUsage
+	err = edgeDB.Where("app_id = ? AND period_start = ?", 1, periodStart).First(&updatedUsage).Error
+	require.NoError(t, err)
+
+	// The control server's value ($45.00 * 10000 = 450000) should be used
+	assert.InDelta(t, 450000.0, updatedUsage.TotalCost, 1.0,
+		"TotalCost should be updated to control server's value of 450000 ($45.00 * 10000)")
+
+	// Note: Other fields like TokensUsed, RequestsCount may be preserved or reset
+	// depending on the implementation. The important thing is TotalCost is correct.
+}

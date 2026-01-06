@@ -898,6 +898,128 @@ func TestControlServer_getConfigurationSnapshot(t *testing.T) {
 	}
 }
 
+// TestControlServer_getConfigurationSnapshot_BudgetUsage tests that current period usage is included in snapshot
+func TestControlServer_getConfigurationSnapshot_BudgetUsage(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+
+	namespace := "test-budget"
+
+	// Create an app with a budget
+	budget := 100.0
+	app := models.App{
+		Name:          "Budget Test App",
+		Description:   "App with budget for testing",
+		IsActive:      true,
+		Namespace:     namespace,
+		MonthlyBudget: &budget,
+	}
+	db.Create(&app)
+
+	// Create LLM chat records to simulate usage
+	// Cost is stored as dollars * 10000 (cents with 4 decimal places)
+	now := time.Now()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	// Create usage records within the current period
+	chatRecords := []models.LLMChatRecord{
+		{
+			AppID:     app.ID,
+			Cost:      250000, // $25.00 (25 * 10000)
+			TimeStamp: periodStart.Add(time.Hour),
+		},
+		{
+			AppID:     app.ID,
+			Cost:      150000, // $15.00 (15 * 10000)
+			TimeStamp: periodStart.Add(2 * time.Hour),
+		},
+		{
+			AppID:     app.ID,
+			Cost:      100000, // $10.00 (10 * 10000)
+			TimeStamp: periodStart.Add(3 * time.Hour),
+		},
+	}
+	for _, record := range chatRecords {
+		db.Create(&record)
+	}
+
+	// Create a record from last month (should NOT be included)
+	lastMonth := periodStart.AddDate(0, -1, 0)
+	oldRecord := models.LLMChatRecord{
+		AppID:     app.ID,
+		Cost:      500000, // $50.00 - should not be counted
+		TimeStamp: lastMonth,
+	}
+	db.Create(&oldRecord)
+
+	// Get configuration snapshot
+	snapshot, err := server.getConfigurationSnapshot(namespace)
+	require.NoError(t, err)
+	require.NotNil(t, snapshot)
+
+	// Find our test app in the snapshot
+	var foundApp *pb.AppConfig
+	for _, appConfig := range snapshot.Apps {
+		if appConfig.Name == "Budget Test App" {
+			foundApp = appConfig
+			break
+		}
+	}
+
+	require.NotNil(t, foundApp, "Budget Test App should be in snapshot")
+	assert.Equal(t, budget, foundApp.MonthlyBudget)
+
+	// Expected usage: $25 + $15 + $10 = $50.00
+	expectedUsage := 50.0
+	assert.InDelta(t, expectedUsage, foundApp.CurrentPeriodUsage, 0.01,
+		"CurrentPeriodUsage should be sum of current period costs (expected $50.00)")
+}
+
+// TestControlServer_getConfigurationSnapshot_NoBudget tests apps without budget don't have usage calculated
+func TestControlServer_getConfigurationSnapshot_NoBudget(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+
+	namespace := "test-no-budget"
+
+	// Create an app WITHOUT a budget
+	app := models.App{
+		Name:        "No Budget App",
+		Description: "App without budget",
+		IsActive:    true,
+		Namespace:   namespace,
+		// MonthlyBudget is nil
+	}
+	db.Create(&app)
+
+	// Create some usage records
+	now := time.Now()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	chatRecord := models.LLMChatRecord{
+		AppID:     app.ID,
+		Cost:      100000, // $10.00
+		TimeStamp: periodStart.Add(time.Hour),
+	}
+	db.Create(&chatRecord)
+
+	// Get configuration snapshot
+	snapshot, err := server.getConfigurationSnapshot(namespace)
+	require.NoError(t, err)
+
+	// Find our test app
+	var foundApp *pb.AppConfig
+	for _, appConfig := range snapshot.Apps {
+		if appConfig.Name == "No Budget App" {
+			foundApp = appConfig
+			break
+		}
+	}
+
+	require.NotNil(t, foundApp, "No Budget App should be in snapshot")
+	assert.Equal(t, float64(0), foundApp.MonthlyBudget, "MonthlyBudget should be 0")
+	assert.Equal(t, float64(0), foundApp.CurrentPeriodUsage,
+		"CurrentPeriodUsage should be 0 for apps without budget")
+}
+
 // TestControlServer_GetFullConfiguration tests the gRPC configuration endpoint
 func TestControlServer_GetFullConfiguration(t *testing.T) {
 	server, db := setupTestServer(t, nil)

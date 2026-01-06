@@ -59,6 +59,9 @@ message AppConfig {
   repeated uint32 llm_ids = 16;        // From app_llms join table - FOR LLM ACCESS VALIDATION
   repeated uint32 credential_ids = 17; // From credentials table
   repeated uint32 token_ids = 18;      // From api_tokens table
+
+  // Budget usage tracking - synced from control server to edge
+  double current_period_usage = 19;    // Current spending in the active budget period (dollars)
 }
 
 // TokenConfig represents an API token configuration

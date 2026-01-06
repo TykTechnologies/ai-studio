@@ -195,10 +195,9 @@ const EdgeGatewayList = () => {
                 onChange={handleNamespaceChange}
               >
                 <MenuItem value="">All Namespaces</MenuItem>
-                <MenuItem value="global">Global</MenuItem>
                 {availableNamespaces.map((namespace) => (
                   <MenuItem key={namespace.name} value={namespace.name}>
-                    {namespace.name} ({namespace.edgeCount} edges)
+                    {namespace.name === 'global' ? 'Global' : namespace.name} ({namespace.edgeCount} edges)
                   </MenuItem>
                 ))}
               </Select>

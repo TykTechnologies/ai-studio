@@ -60,12 +60,13 @@ func (s *DatabaseBudgetService) CheckBudget(appID uint, llmID *uint, estimatedCo
 
 	currentCost := 0.0
 	if usage != nil {
-		currentCost = usage.TotalCost
+		// Convert from stored format (dollars * 10000) to dollars for comparison
+		currentCost = usage.TotalCost / 10000.0
 	}
 
 	// Check if request would exceed budget
 	if currentCost+estimatedCost > monthlyBudget {
-		return fmt.Errorf("budget exceeded: current=%.2f, estimated=%.2f, limit=%.2f", 
+		return fmt.Errorf("budget exceeded: current=%.2f, estimated=%.2f, limit=%.2f",
 			currentCost, estimatedCost, monthlyBudget)
 	}
 
@@ -118,7 +119,7 @@ func (s *DatabaseBudgetService) RecordUsage(appID uint, llmID *uint, tokens int6
 		return fmt.Errorf("failed to get/create budget usage: %w", err)
 	}
 
-	// Update usage statistics
+	// Update usage statistics - cost is already in stored format (dollars * 10000) from proxy layer
 	err = s.repo.UpdateBudgetUsage(usage.ID, tokens, 1, cost, promptTokens, completionTokens)
 	if err != nil {
 		return fmt.Errorf("failed to update budget usage: %w", err)
@@ -151,7 +152,8 @@ func (s *DatabaseBudgetService) GetBudgetStatus(appID uint, llmID *uint) (*Budge
 	requestsCount := 0
 
 	if usage != nil {
-		currentUsage = usage.TotalCost
+		// Convert from stored format (dollars * 10000) to dollars for display
+		currentUsage = usage.TotalCost / 10000.0
 		tokensUsed = usage.TokensUsed
 		requestsCount = usage.RequestsCount
 	}
@@ -269,16 +271,20 @@ func (s *DatabaseBudgetService) GetBudgetSummary() (map[string]interface{}, erro
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
 
-	var totalSpent float64
+	var totalSpentStored float64
 	err = s.db.Model(&database.BudgetUsage{}).
 		Where("period_start >= ? AND period_end <= ?", periodStart, periodEnd).
 		Select("COALESCE(SUM(total_cost), 0)").
-		Scan(&totalSpent).Error
+		Scan(&totalSpentStored).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total spent: %w", err)
 	}
+	// Convert from stored format (dollars * 10000) to dollars for display
+	totalSpent := totalSpentStored / 10000.0
 
 	// Get apps over budget
+	// Note: monthly_budget is in dollars, total_cost is in dollars * 10000
+	// We need to compare (total_cost / 10000) > monthly_budget, which is equivalent to total_cost > monthly_budget * 10000
 	var appsOverBudget []struct {
 		AppID         uint    `json:"app_id"`
 		AppName       string  `json:"app_name"`
@@ -288,18 +294,18 @@ func (s *DatabaseBudgetService) GetBudgetSummary() (map[string]interface{}, erro
 	}
 
 	err = s.db.Raw(`
-		SELECT 
+		SELECT
 			a.id as app_id,
 			a.name as app_name,
 			a.monthly_budget,
-			COALESCE(bu.total_cost, 0) as current_spent,
-			COALESCE(bu.total_cost, 0) - a.monthly_budget as over_by_amount
+			COALESCE(bu.total_cost, 0) / 10000.0 as current_spent,
+			(COALESCE(bu.total_cost, 0) / 10000.0) - a.monthly_budget as over_by_amount
 		FROM apps a
-		LEFT JOIN budget_usage bu ON a.id = bu.app_id 
+		LEFT JOIN budget_usage bu ON a.id = bu.app_id
 			AND bu.period_start >= ? AND bu.period_end <= ?
-		WHERE a.is_active = true 
-			AND a.monthly_budget > 0 
-			AND COALESCE(bu.total_cost, 0) > a.monthly_budget
+		WHERE a.is_active = true
+			AND a.monthly_budget > 0
+			AND COALESCE(bu.total_cost, 0) > a.monthly_budget * 10000
 		ORDER BY over_by_amount DESC
 	`, periodStart, periodEnd).Scan(&appsOverBudget).Error
 

@@ -425,8 +425,10 @@ type AppConfig struct {
 	LlmIds        []uint32 `protobuf:"varint,16,rep,packed,name=llm_ids,json=llmIds,proto3" json:"llm_ids,omitempty"`                      // From app_llms join table - FOR LLM ACCESS VALIDATION
 	CredentialIds []uint32 `protobuf:"varint,17,rep,packed,name=credential_ids,json=credentialIds,proto3" json:"credential_ids,omitempty"` // From credentials table
 	TokenIds      []uint32 `protobuf:"varint,18,rep,packed,name=token_ids,json=tokenIds,proto3" json:"token_ids,omitempty"`                // From api_tokens table
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Budget usage tracking - synced from control server to edge
+	CurrentPeriodUsage float64 `protobuf:"fixed64,19,opt,name=current_period_usage,json=currentPeriodUsage,proto3" json:"current_period_usage,omitempty"` // Current spending in the active budget period (dollars)
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AppConfig) Reset() {
@@ -583,6 +585,13 @@ func (x *AppConfig) GetTokenIds() []uint32 {
 		return x.TokenIds
 	}
 	return nil
+}
+
+func (x *AppConfig) GetCurrentPeriodUsage() float64 {
+	if x != nil {
+		return x.CurrentPeriodUsage
+	}
+	return 0
 }
 
 // TokenConfig represents an API token configuration
@@ -1757,7 +1766,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"filter_ids\x18\x16 \x03(\rR\tfilterIds\x12\x1d\n" +
 	"\n" +
-	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\"\xf9\x04\n" +
+	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\"\xab\x05\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1781,7 +1790,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x17\n" +
 	"\allm_ids\x18\x10 \x03(\rR\x06llmIds\x12%\n" +
 	"\x0ecredential_ids\x18\x11 \x03(\rR\rcredentialIds\x12\x1b\n" +
-	"\ttoken_ids\x18\x12 \x03(\rR\btokenIds\"\xe8\x02\n" +
+	"\ttoken_ids\x18\x12 \x03(\rR\btokenIds\x120\n" +
+	"\x14current_period_usage\x18\x13 \x01(\x01R\x12currentPeriodUsage\"\xe8\x02\n" +
 	"\vTokenConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x12\n" +

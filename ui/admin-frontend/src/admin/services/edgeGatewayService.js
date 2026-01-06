@@ -120,11 +120,15 @@ class EdgeGatewayService {
       const response = await apiClient.post('/edges/reload-all');
 
       if (response.data?.data) {
-        const operation = response.data.data;
+        const data = response.data.data;
+        // Handle the reload-all response format which contains operations array
+        const firstOperation = data.operations?.[0];
         return {
-          operationId: operation.attributes.operation_id,
-          status: operation.attributes.status,
-          message: operation.attributes.message,
+          operationId: firstOperation?.operation_id || data.operation_id || 'reload-all',
+          status: firstOperation?.status || 'initiated',
+          message: data.message,
+          operationsCount: data.operations_count,
+          operations: data.operations,
         };
       }
 

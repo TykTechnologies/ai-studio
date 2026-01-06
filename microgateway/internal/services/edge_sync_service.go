@@ -281,6 +281,44 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 			Str("app_name", pbApp.Name).
 			Int("llm_access_count", len(pbApp.LlmIds)).
 			Msg("App synced to SQLite with LLM access relationships")
+
+		// Initialize budget usage from control server's current_period_usage
+		// This ensures edge budget enforcement respects usage tracked by the control plane
+		// Note: CurrentPeriodUsage comes in dollars, but we store as dollars * 10000 for consistency
+		if pbApp.MonthlyBudget > 0 {
+			now := time.Now()
+			periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+			periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+
+			// Convert from dollars (control server format) to dollars * 10000 (edge storage format)
+			storedCost := pbApp.CurrentPeriodUsage * 10000
+
+			budgetUsage := &database.BudgetUsage{
+				AppID:       uint(pbApp.Id),
+				PeriodStart: periodStart,
+				PeriodEnd:   periodEnd,
+				TotalCost:   storedCost,
+			}
+
+			// Use FirstOrCreate to avoid duplicates, and update TotalCost if record exists
+			result := tx.Where("app_id = ? AND period_start = ?", pbApp.Id, periodStart).
+				Assign(map[string]interface{}{"total_cost": storedCost}).
+				FirstOrCreate(budgetUsage)
+			if result.Error != nil {
+				log.Warn().Err(result.Error).
+					Uint32("app_id", pbApp.Id).
+					Float64("current_usage", pbApp.CurrentPeriodUsage).
+					Float64("stored_cost", storedCost).
+					Msg("Failed to initialize budget usage from control server")
+			} else {
+				log.Debug().
+					Uint32("app_id", pbApp.Id).
+					Float64("current_usage_dollars", pbApp.CurrentPeriodUsage).
+					Float64("stored_cost", storedCost).
+					Float64("monthly_budget", pbApp.MonthlyBudget).
+					Msg("Initialized budget usage from control server snapshot")
+			}
+		}
 	}
 
 	return nil

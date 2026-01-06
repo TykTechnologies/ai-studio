@@ -9,12 +9,19 @@ RUN apk add --no-cache git make ca-certificates tzdata gcc musl-dev sqlite-dev
 # Set working directory
 WORKDIR /build
 
+# Clone the langchaingo fork first
+RUN git clone --depth 1 https://github.com/lonelycode/langchaingo /build/langchaingo
+
 # Copy parent project go.mod first (for the replace directive)
 COPY go.mod go.sum ./
 COPY microgateway/go.mod microgateway/go.sum ./microgateway/
 
 # Copy all source code needed for the replace directive
 COPY . .
+
+# Fix the replace directives to use the cloned langchaingo
+RUN sed -i 's|replace github.com/tmc/langchaingo => /Users/martinbuhr/apps/lonelycode/langchaingo|replace github.com/tmc/langchaingo => /build/langchaingo|g' go.mod && \
+    sed -i 's|replace github.com/tmc/langchaingo => /Users/martinbuhr/apps/lonelycode/langchaingo|replace github.com/tmc/langchaingo => /build/langchaingo|g' microgateway/go.mod
 
 # Change to microgateway directory
 WORKDIR /build/microgateway
