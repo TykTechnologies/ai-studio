@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
@@ -21,6 +22,11 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// BudgetSyncSubscriber is implemented by handlers that want to receive budget sync events
+type BudgetSyncSubscriber interface {
+	HandleBudgetSync(event eventbridge.Event)
+}
 
 // SimpleEdgeClient provides basic edge functionality for testing
 type SimpleEdgeClient struct {
@@ -63,6 +69,9 @@ type SimpleEdgeClient struct {
 	eventBridge   *eventbridge.Bridge
 	bridgeCtx     context.Context
 	bridgeCancel  context.CancelFunc
+
+	// Budget sync handler for multi-edge budget synchronization
+	budgetSyncHandler BudgetSyncSubscriber
 }
 
 // NewSimpleEdgeClient creates a basic edge client
@@ -248,6 +257,17 @@ func (c *SimpleEdgeClient) SetControlPayloadQueue(queue *ControlPayloadQueue) {
 		queue.SetGRPCClient(c.client, c.createAuthContext)
 	}
 	log.Debug().Msg("Control payload queue set for edge client")
+}
+
+// SetBudgetSyncHandler sets the budget sync handler for multi-edge budget synchronization.
+// The handler will receive budget.sync events from the control server via the event bridge.
+func (c *SimpleEdgeClient) SetBudgetSyncHandler(handler BudgetSyncSubscriber) {
+	c.budgetSyncHandler = handler
+	// Subscribe to budget.sync topic if event bus exists
+	if c.eventBus != nil && handler != nil {
+		c.eventBus.Subscribe(services.BudgetSyncTopic, handler.HandleBudgetSync)
+		log.Debug().Msg("Budget sync handler subscribed to budget.sync events")
+	}
 }
 
 // GetGRPCClient returns the gRPC client for use by pulse manager

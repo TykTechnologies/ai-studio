@@ -251,6 +251,11 @@ func main() {
 				edgeClient.SetReloadHandler(edgeReloadHandler)
 				log.Debug().Msg("Edge reload handler created - gateway reloader will be set after server creation")
 
+				// Create and connect budget sync handler for multi-edge budget synchronization
+				budgetSyncHandler := services.NewBudgetSyncHandler(db)
+				edgeClient.SetBudgetSyncHandler(budgetSyncHandler)
+				log.Debug().Msg("Budget sync handler connected for multi-edge budget synchronization")
+
 				// Connect edge client to plugin manager for built-in plugins
 				serviceContainer.PluginManager.SetEdgeClient(edgeClient)
 				log.Debug().Msg("Edge client connected to plugin manager for built-in plugin support")

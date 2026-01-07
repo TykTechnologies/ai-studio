@@ -23,6 +23,12 @@ const (
 	DirDown
 )
 
+// Well-known event topics for cross-node communication
+const (
+	// BudgetSyncTopic is used for budget synchronization between control and edge nodes
+	BudgetSyncTopic = "budget.sync"
+)
+
 // String returns a human-readable representation of the Direction.
 func (d Direction) String() string {
 	switch d {

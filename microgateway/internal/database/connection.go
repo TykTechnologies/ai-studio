@@ -86,6 +86,7 @@ func Migrate(db *gorm.DB) error {
 		// Hub-and-Spoke models
 		&EdgeInstance{},
 		&ControlPayload{},
+		&SyncState{},
 		// Model Router models (Enterprise)
 		&ModelRouter{},
 		&ModelPool{},

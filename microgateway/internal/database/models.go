@@ -132,15 +132,18 @@ type ModelPrice struct {
 	Namespace    string  `gorm:"default:'';index:idx_model_price_namespace"` // Empty = global, specific = filtered to edge
 }
 
-// BudgetUsage tracks budget consumption
+// BudgetUsage tracks budget consumption per app per period.
+// Note: Budgets are enforced at the APP level, not per-LLM.
+// The unique index is on (AppID, PeriodStart, PeriodEnd) only.
+// LLMID is kept for analytics/reporting purposes but is NOT part of the unique constraint.
 type BudgetUsage struct {
 	ID               uint      `gorm:"primaryKey"`
-	AppID            uint      `gorm:"not null;uniqueIndex:idx_budget_period"`
+	AppID            uint      `gorm:"not null;uniqueIndex:idx_budget_app_period"`
 	App              *App      `gorm:"foreignKey:AppID"`
-	LLMID            *uint     `gorm:"uniqueIndex:idx_budget_period"`
+	LLMID            *uint     `gorm:"index"` // For analytics only, not part of unique constraint
 	LLM              *LLM      `gorm:"foreignKey:LLMID"`
-	PeriodStart      time.Time `gorm:"not null;uniqueIndex:idx_budget_period"`
-	PeriodEnd        time.Time `gorm:"not null;uniqueIndex:idx_budget_period"`
+	PeriodStart      time.Time `gorm:"not null;uniqueIndex:idx_budget_app_period"`
+	PeriodEnd        time.Time `gorm:"not null;uniqueIndex:idx_budget_app_period"`
 	TokensUsed       int64     `gorm:"default:0"`
 	RequestsCount    int       `gorm:"default:0"`
 	TotalCost        float64   `gorm:"default:0"`
@@ -383,6 +386,17 @@ type ControlPayload struct {
 	CreatedAt     time.Time      `gorm:"index:idx_control_payload_created"`
 }
 
+// SyncState stores synchronization state for various sync mechanisms (e.g., budget sync)
+// This ensures sequence numbers survive edge restarts and prevent reprocessing events
+type SyncState struct {
+	ID             uint      `gorm:"primaryKey"`
+	Topic          string    `gorm:"uniqueIndex;not null"` // e.g., "budget.sync"
+	SequenceNumber uint64    `gorm:"default:0"`
+	LastSyncAt     time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 // ModelRouter represents a model router configuration (Enterprise)
 // Routes incoming requests to LLM vendors based on model name patterns
 type ModelRouter struct {
@@ -443,6 +457,7 @@ type ModelMapping struct {
 func (EdgeInstance) TableName() string    { return "edge_instances" }
 func (PluginKV) TableName() string        { return "plugin_kv" }
 func (ControlPayload) TableName() string  { return "control_payloads" }
+func (SyncState) TableName() string       { return "sync_states" }
 func (ModelRouter) TableName() string     { return "model_routers" }
 func (ModelPool) TableName() string       { return "model_pools" }
 func (PoolVendor) TableName() string      { return "pool_vendors" }
