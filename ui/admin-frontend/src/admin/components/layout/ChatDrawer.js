@@ -4,6 +4,10 @@ import useSystemFeatures from '../../hooks/useSystemFeatures';
 import useUserEntitlements from '../../hooks/useUserEntitlements';
 import Icon from '../../../components/common/Icon';
 import agentService from '../../../portal/services/agentService';
+import pubClient from '../../utils/pubClient';
+
+const HISTORY_CACHE_KEY = "chatHistoryDrawer";
+const HISTORY_CACHE_EXPIRY = 30000; // 30s
 
 const ChatDrawer = () => {
   const { features, loading: featuresLoading } = useSystemFeatures();
@@ -14,6 +18,7 @@ const ChatDrawer = () => {
   } = useUserEntitlements();
 
   const [agents, setAgents] = useState([]);
+  const [chatHistory, setChatHistory] = useState([]);
 
   useEffect(() => {
     // Fetch accessible agents
@@ -31,6 +36,35 @@ const ChatDrawer = () => {
 
     if (!featuresLoading && !entitlementsLoading) {
       fetchAgents();
+    }
+  }, [featuresLoading, entitlementsLoading]);
+
+  useEffect(() => {
+    const fetchChatHistory = async () => {
+      const cachedData = localStorage.getItem(HISTORY_CACHE_KEY);
+      if (cachedData) {
+        const { data, timestamp } = JSON.parse(cachedData);
+        if (Date.now() - timestamp < HISTORY_CACHE_EXPIRY) {
+          setChatHistory(data);
+          return;
+        }
+      }
+
+      try {
+        const response = await pubClient.get('/common/history?page_size=5&page=1');
+        const records = response.data.data || [];
+        setChatHistory(records);
+        localStorage.setItem(
+          HISTORY_CACHE_KEY,
+          JSON.stringify({ data: records, timestamp: Date.now() })
+        );
+      } catch (error) {
+        console.error("Failed to fetch chat history:", error);
+      }
+    };
+
+    if (!featuresLoading && !entitlementsLoading) {
+      fetchChatHistory();
     }
   }, [featuresLoading, entitlementsLoading]);
 
@@ -61,6 +95,29 @@ const ChatDrawer = () => {
         }))
       }
     ];
+
+    // Add past conversations section if there are any
+    if (chatHistory.length > 0) {
+      menuItems.push({
+        id: 'past-conversations',
+        text: 'Past Conversations',
+        icon: <Icon name="rectangle-history" />,
+        subItems: [
+          ...chatHistory.map((record) => ({
+            id: `history-${record.id}`,
+            text: record.attributes.name,
+            path: `/chat/${record.attributes.chat_id}?continue_id=${record.attributes.session_id}`,
+            exact: true
+          })),
+          {
+            id: 'view-all-conversations',
+            text: 'View all conversations',
+            path: '/chat/dashboard',
+            exact: true
+          }
+        ]
+      });
+    }
 
     // Add agents section if there are any active agents
     if (agents.length > 0) {

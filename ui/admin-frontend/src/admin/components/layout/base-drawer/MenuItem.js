@@ -8,6 +8,7 @@ import {
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import { StyledNavLink } from '../../../styles/sharedStyles';
+import { Link } from 'react-router-dom';
 import { ParentListItem, SubListItem, ListItemIcon } from './styles';
 
 const MenuItem = ({
@@ -27,12 +28,30 @@ const MenuItem = ({
   const isExpanded = expandedItems[itemId];
   const immediateParentId = parentId || itemId;
 
-  const pathMatches = (itemPath, currentPath) => {
-    return itemPath === currentPath || (itemPath && currentPath?.startsWith(itemPath + '/'));
+  const pathMatches = (itemPath, currentPath, exact = false) => {
+    if (!itemPath || !currentPath) return false;
+    if (exact) return itemPath === currentPath;
+
+    // Extract pathname without query string for comparison
+    const itemPathname = itemPath.split('?')[0];
+    const currentPathname = currentPath.split('?')[0];
+
+    // If item has query params, require exact match
+    if (itemPath.includes('?')) {
+      return itemPath === currentPath;
+    }
+
+    // Otherwise, match pathname or pathname prefix
+    return itemPathname === currentPathname || currentPathname.startsWith(itemPathname + '/');
   };
 
   const isItemSelected = (item, currentPath) => {
-    if (pathMatches(item.path, currentPath)) return true;
+    // Respect exact flag on items
+    if (item.exact) {
+      if (item.path === currentPath) return true;
+    } else if (pathMatches(item.path, currentPath, item.exact)) {
+      return true;
+    }
     if (item.subItems) {
       return item.subItems.some(subItem => isItemSelected(subItem, currentPath));
     }
@@ -98,21 +117,50 @@ const MenuItem = ({
     );
   }
 
+  // Determine if this item needs exact matching (has query params or exact flag)
+  const needsExactMatch = item.exact || item.path?.includes('?');
+  const isLinkSelected = pathMatches(item.path, selectedPath, needsExactMatch);
+
+  // For items needing exact match, use plain Link to avoid NavLink's automatic .active class
+  // For regular items, use NavLink with end prop for proper path matching
+  if (needsExactMatch) {
+    return (
+      <ListItemComponent
+        component={Link}
+        to={item.path}
+        depth={depth}
+        onClick={() => onPathSelect(item.path)}
+        selected={isLinkSelected}
+        disableRipple
+        disableTouchRipple
+        open={open}
+        isFirstItem={depth === 0 && isFirstItem}
+        className={isLinkSelected ? 'active' : ''}
+        style={{ textDecoration: 'none', color: 'inherit' }}
+      >
+        {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
+        <ListItemText
+          primary={item.text}
+          primaryTypographyProps={{
+            variant: depth > 0 ? 'body2' : 'body1',
+          }}
+        />
+      </ListItemComponent>
+    );
+  }
+
   return (
     <ListItemComponent
       component={StyledNavLink}
       to={item.path}
       depth={depth}
       onClick={() => onPathSelect(item.path)}
-      selected={item.exact ? selectedPath === item.path : pathMatches(item.path, selectedPath)}
+      selected={isLinkSelected}
       disableRipple
       disableTouchRipple
-      rootParentId={immediateParentId}
-      itemId={itemId}
-      hasSubItems={hasSubItems}
       open={open}
       isFirstItem={depth === 0 && isFirstItem}
-      {...(item.exact ? { end: true } : {})}
+      end
     >
       {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
       <ListItemText
