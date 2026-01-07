@@ -211,18 +211,22 @@ func (r *Repository) RevokeAPIToken(token string) error {
 }
 
 // BudgetUsage repository methods
+// Note: Budgets are enforced at the APP level, not per-LLM.
+// The unique constraint is on (AppID, PeriodStart, PeriodEnd) only.
+// LLMID parameter is accepted for backwards compatibility but ignored for lookup.
 
-// GetOrCreateBudgetUsage gets or creates budget usage record for a period
+// GetOrCreateBudgetUsage gets or creates budget usage record for a period.
+// The llmID parameter is ignored - budget tracking is per-app only.
 func (r *Repository) GetOrCreateBudgetUsage(appID uint, llmID *uint, periodStart, periodEnd time.Time) (*BudgetUsage, error) {
 	var usage BudgetUsage
-	
+
+	// Find or create by app_id + period only (ignoring llmID for uniqueness)
 	err := r.db.Where(BudgetUsage{
 		AppID:       appID,
-		LLMID:       llmID,
 		PeriodStart: periodStart,
 		PeriodEnd:   periodEnd,
 	}).FirstOrCreate(&usage).Error
-	
+
 	return &usage, err
 }
 
@@ -238,18 +242,12 @@ func (r *Repository) UpdateBudgetUsage(id uint, tokensUsed int64, requestsCount 
 	}).Error
 }
 
-// GetBudgetUsage retrieves budget usage for an app and period
+// GetBudgetUsage retrieves budget usage for an app and period.
+// The llmID parameter is ignored - budget tracking is per-app only.
 func (r *Repository) GetBudgetUsage(appID uint, llmID *uint, periodStart, periodEnd time.Time) (*BudgetUsage, error) {
 	var usage BudgetUsage
-	query := r.db.Where("app_id = ? AND period_start = ? AND period_end = ?", appID, periodStart, periodEnd)
-	
-	if llmID != nil {
-		query = query.Where("llm_id = ?", *llmID)
-	} else {
-		query = query.Where("llm_id IS NULL")
-	}
-	
-	err := query.First(&usage).Error
+	// Query by app_id + period only (ignoring llmID)
+	err := r.db.Where("app_id = ? AND period_start = ? AND period_end = ?", appID, periodStart, periodEnd).First(&usage).Error
 	if err != nil {
 		return nil, err
 	}

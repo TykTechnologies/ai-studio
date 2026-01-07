@@ -132,15 +132,18 @@ type ModelPrice struct {
 	Namespace    string  `gorm:"default:'';index:idx_model_price_namespace"` // Empty = global, specific = filtered to edge
 }
 
-// BudgetUsage tracks budget consumption
+// BudgetUsage tracks budget consumption per app per period.
+// Note: Budgets are enforced at the APP level, not per-LLM.
+// The unique index is on (AppID, PeriodStart, PeriodEnd) only.
+// LLMID is kept for analytics/reporting purposes but is NOT part of the unique constraint.
 type BudgetUsage struct {
 	ID               uint      `gorm:"primaryKey"`
-	AppID            uint      `gorm:"not null;uniqueIndex:idx_budget_period"`
+	AppID            uint      `gorm:"not null;uniqueIndex:idx_budget_app_period"`
 	App              *App      `gorm:"foreignKey:AppID"`
-	LLMID            *uint     `gorm:"uniqueIndex:idx_budget_period"`
+	LLMID            *uint     `gorm:"index"` // For analytics only, not part of unique constraint
 	LLM              *LLM      `gorm:"foreignKey:LLMID"`
-	PeriodStart      time.Time `gorm:"not null;uniqueIndex:idx_budget_period"`
-	PeriodEnd        time.Time `gorm:"not null;uniqueIndex:idx_budget_period"`
+	PeriodStart      time.Time `gorm:"not null;uniqueIndex:idx_budget_app_period"`
+	PeriodEnd        time.Time `gorm:"not null;uniqueIndex:idx_budget_app_period"`
 	TokensUsed       int64     `gorm:"default:0"`
 	RequestsCount    int       `gorm:"default:0"`
 	TotalCost        float64   `gorm:"default:0"`

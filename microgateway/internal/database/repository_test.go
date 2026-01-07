@@ -387,11 +387,12 @@ func TestRepository_BudgetUsage_Operations(t *testing.T) {
 	periodEnd := time.Date(2024, 1, 31, 23, 59, 59, 0, time.UTC)
 
 	t.Run("GetOrCreateBudgetUsage", func(t *testing.T) {
+		// Note: llmID is passed but ignored - budgets are per-app only
 		usage, err := repo.GetOrCreateBudgetUsage(app.ID, &llm.ID, periodStart, periodEnd)
 		assert.NoError(t, err)
 		assert.NotNil(t, usage)
 		assert.Equal(t, app.ID, usage.AppID)
-		assert.Equal(t, llm.ID, *usage.LLMID)
+		// LLMID is not stored - budget tracking is per-app
 		assert.Equal(t, periodStart, usage.PeriodStart)
 		assert.Equal(t, periodEnd, usage.PeriodEnd)
 	})
