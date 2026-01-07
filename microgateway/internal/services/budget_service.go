@@ -32,15 +32,41 @@ func NewDatabaseBudgetService(db *gorm.DB, repo *database.Repository, pluginMana
 	}
 }
 
+// calculateBudgetPeriod determines the budget period for an app based on its budget_start_date.
+// If no budget_start_date is set, uses calendar month (1st to last day).
+func (s *DatabaseBudgetService) calculateBudgetPeriod(budgetStartDate *time.Time, now time.Time) (time.Time, time.Time) {
+	if budgetStartDate == nil {
+		// Default to calendar month
+		periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+		return periodStart, periodEnd
+	}
+
+	budgetDay := budgetStartDate.Day()
+	currentYear := now.Year()
+	currentMonth := now.Month()
+
+	// If we haven't reached the budget day in current month,
+	// the period started on the budget day of previous month
+	if now.Day() < budgetDay {
+		if currentMonth == time.January {
+			currentMonth = time.December
+			currentYear--
+		} else {
+			currentMonth--
+		}
+	}
+
+	periodStart := time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
+	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+
+	return periodStart, periodEnd
+}
+
 
 // CheckBudget validates if the request is within budget limits
 func (s *DatabaseBudgetService) CheckBudget(appID uint, llmID *uint, estimatedCost float64) error {
-	// Get current budget period
-	now := time.Now()
-	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
-
-	// Get app's monthly budget
+	// Get app's monthly budget and budget_start_date
 	var app database.App
 	err := s.db.Where("id = ? AND is_active = ?", appID, true).First(&app).Error
 	if err != nil {
@@ -51,6 +77,10 @@ func (s *DatabaseBudgetService) CheckBudget(appID uint, llmID *uint, estimatedCo
 	if monthlyBudget <= 0 {
 		return nil // No budget limit set
 	}
+
+	// Calculate budget period using app's custom budget_start_date
+	now := time.Now()
+	periodStart, periodEnd := s.calculateBudgetPeriod(app.BudgetStartDate, now)
 
 	// Get current usage for this period
 	usage, err := s.repo.GetBudgetUsage(appID, llmID, periodStart, periodEnd)
@@ -76,8 +106,15 @@ func (s *DatabaseBudgetService) CheckBudget(appID uint, llmID *uint, estimatedCo
 // RecordUsage records usage for budget tracking
 func (s *DatabaseBudgetService) RecordUsage(appID uint, llmID *uint, tokens int64, cost float64, promptTokens, completionTokens int64) error {
 	now := time.Now()
-	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+
+	// Get app to determine custom budget period
+	var app database.App
+	if err := s.db.Where("id = ?", appID).First(&app).Error; err != nil {
+		// If app not found, fall back to calendar month
+		log.Warn().Err(err).Uint("app_id", appID).Msg("App not found for budget period calculation, using calendar month")
+	}
+
+	periodStart, periodEnd := s.calculateBudgetPeriod(app.BudgetStartDate, now)
 
 	// Execute budget usage data collection plugins
 	if s.pluginManager != nil {
@@ -136,9 +173,9 @@ func (s *DatabaseBudgetService) GetBudgetStatus(appID uint, llmID *uint) (*Budge
 		return nil, fmt.Errorf("app not found: %w", err)
 	}
 
+	// Calculate budget period using app's custom budget_start_date
 	now := time.Now()
-	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+	periodStart, periodEnd := s.calculateBudgetPeriod(app.BudgetStartDate, now)
 
 	// Get current usage
 	usage, err := s.repo.GetBudgetUsage(appID, llmID, periodStart, periodEnd)

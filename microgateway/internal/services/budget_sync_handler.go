@@ -12,15 +12,34 @@ import (
 	"gorm.io/gorm"
 )
 
+// AppBudgetData contains budget usage and period info for a single app
+type AppBudgetData struct {
+	// Usage is the current period usage in dollars
+	Usage float64 `json:"usage"`
+
+	// PeriodStart is the start of this app's budget period
+	PeriodStart time.Time `json:"period_start"`
+
+	// PeriodEnd is the end of this app's budget period
+	PeriodEnd time.Time `json:"period_end"`
+}
+
 // BudgetSyncPayload matches the control server's payload structure
 type BudgetSyncPayload struct {
 	// AppUsages maps app_id to current period usage in dollars
+	// Deprecated: Use AppBudgets instead for per-app budget periods
 	AppUsages map[uint32]float64 `json:"app_usages"`
 
+	// AppBudgets maps app_id to budget data with per-app period info
+	// This supports custom budget_start_date per app
+	AppBudgets map[uint32]AppBudgetData `json:"app_budgets,omitempty"`
+
 	// PeriodStart is the start of the budget period (1st of month)
+	// Deprecated: Use per-app periods in AppBudgets instead
 	PeriodStart time.Time `json:"period_start"`
 
 	// PeriodEnd is the end of the budget period (last moment of month)
+	// Deprecated: Use per-app periods in AppBudgets instead
 	PeriodEnd time.Time `json:"period_end"`
 
 	// ControlTimestamp is when the control server generated this payload
@@ -114,33 +133,43 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 	}
 	h.lastSequenceNumber = payload.SequenceNumber
 
-	// Validate period matches local expectation (detect clock skew)
-	now := time.Now()
-	localPeriodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	// Use new AppBudgets if available (supports per-app budget periods)
+	if len(payload.AppBudgets) > 0 {
+		for appID, budgetData := range payload.AppBudgets {
+			h.updateLocalBudget(uint(appID), budgetData.Usage, budgetData.PeriodStart, budgetData.PeriodEnd)
+		}
 
-	// Allow up to 1 hour clock skew tolerance
-	periodDiff := payload.PeriodStart.Sub(localPeriodStart).Hours()
-	if math.Abs(periodDiff) > 1 {
-		log.Warn().
-			Time("control_period", payload.PeriodStart).
-			Time("local_period", localPeriodStart).
-			Float64("diff_hours", periodDiff).
-			Msg("Budget sync period mismatch - possible clock skew")
-		// Still apply update but log warning - control is authoritative
-	}
+		log.Debug().
+			Int("app_count", len(payload.AppBudgets)).
+			Uint64("sequence", payload.SequenceNumber).
+			Msg("Processed budget sync from control server (per-app periods)")
+	} else {
+		// Fall back to legacy AppUsages with global period (backwards compatibility)
+		now := time.Now()
+		localPeriodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
-	// Update local budget_usage for each app
-	for appID, usageDollars := range payload.AppUsages {
-		h.updateLocalBudget(uint(appID), usageDollars, payload.PeriodStart, payload.PeriodEnd)
+		// Allow up to 1 hour clock skew tolerance
+		periodDiff := payload.PeriodStart.Sub(localPeriodStart).Hours()
+		if math.Abs(periodDiff) > 1 {
+			log.Warn().
+				Time("control_period", payload.PeriodStart).
+				Time("local_period", localPeriodStart).
+				Float64("diff_hours", periodDiff).
+				Msg("Budget sync period mismatch - possible clock skew")
+		}
+
+		for appID, usageDollars := range payload.AppUsages {
+			h.updateLocalBudget(uint(appID), usageDollars, payload.PeriodStart, payload.PeriodEnd)
+		}
+
+		log.Debug().
+			Int("app_count", len(payload.AppUsages)).
+			Uint64("sequence", payload.SequenceNumber).
+			Msg("Processed budget sync from control server (legacy)")
 	}
 
 	// Persist sequence number to survive restarts
 	h.persistSequenceNumber(payload.SequenceNumber)
-
-	log.Debug().
-		Int("app_count", len(payload.AppUsages)).
-		Uint64("sequence", payload.SequenceNumber).
-		Msg("Processed budget sync from control server")
 }
 
 // updateLocalBudget updates the local budget_usage table for a single app.
