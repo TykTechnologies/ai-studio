@@ -559,6 +559,53 @@ func (a *API) deactivateAppCredential(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// @Summary Reset app budget
+// @Description Reset the budget period for an app by setting start date to today
+// @Tags apps
+// @Accept json
+// @Produce json
+// @Param id path int true "App ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /apps/{id}/reset-budget [post]
+// @Security BearerAuth
+func (a *API) resetAppBudget(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid app ID"}},
+		})
+		return
+	}
+
+	err = a.service.ResetAppBudget(uint(id))
+	if err != nil {
+		// Check if it's a "no budget configured" error
+		if err.Error() == "app does not have a budget configured" {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: err.Error()}},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 // @Summary List all apps
 // @Description Get a list of all apps, optionally filtered by search term
 // @Tags apps

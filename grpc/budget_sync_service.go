@@ -6,21 +6,41 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
+// AppBudgetData contains budget usage and period info for a single app
+type AppBudgetData struct {
+	// Usage is the current period usage in dollars
+	Usage float64 `json:"usage"`
+
+	// PeriodStart is the start of this app's budget period
+	PeriodStart time.Time `json:"period_start"`
+
+	// PeriodEnd is the end of this app's budget period
+	PeriodEnd time.Time `json:"period_end"`
+}
+
 // BudgetSyncPayload is the JSON payload for budget.sync events
 // sent from control server to edge gateways to synchronize budget usage.
 type BudgetSyncPayload struct {
 	// AppUsages maps app_id to current period usage in dollars
+	// Deprecated: Use AppBudgets instead for per-app budget periods
 	AppUsages map[uint32]float64 `json:"app_usages"`
 
+	// AppBudgets maps app_id to budget data with per-app period info
+	// This supports custom budget_start_date per app
+	AppBudgets map[uint32]AppBudgetData `json:"app_budgets,omitempty"`
+
 	// PeriodStart is the start of the budget period (1st of month)
+	// Deprecated: Use per-app periods in AppBudgets instead
 	PeriodStart time.Time `json:"period_start"`
 
 	// PeriodEnd is the end of the budget period (last moment of month)
+	// Deprecated: Use per-app periods in AppBudgets instead
 	PeriodEnd time.Time `json:"period_end"`
 
 	// ControlTimestamp is when the control server generated this payload
@@ -111,52 +131,99 @@ func (s *BudgetSyncService) Stop() {
 	}
 }
 
+// calculateBudgetPeriod determines the budget period for an app based on its budget_start_date.
+// If no budget_start_date is set, uses calendar month (1st to last day).
+func (s *BudgetSyncService) calculateBudgetPeriod(budgetStartDate *time.Time, now time.Time) (time.Time, time.Time) {
+	if budgetStartDate == nil {
+		// Default to calendar month
+		periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+		return periodStart, periodEnd
+	}
+
+	budgetDay := budgetStartDate.Day()
+	currentYear := now.Year()
+	currentMonth := now.Month()
+
+	// If we haven't reached the budget day in current month,
+	// the period started on the budget day of previous month
+	if now.Day() < budgetDay {
+		if currentMonth == time.January {
+			currentMonth = time.December
+			currentYear--
+		} else {
+			currentMonth--
+		}
+	}
+
+	periodStart := time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
+	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+
+	return periodStart, periodEnd
+}
+
 // aggregateAndPublish queries the database for budget usage
 // and publishes the aggregated values to all edges.
 func (s *BudgetSyncService) aggregateAndPublish() {
 	now := time.Now()
-	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
 
-	// Query total cost from llm_chat_records grouped by app_id for current period
-	var results []struct {
-		AppID     uint32  `gorm:"column:app_id"`
-		TotalCost float64 `gorm:"column:total_cost"`
-	}
+	// Default calendar period for legacy compatibility
+	calendarPeriodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	calendarPeriodEnd := calendarPeriodStart.AddDate(0, 1, 0).Add(-time.Second)
 
-	// Cost is stored as dollars * 10000 in the database
-	err := s.db.Raw(`
-		SELECT
-			app_id,
-			COALESCE(SUM(cost), 0) as total_cost
-		FROM llm_chat_records
-		WHERE time_stamp >= ? AND time_stamp < ?
-		AND app_id IS NOT NULL AND app_id > 0
-		GROUP BY app_id
-	`, periodStart, periodEnd.Add(time.Second)).Scan(&results).Error
-
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to aggregate budget usage for sync")
+	// Get all apps with their budget_start_date
+	var apps []models.App
+	if err := s.db.Select("id", "budget_start_date").Find(&apps).Error; err != nil {
+		log.Error().Err(err).Msg("Failed to fetch apps for budget sync")
 		return
 	}
 
-	// Build payload with usage in dollars (convert from stored format)
-	appUsages := make(map[uint32]float64)
-	for _, r := range results {
-		// Convert from cents*10000 to dollars
-		appUsages[r.AppID] = r.TotalCost / 10000.0
+	// Build per-app budget data with custom periods
+	appBudgets := make(map[uint32]AppBudgetData)
+	appUsages := make(map[uint32]float64) // Legacy field for backwards compatibility
+
+	for _, app := range apps {
+		periodStart, periodEnd := s.calculateBudgetPeriod(app.BudgetStartDate, now)
+
+		// Query usage for this app's specific period
+		var totalCost float64
+		err := s.db.Raw(`
+			SELECT COALESCE(SUM(cost), 0) as total_cost
+			FROM llm_chat_records
+			WHERE app_id = ? AND time_stamp >= ? AND time_stamp <= ?
+		`, app.ID, periodStart, periodEnd).Scan(&totalCost).Error
+
+		if err != nil {
+			log.Error().Err(err).Uint("app_id", app.ID).Msg("Failed to query app budget usage")
+			continue
+		}
+
+		// Convert from stored format (dollars * 10000) to dollars
+		usageDollars := totalCost / 10000.0
+
+		// Only include apps with usage > 0
+		if usageDollars > 0 {
+			appBudgets[uint32(app.ID)] = AppBudgetData{
+				Usage:       usageDollars,
+				PeriodStart: periodStart,
+				PeriodEnd:   periodEnd,
+			}
+			// Also populate legacy field for backwards compatibility
+			appUsages[uint32(app.ID)] = usageDollars
+		}
 	}
 
 	// Skip publishing if no usage data
-	if len(appUsages) == 0 {
+	if len(appBudgets) == 0 {
 		log.Debug().Msg("No budget usage data to sync")
 		return
 	}
 
 	payload := BudgetSyncPayload{
-		AppUsages:        appUsages,
-		PeriodStart:      periodStart,
-		PeriodEnd:        periodEnd,
+		AppUsages:        appUsages,           // Legacy field
+		AppBudgets:       appBudgets,          // New per-app periods
+		PeriodStart:      calendarPeriodStart, // Legacy field
+		PeriodEnd:        calendarPeriodEnd,   // Legacy field
 		ControlTimestamp: now,
 		SequenceNumber:   atomic.AddUint64(&s.sequenceNumber, 1),
 	}
@@ -168,9 +235,8 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	}
 
 	log.Debug().
-		Int("app_count", len(appUsages)).
+		Int("app_count", len(appBudgets)).
 		Uint64("sequence", payload.SequenceNumber).
-		Time("period_start", periodStart).
 		Msg("Published budget sync to edges")
 }
 

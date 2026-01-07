@@ -613,6 +613,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/apps/by-name", a.getAppByName)
 	v1.POST("/apps/:id/activate-credential", a.activateAppCredential)
 	v1.POST("/apps/:id/deactivate-credential", a.deactivateAppCredential)
+	v1.POST("/apps/:id/reset-budget", a.resetAppBudget)
 	v1.GET("/apps", a.listApps)
 	v1.GET("/apps/search", a.searchApps)
 	v1.GET("/apps/count", a.countApps)
