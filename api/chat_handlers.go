@@ -469,7 +469,7 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 			DefaultDataSourceID: defaultDSID,
 			DefaultDataSource:   serializeDatasource(chat.DefaultDataSource),
 			ExtraContext:        serializeFileStores(extraContext),
-			DefaultTools:        serializeToolsPointers(chat.DefaultTools, db),
+			DefaultTools:        serializeToolsPointersSlim(chat.DefaultTools, db),
 			PromptTemplates:     serializePromptTemplates(templates),
 		},
 	}
