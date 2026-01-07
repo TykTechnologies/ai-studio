@@ -1045,6 +1045,62 @@ func serializeToolsPointers(tools []*models.Tool, db *gorm.DB) []ToolResponse {
 	return result
 }
 
+// serializeToolSlim returns a tool response without sensitive/large fields
+// Used for entitlements and other contexts where the full spec isn't needed
+func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
+	fileStores, _ := tool.GetFileStores(db)
+	filters, _ := tool.GetFilters(db)
+	dependencies, _ := tool.GetDependencies(db)
+
+	response := ToolResponse{
+		Type: "tools",
+		ID:   strconv.FormatUint(uint64(tool.ID), 10),
+		Attributes: struct {
+			Name           string              `json:"name"`
+			Description    string              `json:"description"`
+			ToolType       string              `json:"tool_type"`
+			OASSpec        string              `json:"oas_spec"`
+			PrivacyScore   int                 `json:"privacy_score"`
+			Operations     []string            `json:"operations"`
+			AuthKey        string              `json:"auth_key"`
+			AuthSchemaName string              `json:"auth_schema_name"`
+			FileStores     []FileStoreResponse `json:"file_stores"`
+			Filters        []FilterResponse    `json:"filters"`
+			Dependencies   []ToolResponse      `json:"dependencies"`
+		}{
+			Name:           tool.Name,
+			Description:    tool.Description,
+			ToolType:       tool.ToolType,
+			OASSpec:        "", // Omit large OAS spec
+			PrivacyScore:   tool.PrivacyScore,
+			Operations:     tool.GetOperations(),
+			AuthKey:        "", // Omit sensitive auth key
+			AuthSchemaName: tool.AuthSchemaName,
+			FileStores:     serializeFileStores(fileStores),
+			Filters:        serializeFiltersForTool(filters),
+			Dependencies:   serializeToolsPointersSlim(dependencies, db),
+		},
+	}
+
+	return response
+}
+
+func serializeToolsSlim(tools []models.Tool, db *gorm.DB) []ToolResponse {
+	result := make([]ToolResponse, len(tools))
+	for i, tool := range tools {
+		result[i] = serializeToolSlim(&tool, db)
+	}
+	return result
+}
+
+func serializeToolsPointersSlim(tools []*models.Tool, db *gorm.DB) []ToolResponse {
+	result := make([]ToolResponse, len(tools))
+	for i, tool := range tools {
+		result[i] = serializeToolSlim(tool, db)
+	}
+	return result
+}
+
 // @Summary Add dependency to tool
 // @Description Add a dependency to a specific tool
 // @Tags tools
