@@ -93,6 +93,9 @@ type ControlServer struct {
 
 	// Event bridge: local event bus for control node
 	eventBus eventbridge.Bus
+
+	// Budget sync service for multi-edge budget synchronization
+	budgetSyncService *BudgetSyncService
 }
 
 // Config holds the control server configuration
@@ -150,6 +153,11 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 
 	log.Debug().Msg("Event bridge bus initialized for control server")
 
+	// Initialize budget sync service for multi-edge budget synchronization
+	server.budgetSyncService = NewBudgetSyncService(db, server.eventBus)
+	server.budgetSyncService.Start()
+	log.Debug().Msg("Budget sync service initialized for control server")
+
 	// Start cleanup routine
 	server.startCleanupRoutine()
 
@@ -201,6 +209,11 @@ func (s *ControlServer) Start() error {
 // Stop stops the gRPC server gracefully
 func (s *ControlServer) Stop() {
 	log.Info().Msg("Stopping AI Studio gRPC control server")
+
+	// Stop budget sync service
+	if s.budgetSyncService != nil {
+		s.budgetSyncService.Stop()
+	}
 
 	// Stop cleanup routine
 	if s.cleanupTicker != nil {

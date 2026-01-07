@@ -383,6 +383,17 @@ type ControlPayload struct {
 	CreatedAt     time.Time      `gorm:"index:idx_control_payload_created"`
 }
 
+// SyncState stores synchronization state for various sync mechanisms (e.g., budget sync)
+// This ensures sequence numbers survive edge restarts and prevent reprocessing events
+type SyncState struct {
+	ID             uint      `gorm:"primaryKey"`
+	Topic          string    `gorm:"uniqueIndex;not null"` // e.g., "budget.sync"
+	SequenceNumber uint64    `gorm:"default:0"`
+	LastSyncAt     time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 // ModelRouter represents a model router configuration (Enterprise)
 // Routes incoming requests to LLM vendors based on model name patterns
 type ModelRouter struct {
@@ -443,6 +454,7 @@ type ModelMapping struct {
 func (EdgeInstance) TableName() string    { return "edge_instances" }
 func (PluginKV) TableName() string        { return "plugin_kv" }
 func (ControlPayload) TableName() string  { return "control_payloads" }
+func (SyncState) TableName() string       { return "sync_states" }
 func (ModelRouter) TableName() string     { return "model_routers" }
 func (ModelPool) TableName() string       { return "model_pools" }
 func (PoolVendor) TableName() string      { return "pool_vendors" }
