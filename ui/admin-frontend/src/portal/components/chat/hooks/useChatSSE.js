@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { generateTempId } from '../utils/chatMessageUtils';
 import { fetchChatHistory, sendChatMessage } from '../services/chatHistoryService';
 import { setupSSEConnection } from '../services/sseConnectionService';
 
 export const useChatSSE = ({ chatId, onMessageReceived }) => {
+  const location = useLocation();
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
@@ -27,10 +29,11 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
     return sendChatMessage(chatId, sessionId, message);
   }, [chatId, sessionId]);
 
-  useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const continueId = searchParams.get("continue_id");
+  // Extract continue_id from location.search to use as dependency
+  const searchParams = new URLSearchParams(location.search);
+  const continueId = searchParams.get("continue_id");
 
+  useEffect(() => {
     const maxReconnectAttempts = 5;
     const initialReconnectDelay = 500;
 
@@ -77,7 +80,7 @@ export const useChatSSE = ({ chatId, onMessageReceived }) => {
       setIsConnected(false);
       isConnectedRef.current = false;
     };
-  }, [chatId, closeConnection, onMessageReceived]);
+  }, [chatId, continueId, closeConnection, onMessageReceived]);
 
   return {
     isConnected,

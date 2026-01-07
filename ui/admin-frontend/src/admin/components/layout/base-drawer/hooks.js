@@ -31,12 +31,19 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems, me
   const location = useLocation();
   
   useEffect(() => {
-    const path = location.pathname;
+    // Include search params for exact matching (e.g., continue_id)
+    const path = location.pathname + location.search;
     setSelectedPath(path);
-    
+
     if (menuItems.length > 0) {
-      const parentIds = findParentItemsForPath(menuItems, path);
-      
+      // Use full path with search for finding parent items
+      let parentIds = findParentItemsForPath(menuItems, path);
+
+      // Fallback to pathname only if no match found with search params
+      if (parentIds.length === 0) {
+        parentIds = findParentItemsForPath(menuItems, location.pathname);
+      }
+
       if (parentIds.length > 0) {
         setExpandedItems((prevState) => {
           const newState = { ...prevState };
@@ -47,7 +54,7 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems, me
         });
       }
     }
-  }, [location.pathname, menuItems]);
+  }, [location.pathname, location.search, menuItems]);
 
   useEffect(() => {
     try {
