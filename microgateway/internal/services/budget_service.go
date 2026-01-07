@@ -178,7 +178,7 @@ func (s *DatabaseBudgetService) GetBudgetStatus(appID uint, llmID *uint) (*Budge
 		RequestsCount:   requestsCount,
 		PeriodStart:     periodStart,
 		PeriodEnd:       periodEnd,
-		IsOverBudget:    currentUsage > monthlyBudget,
+		IsOverBudget:    monthlyBudget > 0 && currentUsage > monthlyBudget,
 		PercentageUsed:  percentageUsed,
 	}, nil
 }

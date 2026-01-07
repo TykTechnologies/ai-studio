@@ -461,6 +461,32 @@ func (s *Service) DeactivateAppCredential(appID uint) error {
 	return app.DeactivateCredential(s.DB)
 }
 
+// ResetAppBudget resets the budget period for an app by setting the start date to today
+func (s *Service) ResetAppBudget(appID uint) error {
+	app, err := s.GetAppByID(appID)
+	if err != nil {
+		return err
+	}
+
+	if app.MonthlyBudget == nil || *app.MonthlyBudget <= 0 {
+		return errors.New("app does not have a budget configured")
+	}
+
+	now := time.Now()
+	app.BudgetStartDate = &now
+
+	if err := app.Update(s.DB); err != nil {
+		return err
+	}
+
+	// Clear budget cache so new calculations start fresh
+	if s.Budget != nil {
+		s.Budget.ClearCache()
+	}
+
+	return nil
+}
+
 // AddDatasourceToApp adds a datasource to an app
 func (s *Service) AddDatasourceToApp(appID, datasourceID uint) error {
 	app, err := s.GetAppByID(appID)

@@ -4,7 +4,9 @@ import { useDebounce } from "use-debounce";
 import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
 import { formatBudgetDisplay } from "../../utils/budgetFormatter";
 import agentService from "../../services/agentService";
+import { resetAppBudget } from "../../services/appService";
 import SearchInput from "../common/SearchInput";
+import ConfirmationDialog from "../common/ConfirmationDialog";
 import {
   Alert,
   Typography,
@@ -157,6 +159,7 @@ const AppDetails = () => {
     message: "",
     severity: "success",
   });
+  const [resetBudgetDialogOpen, setResetBudgetDialogOpen] = useState(false);
 
   const {
     page,
@@ -378,6 +381,30 @@ const AppDetails = () => {
       setSnackbar({
         open: true,
         message: "Failed to approve app. Please try again.",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleResetBudget = async () => {
+    try {
+      await resetAppBudget(id);
+      setResetBudgetDialogOpen(false);
+
+      // Refresh the budget data and app details
+      fetchTokenUsageAndCost();
+      fetchAppDetails();
+
+      setSnackbar({
+        open: true,
+        message: "Budget period reset successfully. New period starts from today.",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Error resetting budget", error);
+      setSnackbar({
+        open: true,
+        message: error.message || "Failed to reset budget. Please try again.",
         severity: "error",
       });
     }
@@ -735,14 +762,25 @@ const AppDetails = () => {
             <FieldLabel>Monthly Budget:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
-            <FieldValue>
-              {formatBudgetDisplay({
-                monthlyBudget: app.attributes.monthly_budget,
-                currentUsage: budgetUsageData?.current_usage,
-                percentage: budgetUsageData?.percentage,
-                budgetStartDate: app.attributes.budget_start_date || budgetUsageData?.start_date
-              })}
-            </FieldValue>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <FieldValue>
+                {formatBudgetDisplay({
+                  monthlyBudget: app.attributes.monthly_budget,
+                  currentUsage: budgetUsageData?.current_usage,
+                  percentage: budgetUsageData?.percentage,
+                  budgetStartDate: app.attributes.budget_start_date || budgetUsageData?.start_date
+                })}
+              </FieldValue>
+              {app.attributes.monthly_budget && isEnterprise && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => setResetBudgetDialogOpen(true)}
+                >
+                  Reset Budget
+                </Button>
+              )}
+            </Box>
           </Grid>
         </Grid>
 
@@ -960,6 +998,22 @@ const AppDetails = () => {
         initialStartDate={startDate}
         initialEndDate={endDate}
         initialSearch={debouncedProxyLogSearch}
+      />
+
+      <ConfirmationDialog
+        open={resetBudgetDialogOpen}
+        title="Reset Budget Period"
+        message="This will start a new budget period from today. Historical usage data will be preserved but won't count toward the current budget."
+        confirmText="Are you sure you want to reset the budget period for this app?"
+        buttonLabel="Reset Budget"
+        onConfirm={handleResetBudget}
+        onCancel={() => setResetBudgetDialogOpen(false)}
+        iconName="hexagon-exclamation"
+        iconColor="text.warningDefault"
+        titleColor="text.warningDefault"
+        backgroundColor="background.surfaceWarningDefault"
+        borderColor="border.warningDefault"
+        primaryButtonComponent="primary"
       />
     </>
   );
