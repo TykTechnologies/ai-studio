@@ -97,7 +97,7 @@ func serializeToolCatalogues(toolCatalogues models.ToolCatalogues, db *gorm.DB) 
 				ShortDescription: tc.ShortDescription,
 				LongDescription:  tc.LongDescription,
 				Icon:             tc.Icon,
-				Tools:            serializeTools(tc.Tools, db),
+				Tools:            serializeToolsSlim(tc.Tools, db),
 				Tags:             serializeTags(tc.Tags),
 			},
 		}
