@@ -1061,6 +1061,14 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 		}
 
+		// Serialize allowed_models to JSON string
+		var allowedModelsJSON string
+		if len(llm.AllowedModels) > 0 {
+			if allowedModelsBytes, err := json.Marshal(llm.AllowedModels); err == nil {
+				allowedModelsJSON = string(allowedModelsBytes)
+			}
+		}
+
 		pbLLM := &pb.LLMConfig{
 			Id:              uint32(llm.ID),
 			Name:            llm.Name,
@@ -1076,6 +1084,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			MonthlyBudget:   monthlyBudget,
 			RateLimitRpm:    0, // AI Studio doesn't have this field yet
 			Metadata:        metadataJSON,
+			AllowedModels:   allowedModelsJSON,
 			Namespace:       llm.Namespace,
 			FilterIds:       filterIDs,
 			CreatedAt:       timestamppb.New(llm.CreatedAt),
