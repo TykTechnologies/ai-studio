@@ -87,6 +87,9 @@ type AppConf struct {
 	LicenseTelemetryURL     string
 	LicenseValidityPeriod   time.Duration
 	LicenseTelemetryConcurrency int
+
+	// Budget Configuration
+	DefaultAppBudget *float64
 }
 
 // QueueConfig holds configuration for message queues
@@ -451,6 +454,16 @@ func getConfigFromEnv(envFile string) *AppConf {
 
 	// Session duration configuration
 	conf.SessionDuration = parseDurationWithDefault("SESSION_DURATION", 6*time.Hour)
+
+	// Default app budget configuration
+	if defaultBudgetStr := os.Getenv("DEFAULT_APP_BUDGET"); defaultBudgetStr != "" {
+		if defaultBudget, err := strconv.ParseFloat(defaultBudgetStr, 64); err == nil && defaultBudget > 0 {
+			conf.DefaultAppBudget = &defaultBudget
+			cfgLog.Info().Msgf("Default app budget set to: %.2f", defaultBudget)
+		} else if err != nil {
+			cfgLog.Warn().Msgf("Warning: Invalid DEFAULT_APP_BUDGET value: %s", defaultBudgetStr)
+		}
+	}
 
 	return conf
 }
