@@ -12,16 +12,40 @@
 
 Tyk AI Studio is an open source platform that addresses the critical challenges organizations face when adopting AI: shadow AI usage, compliance requirements, security concerns, and spiraling costs. Built for developers and platform teams, it provides structured AI management through governance, monitoring, and unified access controls.
 
-> **📦 Available in two editions**: [Community Edition](#community-edition) (open source) and [Enterprise Edition](#enterprise-edition) (advanced features). See [edition comparison](#edition-comparison) below.
+> **Available in two editions**: [Community Edition](#community-edition) (open source) and [Enterprise Edition](#enterprise-edition) (advanced features). See [edition comparison](#edition-comparison) below.
+
+## Try it Now
+
+Get a demo instance running in minutes using Docker Compose.
+
+**Community Edition** (no license required):
+```bash
+git clone https://github.com/TykTechnologies/ai-studio.git
+cd ai-studio/quickstart
+docker compose -f ./ce/compose.yaml up -d
+```
+
+**Enterprise Edition** (requires license):
+```bash
+git clone https://github.com/TykTechnologies/ai-studio.git
+cd ai-studio/quickstart
+# Add your license to required.env
+echo "TYK_AI_LICENSE=<your-license-key>" > required.env
+docker compose -f ./enterprise/compose.yaml up -d
+```
+
+Once running, access the UI at http://localhost:8585
+
+See the [quickstart README](quickstart/README.md) for more details.
 
 ## Why Tyk AI Studio?
 
 AI adoption brings significant challenges that require structured solutions:
 
-🚫 **Shadow AI Prevention** - Stop unauthorized AI tool usage without oversight  
-🔒 **Security & Compliance** - Maintain data privacy and meet regulatory requirements  
-💰 **Cost Control** - Monitor usage and prevent unlimited AI consumption  
-🎯 **Unified Access** - Single interface for multiple AI vendors and internal tools  
+- **Shadow AI Prevention** - Stop unauthorized AI tool usage without oversight
+- **Security & Compliance** - Maintain data privacy and meet regulatory requirements
+- **Cost Control** - Monitor usage and prevent unlimited AI consumption
+- **Unified Access** - Single interface for multiple AI vendors and internal tools  
 
 ## Core Capabilities
 
@@ -121,7 +145,7 @@ cp .env.example .env
 ./ai-studio
 ```
 
-**⚠️ Important**: If you try to run `go build` without first building the frontend, you'll get an error about empty directories because the Go application embeds the frontend build assets. Always build the frontend first!
+**Important**: If you try to run `go build` without first building the frontend, you'll get an error about empty directories because the Go application embeds the frontend build assets. Always build the frontend first.
 
 ## Edition Comparison
 
@@ -281,11 +305,11 @@ Build plugins that extend AI Studio in multiple ways:
 
 ### Key Features
 
-✨ **Single SDK**: One import works everywhere (AI Studio and Microgateway)
-🔌 **10 Plugin Capabilities**: Mix and match to build exactly what you need
-🔒 **Secure Isolation**: Plugins run as separate processes
-🎯 **Fine-grained Permissions**: Control access with declarative scopes
-🚀 **Multiple Deployment Options**: Local files, remote gRPC, or OCI containers
+- **Single SDK**: One import works everywhere (AI Studio and Microgateway)
+- **10 Plugin Capabilities**: Mix and match to build exactly what you need
+- **Secure Isolation**: Plugins run as separate processes
+- **Fine-grained Permissions**: Control access with declarative scopes
+- **Multiple Deployment Options**: Local files, remote gRPC, or OCI containers
 
 ### Quick Start
 
@@ -321,11 +345,11 @@ func main() {
 
 ## Key Benefits
 
-✅ **Reduce Risk** - Centralized access controls and comprehensive monitoring  
-✅ **Improve Efficiency** - Streamlined workflows for both developers and end users  
-✅ **Cost Control** - Real-time usage tracking with budgeting and rate limiting  
-✅ **Support Compliance** - Built-in policy enforcement and audit logging  
-✅ **Enable Scale** - Standards-based architecture supporting growth  
+- **Reduce Risk** - Centralized access controls and comprehensive monitoring
+- **Improve Efficiency** - Streamlined workflows for both developers and end users
+- **Cost Control** - Real-time usage tracking with budgeting and rate limiting
+- **Support Compliance** - Built-in policy enforcement and audit logging
+- **Enable Scale** - Standards-based architecture supporting growth  
 
 ## Documentation & Resources
 
@@ -397,7 +421,7 @@ make test
 make clean
 ```
 
-**⚠️ Build Order Important**: The frontend must be built before the Go binary because the application embeds frontend assets. Running `go build` without building the frontend first will fail with empty directory errors.
+**Build Order Important**: The frontend must be built before the Go binary because the application embeds frontend assets. Running `go build` without building the frontend first will fail with empty directory errors.
 
 ### Additional Commands
 ```bash
@@ -509,6 +533,4 @@ Tyk AI Studio is actively developed and maintained by Tyk Technologies. It serve
 
 ---
 
-**Built with ❤️ by Tyk**
-
-If you're using Tyk AI Studio, give us a star ⭐️ and let us know how it's working for you!
+**Built by Tyk**
