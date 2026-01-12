@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
 )
@@ -19,6 +20,20 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 	// Check if datasources have higher privacy score than LLMs
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
 		return nil, err
+	}
+
+	// Apply default budget if not set and default is configured
+	budgetNotSet := monthlyBudget == nil
+	if !budgetNotSet && *monthlyBudget == 0 {
+		budgetNotSet = true
+	}
+	defaultBudget := config.Get("").DefaultAppBudget
+	if budgetNotSet && defaultBudget != nil && *defaultBudget > 0 {
+		monthlyBudget = defaultBudget
+		if budgetStartDate == nil {
+			now := time.Now()
+			budgetStartDate = &now
+		}
 	}
 
 	app := &models.App{
@@ -120,6 +135,20 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 	// Check if datasources have higher privacy score than LLMs
 	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
 		return nil, err
+	}
+
+	// Apply default budget if not set and default is configured
+	budgetNotSet := monthlyBudget == nil
+	if !budgetNotSet && *monthlyBudget == 0 {
+		budgetNotSet = true
+	}
+	defaultBudget := config.Get("").DefaultAppBudget
+	if budgetNotSet && defaultBudget != nil && *defaultBudget > 0 {
+		monthlyBudget = defaultBudget
+		if budgetStartDate == nil {
+			now := time.Now()
+			budgetStartDate = &now
+		}
 	}
 
 	app := &models.App{
