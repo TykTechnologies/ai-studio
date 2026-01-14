@@ -1139,9 +1139,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// Calculate current period usage from llm_chat_records for budget sync to edge
 		var currentPeriodUsage float64
 		if monthlyBudget > 0 {
-			// Calculate budget period start (1st of current month - matches edge budget service logic)
+			// Calculate budget period using app's BudgetStartDate (handles mid-period resets)
 			now := time.Now()
-			periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+			periodStart, _ := calculateBudgetPeriod(app.BudgetStartDate, now)
 
 			// Query total cost from llm_chat_records for this app in the current period
 			var totalCostCents float64

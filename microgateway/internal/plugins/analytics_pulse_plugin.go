@@ -256,6 +256,12 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 	p.bufferMutex.Lock()
 	defer p.bufferMutex.Unlock()
 
+	// Use actual status code, default to 200 for backwards compatibility
+	statusCode := req.StatusCode
+	if statusCode == 0 {
+		statusCode = 200
+	}
+
 	// Convert to database analytics event format for buffering
 	event := database.AnalyticsEvent{
 		RequestID:              req.RequestID,
@@ -275,7 +281,7 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		// Request/Response details
 		Endpoint:               fmt.Sprintf("/%s", req.Vendor),
 		Method:                 "POST",
-		StatusCode:             200, // Default success
+		StatusCode:             statusCode, // Use actual HTTP status code (e.g., 403 for budget exceeded)
 
 		// Token tracking (using new field names)
 		PromptTokens:           req.PromptTokens,

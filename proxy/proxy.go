@@ -455,6 +455,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
+		go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
@@ -531,8 +532,10 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			} else if blocked {
 				// Response was blocked by filter - return error instead
 				respondWithError(w, http.StatusBadRequest, blockMsg, nil, false)
-				// Still analyze for logging purposes
-				go p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
+				// Log with 400 status and include both the block reason and original LLM response for audit trail
+				blockedResponseBody := fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"original_response":%s}`,
+					blockMsg, string(bufferedCapture.buffer.Bytes()))
+				go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(blockedResponseBody), reqBody, r)
 				return
 			}
 		}
@@ -780,6 +783,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
+		go p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now())
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
@@ -891,8 +895,10 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 						f.Flush()
 					}
 					isErr = true
-					// Analyze partial response
-					go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now())
+					// Log with 400 status and include both the block reason and partial LLM response for audit trail
+					blockedResponseBody := []byte(fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"chunk_index":%d,"partial_response":%s}`,
+						blockMsg, chunkIndex, fullResponse.String()))
+					go p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now())
 					return
 				}
 			}

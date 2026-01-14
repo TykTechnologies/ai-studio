@@ -79,6 +79,8 @@ import ModelRouterList from "./pages/ModelRouterList";
 import ModelRouterDetails from "./components/model-routers/ModelRouterDetails";
 import ModelRouterForm from "./components/model-routers/ModelRouterForm";
 
+import ComplianceOverview from "./pages/ComplianceOverview";
+
 const mainAdminRoutes = (
   <>
     <Route index element={<Overview />} />
@@ -147,6 +149,8 @@ const mainAdminRoutes = (
     <Route path="filters/:id" element={<FilterDetails />} />
     <Route path="filters/edit/:id" element={<FilterForm />} />
     <Route path="filters/new" element={<FilterForm />} />
+
+    <Route path="compliance" element={<ComplianceOverview />} />
   </>
 );
 

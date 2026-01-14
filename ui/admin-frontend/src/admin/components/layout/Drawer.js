@@ -105,6 +105,9 @@ const Drawer = () => {
           : []),
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets' },
         { id: 'branding', text: 'Branding', path: '/admin/branding' },
+        ...(config?.is_enterprise
+          ? [{ id: 'compliance', text: 'Compliance', path: '/admin/compliance' }]
+          : []),
       ],
     },
     ...(features.feature_gateway &&

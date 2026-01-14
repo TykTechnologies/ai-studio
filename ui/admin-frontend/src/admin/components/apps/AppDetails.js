@@ -160,6 +160,7 @@ const AppDetails = () => {
     severity: "success",
   });
   const [resetBudgetDialogOpen, setResetBudgetDialogOpen] = useState(false);
+  const [resetBudgetSuccessDialogOpen, setResetBudgetSuccessDialogOpen] = useState(false);
 
   const {
     page,
@@ -395,11 +396,8 @@ const AppDetails = () => {
       fetchTokenUsageAndCost();
       fetchAppDetails();
 
-      setSnackbar({
-        open: true,
-        message: "Budget period reset successfully. New period starts from today.",
-        severity: "success",
-      });
+      // Show success dialog prompting user to update edge configurations
+      setResetBudgetSuccessDialogOpen(true);
     } catch (error) {
       console.error("Error resetting budget", error);
       setSnackbar({
@@ -1013,6 +1011,25 @@ const AppDetails = () => {
         titleColor="text.warningDefault"
         backgroundColor="background.surfaceWarningDefault"
         borderColor="border.warningDefault"
+        primaryButtonComponent="primary"
+      />
+
+      <ConfirmationDialog
+        open={resetBudgetSuccessDialogOpen}
+        title="Budget Reset Successfully"
+        message="The budget period has been reset. To apply this change to edge gateways, you need to push a configuration update from the Edge Gateways page."
+        confirmText="Would you like to go to the Edge Gateways page now?"
+        buttonLabel="Go to Edge Gateways"
+        onConfirm={() => {
+          setResetBudgetSuccessDialogOpen(false);
+          navigate("/admin/edge-gateways");
+        }}
+        onCancel={() => setResetBudgetSuccessDialogOpen(false)}
+        iconName="hexagon-check"
+        iconColor="text.successDefault"
+        titleColor="text.successDefault"
+        backgroundColor="background.surfaceSuccessDefault"
+        borderColor="border.successDefault"
         primaryButtonComponent="primary"
       />
     </>
