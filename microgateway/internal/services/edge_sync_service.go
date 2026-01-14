@@ -19,6 +19,50 @@ type EdgeSyncService struct {
 	namespace string
 }
 
+// calculateBudgetPeriod determines the budget period for an app based on its budget_start_date.
+// If no budget_start_date is set, uses calendar month (1st to last day).
+// When a budget is reset on the same day, this preserves the exact reset time to ensure
+// usage from before the reset is not counted.
+// Note: Timestamps are truncated to second precision to ensure consistency across all components.
+func calculateBudgetPeriod(budgetStartDate *time.Time, now time.Time) (time.Time, time.Time) {
+	if budgetStartDate == nil {
+		// Default to calendar month
+		periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+		return periodStart, periodEnd
+	}
+
+	budgetDay := budgetStartDate.Day()
+	currentYear := now.Year()
+	currentMonth := now.Month()
+
+	// If we haven't reached the budget day in current month,
+	// the period started on the budget day of previous month
+	if now.Day() < budgetDay {
+		if currentMonth == time.January {
+			currentMonth = time.December
+			currentYear--
+		} else {
+			currentMonth--
+		}
+	}
+
+	// Calculate the normalized period start (midnight of the budget day)
+	normalizedPeriodStart := time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
+	periodEnd := normalizedPeriodStart.AddDate(0, 1, 0).Add(-time.Second)
+
+	// Check if the actual budget_start_date falls within this period.
+	// If it does (e.g., budget was reset mid-period), use the exact timestamp
+	// to ensure usage from before the reset is not counted.
+	// Truncate to second precision to ensure consistency across control server and edges.
+	if budgetStartDate.After(normalizedPeriodStart) && budgetStartDate.Before(periodEnd) {
+		truncated := budgetStartDate.Truncate(time.Second)
+		return truncated, periodEnd
+	}
+
+	return normalizedPeriodStart, periodEnd
+}
+
 // NewEdgeSyncService creates a new edge sync service
 func NewEdgeSyncService(db *gorm.DB, namespace string) *EdgeSyncService {
 	return &EdgeSyncService{
@@ -287,8 +331,9 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 		// Note: CurrentPeriodUsage comes in dollars, but we store as dollars * 10000 for consistency
 		if pbApp.MonthlyBudget > 0 {
 			now := time.Now()
-			periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-			periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+			// Use app's BudgetStartDate to calculate the correct budget period
+			// This ensures budget resets are properly reflected on the edge
+			periodStart, periodEnd := calculateBudgetPeriod(app.BudgetStartDate, now)
 
 			// Convert from dollars (control server format) to dollars * 10000 (edge storage format)
 			storedCost := pbApp.CurrentPeriodUsage * 10000
@@ -316,6 +361,7 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 					Float64("current_usage_dollars", pbApp.CurrentPeriodUsage).
 					Float64("stored_cost", storedCost).
 					Float64("monthly_budget", pbApp.MonthlyBudget).
+					Time("period_start", periodStart).
 					Msg("Initialized budget usage from control server snapshot")
 			}
 		}

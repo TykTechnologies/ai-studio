@@ -4,7 +4,10 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
 )
@@ -391,6 +394,17 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	}
 	if !cred.Active {
 		log.Debug().Uint("cred_id", cred.ID).Msg("CheckAPICredential: Credential is inactive")
+		// Log inactive credential usage for compliance tracking
+		if app, appErr := cv.service.GetAppByCredentialID(cred.ID); appErr == nil {
+			analytics.RecordProxyLog(&models.ProxyLog{
+				AppID:        app.ID,
+				UserID:       app.UserID,
+				ResponseCode: http.StatusUnauthorized,
+				TimeStamp:    time.Now(),
+				Vendor:       "auth",
+				ResponseBody: `{"error":"credential_inactive","detail":"API credential is inactive"}`,
+			})
+		}
 		return false, r
 	}
 

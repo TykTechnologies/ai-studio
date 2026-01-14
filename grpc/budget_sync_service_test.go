@@ -19,7 +19,8 @@ func setupBudgetSyncTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&models.LLMChatRecord{})
+	// Migrate both LLMChatRecord and App tables (App is needed for BudgetStartDate lookup)
+	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.App{})
 	require.NoError(t, err)
 
 	return db
@@ -66,21 +67,31 @@ func TestBudgetSyncService_PublishesEvents(t *testing.T) {
 	now := time.Now()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
+	// Create apps first (required for budget sync to work)
+	apps := []models.App{
+		{Name: "App 1"},
+		{Name: "App 2"},
+	}
+	for i := range apps {
+		err := db.Create(&apps[i]).Error
+		require.NoError(t, err)
+	}
+
 	records := []models.LLMChatRecord{
 		{
-			AppID:     1,
+			AppID:     apps[0].ID,
 			LLMID:     1,
 			Cost:      250000.0, // $25.00 (stored as dollars * 10000)
 			TimeStamp: periodStart.Add(time.Hour),
 		},
 		{
-			AppID:     1,
+			AppID:     apps[0].ID,
 			LLMID:     1,
 			Cost:      100000.0, // $10.00
 			TimeStamp: periodStart.Add(2 * time.Hour),
 		},
 		{
-			AppID:     2,
+			AppID:     apps[1].ID,
 			LLMID:     1,
 			Cost:      50000.0, // $5.00
 			TimeStamp: periodStart.Add(3 * time.Hour),
@@ -131,10 +142,10 @@ func TestBudgetSyncService_PublishesEvents(t *testing.T) {
 	require.NoError(t, err)
 
 	// App 1 should have $35.00 total (25 + 10)
-	assert.InDelta(t, 35.0, payload.AppUsages[1], 0.01)
+	assert.InDelta(t, 35.0, payload.AppUsages[uint32(apps[0].ID)], 0.01)
 
 	// App 2 should have $5.00
-	assert.InDelta(t, 5.0, payload.AppUsages[2], 0.01)
+	assert.InDelta(t, 5.0, payload.AppUsages[uint32(apps[1].ID)], 0.01)
 
 	// Verify sequence number incremented
 	assert.Equal(t, uint64(1), payload.SequenceNumber)
@@ -151,13 +162,18 @@ func TestBudgetSyncService_SequenceNumberIncrement(t *testing.T) {
 	now := time.Now()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
+	// Create app first (required for budget sync to work)
+	app := models.App{Name: "Test App"}
+	err := db.Create(&app).Error
+	require.NoError(t, err)
+
 	record := models.LLMChatRecord{
-		AppID:     1,
+		AppID:     app.ID,
 		LLMID:     1,
 		Cost:      100000.0,
 		TimeStamp: periodStart.Add(time.Hour),
 	}
-	err := db.Create(&record).Error
+	err = db.Create(&record).Error
 	require.NoError(t, err)
 
 	// Collect events
@@ -225,13 +241,18 @@ func TestBudgetSyncService_StartStop(t *testing.T) {
 	now := time.Now()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
+	// Create app first (required for budget sync to work)
+	app := models.App{Name: "Test App"}
+	err := db.Create(&app).Error
+	require.NoError(t, err)
+
 	record := models.LLMChatRecord{
-		AppID:     1,
+		AppID:     app.ID,
 		LLMID:     1,
 		Cost:      100000.0,
 		TimeStamp: periodStart.Add(time.Hour),
 	}
-	err := db.Create(&record).Error
+	err = db.Create(&record).Error
 	require.NoError(t, err)
 
 	// Count events
@@ -280,21 +301,26 @@ func TestBudgetSyncService_IgnoresRecordsOutsidePeriod(t *testing.T) {
 	now := time.Now()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
+	// Create app first (required for budget sync to work)
+	app := models.App{Name: "Test App"}
+	err := db.Create(&app).Error
+	require.NoError(t, err)
+
 	// Insert records: one in current period, one in previous period
 	currentPeriodRecord := models.LLMChatRecord{
-		AppID:     1,
+		AppID:     app.ID,
 		LLMID:     1,
 		Cost:      100000.0, // $10.00
 		TimeStamp: periodStart.Add(time.Hour),
 	}
 	previousPeriodRecord := models.LLMChatRecord{
-		AppID:     1,
+		AppID:     app.ID,
 		LLMID:     1,
 		Cost:      200000.0, // $20.00 - should be ignored
 		TimeStamp: periodStart.Add(-24 * time.Hour), // Previous period
 	}
 
-	err := db.Create(&currentPeriodRecord).Error
+	err = db.Create(&currentPeriodRecord).Error
 	require.NoError(t, err)
 	err = db.Create(&previousPeriodRecord).Error
 	require.NoError(t, err)
@@ -328,5 +354,5 @@ func TestBudgetSyncService_IgnoresRecordsOutsidePeriod(t *testing.T) {
 	}
 
 	// Only current period record should be counted
-	assert.InDelta(t, 10.0, receivedPayload.AppUsages[1], 0.01, "Should only include current period records")
+	assert.InDelta(t, 10.0, receivedPayload.AppUsages[uint32(app.ID)], 0.01, "Should only include current period records")
 }

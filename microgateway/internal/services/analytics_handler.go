@@ -310,6 +310,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 					ToolCalls:              record.ToolCalls,
 					Choices:                record.Choices,
 					RequestID:              fmt.Sprintf("proxy_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
+					StatusCode:             mergedEvent.StatusCode, // Pass actual HTTP status code (e.g., 403 for budget exceeded)
 					// Include request/response bodies from the merged event
 					RequestBody:            mergedEvent.RequestBody,
 					ResponseBody:           mergedEvent.ResponseBody,
@@ -352,6 +353,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 			ToolCalls:              record.ToolCalls,
 			Choices:                record.Choices,
 			RequestID:              fmt.Sprintf("chat_%d_%d", record.AppID, record.TimeStamp.UnixNano()),
+			StatusCode:             200, // Standalone chat interactions are successful by definition
 		}
 
 		// Execute analytics plugins
