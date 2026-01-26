@@ -2,6 +2,117 @@
 
 Comprehensive reference of working plugin examples in the Tyk AI Studio repository. All examples use the **Unified Plugin SDK** (`pkg/plugin_sdk`) and demonstrate real-world patterns for different plugin capabilities.
 
+## Production-Ready Plugins
+
+The following plugins in `community/plugins/` and `enterprise/plugins/` are **production-tested** and serve as the best reference implementations:
+
+### Community Plugins
+
+#### LLM Cache
+
+**Path**: [`community/plugins/llm-cache/`](../../../community/plugins/llm-cache/)
+
+**Capabilities**: PostAuth, Response, StreamComplete, UI, RPC, EdgePayloadReceiver, SessionAware, Config
+
+**Description**: Semantic caching for LLM responses using request hash matching. Reduces costs and latency by returning cached responses for similar prompts.
+
+**Key Features**:
+- Request hashing for cache key generation
+- Streaming response caching
+- Edge-to-control cache synchronization
+- WebComponent UI for cache management
+- KV storage for cache state
+- Session-aware broker connection warmup
+
+**Why Use This Example**:
+- **Best example of multi-capability plugin** - Shows how to combine 8 different capabilities
+- **Edge-to-control pattern** - Demonstrates hub-and-spoke communication
+- **SessionAware warmup** - Critical pattern for Service API access
+
+**Complexity**: Advanced
+
+---
+
+#### LLM Firewall
+
+**Path**: [`community/plugins/llm-firewall/`](../../../community/plugins/llm-firewall/)
+
+**Capabilities**: PreAuth, PostAuth, Config
+
+**Description**: Content filtering for LLM prompts using configurable phrase/pattern matching. Blocks requests containing disallowed content.
+
+**Key Features**:
+- Regex and literal phrase matching
+- Per-model rule configuration
+- Multi-vendor content extraction (OpenAI, Anthropic, Google AI, Vertex)
+- Configurable block messages
+- Case-sensitive/insensitive matching
+
+**Why Use This Example**:
+- **Best example of content filtering** - Clean implementation of request inspection
+- **Multi-vendor support** - Shows how to handle different LLM formats
+- **Configuration-driven rules** - JSON schema for rule management
+
+**Complexity**: Intermediate
+
+---
+
+#### GitHub RAG Ingest
+
+**Path**: [`community/plugins/github-rag-ingest/`](../../../community/plugins/github-rag-ingest/)
+
+**Capabilities**: UI, RPC, Scheduler, SessionAware
+
+**Description**: Scheduled ingestion of GitHub repository content for RAG (Retrieval-Augmented Generation). Indexes code, docs, and issues.
+
+**Key Features**:
+- Cron-based scheduled execution
+- GitHub API integration
+- Custom UI for ingest configuration
+- RPC methods for manual triggers
+- Session-aware initialization
+
+**Why Use This Example**:
+- **Best example of scheduled data ingestion** - Complete Scheduler implementation
+- **UI + backend integration** - Shows RPC pattern for UI communication
+- **External API integration** - GitHub API usage patterns
+
+**Complexity**: Advanced
+
+---
+
+### Enterprise Plugins
+
+> **Note**: Enterprise plugins require a valid license.
+
+#### LLM Load Balancer
+
+**Path**: [`enterprise/plugins/llm-load-balancer/`](../../../enterprise/plugins/llm-load-balancer/)
+
+**Capabilities**: PostAuth, Response, UI
+
+**Description**: Intelligent request distribution across multiple LLM backends with health checking and failover.
+
+**Complexity**: Advanced
+
+---
+
+#### Advanced LLM Cache
+
+**Path**: [`enterprise/plugins/advanced-llm-cache/`](../../../enterprise/plugins/advanced-llm-cache/)
+
+**Capabilities**: PostAuth, Response, UI
+
+**Description**: Extended caching with semantic similarity matching, cache invalidation policies, and advanced analytics. Extends the community LLM Cache.
+
+**Complexity**: Advanced
+
+---
+
+## Example Plugins
+
+The following examples in `examples/plugins/` demonstrate specific patterns and are useful for learning:
+
 ## AI Studio Plugins
 
 ### Echo Agent
@@ -343,11 +454,16 @@ data_collection_plugins:
 |------------|----------|
 | **Agent** | echo-agent |
 | **Object Hooks** | llm-validator, hook-test-plugin |
-| **PostAuth** | request_enricher, message_modifier, service-api-test, gateway-service-test |
-| **Response** | response_modifier, llm-rate-limiter-multiphase |
+| **PreAuth** | **llm-firewall** ★ |
+| **PostAuth** | **llm-cache** ★, **llm-firewall** ★, request_enricher, message_modifier, service-api-test, gateway-service-test |
+| **Response** | **llm-cache** ★, response_modifier, llm-rate-limiter-multiphase |
 | **DataCollector** | elasticsearch_collector, file-analytics-collector, file-budget-collector, file-proxy-collector |
-| **UI Provider** | llm-rate-limiter-multiphase, custom-auth-ui |
-| **Multi-Capability** | llm-rate-limiter-multiphase (PostAuth + Response + UI) |
+| **UI Provider** | **llm-cache** ★, **llm-firewall** ★, llm-rate-limiter-multiphase, custom-auth-ui |
+| **Scheduler** | **github-rag-ingest** ★ |
+| **EdgePayloadReceiver** | **llm-cache** ★ |
+| **Multi-Capability** | **llm-cache** ★ (8 capabilities), llm-rate-limiter-multiphase (PostAuth + Response + UI) |
+
+★ = Production-ready community/enterprise plugins (recommended as reference)
 
 ### By Runtime
 
@@ -485,8 +601,14 @@ if ctx.Runtime == plugin_sdk.RuntimeStudio {
 - **response_modifier**: Two-phase response handling
 - **elasticsearch_collector**: Data collection and export
 
-### 4. Multi-Capability
+### 4. Production-Ready References (Recommended)
+- **llm-firewall** (`community/plugins/`): Content filtering and multi-vendor support
+- **llm-cache** (`community/plugins/`): Multi-capability plugin with edge-to-control communication
+- **github-rag-ingest** (`community/plugins/`): Scheduler and UI patterns
+
+### 5. Multi-Capability
 - **llm-rate-limiter-multiphase**: Combining capabilities with UI
+- **llm-cache**: 8 capabilities working together (production reference)
 
 ## Next Steps
 

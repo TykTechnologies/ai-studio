@@ -368,92 +368,101 @@ Configuration values are passed to `Initialize()` and can be updated via the API
 
 ### Example 1: Custom Authentication Plugin
 
+This example uses the **Unified SDK** for consistency with other gateway plugins like `llm-firewall` and `llm-cache`.
+
 ```go
 package main
 
 import (
-    "context"
     "strings"
 
-    "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+    "github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+    pb "github.com/TykTechnologies/midsommar/v2/proto"
 )
 
 type CustomAuthPlugin struct {
+    plugin_sdk.BasePlugin
     validToken string
 }
 
-func (p *CustomAuthPlugin) Initialize(config map[string]interface{}) error {
-    if token, ok := config["valid_token"].(string); ok {
+func NewCustomAuthPlugin() *CustomAuthPlugin {
+    return &CustomAuthPlugin{
+        BasePlugin: plugin_sdk.NewBasePlugin(
+            "custom-auth",
+            "1.0.0",
+            "Custom token authentication plugin",
+        ),
+    }
+}
+
+func (p *CustomAuthPlugin) Initialize(ctx plugin_sdk.Context, config map[string]string) error {
+    // Parse configuration
+    if token, ok := config["valid_token"]; ok && token != "" {
         p.validToken = token
     } else {
         p.validToken = "default-token"
     }
+
+    ctx.Services.Logger().Info("CustomAuthPlugin initialized",
+        "runtime", ctx.Runtime,
+    )
+
     return nil
 }
 
-func (p *CustomAuthPlugin) GetHookType() sdk.HookType {
-    return sdk.HookTypeAuth
-}
-
-func (p *CustomAuthPlugin) GetName() string {
-    return "custom-auth"
-}
-
-func (p *CustomAuthPlugin) GetVersion() string {
-    return "1.0.0"
-}
-
-func (p *CustomAuthPlugin) Shutdown() error {
+func (p *CustomAuthPlugin) Shutdown(ctx plugin_sdk.Context) error {
     return nil
 }
 
-func (p *CustomAuthPlugin) Authenticate(ctx context.Context,
-    req *sdk.AuthRequest,
-    pluginCtx *sdk.PluginContext) (*sdk.AuthResponse, error) {
+// HandleAuth implements the AuthHandler interface
+func (p *CustomAuthPlugin) HandleAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+    // Extract token from Authorization header
+    authHeader := ""
+    if req.Request != nil && req.Request.Headers != nil {
+        authHeader = req.Request.Headers["Authorization"]
+    }
 
-    token := strings.TrimPrefix(req.Credential, "Bearer ")
+    token := strings.TrimPrefix(authHeader, "Bearer ")
 
     if token == p.validToken {
-        return &sdk.AuthResponse{
-            Authenticated: true,
-            UserID:        "plugin-user",
-            AppID:         "plugin-app",
-            Claims: map[string]string{
-                "source": "custom-auth-plugin",
+        ctx.Services.Logger().Info("Authentication successful",
+            "request_id", ctx.RequestID,
+        )
+
+        return &pb.PluginResponse{
+            Modified: true,
+            Credential: &pb.Credential{
+                UserID:   "plugin-user",
+                Username: "Plugin User",
+                Claims: map[string]string{
+                    "source": "custom-auth-plugin",
+                },
             },
         }, nil
     }
 
-    return &sdk.AuthResponse{
-        Authenticated: false,
-        ErrorMessage:  "Invalid token",
-    }, nil
-}
+    ctx.Services.Logger().Warn("Authentication failed",
+        "request_id", ctx.RequestID,
+        "token_provided", token != "",
+    )
 
-func (p *CustomAuthPlugin) ValidateToken(ctx context.Context,
-    token string,
-    pluginCtx *sdk.PluginContext) (*sdk.AuthResponse, error) {
-
-    token = strings.TrimPrefix(token, "Bearer ")
-    if token == p.validToken {
-        return &sdk.AuthResponse{
-            Authenticated: true,
-            UserID:        "plugin-user",
-            AppID:         "plugin-app",
-        }, nil
-    }
-
-    return &sdk.AuthResponse{
-        Authenticated: false,
-        ErrorMessage:  "Invalid token",
+    return &pb.PluginResponse{
+        Block:        true,
+        StatusCode:   401,
+        ErrorMessage: "Invalid token",
+        Headers: map[string]string{
+            "WWW-Authenticate": "Bearer",
+        },
     }, nil
 }
 
 func main() {
-    plugin := &CustomAuthPlugin{}
-    sdk.ServePlugin(plugin)
+    plugin := NewCustomAuthPlugin()
+    plugin_sdk.Serve(plugin)
 }
 ```
+
+**Working Example**: See [`community/plugins/llm-firewall/`](../../../community/plugins/llm-firewall/) for a production-ready content filtering plugin using this pattern.
 
 ### Example 2: Elasticsearch Data Collector
 

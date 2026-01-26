@@ -31,20 +31,22 @@ Administrators configure these budgets via the Tyk AI Studio UI or API.
 
 ## Enforcement
 
+> **Note:** Budget *enforcement* (blocking requests when limits are exceeded) is an **Enterprise Edition** feature. In Community Edition, budgets are tracked and recorded for reporting purposes, but requests are not blocked when limits are exceeded.
+
 Budget enforcement primarily occurs at the **[Proxy & API Gateway](./proxy.md)**:
 
 1.  **Request Received:** The Proxy receives a request destined for an LLM.
 2.  **Cost Estimation:** Before forwarding the request, the Proxy might estimate the potential maximum cost (or rely on post-request cost calculation).
 3.  **Budget Check:** The Proxy checks the current spending against all applicable budgets (e.g., the specific LLM config budget AND the overall organization budget) for the current time period.
-4.  **Allow or Deny:**
+4.  **Allow or Deny (Enterprise Edition):**
     *   If the current spending plus the estimated/actual cost of the request does *not* exceed the limit(s), the request is allowed to proceed.
-    *   If the request *would* cause a budget limit to be exceeded, the request is blocked, and an error is returned to the caller.
+    *   If the request *would* cause a budget limit to be exceeded, the request is blocked with HTTP 403, and an error is returned to the caller.
 
 ## Integration with Other Systems
 
 *   **[Analytics & Monitoring](./analytics.md):** The Analytics system provides the cost data used to track spending against budgets. The current spent amount for a budget period is derived from aggregated analytics data.
 *   **[Model Pricing](./llm-management.md#model-pricing-system):** The pricing definitions are essential for the Analytics system to calculate costs accurately, which in turn feeds the Budget Control system.
-*   **[Notification System](./notifications.md):** Budgets can be configured to trigger notifications when spending approaches or reaches defined thresholds (e.g., alert admin when 80% of budget is consumed, notify user/admin when budget is exceeded).
+*   **[Notification System](./notifications.md):** Budgets trigger notifications when spending reaches defined thresholds. The system supports alerts at **50%**, **80%**, **90%**, and **100%** of the budget limit. Administrators receive notifications when these thresholds are crossed.
 
 ## Benefits
 

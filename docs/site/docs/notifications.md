@@ -39,13 +39,42 @@ Examples of events that might trigger notifications include:
 
 ## Configuration
 
-*   **System-Level (Admin):** Administrators typically configure the core settings for the notification system, such as:
-    *   Email server (SMTP) details for sending emails.
-    *   Default notification templates.
-    *   Enabling/disabling specific system-wide notification types.
-*   **User-Level:** Users can often manage their notification preferences in their profile settings:
-    *   Opt-in/opt-out of specific notification categories.
-    *   Choose preferred delivery channels (e.g., receive budget alerts via email).
+### SMTP Configuration (Email Notifications)
+
+To enable email notifications, configure the following environment variables:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `SMTP_SERVER` | SMTP server hostname (e.g., `smtp.gmail.com`) | Yes |
+| `SMTP_PORT` | SMTP server port (e.g., `587` for TLS, `465` for SSL) | Yes |
+| `SMTP_USER` | SMTP authentication username | Yes |
+| `SMTP_PASS` | SMTP authentication password | Yes |
+| `FROM_EMAIL` | Sender email address for outgoing notifications | Yes |
+
+**Example `.env` configuration:**
+
+```bash
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+FROM_EMAIL=noreply@your-domain.com
+```
+
+> **Note:** If SMTP is not configured, email notifications will be skipped silently, but in-app notifications will still work.
+
+### System-Level Settings (Admin)
+
+Administrators configure core notification settings:
+*   SMTP server details (via environment variables above)
+*   Default notification templates
+*   Enabling/disabling specific system-wide notification types
+
+### User-Level Settings
+
+Users can manage their notification preferences in their profile settings:
+*   Opt-in/opt-out of specific notification categories
+*   Choose preferred delivery channels (e.g., receive budget alerts via email)
 
     ![Placeholder: Notification Prefs UI](https://placehold.co/600x400?text=User+Notification+Preferences)
 

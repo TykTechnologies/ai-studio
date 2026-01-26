@@ -29,10 +29,12 @@ Tools bridge the gap between conversational AI and external functionalities. By 
 *   **Privacy Levels:** Each Tool is assigned a privacy level. This level is compared against the privacy level of the [LLM Configuration](./llm-management.md) being used. A Tool can only be used if its privacy level is less than or equal to the LLM's level, preventing sensitive tools from being used with potentially less secure or external LLMs.
 
     Privacy levels define how data is protected by controlling LLM access based on its sensitivity:
-    - Public – Safe to share (e.g., blogs, press releases).
-    - Internal – Company-only info (e.g., reports, policies).
-    - Confidential – Sensitive business data (e.g., financials, strategies).
-    - Restricted (PII) – Personal data (e.g., names, emails, customer info).
+    - **Public (0)** – Safe to share (e.g., blogs, press releases).
+    - **Internal (25)** – Company-only info (e.g., reports, policies).
+    - **Confidential (50)** – Sensitive business data (e.g., financials, strategies).
+    - **Restricted/PII (100)** – Personal data (e.g., names, emails, customer info).
+
+    *Note: Privacy levels are stored as integer scores in the system. The values shown in parentheses are the typical score mappings.*
 *   **Tool Catalogues:** Tools are grouped into logical collections called Catalogues. This simplifies management and access control.
 *   **Filters:** Optional [Filters](./filters.md) can be applied to tool interactions to pre-process requests sent to the tool or post-process responses received from it (e.g., for data sanitization).
 *   **Documentation:** Administrators can provide additional natural language documentation or instructions specifically for the LLM, guiding it on how and when to use the tool effectively.

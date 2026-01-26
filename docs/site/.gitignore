@@ -1,3 +1,4 @@
 # VitePress cache and build output
 .vitepress/cache/
 .vitepress/dist/
+dist/

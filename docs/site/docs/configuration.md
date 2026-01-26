@@ -28,7 +28,7 @@ One of the most common initial steps is connecting Tyk AI Studio to an LLM provi
 
 1.  **Navigate to LLM Management:** In the admin UI sidebar, find the section for LLM Management (or similar) and select it.
 2.  **Add LLM Configuration:** Click the button to add a new LLM Configuration.
-3.  **Select Provider:** Choose the LLM provider you want to connect (e.g., OpenAI, Anthropic, Azure OpenAI).
+3.  **Select Provider:** Choose the LLM provider you want to connect (e.g., OpenAI, Anthropic, Google Vertex AI, Ollama).
 4.  **Enter Details:**
     *   **Configuration Name:** Give it a recognizable name (e.g., `OpenAI-GPT-4o`).
     *   **Model Name(s):** Specify the exact model identifier(s) provided by the vendor (e.g., `gpt-4o`, `gpt-4-turbo`).
@@ -81,6 +81,51 @@ Remember that fundamental system parameters are typically set via environment va
 For detailed NATS configuration options, see the [NATS Configuration Guide](./nats-configuration.md).
 
 Refer to the **Configuration Options** detailed within the [Installation Guide](./deployment-helm-k8s.md) for specifics on setting these values during the deployment process.
+
+## 5. Namespace Support (Enterprise)
+
+> **Note:** Namespace support is an **Enterprise Edition** feature for hub-and-spoke deployments.
+
+Namespaces allow you to partition resources across distributed deployments, enabling multi-tenant or geographically distributed architectures.
+
+### What Are Namespaces?
+
+A namespace is a logical grouping that isolates resources within a Tyk AI Studio deployment. Resources that support namespaces include:
+
+*   **LLM Configurations** - Partition LLM access by region or tenant
+*   **Apps** - Scope applications to specific namespaces
+*   **Filters** - Apply different filter policies per namespace
+*   **Plugins** - Deploy plugins to specific edge instances
+*   **Model Routers** - Configure routing rules per namespace
+*   **Agent Configs** - Scope AI agents to namespaces
+
+### Hub-and-Spoke Architecture
+
+In enterprise deployments, Tyk AI Studio supports a hub-and-spoke model:
+
+*   **Hub (Control Plane):** Central Tyk AI Studio instance managing configuration, policies, and analytics
+*   **Spoke (Edge Instances):** Distributed Microgateway instances processing requests locally
+
+Namespaces enable the hub to push configuration to specific edge instances, allowing:
+
+*   **Regional Compliance:** Keep data processing within specific geographic regions
+*   **Multi-Tenancy:** Isolate resources between different teams or customers
+*   **Distributed Processing:** Route requests to the nearest edge instance
+
+### Configuration
+
+When creating resources (LLMs, Apps, Filters, etc.), you can specify a `namespace` field to associate them with a specific edge instance or group of instances.
+
+```json
+{
+  "name": "OpenAI Config - EU",
+  "vendor": "openai",
+  "namespace": "eu-west-1",
+  ...
+}
+```
+
+Edge instances register with the hub using their namespace identifier, and only receive configuration relevant to their namespace.
 
 ## Next Steps
 

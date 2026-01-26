@@ -68,7 +68,8 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 	}
 
 	if chat.LLM != nil {
-		chat.LLM.APIKey = secrets.GetValue(chat.LLM.APIKey, false) // false to resolve actual value
+		chat.LLM.APIKey = secrets.GetValue(chat.LLM.APIKey, false)         // false to resolve actual value
+		chat.LLM.APIEndpoint = secrets.GetValue(chat.LLM.APIEndpoint, false) // resolve endpoint secrets too
 	}
 	for i := range chat.DefaultTools {
 		chat.DefaultTools[i].AuthKey = secrets.GetValue(chat.DefaultTools[i].AuthKey, false) // false to resolve actual value

@@ -4,6 +4,7 @@
 ADMIN_FRONTEND_DIR := ui/admin-frontend
 FORCE_BUILD := false
 SKIP_FRONTEND := false
+SKIP_DOCS := false
 
 # Detect if enterprise submodule exists and is initialized
 ENTERPRISE_EXISTS := $(shell test -f enterprise/.git && echo "yes" || echo "no")
@@ -39,7 +40,8 @@ help:
 	@echo ""
 	@echo "Development flags:"
 	@echo "  SKIP_FRONTEND=true      - Skip frontend build (for faster iteration)"
-	@echo "  Example: make build-native-ce SKIP_FRONTEND=true"
+	@echo "  SKIP_DOCS=true          - Skip docs build (for faster iteration)"
+	@echo "  Example: make build-native-ce SKIP_FRONTEND=true SKIP_DOCS=true"
 	@echo ""
 	@echo "Production (multi-platform, optimized, CGO-enabled):"
 	@echo "  make build-prod         - Build all platforms with CGO (auto-detect edition)"
@@ -78,12 +80,21 @@ else
 	cd $(ADMIN_FRONTEND_DIR) && npm run build
 endif
 
+# Build documentation site (can be skipped with SKIP_DOCS=true)
+build-docs:
+ifeq ($(SKIP_DOCS),true)
+	@echo "⏭️  Skipping docs build (SKIP_DOCS=true)"
+else
+	@echo "📚 Building documentation..."
+	cd docs/site && npm ci && npm run docs:build
+endif
+
 # ============================================================================
 # Development Builds (single platform, fast, CGO enabled)
 # ============================================================================
 
 # Build for native platform (auto-detect edition)
-build-native: build-frontend
+build-native: build-frontend build-docs
 	@echo "🔨 Building $(EDITION) for native platform with CGO..."
 	@mkdir -p bin
 	CGO_ENABLED=1 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)
@@ -93,7 +104,7 @@ build-native: build-frontend
 	@echo "✅ Native build complete: bin/midsommar-$(EDITION) and bin/mgw-$(EDITION)"
 
 # Build CE for native platform
-build-native-ce: build-frontend
+build-native-ce: build-frontend build-docs
 	@echo "🔨 Building CE for native platform with CGO..."
 	@mkdir -p bin
 	CGO_ENABLED=1 go build -o bin/midsommar-ce
@@ -103,7 +114,7 @@ build-native-ce: build-frontend
 	@echo "✅ Native CE build complete"
 
 # Build ENT for native platform
-build-native-ent: build-frontend
+build-native-ent: build-frontend build-docs
 	@if [ ! -f enterprise/.git ]; then \
 		echo "❌ ERROR: Enterprise submodule not initialized."; \
 		echo "Run: make init-enterprise"; \
