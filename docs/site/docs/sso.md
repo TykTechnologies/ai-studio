@@ -1,5 +1,7 @@
 # SSO Integration
 
+> **Note:** SSO integration is an **Enterprise Edition** feature. Community Edition users will receive a 402 Payment Required response when attempting to use SSO endpoints.
+
 Tyk AI Studio supports Single Sign-On (SSO) integration, allowing users to authenticate using their existing credentials from external Identity Providers (IdPs). This simplifies login, enhances security, and centralizes user management.
 
 ## Purpose
@@ -61,3 +63,50 @@ When SSO is enabled:
 *   **Enhanced Security:** Leverages established IdP security policies.
 *   **Centralized Control:** User access can often be managed centrally via the IdP.
 *   **Simplified Onboarding/Offboarding:** User access to Tyk AI Studio can be tied to their status in the central IdP.
+
+## SSO Profile Management API
+
+Administrators can manage SSO profiles programmatically using the following API endpoints:
+
+### Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v1/sso-profiles` | Create a new SSO profile |
+| `GET` | `/api/v1/sso-profiles` | List all SSO profiles |
+| `GET` | `/api/v1/sso-profiles/{id}` | Get a specific SSO profile |
+| `PUT` | `/api/v1/sso-profiles/{id}` | Update an SSO profile |
+| `DELETE` | `/api/v1/sso-profiles/{id}` | Delete an SSO profile |
+
+### SSO Authentication Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET/POST` | `/auth/{profileId}/{provider}` | Initiate SSO authentication |
+| `GET/POST` | `/auth/{profileId}/{provider}/callback` | SSO callback handler |
+| `GET/POST` | `/auth/{profileId}/saml/metadata` | SAML metadata endpoint |
+
+### Profile Configuration
+
+SSO profiles include the following key configuration options:
+
+*   **Profile Name:** Unique identifier for the SSO configuration
+*   **Provider Type:** OIDC, SAML, LDAP, or social provider
+*   **Provider Settings:** Client ID, secrets, discovery URLs, certificates
+*   **User Group Mapping:** Rules for assigning users to groups based on IdP claims
+*   **Attribute Mapping:** How IdP attributes map to Tyk AI Studio user fields
+
+### Example: Creating an OIDC Profile
+
+```bash
+curl -X POST "https://your-instance/api/v1/sso-profiles" \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Okta OIDC",
+    "provider": "oidc",
+    "client_id": "your-client-id",
+    "client_secret": "your-client-secret",
+    "discovery_url": "https://your-domain.okta.com/.well-known/openid-configuration"
+  }'
+```

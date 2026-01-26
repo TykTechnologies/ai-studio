@@ -125,8 +125,7 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 		return
 	}
 
-	chat := &models.Chat{}
-	err = chat.Get(a.service.DB, uint(chatID))
+	chat, err := a.service.GetChatByID(uint(chatID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {

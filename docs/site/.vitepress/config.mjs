@@ -4,6 +4,8 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   // Set base path conditionally
   base: process.env.NODE_ENV === 'production' ? '/ai-studio/' : '/',
+  // Output to dist folder for Go embed (avoids .vitepress dot-prefix issue)
+  outDir: 'dist',
   title: "Tyk AI Studio",
   description: "Tyk AI Studio - Accelerate AI innovation without sacrificing control",
   ignoreDeadLinks: true,

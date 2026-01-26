@@ -26,6 +26,9 @@ RUN sed -i 's|replace github.com/tmc/langchaingo => /Users/martinbuhr/apps/lonel
 # Build frontend
 RUN cd ui/admin-frontend && npm ci && PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
 
+# Build documentation site
+RUN cd docs/site && npm ci && npm run docs:build
+
 # Download dependencies
 RUN go mod download
 

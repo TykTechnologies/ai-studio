@@ -24,7 +24,7 @@ The primary goal is to enhance LLM interactions by:
 ## Core Concepts
 
 *   **Data Source:** A configuration in Tyk AI Studio that defines a connection to a specific knowledge base (typically a vector store) and the associated embedding service used to populate it.
-*   **Vector Store Abstraction:** Tyk AI Studio provides a unified interface to interact with various vector database types (e.g., Pinecone, Milvus, ChromaDB). Administrators configure the connection details for their chosen store.
+*   **Vector Store Abstraction:** Tyk AI Studio provides a unified interface to interact with various vector database types. Supported stores: **Pinecone**, **PGVector**, **Chroma**, **Redis**, **Qdrant**, and **Weaviate**. Administrators configure the connection details for their chosen store.
 *   **Embedding Service:** Text needs to be converted into numerical vector embeddings before being stored and searched. Administrators configure the embedding service (e.g., OpenAI `text-embedding-ada-002`, a local Sentence Transformer model via an API endpoint) and its credentials (using [Secrets Management](./secrets.md)).
 *   **File Processing:** Administrators upload documents (e.g., PDF, TXT, DOCX) to a Data Source configuration. Tyk AI Studio automatically:
     *   Chunks the documents into smaller, manageable pieces.
@@ -39,10 +39,12 @@ The primary goal is to enhance LLM interactions by:
 *   **Privacy Levels:** Each Data Source has a privacy level. It can only be used in RAG if its level is less than or equal to the privacy level of the [LLM Configuration](./llm-management.md) being used, ensuring data governance.
 
     Privacy levels define how data is protected by controlling LLM access based on its sensitivity:
-    - Public – Safe to share (e.g., blogs, press releases).
-    - Internal – Company-only info (e.g., reports, policies).
-    - Confidential – Sensitive business data (e.g., financials, strategies).
-    - Restricted (PII) – Personal data (e.g., names, emails, customer info).
+    - **Public (0)** – Safe to share (e.g., blogs, press releases).
+    - **Internal (25)** – Company-only info (e.g., reports, policies).
+    - **Confidential (50)** – Sensitive business data (e.g., financials, strategies).
+    - **Restricted/PII (100)** – Personal data (e.g., names, emails, customer info).
+
+    *Note: Privacy levels are stored as integer scores in the system. The values shown in parentheses are the typical score mappings.*
 
 ## How RAG Works in the Chat Interface
 

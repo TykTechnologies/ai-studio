@@ -25,7 +25,7 @@ The primary point of data collection is the **[Proxy & API Gateway](./proxy.md)*
 ## Architecture
 
 *   **Asynchronous Ingestion:** To minimize impact on request latency, analytics data is typically collected by the Proxy and sent asynchronously to a dedicated analytics database or processing pipeline.
-*   **Data Storage:** A suitable database (e.g., time-series database like InfluxDB, relational database like PostgreSQL, or a data warehouse) stores the aggregated analytics records.
+*   **Data Storage:** Analytics records are stored in the application's relational database (PostgreSQL or SQLite, configured via environment variables). The same database used for other application data stores analytics records.
 *   **API Endpoints:** Tyk AI Studio exposes internal API endpoints that allow the Admin UI (and potentially other authorized services) to query the aggregated analytics data.
 
 ## Key Metrics Tracked (Examples)
