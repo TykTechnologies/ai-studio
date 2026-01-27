@@ -121,19 +121,28 @@ The following examples in `examples/plugins/` demonstrate specific patterns and 
 
 **Capabilities**: Agent
 
+> **Experimental**: Agent plugins are currently experimental. See [Agent Plugins Guide](plugins-studio-agent.md) for full documentation.
+
 **Description**: Simple conversational agent that wraps LLM responses with custom prefix/suffix formatting. Demonstrates basic agent implementation with streaming responses and LLM integration.
 
+**Architecture**: Agent plugins follow the **Plugin → Agent Object → App Object** pattern:
+- **Plugin**: Implements `HandleAgentMessage` for conversations (long-running gRPC)
+- **Agent Object**: Binds the plugin to an App with configuration and group access
+- **App Object**: Provides LLM access, tools, datasources, and budget control
+
 **Key Features**:
-- Streaming server-side responses
+- Streaming server-side responses via gRPC
 - LLM integration via `ai_studio_sdk.CallLLM()`
 - Per-agent configuration (prefix, suffix, metadata)
 - Fallback echo mode when no LLM available
 - JSON schema configuration
+- SessionAware warmup for Service API connection
 
 **Use Cases**:
 - Learning agent plugin basics
 - Response formatting and wrapping
 - Custom agent configuration
+- Reference implementation for agent architecture
 
 **Complexity**: Beginner
 

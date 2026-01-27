@@ -152,7 +152,19 @@ AI Studio UI plugins extend the dashboard with custom WebComponents, adding new 
 
 ## 3. AI Studio Agent Plugins
 
+> **Experimental Feature**: Agent plugins are currently experimental. The API and behavior may change in future releases.
+
 Agent plugins enable conversational AI experiences in the Chat Interface using the unified SDK. These plugins can wrap LLMs, add custom logic, integrate external services, and create sophisticated multi-turn conversations.
+
+### Architecture
+
+Agent plugins follow the **Plugin → Agent Object → App Object** pattern:
+
+- **Plugin**: Long-running gRPC plugin implementing `HandleAgentMessage`
+- **Agent Object**: Configuration binding the plugin to an App with access controls
+- **App Object**: Provides LLMs, tools, datasources, credentials, and budget control
+
+Agents appear in the **Chat** section of the AI Portal alongside managed chats. Users access agents based on group membership.
 
 ### Capabilities
 
@@ -431,10 +443,12 @@ Permissions are validated when plugins call the Service API. The platform enforc
 
 1. Choose your plugin type
 2. Read the specific plugin guide
-3. Review example plugins in `examples/plugins/` and `microgateway/plugins/examples/`
+3. Review example plugins in `examples/plugins/` and `community/plugins/`
 4. Use the SDK to implement required interfaces
-5. Build and test with `file://` deployment
+5. Build and test with `file://` deployment (see [Development Workflow Guide](plugins-development-workflow.md) for fast iteration)
 6. Deploy with `grpc://` or `oci://` for production
+
+**Pro tip**: Use the reload API (`POST /api/v1/plugins/{id}/reload`) to test changes instantly without reinstalling. See the [Development Workflow Guide](plugins-development-workflow.md) for the fastest iteration loop.
 
 ### SDK Installation
 
@@ -460,11 +474,13 @@ func main() {
 
 ## Next Steps
 
+- **[Development Workflow Guide](plugins-development-workflow.md)** - Fast iteration with file:// and reload API
 - **[Plugin SDK Reference](plugins-sdk.md)** - Complete SDK documentation
+- **[Plugin Examples](plugins-examples.md)** - Browse working examples (including production-ready community plugins)
 - **[Object Hooks Guide](plugins-object-hooks.md)** - Intercept CRUD operations
 - **[Microgateway Plugins Guide](plugins-microgateway.md)** - Gateway-specific patterns
 - **[AI Studio UI Plugins Guide](plugins-studio-ui.md)** - Build plugin UIs
 - **[AI Studio Agent Plugins Guide](plugins-studio-agent.md)** - Build conversational agents
 - **[Service API Reference](plugins-service-api.md)** - Complete API documentation
-- **[Plugin Examples](plugins-examples.md)** - Browse working examples
+- **[Plugin Deployment](plugins-deployment.md)** - Production deployment options
 - **[Migration Guide](plugins-migration-guide.md)** - Upgrade from old SDKs

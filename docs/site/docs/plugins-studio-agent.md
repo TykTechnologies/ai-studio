@@ -1,8 +1,51 @@
 # AI Studio Agent Plugins Guide
 
+> **Experimental Feature**: Agent plugins are currently experimental. The API and behavior may change in future releases.
+
 AI Studio Agent plugins enable conversational AI experiences in the Chat Interface using the **Unified Plugin SDK**. Build custom agents that wrap LLMs, add specialized logic, integrate external services, and create sophisticated multi-turn conversations with streaming responses.
 
 Agent plugins use the same `pkg/plugin_sdk` as other plugin types, automatically detecting the Studio runtime and providing access to Studio Services (LLM calls, tool execution, datasource queries).
+
+## Architecture Overview
+
+Agent plugins follow a **three-tier binding model**:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         AGENT ARCHITECTURE                              │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   ┌────────────┐     ┌────────────────┐     ┌──────────────┐           │
+│   │   Plugin   │────►│  Agent Object  │────►│  App Object  │           │
+│   │  (gRPC)    │     │  (AgentConfig) │     │              │           │
+│   └────────────┘     └────────────────┘     └──────────────┘           │
+│        │                    │                      │                    │
+│        │                    │                      │                    │
+│   Implements         Binds plugin            Provides                   │
+│   HandleAgentMessage to an App with:        - LLM access               │
+│   for conversations  - Name & slug          - Tools                    │
+│                      - Config               - Datasources              │
+│                      - Group access         - Credentials              │
+│                      - Active state         - Budget control           │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Component | Purpose |
+|-----------|---------|
+| **Plugin** | Long-running gRPC plugin implementing `AgentPlugin` interface |
+| **Agent Object** | Configuration binding a plugin to an App, with access controls |
+| **App Object** | Resource container providing LLMs, tools, datasources, and credentials |
+
+**Important points:**
+
+1. **Plugins are reusable**: A single plugin can power multiple Agent Objects
+2. **Apps provide resources**: The App determines which LLMs the agent can call
+3. **Access via Groups**: Users access agents based on group membership
+4. **Budget enforcement**: LLM calls are routed through the proxy, enforcing budgets
+5. **Portal integration**: Active agents appear in the **Chat** section of the AI Portal alongside managed chats
 
 ## Overview
 
@@ -358,33 +401,87 @@ curl -X POST http://localhost:3000/api/v1/plugins \
   }'
 ```
 
-### 5. Create Agent Configuration
+### 5. Create Agent Object
 
-Associate your plugin with an app to create an agent configuration:
+Create an Agent Object that binds the plugin to an App:
+
+**Prerequisites:**
+- An active plugin with `hook_type: agent`
+- An App with at least one LLM assigned, active credential, and optionally tools and datasources
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/apps/1/agents \
+curl -X POST http://localhost:3000/api/v1/agents \
   -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
   -d '{
+    "name": "My Custom Agent",
+    "description": "An agent that helps with specific tasks",
     "plugin_id": 1,
+    "app_id": 1,
     "config": {
       "system_prompt": "You are a helpful assistant",
       "temperature": 0.7
-    }
+    },
+    "group_ids": [1, 2],
+    "is_active": true
   }'
 ```
+
+**Agent Object Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Display name for the agent |
+| `description` | `string` | Description shown to users |
+| `plugin_id` | `uint` | ID of the agent plugin to use |
+| `app_id` | `uint` | ID of the App providing resources |
+| `config` | `object` | Plugin-specific configuration (passed as `ConfigJson`) |
+| `group_ids` | `[]uint` | Groups that can access this agent (empty = public) |
+| `is_active` | `bool` | Whether the agent is available to users |
+| `namespace` | `string` | Optional namespace for multi-tenant deployments |
 
 ### 6. Use in Chat Interface
 
-Access the agent via the Chat Interface at `/chat` or via API:
+Active agents appear in the **Chat** section of the AI Portal alongside managed chats. Users see agents they have access to based on group membership.
 
-```bash
-curl -X POST http://localhost:3000/api/v1/ai/agents/1/message \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{
-    "message": "Hello, agent!"
-  }'
-```
+**SSE Communication Flow:**
+
+1. **Establish SSE connection**:
+   ```
+   GET /api/agents/{id}/stream?token=...
+   ```
+
+2. **Receive session info** (first message):
+   ```json
+   {
+     "session_id": "agent-1-123",
+     "agent_id": 1,
+     "agent_name": "My Agent",
+     "available_llms": 3,
+     "available_tools": 2,
+     "available_datasources": 1
+   }
+   ```
+
+3. **Send messages** via POST:
+   ```bash
+   curl -X POST "http://localhost:3000/api/agents/1/message?session_id=agent-1-123" \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "message": "Hello, can you help me?",
+       "history": []
+     }'
+   ```
+
+4. **Receive streaming response** via SSE:
+   ```
+   event: content
+   data: {"type":"CONTENT","content":"Hello! How can I help?","is_final":false}
+
+   event: done
+   data: {"type":"DONE","content":"completed","is_final":true}
+   ```
 
 ## Agent Message Request
 
@@ -982,6 +1079,60 @@ func (p *MyAgent) HandleAgentMessage(
 - Use permission scopes appropriately
 - Log security-relevant events
 
+## API Reference
+
+### Agent Management (Admin Only)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/agents` | GET | List all accessible agents |
+| `/api/v1/agents` | POST | Create new agent config |
+| `/api/v1/agents/{id}` | GET | Get agent details |
+| `/api/v1/agents/{id}` | PUT | Update agent config |
+| `/api/v1/agents/{id}` | DELETE | Delete agent config |
+| `/api/v1/agents/{id}/activate` | POST | Activate agent |
+| `/api/v1/agents/{id}/deactivate` | POST | Deactivate agent |
+
+### Agent Communication (Users)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/agents/{id}/stream` | GET | Establish SSE connection |
+| `/api/agents/{id}/message` | POST | Send message to active session |
+
+### SessionAware Pattern (Recommended)
+
+Agent plugins should implement the `SessionAware` interface to warm up the Service API connection:
+
+```go
+// OnSessionReady is called when the session broker is ready
+func (p *MyAgentPlugin) OnSessionReady(ctx plugin_sdk.Context) {
+    // Warm up Service API connection
+    if ai_studio_sdk.IsInitialized() {
+        _, _ = ai_studio_sdk.GetPluginsCount(context.Background())
+    }
+}
+
+// OnSessionClosing is called when the session is closing
+func (p *MyAgentPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
+    // Clean up session resources
+}
+```
+
+### Service Broker ID
+
+For LLM calls via the Service API, always set the service broker ID from the request:
+
+```go
+func (p *MyAgentPlugin) HandleAgentMessage(req *pb.AgentMessageRequest, stream pb.PluginService_HandleAgentMessageServer) error {
+    // Critical: Set service broker ID for LLM calls
+    if req.ServiceBrokerId != 0 {
+        ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+    }
+    // ... rest of handler
+}
+```
+
 ## Troubleshooting
 
 ### Agent Not Appearing in Chat
@@ -1012,9 +1163,32 @@ func (p *MyAgent) HandleAgentMessage(
 - Ensure session ID is provided
 - Review plugin initialization
 
+## Working Example
+
+See the **Echo Agent** example in the repository:
+
+**Path**: [`examples/plugins/studio/echo-agent/`](../../../examples/plugins/studio/echo-agent/)
+
+The Echo Agent demonstrates:
+- Basic `HandleAgentMessage` implementation
+- LLM selection from available LLMs
+- Calling LLMs via `ai_studio_sdk.CallLLM()`
+- Streaming responses back to users
+- Configuration handling via JSON schema
+- Session warmup with `OnSessionReady`
+
+## Limitations (Experimental)
+
+- No built-in conversation persistence (agents must manage their own state if needed)
+- Tool execution must be implemented by the agent
+- No automatic retry on LLM failures
+- Single concurrent conversation per session
+
 ## Next Steps
 
-- [Plugin Manifests & Permissions]([plugins-manifests](https://docs.claude.com/en/docs/plugins-manifests))
-- [Service API Reference]([plugins-service-api](https://docs.claude.com/en/docs/plugins-service-api))
-- [SDK Reference]([plugins-sdk](https://docs.claude.com/en/docs/plugins-sdk))
-- [Plugin Deployment]([plugins-deployment](https://docs.claude.com/en/docs/plugins-deployment))
+- **[Plugin SDK Reference](plugins-sdk.md)** - Core SDK documentation
+- **[Plugin Manifests](plugins-manifests.md)** - Manifest configuration
+- **[Service API Reference](plugins-service-api.md)** - All Service API operations
+- **[Plugin Development Workflow](plugins-development-workflow.md)** - Fast iteration setup
+- **[Plugin Deployment](plugins-deployment.md)** - Production deployment options
+- **[Apps Management](apps.md)** - Configure Apps for agent resource access

@@ -438,8 +438,11 @@ chcon -t container_file_t /path/to/plugin
 ### Development Workflow
 
 1. **Local Development**: Use `file://` for fast iteration
-2. **Testing**: Deploy to staging with `grpc://` or `oci://`
-3. **Production**: Use `oci://` with versioned tags
+2. **Reload Loop**: Use `POST /api/v1/plugins/{id}/reload` to test changes instantly
+3. **Testing**: Deploy to staging with `grpc://` or `oci://`
+4. **Production**: Use `oci://` with versioned tags
+
+**See [Plugin Development Workflow](plugins-development-workflow.md)** for detailed setup, helper scripts, and the fastest development loop.
 
 ### Version Management
 
@@ -482,6 +485,8 @@ curl -X POST .../plugins -d '{"command": "oci://registry.../my-plugin:v1.2.3", .
 
 ## Next Steps
 
-- [Plugin Overview]([plugins-overview](https://docs.claude.com/en/docs/plugins-overview))
-- [SDK Reference]([plugins-sdk](https://docs.claude.com/en/docs/plugins-sdk))
-- [Plugin Manifests]([plugins-manifests](https://docs.claude.com/en/docs/plugins-manifests))
+- **[Plugin Development Workflow](plugins-development-workflow.md)** - Fast iteration with file:// and reload API
+- **[Plugin Overview](plugins-overview.md)** - All plugin types and capabilities
+- **[SDK Reference](plugins-sdk.md)** - Complete SDK documentation
+- **[Plugin Manifests](plugins-manifests.md)** - Manifest configuration
+- **[Plugin Examples](plugins-examples.md)** - Working examples including community plugins
