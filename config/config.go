@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -290,12 +291,7 @@ func getConfigFromEnv(envFile string) *AppConf {
 		conf.ProxyOnly = true
 	}
 
-	conf.DocsURL = os.Getenv("DOCS_URL")
-	if conf.DocsURL == "" {
-		conf.DocsURL = "http://localhost:8989"
-	}
-
-	// Docs server configuration
+	// Docs server configuration - read port first so we can use it in default URL
 	docsPortStr := os.Getenv("DOCS_PORT")
 	if docsPortStr != "" {
 		if port, err := strconv.Atoi(docsPortStr); err == nil {
@@ -306,6 +302,12 @@ func getConfigFromEnv(envFile string) *AppConf {
 		}
 	} else {
 		conf.DocsPort = 8989
+	}
+
+	// Default DocsURL constructed from port, can be overridden for production/proxy setups
+	conf.DocsURL = fmt.Sprintf("http://localhost:%d", conf.DocsPort)
+	if override := os.Getenv("DOCS_URL_OVERRIDE"); override != "" {
+		conf.DocsURL = override
 	}
 
 	docsDisabledStr := os.Getenv("DOCS_DISABLED")

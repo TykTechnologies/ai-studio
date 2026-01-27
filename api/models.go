@@ -1007,6 +1007,8 @@ type FrontendConfig struct {
 	IsEnterprise         bool              `json:"is_enterprise"`
 	DocsLinks            map[string]string `json:"docsLinks"`
 	Branding             *BrandingConfig   `json:"branding,omitempty"`
+	DocsEnabled          bool              `json:"docsEnabled"`
+	DocsURL              string            `json:"docsURL,omitempty"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend

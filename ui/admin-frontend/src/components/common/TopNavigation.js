@@ -3,7 +3,9 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import { styled } from "@mui/material/styles";
 import { Box, Typography, Chip } from "@mui/material";
 import NotificationIcon from "../../admin/components/notifications/NotificationIcon";
+import DocsIcon from "./DocsIcon";
 import Icon from "./Icon";
+import { getConfig } from "../../config";
 
 import { logout } from "../../admin/utils/pubClient";
 import { createDocsLinkHandler } from "../../admin/utils/docsLinkUtils";
@@ -44,6 +46,7 @@ const TopNavigation = ({
 }) => {
   const { licenseDaysLeft, getDocsLink } = useOverviewData();
   const { version, isEnterprise } = useEdition();
+  const config = getConfig();
   const tabs = [];
 
   if (showChat) {
@@ -138,6 +141,9 @@ const TopNavigation = ({
               Get in touch
             </Typography>
           </LicenseAlert>
+        )}
+        {config?.docsEnabled && config?.docsURL && (
+          <DocsIcon docsUrl={config.docsURL} />
         )}
         <NotificationIcon sx={{ mr: 1 }} />
         <StyledLogoutButton onClick={logout}>

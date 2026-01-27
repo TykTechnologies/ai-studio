@@ -39,18 +39,18 @@
 }
 
 /* === Global Background Adjustments === */
-:root {
-  --vp-c-bg: #FFFFFF !important;
-  /* Attempt to force default background white */
-  --vp-c-bg-alt: #F9FAFB !important;
-  /* Set alt background to the desired gray */
-  --vp-c-bg-soft: #F9FAFB !important;
-  /* May need to adjust this too */
-}
+/* Light mode backgrounds are handled by VitePress defaults */
 
-/* Fallback for body background */
-body {
-  background-color: #FFFFFF !important;
+/* Dark mode background overrides */
+.dark {
+  --vp-c-bg: #1a1a1a;
+  --vp-c-bg-alt: #141414;
+  --vp-c-bg-soft: #242424;
+  --bg-white: #1a1a1a;
+  --bg-gray-50: #141414;
+  --bg-gray-100: #242424;
+  --text-dark: #e5e5e5;
+  --text-gray-600: #a3a3a3;
 }
 
 /* Typography */
@@ -58,7 +58,6 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   color: var(--text-dark);
   line-height: 1.5;
-  background-color: var(--bg-gray-50);
 }
 
 /* Navbar styles */
@@ -837,7 +836,7 @@ body {
 }
 
 .VPFeatures .item {
-  background-color: var(--bg-white);
+  background-color: var(--vp-c-bg-soft);
   border-radius: 8px;
   padding: 24px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
@@ -867,11 +866,11 @@ body {
   font-size: 17px;
   font-weight: 600;
   margin-bottom: 10px;
-  color: var(--text-dark);
+  color: var(--vp-c-text-1);
 }
 
 .VPFeatures .details {
-  color: var(--text-gray-600);
+  color: var(--vp-c-text-2);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -894,7 +893,7 @@ body {
 .VPContent h2 {
   font-size: 28px;
   font-weight: 700;
-  color: var(--text-dark);
+  color: var(--vp-c-text-1);
   margin-top: 48px;
   margin-bottom: 16px;
 }
@@ -902,7 +901,7 @@ body {
 .VPContent h3 {
   font-size: 22px;
   font-weight: 600;
-  color: var(--text-dark);
+  color: var(--vp-c-text-1);
   margin-top: 32px;
   margin-bottom: 12px;
 }
@@ -910,7 +909,7 @@ body {
 .VPContent h4 {
   font-size: 18px;
   font-weight: 600;
-  color: var(--text-dark);
+  color: var(--vp-c-text-1);
   margin-top: 24px;
   margin-bottom: 10px;
 }
@@ -973,38 +972,37 @@ body {
   display: block;
 }
 
-/* Override dark mode completely - disable dark mode styling */
+/* Dark mode styling */
 html.dark {
-  /* Reset all dark mode variables to light mode values */
-  --vp-c-bg: #FFFFFF !important;
-  --vp-c-bg-alt: #F9FAFB !important;
-  --vp-c-bg-soft: #F9FAFB !important;
-  --bg-white: #FFFFFF !important;
-  --bg-gray-50: #F9FAFB !important;
-  --text-dark: #111827 !important;
-  --text-gray-600: #4B5563 !important;
-  
-  /* Force all text colors back to light mode */
-  color-scheme: light !important;
+  color-scheme: dark;
 }
 
-/* Ensure all text in dark mode uses light mode colors */
+/* Dark mode text colors */
 html.dark .VPContent,
 html.dark .VPDoc,
 html.dark .VPHome,
 html.dark .VPFeatures,
 html.dark .VPFooter,
-html.dark .custom-block,
+html.dark .custom-block {
+  color: var(--text-dark);
+}
+
 html.dark .vp-doc h1,
 html.dark .vp-doc h2,
 html.dark .vp-doc h3,
 html.dark .vp-doc h4,
 html.dark .vp-doc h5,
-html.dark .vp-doc h6,
+html.dark .vp-doc h6 {
+  color: #ffffff;
+}
+
 html.dark .vp-doc p,
-html.dark .vp-doc a,
 html.dark .vp-doc li {
-  color: var(--text-dark) !important;
+  color: var(--text-dark);
+}
+
+html.dark .vp-doc a {
+  color: var(--vp-c-brand-light);
 }
 
 /* Keep the navbar gradient in dark mode */
@@ -1017,12 +1015,28 @@ html.dark .VPNav {
 
 /* Ensure feature items have proper styling in dark mode */
 html.dark .VPFeatures .item {
-  background-color: var(--bg-white);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background-color: var(--vp-c-bg-soft);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 html.dark .VPFeatures .icon {
-  background-color: #f3f4ff;
+  background-color: #2d2d3d;
+}
+
+/* Dark mode section backgrounds */
+html.dark .VPHome .ai-studio-section,
+html.dark .real-world-apps-section {
+  background-color: var(--vp-c-bg-alt) !important;
+}
+
+html.dark .VPHomeFeatures .VPFeature .title,
+html.dark .VPFeatures .title {
+  color: #ffffff;
+}
+
+html.dark .VPHomeFeatures .VPFeature .details,
+html.dark .VPFeatures .details {
+  color: var(--text-gray-600);
 }
 
 /* === Header Scroll Behavior === */
@@ -1068,9 +1082,10 @@ html.is-scrolled .VPNavBarSearch .DocSearch-Button-Placeholder {
   border-top: 1px solid var(--vp-c-divider);
   padding: 24px 0;
   text-align: center;
-  background-color: var(--vp-c-bg-soft);
+  background-color: var(--vp-c-bg-alt);
 }
 
+.VPFooter .message,
 .VPFooter .copyright {
   font-size: 0.875rem;
   color: var(--vp-c-text-2);

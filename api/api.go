@@ -1015,6 +1015,8 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		IsEnterprise:         config.IsEnterprise(), // Detect enterprise edition via build tags
 		DocsLinks:            config.Get("").DocsLinks,
 		Branding:             brandingConfig,
+		DocsEnabled:          !config.Get("").DocsDisabled,
+		DocsURL:              config.Get("").DocsURL,
 	}
 
 	c.JSON(http.StatusOK, cfg)

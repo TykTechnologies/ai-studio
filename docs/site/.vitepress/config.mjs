@@ -9,9 +9,9 @@ export default defineConfig({
   title: "Tyk AI Studio",
   description: "Tyk AI Studio - Accelerate AI innovation without sacrificing control",
   ignoreDeadLinks: true,
+  appearance: 'force-dark', // Force dark mode
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
-    appearance: false, // Disable dark/light mode switch
     logo: '/logo.png',
     nav: [
       { text: 'Quickstart', link: '/docs/quickstart' }
