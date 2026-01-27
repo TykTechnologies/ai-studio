@@ -356,8 +356,8 @@ func main() {
 		}
 	}
 
-	noDocsArg := false
-	docsPortArg := 8989
+	noDocsArg := appConf.DocsDisabled
+	docsPortArg := appConf.DocsPort
 	for i, arg := range os.Args {
 		if arg == "--no-docs" {
 			noDocsArg = true

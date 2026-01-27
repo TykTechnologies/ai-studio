@@ -90,6 +90,10 @@ type AppConf struct {
 
 	// Budget Configuration
 	DefaultAppBudget *float64
+
+	// Docs Server Configuration
+	DocsPort     int
+	DocsDisabled bool
 }
 
 // QueueConfig holds configuration for message queues
@@ -289,6 +293,24 @@ func getConfigFromEnv(envFile string) *AppConf {
 	conf.DocsURL = os.Getenv("DOCS_URL")
 	if conf.DocsURL == "" {
 		conf.DocsURL = "http://localhost:8989"
+	}
+
+	// Docs server configuration
+	docsPortStr := os.Getenv("DOCS_PORT")
+	if docsPortStr != "" {
+		if port, err := strconv.Atoi(docsPortStr); err == nil {
+			conf.DocsPort = port
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid DOCS_PORT value: %s. Using default: 8989", docsPortStr)
+			conf.DocsPort = 8989
+		}
+	} else {
+		conf.DocsPort = 8989
+	}
+
+	docsDisabledStr := os.Getenv("DOCS_DISABLED")
+	if docsDisabledStr == "true" || docsDisabledStr == "1" {
+		conf.DocsDisabled = true
 	}
 
 	conf.DocsLinks = make(DocsLinks)
