@@ -61,8 +61,6 @@ Administrators typically access analytics data via dashboards within the Tyk AI 
 *   **Visualizations:** Charts and graphs showing trends in cost, token usage, request volume, and latency.
 *   **Detailed Logs:** Access to raw or near-raw event logs for specific interactions (useful for debugging).
 
-    ![Placeholder: Analytics Dashboard](https://placehold.co/600x400?text=Analytics+Dashboard)
-
 ## Integration with Other Systems
 
 *   **[Budget Control](./llm-management.md#budget-control-system):** Analytics data (specifically cost) is likely used by the Budget Control system to track spending against defined limits.

@@ -76,8 +76,6 @@ Users can manage their notification preferences in their profile settings:
 *   Opt-in/opt-out of specific notification categories
 *   Choose preferred delivery channels (e.g., receive budget alerts via email)
 
-    ![Placeholder: Notification Prefs UI](https://placehold.co/600x400?text=User+Notification+Preferences)
-
 ## Integration
 
 The Notification System integrates with various other Tyk AI Studio components that generate relevant events, including:

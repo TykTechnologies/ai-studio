@@ -23,7 +23,6 @@ Administrators can configure connections to different LLM providers through the 
     *   **Vendor:** Select the LLM vendor. Supported vendors: `openai`, `anthropic`, `vertex` (Google Vertex AI), `google_ai`, `huggingface`, `ollama`.
     *   **API Key/Credentials:** Securely provide the necessary authentication credentials. Use the **Secrets Management** system (`$SECRET/YourSecretName`) for best practice.
     *   **Base URL (Optional):** Override the default API endpoint if needed (e.g., for self-hosted models or custom endpoints).
-    ![Placeholder: LLM Provider Config](https://placehold.co/600x400?text=LLM+Provider+Config)
 
 4.  **Model Selection:**
     *   **Allowed Models:** Specify the exact model names from the vendor that can be used via this configuration (e.g., `gpt-4-turbo`, `claude-3-opus-20240229`).
@@ -56,7 +55,6 @@ To enable cost tracking in the Analytics system, you need to define the price pe
     *   **Model Name:** Enter the exact model name.
     *   **Input Token Price:** Cost per input token (usually stored as integer * 10000 for precision).
     *   **Output Token Price:** Cost per output token (usually stored as integer * 10000 for precision).
-    ![Placeholder: Model Price Config](https://placehold.co/600x400?text=Model+Price+Config)
 
 3.  **Save:** Save the pricing information.
 
@@ -80,7 +78,5 @@ Tyk AI Studio allows setting monthly spending limits to control AI costs.
 
 *   **LLM Budget:** Set the `MonthlyBudget` field when creating/editing an LLM configuration.
 *   **App Budget:** Set the `MonthlyBudget` field when creating/editing an App configuration.
-
-    ![Placeholder: Budget Config](https://placehold.co/600x400?text=Budget+Config)
 
 By combining LLM configuration, pricing, and budgeting, administrators gain granular control over AI model access and expenditure within Tyk AI Studio.

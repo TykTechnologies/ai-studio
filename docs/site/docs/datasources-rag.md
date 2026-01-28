@@ -148,14 +148,10 @@ Administrators configure Data Sources via the UI or API:
     *   Reference a [Secret](./secrets.md) containing the API key (if applicable).
 4.  **Upload Files:** Upload documents to be chunked, embedded, and indexed into the vector store.
 
-    ![Placeholder: Datasource Config](https://placehold.co/600x400?text=DataSource+Config)
-
 ## Organizing & Assigning Data Sources (Admin)
 
 *   **Create Catalogues:** Group related Data Sources into Catalogues (e.g., "Product Docs", "Support KB").
 *   **Assign to Groups:** Assign Data Source Catalogues to specific [User Groups](./user-management.md).
-
-    ![Placeholder: Catalogue Config](https://placehold.co/600x400?text=DataSource+Catalogue+Config)
 
 ## Using Data Sources (User)
 

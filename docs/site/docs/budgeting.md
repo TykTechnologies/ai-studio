@@ -27,8 +27,6 @@ Budgets are typically configured by administrators and applied at specific level
 
 Administrators configure these budgets via the Tyk AI Studio UI or API.
 
-    ![Placeholder: Budget Config UI](https://placehold.co/600x400?text=Budget+Configuration)
-
 ## Enforcement
 
 > **Note:** Budget *enforcement* (blocking requests when limits are exceeded) is an **Enterprise Edition** feature. In Community Edition, budgets are tracked and recorded for reporting purposes, but requests are not blocked when limits are exceeded.

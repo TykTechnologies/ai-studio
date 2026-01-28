@@ -20,8 +20,6 @@ This guide covers the essential first steps to take within the Tyk AI Studio UI 
     *   **Email:** The `ADMIN_EMAIL` configured during deployment (e.g., `admin@yourdomain.com`).
     *   **Password:** Check the deployment logs or default configuration for the initial admin password setup. You may be required to set a new password upon first login.
 
-    ![Placeholder: Login Screen](https://placehold.co/600x300?text=Tyk AI Studio+Login)
-
 ## 2. Configure Your First LLM
 
 One of the most common initial steps is connecting Tyk AI Studio to an LLM provider.
@@ -42,8 +40,6 @@ One of the most common initial steps is connecting Tyk AI Studio to an LLM provi
         *   In the API Key field, enter the secret reference: `$SECRET/OPENAI_API_KEY` (using the exact Variable Name you created).
     *   **Other Parameters:** Configure any other provider-specific settings (e.g., Base URL for Azure/custom endpoints, default temperature, etc.).
 5.  **Save:** Save the LLM configuration.
-
-    ![Placeholder: LLM Config UI](https://placehold.co/600x400?text=LLM+Configuration+UI)
 
 This LLM is now available for use within Tyk AI Studio, subject to [User/Group permissions](./user-management.md).
 

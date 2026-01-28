@@ -66,14 +66,10 @@ Administrators define and manage Tools via the UI or API:
 5.  **Add Documentation:** Provide natural language instructions for the LLM.
 6.  **Assign Filters (Optional):** Add request/response filters.
 
-    ![Placeholder: Tool Config](https://placehold.co/600x400?text=Tool+Configuration)
-
 ## Organizing & Assigning Tools (Admin)
 
 *   **Create Catalogues:** Group related tools into Tool Catalogues (e.g., "CRM Tools", "Search Tools").
 *   **Assign to Groups:** Assign Tool Catalogues to specific [User Groups](./user-management.md). This grants users in those groups *potential* access to the tools within the catalogue.
-
-    ![Placeholder: Catalogue Config](https://placehold.co/600x400?text=Tool+Catalogue+Config)
 
 ## Using Tools (User)
 
