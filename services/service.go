@@ -44,6 +44,8 @@ type Service struct {
 	LicensingService licensing.Service
 	// Model Router (Enterprise)
 	ModelRouterService model_router.Service
+	// Sync Status (Hub-and-Spoke)
+	SyncStatusService *SyncStatusService
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -69,6 +71,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	edgeService := NewEdgeService(db)
 	namespaceService := NewNamespaceService(db, edgeService)
 	edgeManagementService := edge_management.NewService(db)
+	syncStatusService := NewSyncStatusService(db)
 
 	// Initialize plugin services with OCI support
 	var pluginService *PluginService
@@ -159,6 +162,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		HookRegistry:          hookRegistry,
 		HookManager:           hookManager,
 		ModelRouterService:    modelRouterSvc,
+		SyncStatusService:     syncStatusService,
 	}
 
 	// Wire service reference to AI Studio plugin manager for proper service provider injection

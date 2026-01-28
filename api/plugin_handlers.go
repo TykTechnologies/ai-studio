@@ -357,6 +357,11 @@ func (a *API) createPlugin(c *gin.Context) {
 		}
 	}
 
+	// Emit system event for plugin creation
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitPluginCreated(plugin, plugin.ID, 0)
+	}
+
 	c.JSON(http.StatusCreated, gin.H{"data": serializePlugin(plugin)})
 }
 
@@ -565,6 +570,11 @@ func (a *API) updatePlugin(c *gin.Context) {
 		}
 	}
 
+	// Emit system event for plugin update
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitPluginUpdated(plugin, plugin.ID, 0)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": serializePlugin(plugin)})
 }
 
@@ -650,6 +660,11 @@ func (a *API) deletePlugin(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Emit system event for plugin deletion
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitPluginDeleted(plugin.ID, 0)
 	}
 
 	log.Printf("✅ Plugin deleted successfully: %s (ID: %d)", plugin.Name, plugin.ID)

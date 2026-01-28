@@ -35,6 +35,10 @@ type SimpleEdgeClient struct {
 	client      pb.ConfigurationSyncServiceClient
 	configCache *pb.ConfigurationSnapshot
 
+	// Config checksum tracking for sync status
+	loadedChecksum string
+	loadedVersion  string
+
 	// Build information
 	version   string
 	buildHash string
@@ -163,11 +167,16 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 	if resp.InitialConfig != nil {
 		log.Debug().
 			Str("version", resp.InitialConfig.Version).
+			Str("checksum", resp.InitialConfig.Checksum).
 			Int32("llm_count", int32(len(resp.InitialConfig.Llms))).
 			Int32("app_count", int32(len(resp.InitialConfig.Apps))).
 			Msg("Received initial configuration from control")
 
 		c.configCache = resp.InitialConfig
+
+		// Store checksum and version for sync tracking
+		c.loadedChecksum = resp.InitialConfig.Checksum
+		c.loadedVersion = resp.InitialConfig.Version
 
 		// Notify provider if callback is set
 		if c.onConfigChange != nil {
@@ -307,12 +316,18 @@ func (c *SimpleEdgeClient) RequestFullSync() error {
 
 	// Update local cache and trigger callback
 	c.configCache = resp
+
+	// Store checksum and version for sync tracking
+	c.loadedChecksum = resp.Checksum
+	c.loadedVersion = resp.Version
+
 	if c.onConfigChange != nil {
 		c.onConfigChange(resp)
 	}
 
 	log.Debug().
 		Str("version", resp.Version).
+		Str("checksum", resp.Checksum).
 		Int("llm_count", len(resp.Llms)).
 		Int("app_count", len(resp.Apps)).
 		Msg("Full configuration sync completed")
@@ -586,11 +601,21 @@ func (c *SimpleEdgeClient) handleRegistrationResponse(resp *pb.EdgeRegistrationR
 func (c *SimpleEdgeClient) handleConfigurationUpdate(config *pb.ConfigurationSnapshot) error {
 	log.Debug().
 		Str("version", config.Version).
+		Str("checksum", config.Checksum).
 		Int("llm_count", len(config.Llms)).
 		Int("app_count", len(config.Apps)).
 		Msg("Received configuration update via stream")
 
 	c.configCache = config
+
+	// Store checksum and version for sync tracking
+	c.loadedChecksum = config.Checksum
+	c.loadedVersion = config.Version
+
+	log.Info().
+		Str("checksum", config.Checksum).
+		Str("version", config.Version).
+		Msg("Configuration loaded and checksum stored for sync tracking")
 
 	// Call configuration change callback if set
 	if c.onConfigChange != nil {
@@ -618,13 +643,23 @@ func (c *SimpleEdgeClient) handleHeartbeatResponse(resp *pb.HeartbeatResponse) e
 	log.Debug().
 		Bool("acknowledged", resp.Acknowledged).
 		Str("message", resp.Message).
+		Bool("is_in_sync", resp.IsInSync).
+		Str("expected_checksum", resp.ExpectedChecksum).
 		Bool("request_full_sync", resp.RequestFullSync).
 		Bool("shutdown_requested", resp.ShutdownRequested).
 		Msg("Received heartbeat response")
 
+	// Log sync status warning if out of sync
+	if resp.ExpectedChecksum != "" && !resp.IsInSync {
+		log.Warn().
+			Str("loaded_checksum", c.loadedChecksum).
+			Str("expected_checksum", resp.ExpectedChecksum).
+			Msg("Edge is out of sync with control - configuration update pending")
+	}
+
 	// Handle control directives
 	if resp.RequestFullSync {
-		log.Debug().Msg("Control server requested full configuration sync")
+		log.Info().Msg("Control server requested full configuration sync")
 		return c.RequestFullSync()
 	}
 
@@ -766,8 +801,10 @@ func (c *SimpleEdgeClient) sendHeartbeat() {
 					Message:   "Operational",
 					Timestamp: timestamppb.Now(),
 				},
-				Metrics:   c.collectBasicMetrics(),
-				Timestamp: timestamppb.Now(),
+				Metrics:              c.collectBasicMetrics(),
+				Timestamp:            timestamppb.Now(),
+				LoadedConfigChecksum: c.loadedChecksum,
+				LoadedConfigVersion:  c.loadedVersion,
 			},
 		},
 	}
@@ -777,7 +814,8 @@ func (c *SimpleEdgeClient) sendHeartbeat() {
 	} else {
 		log.Debug().
 			Str("edge_id", c.config.HubSpoke.EdgeID).
-			Msg("Heartbeat sent successfully")
+			Str("checksum", c.loadedChecksum).
+			Msg("Heartbeat sent with config checksum")
 	}
 
 	// Send pending control payloads (piggybacking on heartbeat interval)

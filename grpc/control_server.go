@@ -153,6 +153,9 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 
 	log.Debug().Msg("Event bridge bus initialized for control server")
 
+	// Subscribe to config change events to trigger checksum recomputation
+	server.subscribeToConfigChanges()
+
 	// Initialize budget sync service for multi-edge budget synchronization
 	server.budgetSyncService = NewBudgetSyncService(db, server.eventBus)
 	server.budgetSyncService.Start()
@@ -322,6 +325,25 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		}
 	}
 
+	// Update edge sync status - since the edge is receiving the latest config at registration,
+	// it should be marked as in_sync to avoid false "pending" status before first heartbeat
+	if initialConfig.Checksum != "" {
+		now := time.Now()
+		edgeInstance.SyncStatus = models.EdgeSyncStatusInSync
+		edgeInstance.LoadedChecksum = initialConfig.Checksum
+		edgeInstance.LoadedVersion = initialConfig.Version
+		edgeInstance.LastSyncAck = &now
+		if err := edgeInstance.Update(s.db); err != nil {
+			log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to update edge sync status on registration")
+		} else {
+			log.Debug().
+				Str("edge_id", req.EdgeId).
+				Str("checksum", initialConfig.Checksum).
+				Str("version", initialConfig.Version).
+				Msg("Set edge sync status to in_sync on registration")
+		}
+	}
+
 	return &pb.EdgeRegistrationResponse{
 		Success:       true,
 		Message:       "Edge registered successfully with AI Studio",
@@ -465,18 +487,63 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					edgeConnection.LastHeartbeat = time.Now()
 					edgeConnection.mu.Unlock()
 
-					// Update database
+					// Get loaded config info from heartbeat
+					loadedChecksum := m.Heartbeat.LoadedConfigChecksum
+					loadedVersion := m.Heartbeat.LoadedConfigVersion
+
+					// Update database with heartbeat and sync tracking
 					var edgeInstance models.EdgeInstance
+					var expectedChecksum string
+					var isInSync bool
+					var requestFullSync bool
+
 					if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
 						edgeInstance.UpdateHeartbeat(s.db)
+
+						// Check sync status against namespace expected checksum
+						// The checksum is updated via config change events, so we use the cached value
+						var syncStatus models.NamespaceSyncStatus
+						if err := syncStatus.GetByNamespace(s.db, edgeInstance.Namespace); err == nil {
+							expectedChecksum = syncStatus.ExpectedChecksum
+							isInSync = loadedChecksum != "" && loadedChecksum == expectedChecksum
+
+							// Update edge sync status
+							syncStatusValue := models.EdgeSyncStatusPending
+							if isInSync {
+								syncStatusValue = models.EdgeSyncStatusInSync
+							} else if loadedChecksum == "" {
+								syncStatusValue = models.EdgeSyncStatusUnknown
+							}
+							edgeInstance.UpdateSyncStatus(s.db, loadedChecksum, loadedVersion, syncStatusValue)
+
+							// Log sync status change for audit if out of sync
+							if !isInSync && loadedChecksum != "" {
+								auditLog := &models.SyncAuditLog{
+									EventType:     models.SyncEventEdgeOutOfSync,
+									Namespace:     edgeInstance.Namespace,
+									EdgeID:        &edgeID,
+									Checksum:      loadedChecksum,
+									ConfigVersion: loadedVersion,
+									Details:       fmt.Sprintf("Edge out of sync. Expected: %s, Got: %s", expectedChecksum, loadedChecksum),
+								}
+								auditLog.Create(s.db)
+
+								// NOTE: We intentionally do NOT set requestFullSync = true here.
+								// Config pushes are manual-only per design requirement.
+								// Users must explicitly push config changes via the UI or API.
+							}
+						}
 					}
 
-					// Send heartbeat response
+					// Send heartbeat response with sync info
 					response := &pb.ControlMessage{
 						Message: &pb.ControlMessage_HeartbeatResponse{
 							HeartbeatResponse: &pb.HeartbeatResponse{
-								Acknowledged: true,
-								Message:      "Heartbeat received by AI Studio",
+								Acknowledged:     true,
+								Message:          "Heartbeat received by AI Studio",
+								ExpectedChecksum: expectedChecksum,
+								IsInSync:         isInSync,
+								RequestFullSync:  requestFullSync,
 							},
 						},
 					}
@@ -496,6 +563,21 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 							},
 						}
 						stream.Send(response)
+
+						// Update edge sync status immediately since it's receiving the latest config
+						if snapshot.Checksum != "" {
+							var edgeInstance models.EdgeInstance
+							if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
+								now := time.Now()
+								edgeInstance.UpdateSyncStatus(s.db, snapshot.Checksum, snapshot.Version, models.EdgeSyncStatusInSync)
+								edgeInstance.LastSyncAck = &now
+								edgeInstance.Update(s.db)
+								log.Debug().
+									Str("edge_id", edgeID).
+									Str("checksum", snapshot.Checksum).
+									Msg("Updated edge sync status to in_sync after config request")
+							}
+						}
 					}
 				}
 
@@ -1499,7 +1581,67 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		Int("model_router_count", len(snapshot.ModelRouters)).
 		Msg("Generated configuration snapshot for edge")
 
+	// Compute checksum for the snapshot
+	checksum, err := ComputeSnapshotChecksum(snapshot)
+	if err != nil {
+		log.Error().Err(err).Str("namespace", namespace).Msg("Failed to compute snapshot checksum")
+		// Don't fail the snapshot, just log the error - edge can still sync
+	} else {
+		snapshot.Checksum = checksum
+
+		log.Info().
+			Str("namespace", namespace).
+			Str("checksum", checksum).
+			Str("version", snapshot.Version).
+			Msg("Computed snapshot checksum")
+
+		// Update namespace sync status in database
+		if err := s.updateNamespaceSyncStatus(namespace, checksum, snapshot.Version); err != nil {
+			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to update namespace sync status")
+		}
+	}
+
 	return snapshot, nil
+}
+
+// updateNamespaceSyncStatus updates the sync status for a namespace in the database
+func (s *ControlServer) updateNamespaceSyncStatus(namespace, checksum, version string) error {
+	status := &models.NamespaceSyncStatus{
+		Namespace:        namespace,
+		ExpectedChecksum: checksum,
+		ConfigVersion:    version,
+		LastConfigChange: time.Now(),
+	}
+
+	if err := status.Upsert(s.db); err != nil {
+		return fmt.Errorf("failed to upsert namespace sync status: %w", err)
+	}
+
+	// Log audit event for config change
+	auditLog := &models.SyncAuditLog{
+		EventType:     models.SyncEventConfigChanged,
+		Namespace:     namespace,
+		Checksum:      checksum,
+		ConfigVersion: version,
+		Details:       fmt.Sprintf("Configuration snapshot generated with checksum %s", checksum),
+	}
+	if err := auditLog.Create(s.db); err != nil {
+		log.Warn().Err(err).Str("namespace", namespace).Msg("Failed to create sync audit log")
+	}
+
+	// Mark all active edges in this namespace as pending sync
+	edgeInstance := &models.EdgeInstance{}
+	if err := edgeInstance.MarkEdgesAsPendingInNamespace(s.db, namespace); err != nil {
+		log.Warn().Err(err).Str("namespace", namespace).Msg("Failed to mark edges as pending sync")
+	}
+
+	log.Debug().
+		Str("namespace", namespace).
+		Str("checksum", checksum).
+		Str("version", version).
+		Msg("Updated namespace sync status")
+
+	return nil
 }
 
 // encryptForMicrogateway encrypts a plaintext string using microgateway's expected AES-GCM format
@@ -1699,4 +1841,112 @@ func (s *ControlServer) cleanupStaleConnections() {
 	if len(toRemove) > 0 {
 		log.Info().Int("removed_count", len(toRemove)).Msg("Cleaned up stale edge connections")
 	}
+}
+
+// Config change event topics (defined locally to avoid import cycle with services package)
+// Note: Only objects included in the microgateway ConfigurationSnapshot trigger sync.
+// Tools, Datasources, Users, and Groups are AI Studio-only and don't affect edge sync.
+const (
+	topicLLMCreated         = "system.llm.created"
+	topicLLMUpdated         = "system.llm.updated"
+	topicLLMDeleted         = "system.llm.deleted"
+	topicAppCreated         = "system.app.created"
+	topicAppUpdated         = "system.app.updated"
+	topicAppDeleted         = "system.app.deleted"
+	topicFilterCreated      = "system.filter.created"
+	topicFilterUpdated      = "system.filter.updated"
+	topicFilterDeleted      = "system.filter.deleted"
+	topicPluginCreated      = "system.plugin.created"
+	topicPluginUpdated      = "system.plugin.updated"
+	topicPluginDeleted      = "system.plugin.deleted"
+	topicModelPriceCreated  = "system.model_price.created"
+	topicModelPriceUpdated  = "system.model_price.updated"
+	topicModelPriceDeleted  = "system.model_price.deleted"
+	topicModelRouterCreated = "system.model_router.created"
+	topicModelRouterUpdated = "system.model_router.updated"
+	topicModelRouterDeleted = "system.model_router.deleted"
+)
+
+// subscribeToConfigChanges sets up event subscriptions for configuration changes.
+// When any relevant config change occurs, checksums are recomputed for all namespaces.
+func (s *ControlServer) subscribeToConfigChanges() {
+	if s.eventBus == nil {
+		log.Warn().Msg("Event bus not available, config change subscriptions not set up")
+		return
+	}
+
+	configTopics := []string{
+		topicLLMCreated, topicLLMUpdated, topicLLMDeleted,
+		topicAppCreated, topicAppUpdated, topicAppDeleted,
+		topicFilterCreated, topicFilterUpdated, topicFilterDeleted,
+		topicPluginCreated, topicPluginUpdated, topicPluginDeleted,
+		topicModelPriceCreated, topicModelPriceUpdated, topicModelPriceDeleted,
+		topicModelRouterCreated, topicModelRouterUpdated, topicModelRouterDeleted,
+	}
+
+	for _, topic := range configTopics {
+		topic := topic // Capture for closure
+		s.eventBus.Subscribe(topic, func(event eventbridge.Event) {
+			s.onConfigurationChanged(topic, event)
+		})
+	}
+
+	log.Info().Int("topic_count", len(configTopics)).Msg("Subscribed to configuration change events for sync status tracking")
+}
+
+// onConfigurationChanged handles configuration change events by recomputing
+// checksums for all namespaces and marking affected edges as pending.
+func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.Event) {
+	log.Info().
+		Str("topic", topic).
+		Str("event_id", event.ID).
+		Msg("Configuration changed, recomputing namespace checksums")
+
+	// Get all namespaces that have connected edges
+	namespaces := s.getActiveNamespaces()
+	if len(namespaces) == 0 {
+		// No connected edges, just update default namespace
+		namespaces = []string{"default"}
+	}
+
+	for _, namespace := range namespaces {
+		// Recompute snapshot and checksum for this namespace
+		// This will also update NamespaceSyncStatus
+		snapshot, err := s.getConfigurationSnapshot(namespace)
+		if err != nil {
+			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to recompute snapshot on config change")
+			continue
+		}
+
+		log.Info().
+			Str("namespace", namespace).
+			Str("checksum", snapshot.Checksum).
+			Str("version", snapshot.Version).
+			Msg("Recomputed namespace checksum after config change")
+
+		// Mark all edges in this namespace as pending sync
+		var edgeInstance models.EdgeInstance
+		if err := edgeInstance.MarkEdgesAsPendingInNamespace(s.db, namespace); err != nil {
+			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to mark edges as pending")
+		}
+	}
+}
+
+// getActiveNamespaces returns a list of unique namespaces that have connected edges.
+func (s *ControlServer) getActiveNamespaces() []string {
+	s.edgeMutex.RLock()
+	defer s.edgeMutex.RUnlock()
+
+	namespaceSet := make(map[string]bool)
+	for _, conn := range s.edgeConnections {
+		if conn.Namespace != "" {
+			namespaceSet[conn.Namespace] = true
+		}
+	}
+
+	namespaces := make([]string, 0, len(namespaceSet))
+	for ns := range namespaceSet {
+		namespaces = append(namespaces, ns)
+	}
+	return namespaces
 }

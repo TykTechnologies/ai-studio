@@ -4,6 +4,7 @@ import Toolbar from "@mui/material/Toolbar";
 import MyAppBar from "./AppBar";
 import Drawer from "./Drawer";
 import { Outlet } from "react-router-dom";
+import SyncStatusBanner from "../common/SyncStatusBanner";
 
 const MainLayout = ({ hideAppBar }) => {
   return (
@@ -18,6 +19,8 @@ const MainLayout = ({ hideAppBar }) => {
         }}
         sx={{ flexGrow: 1, p: 3 }}
       >
+        {/* Sync status banner for edge gateway configuration sync */}
+        <SyncStatusBanner />
         <Outlet />
       </Box>
     </Box>

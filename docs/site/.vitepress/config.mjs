@@ -54,7 +54,8 @@ export default defineConfig({
           { text: 'Secrets Management', link: '/docs/secrets' }, // Keep secrets
           { text: 'Budget Control', link: '/docs/budgeting' }, // New
           { text: 'Analytics & Monitoring', link: '/docs/analytics' }, // New (replace dashboard)
-          { text: 'Notifications', link: '/docs/notifications' } // New
+          { text: 'Notifications', link: '/docs/notifications' }, // New
+          { text: 'Edge Gateways (Enterprise)', link: '/docs/edge-gateways' } // Enterprise hub-spoke management
           // Removed: apps, model-prices, call-settings (to be merged)
         ]
       },

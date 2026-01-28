@@ -81,6 +81,11 @@ func (a *API) createModelPrice(c *gin.Context) {
 		return
 	}
 
+	// Emit system event for model price creation
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitModelPriceCreated(modelPrice, modelPrice.ID, 0)
+	}
+
 	c.JSON(http.StatusCreated, gin.H{"data": serializeModelPrice(modelPrice)})
 }
 
@@ -185,6 +190,11 @@ func (a *API) updateModelPrice(c *gin.Context) {
 		return
 	}
 
+	// Emit system event for model price update
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitModelPriceUpdated(modelPrice, modelPrice.ID, 0)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": serializeModelPrice(modelPrice)})
 }
 
@@ -220,6 +230,11 @@ func (a *API) deleteModelPrice(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Emit system event for model price deletion
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitModelPriceDeleted(uint(id), 0)
 	}
 
 	c.Status(http.StatusNoContent)

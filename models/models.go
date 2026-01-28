@@ -60,6 +60,9 @@ func InitModels(db *gorm.DB) error {
 		&InstalledPluginVersion{}, // Installed plugin version tracking
 		&MarketplaceConfig{},      // Marketplace configuration
 		&BrandingSettings{},       // UI branding customization
+		// Sync Status Models
+		&NamespaceSyncStatus{}, // Namespace configuration sync status tracking
+		&SyncAuditLog{},        // Sync audit log for control-edge synchronization
 		// Model Router Models (Enterprise)
 		&ModelRouter{},  // Model router configurations
 		&ModelPool{},    // Model pools with patterns

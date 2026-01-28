@@ -17,6 +17,11 @@ func (s *Service) CreateFilter(name, description string, script []byte, response
 		return nil, err
 	}
 
+	// Emit event for sync status tracking
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitFilterCreated(filter, filter.ID, 0)
+	}
+
 	return filter, nil
 }
 
@@ -44,6 +49,11 @@ func (s *Service) UpdateFilter(id uint, name, description string, script []byte,
 		return nil, err
 	}
 
+	// Emit event for sync status tracking
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitFilterUpdated(filter, filter.ID, 0)
+	}
+
 	return filter, nil
 }
 
@@ -53,7 +63,16 @@ func (s *Service) DeleteFilter(id uint) error {
 		return err
 	}
 
-	return filter.Delete(s.DB)
+	if err := filter.Delete(s.DB); err != nil {
+		return err
+	}
+
+	// Emit event for sync status tracking
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitFilterDeleted(id, 0)
+	}
+
+	return nil
 }
 
 func (s *Service) GetAllFilters(pageSize int, pageNumber int, all bool) ([]models.Filter, int64, int, error) {

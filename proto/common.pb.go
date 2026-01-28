@@ -1479,6 +1479,7 @@ type ConfigurationSnapshot struct {
 	EdgeNamespace string                 `protobuf:"bytes,7,opt,name=edge_namespace,json=edgeNamespace,proto3" json:"edge_namespace,omitempty"` // Namespace this snapshot is filtered for
 	SnapshotTime  *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=snapshot_time,json=snapshotTime,proto3" json:"snapshot_time,omitempty"`
 	ModelRouters  []*ModelRouterConfig   `protobuf:"bytes,9,rep,name=model_routers,json=modelRouters,proto3" json:"model_routers,omitempty"` // Enterprise: Model router configurations
+	Checksum      string                 `protobuf:"bytes,10,opt,name=checksum,proto3" json:"checksum,omitempty"`                            // SHA-256 checksum of serialized snapshot (excluding volatile fields)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1574,6 +1575,13 @@ func (x *ConfigurationSnapshot) GetModelRouters() []*ModelRouterConfig {
 		return x.ModelRouters
 	}
 	return nil
+}
+
+func (x *ConfigurationSnapshot) GetChecksum() string {
+	if x != nil {
+		return x.Checksum
+	}
+	return ""
 }
 
 // ConfigurationChange represents a single configuration change
@@ -1892,7 +1900,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x12ModelMappingConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12!\n" +
 	"\fsource_model\x18\x02 \x01(\tR\vsourceModel\x12!\n" +
-	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\xe8\x03\n" +
+	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\x84\x04\n" +
 	"\x15ConfigurationSnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12+\n" +
 	"\x04llms\x18\x02 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +
@@ -1902,7 +1910,9 @@ const file_proto_common_proto_rawDesc = "" +
 	"\aplugins\x18\x06 \x03(\v2\x1a.microgateway.PluginConfigR\aplugins\x12%\n" +
 	"\x0eedge_namespace\x18\a \x01(\tR\redgeNamespace\x12?\n" +
 	"\rsnapshot_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\fsnapshotTime\x12D\n" +
-	"\rmodel_routers\x18\t \x03(\v2\x1f.microgateway.ModelRouterConfigR\fmodelRouters\"\xe1\x03\n" +
+	"\rmodel_routers\x18\t \x03(\v2\x1f.microgateway.ModelRouterConfigR\fmodelRouters\x12\x1a\n" +
+	"\bchecksum\x18\n" +
+	" \x01(\tR\bchecksum\"\xe1\x03\n" +
 	"\x13ConfigurationChange\x12M\n" +
 	"\vchange_type\x18\x01 \x01(\x0e2,.microgateway.ConfigurationChange.ChangeTypeR\n" +
 	"changeType\x12M\n" +

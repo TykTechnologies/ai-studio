@@ -181,6 +181,7 @@ message ConfigurationSnapshot {
   string edge_namespace = 7; // Namespace this snapshot is filtered for
   google.protobuf.Timestamp snapshot_time = 8;
   repeated ModelRouterConfig model_routers = 9; // Enterprise: Model router configurations
+  string checksum = 10; // SHA-256 checksum of serialized snapshot (excluding volatile fields)
 }
 
 // ConfigurationChange represents a single configuration change

@@ -39,6 +39,26 @@ const (
 	TopicToolCreated = "system.tool.created"
 	TopicToolUpdated = "system.tool.updated"
 	TopicToolDeleted = "system.tool.deleted"
+
+	// Filter events
+	TopicFilterCreated = "system.filter.created"
+	TopicFilterUpdated = "system.filter.updated"
+	TopicFilterDeleted = "system.filter.deleted"
+
+	// Plugin events
+	TopicPluginCreated = "system.plugin.created"
+	TopicPluginUpdated = "system.plugin.updated"
+	TopicPluginDeleted = "system.plugin.deleted"
+
+	// ModelPrice events
+	TopicModelPriceCreated = "system.model_price.created"
+	TopicModelPriceUpdated = "system.model_price.updated"
+	TopicModelPriceDeleted = "system.model_price.deleted"
+
+	// ModelRouter events
+	TopicModelRouterCreated = "system.model_router.created"
+	TopicModelRouterUpdated = "system.model_router.updated"
+	TopicModelRouterDeleted = "system.model_router.deleted"
 )
 
 // ObjectEventPayload is the standard payload for all system CRUD events
@@ -185,4 +205,64 @@ func (e *SystemEventEmitter) EmitToolUpdated(tool interface{}, objectID uint, us
 // EmitToolDeleted emits an event when a Tool is deleted
 func (e *SystemEventEmitter) EmitToolDeleted(objectID uint, userID uint) {
 	e.EmitObjectEvent(TopicToolDeleted, "tool", "deleted", objectID, userID, nil)
+}
+
+// EmitFilterCreated emits an event when a Filter is created
+func (e *SystemEventEmitter) EmitFilterCreated(filter interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicFilterCreated, "filter", "created", objectID, userID, filter)
+}
+
+// EmitFilterUpdated emits an event when a Filter is updated
+func (e *SystemEventEmitter) EmitFilterUpdated(filter interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicFilterUpdated, "filter", "updated", objectID, userID, filter)
+}
+
+// EmitFilterDeleted emits an event when a Filter is deleted
+func (e *SystemEventEmitter) EmitFilterDeleted(objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicFilterDeleted, "filter", "deleted", objectID, userID, nil)
+}
+
+// EmitPluginCreated emits an event when a Plugin is created
+func (e *SystemEventEmitter) EmitPluginCreated(plugin interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicPluginCreated, "plugin", "created", objectID, userID, plugin)
+}
+
+// EmitPluginUpdated emits an event when a Plugin is updated
+func (e *SystemEventEmitter) EmitPluginUpdated(plugin interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicPluginUpdated, "plugin", "updated", objectID, userID, plugin)
+}
+
+// EmitPluginDeleted emits an event when a Plugin is deleted
+func (e *SystemEventEmitter) EmitPluginDeleted(objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicPluginDeleted, "plugin", "deleted", objectID, userID, nil)
+}
+
+// EmitModelPriceCreated emits an event when a ModelPrice is created
+func (e *SystemEventEmitter) EmitModelPriceCreated(price interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicModelPriceCreated, "model_price", "created", objectID, userID, price)
+}
+
+// EmitModelPriceUpdated emits an event when a ModelPrice is updated
+func (e *SystemEventEmitter) EmitModelPriceUpdated(price interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicModelPriceUpdated, "model_price", "updated", objectID, userID, price)
+}
+
+// EmitModelPriceDeleted emits an event when a ModelPrice is deleted
+func (e *SystemEventEmitter) EmitModelPriceDeleted(objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicModelPriceDeleted, "model_price", "deleted", objectID, userID, nil)
+}
+
+// EmitModelRouterCreated emits an event when a ModelRouter is created
+func (e *SystemEventEmitter) EmitModelRouterCreated(router interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicModelRouterCreated, "model_router", "created", objectID, userID, router)
+}
+
+// EmitModelRouterUpdated emits an event when a ModelRouter is updated
+func (e *SystemEventEmitter) EmitModelRouterUpdated(router interface{}, objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicModelRouterUpdated, "model_router", "updated", objectID, userID, router)
+}
+
+// EmitModelRouterDeleted emits an event when a ModelRouter is deleted
+func (e *SystemEventEmitter) EmitModelRouterDeleted(objectID uint, userID uint) {
+	e.EmitObjectEvent(TopicModelRouterDeleted, "model_router", "deleted", objectID, userID, nil)
 }

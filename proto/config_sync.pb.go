@@ -681,14 +681,16 @@ func (x *EventFrame) GetPayload() []byte {
 
 // HeartbeatRequest contains health and status information from edge
 type HeartbeatRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EdgeId        string                 `protobuf:"bytes,1,opt,name=edge_id,json=edgeId,proto3" json:"edge_id,omitempty"`
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Health        *HealthStatus          `protobuf:"bytes,3,opt,name=health,proto3" json:"health,omitempty"`
-	Metrics       *EdgeMetrics           `protobuf:"bytes,4,opt,name=metrics,proto3" json:"metrics,omitempty"`
-	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	EdgeId               string                 `protobuf:"bytes,1,opt,name=edge_id,json=edgeId,proto3" json:"edge_id,omitempty"`
+	SessionId            string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Health               *HealthStatus          `protobuf:"bytes,3,opt,name=health,proto3" json:"health,omitempty"`
+	Metrics              *EdgeMetrics           `protobuf:"bytes,4,opt,name=metrics,proto3" json:"metrics,omitempty"`
+	Timestamp            *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	LoadedConfigChecksum string                 `protobuf:"bytes,6,opt,name=loaded_config_checksum,json=loadedConfigChecksum,proto3" json:"loaded_config_checksum,omitempty"` // Checksum of currently loaded configuration
+	LoadedConfigVersion  string                 `protobuf:"bytes,7,opt,name=loaded_config_version,json=loadedConfigVersion,proto3" json:"loaded_config_version,omitempty"`    // Version string of loaded configuration
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *HeartbeatRequest) Reset() {
@@ -756,14 +758,30 @@ func (x *HeartbeatRequest) GetTimestamp() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *HeartbeatRequest) GetLoadedConfigChecksum() string {
+	if x != nil {
+		return x.LoadedConfigChecksum
+	}
+	return ""
+}
+
+func (x *HeartbeatRequest) GetLoadedConfigVersion() string {
+	if x != nil {
+		return x.LoadedConfigVersion
+	}
+	return ""
+}
+
 // HeartbeatResponse acknowledges heartbeat and may contain control directives
 type HeartbeatResponse struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Acknowledged bool                   `protobuf:"varint,1,opt,name=acknowledged,proto3" json:"acknowledged,omitempty"`
 	Message      string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	// Control directives (if any)
-	RequestFullSync   bool `protobuf:"varint,3,opt,name=request_full_sync,json=requestFullSync,proto3" json:"request_full_sync,omitempty"`     // Request edge to perform full configuration sync
-	ShutdownRequested bool `protobuf:"varint,4,opt,name=shutdown_requested,json=shutdownRequested,proto3" json:"shutdown_requested,omitempty"` // Request graceful shutdown
+	RequestFullSync   bool   `protobuf:"varint,3,opt,name=request_full_sync,json=requestFullSync,proto3" json:"request_full_sync,omitempty"`     // Request edge to perform full configuration sync
+	ShutdownRequested bool   `protobuf:"varint,4,opt,name=shutdown_requested,json=shutdownRequested,proto3" json:"shutdown_requested,omitempty"` // Request graceful shutdown
+	ExpectedChecksum  string `protobuf:"bytes,5,opt,name=expected_checksum,json=expectedChecksum,proto3" json:"expected_checksum,omitempty"`     // Expected configuration checksum for edge's namespace
+	IsInSync          bool   `protobuf:"varint,6,opt,name=is_in_sync,json=isInSync,proto3" json:"is_in_sync,omitempty"`                          // Whether edge's loaded checksum matches expected
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -822,6 +840,20 @@ func (x *HeartbeatResponse) GetRequestFullSync() bool {
 func (x *HeartbeatResponse) GetShutdownRequested() bool {
 	if x != nil {
 		return x.ShutdownRequested
+	}
+	return false
+}
+
+func (x *HeartbeatResponse) GetExpectedChecksum() string {
+	if x != nil {
+		return x.ExpectedChecksum
+	}
+	return ""
+}
+
+func (x *HeartbeatResponse) GetIsInSync() bool {
+	if x != nil {
+		return x.IsInSync
 	}
 	return false
 }
@@ -2721,19 +2753,24 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12\x16\n" +
 	"\x06origin\x18\x03 \x01(\tR\x06origin\x12\x10\n" +
 	"\x03dir\x18\x04 \x01(\x05R\x03dir\x12\x18\n" +
-	"\apayload\x18\x05 \x01(\fR\apayload\"\xed\x01\n" +
+	"\apayload\x18\x05 \x01(\fR\apayload\"\xd7\x02\n" +
 	"\x10HeartbeatRequest\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x122\n" +
 	"\x06health\x18\x03 \x01(\v2\x1a.microgateway.HealthStatusR\x06health\x123\n" +
 	"\ametrics\x18\x04 \x01(\v2\x19.microgateway.EdgeMetricsR\ametrics\x128\n" +
-	"\ttimestamp\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xac\x01\n" +
+	"\ttimestamp\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x124\n" +
+	"\x16loaded_config_checksum\x18\x06 \x01(\tR\x14loadedConfigChecksum\x122\n" +
+	"\x15loaded_config_version\x18\a \x01(\tR\x13loadedConfigVersion\"\xf7\x01\n" +
 	"\x11HeartbeatResponse\x12\"\n" +
 	"\facknowledged\x18\x01 \x01(\bR\facknowledged\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12*\n" +
 	"\x11request_full_sync\x18\x03 \x01(\bR\x0frequestFullSync\x12-\n" +
-	"\x12shutdown_requested\x18\x04 \x01(\bR\x11shutdownRequested\"k\n" +
+	"\x12shutdown_requested\x18\x04 \x01(\bR\x11shutdownRequested\x12+\n" +
+	"\x11expected_checksum\x18\x05 \x01(\tR\x10expectedChecksum\x12\x1c\n" +
+	"\n" +
+	"is_in_sync\x18\x06 \x01(\bR\bisInSync\"k\n" +
 	"\x19EdgeUnregistrationRequest\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12\x1d\n" +
 	"\n" +
