@@ -44,6 +44,7 @@ jobs:
         with:
           fetch-depth: 2
           submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
 
       - name: Checkout langchaingo repository
         uses: actions/checkout@v4
