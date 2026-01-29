@@ -105,6 +105,8 @@ message HeartbeatRequest {
   HealthStatus health = 3;
   EdgeMetrics metrics = 4;
   google.protobuf.Timestamp timestamp = 5;
+  string loaded_config_checksum = 6; // Checksum of currently loaded configuration
+  string loaded_config_version = 7;  // Version string of loaded configuration
 }
 
 // HeartbeatResponse acknowledges heartbeat and may contain control directives
@@ -114,6 +116,8 @@ message HeartbeatResponse {
   // Control directives (if any)
   bool request_full_sync = 3;  // Request edge to perform full configuration sync
   bool shutdown_requested = 4; // Request graceful shutdown
+  string expected_checksum = 5; // Expected configuration checksum for edge's namespace
+  bool is_in_sync = 6;          // Whether edge's loaded checksum matches expected
 }
 
 // EdgeUnregistrationRequest is sent when edge is shutting down

@@ -207,6 +207,23 @@ const AppDetailView = () => {
     return `${datasourceDisplayUrl}${path}${slug}`;
   };
 
+  // Helper to join URL parts ensuring proper slash handling
+  const joinUrlParts = (...parts) => {
+    return parts
+      .map((part, index) => {
+        if (index === 0) {
+          // Remove trailing slash from first part
+          return part.replace(/\/+$/, '');
+        }
+        // Remove leading and trailing slashes from middle parts, only trailing from last
+        if (index === parts.length - 1) {
+          return part.replace(/^\/+/, '');
+        }
+        return part.replace(/^\/+/, '').replace(/\/+$/, '');
+      })
+      .join('/');
+  };
+
   const copyToClipboard = (text) => {
     navigator.clipboard
       .writeText(text)
@@ -693,12 +710,12 @@ const AppDetailView = () => {
                       flexGrow: 1,
                     }}
                   >
-                    {`${generateEndpointUrl("/ai/", llm.attributes.name)}v1`}
+                    {joinUrlParts(generateEndpointUrl("/ai/", llm.attributes.name), "v1")}
                   </Typography>
                   <IconButton
                     onClick={() =>
                       copyToClipboard(
-                        `${generateEndpointUrl("/ai/", llm.attributes.name)}v1`,
+                        joinUrlParts(generateEndpointUrl("/ai/", llm.attributes.name), "v1"),
                       )
                     }
                     size="small"

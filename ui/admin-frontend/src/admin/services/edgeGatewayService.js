@@ -18,13 +18,18 @@ class EdgeGatewayService {
             metadata: edge.attributes.metadata || {},
             lastHeartbeat: edge.attributes.last_heartbeat,
             sessionId: edge.attributes.session_id,
+            // Sync status fields
+            syncStatus: edge.attributes.sync_status || 'unknown',
+            loadedChecksum: edge.attributes.loaded_checksum,
+            loadedVersion: edge.attributes.loaded_version,
+            lastSyncAck: edge.attributes.last_sync_ack,
             createdAt: edge.attributes.created_at,
             updatedAt: edge.attributes.updated_at,
           })),
           meta: response.data.meta || {},
         };
       }
-      
+
       return { data: [], meta: {} };
     } catch (error) {
       console.error('Error fetching edge gateways:', error);
@@ -35,7 +40,7 @@ class EdgeGatewayService {
   async getEdgeGateway(id) {
     try {
       const response = await apiClient.get(`/edges/${id}`);
-      
+
       if (response.data?.data) {
         const edge = response.data.data;
         return {
@@ -48,11 +53,16 @@ class EdgeGatewayService {
           metadata: edge.attributes.metadata || {},
           lastHeartbeat: edge.attributes.last_heartbeat,
           sessionId: edge.attributes.session_id,
+          // Sync status fields
+          syncStatus: edge.attributes.sync_status || 'unknown',
+          loadedChecksum: edge.attributes.loaded_checksum,
+          loadedVersion: edge.attributes.loaded_version,
+          lastSyncAck: edge.attributes.last_sync_ack,
           createdAt: edge.attributes.created_at,
           updatedAt: edge.attributes.updated_at,
         };
       }
-      
+
       return null;
     } catch (error) {
       console.error('Error fetching edge gateway:', error);
@@ -63,7 +73,7 @@ class EdgeGatewayService {
   async getEdgesInNamespace(namespace) {
     try {
       const response = await apiClient.get(`/namespaces/${namespace}/edges`);
-      
+
       if (response.data?.data) {
         return {
           data: response.data.data.map(edge => ({
@@ -76,13 +86,18 @@ class EdgeGatewayService {
             metadata: edge.attributes.metadata || {},
             lastHeartbeat: edge.attributes.last_heartbeat,
             sessionId: edge.attributes.session_id,
+            // Sync status fields
+            syncStatus: edge.attributes.sync_status || 'unknown',
+            loadedChecksum: edge.attributes.loaded_checksum,
+            loadedVersion: edge.attributes.loaded_version,
+            lastSyncAck: edge.attributes.last_sync_ack,
             createdAt: edge.attributes.created_at,
             updatedAt: edge.attributes.updated_at,
           })),
           meta: response.data.meta || {},
         };
       }
-      
+
       return { data: [], meta: {} };
     } catch (error) {
       console.error('Error fetching edges in namespace:', error);
@@ -212,6 +227,17 @@ class EdgeGatewayService {
     } else {
       return heartbeatTime.toLocaleDateString();
     }
+  }
+
+  // Utility function to get sync status display info
+  getSyncStatusDisplay(syncStatus) {
+    const statusConfig = {
+      in_sync: { status: 'in_sync', color: 'success', label: 'Synced' },
+      pending: { status: 'pending', color: 'warning', label: 'Pending' },
+      stale: { status: 'stale', color: 'error', label: 'Stale' },
+      unknown: { status: 'unknown', color: 'default', label: 'Unknown' },
+    };
+    return statusConfig[syncStatus] || statusConfig.unknown;
   }
 }
 

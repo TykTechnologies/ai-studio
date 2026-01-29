@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import edgeGatewayService from '../../services/edgeGatewayService';
+import { useSyncStatus } from '../../context/SyncStatusContext';
 import PushConfigurationModal from './PushConfigurationModal';
 import RemoveEdgeModal from './RemoveEdgeModal';
 import {
@@ -39,7 +40,8 @@ import {
 const EdgeGatewayDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  
+  const { syncStatus: globalSyncStatus } = useSyncStatus();
+
   const [edgeGateway, setEdgeGateway] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -85,6 +87,17 @@ const EdgeGatewayDetail = () => {
   const getStatusInfo = (edge) => {
     if (!edge) return null;
     return edgeGatewayService.getConnectionStatus(edge.lastHeartbeat);
+  };
+
+  // Get expected checksum for a namespace from the global sync status
+  const getExpectedChecksum = (namespace) => {
+    const nsStatus = globalSyncStatus?.data?.find(ns => ns.namespace === (namespace || 'default'));
+    return nsStatus?.expected_checksum || null;
+  };
+
+  const getSyncStatusInfo = (edge) => {
+    if (!edge) return null;
+    return edgeGatewayService.getSyncStatusDisplay(edge.syncStatus);
   };
 
   const formatTimestamp = (timestamp) => {
@@ -174,6 +187,8 @@ const EdgeGatewayDetail = () => {
   }
 
   const statusInfo = getStatusInfo(edgeGateway);
+  const syncStatusInfo = getSyncStatusInfo(edgeGateway);
+  const expectedChecksum = getExpectedChecksum(edgeGateway?.namespace);
 
   return (
     <Box>
@@ -300,6 +315,70 @@ const EdgeGatewayDetail = () => {
             </Card>
           </Grid>
 
+          {/* Configuration Sync Status */}
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Configuration Sync Status
+                </Typography>
+                <Divider sx={{ mb: 2 }} />
+
+                <Box mb={2}>
+                  <Typography variant="body2" color="textSecondary">
+                    Sync Status
+                  </Typography>
+                  {syncStatusInfo && (
+                    <Chip
+                      label={syncStatusInfo.label}
+                      color={syncStatusInfo.color}
+                      size="small"
+                      variant="outlined"
+                    />
+                  )}
+                </Box>
+
+                <Box mb={2}>
+                  <Typography variant="body2" color="textSecondary">
+                    Loaded Config Checksum
+                  </Typography>
+                  <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem', wordBreak: 'break-all' }}>
+                    {edgeGateway.loadedChecksum || 'Not reported'}
+                  </Typography>
+                </Box>
+
+                {edgeGateway.syncStatus !== 'in_sync' && expectedChecksum && (
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary">
+                      Expected Config Checksum
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontFamily: 'monospace', fontSize: '0.875rem', wordBreak: 'break-all' }}>
+                      {expectedChecksum}
+                    </Typography>
+                  </Box>
+                )}
+
+                <Box mb={2}>
+                  <Typography variant="body2" color="textSecondary">
+                    Loaded Config Version
+                  </Typography>
+                  <Typography variant="body1">
+                    {edgeGateway.loadedVersion || 'Not reported'}
+                  </Typography>
+                </Box>
+
+                <Box mb={2}>
+                  <Typography variant="body2" color="textSecondary">
+                    Last Sync Acknowledgment
+                  </Typography>
+                  <Typography variant="body1">
+                    {edgeGateway.lastSyncAck ? formatTimestamp(edgeGateway.lastSyncAck) : 'Never'}
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
           {/* Timestamps */}
           <Grid item xs={12} md={6}>
             <Card>
@@ -308,7 +387,7 @@ const EdgeGatewayDetail = () => {
                   Timestamps
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
-                
+
                 <Box mb={2}>
                   <Typography variant="body2" color="textSecondary">
                     Created At

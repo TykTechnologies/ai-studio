@@ -18,9 +18,14 @@ type EdgeInstance struct {
 	LastHeartbeat  *time.Time             `json:"last_heartbeat" gorm:"index:idx_edge_instances_heartbeat"`
 	Status         string                 `json:"status" gorm:"default:'registered';index:idx_edge_instances_status"`
 	SessionID      string                 `json:"session_id"`
-	CreatedAt      time.Time              `json:"created_at"`
-	UpdatedAt      time.Time              `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt         `json:"deleted_at,omitempty" gorm:"index"`
+	// Sync tracking fields
+	LoadedChecksum string     `json:"loaded_checksum" gorm:"size:64"`
+	LoadedVersion  string     `json:"loaded_version" gorm:"size:64"`
+	SyncStatus     string     `json:"sync_status" gorm:"size:20;default:'unknown';index:idx_edge_instances_sync_status"`
+	LastSyncAck    *time.Time `json:"last_sync_ack"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
 }
 
 type EdgeInstances []EdgeInstance
@@ -28,9 +33,17 @@ type EdgeInstances []EdgeInstance
 // Edge instance status constants
 const (
 	EdgeStatusRegistered   = "registered"
-	EdgeStatusConnected    = "connected" 
+	EdgeStatusConnected    = "connected"
 	EdgeStatusDisconnected = "disconnected"
 	EdgeStatusUnhealthy    = "unhealthy"
+)
+
+// Edge sync status constants
+const (
+	EdgeSyncStatusInSync  = "in_sync"
+	EdgeSyncStatusPending = "pending"
+	EdgeSyncStatusUnknown = "unknown"
+	EdgeSyncStatusStale   = "stale"
 )
 
 // NewEdgeInstance creates a new EdgeInstance
@@ -125,4 +138,72 @@ func (e *EdgeInstance) CleanupStaleEdges(db *gorm.DB, maxAge time.Duration) erro
 	return db.Model(&EdgeInstance{}).
 		Where("status = ? AND (last_heartbeat IS NULL OR last_heartbeat < ?)", EdgeStatusConnected, cutoff).
 		Update("status", EdgeStatusDisconnected).Error
+}
+
+// UpdateSyncStatus updates the sync status for an edge
+func (e *EdgeInstance) UpdateSyncStatus(db *gorm.DB, checksum, version, status string) error {
+	updates := map[string]interface{}{
+		"loaded_checksum": checksum,
+		"loaded_version":  version,
+		"sync_status":     status,
+	}
+	if status == EdgeSyncStatusInSync {
+		now := time.Now()
+		e.LastSyncAck = &now
+		updates["last_sync_ack"] = now
+	}
+	e.LoadedChecksum = checksum
+	e.LoadedVersion = version
+	e.SyncStatus = status
+	return db.Model(e).Updates(updates).Error
+}
+
+// MarkEdgesAsPendingInNamespace marks all active edges in a namespace as pending sync
+func (e *EdgeInstance) MarkEdgesAsPendingInNamespace(db *gorm.DB, namespace string) error {
+	return db.Model(&EdgeInstance{}).
+		Where("namespace = ? AND status IN ?", namespace, []string{EdgeStatusConnected, EdgeStatusRegistered}).
+		Update("sync_status", EdgeSyncStatusPending).Error
+}
+
+// MarkStaleEdges marks edges that have been pending sync for too long as stale
+func (e *EdgeInstance) MarkStaleEdges(db *gorm.DB, staleThreshold time.Duration) error {
+	cutoff := time.Now().Add(-staleThreshold)
+	return db.Model(&EdgeInstance{}).
+		Where("sync_status = ? AND (last_sync_ack IS NULL OR last_sync_ack < ?)", EdgeSyncStatusPending, cutoff).
+		Where("status IN ?", []string{EdgeStatusConnected, EdgeStatusRegistered}).
+		Update("sync_status", EdgeSyncStatusStale).Error
+}
+
+// CountEdgesBySyncStatus returns the count of edges by sync status in a namespace
+func (e *EdgeInstance) CountEdgesBySyncStatus(db *gorm.DB, namespace string) (map[string]int64, error) {
+	type Result struct {
+		SyncStatus string
+		Count      int64
+	}
+	var results []Result
+
+	query := db.Model(&EdgeInstance{}).
+		Select("sync_status, COUNT(*) as count").
+		Where("status IN ?", []string{EdgeStatusConnected, EdgeStatusRegistered})
+
+	if namespace != "" {
+		query = query.Where("namespace = ?", namespace)
+	}
+
+	err := query.Group("sync_status").Scan(&results).Error
+	if err != nil {
+		return nil, err
+	}
+
+	counts := make(map[string]int64)
+	for _, r := range results {
+		counts[r.SyncStatus] = r.Count
+	}
+	return counts, nil
+}
+
+// ListEdgesBySyncStatus returns edges with a specific sync status
+func (edges *EdgeInstances) ListEdgesBySyncStatus(db *gorm.DB, syncStatus string) error {
+	return db.Where("sync_status = ? AND status IN ?", syncStatus, []string{EdgeStatusConnected, EdgeStatusRegistered}).
+		Order("created_at DESC").Find(edges).Error
 }

@@ -904,6 +904,12 @@ func (a *API) setupRoutes() {
 	v1.POST("/namespaces/:namespace/reload", a.triggerNamespaceReload)
 	v1.GET("/namespaces/:namespace/edges", a.getNamespaceEdges)
 
+	// Sync status routes (admin only - for edge gateway sync monitoring)
+	syncStatusHandlers := NewSyncStatusHandlers(a.service.SyncStatusService)
+	v1.GET("/sync/status", syncStatusHandlers.GetSyncStatus)
+	v1.GET("/sync/status/:namespace", syncStatusHandlers.GetNamespaceSyncStatus)
+	v1.GET("/sync/audit", syncStatusHandlers.GetSyncAuditLog)
+
 	// SSO routes (ENT: full functionality, CE: returns 402 Payment Required)
 	public.GET("/auth/:id/:provider", a.handleTIBAuth)
 	public.POST("/auth/:id/:provider", a.handleTIBAuth)
