@@ -10,13 +10,24 @@ const SyncStatusContext = createContext();
  * This allows components like PushConfigurationModal to trigger an
  * immediate refresh of the sync status after a config push completes,
  * rather than waiting for the next polling interval.
+ *
+ * Note: Only fetches for admin users since sync status is only relevant
+ * to administrators managing edge gateways.
  */
 export const SyncStatusProvider = ({ children }) => {
   const [syncStatus, setSyncStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
 
+  // Check if user is an admin (set by App.js after auth check)
+  const isAdmin = () => window.adminEntitlements?.is_admin === true;
+
   const fetchSyncStatus = useCallback(async () => {
+    // Only fetch sync status for admin users
+    if (!isAdmin()) {
+      return null;
+    }
+
     setLoading(true);
     try {
       const response = await syncStatusService.getSyncStatus();
@@ -31,13 +42,22 @@ export const SyncStatusProvider = ({ children }) => {
     }
   }, []);
 
-  // Initial fetch on mount
+  // Initial fetch on mount (only for admins)
   useEffect(() => {
-    fetchSyncStatus();
+    // Small delay to allow App.js to set adminEntitlements after auth check
+    const timer = setTimeout(() => {
+      if (isAdmin()) {
+        fetchSyncStatus();
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, [fetchSyncStatus]);
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 30 seconds (only for admins)
   useEffect(() => {
+    if (!isAdmin()) {
+      return; // No polling for non-admins
+    }
     const interval = setInterval(fetchSyncStatus, 30000);
     return () => clearInterval(interval);
   }, [fetchSyncStatus]);
