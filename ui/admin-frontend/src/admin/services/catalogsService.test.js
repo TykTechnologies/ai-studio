@@ -99,20 +99,20 @@ describe('catalogsService', () => {
   describe('getToolCatalogues', () => {
     it('should get tool catalogues with pagination by default', async () => {
       const mockResponse = {
-        data: [{ id: 'tool-cat-1' }, { id: 'tool-cat-2' }],
+        data: { data: [{ id: 'tool-cat-1' }, { id: 'tool-cat-2' }] },
         headers: {
           'x-total-count': '6',
           'x-total-pages': '3'
         }
       };
-      
+
       jest.spyOn(apiClient, 'get').mockResolvedValueOnce(mockResponse);
-      
+
       const result = await catalogsService.getToolCatalogues(2);
-      
+
       expect(apiClient.get).toHaveBeenCalledWith('/tool-catalogues', { params: { page: 2 } });
       expect(result).toEqual({
-        data: mockResponse.data,
+        data: mockResponse.data.data,
         totalCount: 6,
         totalPages: 3
       });
@@ -121,13 +121,13 @@ describe('catalogsService', () => {
     it('should get all tool catalogues when all flag is true', async () => {
       const mockData = [{ id: 'tool-cat-1' }, { id: 'tool-cat-2' }, { id: 'tool-cat-3' }];
       const mockResponse = {
-        data: mockData
+        data: { data: mockData }
       };
-      
+
       jest.spyOn(apiClient, 'get').mockResolvedValueOnce(mockResponse);
-      
+
       const result = await catalogsService.getToolCatalogues(1, true);
-      
+
       expect(apiClient.get).toHaveBeenCalledWith('/tool-catalogues', { params: { all: true } });
       expect(result).toEqual(mockData);
     });

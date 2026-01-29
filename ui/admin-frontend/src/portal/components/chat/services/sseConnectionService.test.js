@@ -369,37 +369,37 @@ describe('setupSSEConnection', () => {
   test('should handle system event correctly', () => {
     // Call the function
     setupSSEConnection(defaultParams);
-    
+
     // Simulate system event
     mockRefs.eventSourceRef.current.dispatchEvent({
       type: 'system',
       data: 'System notification'
     });
-    
+
     // Verify onMessageReceived was called with formatted system message
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
       id: 'temp-123',
       type: 'system',
-      payload: ':::system System notification:::',
+      content: ':::system System notification:::',
       isComplete: true
     });
   });
-  
+
   test('should handle system event with existing system prefix', () => {
     // Call the function
     setupSSEConnection(defaultParams);
-    
+
     // Simulate system event with existing prefix
     mockRefs.eventSourceRef.current.dispatchEvent({
       type: 'system',
       data: ':::system Already formatted:::'
     });
-    
+
     // Verify onMessageReceived was called with unchanged message
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
       id: 'temp-123',
       type: 'system',
-      payload: ':::system Already formatted:::',
+      content: ':::system Already formatted:::',
       isComplete: true
     });
   });
@@ -407,64 +407,49 @@ describe('setupSSEConnection', () => {
   test('should handle error event correctly', () => {
     // Call the function
     setupSSEConnection(defaultParams);
-    
-    // Simulate error event
+
+    // Simulate error event (server-sent error with data)
     mockRefs.eventSourceRef.current.dispatchEvent({
       type: 'error',
       data: 'Connection error'
     });
-    
+
     // Verify onMessageReceived was called with error message
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'temp-123',
         type: 'system',
-        payload: ':::system Error: Connection error:::',
+        content: ':::system Error: Connection error:::',
         errorType: 'connection',
         isComplete: true
       })
     );
-    
-    // The error event also triggers the connection error handler, which sends a reconnection message
-    expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'system',
-        payload: 'Connection lost. Attempting to reconnect... (Attempt 1/3)',
-        errorType: 'connection'
-      })
-    );
+
+    // Note: When error event has data, the onerror handler returns early
+    // and doesn't send a reconnection message (the error was already handled)
   });
-  
+
   test('should handle LLM config error differently', () => {
     // Call the function
     setupSSEConnection(defaultParams);
-    
+
     // Simulate LLM config error event
     mockRefs.eventSourceRef.current.dispatchEvent({
       type: 'error',
       data: 'LLM configuration error'
     });
-    
+
     // Verify onMessageReceived was called with LLM error message
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'temp-123',
         type: 'system',
-        payload: ':::system Error: LLM configuration error:::',
+        content: ':::system Error: LLM configuration error:::',
         errorType: 'llm_config',
         isComplete: true
       })
     );
-    
-    // The error event also triggers the connection error handler, which sends an LLM config message
-    expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'system',
-        payload: 'LLM configuration error. Please check your settings.',
-        errorType: 'llm_config'
-      })
-    );
-    
+
     // Verify reconnectAttempts was set to max to prevent reconnection
     expect(mockRefs.reconnectAttempts.current).toBe(3);
   });
@@ -491,60 +476,62 @@ describe('setupSSEConnection', () => {
   test('should handle connection error and attempt reconnection', () => {
     // Call the function
     setupSSEConnection(defaultParams);
-    
-    // Simulate connection error
-    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error' });
-    
+
+    // Simulate connection error (network failure - no data property)
+    mockRefs.eventSourceRef.current.onerror({});
+
     // Verify callbacks were called
     expect(mockCallbacks.setIsConnected).toHaveBeenCalledWith(false);
     expect(mockRefs.isConnectedRef.current).toBe(false);
     expect(mockCallbacks.setIsLoading).toHaveBeenCalledWith(false);
-    
+
     // Verify reconnection message was sent
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
       id: 'temp-123',
       type: 'system',
-      payload: 'Connection lost. Attempting to reconnect... (Attempt 1/3)',
-      errorType: 'connection'
+      content: 'Connection lost. Attempting to reconnect... (Attempt 1/3)',
+      errorType: 'connection',
+      isComplete: true
     });
-    
+
     // Fast-forward timers to trigger reconnection
     jest.advanceTimersByTime(100);
-    
+
     // Verify reconnectAttempts was incremented
     expect(mockRefs.reconnectAttempts.current).toBe(1);
-    
+
     // Verify EventSource was closed and recreated
     expect(mockRefs.eventSourceRef.current).not.toBeNull();
   });
-  
+
   test('should handle maximum reconnection attempts', () => {
     // Set reconnectAttempts to max - 1
     mockRefs.reconnectAttempts.current = 2;
-    
+
     // Call the function
     setupSSEConnection(defaultParams);
-    
-    // Simulate connection error
-    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error' });
-    
+
+    // Simulate connection error (network failure - no data property)
+    mockRefs.eventSourceRef.current.onerror({});
+
     // Fast-forward timers to trigger reconnection
     jest.advanceTimersByTime(400); // 100 * 2^2 = 400ms
-    
+
     // Verify reconnectAttempts was incremented to max
     expect(mockRefs.reconnectAttempts.current).toBe(3);
-    
+
     // Simulate another connection error
-    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error' });
-    
+    mockRefs.eventSourceRef.current.onerror({});
+
     // Verify max attempts message was sent
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
       id: 'temp-123',
       type: 'system',
-      payload: 'Maximum reconnection attempts reached. Please refresh the page.',
-      errorType: 'connection'
+      content: 'Maximum reconnection attempts reached. Please refresh the page.',
+      errorType: 'connection',
+      isComplete: true
     });
-    
+
     // Verify error was set
     expect(mockCallbacks.setError).toHaveBeenCalledWith(
       'Maximum reconnection attempts reached. Please refresh the page.'
@@ -567,36 +554,36 @@ describe('setupSSEConnection', () => {
   test('should handle error parsing session_id message', () => {
     // Call the function
     setupSSEConnection(defaultParams);
-    
+
     // Simulate session_id event with invalid JSON
     mockRefs.eventSourceRef.current.dispatchEvent({
       type: 'session_id',
       data: 'invalid json'
     });
-    
+
     // Verify error message was sent
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
       id: 'temp-123',
       type: 'system',
-      payload: 'Error: Failed to parse message from server',
+      content: ':::system Error: Failed to parse message from server:::',
       isComplete: true
     });
   });
-  
+
   test('should handle error parsing generic message', () => {
     // Call the function
     setupSSEConnection(defaultParams);
-    
+
     // Simulate generic message event with invalid JSON
     mockRefs.eventSourceRef.current.onmessage({
       data: 'invalid json'
     });
-    
+
     // Verify error message was sent
     expect(mockCallbacks.onMessageReceived).toHaveBeenCalledWith({
       id: 'temp-123',
       type: 'system',
-      payload: 'Error: Failed to parse message from server',
+      content: ':::system Error: Failed to parse message from server:::',
       isComplete: true
     });
   });
@@ -631,114 +618,114 @@ describe('setupSSEConnection', () => {
   test('should update currentSessionId when session_id event is received', () => {
     // Call the function
     setupSSEConnection(defaultParams);
-    
+
     // Create mock session_id event data
     const sessionData = {
       payload: 'session-789',
       tools: []
     };
-    
+
     // Simulate session_id event
     mockRefs.eventSourceRef.current.dispatchEvent({
       type: 'session_id',
       data: JSON.stringify(sessionData)
     });
-    
+
     // Verify setSessionId was called with the correct session ID
     expect(mockCallbacks.setSessionId).toHaveBeenCalledWith('session-789');
-    
+
     // Store the original EventSource
     const originalEventSource = mockRefs.eventSourceRef.current;
-    
-    // Now simulate a connection error to trigger reconnection
-    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error' });
-    
+
+    // Now simulate a connection error to trigger reconnection (no data = network error)
+    mockRefs.eventSourceRef.current.onerror({});
+
     // Fast-forward timers to trigger reconnection
     jest.advanceTimersByTime(100);
-    
+
     // Verify that a new EventSource was created
     expect(mockRefs.eventSourceRef.current).not.toBe(originalEventSource);
-    
+
     // Verify that the new connection uses the session ID from the session_id event
     expect(mockRefs.eventSourceRef.current.url).toContain('session_id=session-789');
   });
-  
+
   test('should use current sessionId instead of original continueId for reconnection', () => {
     // Call the function with an initial continueId
     setupSSEConnection({
       ...defaultParams,
       continueId: 'original-session-123'
     });
-    
+
     // Verify initial connection uses the original continueId
     expect(mockRefs.eventSourceRef.current.url).toContain('session_id=original-session-123');
-    
+
     // Create mock session_id event data with a different session ID
     const sessionData = {
       payload: 'new-session-456',
       tools: []
     };
-    
+
     // Simulate session_id event
     mockRefs.eventSourceRef.current.dispatchEvent({
       type: 'session_id',
       data: JSON.stringify(sessionData)
     });
-    
+
     // Store the original EventSource
     const originalEventSource = mockRefs.eventSourceRef.current;
-    
-    // Now simulate a connection error to trigger reconnection
-    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error' });
-    
+
+    // Now simulate a connection error to trigger reconnection (no data = network error)
+    mockRefs.eventSourceRef.current.onerror({});
+
     // Fast-forward timers to trigger reconnection
     jest.advanceTimersByTime(100);
-    
+
     // Verify that a new EventSource was created
     expect(mockRefs.eventSourceRef.current).not.toBe(originalEventSource);
-    
+
     // Verify that the new connection uses the new session ID, not the original continueId
     expect(mockRefs.eventSourceRef.current.url).toContain('session_id=new-session-456');
     expect(mockRefs.eventSourceRef.current.url).not.toContain('session_id=original-session-123');
   });
-  
+
   test('should maintain session continuity across multiple reconnections', () => {
     // Call the function
     setupSSEConnection(defaultParams);
-    
+
     // Create mock session_id event data
     const sessionData = {
       payload: 'persistent-session-id',
       tools: []
     };
-    
+
     // Simulate session_id event
     mockRefs.eventSourceRef.current.dispatchEvent({
       type: 'session_id',
       data: JSON.stringify(sessionData)
     });
-    
+
     // Verify setSessionId was called with the correct session ID
     expect(mockCallbacks.setSessionId).toHaveBeenCalledWith('persistent-session-id');
-    
-    // Simulate first connection error and reconnection
-    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error 1' });
+
+    // Simulate first connection error and reconnection (no data = network error)
+    mockRefs.eventSourceRef.current.onerror({});
     jest.advanceTimersByTime(100);
-    
+
     // Verify first reconnection uses the correct session ID
     expect(mockRefs.eventSourceRef.current.url).toContain('session_id=persistent-session-id');
-    
+
     // Simulate second connection error and reconnection
-    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error 2' });
+    mockRefs.eventSourceRef.current.onerror({});
     jest.advanceTimersByTime(200); // 100 * 2^1
-    
+
     // Verify second reconnection still uses the correct session ID
     expect(mockRefs.eventSourceRef.current.url).toContain('session_id=persistent-session-id');
-    
+
     // Simulate third connection error and reconnection
-    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error 3' });
+    mockRefs.eventSourceRef.current.onerror({});
     jest.advanceTimersByTime(400); // 100 * 2^2
-    
+
     // Verify third reconnection still uses the correct session ID
     expect(mockRefs.eventSourceRef.current.url).toContain('session_id=persistent-session-id');
   });
@@ -749,22 +736,22 @@ describe('setupSSEConnection', () => {
       ...defaultParams,
       continueId: 'fallback-session-id'
     });
-    
+
     // Verify initial connection uses the continueId
     expect(mockRefs.eventSourceRef.current.url).toContain('session_id=fallback-session-id');
-    
+
     // Store the original EventSource
     const originalEventSource = mockRefs.eventSourceRef.current;
-    
-    // Simulate a connection error without receiving a session_id event first
-    mockRefs.eventSourceRef.current.onerror({ data: 'Connection error' });
-    
+
+    // Simulate a connection error without receiving a session_id event first (no data = network error)
+    mockRefs.eventSourceRef.current.onerror({});
+
     // Fast-forward timers to trigger reconnection
     jest.advanceTimersByTime(100);
-    
+
     // Verify that a new EventSource was created
     expect(mockRefs.eventSourceRef.current).not.toBe(originalEventSource);
-    
+
     // Verify that the new connection still uses the original continueId as fallback
     expect(mockRefs.eventSourceRef.current.url).toContain('session_id=fallback-session-id');
   });

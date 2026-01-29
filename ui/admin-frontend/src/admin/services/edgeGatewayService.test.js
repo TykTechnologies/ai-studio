@@ -55,6 +55,10 @@ describe('EdgeGatewayService', () => {
         metadata: { region: 'us-east' },
         lastHeartbeat: '2024-01-01T12:00:00Z',
         sessionId: 'session-001',
+        syncStatus: 'unknown',
+        loadedChecksum: undefined,
+        loadedVersion: undefined,
+        lastSyncAck: undefined,
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: '2024-01-01T12:00:00Z',
       });
@@ -317,11 +321,12 @@ describe('EdgeGatewayService', () => {
     const mockReloadResponse = {
       data: {
         data: {
-          attributes: {
-            operation_id: 'op-global-001',
-            status: 'pending',
-            message: 'Global reload triggered',
-          },
+          message: 'Global reload triggered',
+          operations_count: 2,
+          operations: [
+            { operation_id: 'op-global-001', status: 'initiated' },
+            { operation_id: 'op-global-002', status: 'initiated' },
+          ],
         },
       },
     };
@@ -334,8 +339,13 @@ describe('EdgeGatewayService', () => {
       expect(apiClient.post).toHaveBeenCalledWith('/edges/reload-all');
       expect(result).toEqual({
         operationId: 'op-global-001',
-        status: 'pending',
+        status: 'initiated',
         message: 'Global reload triggered',
+        operationsCount: 2,
+        operations: [
+          { operation_id: 'op-global-001', status: 'initiated' },
+          { operation_id: 'op-global-002', status: 'initiated' },
+        ],
       });
     });
 
