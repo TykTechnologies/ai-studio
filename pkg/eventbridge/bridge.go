@@ -40,6 +40,7 @@ type Bridge struct {
 	running bool
 	cancel  context.CancelFunc
 	sub     *pubsub.Subscription
+	wg      sync.WaitGroup // Tracks remoteToLocal goroutine for clean shutdown
 }
 
 // BridgeConfig configures the bridge behavior.
@@ -76,6 +77,7 @@ func (b *Bridge) Start(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 	b.cancel = cancel
+	b.wg.Add(1) // Track remoteToLocal goroutine
 	b.mu.Unlock()
 
 	go b.localToRemote(ctx)
@@ -199,12 +201,18 @@ func (b *Bridge) localToRemote(ctx context.Context) {
 
 	<-ctx.Done()
 
+	// Wait for remoteToLocal to finish before unsubscribing
+	// This prevents a race between Publish and Unsubscribe
+	b.wg.Wait()
+
 	b.bus.Unsubscribe(sub)
 }
 
 // remoteToLocal receives events from the remote end and republishes them locally.
 // All received events are marked as DirLocal to prevent re-forwarding.
 func (b *Bridge) remoteToLocal(ctx context.Context) {
+	defer b.wg.Done() // Signal completion for clean shutdown
+
 	log.Debug().
 		Str("node_id", b.nodeID).
 		Bool("is_control", b.isControl).
