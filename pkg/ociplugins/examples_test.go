@@ -3,7 +3,6 @@ package ociplugins
 
 import (
 	"fmt"
-	"runtime"
 )
 
 // ExampleParseOCICommand demonstrates how to parse OCI plugin commands
@@ -65,12 +64,10 @@ func ExampleOCIPluginClient_FetchPlugin() {
 	// This would fetch from the registry in a real scenario
 	fmt.Printf("Would fetch plugin: %s\n", ref.FullReference())
 	fmt.Printf("Target architecture: %s\n", params.Architecture)
-	fmt.Printf("Runtime: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 
 	// Output:
 	// Would fetch plugin: nexus.example.com/plugins/ner@sha256:0123deadbeef456
 	// Target architecture: linux/amd64
-	// Runtime: darwin/arm64
 }
 
 // ExampleOCIReference_FullReference demonstrates reference formatting

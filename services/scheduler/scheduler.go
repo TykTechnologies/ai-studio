@@ -324,8 +324,11 @@ func (s *SchedulerService) executeSchedule(schedule *models.PluginSchedule) {
 	start := time.Now()
 	errChan := make(chan error, 1)
 
+	// Copy schedule to avoid data race - the goroutine may still be reading
+	// from schedule when timeout occurs and we update schedule.LastRun
+	scheduleCopy := *schedule
 	go func() {
-		errChan <- s.callPluginScheduleTask(ctx, &plugin, schedule)
+		errChan <- s.callPluginScheduleTask(ctx, &plugin, &scheduleCopy)
 	}()
 
 	var execErr error
