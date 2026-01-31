@@ -1,5 +1,7 @@
 .zed
 .env
+dev/.env
+dev/.env.gateway
 .aider*
 *.db
 midsommar
@@ -121,4 +123,4 @@ data/exports
 data/exports/*
 keys/*
 *.test
-*.out
+*.outtests/postgres_data/
