@@ -123,4 +123,5 @@ data/exports
 data/exports/*
 keys/*
 *.test
-*.outtests/postgres_data/
+*.out
+tests/postgres_data/
