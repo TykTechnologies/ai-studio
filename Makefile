@@ -32,6 +32,14 @@ help:
 	@echo ""
 	@echo "Current edition: $(EDITION)"
 	@echo ""
+	@echo "🐳 Docker Development (RECOMMENDED - with hot reloading):"
+	@echo "  make dev                - Start minimal env (Studio + Frontend + Postgres)"
+	@echo "  make dev-full           - Start full stack (+ Gateway + Plugins)"
+	@echo "  make dev-ent            - Start enterprise minimal env"
+	@echo "  make dev-full-ent       - Start enterprise full stack"
+	@echo "  make dev-down           - Stop development environment"
+	@echo "  make dev-help           - Show all development commands"
+	@echo ""
 	@echo "Development (single platform, fast):"
 	@echo "  make build-native       - Build for current platform with CGO (auto-detect edition)"
 	@echo "  make build-native-ce    - Build CE for current platform with CGO"
@@ -279,13 +287,270 @@ plugins:
 		echo "✅ All plugins built successfully!"; \
 	fi
 
-# Test target
+# Test target (legacy - use test-all for more control)
 test:
 	go test $(BUILD_TAGS) ./...
 	cd microgateway && go test $(BUILD_TAGS) ./...
 
 # ============================================================================
-# Integration Tests (Enterprise)
+# Unified Testing System
+# ============================================================================
+# Usage:
+#   make test-all                           # Run unit + integration tests (auto-detect edition)
+#   make test-all EDITION=ent               # Run with enterprise edition
+#   make test-quick                         # Unit tests only (fast feedback)
+#   make test-ci                            # CI tests with coverage
+#   make test-all TEST_COMPONENTS="studio"  # Test only studio
+#   make test-all TEST_TYPES="unit"         # Unit tests only
+#
+# Components: studio, microgateway, frontend, plugins
+# Types: unit, integration, e2e
+# Editions: ce, ent
+
+# Test configuration variables (can be overridden)
+TEST_COMPONENTS ?= studio microgateway frontend plugins
+TEST_TYPES ?= unit integration
+TEST_EDITION ?= $(EDITION)
+TEST_VERBOSE ?= false
+TEST_COVERAGE ?= false
+TEST_TIMEOUT ?= 30m
+
+# Determine build tags based on edition
+ifeq ($(TEST_EDITION),ent)
+    TEST_BUILD_TAGS := -tags enterprise
+else
+    TEST_BUILD_TAGS :=
+endif
+
+# Verbose flag
+ifeq ($(TEST_VERBOSE),true)
+    TEST_VERBOSE_FLAG := -v
+else
+    TEST_VERBOSE_FLAG :=
+endif
+
+# Coverage flag
+ifeq ($(TEST_COVERAGE),true)
+    TEST_COVERAGE_FLAG := -coverprofile=coverage.out -covermode=atomic
+else
+    TEST_COVERAGE_FLAG :=
+endif
+
+# Primary unified test target
+.PHONY: test-all
+test-all: ## Run all tests with configurable options
+	@echo "=========================================="
+	@echo "Tyk AI Studio Unified Test Suite"
+	@echo "=========================================="
+	@echo "Edition:    $(TEST_EDITION)"
+	@echo "Components: $(TEST_COMPONENTS)"
+	@echo "Types:      $(TEST_TYPES)"
+	@echo "Timeout:    $(TEST_TIMEOUT)"
+	@echo "=========================================="
+	@failed=0; \
+	for component in $(TEST_COMPONENTS); do \
+		for type in $(TEST_TYPES); do \
+			target="test-$${component}-$${type}"; \
+			if $(MAKE) -n $$target > /dev/null 2>&1; then \
+				echo ""; \
+				echo ">>> Running: $$target"; \
+				if ! $(MAKE) $$target TEST_EDITION=$(TEST_EDITION) TEST_VERBOSE=$(TEST_VERBOSE) TEST_COVERAGE=$(TEST_COVERAGE) TEST_TIMEOUT=$(TEST_TIMEOUT); then \
+					echo "FAILED: $$target"; \
+					failed=1; \
+				fi; \
+			fi; \
+		done; \
+	done; \
+	if [ $$failed -eq 1 ]; then \
+		echo ""; \
+		echo "=========================================="; \
+		echo "SOME TESTS FAILED"; \
+		echo "=========================================="; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "=========================================="; \
+	echo "ALL TESTS PASSED"; \
+	echo "=========================================="
+
+.PHONY: test-quick
+test-quick: ## Run only unit tests (fast feedback)
+	$(MAKE) test-all TEST_TYPES="unit" TEST_COMPONENTS="studio microgateway frontend"
+
+.PHONY: test-ci
+test-ci: ## Run CI-appropriate tests (unit + integration, with coverage)
+	$(MAKE) test-all TEST_TYPES="unit integration" TEST_COVERAGE=true TEST_VERBOSE=true
+
+# ============================================================================
+# AI Studio Tests
+# ============================================================================
+
+.PHONY: test-studio-unit
+test-studio-unit: ## Run AI Studio unit tests
+	@echo "Running AI Studio unit tests ($(TEST_EDITION))..."
+	go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) $(TEST_COVERAGE_FLAG) \
+		-timeout $(TEST_TIMEOUT) -race -short ./...
+
+.PHONY: test-studio-integration
+test-studio-integration: ## Run AI Studio integration tests
+	@echo "Running AI Studio integration tests ($(TEST_EDITION))..."
+	go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) \
+		-timeout $(TEST_TIMEOUT) -count=1 -run "Integration|TestOAuth" ./tests/... || true
+
+# ============================================================================
+# Microgateway Tests
+# ============================================================================
+
+.PHONY: test-microgateway-unit
+test-microgateway-unit: ## Run Microgateway unit tests
+	@echo "Running Microgateway unit tests ($(TEST_EDITION))..."
+	cd microgateway && go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) \
+		-timeout $(TEST_TIMEOUT) -race -short ./...
+
+.PHONY: test-microgateway-integration
+test-microgateway-integration: ## Run Microgateway integration tests
+	@echo "Running Microgateway integration tests ($(TEST_EDITION))..."
+	cd microgateway && go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) \
+		-timeout $(TEST_TIMEOUT) -count=1 -run Integration ./tests/integration/... || true
+
+# ============================================================================
+# Frontend Tests
+# ============================================================================
+
+.PHONY: test-frontend-unit
+test-frontend-unit: ## Run frontend Jest tests
+	@echo "Running frontend unit tests..."
+	cd ui/admin-frontend && npm test
+
+# ============================================================================
+# Plugin Tests
+# ============================================================================
+
+.PHONY: test-plugins-unit
+test-plugins-unit: ## Run plugin unit tests
+	@echo "Running plugin unit tests..."
+	@# Community plugins
+	@if [ -d "community/plugins/llm-cache" ]; then \
+		echo ">>> community/plugins/llm-cache"; \
+		cd community/plugins/llm-cache && go test $(TEST_VERBOSE_FLAG) ./... || true; \
+	fi
+
+.PHONY: test-plugins-integration
+test-plugins-integration: ## Run plugin integration tests (requires Docker)
+	@if [ "$(TEST_EDITION)" != "ent" ]; then \
+		echo "Skipping enterprise plugin integration tests (set EDITION=ent to enable)"; \
+		exit 0; \
+	fi
+	@echo "Running enterprise plugin integration tests..."
+	@echo ">>> advanced-llm-cache integration tests"
+	cd enterprise/plugins/advanced-llm-cache && \
+		go test -v -count=1 -tags="integration,enterprise" \
+		-timeout $(TEST_TIMEOUT) ./tests/integration/...
+	@echo ">>> llm-load-balancer integration tests"
+	cd enterprise/plugins/llm-load-balancer && \
+		go test -v -count=1 -tags="integration,enterprise" \
+		-timeout $(TEST_TIMEOUT) ./tests/integration/...
+	@echo ">>> github-rag-ingest Vault integration tests"
+	@if [ -d "community/plugins/github-rag-ingest/server" ]; then \
+		cd community/plugins/github-rag-ingest/server && \
+		go test -v -count=1 -tags=integration -timeout $(TEST_TIMEOUT) ./secrets/... || true; \
+	fi
+
+.PHONY: test-plugins-e2e
+test-plugins-e2e: ## Run plugin E2E tests (requires Docker)
+	@if [ "$(TEST_EDITION)" != "ent" ]; then \
+		echo "Skipping enterprise plugin e2e tests (set EDITION=ent to enable)"; \
+		exit 0; \
+	fi
+	@echo "Running enterprise plugin E2E tests..."
+	cd enterprise/plugins/llm-load-balancer && \
+		go test -v -count=1 -tags="e2e,enterprise" \
+		-timeout $(TEST_TIMEOUT) ./tests/e2e/...
+
+# ============================================================================
+# UI E2E Tests (Playwright)
+# ============================================================================
+
+.PHONY: test-ui-e2e
+test-ui-e2e: ## Run UI E2E tests (requires Docker Compose environment)
+	@echo "Running UI E2E tests..."
+	@echo "Note: Requires Docker Compose test environment to be running"
+	@echo "Start with: make start-test-env"
+	cd tests/ui && npm ci && npx playwright install --with-deps chromium && npm run test
+
+.PHONY: test-ui-e2e-with-env
+test-ui-e2e-with-env: ## Start test env and run UI E2E tests
+	@echo "Starting test environment..."
+	@if [ ! -f .env ]; then cp .env.example .env; fi
+	@mkdir -p ./tests/postgres_data_temp
+	@cp -r tests/postgres_data ./tests/postgres_data_temp 2>/dev/null || true
+	docker compose --env-file .env -f tests/compose.yml up -d
+	@echo "Waiting for test environment to be ready..."
+	@attempts=0; \
+	max_attempts=60; \
+	while [ "$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/common/api/v1/notifications/unread/count 2>/dev/null)" != "401" ]; do \
+		attempts=$$((attempts+1)); \
+		echo "Waiting for AI Studio... ($$attempts/$$max_attempts)"; \
+		if [ $$attempts -ge $$max_attempts ]; then \
+			echo "Timed out waiting for AI Studio"; \
+			docker compose --env-file .env -f tests/compose.yml down; \
+			exit 1; \
+		fi; \
+		sleep 5; \
+	done
+	@echo "AI Studio is ready, running tests..."
+	$(MAKE) test-ui-e2e || (docker compose --env-file .env -f tests/compose.yml down && exit 1)
+	docker compose --env-file .env -f tests/compose.yml down
+
+# ============================================================================
+# Test Help and Discovery
+# ============================================================================
+
+.PHONY: test-help
+test-help: ## Show testing system help
+	@echo "Tyk AI Studio Unified Testing System"
+	@echo ""
+	@echo "Primary Targets:"
+	@echo "  make test-all              Run all tests (default: unit + integration)"
+	@echo "  make test-quick            Run only unit tests (fast feedback)"
+	@echo "  make test-ci               Run CI tests with coverage"
+	@echo ""
+	@echo "Component Targets:"
+	@echo "  make test-studio-unit            AI Studio Go unit tests"
+	@echo "  make test-studio-integration     AI Studio integration tests"
+	@echo "  make test-microgateway-unit      Microgateway unit tests"
+	@echo "  make test-microgateway-integration  Microgateway integration tests"
+	@echo "  make test-frontend-unit          Frontend Jest tests"
+	@echo "  make test-plugins-unit           Plugin unit tests"
+	@echo "  make test-plugins-integration    Plugin integration tests (Docker required)"
+	@echo "  make test-plugins-e2e            Plugin E2E tests (Docker required)"
+	@echo "  make test-ui-e2e                 UI Playwright E2E tests"
+	@echo "  make test-ui-e2e-with-env        UI E2E with auto-started environment"
+	@echo ""
+	@echo "Configuration Variables:"
+	@echo "  TEST_EDITION=ce|ent        Edition to test (default: auto-detect)"
+	@echo "  TEST_COMPONENTS=\"...\"      Components to test (space-separated)"
+	@echo "  TEST_TYPES=\"...\"           Test types to run (space-separated)"
+	@echo "  TEST_VERBOSE=true          Enable verbose output"
+	@echo "  TEST_COVERAGE=true         Generate coverage report"
+	@echo "  TEST_TIMEOUT=30m           Test timeout duration"
+	@echo ""
+	@echo "Components: studio, microgateway, frontend, plugins"
+	@echo "Types: unit, integration, e2e"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make test-all EDITION=ent"
+	@echo "  make test-all TEST_COMPONENTS=\"studio frontend\" TEST_TYPES=\"unit\""
+	@echo "  make test-all TEST_VERBOSE=true TEST_COVERAGE=true"
+
+.PHONY: test-list
+test-list: ## List all available test targets
+	@echo "Available test targets:"
+	@grep -E '^test-[a-zA-Z0-9_-]+:.*##' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*## "}; {printf "  %-35s %s\n", $$1, $$2}'
+
+# ============================================================================
+# Integration Tests (Enterprise) - Legacy targets preserved
 # ============================================================================
 # Note: The advanced-llm-cache plugin has its own go.mod, so tests run from
 # within the plugin directory
@@ -396,8 +661,13 @@ clean:
 	rm -rf $(ADMIN_FRONTEND_DIR)/build
 	cd microgateway && rm -rf bin/ dist/
 
-# Development targets
+# Development targets (LEGACY - consider using 'make dev' instead)
+# The new Docker Compose-based environment provides hot reloading and multi-component support.
+# See 'make dev-help' for more information.
 start-dev: stop-dev
+	@echo "⚠️  Note: 'make start-dev' is the legacy approach."
+	@echo "   Consider using 'make dev' for hot reloading and better DX."
+	@echo ""
 	@if [ ! -f .env ]; then \
 		cp .env.example .env; \
 		echo ".env file created from .env.example"; \
@@ -414,6 +684,159 @@ stop-dev:
 	@pkill -f "npm start" || true
 	@pkill -f "./midsommar" || true
 	@screen -S midsommar -X quit || true
+
+# ============================================================================
+# Docker Compose Development Environment (NEW - Recommended)
+# ============================================================================
+# Modern Docker Compose-based development with hot reloading.
+# See dev/README.md for full documentation.
+#
+# Quick Start:
+#   make dev          - Start minimal dev env (Studio + Frontend + Postgres)
+#   make dev-full     - Start full stack (+ Gateway + Plugins watcher)
+#   make dev-ent      - Start enterprise dev env
+#   make dev-full-ent - Start full enterprise stack
+#
+# All services have hot reloading enabled via Air (Go) and React HMR (frontend).
+
+.PHONY: dev dev-full dev-ent dev-full-ent dev-down dev-logs dev-clean dev-status dev-rebuild
+
+# Start minimal development environment (Studio + Frontend + PostgreSQL)
+dev:
+	@echo "🚀 Starting minimal development environment..."
+	@echo "   Services: postgres, studio (with hot reload), frontend (with HMR)"
+	@echo ""
+	@if [ ! -f dev/.env ]; then \
+		cp dev/.env.dev dev/.env; \
+		echo "📝 Created dev/.env from template"; \
+		echo "   Edit dev/.env to add your API keys"; \
+		echo ""; \
+	fi
+	cd dev && docker compose up --build
+
+# Start full development environment (+ Gateway + Plugin watcher)
+dev-full:
+	@echo "🚀 Starting full development environment..."
+	@echo "   Services: postgres, studio, frontend, gateway, plugins"
+	@echo ""
+	@if [ ! -f dev/.env ]; then \
+		cp dev/.env.dev dev/.env; \
+		echo "📝 Created dev/.env from template"; \
+		echo "   Edit dev/.env to add your API keys"; \
+		echo ""; \
+	fi
+	@if [ ! -f dev/.env.gateway ]; then \
+		cp dev/.env.gateway.dev dev/.env.gateway; \
+		echo "📝 Created dev/.env.gateway from template"; \
+	fi
+	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+
+# Start enterprise development environment (minimal)
+dev-ent:
+	@if [ ! -d "enterprise/.git" ] && [ ! -f "enterprise/.git" ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized."; \
+		echo "   Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "🏢 Starting enterprise development environment..."
+	@if [ ! -f dev/.env ]; then \
+		cp dev/.env.dev dev/.env; \
+		echo "📝 Created dev/.env from template"; \
+	fi
+	@if ! grep -q "^TYK_AI_LICENSE=" dev/.env || [ "$$(grep "^TYK_AI_LICENSE=" dev/.env | cut -d= -f2)" = "" ]; then \
+		echo "⚠️  Warning: TYK_AI_LICENSE not set in dev/.env"; \
+		echo "   Enterprise features require a valid license."; \
+		echo ""; \
+	fi
+	cd dev && docker compose -f docker-compose.yml -f docker-compose.ent.yml up --build
+
+# Start full enterprise development environment
+dev-full-ent:
+	@if [ ! -d "enterprise/.git" ] && [ ! -f "enterprise/.git" ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized."; \
+		echo "   Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "🏢 Starting full enterprise development environment..."
+	@if [ ! -f dev/.env ]; then \
+		cp dev/.env.dev dev/.env; \
+		echo "📝 Created dev/.env from template"; \
+	fi
+	@if [ ! -f dev/.env.gateway ]; then \
+		cp dev/.env.gateway.dev dev/.env.gateway; \
+		echo "📝 Created dev/.env.gateway from template"; \
+	fi
+	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml -f docker-compose.ent.yml -f docker-compose.full-ent.yml up --build
+
+# Stop development environment
+dev-down:
+	@echo "🛑 Stopping development environment..."
+	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml down 2>/dev/null || true
+
+# View all logs
+dev-logs:
+	cd dev && docker compose logs -f
+
+# View logs for specific service (usage: make dev-logs-studio, make dev-logs-gateway, etc.)
+dev-logs-%:
+	cd dev && docker compose logs -f $*
+
+# Shell into a service (usage: make dev-shell-studio, make dev-shell-gateway, etc.)
+dev-shell-%:
+	cd dev && docker compose exec $* sh
+
+# Rebuild a specific service (usage: make dev-rebuild-studio)
+dev-rebuild-%:
+	cd dev && docker compose up --build -d $*
+
+# Clean development environment (stops containers and removes volumes)
+dev-clean:
+	@echo "🧹 Cleaning development environment..."
+	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml down -v 2>/dev/null || true
+	rm -f dev/.env dev/.env.gateway
+	@echo "✅ Development environment cleaned"
+	@echo "   Run 'make dev' to start fresh"
+
+# Show development environment status
+dev-status:
+	@echo "Development Environment Status:"
+	@echo ""
+	cd dev && docker compose ps 2>/dev/null || echo "No containers running"
+
+# Development help
+dev-help:
+	@echo "Docker Compose Development Environment"
+	@echo ""
+	@echo "Quick Start:"
+	@echo "  make dev              Start minimal env (Studio + Frontend + Postgres)"
+	@echo "  make dev-full         Start full stack (+ Gateway + Plugins watcher)"
+	@echo ""
+	@echo "Enterprise Edition:"
+	@echo "  make dev-ent          Start enterprise minimal env"
+	@echo "  make dev-full-ent     Start enterprise full stack"
+	@echo ""
+	@echo "Management:"
+	@echo "  make dev-down         Stop all containers"
+	@echo "  make dev-logs         View all logs"
+	@echo "  make dev-logs-studio  View studio logs only"
+	@echo "  make dev-logs-gateway View gateway logs only"
+	@echo "  make dev-shell-studio Shell into studio container"
+	@echo "  make dev-status       Show container status"
+	@echo "  make dev-clean        Stop and remove all data"
+	@echo ""
+	@echo "Ports:"
+	@echo "  3000  Frontend (React dev server)"
+	@echo "  8080  Studio REST API"
+	@echo "  9090  Studio gRPC (control server)"
+	@echo "  8081  Gateway REST API"
+	@echo "  5432  PostgreSQL"
+	@echo ""
+	@echo "Hot Reloading:"
+	@echo "  - Edit Go files → Air rebuilds in ~2-3 seconds"
+	@echo "  - Edit React files → HMR updates instantly"
+	@echo "  - Edit plugins → Auto-rebuilt by watcher (full mode)"
+	@echo ""
+	@echo "See dev/README.md for full documentation"
 
 # Start pre-defined test env in docker
 start-test-env:
@@ -490,8 +913,15 @@ show-edition:
 	build-linux-amd64 build-linux-arm64 build-darwin-amd64 build-darwin-arm64 \
 	build-local build-community build-enterprise \
 	plugins test clean start-dev stop-dev \
+	dev dev-full dev-ent dev-full-ent dev-down dev-logs dev-clean dev-status dev-help \
 	perf-test perf-profile perf-baseline perf-compare perf-report perf-clean \
 	init-enterprise update-enterprise show-edition \
 	test-integration test-integration-plugin-cache test-integration-plugin-cache-full \
 	test-integration-plugin-cache-coverage test-integration-plugin-cache-cluster \
-	test-integration-plugin-cache-syslog test-integration-plugin-github-rag
+	test-integration-plugin-cache-syslog test-integration-plugin-github-rag \
+	test-all test-quick test-ci test-help test-list \
+	test-studio-unit test-studio-integration \
+	test-microgateway-unit test-microgateway-integration \
+	test-frontend-unit \
+	test-plugins-unit test-plugins-integration test-plugins-e2e \
+	test-ui-e2e test-ui-e2e-with-env

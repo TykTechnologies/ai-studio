@@ -27,12 +27,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
 	"github.com/TykTechnologies/midsommar/v2/startup"
 
@@ -45,7 +45,7 @@ import (
 var staticFiles embed.FS
 
 func printWelcome() {
-	fmt.Printf("Starting Tyk AI Portal %v\n", "v2.0-hub-spoke")
+	fmt.Printf("Starting Tyk AI Studio %v\n", "v2.0-hub-spoke")
 	fmt.Printf("Copyright Tyk Technologies, %s\n", time.Now().Format("2006"))
 }
 
