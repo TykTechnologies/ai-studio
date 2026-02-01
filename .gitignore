@@ -50,7 +50,6 @@ examples/file-based-demo/demo
 examples/file-based-demo/analytics/*.json
 utils/uc/*.json
 utils/uc/uc
-CLAUDE.md
 staging/*
 staging
 envs/*
