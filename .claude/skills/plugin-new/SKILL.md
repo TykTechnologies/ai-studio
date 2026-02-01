@@ -33,6 +33,18 @@ Create a new Tyk AI Studio plugin using the plugin-scaffold tool.
 | `object_hooks` | ✓ | - | Intercept CRUD operations |
 | `data_collector` | ✓ | ✓ | Telemetry collection handlers |
 
+## Reference Examples
+
+Before scaffolding, review existing implementations for patterns:
+
+| Capability | Example Plugin | Path |
+|------------|----------------|------|
+| `auth` | **custom-auth-ui** | `examples/plugins/studio/custom-auth-ui/server/main.go` |
+| `studio_ui` | custom-auth-ui | `examples/plugins/studio/custom-auth-ui/server/main.go` |
+| `object_hooks` | hook-test-plugin | `examples/plugins/studio/hook-test-plugin/main.go` |
+| `data_collector` | file-analytics-collector | `examples/plugins/data-collectors/file-analytics-collector/main.go` |
+| `post_auth` + `on_response` | llm-rate-limiter-multiphase | `examples/plugins/studio/llm-rate-limiter-multiphase/main.go` |
+
 ## Usage
 
 First, ensure the scaffolding tool is built:
@@ -99,6 +111,14 @@ make plugins
    - Open http://localhost:3000
    - Go to Admin > Plugins > Register Plugin
    - Command: `file:///app/examples/plugins/studio/<name>/<name>`
+
+## Post-Scaffold Verification
+
+After scaffolding, verify:
+
+1. **Method signatures match SDK**: Check `pkg/plugin_sdk/capabilities.go`
+2. **Proto types are correct**: Check `proto/plugin.proto` if unsure
+3. **Code compiles**: `go build -o <name>` in the plugin directory
 
 ## Notes
 

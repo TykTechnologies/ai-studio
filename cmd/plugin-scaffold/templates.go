@@ -40,6 +40,9 @@ import (
 	"mime"
 	"path/filepath"
 	"strings"
+{{- else if .HasAuth}}
+	"fmt"
+	"strings"
 {{- end}}
 	"log"
 
@@ -134,13 +137,42 @@ func (p *{{.StructName}}Plugin) HandlePreAuth(ctx plugin_sdk.Context, req *pb.En
 {{end -}}
 {{if .HasAuth -}}
 // HandleAuth implements plugin_sdk.AuthHandler
-func (p *{{.StructName}}Plugin) HandleAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+func (p *{{.StructName}}Plugin) HandleAuth(ctx plugin_sdk.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
 	log.Printf("%s: HandleAuth called", PluginName)
 
-	// TODO: Add your authentication logic here
-	// Return Block: true to reject, or set auth headers
+	// Extract credential (handles Bearer prefix)
+	credential := req.Credential
+	if strings.HasPrefix(credential, "Bearer ") {
+		credential = strings.TrimPrefix(credential, "Bearer ")
+	}
 
-	return &pb.PluginResponse{Modified: false}, nil
+	// Access request headers if needed: req.Request.Headers
+
+	// TODO: Add your authentication logic here
+	// Return Authenticated: false with ErrorMessage to reject
+	// See examples/plugins/studio/custom-auth-ui for full implementation
+
+	return &pb.AuthResponse{
+		Authenticated: true,
+		UserId:        "user-id",
+		AppId:         "1",
+		Claims: map[string]string{
+			"source": PluginName,
+		},
+	}, nil
+}
+
+// GetAppByCredential implements plugin_sdk.AuthHandler
+func (p *{{.StructName}}Plugin) GetAppByCredential(ctx plugin_sdk.Context, credential string) (*pb.App, error) {
+	// TODO: Return app for this credential, or error if not found
+	// See examples/plugins/studio/custom-auth-ui for runtime-aware implementation
+	return nil, fmt.Errorf("app lookup not implemented")
+}
+
+// GetUserByCredential implements plugin_sdk.AuthHandler
+func (p *{{.StructName}}Plugin) GetUserByCredential(ctx plugin_sdk.Context, credential string) (*pb.User, error) {
+	// TODO: Return user for this credential, or error if not found
+	return nil, fmt.Errorf("user lookup not implemented")
 }
 
 {{end -}}
@@ -351,6 +383,9 @@ const gatewayMainTemplate = `package main
 import (
 	_ "embed"
 	"encoding/json"
+{{- if .HasAuth}}
+	"fmt"
+{{- end}}
 	"log"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
@@ -415,9 +450,33 @@ func (p *{{.StructName}}Plugin) HandlePreAuth(ctx plugin_sdk.Context, req *pb.En
 {{end -}}
 {{if .HasAuth -}}
 // HandleAuth implements plugin_sdk.AuthHandler
-func (p *{{.StructName}}Plugin) HandleAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
+func (p *{{.StructName}}Plugin) HandleAuth(ctx plugin_sdk.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
+	log.Printf("%s: HandleAuth called", PluginName)
+
 	// TODO: Add authentication logic
-	return &pb.PluginResponse{Modified: false}, nil
+	// Return Authenticated: false with ErrorMessage to reject
+	// See examples/plugins/studio/custom-auth-ui for full implementation
+
+	return &pb.AuthResponse{
+		Authenticated: true,
+		UserId:        "user-id",
+		AppId:         "1",
+		Claims: map[string]string{
+			"source": PluginName,
+		},
+	}, nil
+}
+
+// GetAppByCredential implements plugin_sdk.AuthHandler
+func (p *{{.StructName}}Plugin) GetAppByCredential(ctx plugin_sdk.Context, credential string) (*pb.App, error) {
+	// TODO: Return app for this credential
+	return nil, fmt.Errorf("app lookup not implemented")
+}
+
+// GetUserByCredential implements plugin_sdk.AuthHandler
+func (p *{{.StructName}}Plugin) GetUserByCredential(ctx plugin_sdk.Context, credential string) (*pb.User, error) {
+	// TODO: Return user for this credential
+	return nil, fmt.Errorf("user lookup not implemented")
 }
 
 {{end -}}
