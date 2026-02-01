@@ -59,7 +59,8 @@ services:
       - studio_data:/app/data
     ports:
       - "8080:8080"   # REST API
-      - "9090:9090"   # gRPC Control Server
+      - "9091:9091"   # gRPC Control Server
+      - "9090:9090"   # embedded gateway
       - "9898:9898"   # API Documentation Server
     environment:
       # Edition (ce or ent)

@@ -26,7 +26,8 @@ This directory contains the Docker Compose-based development environment for Tyk
 3. **Access the application:**
    - **Frontend (React):** http://localhost:3000
    - **Backend API:** http://localhost:8080
-   - **gRPC Control Server:** localhost:9090
+   - **Embedded gateway:** localhost:9090
+   - **gRPC Control Server:** localhost:9091
 
 That's it! The environment will automatically:
 - Create a `.env` file from the template
@@ -124,10 +125,17 @@ make dev-full
    make init-enterprise
    ```
 
-2. **Add your license key** to `dev/.env`:
+2. **Create a secrets file** with your license key:
    ```bash
-   TYK_AI_LICENSE=your-license-key-here
+   # Create dev/.env.secrets (this file is gitignored)
+   echo "TYK_AI_LICENSE=your-license-key-here" > dev/.env.secrets
+
+   # Optionally add API keys for LLM providers
+   echo "OPENAI_API_KEY=sk-..." >> dev/.env.secrets
+   echo "ANTHROPIC_AI_KEY=sk-ant-..." >> dev/.env.secrets
    ```
+
+   > **Why `.env.secrets`?** This file is automatically merged into `.env` when you run the dev commands. It's gitignored, so your secrets won't be committed. This approach works with both manual runs and automated tools like Claude Code skills.
 
 3. **Start in enterprise mode**:
    ```bash
@@ -146,8 +154,24 @@ The development environment uses separate environment files for different compon
 |------|---------|--------------|
 | `.env` | AI Studio (control plane) settings | `.env.dev` |
 | `.env.gateway` | Microgateway (edge) settings | `.env.gateway.dev` |
+| `.env.secrets` | **Your secrets** (license, API keys) | Created manually |
 
-These files are automatically created when you run `make dev` or `make dev-full`.
+These files (except `.env.secrets`) are automatically created when you run `make dev` or `make dev-full`.
+
+### Secrets File (`.env.secrets`)
+
+Create `dev/.env.secrets` to store your license key and API keys. This file is:
+- **Gitignored** - won't be committed
+- **Automatically merged** - values override the template when running `make dev-ent` etc.
+- **Persistent** - survives `make dev-clean`
+
+Example:
+```bash
+# dev/.env.secrets
+TYK_AI_LICENSE=your-enterprise-license-key
+OPENAI_API_KEY=sk-...
+ANTHROPIC_AI_KEY=sk-ant-...
+```
 
 ### AI Studio Environment (`.env`)
 
@@ -332,7 +356,8 @@ make dev
 |------|---------|----------|-------------|
 | 3000 | Frontend | HTTP | React development server |
 | 8080 | Studio | HTTP | REST API endpoints |
-| 9090 | Studio | gRPC | Control server (edge sync) |
+| 9090 | Studio | HTTP | Embedded AI Gateway |
+| 9091 | Studio | gRPC | Control server (edge sync) |
 | 9898 | Studio | HTTP | API Documentation server |
 | 8081 | Gateway | HTTP | Gateway REST/Proxy API |
 | 5432 | PostgreSQL | TCP | Database |

@@ -2,6 +2,7 @@
 .env
 dev/.env
 dev/.env.gateway
+dev/.env.secrets
 .aider*
 *.db
 midsommar
@@ -125,3 +126,11 @@ keys/*
 *.test
 *.out
 tests/postgres_data/
+examples/plugins/studio/service-api-test/server/server
+examples/plugins/studio/scheduler-demo/server/server
+examples/plugins/studio/llm-rate-limiter-multiphase/llm-rate-limiter-multiphase
+examples/plugins/data-collectors/file-analytics-collector/file-analytics-collector
+examples/plugins/data-collectors/file-budget-collector/file-budget-collector
+examples/plugins/data-collectors/file-proxy-collector/file-proxy-collector
+examples/plugins/studio/custom-auth-ui/server/server
+examples/plugins/studio/echo-agent/server/server

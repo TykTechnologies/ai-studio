@@ -62,8 +62,13 @@ help:
 	@echo "  make build-darwin-amd64 - Darwin AMD64 with CGO"
 	@echo "  make build-darwin-arm64 - Darwin ARM64 with CGO"
 	@echo ""
+	@echo "Plugin Development:"
+	@echo "  make tools              - Build development tools (plugin-scaffold)"
+	@echo "  make plugin-new         - Scaffold a new plugin (NAME=x TYPE=y [CAPABILITIES=a,b])"
+	@echo "  make plugin-help        - Show plugin scaffolding help"
+	@echo "  make plugins            - Build all example plugins"
+	@echo ""
 	@echo "Other targets:"
-	@echo "  make plugins            - Build all plugins"
 	@echo "  make test               - Run tests"
 	@echo "  make clean              - Clean build artifacts"
 	@echo "  make show-edition       - Show current edition info"
@@ -286,6 +291,43 @@ plugins:
 		echo ""; \
 		echo "✅ All plugins built successfully!"; \
 	fi
+
+# ============================================================================
+# Plugin Scaffolding
+# ============================================================================
+# Usage:
+#   make plugin-new NAME=my-plugin TYPE=studio
+#   make plugin-new NAME=my-plugin TYPE=studio CAPABILITIES=studio_ui,post_auth,on_response
+#   make plugin-new NAME=my-enricher TYPE=gateway
+#   make plugin-new NAME=my-assistant TYPE=agent
+#   make plugin-help
+
+.PHONY: plugin-new plugin-help tools
+
+# Build all development tools
+tools: bin/plugin-scaffold
+	@echo "✅ Development tools built successfully"
+	@echo "   - bin/plugin-scaffold (plugin scaffolding)"
+
+# Build the scaffolding tool (rebuilds only if source changes)
+bin/plugin-scaffold: $(wildcard cmd/plugin-scaffold/*.go)
+	@echo "Building plugin-scaffold tool..."
+	@mkdir -p bin
+	@go build -o bin/plugin-scaffold ./cmd/plugin-scaffold
+
+# Scaffold a new plugin
+plugin-new: bin/plugin-scaffold
+	@if [ -z "$(NAME)" ] || [ -z "$(TYPE)" ]; then \
+		echo "Usage: make plugin-new NAME=my-plugin TYPE=studio|gateway|agent|data-collector [CAPABILITIES=cap1,cap2]"; \
+		echo ""; \
+		echo "Run 'make plugin-help' for more information."; \
+		exit 1; \
+	fi
+	@./bin/plugin-scaffold -name="$(NAME)" -type="$(TYPE)" -capabilities="$(CAPABILITIES)"
+
+# Show plugin scaffolding help
+plugin-help: bin/plugin-scaffold
+	@./bin/plugin-scaffold -help
 
 # Test target (legacy - use test-all for more control)
 test:
@@ -743,9 +785,21 @@ dev-ent:
 		cp dev/.env.dev dev/.env; \
 		echo "📝 Created dev/.env from template"; \
 	fi
+	@if [ -f dev/.env.secrets ]; then \
+		echo "🔐 Merging dev/.env.secrets into dev/.env"; \
+		while IFS= read -r line || [ -n "$$line" ]; do \
+			key=$$(echo "$$line" | cut -d= -f1); \
+			if [ -n "$$key" ] && [ "$${key#\#}" = "$$key" ]; then \
+				sed -i.bak "/^$$key=/d" dev/.env 2>/dev/null || sed -i '' "/^$$key=/d" dev/.env; \
+				echo "$$line" >> dev/.env; \
+			fi; \
+		done < dev/.env.secrets; \
+		rm -f dev/.env.bak; \
+	fi
 	@if ! grep -q "^TYK_AI_LICENSE=" dev/.env || [ "$$(grep "^TYK_AI_LICENSE=" dev/.env | cut -d= -f2)" = "" ]; then \
-		echo "⚠️  Warning: TYK_AI_LICENSE not set in dev/.env"; \
-		echo "   Enterprise features require a valid license."; \
+		echo "⚠️  Warning: TYK_AI_LICENSE not set"; \
+		echo "   Create dev/.env.secrets with:"; \
+		echo "     TYK_AI_LICENSE=your-license-key"; \
 		echo ""; \
 	fi
 	cd dev && docker compose -f docker-compose.yml -f docker-compose.ent.yml up --build
@@ -761,6 +815,17 @@ dev-full-ent:
 	@if [ ! -f dev/.env ]; then \
 		cp dev/.env.dev dev/.env; \
 		echo "📝 Created dev/.env from template"; \
+	fi
+	@if [ -f dev/.env.secrets ]; then \
+		echo "🔐 Merging dev/.env.secrets into dev/.env"; \
+		while IFS= read -r line || [ -n "$$line" ]; do \
+			key=$$(echo "$$line" | cut -d= -f1); \
+			if [ -n "$$key" ] && [ "$${key#\#}" = "$$key" ]; then \
+				sed -i.bak "/^$$key=/d" dev/.env 2>/dev/null || sed -i '' "/^$$key=/d" dev/.env; \
+				echo "$$line" >> dev/.env; \
+			fi; \
+		done < dev/.env.secrets; \
+		rm -f dev/.env.bak; \
 	fi
 	@if [ ! -f dev/.env.gateway ]; then \
 		cp dev/.env.gateway.dev dev/.env.gateway; \
@@ -815,6 +880,12 @@ dev-help:
 	@echo "  make dev-ent          Start enterprise minimal env"
 	@echo "  make dev-full-ent     Start enterprise full stack"
 	@echo ""
+	@echo "Detached Mode (for automation/Claude):"
+	@echo "  make dev-start        Start minimal env (detached)"
+	@echo "  make dev-start-full   Start full stack (detached)"
+	@echo "  make dev-start-ent    Start enterprise minimal (detached)"
+	@echo "  make dev-start-full-ent Start enterprise full (detached)"
+	@echo ""
 	@echo "Management:"
 	@echo "  make dev-down         Stop all containers"
 	@echo "  make dev-logs         View all logs"
@@ -823,6 +894,11 @@ dev-help:
 	@echo "  make dev-shell-studio Shell into studio container"
 	@echo "  make dev-status       Show container status"
 	@echo "  make dev-clean        Stop and remove all data"
+	@echo ""
+	@echo "Non-blocking Logs (for automation/Claude):"
+	@echo "  make dev-tail-studio  Last 100 lines of studio logs"
+	@echo "  make dev-tail-gateway Last 100 lines of gateway logs"
+	@echo "  make dev-tail LINES=50 Custom line count"
 	@echo ""
 	@echo "Ports:"
 	@echo "  3000  Frontend (React dev server)"
@@ -837,6 +913,104 @@ dev-help:
 	@echo "  - Edit plugins → Auto-rebuilt by watcher (full mode)"
 	@echo ""
 	@echo "See dev/README.md for full documentation"
+
+# ============================================================================
+# Detached Mode Development (for automation/Claude Code)
+# ============================================================================
+# These targets run the dev environment in detached mode (-d flag) so that
+# the command returns immediately. Useful for automation and Claude Code skills.
+
+# Start minimal dev env in detached mode
+dev-start:
+	@echo "🚀 Starting minimal development environment (detached)..."
+	@if [ ! -f dev/.env ]; then \
+		cp dev/.env.dev dev/.env; \
+		echo "📝 Created dev/.env from template"; \
+	fi
+	cd dev && docker compose up --build -d
+	@echo "✅ Environment started. Use 'make dev-status' to check."
+
+# Start full dev env in detached mode
+dev-start-full:
+	@echo "🚀 Starting full development environment (detached)..."
+	@if [ ! -f dev/.env ]; then \
+		cp dev/.env.dev dev/.env; \
+		echo "📝 Created dev/.env from template"; \
+	fi
+	@if [ ! -f dev/.env.gateway ]; then \
+		cp dev/.env.gateway.dev dev/.env.gateway; \
+		echo "📝 Created dev/.env.gateway from template"; \
+	fi
+	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml up --build -d
+	@echo "✅ Environment started. Use 'make dev-status' to check."
+
+# Start enterprise dev env in detached mode
+dev-start-ent:
+	@if [ ! -d "enterprise/.git" ] && [ ! -f "enterprise/.git" ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized. Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "🏢 Starting enterprise development environment (detached)..."
+	@if [ ! -f dev/.env ]; then \
+		cp dev/.env.dev dev/.env; \
+		echo "📝 Created dev/.env from template"; \
+	fi
+	@if [ -f dev/.env.secrets ]; then \
+		echo "🔐 Merging dev/.env.secrets into dev/.env"; \
+		while IFS= read -r line || [ -n "$$line" ]; do \
+			key=$$(echo "$$line" | cut -d= -f1); \
+			if [ -n "$$key" ] && [ "$${key#\#}" = "$$key" ]; then \
+				sed -i.bak "/^$$key=/d" dev/.env 2>/dev/null || sed -i '' "/^$$key=/d" dev/.env; \
+				echo "$$line" >> dev/.env; \
+			fi; \
+		done < dev/.env.secrets; \
+		rm -f dev/.env.bak; \
+	fi
+	cd dev && docker compose -f docker-compose.yml -f docker-compose.ent.yml up --build -d
+	@echo "✅ Environment started. Use 'make dev-status' to check."
+
+# Start full enterprise dev env in detached mode
+dev-start-full-ent:
+	@if [ ! -d "enterprise/.git" ] && [ ! -f "enterprise/.git" ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized. Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "🏢 Starting full enterprise development environment (detached)..."
+	@if [ ! -f dev/.env ]; then \
+		cp dev/.env.dev dev/.env; \
+		echo "📝 Created dev/.env from template"; \
+	fi
+	@if [ -f dev/.env.secrets ]; then \
+		echo "🔐 Merging dev/.env.secrets into dev/.env"; \
+		while IFS= read -r line || [ -n "$$line" ]; do \
+			key=$$(echo "$$line" | cut -d= -f1); \
+			if [ -n "$$key" ] && [ "$${key#\#}" = "$$key" ]; then \
+				sed -i.bak "/^$$key=/d" dev/.env 2>/dev/null || sed -i '' "/^$$key=/d" dev/.env; \
+				echo "$$line" >> dev/.env; \
+			fi; \
+		done < dev/.env.secrets; \
+		rm -f dev/.env.bak; \
+	fi
+	@if [ ! -f dev/.env.gateway ]; then \
+		cp dev/.env.gateway.dev dev/.env.gateway; \
+		echo "📝 Created dev/.env.gateway from template"; \
+	fi
+	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml -f docker-compose.ent.yml -f docker-compose.full-ent.yml up --build -d
+	@echo "✅ Environment started. Use 'make dev-status' to check."
+
+# ============================================================================
+# Non-blocking Log Commands (for automation/Claude Code)
+# ============================================================================
+# These targets fetch logs without following (-f), returning immediately.
+# Use LINES=N to control how many lines to fetch (default: 100).
+
+# View last N lines of all logs (default 100, non-blocking)
+dev-tail:
+	cd dev && docker compose logs --tail=$(or $(LINES),100)
+
+# View last N lines of specific service logs (usage: make dev-tail-studio LINES=50)
+dev-tail-%:
+	cd dev && docker compose logs --tail=$(or $(LINES),100) $*
 
 # Start pre-defined test env in docker
 start-test-env:
@@ -914,6 +1088,7 @@ show-edition:
 	build-local build-community build-enterprise \
 	plugins test clean start-dev stop-dev \
 	dev dev-full dev-ent dev-full-ent dev-down dev-logs dev-clean dev-status dev-help \
+	dev-start dev-start-full dev-start-ent dev-start-full-ent dev-tail \
 	perf-test perf-profile perf-baseline perf-compare perf-report perf-clean \
 	init-enterprise update-enterprise show-edition \
 	test-integration test-integration-plugin-cache test-integration-plugin-cache-full \
@@ -924,4 +1099,5 @@ show-edition:
 	test-microgateway-unit test-microgateway-integration \
 	test-frontend-unit \
 	test-plugins-unit test-plugins-integration test-plugins-e2e \
-	test-ui-e2e test-ui-e2e-with-env
+	test-ui-e2e test-ui-e2e-with-env \
+	plugin-new plugin-help tools
