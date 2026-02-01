@@ -1,3 +1,14 @@
+# =============================================================================
+# DEPRECATED: This Dockerfile is deprecated and will be removed in a future release.
+#
+# Please use the new Docker Compose-based development environment instead:
+#   make dev          - Start minimal development environment
+#   make dev-full     - Start full stack with Gateway and Plugins
+#   make dev-ent      - Start enterprise development environment
+#
+# See dev/README.md for full documentation.
+# =============================================================================
+
 FROM --platform=$BUILDPLATFORM node:18 AS base
 
 # Install basic tools and build essentials
@@ -37,8 +48,8 @@ WORKDIR /app
 
 RUN git clone https://github.com/lonelycode/langchaingo.git /langchaingo
 
-# Install Air for Go hot reloading
-RUN go install github.com/air-verse/air@latest
+# Install Air for Go hot reloading (pinned for Go 1.22 compatibility)
+RUN go install github.com/air-verse/air@v1.61.5
 
 # Copy package files first to leverage Docker cache
 COPY ui/admin-frontend/package*.json ./ui/admin-frontend/

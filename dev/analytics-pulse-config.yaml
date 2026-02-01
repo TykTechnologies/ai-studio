@@ -1,0 +1,48 @@
+# Analytics Pulse Configuration for Microgateway (Edge Mode)
+#
+# This configuration enables the analytics pulse plugin which sends
+# analytics data from the edge gateway to the control plane (AI Studio).
+#
+# The analytics pulse collects and batches analytics, budget, and proxy log
+# data and sends it periodically to the control server via gRPC.
+
+version: "1.0"
+
+data_collection_plugins:
+  - name: "analytics_pulse"
+    enabled: true
+    hook_types: ["analytics", "budget", "proxy_log"]
+    replace_database: false  # Supplement existing analytics, don't replace
+    priority: 100
+    config:
+      # How often to send analytics batches to control plane
+      interval_seconds: 10
+
+      # Maximum events per batch
+      max_batch_size: 1000
+
+      # Maximum events to buffer before dropping oldest
+      max_buffer_size: 10000
+
+      # Enable gzip compression for gRPC payloads
+      compression_enabled: true
+
+      # Include proxy summary statistics
+      include_proxy_summaries: true
+
+      # Whether to include request/response bodies in pulse
+      # Set to false in production for privacy/performance
+      include_request_response_data: true
+
+      # How long to keep analytics locally on edge before cleanup
+      edge_retention_hours: 24
+
+      # LLM vendors to exclude from analytics
+      excluded_vendors: ["mock", "test"]
+
+      # gRPC timeout for sending batches
+      timeout_seconds: 30
+
+      # Retry configuration for failed sends
+      max_retries: 3
+      retry_interval_secs: 5

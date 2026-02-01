@@ -124,37 +124,109 @@ func (p *MyPlugin) HandlePreAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest
 
 ### 2. AuthHandler
 
-Custom authentication with credential lookup.
+Custom authentication with credential lookup. This interface requires **three methods** to fully integrate with the access control system.
 
 ```go
 type AuthHandler interface {
-    HandleAuth(ctx Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error)
+    Plugin
+    HandleAuth(ctx Context, req *pb.AuthRequest) (*pb.AuthResponse, error)
+    GetAppByCredential(ctx Context, credential string) (*pb.App, error)
+    GetUserByCredential(ctx Context, credential string) (*pb.User, error)
 }
 ```
 
-**Example:**
-```go
-func (p *MyPlugin) HandleAuth(ctx plugin_sdk.Context, req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
-    token := req.Headers["Authorization"]
+#### Why App Linking Is Critical
 
-    // Validate token with external service
-    user, err := validateToken(token)
-    if err != nil {
-        return &pb.PluginResponse{
-            Block:        true,
-            ErrorMessage: "Invalid token",
+**A valid credential alone is not enough.** The system requires an associated App object because Apps provide the access control context:
+
+- **Policy enforcement** - Rate limits, usage quotas, and restrictions
+- **Tool/Datasource permissions** - Which tools and datasources the credential can access
+- **LLM restrictions** - Which LLMs the credential is allowed to use
+- **Budget controls** - Cost tracking and spending limits
+
+Without a valid App association, authenticated requests will fail even if the credential itself is valid.
+
+#### Authentication Flow
+
+1. **`HandleAuth()`** - Validates the credential and returns an App ID and User ID
+2. **`GetAppByCredential()`** - System calls this to fetch the full App object for access control
+3. **`GetUserByCredential()`** - System calls this to fetch the User object for identity context
+
+#### Example Implementation
+
+```go
+type MyAuthPlugin struct {
+    plugin_sdk.BasePlugin
+    tokenStore map[string]*TokenConfig // Maps tokens to app/user IDs
+}
+
+// HandleAuth validates the credential and returns App/User IDs
+func (p *MyAuthPlugin) HandleAuth(ctx plugin_sdk.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
+    // Extract token from request
+    token := req.Credential
+    if token == "" {
+        return &pb.AuthResponse{
+            Authenticated: false,
+            ErrorMessage:  "No credential provided",
         }, nil
     }
 
-    return &pb.PluginResponse{
-        Modified:   true,
-        Credential: &pb.Credential{
-            UserID:   user.ID,
-            Username: user.Name,
-        },
+    // Validate token and look up associated IDs
+    tokenConfig, valid := p.tokenStore[token]
+    if !valid {
+        return &pb.AuthResponse{
+            Authenticated: false,
+            ErrorMessage:  "Invalid token",
+        }, nil
+    }
+
+    // CRITICAL: Return the App ID - this links the credential to access control
+    return &pb.AuthResponse{
+        Authenticated: true,
+        AppId:         tokenConfig.AppID,   // Must be a valid App in the database
+        UserId:        tokenConfig.UserID,
     }, nil
 }
+
+// GetAppByCredential fetches the App object for access control enforcement
+func (p *MyAuthPlugin) GetAppByCredential(ctx plugin_sdk.Context, credential string) (*pb.App, error) {
+    tokenConfig, ok := p.tokenStore[credential]
+    if !ok {
+        return nil, fmt.Errorf("unknown credential")
+    }
+
+    // Fetch the App from the Service API
+    if ctx.Runtime == plugin_sdk.RuntimeGateway {
+        return ctx.Services.Gateway().GetApp(ctx, tokenConfig.AppID)
+    }
+    return ctx.Services.Studio().GetApp(ctx, tokenConfig.AppID)
+}
+
+// GetUserByCredential fetches the User object for identity context
+func (p *MyAuthPlugin) GetUserByCredential(ctx plugin_sdk.Context, credential string) (*pb.User, error) {
+    tokenConfig, ok := p.tokenStore[credential]
+    if !ok {
+        return nil, fmt.Errorf("unknown credential")
+    }
+
+    // Fetch the User from the Service API
+    if ctx.Runtime == plugin_sdk.RuntimeGateway {
+        return ctx.Services.Gateway().GetUser(ctx, tokenConfig.UserID)
+    }
+    return ctx.Services.Studio().GetUser(ctx, tokenConfig.UserID)
+}
 ```
+
+#### Common Pitfalls
+
+| Pitfall | Symptom | Solution |
+|---------|---------|----------|
+| Not returning App ID | Requests fail with "no app context" | Always return a valid `AppId` in `AuthResponse` |
+| App doesn't exist | 500 errors after auth success | Verify App exists in database before returning its ID |
+| Not implementing `GetAppByCredential` | Compile error or runtime panic | Implement all three interface methods |
+| Using wrong App ID | Permission denied for tools/LLMs | Ensure the App has the required permissions configured |
+
+See the working example at `examples/plugins/studio/custom-auth-ui/` for a complete implementation.
 
 ### 3. PostAuthHandler
 

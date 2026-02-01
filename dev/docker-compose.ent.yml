@@ -1,0 +1,35 @@
+# Tyk AI Studio - Enterprise Edition Overlay
+#
+# This compose file configures services for Enterprise Edition development.
+# It must be used with the base docker-compose.yml.
+#
+# Requirements:
+#   - Enterprise submodule must be initialized: make init-enterprise
+#   - TYK_AI_LICENSE must be set in .env or environment
+#
+# Usage (minimal):
+#   cd dev && docker compose -f docker-compose.yml -f docker-compose.ent.yml up --build
+#   Or use: make dev-ent (from project root)
+#
+# Usage (full stack):
+#   cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml -f docker-compose.ent.yml up --build
+#   Or use: make dev-full-ent (from project root)
+
+services:
+  # AI Studio - Enterprise Edition
+  studio:
+    build:
+      args:
+        EDITION: ent
+    environment:
+      EDITION: ent
+      # License is required for Enterprise Edition
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:?TYK_AI_LICENSE is required for Enterprise Edition}
+    volumes:
+      # Mount enterprise submodule (read-only to prevent accidental changes)
+      - ../enterprise:/app/enterprise:ro
+
+  # Frontend - indicate enterprise edition
+  frontend:
+    environment:
+      REACT_APP_EDITION: enterprise
