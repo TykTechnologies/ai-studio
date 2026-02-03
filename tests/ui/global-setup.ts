@@ -17,10 +17,9 @@ const config = {
   admin_name: 'Test Admin',
   dev_user_email: 'dev@tyk.io',
   dev_user_name: 'Dev User',
-  base_url: 'http://localhost:3000',
+  base_url: 'http://localhost:8081',
   // API runs on port 8080 inside container, exposed as 8081 on host (see tests/compose.yml)
-  // However, frontend on :3000 proxies /auth/* and /api/* to backend
-  api_url: process.env.API_URL || 'http://localhost:3000',
+  api_url: process.env.API_URL || 'http://localhost:8081',
   bootstrap_admin_email: process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@tyk.io',
   bootstrap_admin_password: process.env.BOOTSTRAP_ADMIN_PASSWORD || 'Admin#2025',
 };

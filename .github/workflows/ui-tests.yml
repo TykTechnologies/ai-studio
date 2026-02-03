@@ -71,6 +71,7 @@ jobs:
           attempts=0
           max_attempts=60
           # Check backend directly on port 8081 (exposed from container's 8080)
+          # Go backend serves both API and pre-built frontend (SKIP_FRONTEND_DEV=true)
           while [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/common/api/v1/notifications/unread/count)" != "401" ]; do
             attempts=$((attempts+1))
             echo "Attempt $attempts/$max_attempts - Waiting for AI Studio backend..."
@@ -83,19 +84,6 @@ jobs:
               exit 1
             fi
             sleep 5
-          done
-          echo "AI Studio backend is ready!"
-
-          echo "Waiting for frontend to start..."
-          attempts=0
-          while [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000)" != "200" ]; do
-            attempts=$((attempts+1))
-            echo "Attempt $attempts/30 - Waiting for frontend..."
-            if [ $attempts -ge 30 ]; then
-              echo "Frontend not ready, but backend is up. Proceeding..."
-              break
-            fi
-            sleep 2
           done
           echo "AI Studio is ready!"
 
@@ -115,22 +103,23 @@ jobs:
           path: tests/ui/playwright-report/
           retention-days: 7
 
-      - name: Upload Test Results to S3
-        if: failure() && steps.playwright.outcome != 'success'
-        working-directory: tests/ui
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.UI_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.UI_AWS_SECRET_ACCESS_KEY }}
-          RUN_ID: 'midsommar/${{ github.run_id }}'
-        run: npm run upload_report_to_s3
+      # TODO: Re-enable S3 upload after fixing test environment
+      # - name: Upload Test Results to S3
+      #   if: failure() && steps.playwright.outcome != 'success'
+      #   working-directory: tests/ui
+      #   env:
+      #     AWS_ACCESS_KEY_ID: ${{ secrets.UI_AWS_ACCESS_KEY_ID }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.UI_AWS_SECRET_ACCESS_KEY }}
+      #     RUN_ID: 'midsommar/${{ github.run_id }}'
+      #   run: npm run upload_report_to_s3
 
-      - name: Add S3 Report Link to Summary
-        if: failure() && steps.playwright.outcome != 'success'
-        run: |
-          echo "# UI Test Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: :x: Failed" >> $GITHUB_STEP_SUMMARY
-          echo "- [View Report on S3](https://tyk-qa-reports.s3.eu-central-1.amazonaws.com/midsommar/${{ github.run_id }}/index.html)" >> $GITHUB_STEP_SUMMARY
+      # - name: Add S3 Report Link to Summary
+      #   if: failure() && steps.playwright.outcome != 'success'
+      #   run: |
+      #     echo "# UI Test Report" >> $GITHUB_STEP_SUMMARY
+      #     echo "" >> $GITHUB_STEP_SUMMARY
+      #     echo "- Status: :x: Failed" >> $GITHUB_STEP_SUMMARY
+      #     echo "- [View Report on S3](https://tyk-qa-reports.s3.eu-central-1.amazonaws.com/midsommar/${{ github.run_id }}/index.html)" >> $GITHUB_STEP_SUMMARY
 
       - name: Collect Docker Logs
         if: failure()

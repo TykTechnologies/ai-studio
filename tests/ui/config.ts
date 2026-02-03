@@ -6,9 +6,9 @@ export const config = {
   dev1_user_email: 'dev1@tyk.io',
   dev2_user_email: 'dev2@tyk.io',
 
-  base_url: 'http://localhost:3000',
-  register_url: 'http://localhost:3000/register',
-  api_url: 'http://localhost:8080',
+  base_url: 'http://localhost:8081',
+  register_url: 'http://localhost:8081/register',
+  api_url: 'http://localhost:8081',
 
   // Bootstrap admin for API-based setup (when DB has existing users)
   // Set via environment variables or use defaults

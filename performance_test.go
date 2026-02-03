@@ -150,6 +150,10 @@ func TestLLMSerialization_N1Prevention(t *testing.T) {
 }
 
 func TestAnalyticsPulseBatchProcessing_Performance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping performance test in short mode")
+	}
+
 	// Set required environment variable for testing (32 characters)
 	testEncryptionKey := "12345678901234567890123456789012"
 	os.Setenv("MICROGATEWAY_ENCRYPTION_KEY", testEncryptionKey)
