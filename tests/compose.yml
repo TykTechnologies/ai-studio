@@ -8,7 +8,7 @@ services:
     volumes:
       - ../.:/app
       - /app/ui/admin-frontend/node_modules
-      - ../.env:/app/.env # Mount .env file
+      # Note: .env is created by entrypoint from .env.example if not present
     ports:
       - "3000:3000" # Frontend
       - "8081:8080"
@@ -26,6 +26,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DEVMODE=true
       - PROXY_URL=http://localhost:9090
+      # Build edition: enterprise (default) or community
+      - BUILD_EDITION=${BUILD_EDITION:-enterprise}
 
     stdin_open: true
     tty: true

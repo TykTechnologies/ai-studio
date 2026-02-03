@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -46,6 +49,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
           ANTHROPIC_AI_KEY: ${{ secrets.ANTHROPIC_KEY }}
           GO_BUILD_FLAGS: "-buildvcs=false"
+          BUILD_EDITION: enterprise
         run: |
           docker compose -f tests/compose.yml up -d
 

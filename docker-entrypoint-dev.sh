@@ -25,10 +25,17 @@ npm start &
 echo "Building and starting backend..."
 cd /app
 
-# Build enterprise edition
-echo "Performing Go build (enterprise)..."
+# Build edition based on BUILD_EDITION env var (default: enterprise)
+BUILD_EDITION="${BUILD_EDITION:-enterprise}"
+echo "Performing Go build (${BUILD_EDITION})..."
 mkdir -p bin
-CGO_ENABLED=1 go build -tags enterprise -o bin/midsommar-ent .
+
+if [ "$BUILD_EDITION" = "community" ] || [ "$BUILD_EDITION" = "ce" ]; then
+    CGO_ENABLED=1 go build -o bin/midsommar .
+else
+    CGO_ENABLED=1 go build -tags enterprise -o bin/midsommar-ent .
+fi
+
 if [ $? -ne 0 ]; then
     echo "Go build failed!"
     exit 1
@@ -36,7 +43,11 @@ fi
 
 # Start the server
 echo "Starting server..."
-./bin/midsommar-ent &
+if [ "$BUILD_EDITION" = "community" ] || [ "$BUILD_EDITION" = "ce" ]; then
+    ./bin/midsommar &
+else
+    ./bin/midsommar-ent &
+fi
 SERVER_PID=$!
 
 # Wait for any process to exit
