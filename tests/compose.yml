@@ -14,14 +14,15 @@ services:
       - "8081:8080"
       - "9090:9090" # Backend
     environment:
+      - CI=false
       - ALLOW_REGISTRATIONS=true
       - CHOKIDAR_USEPOLLING=true
       - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
       - DATABASE_TYPE=postgres
-      - TYK_AI_LICENSE=${TYK_AI_LICENSE}
-      - TYK_AI_SECRET_KEY=${TYK_AI_SECRET_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY}
+      - TYK_AI_LICENSE=${TYK_AI_LICENSE:-}
+      - TYK_AI_SECRET_KEY=${TYK_AI_SECRET_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY:-}
       - GOFLAGS=-buildvcs=false
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DEVMODE=true
