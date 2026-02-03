@@ -6,12 +6,63 @@
 # - amd64
 version: 2
 builds:
-  - id: std-amd64
+  - id: microgateway-amd64 # Build from a specific subdirectory (e.g., for multi-module repos like ai-studio's microgateway)
+    dir: microgateway # Specify the main package path (e.g., ./cmd/microgateway for non-standard entry points)
+    main: ./cmd/microgateway
+    env:
+      - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=gcc
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.FullCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X main.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
+      - amd64
+    binary: tyk-ai-microgateway
+  - id: microgateway-arm64 # Build from a specific subdirectory (e.g., for multi-module repos like ai-studio's microgateway)
+    dir: microgateway # Specify the main package path (e.g., ./cmd/microgateway for non-standard entry points)
+    main: ./cmd/microgateway
+    env:
+      - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=aarch64-linux-gnu-gcc
+    ldflags:
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.FullCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X main.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
+      - arm64
+    binary: tyk-ai-microgateway
+  - id: microgateway-s390x # Build from a specific subdirectory (e.g., for multi-module repos like ai-studio's microgateway)
+    dir: microgateway # Specify the main package path (e.g., ./cmd/microgateway for non-standard entry points)
+    main: ./cmd/microgateway
+    env:
+      - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=s390x-linux-gnu-gcc
+    ldflags:
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.FullCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X main.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
+      - s390x
+    binary: tyk-ai-microgateway
+  - id: std-amd64
+    env:
+      - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
+      - CC=gcc
+    ldflags:
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.FullCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X main.BuiltBy=goreleaser
     goos:
       - linux
     goarch:
@@ -19,12 +70,13 @@ builds:
     binary: tyk-ai-studio
   - id: std-arm64
     env:
+      - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
       - CC=aarch64-linux-gnu-gcc
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.FullCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X main.BuiltBy=goreleaser
     goos:
       - linux
     goarch:
@@ -32,29 +84,56 @@ builds:
     binary: tyk-ai-studio
   - id: std-s390x
     env:
+      - NOP=nop # ignore this, it is jsut to avoid a complex conditional in the templates
       - CC=s390x-linux-gnu-gcc
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.FullCommit}}
+      - -X main.BuildDate={{.Date}}
+      - -X main.BuiltBy=goreleaser
     goos:
       - linux
     goarch:
       - s390x
     binary: tyk-ai-studio
-  - id: fips
-    ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
-    goos:
-      - linux
-    goarch:
-      - amd64
-    binary: tyk-ai-studio
 nfpms:
+  - id: microgateway
+    vendor: "Tyk Technologies Ltd"
+    homepage: "https://tyk.io"
+    maintainer: "Tyk <info@tyk.io>"
+    description: Tyk AI Microgateway
+    package_name: tyk-ai-microgateway
+    file_name_template: "{{ .ConventionalFileName }}"
+    ids:
+      - microgateway-amd64
+      - microgateway-arm64
+      - microgateway-s390x
+    formats:
+      - deb
+      - rpm
+    contents:
+      - src: "README.md"
+        dst: "/opt/share/docs/tyk-ai-studio/README.md"
+      - src: "ci/install/*"
+        dst: "/opt/tyk-ai-studio/install"
+      - src: ci/install/inits/systemd/system/tyk-ai-studio.service
+        dst: /lib/systemd/system/tyk-ai-studio.service
+      - src: ci/install/inits/sysv/init.d/tyk-ai-studio
+        dst: /etc/init.d/tyk-ai-studio
+    scripts:
+      preinstall: "ci/install/before_install.sh"
+      postinstall: "ci/install/post_install.sh"
+      postremove: "ci/install/post_remove.sh"
+    bindir: "/opt/tyk-ai-studio"
+    rpm:
+      scripts:
+        posttrans: ci/install/post_trans.sh
+      signature:
+        key_file: tyk.io.signing.key
+    deb:
+      signature:
+        key_file: tyk.io.signing.key
+        type: origin
   - id: std
     vendor: "Tyk Technologies Ltd"
     homepage: "https://tyk.io"
@@ -62,7 +141,7 @@ nfpms:
     description: Tyk AI Studio
     package_name: tyk-ai-studio
     file_name_template: "{{ .ConventionalFileName }}"
-    builds:
+    ids:
       - std-amd64
       - std-arm64
       - std-s390x
@@ -78,53 +157,6 @@ nfpms:
         dst: /lib/systemd/system/tyk-ai-studio.service
       - src: ci/install/inits/sysv/init.d/tyk-ai-studio
         dst: /etc/init.d/tyk-ai-studio
-      - src: ci/install/inits/systemd/default/tyk-ai-studio
-        dst: /etc/default/tyk-ai-studio
-      - src: ci/install/data/tyk-ai-studio.conf.example
-        dst: /opt/tyk-ai-studio/tyk-ai-studio.conf.example
-      - src: "templates/*"
-        dst: "/opt/tyk-ai-studio/templates"
-    scripts:
-      preinstall: "ci/install/before_install.sh"
-      postinstall: "ci/install/post_install.sh"
-      postremove: "ci/install/post_remove.sh"
-    bindir: "/opt/tyk-ai-studio"
-    rpm:
-      scripts:
-        posttrans: ci/install/post_trans.sh
-      signature:
-        key_file: tyk.io.signing.key
-    deb:
-      signature:
-        key_file: tyk.io.signing.key
-        type: origin
-  - id: fips
-    vendor: "Tyk Technologies Ltd"
-    homepage: "https://tyk.io"
-    maintainer: "Tyk <info@tyk.io>"
-    description: Tyk AI Portal
-    package_name: tyk-ai-studio-fips
-    file_name_template: "{{ .ConventionalFileName }}"
-    builds:
-      - fips
-    formats:
-      - deb
-      - rpm
-    contents:
-      - src: "README.md"
-        dst: "/opt/share/docs/tyk-ai-studio/README.md"
-      - src: "ci/install/*"
-        dst: "/opt/tyk-ai-studio/install"
-      - src: ci/install/inits/systemd/system/tyk-ai-studio.service
-        dst: /lib/systemd/system/tyk-ai-studio.service
-      - src: ci/install/inits/sysv/init.d/tyk-ai-studio
-        dst: /etc/init.d/tyk-ai-studio
-      - src: ci/install/inits/systemd/default/tyk-ai-studio
-        dst: /etc/default/tyk-ai-studio
-      - src: ci/install/data/tyk-ai-studio.conf.example
-        dst: /opt/tyk-ai-studio/tyk-ai-studio.conf.example
-      - src: "templates/*"
-        dst: "/opt/tyk-ai-studio/templates"
     scripts:
       preinstall: "ci/install/before_install.sh"
       postinstall: "ci/install/post_install.sh"
@@ -140,13 +172,21 @@ nfpms:
         key_file: tyk.io.signing.key
         type: origin
 publishers:
-  - name: tyk-ee-unstable
+  - name: microgateway
+    ids:
+      - microgateway
     env:
       - PACKAGECLOUD_TOKEN={{ .Env.PACKAGECLOUD_TOKEN }}
-    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/tyk-ee-unstable {{ .ArtifactPath }}
+    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/tyk-ai-microgateway {{ .ArtifactPath }}
+  - name: std
+    ids:
+      - std
+    env:
+      - PACKAGECLOUD_TOKEN={{ .Env.PACKAGECLOUD_TOKEN }}
+    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/tyk-ai-studio {{ .ArtifactPath }}
 # This disables archives
 archives:
-  - format: binary
+  - formats: ['binary']
     allow_different_binary_count: true
 checksum:
   disable: true
@@ -154,7 +194,7 @@ release:
   disable: true
   github:
     owner: TykTechnologies
-    name: tyk-ai-studio
+    name: ai-studio
   prerelease: auto
   draft: true
   name_template: "{{.ProjectName}}-v{{.Version}}"

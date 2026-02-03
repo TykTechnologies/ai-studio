@@ -112,4 +112,4 @@ esac
 # https://docs.fedoraproject.org/en-US/packaging-guidelines/Scriptlets/ it appears that cleanup is not
 # needed to support systemd and sysv
 
-cleanup
+#cleanup
