@@ -48,6 +48,12 @@ jobs:
           mkdir -p docs/site/dist
           echo "placeholder" > docs/site/dist/index.html
 
+      - name: Clean test database
+        run: |
+          # Ensure fresh database for each test run
+          rm -rf tests/postgres_data_ci || true
+          docker compose -f tests/compose.yml down -v --remove-orphans 2>/dev/null || true
+
       - name: Start Test Environment
         env:
           TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
@@ -87,13 +93,27 @@ jobs:
           done
           echo "AI Studio is ready!"
 
+      - name: Debug UI Response
+        run: |
+          echo "=== Checking UI response ==="
+          echo "Login page response code:"
+          curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/login
+          echo ""
+          echo "Login page HTML (first 500 chars):"
+          curl -s http://localhost:8081/login | head -c 500
+          echo ""
+          echo "=== Checking for React app root ==="
+          curl -s http://localhost:8081/login | grep -o '<div id="root"' || echo "React root not found!"
+
       - name: Run Playwright Tests
         id: playwright
         working-directory: tests/ui
         env:
           BOOTSTRAP_ADMIN_EMAIL: admin@tyk.io
           BOOTSTRAP_ADMIN_PASSWORD: Admin#2025
-        run: npm run test:ci
+          DEBUG: pw:api
+          PWDEBUG: 0
+        run: npx playwright test --project='chromium' --reporter=list --reporter=html --timeout=60000
 
       - name: Upload Playwright Report
         uses: actions/upload-artifact@v4

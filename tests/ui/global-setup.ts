@@ -42,6 +42,8 @@ async function globalSetup(playwrightConfig: FullConfig) {
   const canLogin = await tryLogin(config.admin_email, config.password);
   if (canLogin) {
     console.log('Test admin user already exists and can login');
+    // Ensure test admin has correct permissions (admin, chat, portal)
+    await ensureTestAdminPermissions();
     // Still ensure dev user exists
     await ensureDevUserExists();
     return;
@@ -80,6 +82,104 @@ async function globalSetup(playwrightConfig: FullConfig) {
 
   // Now ensure dev user exists (needed for user-app-and-proxy tests)
   await ensureDevUserExists();
+}
+
+/**
+ * Ensure test admin has correct permissions (is_admin, show_chat, show_portal).
+ * This handles cases where the user was created but with wrong permissions.
+ */
+async function ensureTestAdminPermissions() {
+  console.log('Ensuring test admin has correct permissions...');
+
+  const context = await request.newContext();
+  try {
+    // Get CSRF token
+    const csrfResponse = await context.get(`${config.api_url}/csrf-token`);
+    const csrfToken = csrfResponse.headers()['x-csrf-token'];
+
+    // Login as test admin
+    const loginResponse = await context.post(`${config.api_url}/auth/login`, {
+      headers: {
+        'X-CSRF-Token': csrfToken || '',
+      },
+      data: {
+        data: {
+          attributes: {
+            email: config.admin_email,
+            password: config.password,
+          },
+        },
+      },
+    });
+
+    if (!loginResponse.ok()) {
+      console.log('Warning: Could not login to check permissions');
+      return;
+    }
+
+    // Get user by listing all users and finding by email
+    const listResponse = await context.get(`${config.api_url}/api/v1/users`, {
+      headers: {
+        'X-CSRF-Token': csrfToken || '',
+      },
+    });
+
+    if (!listResponse.ok()) {
+      console.log('Warning: Could not list users');
+      return;
+    }
+
+    const usersData = await listResponse.json();
+    const currentUser = usersData.data?.find(
+      (u: { attributes?: { email?: string } }) => u.attributes?.email === config.admin_email
+    );
+
+    if (!currentUser) {
+      console.log('Warning: Could not find test admin user');
+      return;
+    }
+
+    const userId = currentUser.id;
+    const attrs = currentUser.attributes || {};
+
+    // Check if permissions need updating
+    if (attrs.is_admin && attrs.show_chat && attrs.show_portal) {
+      console.log('Test admin already has correct permissions');
+      return;
+    }
+
+    console.log(`Updating test admin permissions: is_admin=${attrs.is_admin}, show_chat=${attrs.show_chat}, show_portal=${attrs.show_portal}`);
+
+    // Update user permissions (include email as it's required for validation)
+    const updateResponse = await context.patch(`${config.api_url}/api/v1/users/${userId}`, {
+      headers: {
+        'X-CSRF-Token': csrfToken || '',
+      },
+      data: {
+        data: {
+          type: 'users',
+          id: userId,
+          attributes: {
+            email: config.admin_email,
+            is_admin: true,
+            show_chat: true,
+            show_portal: true,
+          },
+        },
+      },
+    });
+
+    if (updateResponse.ok()) {
+      console.log('Test admin permissions updated successfully');
+    } else {
+      const body = await updateResponse.text();
+      console.log(`Warning: Could not update test admin permissions: ${body}`);
+    }
+  } catch (error) {
+    console.log('Warning: Error updating test admin permissions:', error);
+  } finally {
+    await context.dispose();
+  }
 }
 
 /**
@@ -276,11 +376,77 @@ async function tryApiRegister(): Promise<boolean> {
     if (response.ok()) {
       // Verify we can now login (first user should be auto-verified)
       const canLogin = await tryLogin(config.admin_email, config.password);
-      if (canLogin) {
-        return true;
+      if (!canLogin) {
+        console.log('API registration succeeded but login failed (email not verified?)');
+        return false;
       }
-      console.log('API registration succeeded but login failed (email not verified?)');
-      return false;
+
+      // Login to update user permissions (enable chat and portal)
+      console.log('Updating user permissions to enable chat and portal...');
+      const loginResponse = await context.post(`${config.api_url}/auth/login`, {
+        headers: {
+          'X-CSRF-Token': csrfToken || '',
+        },
+        data: {
+          data: {
+            attributes: {
+              email: config.admin_email,
+              password: config.password,
+            },
+          },
+        },
+      });
+
+      if (!loginResponse.ok()) {
+        console.log('Warning: Could not login to update permissions');
+        return true; // Registration still succeeded
+      }
+
+      // Get user ID by listing users and finding by email
+      const listResponse = await context.get(`${config.api_url}/api/v1/users`, {
+        headers: {
+          'X-CSRF-Token': csrfToken || '',
+        },
+      });
+
+      if (!listResponse.ok()) {
+        console.log('Warning: Could not list users to update permissions');
+        return true; // Registration still succeeded
+      }
+
+      const usersData = await listResponse.json();
+      const currentUser = usersData.data?.find(
+        (u: { attributes?: { email?: string } }) => u.attributes?.email === config.admin_email
+      );
+      const userId = currentUser?.id;
+
+      if (userId) {
+        // Update user to enable chat and portal (include email as it's required for validation)
+        const updateResponse = await context.patch(`${config.api_url}/api/v1/users/${userId}`, {
+          headers: {
+            'X-CSRF-Token': csrfToken || '',
+          },
+          data: {
+            data: {
+              type: 'users',
+              id: userId,
+              attributes: {
+                email: config.admin_email,
+                show_chat: true,
+                show_portal: true,
+              },
+            },
+          },
+        });
+
+        if (updateResponse.ok()) {
+          console.log('User permissions updated (chat and portal enabled)');
+        } else {
+          console.log('Warning: Could not update user permissions');
+        }
+      }
+
+      return true;
     }
 
     const body = await response.text();
