@@ -670,9 +670,12 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		Msg("Control server: on-demand token validation request")
 
 	// Query token with namespace filtering
+	// Preload App with LLMs to include relationship data in response
 	var apiToken database.APIToken
-	tokenQuery := s.db.Where("token = ? AND is_active = ?", req.Token, true).Preload("App")
-	
+	tokenQuery := s.db.Where("token = ? AND is_active = ?", req.Token, true).
+		Preload("App").
+		Preload("App.LLMs")
+
 	// Apply namespace filtering - token must be global or match edge namespace
 	if req.EdgeNamespace == "" {
 		// Global edge - only sees global tokens
@@ -736,7 +739,44 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		Str("token_prefix", tokenPrefix).
 		Uint("app_id", apiToken.AppID).
 		Str("app_name", apiToken.App.Name).
+		Int("llm_count", len(apiToken.App.LLMs)).
 		Msg("Control server: token validation successful")
+
+	// Convert the database.App to pb.AppConfig for edge gateway
+	// This avoids the need for edge to do a local database lookup
+	var appConfig *pb.AppConfig
+	if apiToken.App != nil {
+		// Convert budget start date to string if available
+		var budgetStartDate string
+		if apiToken.App.BudgetStartDate != nil {
+			budgetStartDate = apiToken.App.BudgetStartDate.Format(time.RFC3339)
+		}
+
+		// Get LLM IDs from the app's LLM relationships
+		llmIDs := make([]uint32, len(apiToken.App.LLMs))
+		for i, llm := range apiToken.App.LLMs {
+			llmIDs[i] = uint32(llm.ID)
+		}
+
+		appConfig = &pb.AppConfig{
+			Id:              uint32(apiToken.App.ID),
+			Name:            apiToken.App.Name,
+			Description:     apiToken.App.Description,
+			OwnerEmail:      apiToken.App.OwnerEmail,
+			UserId:          uint32(apiToken.App.UserID),
+			IsActive:        apiToken.App.IsActive,
+			MonthlyBudget:   apiToken.App.MonthlyBudget,
+			BudgetResetDay:  int32(apiToken.App.BudgetResetDay),
+			RateLimitRpm:    int32(apiToken.App.RateLimitRPM),
+			Namespace:       apiToken.App.Namespace,
+			CreatedAt:       timestamppb.New(apiToken.App.CreatedAt),
+			UpdatedAt:       timestamppb.New(apiToken.App.UpdatedAt),
+			BudgetStartDate: budgetStartDate,
+			AllowedIps:      string(apiToken.App.AllowedIPs),
+			Metadata:        string(apiToken.App.Metadata),
+			LlmIds:          llmIDs,
+		}
+	}
 
 	return &pb.TokenValidationResponse{
 		Valid:     true,
@@ -744,6 +784,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		AppName:   apiToken.App.Name,
 		Scopes:    scopes,
 		ExpiresAt: expiresAt,
+		App:       appConfig,
 	}, nil
 }
 
