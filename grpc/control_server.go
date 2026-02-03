@@ -738,9 +738,9 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		return nil, status.Error(codes.Internal, "token validation failed")
 	}
 
-	// Get the associated app
+	// Get the associated app with LLM relationships for edge gateway
 	var app models.App
-	if err := s.db.Where("credential_id = ? AND is_active = ?", credential.ID, true).First(&app).Error; err != nil {
+	if err := s.db.Preload("LLMs").Where("credential_id = ? AND is_active = ?", credential.ID, true).First(&app).Error; err != nil {
 		log.Debug().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
@@ -752,7 +752,11 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		Str("token_prefix", tokenPrefix).
 		Uint("app_id", app.ID).
 		Str("app_name", app.Name).
+		Int("llm_count", len(app.LLMs)).
 		Msg("AI Studio control server: token validation successful")
+
+	// Convert app to protobuf format for edge gateway (avoids local database lookup)
+	pbApp := s.convertAppToProto(&app)
 
 	return &pb.TokenValidationResponse{
 		Valid:     true,
@@ -761,7 +765,74 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		UserId:    uint32(app.UserID), // Owner user ID for analytics tracking
 		Scopes:    []string{},         // AI Studio doesn't use scopes like microgateway
 		ExpiresAt: nil,                // AI Studio credentials don't expire
+		App:       pbApp,              // Full app config for edge gateway
 	}, nil
+}
+
+// convertAppToProto converts a models.App to pb.AppConfig for gRPC responses
+func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
+	// Get associated LLM IDs
+	llmIDs := make([]uint32, len(app.LLMs))
+	for i, llm := range app.LLMs {
+		llmIDs[i] = uint32(llm.ID)
+	}
+
+	// Handle optional monthly budget
+	var monthlyBudget float64
+	if app.MonthlyBudget != nil {
+		monthlyBudget = *app.MonthlyBudget
+	}
+
+	// Serialize metadata to JSON string
+	var metadataJSON string
+	if app.Metadata != nil {
+		if metadataBytes, err := json.Marshal(app.Metadata); err == nil {
+			metadataJSON = string(metadataBytes)
+		}
+	}
+
+	// Format budget start date if available
+	budgetStartDate := ""
+	if app.BudgetStartDate != nil {
+		budgetStartDate = app.BudgetStartDate.Format(time.RFC3339)
+	}
+
+	// Calculate current period usage from llm_chat_records for budget sync to edge
+	var currentPeriodUsage float64
+	if monthlyBudget > 0 {
+		// Calculate budget period using app's BudgetStartDate (handles mid-period resets)
+		now := time.Now()
+		periodStart, _ := calculateBudgetPeriod(app.BudgetStartDate, now)
+
+		// Query total cost from llm_chat_records for this app in the current period
+		var totalCostCents float64
+		if err := s.db.Model(&models.LLMChatRecord{}).
+			Select("COALESCE(SUM(cost), 0)").
+			Where("app_id = ? AND time_stamp >= ?", app.ID, periodStart).
+			Scan(&totalCostCents).Error; err != nil {
+			log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to calculate current period usage for app")
+		} else {
+			// Convert from cents*10000 to dollars
+			currentPeriodUsage = totalCostCents / 10000.0
+		}
+	}
+
+	return &pb.AppConfig{
+		Id:                 uint32(app.ID),
+		Name:               app.Name,
+		Description:        app.Description,
+		OwnerEmail:         "", // AI Studio doesn't have owner email field yet
+		IsActive:           app.IsActive,
+		MonthlyBudget:      monthlyBudget,
+		BudgetStartDate:    budgetStartDate,
+		Metadata:           metadataJSON,
+		Namespace:          app.Namespace,
+		UserId:             uint32(app.UserID), // Owner user ID for analytics tracking
+		LlmIds:             llmIDs,
+		CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
+		CreatedAt:          timestamppb.New(app.CreatedAt),
+		UpdatedAt:          timestamppb.New(app.UpdatedAt),
+	}
 }
 
 // SendAnalyticsPulse handles analytics pulse data from edge instances

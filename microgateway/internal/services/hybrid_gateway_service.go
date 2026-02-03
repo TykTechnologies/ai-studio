@@ -106,23 +106,44 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 			Str("app_name", resp.AppName).
 			Msg("On-demand token validation successful")
 
-		// Get the app from local SQLite database (now has full relationships!)
-		app, err := h.DatabaseGatewayService.GetAppByTokenID(uint(resp.AppId))
-		if err != nil {
-			// App not found in SQLite, create a minimal app object with the validated app_id
-			log.Debug().Uint32("app_id", resp.AppId).Msg("App not found in local SQLite, using minimal app object")
-			
-			// Create minimal app - the app_llm relationships should exist from sync
+		// Use the App from the gRPC response instead of local database lookup
+		// This solves the sync issue where newly created apps aren't yet in edge SQLite
+		var app *database.App
+		if resp.App != nil {
+			// Validate namespace: ensure the app's namespace is allowed on this edge
+			appNamespace := resp.App.Namespace
+			if !h.isNamespaceAllowed(appNamespace) {
+				log.Warn().
+					Str("token_prefix", tokenPrefix).
+					Str("app_namespace", appNamespace).
+					Str("edge_namespace", h.edgeNamespace).
+					Msg("App namespace not allowed on this edge gateway")
+				return nil, fmt.Errorf("app namespace '%s' is not allowed on this edge gateway", appNamespace)
+			}
+
+			// Convert protobuf App to database.App model
+			app = h.convertProtoAppToDatabase(resp.App)
+
+			log.Debug().
+				Uint32("app_id", resp.AppId).
+				Str("app_name", resp.AppName).
+				Str("app_namespace", appNamespace).
+				Int("llm_count", len(resp.App.LlmIds)).
+				Msg("Using app from gRPC response (no local database lookup needed)")
+		} else {
+			// Fallback: App not included in response, try local database
+			// This maintains backward compatibility with older control servers
+			log.Debug().Uint32("app_id", resp.AppId).Msg("App not in response, falling back to local database lookup")
+
 			var dbApp database.App
 			if err := h.db.Where("id = ?", resp.AppId).Preload("LLMs").First(&dbApp).Error; err != nil {
-				return nil, fmt.Errorf("app %d not found in synced SQLite: %w", resp.AppId, err)
+				return nil, fmt.Errorf("app %d not found in synced SQLite and not provided in response: %w", resp.AppId, err)
 			}
-			
 			app = &dbApp
 		}
 
 		result := &TokenValidationResult{
-			TokenID:   uint(resp.AppId), // Use app_id as pseudo token ID  
+			TokenID:   uint(resp.AppId), // Use app_id as pseudo token ID
 			TokenName: "on-demand-validated",
 			AppID:     uint(resp.AppId),
 			App:       app,
@@ -138,6 +159,68 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 	}
 
 	return nil, fmt.Errorf("edge client does not support token validation")
+}
+
+// isNamespaceAllowed checks if an app's namespace is allowed on this edge gateway
+// An app is allowed if:
+// - The app is global (empty namespace) - global apps are allowed everywhere
+// - The app's namespace matches this edge's namespace
+// - This edge is global (empty namespace) - global edges accept all apps
+func (h *HybridGatewayService) isNamespaceAllowed(appNamespace string) bool {
+	// Global apps (empty namespace) are allowed on all edges
+	if appNamespace == "" {
+		return true
+	}
+
+	// Global edges (empty namespace) accept all apps
+	if h.edgeNamespace == "" {
+		return true
+	}
+
+	// Namespace-specific: app namespace must match edge namespace
+	return appNamespace == h.edgeNamespace
+}
+
+// convertProtoAppToDatabase converts a pb.AppConfig to database.App model
+func (h *HybridGatewayService) convertProtoAppToDatabase(pbApp *pb.AppConfig) *database.App {
+	// Parse budget start date if available
+	var budgetStartDate *time.Time
+	if pbApp.BudgetStartDate != "" {
+		if t, err := time.Parse(time.RFC3339, pbApp.BudgetStartDate); err == nil {
+			budgetStartDate = &t
+		}
+	}
+
+	// Build LLM list from LlmIds (minimal info - just IDs for relationship checking)
+	llms := make([]database.LLM, len(pbApp.LlmIds))
+	for i, llmID := range pbApp.LlmIds {
+		llms[i] = database.LLM{}
+		llms[i].ID = uint(llmID)
+	}
+
+	// Create the database.App with all fields from protobuf
+	app := &database.App{
+		Name:            pbApp.Name,
+		Description:     pbApp.Description,
+		OwnerEmail:      pbApp.OwnerEmail,
+		UserID:          uint(pbApp.UserId),
+		IsActive:        pbApp.IsActive,
+		MonthlyBudget:   pbApp.MonthlyBudget,
+		BudgetStartDate: budgetStartDate,
+		Namespace:       pbApp.Namespace,
+		LLMs:            llms,
+	}
+	app.ID = uint(pbApp.Id)
+
+	// Set timestamps if available
+	if pbApp.CreatedAt != nil {
+		app.CreatedAt = pbApp.CreatedAt.AsTime()
+	}
+	if pbApp.UpdatedAt != nil {
+		app.UpdatedAt = pbApp.UpdatedAt.AsTime()
+	}
+
+	return app
 }
 
 // GetAppByTokenID overrides to handle pseudo token IDs from on-demand validation
