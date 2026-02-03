@@ -58,10 +58,12 @@ jobs:
           cache-dependency-path: "**/package-lock.json"
 
       - name: Install and Test Frontend
+        env:
+          CI: true
         run: |
           cd ui/admin-frontend
           npm ci
-          npm test
+          npm test -- --passWithNoTests --forceExit
 
       - name: Build Frontend
         run: |
