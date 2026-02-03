@@ -16,10 +16,15 @@ if [ ! -f /app/.env ]; then
     echo ".env file created from .env.example"
 fi
 
-# Start frontend in background
-echo "Starting frontend..."
-cd /app/ui/admin-frontend
-npm start &
+# Start frontend dev server in background (skip if SKIP_FRONTEND_DEV is set)
+# When using pre-built frontend, the Go binary serves it via embed
+if [ "${SKIP_FRONTEND_DEV}" != "true" ]; then
+    echo "Starting frontend dev server..."
+    cd /app/ui/admin-frontend
+    npm start &
+else
+    echo "Skipping frontend dev server (using embedded build)"
+fi
 
 # Build and start backend
 echo "Building and starting backend..."
