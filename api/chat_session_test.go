@@ -108,7 +108,8 @@ func TestChatSSE(t *gotest.T) {
 		cleanupCh := make(chan struct{})    // signals cleanup needed
 		defer close(cleanupCh)              // ensure cleanup on test completion
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		// Use 30s timeout to account for race detector overhead (adds 5-10x slowdown)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		// Custom client without timeout - we'll use context for cancellation

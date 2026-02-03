@@ -30,8 +30,9 @@ const config = {
  *
  * Uses a multi-strategy approach:
  * 1. Try to login as test admin (if already exists)
- * 2. Try to register (works if first user - becomes admin + verified)
- * 3. Use API with bootstrap admin to create test admin (when DB has existing users)
+ * 2. Try API registration (works if first user - becomes admin + verified)
+ * 3. Try UI registration (fallback)
+ * 4. Use API with bootstrap admin to create test admin (when DB has existing users)
  */
 async function globalSetup(playwrightConfig: FullConfig) {
   console.log('Global setup: Ensuring admin user exists...');
@@ -46,16 +47,25 @@ async function globalSetup(playwrightConfig: FullConfig) {
     return;
   }
 
-  // Strategy 2: Try registration (works if first user - becomes admin + verified)
-  const registered = await tryRegister();
-  if (registered) {
-    console.log('Test admin created via registration (first user)');
+  // Strategy 2: Try API registration (works if first user - becomes admin + verified)
+  const apiRegistered = await tryApiRegister();
+  if (apiRegistered) {
+    console.log('Test admin created via API registration (first user)');
     // Also create dev user
     await ensureDevUserExists();
     return;
   }
 
-  // Strategy 3: Use API with bootstrap admin to create test admin
+  // Strategy 3: Try UI registration (fallback)
+  const registered = await tryRegister();
+  if (registered) {
+    console.log('Test admin created via UI registration (first user)');
+    // Also create dev user
+    await ensureDevUserExists();
+    return;
+  }
+
+  // Strategy 4: Use API with bootstrap admin to create test admin
   console.log('Database has existing users. Using API to create test admin...');
   const created = await createViaAPI();
   if (created) {
@@ -240,6 +250,50 @@ async function tryLogin(email: string, password: string): Promise<boolean> {
   }
 }
 
+async function tryApiRegister(): Promise<boolean> {
+  const context = await request.newContext();
+  try {
+    // Get CSRF token first
+    const csrfResponse = await context.get(`${config.api_url}/csrf-token`);
+    const csrfToken = csrfResponse.headers()['x-csrf-token'];
+
+    console.log('Attempting API registration...');
+    const response = await context.post(`${config.api_url}/auth/register`, {
+      headers: {
+        'X-CSRF-Token': csrfToken || '',
+      },
+      data: {
+        data: {
+          attributes: {
+            email: config.admin_email,
+            name: config.admin_name,
+            password: config.password,
+          },
+        },
+      },
+    });
+
+    if (response.ok()) {
+      // Verify we can now login (first user should be auto-verified)
+      const canLogin = await tryLogin(config.admin_email, config.password);
+      if (canLogin) {
+        return true;
+      }
+      console.log('API registration succeeded but login failed (email not verified?)');
+      return false;
+    }
+
+    const body = await response.text();
+    console.log(`API registration failed (${response.status()}): ${body}`);
+    return false;
+  } catch (error) {
+    console.log('API registration error:', error);
+    return false;
+  } finally {
+    await context.dispose();
+  }
+}
+
 async function tryRegister(): Promise<boolean> {
   const browser = await chromium.launch();
   const page = await browser.newPage();
@@ -250,7 +304,7 @@ async function tryRegister(): Promise<boolean> {
 
     // Check if we're on register page (not redirected)
     if (!page.url().includes('/register')) {
-      console.log('Registration page not accessible, skipping registration strategy');
+      console.log('UI registration page not accessible, skipping UI registration strategy');
       return false;
     }
 
