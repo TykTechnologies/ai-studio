@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
@@ -19,6 +20,9 @@ import (
 )
 
 func SetupTestDB(t *testing.T) *gorm.DB {
+	// Clear signup domain filter for tests (allows any email domain)
+	config.Get("").FilterSignupDomains = nil
+
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err, "Failed to open database")
 

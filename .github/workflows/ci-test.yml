@@ -98,13 +98,6 @@ jobs:
           go 1.24.10
           EOF
 
-      - name: Checkout langchaingo
-        uses: actions/checkout@v4
-        with:
-          repository: lonelycode/langchaingo
-          path: langchaingo
-          fetch-depth: 2
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -131,11 +124,16 @@ jobs:
             echo "BUILD_TAGS=" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create docs placeholder
+      - name: Create placeholders for embeds
         run: |
           # Create placeholder for docs embed (tests don't need actual docs)
           mkdir -p docs/site/dist
           echo "placeholder" > docs/site/dist/index.html
+          # Create placeholder for frontend embed (tests don't need actual frontend)
+          mkdir -p ui/admin-frontend/build
+          echo "placeholder" > ui/admin-frontend/build/index.html
+          # Use dev environment template for tests
+          cp dev/.env.dev .env
 
       - name: Run AI Studio Unit Tests
         run: |

@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
@@ -73,6 +74,9 @@ func setupDB(t *testing.T) *gorm.DB {
 
 // setupTest initializes DB, does migrations, and starts analytics in one place.
 func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
+	// Clear signup domain filter for tests (allows any email domain)
+	config.Get("").FilterSignupDomains = nil
+
 	// Reset global analytics handler state before test
 	analytics.ResetHandler()
 

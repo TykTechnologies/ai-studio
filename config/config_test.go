@@ -56,6 +56,12 @@ func TestConfigWithEnvFile(t *testing.T) {
 		globalConfig = nil // Reset global config for other tests
 	}()
 
+	// Clear env vars before test so .env file values can be loaded
+	os.Unsetenv("SERVER_PORT")
+	os.Unsetenv("DATABASE_URL")
+	os.Unsetenv("DATABASE_TYPE")
+	globalConfig = nil // Reset global config to force reload
+
 	// Create temporary .env file
 	envContent := "SERVER_PORT=8888\nDATABASE_URL=env.db\nDATABASE_TYPE=postgres"
 	err := os.WriteFile(".env", []byte(envContent), 0644)
@@ -90,6 +96,10 @@ func TestConfigEnvOverridesFile(t *testing.T) {
 		os.Setenv("DATABASE_URL", origDBURL)
 		globalConfig = nil // Reset global config for other tests
 	}()
+
+	// Clear DATABASE_URL so it can be loaded from .env file
+	os.Unsetenv("DATABASE_URL")
+	globalConfig = nil // Reset global config to force reload
 
 	// Create temporary .env file first
 	envContent := "SERVER_PORT=8888\nDATABASE_URL=env.db"

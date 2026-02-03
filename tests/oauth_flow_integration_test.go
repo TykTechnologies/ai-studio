@@ -50,6 +50,9 @@ func setupIntegrationTestEnv(t *testing.T) (*http.Client, string, string) {
 	gin.SetMode(gin.TestMode)
 	testDB = apitesting.SetupTestDB(t)
 
+	// Clear signup domain filter for tests (allows any email domain)
+	config.Get("").FilterSignupDomains = nil
+
 	// Create main service bundle
 	serviceInstance := apitesting.SetupTestService(testDB)
 	authConfig := apitesting.SetupTestAuthConfig(testDB, serviceInstance)
