@@ -42,6 +42,12 @@ jobs:
           npm ci
           CI=false npm run build
 
+      - name: Create docs placeholder
+        run: |
+          # Create placeholder for docs embed (docs aren't needed for UI tests)
+          mkdir -p docs/site/dist
+          echo "placeholder" > docs/site/dist/index.html
+
       - name: Start Test Environment
         env:
           TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}

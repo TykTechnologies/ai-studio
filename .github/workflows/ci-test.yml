@@ -121,6 +121,12 @@ jobs:
             echo "BUILD_TAGS=" >> $GITHUB_OUTPUT
           fi
 
+      - name: Create docs placeholder
+        run: |
+          # Create placeholder for docs embed (tests don't need actual docs)
+          mkdir -p docs/site/dist
+          echo "placeholder" > docs/site/dist/index.html
+
       - name: Run AI Studio Unit Tests
         run: |
           go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -race -short \
