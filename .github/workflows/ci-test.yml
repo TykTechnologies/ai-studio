@@ -137,14 +137,14 @@ jobs:
 
       - name: Run AI Studio Unit Tests
         run: |
-          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -short \
+          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -race -short \
             -coverprofile=coverage-studio-${{ matrix.edition }}.out \
             -covermode=atomic ./...
 
       - name: Run Microgateway Unit Tests
         run: |
           cd microgateway
-          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -short \
+          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -race -short \
             -coverprofile=../coverage-microgateway-${{ matrix.edition }}.out \
             -covermode=atomic ./...
 
