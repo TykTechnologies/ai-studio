@@ -60,7 +60,9 @@ func (d *DummyDriver) GetOutputKeys() []string {
 func (d *DummyDriver) FakeChunkedResponse(para string, sFunc func(ctx context.Context, chunk []byte) error) {
 	x := strings.Split(para, " ")
 	for _, c := range x {
-		randomNum := rand.Intn(501) + 100
+		// Use minimal sleep (1-5ms) to avoid test timeouts, especially with race detector
+		// Race detector adds 5-10x overhead, making longer sleeps problematic
+		randomNum := rand.Intn(5) + 1
 		time.Sleep(time.Duration(randomNum) * time.Millisecond)
 
 		err := sFunc(context.Background(), []byte(c))
