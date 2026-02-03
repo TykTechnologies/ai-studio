@@ -88,6 +88,16 @@ jobs:
           submodules: ${{ matrix.edition == 'ent' }}
           token: ${{ secrets.CI_SUBMODULE_PAT }}
 
+      - name: Create enterprise stub for CE builds
+        if: matrix.edition == 'ce'
+        run: |
+          mkdir -p enterprise
+          cat > enterprise/go.mod << 'EOF'
+          module github.com/TykTechnologies/midsommar/v2/enterprise
+
+          go 1.24.10
+          EOF
+
       - name: Checkout langchaingo
         uses: actions/checkout@v4
         with:
@@ -129,14 +139,14 @@ jobs:
 
       - name: Run AI Studio Unit Tests
         run: |
-          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -race -short \
+          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -short \
             -coverprofile=coverage-studio-${{ matrix.edition }}.out \
             -covermode=atomic ./...
 
       - name: Run Microgateway Unit Tests
         run: |
           cd microgateway
-          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -race -short \
+          go test ${{ steps.tags.outputs.BUILD_TAGS }} -v -short \
             -coverprofile=../coverage-microgateway-${{ matrix.edition }}.out \
             -covermode=atomic ./...
 

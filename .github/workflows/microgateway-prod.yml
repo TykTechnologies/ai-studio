@@ -18,7 +18,7 @@ on:
       force_deploy:
         description: 'Force deployment even on non-main branch'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 env:
