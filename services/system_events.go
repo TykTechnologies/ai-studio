@@ -103,7 +103,7 @@ func (e *SystemEventEmitter) EmitObjectEvent(topic string, objectType string, ac
 		Object:     object,
 	}
 
-	if err := eventbridge.PublishLocal(e.bus, e.nodeID, topic, payload); err != nil {
+	if err := eventbridge.PublishDown(e.bus, e.nodeID, topic, payload); err != nil {
 		logger.Warnf("Failed to emit system event %s: %v", topic, err)
 	} else {
 		logger.Debugf("Emitted system event: topic=%s object_type=%s action=%s object_id=%d", topic, objectType, action, objectID)
