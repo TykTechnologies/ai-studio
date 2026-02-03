@@ -17,7 +17,7 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     await aiPortalPage.CreateANewAppButton.click();
     await aiPortalPage.NameInput.fill(app_name);
     await aiPortalPage.DescriptionInput.fill(app_description);
-    await aiPortalPage.LlmDropDown.setValue('Env Anthropic LLM');
+    await aiPortalPage.LlmDropDown.setValue('Anthropic');
     await aiPortalPage.AddLlmButton.click();
     await aiPortalPage.CreateappButton.click();
     await aiPortalPage.ViewYourAppsButton.click();

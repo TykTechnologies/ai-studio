@@ -12,6 +12,7 @@ import { defineConfig, devices } from '@playwright/test';
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
+  globalSetup: require.resolve('./global-setup'),
   testDir: './tests',
   /* Run tests in files in parallel */
   fullyParallel: true,
@@ -41,11 +42,12 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      name: 'prerequisite',
-      use: { ...devices['Desktop Chrome'] },
-      testDir: './prerequisite',
-    },
+    // Prerequisite project removed - using globalSetup instead
+    // {
+    //   name: 'prerequisite',
+    //   use: { ...devices['Desktop Chrome'] },
+    //   testDir: './prerequisite',
+    // },
 
     // {
     //   name: 'firefox',
