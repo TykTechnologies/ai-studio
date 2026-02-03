@@ -78,7 +78,10 @@ jobs:
       - name: Run Playwright Tests
         id: playwright
         working-directory: tests/ui
-        run: npm run test
+        env:
+          BOOTSTRAP_ADMIN_EMAIL: admin@tyk.io
+          BOOTSTRAP_ADMIN_PASSWORD: Admin#2025
+        run: npm run test:ci
 
       - name: Upload Playwright Report
         uses: actions/upload-artifact@v4

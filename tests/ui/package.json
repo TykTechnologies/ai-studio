@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "npx playwright test --project='chromium'",
-    "test:ci": "npx playwright test --project='chromium' --reporter=list",
+    "test:ci": "npx playwright test --project='chromium' --reporter=list --reporter=html",
     "test:serial": "npx playwright test --project='chromium' --reporter=list --workers=1",
     "gui": "npx playwright test --project='chromium' --ui",
     "upload_report_to_s3": "node ./node_modules/tyk-test-automation-wrappers/lib/utils/uploadReport.js"
