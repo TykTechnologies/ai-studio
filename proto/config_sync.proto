@@ -173,6 +173,13 @@ message TokenValidationResponse {
   string error_message = 5; // Error message if invalid
   google.protobuf.Timestamp expires_at = 6; // Token expiration
   uint32 user_id = 7;       // Owner user ID for analytics tracking
+
+  // Pull-on-miss: Full app configuration for edge caching
+  // When a token is validated on-demand and the edge doesn't have the app cached,
+  // this field contains the complete AppConfig so the edge can:
+  // 1. Validate the app's namespace matches the edge's namespace
+  // 2. Cache the app locally for subsequent requests
+  AppConfig app_config = 8; // Full app config (from common.proto) - populated on cache miss
 }
 
 // Distributed configuration reload messages (NEW)

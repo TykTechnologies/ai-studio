@@ -738,13 +738,93 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		Str("app_name", apiToken.App.Name).
 		Msg("Control server: token validation successful")
 
+	// Build AppConfig for pull-on-miss: allows edge to cache app locally
+	appConfig := s.buildAppConfig(apiToken.App)
+
 	return &pb.TokenValidationResponse{
 		Valid:     true,
 		AppId:     uint32(apiToken.AppID),
 		AppName:   apiToken.App.Name,
 		Scopes:    scopes,
 		ExpiresAt: expiresAt,
+		UserId:    uint32(apiToken.App.UserID),
+		AppConfig: appConfig,
 	}, nil
+}
+
+// buildAppConfig converts a database App to protobuf AppConfig for pull-on-miss
+// This is used when returning token validation responses to include the full app config
+func (s *ControlServer) buildAppConfig(app *database.App) *pb.AppConfig {
+	if app == nil {
+		return nil
+	}
+
+	// Query LLM relationships for this app
+	var appLLMs []database.AppLLM
+	if err := s.db.Where("app_id = ? AND is_active = ?", app.ID, true).Find(&appLLMs).Error; err != nil {
+		log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to query app_llms for AppConfig")
+	}
+	llmIDs := make([]uint32, len(appLLMs))
+	for i, appLLM := range appLLMs {
+		llmIDs[i] = uint32(appLLM.LLMID)
+	}
+
+	// Query credentials for this app
+	var credentials []database.Credential
+	if err := s.db.Where("app_id = ?", app.ID).Find(&credentials).Error; err != nil {
+		log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to query credentials for AppConfig")
+	}
+	credentialIDs := make([]uint32, len(credentials))
+	for i, cred := range credentials {
+		credentialIDs[i] = uint32(cred.ID)
+	}
+
+	// Query tokens for this app
+	var tokens []database.APIToken
+	if err := s.db.Where("app_id = ?", app.ID).Find(&tokens).Error; err != nil {
+		log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to query tokens for AppConfig")
+	}
+	tokenIDs := make([]uint32, len(tokens))
+	for i, token := range tokens {
+		tokenIDs[i] = uint32(token.ID)
+	}
+
+	// Convert budget start date to string if available
+	var budgetStartDate string
+	if app.BudgetStartDate != nil {
+		budgetStartDate = app.BudgetStartDate.Format(time.RFC3339)
+	}
+
+	appConfig := &pb.AppConfig{
+		Id:              uint32(app.ID),
+		Name:            app.Name,
+		Description:     app.Description,
+		OwnerEmail:      app.OwnerEmail,
+		IsActive:        app.IsActive,
+		MonthlyBudget:   app.MonthlyBudget,
+		BudgetResetDay:  int32(app.BudgetResetDay),
+		RateLimitRpm:    int32(app.RateLimitRPM),
+		Namespace:       app.Namespace,
+		CreatedAt:       timestamppb.New(app.CreatedAt),
+		UpdatedAt:       timestamppb.New(app.UpdatedAt),
+		UserId:          uint32(app.UserID),
+		BudgetStartDate: budgetStartDate,
+		AllowedIps:      string(app.AllowedIPs),
+		Metadata:        string(app.Metadata),
+		LlmIds:          llmIDs,
+		CredentialIds:   credentialIDs,
+		TokenIds:        tokenIDs,
+	}
+
+	log.Debug().
+		Uint("app_id", app.ID).
+		Str("app_name", app.Name).
+		Int("llm_count", len(llmIDs)).
+		Int("credential_count", len(credentialIDs)).
+		Int("token_count", len(tokenIDs)).
+		Msg("Built AppConfig for token validation response (pull-on-miss)")
+
+	return appConfig
 }
 
 // SendAnalyticsPulse handles analytics pulse data from edge instances

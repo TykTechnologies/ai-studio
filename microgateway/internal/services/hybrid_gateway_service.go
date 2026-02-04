@@ -106,23 +106,52 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 			Str("app_name", resp.AppName).
 			Msg("On-demand token validation successful")
 
-		// Get the app from local SQLite database (now has full relationships!)
-		app, err := h.DatabaseGatewayService.GetAppByTokenID(uint(resp.AppId))
-		if err != nil {
-			// App not found in SQLite, create a minimal app object with the validated app_id
-			log.Debug().Uint32("app_id", resp.AppId).Msg("App not found in local SQLite, using minimal app object")
-			
-			// Create minimal app - the app_llm relationships should exist from sync
-			var dbApp database.App
-			if err := h.db.Where("id = ?", resp.AppId).Preload("LLMs").First(&dbApp).Error; err != nil {
-				return nil, fmt.Errorf("app %d not found in synced SQLite: %w", resp.AppId, err)
+		var app *database.App
+
+		// Pull-on-miss: Use AppConfig from response if available
+		if resp.AppConfig != nil {
+			log.Debug().
+				Uint32("app_id", resp.AppId).
+				Str("app_namespace", resp.AppConfig.Namespace).
+				Str("edge_namespace", h.edgeNamespace).
+				Msg("Pull-on-miss: received AppConfig from control server")
+
+			// Validate namespace: app must be global (empty namespace) or match edge namespace
+			if !h.validateAppNamespace(resp.AppConfig.Namespace) {
+				log.Warn().
+					Str("token_prefix", tokenPrefix).
+					Str("app_namespace", resp.AppConfig.Namespace).
+					Str("edge_namespace", h.edgeNamespace).
+					Msg("Namespace mismatch: app not accessible from this edge")
+				return nil, fmt.Errorf("app namespace '%s' not accessible from edge namespace '%s'", resp.AppConfig.Namespace, h.edgeNamespace)
 			}
-			
-			app = &dbApp
+
+			// Cache the app locally in SQLite for future requests
+			app, err = h.cacheAppFromConfig(resp.AppConfig)
+			if err != nil {
+				log.Warn().Err(err).Uint32("app_id", resp.AppId).Msg("Failed to cache app locally, falling back to minimal app")
+				// Fall back to creating a minimal app from the response
+				app = h.createMinimalAppFromConfig(resp.AppConfig)
+			}
+		} else {
+			// Fallback: Get the app from local SQLite database (legacy behavior)
+			app, err = h.DatabaseGatewayService.GetAppByTokenID(uint(resp.AppId))
+			if err != nil {
+				// App not found in SQLite, create a minimal app object with the validated app_id
+				log.Debug().Uint32("app_id", resp.AppId).Msg("App not found in local SQLite, using minimal app object")
+
+				// Create minimal app - the app_llm relationships should exist from sync
+				var dbApp database.App
+				if err := h.db.Where("id = ?", resp.AppId).Preload("LLMs").First(&dbApp).Error; err != nil {
+					return nil, fmt.Errorf("app %d not found in synced SQLite: %w", resp.AppId, err)
+				}
+
+				app = &dbApp
+			}
 		}
 
 		result := &TokenValidationResult{
-			TokenID:   uint(resp.AppId), // Use app_id as pseudo token ID  
+			TokenID:   uint(resp.AppId), // Use app_id as pseudo token ID
 			TokenName: "on-demand-validated",
 			AppID:     uint(resp.AppId),
 			App:       app,
@@ -138,6 +167,171 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 	}
 
 	return nil, fmt.Errorf("edge client does not support token validation")
+}
+
+// validateAppNamespace checks if the app's namespace is accessible from this edge
+func (h *HybridGatewayService) validateAppNamespace(appNamespace string) bool {
+	// Global apps (empty namespace) are accessible from all edges
+	if appNamespace == "" {
+		return true
+	}
+	// Global edges (empty namespace) can only access global apps
+	if h.edgeNamespace == "" {
+		return false
+	}
+	// Specific namespace edges can access global + matching namespace apps
+	return appNamespace == h.edgeNamespace
+}
+
+// cacheAppFromConfig caches an app from the AppConfig into local SQLite
+func (h *HybridGatewayService) cacheAppFromConfig(appConfig *pb.AppConfig) (*database.App, error) {
+	// Check if app already exists in local SQLite
+	var existingApp database.App
+	err := h.db.Where("id = ?", appConfig.Id).First(&existingApp).Error
+	if err == nil {
+		// App exists, update it
+		existingApp.Name = appConfig.Name
+		existingApp.Description = appConfig.Description
+		existingApp.OwnerEmail = appConfig.OwnerEmail
+		existingApp.IsActive = appConfig.IsActive
+		existingApp.MonthlyBudget = appConfig.MonthlyBudget
+		existingApp.BudgetResetDay = int(appConfig.BudgetResetDay)
+		existingApp.RateLimitRPM = int(appConfig.RateLimitRpm)
+		existingApp.Namespace = appConfig.Namespace
+		existingApp.UserID = uint(appConfig.UserId)
+		if appConfig.AllowedIps != "" {
+			existingApp.AllowedIPs = []byte(appConfig.AllowedIps)
+		}
+		if appConfig.Metadata != "" {
+			existingApp.Metadata = []byte(appConfig.Metadata)
+		}
+
+		if err := h.db.Save(&existingApp).Error; err != nil {
+			return nil, fmt.Errorf("failed to update cached app: %w", err)
+		}
+
+		// Update LLM relationships
+		if err := h.updateAppLLMRelationships(uint(appConfig.Id), appConfig.LlmIds); err != nil {
+			log.Warn().Err(err).Uint32("app_id", appConfig.Id).Msg("Failed to update app-LLM relationships")
+		}
+
+		// Reload with relationships
+		if err := h.db.Where("id = ?", appConfig.Id).Preload("LLMs").First(&existingApp).Error; err != nil {
+			return nil, fmt.Errorf("failed to reload cached app: %w", err)
+		}
+
+		log.Debug().
+			Uint32("app_id", appConfig.Id).
+			Str("app_name", appConfig.Name).
+			Int("llm_count", len(existingApp.LLMs)).
+			Msg("Pull-on-miss: updated existing app in local cache")
+
+		return &existingApp, nil
+	}
+
+	if err != gorm.ErrRecordNotFound {
+		return nil, fmt.Errorf("failed to check for existing app: %w", err)
+	}
+
+	// App doesn't exist, create it
+	newApp := &database.App{
+		Name:           appConfig.Name,
+		Description:    appConfig.Description,
+		OwnerEmail:     appConfig.OwnerEmail,
+		IsActive:       appConfig.IsActive,
+		MonthlyBudget:  appConfig.MonthlyBudget,
+		BudgetResetDay: int(appConfig.BudgetResetDay),
+		RateLimitRPM:   int(appConfig.RateLimitRpm),
+		Namespace:      appConfig.Namespace,
+		UserID:         uint(appConfig.UserId),
+	}
+	// Set the ID explicitly for edge SQLite (matches control server ID)
+	newApp.ID = uint(appConfig.Id)
+
+	if appConfig.AllowedIps != "" {
+		newApp.AllowedIPs = []byte(appConfig.AllowedIps)
+	}
+	if appConfig.Metadata != "" {
+		newApp.Metadata = []byte(appConfig.Metadata)
+	}
+
+	// Use raw SQL to insert with explicit ID (GORM normally auto-increments)
+	if err := h.db.Exec(
+		`INSERT OR REPLACE INTO apps (id, name, description, owner_email, is_active, monthly_budget, budget_reset_day, rate_limit_rpm, namespace, user_id, allowed_ips, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+		newApp.ID, newApp.Name, newApp.Description, newApp.OwnerEmail, newApp.IsActive, newApp.MonthlyBudget, newApp.BudgetResetDay, newApp.RateLimitRPM, newApp.Namespace, newApp.UserID, newApp.AllowedIPs, newApp.Metadata,
+	).Error; err != nil {
+		return nil, fmt.Errorf("failed to cache new app: %w", err)
+	}
+
+	// Create LLM relationships
+	if err := h.updateAppLLMRelationships(uint(appConfig.Id), appConfig.LlmIds); err != nil {
+		log.Warn().Err(err).Uint32("app_id", appConfig.Id).Msg("Failed to create app-LLM relationships")
+	}
+
+	// Reload with relationships
+	var cachedApp database.App
+	if err := h.db.Where("id = ?", appConfig.Id).Preload("LLMs").First(&cachedApp).Error; err != nil {
+		return nil, fmt.Errorf("failed to reload newly cached app: %w", err)
+	}
+
+	log.Info().
+		Uint32("app_id", appConfig.Id).
+		Str("app_name", appConfig.Name).
+		Int("llm_count", len(cachedApp.LLMs)).
+		Msg("Pull-on-miss: cached new app in local SQLite")
+
+	return &cachedApp, nil
+}
+
+// updateAppLLMRelationships updates the app_llms join table for an app
+func (h *HybridGatewayService) updateAppLLMRelationships(appID uint, llmIDs []uint32) error {
+	// Delete existing relationships for this app
+	if err := h.db.Exec("DELETE FROM app_llms WHERE app_id = ?", appID).Error; err != nil {
+		return fmt.Errorf("failed to clear existing app-LLM relationships: %w", err)
+	}
+
+	// Insert new relationships
+	for _, llmID := range llmIDs {
+		if err := h.db.Exec(
+			"INSERT INTO app_llms (app_id, llm_id, is_active, created_at, updated_at) VALUES (?, ?, 1, datetime('now'), datetime('now'))",
+			appID, llmID,
+		).Error; err != nil {
+			log.Warn().Err(err).Uint("app_id", appID).Uint32("llm_id", llmID).Msg("Failed to insert app-LLM relationship")
+		}
+	}
+
+	return nil
+}
+
+// createMinimalAppFromConfig creates a minimal in-memory App from AppConfig
+// Used as a fallback when SQLite caching fails
+func (h *HybridGatewayService) createMinimalAppFromConfig(appConfig *pb.AppConfig) *database.App {
+	app := &database.App{
+		Name:           appConfig.Name,
+		Description:    appConfig.Description,
+		OwnerEmail:     appConfig.OwnerEmail,
+		IsActive:       appConfig.IsActive,
+		MonthlyBudget:  appConfig.MonthlyBudget,
+		BudgetResetDay: int(appConfig.BudgetResetDay),
+		RateLimitRPM:   int(appConfig.RateLimitRpm),
+		Namespace:      appConfig.Namespace,
+		UserID:         uint(appConfig.UserId),
+	}
+	app.ID = uint(appConfig.Id)
+
+	// Create LLM stubs for the relationship (allows LLM access validation)
+	app.LLMs = make([]database.LLM, len(appConfig.LlmIds))
+	for i, llmID := range appConfig.LlmIds {
+		app.LLMs[i] = database.LLM{}
+		app.LLMs[i].ID = uint(llmID)
+	}
+
+	log.Debug().
+		Uint32("app_id", appConfig.Id).
+		Int("llm_count", len(app.LLMs)).
+		Msg("Created minimal in-memory app from AppConfig")
+
+	return app
 }
 
 // GetAppByTokenID overrides to handle pseudo token IDs from on-demand validation
