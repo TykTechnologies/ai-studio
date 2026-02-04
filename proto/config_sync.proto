@@ -173,6 +173,10 @@ message TokenValidationResponse {
   string error_message = 5; // Error message if invalid
   google.protobuf.Timestamp expires_at = 6; // Token expiration
   uint32 user_id = 7;       // Owner user ID for analytics tracking
+
+  // Full App configuration for pull-on-miss sync
+  // Only populated when App's namespace matches edge namespace (or App is global)
+  AppConfig app = 8;
 }
 
 // Distributed configuration reload messages (NEW)

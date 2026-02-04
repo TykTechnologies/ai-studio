@@ -781,6 +781,226 @@ func TestControlServer_ValidateToken(t *testing.T) {
 	}
 }
 
+// TestControlServer_ValidateToken_PullOnMissAppSync tests that ValidateToken includes
+// the App in the response for pull-on-miss sync when namespace matches
+func TestControlServer_ValidateToken_PullOnMissAppSync(t *testing.T) {
+	t.Run("includes app for global namespace app", func(t *testing.T) {
+		server, db := setupTestServer(t, nil)
+
+		// Create app with global namespace (empty string)
+		credential := &models.Credential{
+			KeyID:  "global-app-key-id",
+			Secret: "global-app-token",
+			Active: true,
+		}
+		db.Create(credential)
+
+		// Create LLMs for the app
+		llm1 := &models.LLM{Name: "Test LLM 1", Vendor: models.OPENAI, Active: true, Namespace: ""}
+		llm2 := &models.LLM{Name: "Test LLM 2", Vendor: models.ANTHROPIC, Active: true, Namespace: ""}
+		db.Create(llm1)
+		db.Create(llm2)
+
+		app := &models.App{
+			Name:         "Global App",
+			Description:  "App with global namespace",
+			IsActive:     true,
+			CredentialID: credential.ID,
+			Namespace:    "", // Global namespace
+			LLMs:         []models.LLM{*llm1, *llm2},
+		}
+		db.Create(app)
+		db.Save(app) // Save to persist LLM associations
+
+		ctx := context.Background()
+		response, err := server.ValidateToken(ctx, &pb.TokenValidationRequest{
+			Token:         "global-app-token",
+			EdgeId:        "edge-001",
+			EdgeNamespace: "any-namespace", // Any namespace should get global app
+		})
+
+		require.NoError(t, err)
+		assert.True(t, response.Valid)
+		assert.NotNil(t, response.App, "Global namespace app should be included in response")
+		assert.Equal(t, app.Name, response.App.Name)
+		assert.Len(t, response.App.LlmIds, 2, "App should include LLM IDs")
+	})
+
+	t.Run("includes app when namespace matches exactly", func(t *testing.T) {
+		server, db := setupTestServer(t, nil)
+
+		// Create app with specific namespace
+		credential := &models.Credential{
+			KeyID:  "namespaced-app-key-id",
+			Secret: "namespaced-app-token",
+			Active: true,
+		}
+		db.Create(credential)
+
+		llm := &models.LLM{Name: "Regional LLM", Vendor: models.OPENAI, Active: true, Namespace: "region-eu"}
+		db.Create(llm)
+
+		app := &models.App{
+			Name:         "Regional App",
+			Description:  "App with region-eu namespace",
+			IsActive:     true,
+			CredentialID: credential.ID,
+			Namespace:    "region-eu",
+			LLMs:         []models.LLM{*llm},
+		}
+		db.Create(app)
+		db.Save(app)
+
+		ctx := context.Background()
+		response, err := server.ValidateToken(ctx, &pb.TokenValidationRequest{
+			Token:         "namespaced-app-token",
+			EdgeId:        "edge-001",
+			EdgeNamespace: "region-eu", // Matching namespace
+		})
+
+		require.NoError(t, err)
+		assert.True(t, response.Valid)
+		assert.NotNil(t, response.App, "Matching namespace app should be included in response")
+		assert.Equal(t, "region-eu", response.App.Namespace)
+	})
+
+	t.Run("excludes app when namespace does not match", func(t *testing.T) {
+		server, db := setupTestServer(t, nil)
+
+		// Create app with specific namespace
+		credential := &models.Credential{
+			KeyID:  "mismatched-app-key-id",
+			Secret: "mismatched-app-token",
+			Active: true,
+		}
+		db.Create(credential)
+
+		app := &models.App{
+			Name:         "US Regional App",
+			Description:  "App with region-us namespace",
+			IsActive:     true,
+			CredentialID: credential.ID,
+			Namespace:    "region-us",
+		}
+		db.Create(app)
+
+		ctx := context.Background()
+		response, err := server.ValidateToken(ctx, &pb.TokenValidationRequest{
+			Token:         "mismatched-app-token",
+			EdgeId:        "edge-001",
+			EdgeNamespace: "region-eu", // Different namespace
+		})
+
+		require.NoError(t, err)
+		assert.True(t, response.Valid)
+		assert.Nil(t, response.App, "Mismatched namespace app should NOT be included in response")
+		// But AppId should still be returned for basic validation
+		assert.Equal(t, uint32(app.ID), response.AppId)
+	})
+
+	t.Run("app includes llm ids", func(t *testing.T) {
+		server, db := setupTestServer(t, nil)
+
+		credential := &models.Credential{
+			KeyID:  "llm-test-key-id",
+			Secret: "llm-test-token",
+			Active: true,
+		}
+		db.Create(credential)
+
+		// Create multiple LLMs
+		llms := []models.LLM{
+			{Name: "LLM 1", Vendor: models.OPENAI, Active: true, Namespace: ""},
+			{Name: "LLM 2", Vendor: models.ANTHROPIC, Active: true, Namespace: ""},
+			{Name: "LLM 3", Vendor: models.GOOGLEAI, Active: true, Namespace: ""},
+		}
+		for i := range llms {
+			db.Create(&llms[i])
+		}
+
+		app := &models.App{
+			Name:         "Multi-LLM App",
+			IsActive:     true,
+			CredentialID: credential.ID,
+			Namespace:    "",
+			LLMs:         llms,
+		}
+		db.Create(app)
+		db.Save(app)
+
+		ctx := context.Background()
+		response, err := server.ValidateToken(ctx, &pb.TokenValidationRequest{
+			Token:         "llm-test-token",
+			EdgeId:        "edge-001",
+			EdgeNamespace: "test",
+		})
+
+		require.NoError(t, err)
+		assert.True(t, response.Valid)
+		require.NotNil(t, response.App)
+		assert.Len(t, response.App.LlmIds, 3, "App should include all LLM IDs")
+
+		// Verify all LLM IDs are present
+		llmIDMap := make(map[uint32]bool)
+		for _, id := range response.App.LlmIds {
+			llmIDMap[id] = true
+		}
+		for _, llm := range llms {
+			assert.True(t, llmIDMap[uint32(llm.ID)], "LLM %d should be in response", llm.ID)
+		}
+	})
+}
+
+// TestControlServer_shouldIncludeAppInResponse tests the namespace matching helper
+func TestControlServer_shouldIncludeAppInResponse(t *testing.T) {
+	server, _ := setupTestServer(t, nil)
+
+	tests := []struct {
+		name          string
+		appNamespace  string
+		edgeNamespace string
+		expected      bool
+	}{
+		{
+			name:          "global app syncs to any edge",
+			appNamespace:  "",
+			edgeNamespace: "any-namespace",
+			expected:      true,
+		},
+		{
+			name:          "global app syncs to global edge",
+			appNamespace:  "",
+			edgeNamespace: "",
+			expected:      true,
+		},
+		{
+			name:          "namespaced app syncs to matching edge",
+			appNamespace:  "region-eu",
+			edgeNamespace: "region-eu",
+			expected:      true,
+		},
+		{
+			name:          "namespaced app does not sync to different edge",
+			appNamespace:  "region-us",
+			edgeNamespace: "region-eu",
+			expected:      false,
+		},
+		{
+			name:          "namespaced app does not sync to global edge",
+			appNamespace:  "region-us",
+			edgeNamespace: "",
+			expected:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := server.shouldIncludeAppInResponse(tt.appNamespace, tt.edgeNamespace)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // TestControlServer_getConfigurationSnapshot tests configuration snapshot generation
 func TestControlServer_getConfigurationSnapshot(t *testing.T) {
 	server, db := setupTestServer(t, nil)

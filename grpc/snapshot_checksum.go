@@ -32,12 +32,10 @@ func ComputeSnapshotChecksum(snapshot *pb.ConfigurationSnapshot) (string, error)
 		llm.UpdatedAt = nil
 	}
 
-	// Clear volatile fields from nested AppConfig messages
-	for _, app := range checksumSnapshot.Apps {
-		app.CreatedAt = nil
-		app.UpdatedAt = nil
-		app.CurrentPeriodUsage = 0 // Budget usage changes constantly
-	}
+	// Exclude Apps from checksum entirely.
+	// Apps are synced via pull-on-miss (out-of-band) which would cause checksum mismatches.
+	// Apps are still included in the snapshot for initial sync, but don't affect the checksum.
+	checksumSnapshot.Apps = nil
 
 	// Clear volatile fields from nested FilterConfig messages
 	for _, filter := range checksumSnapshot.Filters {
