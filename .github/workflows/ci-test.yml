@@ -63,7 +63,7 @@ jobs:
         run: |
           cd ui/admin-frontend
           npm ci
-          npm test -- --passWithNoTests --forceExit
+          npm test -- --forceExit
 
       - name: Build Frontend
         run: |
