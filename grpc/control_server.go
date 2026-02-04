@@ -1980,7 +1980,7 @@ func (s *ControlServer) shouldIncludeAppInResponse(appNamespace, edgeNamespace s
 }
 
 // convertAppToProto converts a models.App to a pb.AppConfig for pull-on-miss sync.
-// This includes calculating current period usage for budget enforcement at the edge.
+// Note: CurrentPeriodUsage is set to 0 - the edge tracks budget locally via analytics.
 func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 	// Get associated LLM IDs
 	llmIDs := make([]uint32, len(app.LLMs))
@@ -2008,25 +2008,10 @@ func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 		budgetStartDate = app.BudgetStartDate.Format(time.RFC3339)
 	}
 
-	// Calculate current period usage from llm_chat_records for budget sync to edge
-	var currentPeriodUsage float64
-	if monthlyBudget > 0 {
-		// Calculate budget period using app's BudgetStartDate (handles mid-period resets)
-		now := time.Now()
-		periodStart, _ := calculateBudgetPeriod(app.BudgetStartDate, now)
-
-		// Query total cost from llm_chat_records for this app in the current period
-		var totalCostCents float64
-		if err := s.db.Model(&models.LLMChatRecord{}).
-			Select("COALESCE(SUM(cost), 0)").
-			Where("app_id = ? AND time_stamp >= ?", app.ID, periodStart).
-			Scan(&totalCostCents).Error; err != nil {
-			log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to calculate current period usage for app")
-		} else {
-			// Convert from cents*10000 to dollars
-			currentPeriodUsage = totalCostCents / 10000.0
-		}
-	}
+	// Note: CurrentPeriodUsage is intentionally set to 0 for pull-on-miss sync.
+	// The edge gateway maintains its own budget tracking via local analytics.
+	// Setting it to 0 here avoids an expensive SUM(cost) query on llm_chat_records
+	// for every token validation, and prevents overwriting the edge's local budget data.
 
 	return &pb.AppConfig{
 		Id:                 uint32(app.ID),
@@ -2040,7 +2025,7 @@ func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 		Namespace:          app.Namespace,
 		UserId:             uint32(app.UserID), // Owner user ID for analytics tracking
 		LlmIds:             llmIDs,
-		CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
+		CurrentPeriodUsage: 0, // Intentionally 0 - edge tracks budget locally
 		CreatedAt:          timestamppb.New(app.CreatedAt),
 		UpdatedAt:          timestamppb.New(app.UpdatedAt),
 	}

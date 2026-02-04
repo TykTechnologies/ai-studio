@@ -359,27 +359,9 @@ func (h *HybridGatewayService) storeAppFromPullOnMiss(pbApp *pb.AppConfig) error
 			}
 		}
 
-		// Initialize budget usage if applicable
-		if pbApp.MonthlyBudget > 0 {
-			now := time.Now()
-			periodStart, periodEnd := calculateBudgetPeriod(app.BudgetStartDate, now)
-
-			// Convert from dollars (control server format) to dollars * 10000 (edge storage format)
-			storedCost := pbApp.CurrentPeriodUsage * 10000
-
-			budgetUsage := &database.BudgetUsage{
-				AppID:       uint(pbApp.Id),
-				PeriodStart: periodStart,
-				PeriodEnd:   periodEnd,
-				TotalCost:   storedCost,
-			}
-
-			if err := tx.Where("app_id = ? AND period_start = ?", pbApp.Id, periodStart).
-				Assign(map[string]interface{}{"total_cost": storedCost}).
-				FirstOrCreate(budgetUsage).Error; err != nil {
-				log.Warn().Err(err).Uint32("app_id", pbApp.Id).Msg("Failed to init budget usage from pull-on-miss")
-			}
-		}
+		// Note: Budget usage is NOT initialized here for pull-on-miss sync.
+		// The edge gateway tracks budget locally via its own analytics.
+		// Initializing it here with 0 would overwrite existing local budget data.
 
 		log.Debug().
 			Uint32("app_id", pbApp.Id).

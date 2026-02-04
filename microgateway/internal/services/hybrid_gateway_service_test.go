@@ -181,22 +181,40 @@ func TestHybridGatewayService_storeAppFromPullOnMiss(t *testing.T) {
 		assert.True(t, llmIDMap[llm3.ID], "LLM 3 should now be associated")
 	})
 
-	t.Run("initializes budget usage when budget is set", func(t *testing.T) {
+	t.Run("preserves existing budget usage - does not overwrite", func(t *testing.T) {
 		db, repo := setupHybridTestDB(t)
 		defer database.Close(db)
 
 		service := createTestHybridService(t, db, repo)
 
-		now := time.Now()
-		budgetStartDate := now.AddDate(0, -1, 0) // Started last month
+		// Create existing app with budget usage already tracked locally
+		existingApp := &database.App{
+			Model:         gorm.Model{ID: 400},
+			Name:          "Budget App",
+			IsActive:      true,
+			MonthlyBudget: 1000.0,
+		}
+		db.Create(existingApp)
 
+		// Simulate existing local budget usage (e.g., from previous requests)
+		now := time.Now()
+		periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		periodEnd := periodStart.AddDate(0, 1, 0)
+		existingBudgetUsage := &database.BudgetUsage{
+			AppID:       400,
+			PeriodStart: periodStart,
+			PeriodEnd:   periodEnd,
+			TotalCost:   5000000, // $500 already used locally (stored as dollars * 10000)
+		}
+		db.Create(existingBudgetUsage)
+
+		// Pull-on-miss with CurrentPeriodUsage=0 (control server doesn't calculate it)
 		pbApp := &pb.AppConfig{
 			Id:                 400,
-			Name:               "Budget App",
+			Name:               "Budget App Updated",
 			IsActive:           true,
 			MonthlyBudget:      1000.0,
-			BudgetStartDate:    budgetStartDate.Format(time.RFC3339),
-			CurrentPeriodUsage: 250.0, // Already used $250 this period
+			CurrentPeriodUsage: 0, // Intentionally 0 from control server
 			CreatedAt:          timestamppb.New(now),
 			UpdatedAt:          timestamppb.New(now),
 		}
@@ -204,14 +222,13 @@ func TestHybridGatewayService_storeAppFromPullOnMiss(t *testing.T) {
 		err := service.storeAppFromPullOnMiss(pbApp)
 		require.NoError(t, err)
 
-		// Verify budget usage was initialized
+		// Verify existing budget usage was NOT overwritten
 		var budgetUsage database.BudgetUsage
 		err = db.Where("app_id = ?", 400).First(&budgetUsage).Error
 		require.NoError(t, err)
 
-		// CurrentPeriodUsage is in dollars, stored as dollars * 10000
-		expectedStoredCost := 250.0 * 10000
-		assert.Equal(t, expectedStoredCost, budgetUsage.TotalCost)
+		// Should still be the original $500 (5000000), not reset to 0
+		assert.Equal(t, 5000000.0, budgetUsage.TotalCost, "Existing budget usage should be preserved")
 	})
 
 	t.Run("handles nil timestamps gracefully", func(t *testing.T) {
