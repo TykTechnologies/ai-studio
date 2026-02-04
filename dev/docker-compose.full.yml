@@ -92,7 +92,8 @@ services:
                   build_tags='';
                 fi;
                 echo \"Building: \$$plugin_name\";
-                (cd \"\$$plugin_dir\" && go mod tidy -e 2>/dev/null; CGO_ENABLED=0 go build \$$build_tags -o \$$plugin_name .) && echo \"  ✓ \$$plugin_name\" || echo \"  ✗ \$$plugin_name\";
+                mkdir -p /app/bin/plugins;
+                (cd \"\$$plugin_dir\" && go mod tidy -e 2>/dev/null; CGO_ENABLED=0 go build \$$build_tags -o /app/bin/plugins/\$$plugin_name .) && echo \"  ✓ \$$plugin_name\" || echo \"  ✗ \$$plugin_name\";
               done;
             fi;
           done;
