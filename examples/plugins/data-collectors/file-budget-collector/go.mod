@@ -1,6 +1,6 @@
 module github.com/TykTechnologies/midsommar/v2/examples/plugins/unified/data-collectors/file-budget-collector
 
-go 1.24.10
+go 1.25.2
 
 require github.com/TykTechnologies/midsommar/v2 v2.0.0
 

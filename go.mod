@@ -1,8 +1,8 @@
 module github.com/TykTechnologies/midsommar/v2
 
-go 1.24.10
+go 1.25.2
 
-toolchain go1.24.11
+toolchain go1.25.6
 
 require (
 	dario.cat/mergo v1.0.2

@@ -1,6 +1,6 @@
 module github.com/TykTechnologies/midsommar/v2/examples/plugins/echo-agent
 
-go 1.24.10
+go 1.25.2
 
 replace github.com/TykTechnologies/midsommar/v2 => ../../../../../
 
