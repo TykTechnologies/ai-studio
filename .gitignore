@@ -134,3 +134,4 @@ examples/plugins/data-collectors/file-proxy-collector/file-proxy-collector
 examples/plugins/studio/custom-auth-ui/server/server
 examples/plugins/studio/echo-agent/server/server
 tests/postgres_data_ci/
+.playwright-mcp

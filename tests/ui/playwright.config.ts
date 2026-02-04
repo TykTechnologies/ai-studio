@@ -10,18 +10,22 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
+ *
+ * IMPORTANT: Tests must run serially (workers: 1) because they share database
+ * state and will fail with race conditions if run in parallel. Multiple tests
+ * logging in/out and modifying the same data causes interference.
  */
 export default defineConfig({
   globalSetup: require.resolve('./global-setup'),
   testDir: './tests',
-  /* Run tests in files in parallel */
-  fullyParallel: true,
+  /* Tests must run serially - they share database state */
+  fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /* Single worker required - tests share database state and interfere when parallel */
+  workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */

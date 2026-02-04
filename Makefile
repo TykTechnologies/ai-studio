@@ -518,7 +518,8 @@ test-ui-e2e: ## Run UI E2E tests (requires Docker Compose environment)
 	@echo "Running UI E2E tests..."
 	@echo "Note: Requires Docker Compose test environment to be running"
 	@echo "Start with: make start-test-env"
-	cd tests/ui && npm ci && npx playwright install --with-deps chromium && npm run test
+	@# Uses --workers=1 because tests share database state and will fail with race conditions if run in parallel
+	cd tests/ui && npm ci && npx playwright install --with-deps chromium && npm run test:serial
 
 .PHONY: test-ui-e2e-with-env
 test-ui-e2e-with-env: ## Start test env and run UI E2E tests
@@ -833,10 +834,14 @@ dev-full-ent:
 	fi
 	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml -f docker-compose.ent.yml -f docker-compose.full-ent.yml up --build
 
-# Stop development environment
+# Stop development environment (handles all compose file combinations)
 dev-down:
 	@echo "🛑 Stopping development environment..."
-	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml down 2>/dev/null || true
+	@# Stop containers by name to avoid env file dependency issues
+	docker stop midsommar-studio midsommar-frontend midsommar-postgres midsommar-gateway midsommar-plugins 2>/dev/null || true
+	docker rm midsommar-studio midsommar-frontend midsommar-postgres midsommar-gateway midsommar-plugins 2>/dev/null || true
+	@# Also try compose down with just the base file as fallback
+	cd dev && docker compose down 2>/dev/null || true
 
 # View all logs
 dev-logs:
@@ -854,12 +859,16 @@ dev-shell-%:
 dev-rebuild-%:
 	cd dev && docker compose up --build -d $*
 
-# Clean development environment (stops containers and removes volumes)
-dev-clean:
+# Clean development environment (stops containers and removes volumes including postgres data)
+dev-clean: dev-down
 	@echo "🧹 Cleaning development environment..."
-	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml down -v 2>/dev/null || true
+	@echo "   Removing Docker volumes..."
+	docker volume rm midsommar-postgres-data 2>/dev/null || true
+	docker volume rm midsommar-studio-tmp 2>/dev/null || true
+	docker volume rm midsommar-studio-data 2>/dev/null || true
+	docker volume rm midsommar-go-cache 2>/dev/null || true
 	rm -f dev/.env dev/.env.gateway
-	@echo "✅ Development environment cleaned"
+	@echo "✅ Development environment cleaned (including postgres data)"
 	@echo "   Run 'make dev' to start fresh"
 
 # Show development environment status

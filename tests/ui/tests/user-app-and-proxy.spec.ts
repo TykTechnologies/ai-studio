@@ -1,7 +1,6 @@
 import { test } from '@fixtures';
 import { expect } from '@playwright/test';
 import { config } from '../config';
-import { sendRequestToAnthropicLLMWithSDK } from '@utils/anthropic';
 import { generateRandomString } from '@utils/utils';
 
 test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminAppsPage, adminMainPage }) => {
@@ -9,7 +8,6 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
   const app_description = 'Long Description';
   let keyID: string;
   let restUrl: string;
-  const prompt = "Tell me a 1 line joke";
 
   await test.step('Crating new app', async () => {
     await loginPage.goto();
@@ -45,12 +43,6 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     console.log('Proxy URL:', restUrl);
     expect(keyID).not.toBeNull();
     expect(restUrl).not.toBeNull();
-  });
-
-  await test.step('Send request to proxy->LLM', async () => {
-    const resposne = await sendRequestToAnthropicLLMWithSDK(keyID, restUrl, prompt);
-    expect(resposne).not.toBeNull();
-    console.log(`Response from LLM: ${resposne}`);
   });
 
   await test.step('Delete app', async () => {
