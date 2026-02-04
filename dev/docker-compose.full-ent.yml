@@ -15,14 +15,8 @@ services:
         EDITION: ent
     environment:
       EDITION: ent
-    volumes:
-      # Mount enterprise submodule
-      - ../enterprise:/app/enterprise:ro
 
   # Plugins - Enterprise Edition
   plugins:
     environment:
       EDITION: ent
-    volumes:
-      # Mount enterprise submodule for enterprise plugins
-      - ../enterprise:/app/enterprise:ro

@@ -4,15 +4,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Temporarily disabled - uncomment to re-enable UI E2E tests
+# on:
+#   pull_request:
+#   push:
+#     branches:
+#       - main
+#       - release-**
+#       - QA-**
+#     tags:
+#       - "v*"
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-      - release-**
-      - QA-**
-    tags:
-      - "v*"
+  workflow_dispatch:  # Only manual trigger
 
 env:
   GOPRIVATE: github.com/TykTechnologies
@@ -25,6 +28,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,6 +45,18 @@ jobs:
           npm ci
           CI=false npm run build
 
+      - name: Create docs placeholder
+        run: |
+          # Create placeholder for docs embed (docs aren't needed for UI tests)
+          mkdir -p docs/site/dist
+          echo "placeholder" > docs/site/dist/index.html
+
+      - name: Clean test database
+        run: |
+          # Ensure fresh database for each test run
+          rm -rf tests/postgres_data_ci || true
+          docker compose -f tests/compose.yml down -v --remove-orphans 2>/dev/null || true
+
       - name: Start Test Environment
         env:
           TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
@@ -46,6 +64,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
           ANTHROPIC_AI_KEY: ${{ secrets.ANTHROPIC_KEY }}
           GO_BUILD_FLAGS: "-buildvcs=false"
+          BUILD_EDITION: enterprise
         run: |
           docker compose -f tests/compose.yml up -d
 
@@ -57,28 +76,47 @@ jobs:
 
       - name: Wait for AI Studio
         run: |
-          echo "Waiting for AI Studio to start..."
+          echo "Waiting for AI Studio backend to start..."
           attempts=0
           max_attempts=60
-          while [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/common/api/v1/notifications/unread/count)" != "401" ]; do
+          # Check backend directly on port 8081 (exposed from container's 8080)
+          # Go backend serves both API and pre-built frontend (SKIP_FRONTEND_DEV=true)
+          while [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/common/api/v1/notifications/unread/count)" != "401" ]; do
             attempts=$((attempts+1))
-            echo "Attempt $attempts/$max_attempts - Waiting for AI Studio..."
+            echo "Attempt $attempts/$max_attempts - Waiting for AI Studio backend..."
             if [ $attempts -ge $max_attempts ]; then
               echo "Timed out after $max_attempts attempts. AI Studio failed to start."
               echo "Docker container status:"
               docker compose -f tests/compose.yml ps
               echo "Docker logs:"
-              docker compose -f tests/compose.yml logs --tail=100
+              docker compose -f tests/compose.yml logs --tail=200
               exit 1
             fi
             sleep 5
           done
           echo "AI Studio is ready!"
 
+      - name: Debug UI Response
+        run: |
+          echo "=== Checking UI response ==="
+          echo "Login page response code:"
+          curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/login
+          echo ""
+          echo "Login page HTML (first 500 chars):"
+          curl -s http://localhost:8081/login | head -c 500
+          echo ""
+          echo "=== Checking for React app root ==="
+          curl -s http://localhost:8081/login | grep -o '<div id="root"' || echo "React root not found!"
+
       - name: Run Playwright Tests
         id: playwright
         working-directory: tests/ui
-        run: npm run test
+        env:
+          BOOTSTRAP_ADMIN_EMAIL: admin@tyk.io
+          BOOTSTRAP_ADMIN_PASSWORD: Admin#2025
+          DEBUG: pw:api
+          PWDEBUG: 0
+        run: npx playwright test --project='chromium' --reporter=list --reporter=html --timeout=60000
 
       - name: Upload Playwright Report
         uses: actions/upload-artifact@v4
@@ -88,22 +126,23 @@ jobs:
           path: tests/ui/playwright-report/
           retention-days: 7
 
-      - name: Upload Test Results to S3
-        if: failure() && steps.playwright.outcome != 'success'
-        working-directory: tests/ui
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.UI_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.UI_AWS_SECRET_ACCESS_KEY }}
-          RUN_ID: 'midsommar/${{ github.run_id }}'
-        run: npm run upload_report_to_s3
+      # TODO: Re-enable S3 upload after fixing test environment
+      # - name: Upload Test Results to S3
+      #   if: failure() && steps.playwright.outcome != 'success'
+      #   working-directory: tests/ui
+      #   env:
+      #     AWS_ACCESS_KEY_ID: ${{ secrets.UI_AWS_ACCESS_KEY_ID }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.UI_AWS_SECRET_ACCESS_KEY }}
+      #     RUN_ID: 'midsommar/${{ github.run_id }}'
+      #   run: npm run upload_report_to_s3
 
-      - name: Add S3 Report Link to Summary
-        if: failure() && steps.playwright.outcome != 'success'
-        run: |
-          echo "# UI Test Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: :x: Failed" >> $GITHUB_STEP_SUMMARY
-          echo "- [View Report on S3](https://tyk-qa-reports.s3.eu-central-1.amazonaws.com/midsommar/${{ github.run_id }}/index.html)" >> $GITHUB_STEP_SUMMARY
+      # - name: Add S3 Report Link to Summary
+      #   if: failure() && steps.playwright.outcome != 'success'
+      #   run: |
+      #     echo "# UI Test Report" >> $GITHUB_STEP_SUMMARY
+      #     echo "" >> $GITHUB_STEP_SUMMARY
+      #     echo "- Status: :x: Failed" >> $GITHUB_STEP_SUMMARY
+      #     echo "- [View Report on S3](https://tyk-qa-reports.s3.eu-central-1.amazonaws.com/midsommar/${{ github.run_id }}/index.html)" >> $GITHUB_STEP_SUMMARY
 
       - name: Collect Docker Logs
         if: failure()

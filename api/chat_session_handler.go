@@ -201,8 +201,13 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 	hub.AddSession(chatSession.ID(), chatSession)
 	defer hub.RemoveSession(chatSession.ID())
 
+	// Use a WaitGroup to ensure keep-alive goroutine exits before handler returns
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	// Start keep-alive goroutine
 	go func() {
+		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("Recovered from panic in keep-alive goroutine: %v", r)
@@ -231,6 +236,10 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 	}()
 
 	handleSSEOutgoingMessages(c.Writer, chatSession, clientGone)
+
+	// Ensure keep-alive goroutine has exited before handler returns
+	// to prevent race condition with server closing the connection
+	wg.Wait()
 }
 
 func sendSSEMessage(w http.ResponseWriter, event, data string) {

@@ -16,19 +16,31 @@ if [ ! -f /app/.env ]; then
     echo ".env file created from .env.example"
 fi
 
-# Start frontend in background
-echo "Starting frontend..."
-cd /app/ui/admin-frontend
-npm start &
+# Start frontend dev server in background (skip if SKIP_FRONTEND_DEV is set)
+# When using pre-built frontend, the Go binary serves it via embed
+if [ "${SKIP_FRONTEND_DEV}" != "true" ]; then
+    echo "Starting frontend dev server..."
+    cd /app/ui/admin-frontend
+    npm start &
+else
+    echo "Skipping frontend dev server (using embedded build)"
+fi
 
 # Build and start backend
 echo "Building and starting backend..."
 cd /app
 
-# Build enterprise edition
-echo "Performing Go build (enterprise)..."
+# Build edition based on BUILD_EDITION env var (default: enterprise)
+BUILD_EDITION="${BUILD_EDITION:-enterprise}"
+echo "Performing Go build (${BUILD_EDITION})..."
 mkdir -p bin
-CGO_ENABLED=1 go build -tags enterprise -o bin/midsommar-ent .
+
+if [ "$BUILD_EDITION" = "community" ] || [ "$BUILD_EDITION" = "ce" ]; then
+    CGO_ENABLED=1 go build -o bin/midsommar .
+else
+    CGO_ENABLED=1 go build -tags enterprise -o bin/midsommar-ent .
+fi
+
 if [ $? -ne 0 ]; then
     echo "Go build failed!"
     exit 1
@@ -36,7 +48,11 @@ fi
 
 # Start the server
 echo "Starting server..."
-./bin/midsommar-ent &
+if [ "$BUILD_EDITION" = "community" ] || [ "$BUILD_EDITION" = "ce" ]; then
+    ./bin/midsommar &
+else
+    ./bin/midsommar-ent &
+fi
 SERVER_PID=$!
 
 # Wait for any process to exit

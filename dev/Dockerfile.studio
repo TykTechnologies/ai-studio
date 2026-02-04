@@ -5,7 +5,7 @@
 #   docker build -f dev/Dockerfile.studio -t midsommar-studio-dev .
 #   docker build -f dev/Dockerfile.studio --build-arg EDITION=ent -t midsommar-studio-dev-ent .
 
-FROM golang:1.24-bookworm AS base
+FROM golang:1.25-bookworm AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -27,9 +27,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Air for Go hot reloading
-# Pin to v1.61.5 (last version compatible with Go 1.24)
-# v1.64+ requires Go 1.25
-RUN go install github.com/air-verse/air@v1.61.5
+RUN go install github.com/air-verse/air@latest
 
 # Set working directory
 WORKDIR /app

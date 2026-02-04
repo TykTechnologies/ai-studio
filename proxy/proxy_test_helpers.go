@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
@@ -73,6 +74,9 @@ func setupDB(t *testing.T) *gorm.DB {
 
 // setupTest initializes DB, does migrations, and starts analytics in one place.
 func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
+	// Clear signup domain filter for tests (allows any email domain)
+	config.Get("").FilterSignupDomains = nil
+
 	// Reset global analytics handler state before test
 	analytics.ResetHandler()
 
@@ -299,6 +303,46 @@ func waitForSpendingValue(t *testing.T, budgetService services.BudgetService, ap
 	}
 
 	t.Fatalf("Timeout waiting for spending to reach %.2f, last value was %.2f", expectedSpent, lastSpent)
+}
+
+// waitForProxyLog waits for a ProxyLog with specific app_id and response_code to exist
+func waitForProxyLog(t *testing.T, db *gorm.DB, appID uint, statusCode int) {
+	deadline := time.Now().Add(5000 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		var count int64
+		var err error
+
+		// Retry with exponential backoff for database lock errors
+		for i := 0; i < 5; i++ {
+			err = db.Model(&models.ProxyLog{}).Where("app_id = ? AND response_code = ?", appID, statusCode).Count(&count).Error
+			if err == nil {
+				break
+			}
+
+			// Handle database lock errors specifically
+			if strings.Contains(err.Error(), "database table is locked") ||
+				strings.Contains(err.Error(), "database is locked") {
+				backoff := time.Duration(50*(1<<i)) * time.Millisecond
+				t.Logf("Database locked during proxy log wait, backing off %v (attempt %d/5)", backoff, i+1)
+				time.Sleep(backoff)
+				continue
+			}
+
+			// For other errors, use shorter backoff
+			time.Sleep(50 * time.Millisecond)
+		}
+		if err != nil {
+			t.Logf("Error checking proxy log count: %v, retrying...", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		if count >= 1 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("Timeout waiting for ProxyLog with app_id=%d and response_code=%d", appID, statusCode)
 }
 
 // waitForSpendingUpdate waits for spending to be updated to an expected value

@@ -58,10 +58,12 @@ jobs:
           cache-dependency-path: "**/package-lock.json"
 
       - name: Install and Test Frontend
+        env:
+          CI: true
         run: |
           cd ui/admin-frontend
           npm ci
-          npm test
+          npm test -- --forceExit
 
       - name: Build Frontend
         run: |
@@ -86,12 +88,15 @@ jobs:
           submodules: ${{ matrix.edition == 'ent' }}
           token: ${{ secrets.CI_SUBMODULE_PAT }}
 
-      - name: Checkout langchaingo
-        uses: actions/checkout@v4
-        with:
-          repository: lonelycode/langchaingo
-          path: langchaingo
-          fetch-depth: 2
+      - name: Create enterprise stub for CE builds
+        if: matrix.edition == 'ce'
+        run: |
+          mkdir -p enterprise
+          cat > enterprise/go.mod << 'EOF'
+          module github.com/TykTechnologies/midsommar/v2/enterprise
+
+          go 1.25.6
+          EOF
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -118,6 +123,17 @@ jobs:
           else
             echo "BUILD_TAGS=" >> $GITHUB_OUTPUT
           fi
+
+      - name: Create placeholders for embeds
+        run: |
+          # Create placeholder for docs embed (tests don't need actual docs)
+          mkdir -p docs/site/dist
+          echo "placeholder" > docs/site/dist/index.html
+          # Create placeholder for frontend embed (tests don't need actual frontend)
+          mkdir -p ui/admin-frontend/build
+          echo "placeholder" > ui/admin-frontend/build/index.html
+          # Use dev environment template for tests
+          cp dev/.env.dev .env
 
       - name: Run AI Studio Unit Tests
         run: |

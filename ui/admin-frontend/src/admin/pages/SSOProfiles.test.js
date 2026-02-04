@@ -2,11 +2,6 @@ import React from 'react';
 import '@testing-library/jest-dom';
 
 describe('SSOProfiles', () => {
-  // Skip the rendering test since we're having issues with the component dependencies
-  test.skip('renders the component', () => {
-    // This test is skipped
-  });
-
   // Test the formatDate function
   test('formats date correctly', () => {
     // Create a mock implementation of formatDate

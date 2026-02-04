@@ -1,8 +1,6 @@
 module github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk/examples/llm-rate-limiter
 
-go 1.24.10
-
-toolchain go1.24.12
+go 1.25.6
 
 require (
 	github.com/TykTechnologies/midsommar/microgateway v0.0.0

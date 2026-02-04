@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "npx playwright test --project='chromium'",
+    "test:ci": "npx playwright test --project='chromium' --reporter=list --reporter=html",
+    "test:serial": "npx playwright test --project='chromium' --reporter=list --workers=1",
     "gui": "npx playwright test --project='chromium' --ui",
     "upload_report_to_s3": "node ./node_modules/tyk-test-automation-wrappers/lib/utils/uploadReport.js"
   },
@@ -14,6 +16,7 @@
   "devDependencies": {
     "@playwright/test": "^1.50.1",
     "@types/node": "^22.13.8",
+    "dotenv": "^17.2.3",
     "tyk-test-automation-wrappers": "git+https://github.com/TykTechnologies/tyk-test-automation-wrappers.git#main"
   },
   "dependencies": {

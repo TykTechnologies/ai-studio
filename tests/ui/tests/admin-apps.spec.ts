@@ -18,7 +18,7 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
       name: app_name,
       description: app_description,
       user: 'Test Admin',
-      llm: 'Anthropic LLM',
+      llm: 'Anthropic',
       monthlyBudget: '10',
       budgetStartDate: '2024-01-01'
     });

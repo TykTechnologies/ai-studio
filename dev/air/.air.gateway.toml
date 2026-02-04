@@ -25,11 +25,11 @@ else
 fi
 """
 
-# Binary to run (without args - use full_bin for args)
+# Binary to run
 bin = "/app/tmp/gateway/microgateway"
 
-# Full command with arguments - pass the env file location
-full_bin = "/app/tmp/gateway/microgateway -env=/app/dev/.env.gateway"
+# Arguments to pass to the binary
+args_bin = ["-env=/app/dev/.env.gateway"]
 
 # File extensions to watch
 include_ext = ["go"]

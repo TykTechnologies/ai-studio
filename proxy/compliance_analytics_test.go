@@ -272,8 +272,8 @@ func TestAnalyticsStatusCodeCategories(t *testing.T) {
 
 			proxy.analyzeResponse(llm, app, tc.statusCode, []byte(tc.respBody), reqBody, req)
 
-			// Wait for analytics
-			time.Sleep(50 * time.Millisecond)
+			// Wait for proxy log with proper retry logic for database locks
+			waitForProxyLog(t, db, app.ID, tc.statusCode)
 
 			// Verify ProxyLog exists with correct status
 			var count int64

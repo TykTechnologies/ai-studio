@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -26,6 +27,9 @@ func newMockMailService() *notifications.MailService {
 }
 
 func setupTestDB(t *testing.T) *gorm.DB {
+	// Clear signup domain filter for tests (allows any email domain)
+	config.Get("").FilterSignupDomains = nil
+
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
 

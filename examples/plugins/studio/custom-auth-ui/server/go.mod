@@ -1,8 +1,6 @@
 module github.com/TykTechnologies/midsommar/examples/plugins/custom-auth-ui/server
 
-go 1.24.10
-
-toolchain go1.24.12
+go 1.25.6
 
 require github.com/TykTechnologies/midsommar/v2 v2.0.0
 
