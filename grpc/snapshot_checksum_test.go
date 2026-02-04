@@ -168,15 +168,25 @@ func TestComputeSnapshotChecksum(t *testing.T) {
 		assert.Equal(t, checksum1, checksum2, "Nested timestamps should be excluded from checksum")
 	})
 
-	t.Run("current_period_usage is excluded from checksum", func(t *testing.T) {
+	t.Run("apps are excluded entirely from checksum for pull-on-miss sync", func(t *testing.T) {
+		// Apps are excluded from checksum because they can be synced via pull-on-miss
+		// which is out-of-band from the normal snapshot sync mechanism
 		snapshot1 := &pb.ConfigurationSnapshot{
+			Llms: []*pb.LLMConfig{
+				{Id: 1, Name: "test-llm", Vendor: "openai"},
+			},
 			Apps: []*pb.AppConfig{
-				{Id: 1, Name: "test-app", CurrentPeriodUsage: 50.0},
+				{Id: 1, Name: "app-1"},
 			},
 		}
 		snapshot2 := &pb.ConfigurationSnapshot{
+			Llms: []*pb.LLMConfig{
+				{Id: 1, Name: "test-llm", Vendor: "openai"},
+			},
 			Apps: []*pb.AppConfig{
-				{Id: 1, Name: "test-app", CurrentPeriodUsage: 150.0},
+				{Id: 1, Name: "app-1"},
+				{Id: 2, Name: "app-2"},
+				{Id: 3, Name: "app-3"},
 			},
 		}
 
@@ -186,7 +196,36 @@ func TestComputeSnapshotChecksum(t *testing.T) {
 		checksum2, err := ComputeSnapshotChecksum(snapshot2)
 		require.NoError(t, err)
 
-		assert.Equal(t, checksum1, checksum2, "CurrentPeriodUsage should be excluded from checksum")
+		assert.Equal(t, checksum1, checksum2, "Apps should be excluded entirely from checksum")
+	})
+
+	t.Run("apps excluded but llm changes still affect checksum", func(t *testing.T) {
+		// Verify that while Apps are excluded, LLM changes still affect the checksum
+		snapshot1 := &pb.ConfigurationSnapshot{
+			Llms: []*pb.LLMConfig{
+				{Id: 1, Name: "llm-1", Vendor: "openai"},
+			},
+			Apps: []*pb.AppConfig{
+				{Id: 1, Name: "app-1"},
+			},
+		}
+		snapshot2 := &pb.ConfigurationSnapshot{
+			Llms: []*pb.LLMConfig{
+				{Id: 1, Name: "llm-1", Vendor: "openai"},
+				{Id: 2, Name: "llm-2", Vendor: "anthropic"},
+			},
+			Apps: []*pb.AppConfig{
+				{Id: 1, Name: "app-1"},
+			},
+		}
+
+		checksum1, err := ComputeSnapshotChecksum(snapshot1)
+		require.NoError(t, err)
+
+		checksum2, err := ComputeSnapshotChecksum(snapshot2)
+		require.NoError(t, err)
+
+		assert.NotEqual(t, checksum1, checksum2, "LLM changes should still affect checksum even though Apps are excluded")
 	})
 
 	t.Run("complex snapshot produces consistent checksum", func(t *testing.T) {
