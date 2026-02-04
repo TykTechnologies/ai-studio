@@ -1,8 +1,6 @@
 module github.com/TykTechnologies/midsommar/examples/plugins/gateway/response-modifier
 
-go 1.25.2
-
-toolchain go1.25.6
+go 1.25.6
 
 replace github.com/TykTechnologies/midsommar/v2 => ../../../..
 

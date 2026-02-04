@@ -1,6 +1,6 @@
 module github.com/TykTechnologies/midsommar/v2/examples/plugins/unified/data-collectors/file-analytics-collector
 
-go 1.25.2
+go 1.25.6
 
 require github.com/TykTechnologies/midsommar/v2 v2.0.0
 
