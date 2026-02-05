@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gosimple/slug"
 	"gorm.io/gorm"
 )
 
@@ -11,6 +12,7 @@ type Tool struct {
 	gorm.Model
 	ID          uint   `json:"id" gorm:"primary_key"`
 	Name        string `json:"name"`
+	Slug        string `json:"slug" gorm:"index"`
 	Description string `json:"description"`
 
 	ToolType            string `json:"tool_type"`
@@ -37,6 +39,12 @@ const (
 
 func NewTool() *Tool {
 	return &Tool{}
+}
+
+// BeforeSave computes the slug from the tool name before saving
+func (t *Tool) BeforeSave(tx *gorm.DB) error {
+	t.Slug = slug.Make(t.Name)
+	return nil
 }
 
 // Create a new tool
