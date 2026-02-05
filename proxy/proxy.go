@@ -222,8 +222,6 @@ func (w *loggingResponseWriter) WriteHeader(code int) {
 func (p *Proxy) Stop(ctx context.Context) error { return p.server.Shutdown(ctx) }
 
 func (p *Proxy) Reload() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	logger.Debug("proxy reloading resources")
 	return p.loadResources()
 }
@@ -253,8 +251,10 @@ func (p *Proxy) loadResources() error {
 		ds := datasources[i]
 		newDatasources[slug.Make(ds.Name)] = &ds
 	}
+	p.mu.Lock()
 	p.llms = newLLMs
 	p.datasources = newDatasources
+	p.mu.Unlock()
 	return nil
 }
 

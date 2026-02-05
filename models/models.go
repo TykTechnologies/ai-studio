@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/gosimple/slug"
 	"gorm.io/gorm"
 )
 
@@ -76,6 +77,21 @@ func InitModels(db *gorm.DB) error {
 		&ProxyLogExport{}, // Proxy log export jobs (Enterprise)
 	); err != nil {
 		return err
+	}
+
+	// Migration: Populate Tool.Slug for existing records
+	// This ensures tools created before the Slug field was added get their slugs computed
+	var toolCount int64
+	db.Model(&Tool{}).Where("slug = '' OR slug IS NULL").Count(&toolCount)
+	if toolCount > 0 {
+		var tools []Tool
+		db.Find(&tools)
+		for i := range tools {
+			if tools[i].Slug == "" {
+				tools[i].Slug = slug.Make(tools[i].Name)
+				db.Model(&tools[i]).Update("slug", tools[i].Slug)
+			}
+		}
 	}
 
 	if err := db.Table("group_catalogues").AutoMigrate(&struct {

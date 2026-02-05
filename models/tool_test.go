@@ -3,6 +3,7 @@ package models
 import (
 	"testing"
 
+	"github.com/gosimple/slug"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -290,4 +291,146 @@ func TestTool_GetOperations(t *testing.T) {
 	emptyTool := &Tool{}
 	emptyOperations := emptyTool.GetOperations()
 	assert.Equal(t, []string{}, emptyOperations)
+}
+
+// TestTool_SlugComputedOnCreate verifies that the slug is automatically computed
+// from the tool name when the tool is created (via BeforeSave hook)
+func TestTool_SlugComputedOnCreate(t *testing.T) {
+	db := setupTestDB(t)
+
+	tool := &Tool{
+		Name:         "My Test Tool",
+		Description:  "This is a test tool",
+		ToolType:     ToolTypeREST,
+		PrivacyScore: 8,
+	}
+	err := tool.Create(db)
+	assert.NoError(t, err)
+
+	// Verify slug was computed correctly
+	assert.Equal(t, "my-test-tool", tool.Slug)
+
+	// Verify it's persisted in the database
+	fetchedTool := &Tool{}
+	err = fetchedTool.Get(db, tool.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "my-test-tool", fetchedTool.Slug)
+}
+
+// TestTool_SlugWithVersionNumber verifies that tools with version numbers
+// (containing dots) get their slugs computed correctly. This is the key bug fix test.
+// Previously, "FDX V6.2.0 Customer API" would fail to be looked up because:
+// - The proxy used slug.Make() -> "fdx-v6-2-0-customer-api" (dots replaced with hyphens)
+// - The DB query used LOWER(REPLACE(name, ' ', '-')) -> "fdx-v6.2.0-customer-api" (dots preserved)
+// Now both use slug.Make() for consistency.
+func TestTool_SlugWithVersionNumber(t *testing.T) {
+	db := setupTestDB(t)
+
+	testCases := []struct {
+		name         string
+		expectedSlug string
+	}{
+		{"FDX V6.2.0 Customer API", "fdx-v6-2-0-customer-api"},
+		{"API v1.0.0", "api-v1-0-0"},
+		{"Tool_With_Underscores", "tool_with_underscores"}, // underscores are preserved
+		{"Tool.With.Dots", "tool-with-dots"},
+		{"Tool   With   Multiple   Spaces", "tool-with-multiple-spaces"},
+		{"UPPERCASE TOOL", "uppercase-tool"},
+		{"MixedCase Tool Name", "mixedcase-tool-name"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tool := &Tool{
+				Name:         tc.name,
+				Description:  "Test tool",
+				ToolType:     ToolTypeREST,
+				PrivacyScore: 5,
+			}
+			err := tool.Create(db)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedSlug, tool.Slug, "Slug mismatch for tool name: %s", tc.name)
+
+			// Verify the slug matches what slug.Make() produces (ensuring consistency)
+			assert.Equal(t, slug.Make(tc.name), tool.Slug, "Slug should match slug.Make() output")
+		})
+	}
+}
+
+// TestTool_SlugUpdatedOnNameChange verifies that the slug is recomputed
+// when the tool name is updated
+func TestTool_SlugUpdatedOnNameChange(t *testing.T) {
+	db := setupTestDB(t)
+
+	tool := &Tool{
+		Name:         "Original Name",
+		Description:  "Test tool",
+		ToolType:     ToolTypeREST,
+		PrivacyScore: 5,
+	}
+	err := tool.Create(db)
+	assert.NoError(t, err)
+	assert.Equal(t, "original-name", tool.Slug)
+
+	// Update the name
+	tool.Name = "New Tool Name v2.0"
+	err = tool.Update(db)
+	assert.NoError(t, err)
+
+	// Verify slug was recomputed
+	assert.Equal(t, "new-tool-name-v2-0", tool.Slug)
+
+	// Verify it's persisted in the database
+	fetchedTool := &Tool{}
+	err = fetchedTool.Get(db, tool.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "new-tool-name-v2-0", fetchedTool.Slug)
+}
+
+// TestTool_SlugLookupByColumn verifies that tools can be looked up by their slug column
+func TestTool_SlugLookupByColumn(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Create a tool with a version number in the name
+	tool := &Tool{
+		Name:         "FDX V6.2.0 Customer API",
+		Description:  "Financial Data Exchange API",
+		ToolType:     ToolTypeREST,
+		PrivacyScore: 8,
+	}
+	err := tool.Create(db)
+	assert.NoError(t, err)
+
+	// Look up by slug column directly (simulating GetToolBySlug behavior)
+	var fetchedTool Tool
+	err = db.Where("slug = ?", "fdx-v6-2-0-customer-api").First(&fetchedTool).Error
+	assert.NoError(t, err)
+	assert.Equal(t, tool.ID, fetchedTool.ID)
+	assert.Equal(t, tool.Name, fetchedTool.Name)
+
+	// Verify that the lookup slug matches what slug.Make() produces
+	// This is the key consistency check - the proxy uses slug.Make() to generate
+	// the lookup slug, so it must match what's stored in the database
+	lookupSlug := slug.Make("FDX V6.2.0 Customer API")
+	assert.Equal(t, "fdx-v6-2-0-customer-api", lookupSlug)
+
+	var foundTool Tool
+	err = db.Where("slug = ?", lookupSlug).First(&foundTool).Error
+	assert.NoError(t, err)
+	assert.Equal(t, tool.ID, foundTool.ID)
+}
+
+// TestTool_EmptyNameSlug verifies behavior with empty tool names
+func TestTool_EmptyNameSlug(t *testing.T) {
+	db := setupTestDB(t)
+
+	tool := &Tool{
+		Name:         "",
+		Description:  "Tool with empty name",
+		ToolType:     ToolTypeREST,
+		PrivacyScore: 5,
+	}
+	err := tool.Create(db)
+	assert.NoError(t, err)
+	assert.Equal(t, "", tool.Slug) // Empty name produces empty slug
 }

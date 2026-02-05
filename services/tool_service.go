@@ -239,12 +239,12 @@ func (s *Service) GetToolByName(name string) (*models.Tool, error) {
 	return tool, nil
 }
 
-// GetToolBySlug retrieves a tool by its slug (derived from name)
+// GetToolBySlug retrieves a tool by its slug (pre-computed from name using slug.Make)
 func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
 	var tool models.Tool
 
-	// Use SQL to find tool by slug directly - much more efficient than O(N) scan
-	err := s.DB.Where("LOWER(REPLACE(name, ' ', '-')) = ?", slug).
+	// Use the pre-computed slug column for efficient indexed lookup
+	err := s.DB.Where("slug = ?", slug).
 		Preload("FileStores").
 		Preload("Filters").
 		Preload("Dependencies").
