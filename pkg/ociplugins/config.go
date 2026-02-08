@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+// DefaultTykPublicKey is the official Tyk plugin signing public key (ECDSA P-256).
+// This key is always included in the trusted keys list and cannot be disabled via
+// environment variables. Additional keys can be added via OCI_PLUGINS_PUBKEY_* env vars.
+const DefaultTykPublicKey = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEKZg118qSzmf6kRCy2jftW0A8q00s
+09B89WHDBBg8p8XUj7jQf62ZnNTTbq8Oh3Xq6kIgDYFUbxc5587e3k76RA==
+-----END PUBLIC KEY-----`
+
 // OCIConfig holds the configuration for OCI plugin operations
 type OCIConfig struct {
 	// Cache settings
@@ -264,7 +272,8 @@ func LoadRegistryAuthForRegistry(registryName string) *RegistryAuth {
 // - OCI_PLUGINS_PUBKEY_<NAME> - Named keys with PEM content
 // - OCI_PLUGINS_PUBKEY_FILE_<NAME> - File path references
 func LoadPublicKeysFromEnv() []string {
-	var keys []string
+	// Always include the embedded Tyk official signing key (cannot be disabled)
+	keys := []string{"embedded:default"}
 
 	// Scan for numbered keys: OCI_PLUGINS_PUBKEY_1, OCI_PLUGINS_PUBKEY_2, etc.
 	for i := 1; i <= 20; i++ {

@@ -68,6 +68,11 @@ func (v *SignatureVerifier) getPublicKeyPath(pubKeyID string) (string, error) {
 
 // resolveKeyReference resolves a key reference to a usable file path
 func (v *SignatureVerifier) resolveKeyReference(keyRef string) (string, error) {
+	// Case 0: Embedded key reference (the built-in Tyk official signing key)
+	if strings.HasPrefix(keyRef, "embedded:") {
+		return v.writeKeyToTempFile(DefaultTykPublicKey, "tyk-default")
+	}
+
 	// Case 1: Numeric reference (1, 2, 3...)
 	if _, err := strconv.Atoi(keyRef); err == nil {
 		envKey := fmt.Sprintf("OCI_PLUGINS_PUBKEY_%s", keyRef)
