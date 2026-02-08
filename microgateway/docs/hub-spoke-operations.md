@@ -374,13 +374,13 @@ echo "Rolling update complete"
 **Diagnosis:**
 ```bash
 # Test network connectivity
-nc -zv control.example.com 9090
+nc -zv control.example.com 50051
 
 # Check DNS resolution
 nslookup control.example.com
 
 # Test gRPC endpoint
-grpc_cli call control.example.com:9090 \
+grpc_cli call control.example.com:50051 \
   microgateway.ConfigurationSyncService.RegisterEdge \
   'edge_id: "test", edge_namespace: "test"'
 
@@ -395,7 +395,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 ping control.example.com
 
 # 2. Verify gRPC port accessibility
-telnet control.example.com 9090
+telnet control.example.com 50051
 
 # 3. Check authentication token
 export EDGE_AUTH_TOKEN=correct-token
@@ -746,7 +746,7 @@ for i in {6..10}; do
     EDGE_NAMESPACE="production" \
     docker run -d --name "edge-${i}" \
       -e GATEWAY_MODE=edge \
-      -e CONTROL_ENDPOINT=control:9090 \
+      -e CONTROL_ENDPOINT=control:50051 \
       -e EDGE_ID="edge-prod-${i}" \
       -e EDGE_NAMESPACE="production" \
       microgateway:latest
@@ -954,7 +954,7 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 echo "Performing security baseline check..."
 
 # Check TLS configuration
-if curl -k https://control:9090 2>/dev/null; then
+if curl -k https://control:50051 2>/dev/null; then
     echo "✓ TLS enabled on gRPC port"
 else
     echo "⚠ TLS not configured on gRPC port"

@@ -273,7 +273,7 @@ func main() {
 
 	// start the Proxy
 	pConfig := &proxy.Config{
-		Port: 9090,
+		Port: appConf.ProxyPort,
 	}
 	p := proxy.NewProxy(service, pConfig, budgetService)
 

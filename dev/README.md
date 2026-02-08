@@ -27,7 +27,7 @@ This directory contains the Docker Compose-based development environment for Tyk
    - **Frontend (React):** http://localhost:3000
    - **Backend API:** http://localhost:8080
    - **Embedded gateway:** localhost:9090
-   - **gRPC Control Server:** localhost:9091
+   - **gRPC Control Server:** localhost:50051
 
 That's it! The environment will automatically:
 - Create a `.env` file from the template
@@ -205,7 +205,7 @@ Key variables:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `GATEWAY_MODE` | `standalone`, `control`, or `edge` | `edge` |
-| `CONTROL_ENDPOINT` | Control plane gRPC endpoint | `studio:9090` |
+| `CONTROL_ENDPOINT` | Control plane gRPC endpoint | `studio:50051` |
 | `EDGE_ID` | Unique identifier for this edge | `edge-dev-docker` |
 | `EDGE_AUTH_TOKEN` | Auth token (must match Studio's `GRPC_AUTH_TOKEN`) | `dev-grpc-auth-token...` |
 | `PLUGINS_CONFIG_PATH` | Path to analytics config | `/app/dev/analytics-pulse-config.yaml` |
@@ -357,7 +357,7 @@ make dev
 | 3000 | Frontend | HTTP | React development server |
 | 8080 | Studio | HTTP | REST API endpoints |
 | 9090 | Studio | HTTP | Embedded AI Gateway |
-| 9091 | Studio | gRPC | Control server (edge sync) |
+| 50051 | Studio | gRPC | Control server (edge sync) |
 | 9898 | Studio | HTTP | API Documentation server |
 | 8081 | Gateway | HTTP | Gateway REST/Proxy API |
 | 5432 | PostgreSQL | TCP | Database |

@@ -11,7 +11,7 @@
 #
 # Services:
 #   - postgres:  PostgreSQL 17 database (port 5432)
-#   - studio:    AI Studio backend with Air hot reload (ports 8080, 9090, 9091)
+#   - studio:    AI Studio backend with Air hot reload (ports 8080, 9090, 50051)
 #   - frontend:  React development server (port 3000)
 #
 # For full stack with Gateway, use:
@@ -59,7 +59,7 @@ services:
       - studio_data:/app/data
     ports:
       - "8080:8080"   # REST API
-      - "9091:9091"   # gRPC Control Server
+      - "50051:50051" # gRPC Control Server
       - "9090:9090"   # embedded gateway
       - "9898:9898"   # API Documentation Server
     environment:
@@ -77,7 +77,7 @@ services:
       PROXY_URL: http://localhost:9090
       # Gateway mode - Studio acts as control plane
       GATEWAY_MODE: control
-      GRPC_PORT: "9091"
+      GRPC_PORT: "50051"
       GRPC_AUTH_TOKEN: ${GRPC_AUTH_TOKEN:-dev-grpc-token}
       # Security
       TYK_AI_SECRET_KEY: ${TYK_AI_SECRET_KEY:-dev-secret-key-change-in-production}

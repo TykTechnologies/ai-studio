@@ -73,7 +73,7 @@ WHERE namespace = '' OR namespace = 'tenant-a';
 # Assign namespace to edge instance
 GATEWAY_MODE=edge
 EDGE_NAMESPACE=tenant-a
-CONTROL_ENDPOINT=control:9090
+CONTROL_ENDPOINT=control:50051
 EDGE_ID=tenant-a-edge-1
 ./microgateway
 

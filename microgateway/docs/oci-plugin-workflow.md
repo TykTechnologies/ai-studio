@@ -178,7 +178,7 @@ OCI_PLUGINS_KEEP_VERSIONS=3
 
 # Edge gateway configuration
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=control.company.com:9090
+CONTROL_ENDPOINT=control.company.com:50051
 EDGE_ID=edge-us-west-1
 EDGE_NAMESPACE=production
 EDGE_AUTH_TOKEN=your-edge-auth-token
@@ -192,7 +192,7 @@ EDGE_AUTH_TOKEN=your-edge-auth-token
 
 # Standard edge configuration
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=control.company.com:9090
+CONTROL_ENDPOINT=control.company.com:50051
 EDGE_ID=edge-us-west-1
 EDGE_NAMESPACE=production
 EDGE_AUTH_TOKEN=your-edge-auth-token

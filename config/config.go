@@ -39,6 +39,7 @@ type AppConf struct {
 	ToolDisplayURL       string
 	DataSourceDisplayURL string
 	ServerPort           string
+	ProxyPort            int
 	CertFile              string
 	KeyFile               string
 	DisableCors           bool
@@ -246,6 +247,18 @@ func getConfigFromEnv(envFile string) *AppConf {
 		conf.ServerPort = "8080"
 	}
 
+	proxyPortStr := os.Getenv("PROXY_PORT")
+	if proxyPortStr != "" {
+		if port, err := strconv.Atoi(proxyPortStr); err == nil {
+			conf.ProxyPort = port
+		} else {
+			cfgLog.Info().Msgf("Warning: Invalid PROXY_PORT value: %s. Using default: 9090", proxyPortStr)
+			conf.ProxyPort = 9090
+		}
+	} else {
+		conf.ProxyPort = 9090 // Default embedded gateway port
+	}
+
 	conf.CertFile = os.Getenv("CERT_FILE")
 	conf.KeyFile = os.Getenv("KEY_FILE")
 	if conf.KeyFile == "" || conf.CertFile == "" {
@@ -412,11 +425,11 @@ func getConfigFromEnv(envFile string) *AppConf {
 		if port, err := strconv.Atoi(grpcPortStr); err == nil {
 			conf.GRPCPort = port
 		} else {
-			cfgLog.Info().Msgf("Warning: Invalid GRPC_PORT value: %s. Using default: 9090", grpcPortStr)
-			conf.GRPCPort = 9090
+			cfgLog.Info().Msgf("Warning: Invalid GRPC_PORT value: %s. Using default: 50051", grpcPortStr)
+			conf.GRPCPort = 50051
 		}
 	} else {
-		conf.GRPCPort = 9090 // Default gRPC port
+		conf.GRPCPort = 50051 // Default gRPC port
 	}
 
 	conf.GRPCHost = os.Getenv("GRPC_HOST")

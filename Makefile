@@ -912,7 +912,7 @@ dev-help:
 	@echo "Ports:"
 	@echo "  3000  Frontend (React dev server)"
 	@echo "  8080  Studio REST API"
-	@echo "  9090  Studio gRPC (control server)"
+	@echo "  50051 Studio gRPC (control server)"
 	@echo "  8081  Gateway REST API"
 	@echo "  5432  PostgreSQL"
 	@echo ""
