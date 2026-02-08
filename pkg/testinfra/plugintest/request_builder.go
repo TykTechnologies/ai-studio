@@ -345,6 +345,124 @@ func (r *ResponseBuilder) Build() *pb.ResponseWriteRequest {
 	}
 }
 
+// StreamCompleteBuilder builds StreamCompleteRequest proto messages for testing.
+type StreamCompleteBuilder struct {
+	accumulatedResponse []byte
+	headers             map[string]string
+	statusCode          int32
+	chunkCount          int32
+	requestBody         []byte
+
+	// Context fields for PluginContext
+	requestID    string
+	vendor       string
+	llmID        uint32
+	llmSlug      string
+	appID        uint32
+	userID       uint32
+	metadata     map[string]string
+	traceContext map[string]string
+}
+
+// NewStreamCompleteBuilder creates a new stream complete builder.
+func NewStreamCompleteBuilder() *StreamCompleteBuilder {
+	return &StreamCompleteBuilder{
+		headers:      make(map[string]string),
+		metadata:     make(map[string]string),
+		traceContext: make(map[string]string),
+		requestID:    "test-request-id",
+		statusCode:   200,
+		chunkCount:   1,
+	}
+}
+
+// WithAccumulatedResponse sets the accumulated SSE response body.
+func (s *StreamCompleteBuilder) WithAccumulatedResponse(data []byte) *StreamCompleteBuilder {
+	s.accumulatedResponse = data
+	return s
+}
+
+// WithStatusCode sets the HTTP status code.
+func (s *StreamCompleteBuilder) WithStatusCode(code int32) *StreamCompleteBuilder {
+	s.statusCode = code
+	return s
+}
+
+// WithChunkCount sets the number of chunks received.
+func (s *StreamCompleteBuilder) WithChunkCount(count int32) *StreamCompleteBuilder {
+	s.chunkCount = count
+	return s
+}
+
+// WithRequestBody sets the original request body.
+func (s *StreamCompleteBuilder) WithRequestBody(body []byte) *StreamCompleteBuilder {
+	s.requestBody = body
+	return s
+}
+
+// WithHeader adds a header to the response.
+func (s *StreamCompleteBuilder) WithHeader(key, value string) *StreamCompleteBuilder {
+	s.headers[key] = value
+	return s
+}
+
+// WithRequestID sets the request ID for the plugin context.
+func (s *StreamCompleteBuilder) WithRequestID(requestID string) *StreamCompleteBuilder {
+	s.requestID = requestID
+	return s
+}
+
+// WithVendor sets the vendor for the plugin context.
+func (s *StreamCompleteBuilder) WithVendor(vendor string) *StreamCompleteBuilder {
+	s.vendor = vendor
+	return s
+}
+
+// WithLLMID sets the LLM ID for the plugin context.
+func (s *StreamCompleteBuilder) WithLLMID(llmID uint32) *StreamCompleteBuilder {
+	s.llmID = llmID
+	return s
+}
+
+// WithLLMSlug sets the LLM slug for the plugin context.
+func (s *StreamCompleteBuilder) WithLLMSlug(llmSlug string) *StreamCompleteBuilder {
+	s.llmSlug = llmSlug
+	return s
+}
+
+// WithAppID sets the app ID for the plugin context.
+func (s *StreamCompleteBuilder) WithAppID(appID uint32) *StreamCompleteBuilder {
+	s.appID = appID
+	return s
+}
+
+// WithUserID sets the user ID for the plugin context.
+func (s *StreamCompleteBuilder) WithUserID(userID uint32) *StreamCompleteBuilder {
+	s.userID = userID
+	return s
+}
+
+// Build creates the StreamCompleteRequest proto message.
+func (s *StreamCompleteBuilder) Build() *pb.StreamCompleteRequest {
+	return &pb.StreamCompleteRequest{
+		AccumulatedResponse: s.accumulatedResponse,
+		Headers:             s.headers,
+		StatusCode:          s.statusCode,
+		ChunkCount:          s.chunkCount,
+		RequestBody:         s.requestBody,
+		Context: &pb.PluginContext{
+			RequestId:    s.requestID,
+			Vendor:       s.vendor,
+			LlmId:        s.llmID,
+			LlmSlug:      s.llmSlug,
+			AppId:        s.appID,
+			UserId:       s.userID,
+			Metadata:     s.metadata,
+			TraceContext: s.traceContext,
+		},
+	}
+}
+
 // ContextBuilder builds test context configurations.
 type ContextBuilder struct {
 	requestID    string
