@@ -86,6 +86,8 @@ Namespaces allow you to partition resources across distributed deployments, enab
 
 ### What Are Namespaces?
 
+> **Edition Note:** Community Edition supports a **single namespace** only. Enterprise Edition supports multiple namespaces for multi-tenant and geographically distributed deployments.
+
 A namespace is a logical grouping that isolates resources within a Tyk AI Studio deployment. Resources that support namespaces include:
 
 *   **LLM Configurations** - Partition LLM access by region or tenant

@@ -240,6 +240,10 @@ Use weighted routing to gradually shift traffic between model versions or vendor
 | `page_number` | int | 1 | Page number |
 | `all` | bool | false | Return all items without pagination |
 
+## Current Limitations
+
+- **AI Portal integration:** Model Routers are not yet integrated with the AI Portal. Users cannot browse or subscribe to routers through the portal interface. Routers are currently managed exclusively through the Admin UI and API.
+
 ## Enterprise Feature
 
 Model Router is an Enterprise Edition feature. Attempting to use Model Router endpoints without an Enterprise license will return a `402 Payment Required` error.

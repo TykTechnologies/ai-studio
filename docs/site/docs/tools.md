@@ -40,6 +40,16 @@ Tools bridge the gap between conversational AI and external functionalities. By 
 *   **Documentation:** Administrators can provide additional natural language documentation or instructions specifically for the LLM, guiding it on how and when to use the tool effectively.
 *   **Dependencies:** Tools can declare dependencies on other tools, although the exact usage pattern might vary.
 
+## Availability
+
+> **Important:** Tools are only available through **AI Studio** (via the embedded gateway). They are **not** proxied by the Microgateway. Both gateways share the same core library and access control mechanisms, but tool execution currently remains in AI Studio. This may change in future releases.
+
+Tools are accessible in three ways:
+
+1. **Chat Interface** — LLMs invoke tools automatically during conversations (the primary use case).
+2. **REST API** — Each tool is also available as a direct REST API endpoint for developers to call programmatically, independent of LLM interactions.
+3. **MCP Interface** — An MCP-compliant shim wraps the OpenAPI-generated tools, providing an MCP-API compatible interface. This works with tools that require authentication and provides MCP compatibility without a separate MCP proxy server.
+
 ## How it Works
 
 When a user interacts with an LLM via the [Chat Interface](./chat-interface.md):

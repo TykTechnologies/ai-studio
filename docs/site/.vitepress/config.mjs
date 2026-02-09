@@ -23,6 +23,7 @@ export default defineConfig({
         items: [
           { text: 'Overview', link: '/' }, // Assuming index.md is the overview
           { text: 'Quickstart', link: '/docs/quickstart' },
+          { text: 'Architecture Overview', link: '/docs/architecture' },
           { text: 'Core Concepts', link: '/docs/core-concepts' } // New
         ]
       },

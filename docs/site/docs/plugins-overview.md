@@ -327,14 +327,24 @@ func main() {
 
 ## Plugin Architecture
 
+### Monolithic Plugin Architecture
+
+A single plugin binary can run in **both** AI Studio and the Microgateway, so long as the requisite interfaces are implemented and the requirements are clear in the manifest file. This means one plugin can provide UI extensions in Studio, middleware hooks in the gateway, and even use the event bus to communicate between its Studio and gateway components in near-real-time.
+
+### Scheduled Tasks
+
+Studio plugins can register **scheduled tasks** — periodic calls from the host to the plugin on a configurable interval. This enables long-running background jobs such as analytics analysis, compliance checks, log scanning, or data synchronization.
+
 ### Process Isolation
 
 Plugins run as separate processes, communicating with the main platform via gRPC. This provides:
 
 - **Security**: Plugin crashes don't affect the main platform
-- **Language Flexibility**: Plugins can be written in any language with gRPC support
+- **Language Flexibility**: While the gRPC protocol theoretically supports any language, **only Go plugins have been tested** in production. If you plan to write plugins in another language, expect to do additional integration work.
 - **Resource Management**: Plugins can be restarted independently
 - **Version Independence**: Update plugins without platform restarts
+
+Plugins can also run as standalone gRPC services in a sidecar or elsewhere on the network, rather than as local sub-processes. See [Plugin Deployment](./plugins-deployment.md) for details.
 
 ### Communication Flow
 

@@ -46,6 +46,10 @@ The primary goal is to enhance LLM interactions by:
 
     *Note: Privacy levels are stored as integer scores in the system. The values shown in parentheses are the typical score mappings.*
 
+## Availability
+
+> **Important:** Data Sources are only available through **AI Studio** (via the embedded gateway). They are **not** proxied by the Microgateway. Both gateways share the same core library and access control mechanisms, but data source queries and RAG remain in AI Studio. This may change in future releases.
+
 ## How RAG Works in the Chat Interface
 
 When RAG is enabled for a Chat Experience:

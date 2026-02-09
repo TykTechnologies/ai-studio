@@ -14,6 +14,8 @@ Tyk AI Studio supports three plugin deployment methods: local filesystem (`file:
 
 Deploy plugins from the local filesystem.
 
+> **Safety settings:** By default, local filesystem plugin loading has safety restrictions that prevent loading from arbitrary paths. For development, you may need to adjust these settings in your configuration to allow local path loading and absolute paths. See the Security Considerations section below for details on `ALLOW_INTERNAL_NETWORK_ACCESS` and `PLUGIN_COMMAND_ALLOWLIST`.
+
 ### Building Your Plugin
 
 ```bash

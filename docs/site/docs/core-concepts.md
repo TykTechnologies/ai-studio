@@ -6,7 +6,9 @@ Welcome to Tyk AI Studio! Before diving into specific features, understanding th
 
 Tyk AI Studio is designed as a secure, observable, and extensible gateway for interacting with Large Language Models (LLMs) and other AI services. Key architectural pillars include:
 
-*   **[AI Gateway](./proxy.md):** The central gateway managing all interactions between your applications and various LLM providers. It enforces policies, logs activity, and handles vendor abstraction.
+*   **[AI Gateway](./proxy.md):** The central gateway managing all interactions between your applications and various LLM providers. It enforces policies, logs activity, and handles vendor abstraction. The gateway exists in two forms:
+    *   **Embedded Gateway** (in AI Studio): A lightweight "gateway-lite" for testing LLM configurations and powering the Chat interface. No filters, no middleware, no plugins.
+    *   **[Microgateway](./edge-gateways.md)** (standalone binary): The full-featured data plane with the complete middleware pipeline — authentication, filters, plugins, analytics, and budget enforcement. Deployed at edge locations in a hub-and-spoke architecture.
 *   **[Model Router](./model-router.md) (Enterprise):** Intelligent request routing across multiple LLM vendors based on model name patterns, with support for load balancing, failover, and model name translation.
 *   **AI Portal:** Empowers developers with a curated catalog of AI tools and services for faster innovation.
 *   **[Chat](./chat-interface.md):** Provides a secure and interactive environment for users to engage with LLMs, leveraging integrated tools and data sources.
@@ -30,5 +32,7 @@ Understanding these entities is crucial:
 *   **[Catalogue](./tools.md#catalogues-and-access-control) ([Tools](./tools.md#catalogues-and-access-control) / [Data Sources](./datasources-rag.md#catalogues-and-access-control)):** Collections that group related Tools or Data Sources for easier management and assignment to Groups for access control.
 *   **[Secret](./secrets.md):** Securely stored credentials (API keys, tokens) referenced indirectly (e.g., `$SECRET/MY_KEY`) in configurations like LLMs, Tools, or Data Sources.
 *   **[Filter](./filters.md):** Custom logic (using Tengo scripts) associated with specific execution points (e.g., pre/post LLM request) to intercept and modify requests/responses.
+
+For a detailed view of how these components fit together — including the hub-and-spoke architecture, edition differences, and proxy modes — see the [Architecture Overview](./architecture.md).
 
 This page provides a high-level overview. Click the links above or use the sidebar to navigate to the detailed documentation for each feature.

@@ -66,7 +66,6 @@ Tyk AI Studio uses a checksum-based system to track configuration synchronizatio
 The configuration checksum includes objects that need to be synchronized to edge gateways for request processing:
 
 - **LLM Configurations** - AI provider settings and credentials
-- **Apps** - Application definitions and API keys
 - **Filters** - Request/response processing rules
 - **Plugins** - Gateway plugin configurations
 - **Model Prices** - Cost tracking configurations
@@ -74,7 +73,19 @@ The configuration checksum includes objects that need to be synchronized to edge
 
 Any create, update, or delete operation on these objects triggers a checksum recalculation.
 
-> **Note:** Tools and Datasources are used by AI Studio's chat functionality and RAG system respectively. They are not part of the edge gateway configuration and don't trigger sync status changes.
+### Apps and Credentials
+
+**Apps** are synced as part of the configuration snapshot but are **not** included in the checksum calculation. This is because Apps change frequently (users create and update them regularly), and including them in the checksum would cause unnecessary sync churn.
+
+**Credentials** (access tokens) are **not** pulled during the initial configuration snapshot. Instead, Microgateways use a **pull-on-miss** caching strategy:
+
+1. When a gateway receives a request with an unknown access token, it contacts AI Studio to validate and fetch the credential.
+2. The credential is then cached locally for subsequent requests.
+3. This ensures the admin retains ongoing control — disabling a credential in AI Studio takes effect as soon as the gateway's cache expires or the next pull-on-miss occurs.
+
+This approach balances performance (no need to sync every credential change) with security (admin can revoke access without waiting for a full config push).
+
+> **Note:** Tools and Datasources are used by AI Studio's chat functionality and RAG system respectively. They are not proxied by edge gateways and are not part of the edge gateway configuration. See [Architecture Overview](./architecture.md) for details on this design decision.
 
 ### Sync Status Values
 
