@@ -78,7 +78,12 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
-    if (!Object.values(passwordCriteria).every(Boolean)) {
+    const meetsAllCriteria =
+      password.length >= 8 &&
+      /\d/.test(password) &&
+      /[!@#$%^&*(),.?":{}|<>_+=-~]/.test(password) &&
+      /[A-Z]/.test(password);
+    if (!meetsAllCriteria) {
       setError("Please ensure all password criteria are met.");
       return;
     }

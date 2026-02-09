@@ -16,7 +16,7 @@ module.exports = function(app) {
 
   // Proxy all API routes to the backend
   app.use(
-    ['/api', '/auth', '/common', '/admin', '/ws', '/csrf-token', '/health'],
+    ['/api', '/auth', '/common', '/ws', '/csrf-token', '/health'],
     createProxyMiddleware({
       target: target,
       changeOrigin: true,

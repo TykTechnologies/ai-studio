@@ -1,0 +1,148 @@
+# =============================================================================
+# Tyk AI Microgateway - Default Configuration
+# =============================================================================
+# This file is loaded by systemd (EnvironmentFile) when running the service.
+# Modify values below and restart: systemctl restart tyk-microgateway
+#
+# This file is marked config(noreplace) - package upgrades will NOT overwrite
+# your customizations.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Server Configuration
+# -----------------------------------------------------------------------------
+PORT=8080
+HOST=0.0.0.0
+READ_TIMEOUT=300s
+WRITE_TIMEOUT=300s
+IDLE_TIMEOUT=120s
+SHUTDOWN_TIMEOUT=30s
+
+# -----------------------------------------------------------------------------
+# Database Configuration
+# -----------------------------------------------------------------------------
+# SQLite is the default for edge deployments (no external dependencies).
+DATABASE_TYPE=sqlite
+DATABASE_DSN=file:/opt/tyk-microgateway/data/microgateway.db?cache=shared&mode=rwc
+DB_AUTO_MIGRATE=true
+DB_MAX_OPEN_CONNS=25
+DB_MAX_IDLE_CONNS=25
+DB_CONN_MAX_LIFETIME=5m
+DB_LOG_LEVEL=warn
+
+# -----------------------------------------------------------------------------
+# Hub-and-Spoke Configuration - EDGE MODE
+# -----------------------------------------------------------------------------
+# Gateway mode: "standalone", "control", or "edge"
+# Edge mode connects to an AI Studio control plane for config sync
+GATEWAY_MODE=edge
+
+# Control plane endpoint (AI Studio gRPC address)
+# When both services run on the same machine, this points to localhost
+CONTROL_ENDPOINT=localhost:50051
+
+# Edge instance identification
+EDGE_ID=edge-1
+EDGE_NAMESPACE=default
+EDGE_RECONNECT_INTERVAL=5s
+EDGE_HEARTBEAT_INTERVAL=30s
+EDGE_SYNC_TIMEOUT=10s
+
+# Edge authentication - MUST match GRPC_AUTH_TOKEN in AI Studio config
+# Generate with: openssl rand -hex 16
+EDGE_AUTH_TOKEN=CHANGE-ME-must-match-studio-grpc-auth-token
+
+# Edge TLS - ENABLE FOR PRODUCTION
+# Set EDGE_ALLOW_INSECURE=false when using TLS on the control plane
+EDGE_ALLOW_INSECURE=true
+EDGE_TLS_ENABLED=false
+EDGE_SKIP_TLS_VERIFY=false
+
+# Token validation cache
+EDGE_TOKEN_CACHE_ENABLED=true
+EDGE_TOKEN_CACHE_TTL=5m
+EDGE_TOKEN_CACHE_MAX_SIZE=1000
+EDGE_TOKEN_CACHE_CLEANUP_INTERVAL=1m
+
+# -----------------------------------------------------------------------------
+# Security - CHANGE THESE BEFORE PRODUCTION USE
+# -----------------------------------------------------------------------------
+# Must match MICROGATEWAY_ENCRYPTION_KEY in AI Studio config
+# Generate with: openssl rand -hex 16
+ENCRYPTION_KEY=CHANGE-ME-must-match-studio-microgateway-encryption-key
+
+# JWT secret for token validation
+# Generate with: openssl rand -hex 16
+JWT_SECRET=CHANGE-ME-generate-with-openssl-rand-hex-16
+
+BCRYPT_COST=10
+TOKEN_LENGTH=32
+SESSION_TIMEOUT=24h
+ENABLE_RATE_LIMITING=true
+ENABLE_IP_WHITELIST=false
+
+# -----------------------------------------------------------------------------
+# TLS Configuration (Optional - for HTTPS on the proxy API)
+# -----------------------------------------------------------------------------
+TLS_ENABLED=false
+# TLS_CERT_PATH=/etc/tyk-microgateway/tls/cert.pem
+# TLS_KEY_PATH=/etc/tyk-microgateway/tls/key.pem
+
+# -----------------------------------------------------------------------------
+# Gateway Configuration
+# -----------------------------------------------------------------------------
+GATEWAY_TIMEOUT=30s
+GATEWAY_MAX_REQUEST_SIZE=10485760
+GATEWAY_MAX_RESPONSE_SIZE=52428800
+GATEWAY_DEFAULT_RATE_LIMIT=100
+GATEWAY_ENABLE_FILTERS=true
+GATEWAY_ENABLE_ANALYTICS=true
+
+# -----------------------------------------------------------------------------
+# Cache Configuration
+# -----------------------------------------------------------------------------
+CACHE_ENABLED=true
+CACHE_MAX_SIZE=1000
+CACHE_TTL=1h
+CACHE_CLEANUP_INTERVAL=10m
+CACHE_PERSIST_TO_DB=false
+
+# -----------------------------------------------------------------------------
+# Analytics Configuration
+# -----------------------------------------------------------------------------
+ANALYTICS_ENABLED=true
+ANALYTICS_BUFFER_SIZE=1000
+ANALYTICS_FLUSH_INTERVAL=10s
+ANALYTICS_RETENTION_DAYS=90
+ANALYTICS_REALTIME=false
+ANALYTICS_STORE_REQUESTS=false
+ANALYTICS_STORE_RESPONSES=false
+ANALYTICS_MAX_BODY_SIZE=4096
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+# Options: trace, debug, info, warn, error
+LOG_LEVEL=info
+LOG_FORMAT=text
+ENABLE_METRICS=false
+ENABLE_PROFILING=false
+
+# -----------------------------------------------------------------------------
+# Enterprise Edition Only
+# -----------------------------------------------------------------------------
+# License key (required for enterprise features)
+# TYK_AI_LICENSE=your-license-key-here
+
+# -----------------------------------------------------------------------------
+# OCI Plugin Configuration (Optional)
+# -----------------------------------------------------------------------------
+# OCI_PLUGINS_CACHE_DIR=/opt/tyk-microgateway/data/cache/plugins
+# OCI_PLUGINS_REQUIRE_SIGNATURE=false
+# OCI_PLUGINS_ALLOWED_REGISTRIES=docker.tyk.io
+
+# -----------------------------------------------------------------------------
+# Analytics Plugin Configuration (Optional)
+# -----------------------------------------------------------------------------
+# Path to analytics pulse config for sending data to control plane
+# PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/examples/analytics-pulse-config.yaml

@@ -80,8 +80,11 @@ nfpms:
         dst: /etc/init.d/tyk-ai-studio
       - src: ci/install/inits/systemd/default/tyk-ai-studio
         dst: /etc/default/tyk-ai-studio
+        type: config|noreplace
       - src: ci/install/data/tyk-ai-studio.conf.example
         dst: /opt/tyk-ai-studio/tyk-ai-studio.conf.example
+      - src: ci/install/data/PORTS.md
+        dst: /opt/tyk-ai-studio/PORTS.md
       - src: "templates/*"
         dst: "/opt/tyk-ai-studio/templates"
     scripts:
@@ -102,7 +105,7 @@ nfpms:
     vendor: "Tyk Technologies Ltd"
     homepage: "https://tyk.io"
     maintainer: "Tyk <info@tyk.io>"
-    description: Tyk AI Portal
+    description: Tyk AI Studio (FIPS)
     package_name: tyk-ai-studio-fips
     file_name_template: "{{ .ConventionalFileName }}"
     builds:
@@ -121,8 +124,11 @@ nfpms:
         dst: /etc/init.d/tyk-ai-studio
       - src: ci/install/inits/systemd/default/tyk-ai-studio
         dst: /etc/default/tyk-ai-studio
+        type: config|noreplace
       - src: ci/install/data/tyk-ai-studio.conf.example
         dst: /opt/tyk-ai-studio/tyk-ai-studio.conf.example
+      - src: ci/install/data/PORTS.md
+        dst: /opt/tyk-ai-studio/PORTS.md
       - src: "templates/*"
         dst: "/opt/tyk-ai-studio/templates"
     scripts:
@@ -140,10 +146,10 @@ nfpms:
         key_file: tyk.io.signing.key
         type: origin
 publishers:
-  - name: tyk-ee-unstable
+  - name: packagecloud
     env:
       - PACKAGECLOUD_TOKEN={{ .Env.PACKAGECLOUD_TOKEN }}
-    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" tyk/tyk-ee-unstable {{ .ArtifactPath }}
+    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" {{ .Env.PACKAGECLOUD_REPO }} {{ .ArtifactPath }}
 # This disables archives
 archives:
   - format: binary

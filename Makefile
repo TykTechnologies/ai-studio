@@ -68,6 +68,13 @@ help:
 	@echo "  make plugin-help        - Show plugin scaffolding help"
 	@echo "  make plugins            - Build all example plugins"
 	@echo ""
+	@echo "Packaging (RPM/DEB via GoReleaser + nfpm):"
+	@echo "  make package            - Build all packages (auto-detect edition)"
+	@echo "  make package-ce         - Build CE packages (both components)"
+	@echo "  make package-ent        - Build ENT packages (both components)"
+	@echo "  make package-help       - Show all packaging targets"
+	@echo "  make test-package-smoke - Build CE packages and run smoke tests"
+	@echo ""
 	@echo "Other targets:"
 	@echo "  make test               - Run tests"
 	@echo "  make clean              - Clean build artifacts"
@@ -253,6 +260,141 @@ build-community: build-prod-ce
 build-enterprise: build-prod-ent
 	@echo "Note: build-enterprise now builds production artifacts with CGO"
 	@echo "For quick local builds, use: make build-native-ent"
+
+# ============================================================================
+# Package Building (RPM/DEB using GoReleaser + nfpm)
+# ============================================================================
+# These targets use the SAME GoReleaser configs and Docker image as CI,
+# ensuring local packages are identical to release packages.
+#
+# Builds run inside the tykio/golang-cross Docker container (same as CI)
+# because CGO cross-compilation requires Linux cross-compiler toolchains.
+#
+# Prerequisites:
+#   Docker must be running
+#
+# Usage:
+#   make package                    Build all packages (auto-detect edition)
+#   make package-studio             Build AI Studio packages only
+#   make package-microgateway       Build Microgateway packages only
+#   make package-ce                 Build CE packages for both components
+#   make package-ent                Build ENT packages for both components
+# ============================================================================
+
+GOLANG_CROSS_IMAGE ?= tykio/golang-cross:1.25-bullseye
+GORELEASER_FLAGS ?= --snapshot --skip=sign --skip=publish --clean
+
+# Internal helper: run goreleaser inside the cross-compilation Docker container.
+# Usage: $(call run_goreleaser,<goreleaser-config>,<goflags>)
+# This matches CI exactly: same image, same env vars, same goreleaser invocation.
+# NOTE: does NOT use --clean to allow building both components into the same dist/.
+# Use `make clean-dist` to reset before a fresh build.
+define run_goreleaser
+	docker run --rm --platform linux/amd64 \
+		-e CGO_ENABLED=1 \
+		-e GOFLAGS='$(2)' \
+		-e PACKAGECLOUD_REPO=local/dev \
+		-e DEBVERS='unused' \
+		-e RPMVERS='unused' \
+		-e GOCACHE=/cache/go-build \
+		-e GOMODCACHE=/go/pkg/mod \
+		-v $(CURDIR):/go/src/github.com/TykTechnologies/midsommar \
+		-v $(HOME)/go/pkg/mod:/go/pkg/mod \
+		-v $(HOME)/.cache/go-build:/cache/go-build \
+		-w /go/src/github.com/TykTechnologies/midsommar \
+		$(GOLANG_CROSS_IMAGE) \
+		goreleaser release -f $(1) $(GORELEASER_FLAGS)
+endef
+
+clean-dist:
+	rm -rf dist/
+
+.PHONY: package package-studio package-microgateway package-ce package-ent
+.PHONY: package-studio-ce package-studio-ent package-microgateway-ce package-microgateway-ent
+.PHONY: package-help test-package-smoke test-package-smoke-ent
+
+# Build all packages for current edition
+package: clean-dist package-studio package-microgateway
+	@echo "✅ All packages built in dist/"
+	@ls -la dist/*.deb dist/*.rpm 2>/dev/null || echo "No packages found"
+
+# Build AI Studio packages (current edition)
+package-studio: build-frontend build-docs
+	@echo "📦 Building AI Studio $(EDITION) packages..."
+	$(call run_goreleaser,ci/goreleaser/goreleaser.yml,$(BUILD_TAGS))
+	@echo "✅ AI Studio packages:"
+	@ls -la dist/tyk-ai-studio*.deb dist/tyk-ai-studio*.rpm 2>/dev/null
+
+# Build Microgateway packages (current edition)
+package-microgateway:
+	@echo "📦 Building Microgateway $(EDITION) packages..."
+	$(call run_goreleaser,ci/goreleaser/goreleaser-microgateway.yml,$(BUILD_TAGS))
+	@echo "✅ Microgateway packages:"
+	@ls -la dist/tyk-microgateway*.deb dist/tyk-microgateway*.rpm 2>/dev/null
+
+# CE variants
+# GoReleaser uses --clean which wipes dist/ each run. For combined builds,
+# we save studio packages to .dist-staging/ (outside dist/) then merge after mgw build.
+package-ce: build-frontend build-docs
+	@echo "📦 Building all CE packages..."
+	$(call run_goreleaser,ci/goreleaser/goreleaser.yml,)
+	@mkdir -p .dist-staging && cp dist/*.deb dist/*.rpm .dist-staging/ 2>/dev/null || true
+	$(call run_goreleaser,ci/goreleaser/goreleaser-microgateway.yml,)
+	@cp .dist-staging/* dist/ 2>/dev/null || true
+	@rm -rf .dist-staging
+	@echo "✅ CE packages:"
+	@ls dist/*.deb dist/*.rpm 2>/dev/null
+
+# ENT variants
+package-ent: build-frontend build-docs
+	@if [ ! -f enterprise/.git ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized. Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@echo "📦 Building all ENT packages..."
+	$(call run_goreleaser,ci/goreleaser/goreleaser.yml,-tags=enterprise)
+	@mkdir -p .dist-staging && cp dist/*.deb dist/*.rpm .dist-staging/ 2>/dev/null || true
+	$(call run_goreleaser,ci/goreleaser/goreleaser-microgateway.yml,-tags=enterprise)
+	@cp .dist-staging/* dist/ 2>/dev/null || true
+	@rm -rf .dist-staging
+	@echo "✅ ENT packages:"
+	@ls dist/*.deb dist/*.rpm 2>/dev/null
+
+# Package smoke tests
+test-package-smoke: package-ce
+	@echo "🧪 Running package smoke tests (CE)..."
+	docker compose -f tests/packaging/compose.yml up -d --build --wait
+	cd tests/packaging && npx playwright install --with-deps chromium && npx playwright test --reporter=list || \
+		(docker compose -f ../../tests/packaging/compose.yml logs && exit 1)
+	docker compose -f tests/packaging/compose.yml down -v
+	@echo "✅ Package smoke tests passed"
+
+test-package-smoke-ent: package-ent
+	@echo "🧪 Running package smoke tests (ENT)..."
+	docker compose -f tests/packaging/compose.yml up -d --build --wait
+	cd tests/packaging && npx playwright install --with-deps chromium && npx playwright test --reporter=list || \
+		(docker compose -f ../../tests/packaging/compose.yml logs && exit 1)
+	docker compose -f tests/packaging/compose.yml down -v
+	@echo "✅ Package smoke tests passed"
+
+# Package help
+package-help:
+	@echo "Package Building Targets (all run inside Docker for cross-compilation)"
+	@echo ""
+	@echo "  make package                    Build all packages (auto-detect edition)"
+	@echo "  make package-studio             Build AI Studio packages"
+	@echo "  make package-microgateway       Build Microgateway packages"
+	@echo "  make package-ce                 Build all CE packages"
+	@echo "  make package-ent                Build all ENT packages"
+	@echo "  make package-studio-ce          Build AI Studio CE packages"
+	@echo "  make package-studio-ent         Build AI Studio ENT packages"
+	@echo "  make package-microgateway-ce    Build Microgateway CE packages"
+	@echo "  make package-microgateway-ent   Build Microgateway ENT packages"
+	@echo "  make test-package-smoke         Build CE packages and run smoke tests"
+	@echo "  make test-package-smoke-ent     Build ENT packages and run smoke tests"
+	@echo ""
+	@echo "Packages output to dist/ directory"
+	@echo "Override Docker image: GOLANG_CROSS_IMAGE=... make package"
 
 # Build all plugins
 plugins:

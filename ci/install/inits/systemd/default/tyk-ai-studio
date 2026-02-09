@@ -1,7 +1,122 @@
-# Tyk AI Studio Environment Variables
-# Set any environment variables here for tyk-ai-studio
-# These variables will be loaded by systemd when running the service
+# =============================================================================
+# Tyk AI Studio - Default Configuration
+# =============================================================================
+# This file is loaded by systemd (EnvironmentFile) when running the service.
+# Modify values below and restart: systemctl restart tyk-ai-studio
+#
+# This file is marked config(noreplace) - package upgrades will NOT overwrite
+# your customizations.
+# =============================================================================
 
-# Example:
-# TYK_AI_STUDIO_LISTEN_ADDRESS=":8080"
-# TYK_AI_STUDIO_LOG_LEVEL=info
+# -----------------------------------------------------------------------------
+# Core Application Settings
+# -----------------------------------------------------------------------------
+DEVMODE=false
+ALLOW_REGISTRATIONS=true
+
+# URLs - adjust hostname/port as needed for your deployment
+SITE_URL=http://localhost:8080
+DOCS_URL=http://localhost:8989
+
+# Documentation server port
+DOCS_PORT=8989
+DOCS_DISABLED=false
+
+# -----------------------------------------------------------------------------
+# Database Configuration
+# -----------------------------------------------------------------------------
+# SQLite is the default (no external dependencies). For production with
+# multiple instances, switch to PostgreSQL.
+DATABASE_TYPE=sqlite
+# DATABASE_URL=postgres://user:password@localhost:5432/tyk_ai_studio?sslmode=require
+
+# -----------------------------------------------------------------------------
+# Security - CHANGE THESE BEFORE PRODUCTION USE
+# -----------------------------------------------------------------------------
+# Secret key for encryption (used for secrets and SSO)
+# Generate with: openssl rand -hex 16
+TYK_AI_SECRET_KEY=CHANGE-ME-generate-with-openssl-rand-hex-16
+
+# Encryption key for microgateway communication
+# Must match ENCRYPTION_KEY in the microgateway config
+MICROGATEWAY_ENCRYPTION_KEY=CHANGE-ME-generate-with-openssl-rand-hex-16
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+# Options: trace, debug, info, warn, error
+LOG_LEVEL=info
+
+# -----------------------------------------------------------------------------
+# User Registration
+# -----------------------------------------------------------------------------
+# Filter allowed signup domains (comma-separated, empty = allow all)
+# FILTER_SIGNUP_DOMAINS=example.com
+FILTER_SIGNUP_DOMAINS=
+
+# Signup mode: "both", "email", "sso"
+DEFAULT_SIGNUP_MODE=both
+
+# Default budget for new apps
+DEFAULT_APP_BUDGET=100.00
+
+# -----------------------------------------------------------------------------
+# Hub-and-Spoke gRPC Control Server
+# -----------------------------------------------------------------------------
+# Gateway mode: "standalone" (no edge gateways) or "control" (hub for edges)
+GATEWAY_MODE=control
+
+# gRPC server configuration
+GRPC_PORT=50051
+GRPC_HOST=0.0.0.0
+
+# gRPC TLS - ENABLE FOR PRODUCTION
+# Set GRPC_TLS_INSECURE=false and configure cert/key paths
+GRPC_TLS_INSECURE=true
+# GRPC_TLS_CERT_PATH=/etc/tyk-ai-studio/tls/server-cert.pem
+# GRPC_TLS_KEY_PATH=/etc/tyk-ai-studio/tls/server-key.pem
+
+# gRPC authentication token - edge gateways must present this to connect
+# Must match EDGE_AUTH_TOKEN in the microgateway config
+# Generate with: openssl rand -hex 16
+GRPC_AUTH_TOKEN=CHANGE-ME-generate-with-openssl-rand-hex-16
+
+# -----------------------------------------------------------------------------
+# SMTP Configuration (Optional - for email notifications)
+# -----------------------------------------------------------------------------
+# SMTP_SERVER=smtp.example.com
+# SMTP_PORT=587
+# SMTP_USER=apikey
+# SMTP_PASS=your-smtp-password
+# FROM_EMAIL=noreply@example.com
+
+# -----------------------------------------------------------------------------
+# LLM Provider API Keys (Optional)
+# -----------------------------------------------------------------------------
+# OPENAI_API_KEY=sk-...
+# ANTHROPIC_AI_KEY=sk-ant-...
+# GOOGLE_AI_KEY=...
+# COHERE_API_KEY=...
+# AZURE_OPENAI_API_KEY=
+# AZURE_OPENAI_ENDPOINT=
+
+# -----------------------------------------------------------------------------
+# Enterprise Edition Only
+# -----------------------------------------------------------------------------
+# License key (required when running Enterprise Edition)
+# TYK_AI_LICENSE=your-license-key-here
+
+# SSO Configuration
+# Configure SSO profiles via the Admin UI at /admin/sso-profiles
+
+# Telemetry
+# LICENSE_TELEMETRY_URL=https://telemetry.tyk.technology/api/track
+# LICENSE_TELEMETRY_PERIOD=1h
+
+# -----------------------------------------------------------------------------
+# OCI Plugin Configuration (Optional)
+# -----------------------------------------------------------------------------
+# Enable OCI plugin support by setting cache directory
+# AI_STUDIO_OCI_CACHE_DIR=/opt/tyk-ai-studio/data/cache/plugins
+# AI_STUDIO_OCI_REQUIRE_SIGNATURE=false
+# AI_STUDIO_OCI_ALLOWED_REGISTRIES=docker.tyk.io

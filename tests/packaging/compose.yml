@@ -1,0 +1,17 @@
+services:
+  smoke:
+    platform: linux/amd64
+    build:
+      context: ../../
+      dockerfile: tests/packaging/Dockerfile.deb-smoke
+    ports:
+      - "8080:8080"   # AI Studio API + UI
+      - "8081:8081"   # Microgateway proxy
+      - "8989:8989"   # Docs server
+      - "50051:50051" # gRPC control plane
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s

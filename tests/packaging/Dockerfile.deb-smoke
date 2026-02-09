@@ -1,0 +1,38 @@
+FROM debian:bookworm-slim
+
+ARG TARGETARCH=amd64
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install supervisor to manage both services (systemd doesn't work in Docker)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends supervisor curl ca-certificates bash && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create tyk user/group (normally done by package preinstall script)
+RUN groupadd -r tyk && useradd -r -g tyk -M -s /sbin/nologin -c "Tyk service user" tyk
+
+# Install packages from local debs
+COPY dist/tyk-ai-studio*${TARGETARCH}.deb /tmp/
+COPY dist/tyk-microgateway*${TARGETARCH}.deb /tmp/
+RUN dpkg -i /tmp/tyk-ai-studio_*${TARGETARCH}.deb /tmp/tyk-microgateway_*${TARGETARCH}.deb || \
+    apt-get -f install -y && \
+    rm -f /tmp/*.deb
+
+# Overlay smoke test configs (matching auth tokens, SQLite, correct ports)
+COPY tests/packaging/configs/tyk-ai-studio /etc/default/tyk-ai-studio
+COPY tests/packaging/configs/tyk-microgateway /etc/default/tyk-microgateway
+
+# Create data directories
+RUN mkdir -p /opt/tyk-ai-studio/data /opt/tyk-microgateway/data && \
+    chown -R tyk:tyk /opt/tyk-ai-studio /opt/tyk-microgateway
+
+# Supervisor configuration
+COPY tests/packaging/supervisord.conf /etc/supervisor/conf.d/tyk-services.conf
+
+EXPOSE 8080 8081 8989 50051
+
+HEALTHCHECK --interval=5s --timeout=5s --retries=30 \
+    CMD curl -sf http://localhost:8080/health || exit 1
+
+CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

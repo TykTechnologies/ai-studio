@@ -1,0 +1,50 @@
+# Smoke test configuration for Microgateway
+# Pre-configured to connect to the AI Studio smoke test instance
+
+PORT=8081
+HOST=0.0.0.0
+LOG_LEVEL=info
+LOG_FORMAT=text
+
+# Database - SQLite for simplicity
+DATABASE_TYPE=sqlite
+DATABASE_DSN=file:/opt/tyk-microgateway/data/microgateway.db?cache=shared&mode=rwc
+DB_AUTO_MIGRATE=true
+
+# Edge mode - connect to local AI Studio
+GATEWAY_MODE=edge
+CONTROL_ENDPOINT=localhost:50051
+EDGE_ID=smoke-test-edge
+EDGE_NAMESPACE=default
+EDGE_HEARTBEAT_INTERVAL=5s
+EDGE_RECONNECT_INTERVAL=2s
+EDGE_SYNC_TIMEOUT=10s
+
+# Auth tokens must match AI Studio config
+EDGE_AUTH_TOKEN=smoke-test-grpc-token-abcdef1234567890
+EDGE_ALLOW_INSECURE=true
+EDGE_TLS_ENABLED=false
+
+# Security - must match AI Studio
+ENCRYPTION_KEY=smoketestencryptabcdef1234567890
+JWT_SECRET=smoketestjwtsecretabcdef123456789012345678
+
+BCRYPT_COST=10
+TOKEN_LENGTH=32
+SESSION_TIMEOUT=24h
+ENABLE_RATE_LIMITING=true
+
+# Gateway defaults
+GATEWAY_TIMEOUT=30s
+GATEWAY_ENABLE_FILTERS=true
+GATEWAY_ENABLE_ANALYTICS=true
+
+# Cache
+CACHE_ENABLED=true
+CACHE_MAX_SIZE=1000
+CACHE_TTL=1h
+
+# Analytics
+ANALYTICS_ENABLED=true
+ANALYTICS_BUFFER_SIZE=100
+ANALYTICS_FLUSH_INTERVAL=10s
