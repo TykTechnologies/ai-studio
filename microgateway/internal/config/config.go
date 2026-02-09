@@ -96,7 +96,7 @@ type HubSpokeConfig struct {
 	Mode string `env:"GATEWAY_MODE" envDefault:"standalone"`
 	
 	// Control Instance Configuration (for control mode)
-	GRPCPort             int           `env:"GRPC_PORT" envDefault:"9090"`
+	GRPCPort             int           `env:"GRPC_PORT" envDefault:"50051"`
 	GRPCHost             string        `env:"GRPC_HOST" envDefault:"0.0.0.0"`
 	TLSEnabled           bool          `env:"GRPC_TLS_ENABLED" envDefault:"false"`
 	TLSCertPath          string        `env:"GRPC_TLS_CERT_PATH"`

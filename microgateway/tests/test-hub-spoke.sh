@@ -42,7 +42,7 @@ else
 fi
 
 echo "Testing edge mode without edge ID (should fail)..."
-if GATEWAY_MODE=edge CONTROL_ENDPOINT=localhost:9090 ./microgateway -migrate 2>/dev/null; then
+if GATEWAY_MODE=edge CONTROL_ENDPOINT=localhost:50051 ./microgateway -migrate 2>/dev/null; then
     echo "❌ Edge mode should fail without edge ID"
     exit 1
 else
@@ -50,7 +50,7 @@ else
 fi
 
 echo "Testing edge mode with proper configuration..."
-GATEWAY_MODE=edge CONTROL_ENDPOINT=localhost:9090 EDGE_ID=test-edge ./microgateway -migrate
+GATEWAY_MODE=edge CONTROL_ENDPOINT=localhost:50051 EDGE_ID=test-edge ./microgateway -migrate
 echo "✅ Edge mode with proper configuration successful"
 
 # Test 4: Create Admin Token in Different Modes

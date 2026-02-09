@@ -124,7 +124,8 @@ function App() {
 
         // Skip auth check for password reset and forgot password routes
         const currentPath = window.location.pathname;
-        if (currentPath === '/reset-password' ||
+        if (currentPath === '/register' ||
+          currentPath === '/reset-password' ||
           currentPath === '/auth/reset-password' ||
           currentPath === '/forgot-password' ||
           currentPath === '/auth/forgot-password') {

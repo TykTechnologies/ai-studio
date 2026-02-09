@@ -92,8 +92,8 @@ RUN mkdir -p /app/data /app/logs /app/plugins && \
 # Switch to non-root user
 USER gateway
 
-# Expose ports - 8080 for HTTP, 9090 for gRPC control server
-EXPOSE 8080 9090
+# Expose ports - 8080 for HTTP, 50051 for gRPC control server
+EXPOSE 8080 50051
 
 # Health check using the built-in health endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

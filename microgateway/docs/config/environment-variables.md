@@ -172,7 +172,7 @@ Complete reference for all microgateway environment variables organized by funct
 ### Control Mode Settings
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRPC_PORT` | 9090 | gRPC server port |
+| `GRPC_PORT` | 50051 | gRPC server port |
 | `GRPC_HOST` | 0.0.0.0 | gRPC server bind address |
 | `GRPC_TLS_ENABLED` | false | Enable gRPC TLS |
 | `GRPC_TLS_CERT_PATH` | - | gRPC TLS certificate path |
@@ -283,7 +283,7 @@ PLUGINS_TRUSTED_KEYS_PATH=/etc/microgateway/trusted
 ```bash
 # Control instance configuration
 GATEWAY_MODE=control
-GRPC_PORT=9090
+GRPC_PORT=50051
 GRPC_AUTH_TOKEN=${GRPC_AUTH_TOKEN}
 DATABASE_TYPE=postgres
 DATABASE_DSN=postgres://control:${DB_PASSWORD}@postgres:5432/control_db?sslmode=require
@@ -294,7 +294,7 @@ MAX_EDGE_CONNECTIONS=100
 ```bash
 # Edge instance configuration
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=control.company.com:9090
+CONTROL_ENDPOINT=control.company.com:50051
 EDGE_ID=edge-${REGION}-${INSTANCE}
 EDGE_NAMESPACE=${TENANT_NAMESPACE}
 EDGE_AUTH_TOKEN=${GRPC_AUTH_TOKEN}

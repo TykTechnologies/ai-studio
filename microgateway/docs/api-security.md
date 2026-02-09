@@ -200,7 +200,7 @@ mgw plugin create --name="remote-plugin" --command="grpc://plugin-service:9090"
 GATEWAY_MODE=edge
 EDGE_ID=prod-api-gateway-us-west-1
 EDGE_NAMESPACE=production
-CONTROL_ENDPOINT=control.internal.company.com:9090
+CONTROL_ENDPOINT=control.internal.company.com:50051
 EDGE_TLS_ENABLED=true
 EDGE_AUTH_TOKEN=${SECURE_AUTH_TOKEN}
 LOG_LEVEL=info

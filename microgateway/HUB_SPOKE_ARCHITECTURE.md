@@ -68,7 +68,7 @@ GATEWAY_MODE=control                    # or "edge" or "standalone"
 #### Control Instance Configuration
 ```bash
 # gRPC server configuration (control mode)
-GRPC_PORT=9090
+GRPC_PORT=50051
 GRPC_HOST=0.0.0.0
 GRPC_TLS_ENABLED=false
 GRPC_TLS_CERT_PATH=/path/to/cert.pem
@@ -79,7 +79,7 @@ GRPC_AUTH_TOKEN=secure-auth-token
 #### Edge Instance Configuration
 ```bash
 # Connection to control instance (edge mode)
-CONTROL_ENDPOINT=control.example.com:9090
+CONTROL_ENDPOINT=control.example.com:50051
 EDGE_ID=edge-1
 EDGE_NAMESPACE=tenant-1
 EDGE_RECONNECT_INTERVAL=5s
@@ -103,7 +103,7 @@ EDGE_SKIP_TLS_VERIFY=false
 ```bash
 # Start control instance
 GATEWAY_MODE=control \
-GRPC_PORT=9090 \
+GRPC_PORT=50051 \
 GRPC_AUTH_TOKEN=my-secure-token \
 DATABASE_TYPE=postgres \
 DATABASE_DSN="postgres://user:pass@localhost/control_db" \
@@ -114,7 +114,7 @@ DATABASE_DSN="postgres://user:pass@localhost/control_db" \
 ```bash
 # Start edge instance
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control.example.com:9090 \
+CONTROL_ENDPOINT=control.example.com:50051 \
 EDGE_ID=edge-region-1 \
 EDGE_NAMESPACE=production \
 EDGE_AUTH_TOKEN=my-secure-token \
@@ -135,14 +135,14 @@ GRPC_AUTH_TOKEN=control-token \
 ```bash
 # Edge for tenant-a
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control.internal:9090 \
+CONTROL_ENDPOINT=control.internal:50051 \
 EDGE_NAMESPACE=tenant-a \
 EDGE_ID=tenant-a-edge-1 \
 ./microgateway
 
 # Edge for tenant-b  
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control.internal:9090 \
+CONTROL_ENDPOINT=control.internal:50051 \
 EDGE_NAMESPACE=tenant-b \
 EDGE_ID=tenant-b-edge-1 \
 ./microgateway
@@ -160,26 +160,26 @@ services:
     environment:
       GATEWAY_MODE: control
       DATABASE_DSN: postgres://user:pass@postgres:5432/control_db
-      GRPC_PORT: 9090
+      GRPC_PORT: 50051
     ports:
-      - "9090:9090"
+      - "50051:50051"
       - "8080:8080"
-  
+
   control-2:
-    image: microgateway:latest  
+    image: microgateway:latest
     environment:
       GATEWAY_MODE: control
       DATABASE_DSN: postgres://user:pass@postgres:5432/control_db
-      GRPC_PORT: 9090
+      GRPC_PORT: 50051
     ports:
-      - "9091:9090"
+      - "50052:50051"
       - "8081:8080"
-  
+
   edge-1:
     image: microgateway:latest
     environment:
       GATEWAY_MODE: edge
-      CONTROL_ENDPOINT: control-1:9090
+      CONTROL_ENDPOINT: control-1:50051
       EDGE_NAMESPACE: production
       EDGE_ID: edge-1
 ```
@@ -311,10 +311,10 @@ curl -X POST "/api/v1/edges/edge-1/sync"
 #### Edge Cannot Connect to Control
 ```bash
 # Check network connectivity
-nc -zv control.example.com 9090
+nc -zv control.example.com 50051
 
 # Verify TLS configuration
-openssl s_client -connect control.example.com:9090
+openssl s_client -connect control.example.com:50051
 
 # Check authentication token
 EDGE_AUTH_TOKEN=wrong-token ./microgateway
@@ -335,7 +335,7 @@ echo $EDGE_NAMESPACE
 #### Performance Issues
 ```bash
 # Monitor gRPC connections
-ss -tulpn | grep :9090
+ss -tulpn | grep :50051
 
 # Check database performance (control)
 EXPLAIN SELECT * FROM llms WHERE namespace = 'tenant-1';
@@ -383,7 +383,7 @@ curl "http://localhost:8080/api/v1/debug/edges"
 4. **Deploy edge instances**
    ```bash
    GATEWAY_MODE=edge \
-   CONTROL_ENDPOINT=control:9090 \
+   CONTROL_ENDPOINT=control:50051 \
    ./microgateway
    ```
 

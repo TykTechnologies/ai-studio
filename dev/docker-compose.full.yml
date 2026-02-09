@@ -40,7 +40,7 @@ services:
       # Override/supplement env file settings
       EDITION: ${EDITION:-ce}
       # Docker Compose specific - override control endpoint to use service name
-      CONTROL_ENDPOINT: studio:9091
+      CONTROL_ENDPOINT: studio:50051
       # Use shared auth token from main .env
       EDGE_AUTH_TOKEN: ${GRPC_AUTH_TOKEN:-dev-grpc-auth-token-change-in-production}
       ENCRYPTION_KEY: ${MICROGATEWAY_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}

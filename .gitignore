@@ -53,6 +53,7 @@ utils/uc/uc
 staging/*
 staging
 envs/*
+dist/
 
 # Vow - AI accountability files
 .vow-challenge

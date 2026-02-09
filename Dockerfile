@@ -73,7 +73,7 @@ COPY templates ./templates
 COPY config/docs_links.json ./config/docs_links.json
 
 # Expose the required ports
-EXPOSE 8080 9090
+EXPOSE 8080 9090 50051
 
 # Run the binary directly
 ENTRYPOINT ["./tyk-ai-studio"]

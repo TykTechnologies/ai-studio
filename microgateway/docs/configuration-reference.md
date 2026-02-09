@@ -117,7 +117,7 @@ DATABASE_DSN="postgres://username:password@localhost:5432/microgateway?sslmode=r
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `GRPC_PORT` | int | `9090` | gRPC server port |
+| `GRPC_PORT` | int | `50051` | gRPC server port |
 | `GRPC_HOST` | string | `0.0.0.0` | gRPC server bind address |
 | `GRPC_TLS_ENABLED` | bool | `false` | Enable TLS for gRPC server |
 | `GRPC_TLS_CERT_PATH` | string | - | Path to gRPC TLS certificate |
@@ -323,7 +323,7 @@ GRPC_AUTH_TOKEN="new-secure-token"
 GATEWAY_MODE=control
 DATABASE_TYPE=postgres
 DATABASE_DSN=postgres://mgw:password@localhost:5432/microgateway
-GRPC_PORT=9090
+GRPC_PORT=50051
 GRPC_AUTH_TOKEN=secure-token-here
 LOG_LEVEL=info
 LOG_FORMAT=json
@@ -348,7 +348,7 @@ database:
 hub_spoke:
   mode: control
   grpc:
-    port: 9090
+    port: 50051
     auth_token: secure-token
 
 logging:
@@ -413,7 +413,7 @@ METRICS_ENABLED=true
 **Production Edge Instance:**
 ```bash
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=control.internal:9090
+CONTROL_ENDPOINT=control.internal:50051
 EDGE_NAMESPACE=production
 EDGE_TLS_ENABLED=true
 EDGE_AUTH_TOKEN=${EDGE_AUTH_TOKEN}

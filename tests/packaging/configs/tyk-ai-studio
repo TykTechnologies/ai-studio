@@ -1,0 +1,25 @@
+# Smoke test configuration for AI Studio
+# Pre-configured to work with the microgateway smoke test config
+
+DEVMODE=false
+LOG_LEVEL=info
+ALLOW_REGISTRATIONS=true
+
+# URLs
+SITE_URL=http://localhost:8080
+DOCS_URL=http://localhost:8989
+DOCS_PORT=8989
+
+# Database - SQLite for simplicity
+DATABASE_TYPE=sqlite
+
+# Security - fixed tokens for testing
+TYK_AI_SECRET_KEY=smoke-test-secret-key-abcdef1234567890
+MICROGATEWAY_ENCRYPTION_KEY=smoketestencryptabcdef1234567890
+
+# Hub-spoke: control mode so edge gateway can connect
+GATEWAY_MODE=control
+GRPC_PORT=50051
+GRPC_HOST=0.0.0.0
+GRPC_TLS_INSECURE=true
+GRPC_AUTH_TOKEN=smoke-test-grpc-token-abcdef1234567890

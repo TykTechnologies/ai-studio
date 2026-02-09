@@ -36,7 +36,7 @@ DATABASE_DSN="postgres://postgres:postgres@localhost:5432/postgres" \
 GATEWAY_MODE=control \
 DATABASE_TYPE=postgres \
 DATABASE_DSN="postgres://postgres:postgres@localhost:5432/postgres" \
-GRPC_PORT=9090 \
+GRPC_PORT=50051 \
 GRPC_AUTH_TOKEN=quickstart-token \
 ./microgateway
 ```
@@ -45,7 +45,7 @@ GRPC_AUTH_TOKEN=quickstart-token \
 ```bash
 # In another terminal
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=localhost:9090 \
+CONTROL_ENDPOINT=localhost:50051 \
 EDGE_ID=quickstart-edge \
 EDGE_NAMESPACE=demo \
 EDGE_AUTH_TOKEN=quickstart-token \
@@ -96,12 +96,12 @@ services:
       GATEWAY_MODE: control
       DATABASE_TYPE: postgres
       DATABASE_DSN: postgres://mgw:mgw_password@postgres:5432/microgateway
-      GRPC_PORT: 9090
+      GRPC_PORT: 50051
       GRPC_AUTH_TOKEN: docker-demo-token
       PORT: 8080
     ports:
       - "8080:8080"
-      - "9090:9090"
+      - "50051:50051"
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,7 +115,7 @@ services:
     image: microgateway:latest
     environment:
       GATEWAY_MODE: edge
-      CONTROL_ENDPOINT: control:9090
+      CONTROL_ENDPOINT: control:50051
       EDGE_ID: edge-1
       EDGE_NAMESPACE: demo
       EDGE_AUTH_TOKEN: docker-demo-token
@@ -129,7 +129,7 @@ services:
     image: microgateway:latest
     environment:
       GATEWAY_MODE: edge
-      CONTROL_ENDPOINT: control:9090
+      CONTROL_ENDPOINT: control:50051
       EDGE_ID: edge-2
       EDGE_NAMESPACE: demo
       EDGE_AUTH_TOKEN: docker-demo-token
@@ -179,7 +179,7 @@ services:
       GATEWAY_MODE: control
       DATABASE_TYPE: postgres
       DATABASE_DSN: postgres://mgw_prod:${POSTGRES_PASSWORD}@postgres:5432/microgateway_prod
-      GRPC_PORT: 9090
+      GRPC_PORT: 50051
       GRPC_TLS_ENABLED: ${GRPC_TLS_ENABLED:-false}
       GRPC_TLS_CERT_PATH: /etc/certs/server.crt
       GRPC_TLS_KEY_PATH: /etc/certs/server.key
@@ -188,7 +188,7 @@ services:
       LOG_FORMAT: json
     ports:
       - "8080:8080"
-      - "9090:9090"
+      - "50051:50051"
     volumes:
       - ./certs:/etc/certs:ro
       - ./logs:/var/log/microgateway
@@ -244,7 +244,7 @@ docker-compose -f control-compose.yml up -d
 
 **Deploy Edge:**
 ```bash
-export CONTROL_ENDPOINT=control.internal.company.com:9090
+export CONTROL_ENDPOINT=control.internal.company.com:50051
 export EDGE_ID=prod-us-west-1
 export EDGE_NAMESPACE=production
 export EDGE_AUTH_TOKEN=production_token
@@ -398,7 +398,7 @@ spec:
               name: microgateway-secrets
               key: database-dsn
         - name: GRPC_PORT
-          value: "9090"
+          value: "50051"
         - name: GRPC_AUTH_TOKEN
           valueFrom:
             secretKeyRef:
@@ -411,7 +411,7 @@ spec:
         ports:
         - containerPort: 8080
           name: http
-        - containerPort: 9090
+        - containerPort: 50051
           name: grpc
         livenessProbe:
           httpGet:
@@ -445,8 +445,8 @@ spec:
   - port: 8080
     targetPort: 8080
     name: http
-  - port: 9090
-    targetPort: 9090
+  - port: 50051
+    targetPort: 50051
     name: grpc
 ---
 apiVersion: v1
@@ -462,8 +462,8 @@ spec:
   - port: 8080
     targetPort: 8080
     name: http
-  - port: 9090
-    targetPort: 9090
+  - port: 50051
+    targetPort: 50051
     name: grpc
 ```
 
@@ -493,7 +493,7 @@ spec:
         - name: GATEWAY_MODE
           value: "edge"
         - name: CONTROL_ENDPOINT
-          value: "microgateway-control:9090"
+          value: "microgateway-control:50051"
         - name: EDGE_NAMESPACE
           value: "production"
         - name: EDGE_AUTH_TOKEN
@@ -575,12 +575,12 @@ kubectl apply -f edge.yaml
       "image": "your-account.dkr.ecr.region.amazonaws.com/microgateway:latest",
       "portMappings": [
         {"containerPort": 8080, "protocol": "tcp"},
-        {"containerPort": 9090, "protocol": "tcp"}
+        {"containerPort": 50051, "protocol": "tcp"}
       ],
       "environment": [
         {"name": "GATEWAY_MODE", "value": "control"},
         {"name": "DATABASE_TYPE", "value": "postgres"},
-        {"name": "GRPC_PORT", "value": "9090"}
+        {"name": "GRPC_PORT", "value": "50051"}
       ],
       "secrets": [
         {
@@ -629,7 +629,7 @@ kubectl apply -f edge.yaml
       ],
       "environment": [
         {"name": "GATEWAY_MODE", "value": "edge"},
-        {"name": "CONTROL_ENDPOINT", "value": "mgw-control-nlb.internal:9090"},
+        {"name": "CONTROL_ENDPOINT", "value": "mgw-control-nlb.internal:50051"},
         {"name": "EDGE_NAMESPACE", "value": "production"}
       ],
       "secrets": [
@@ -726,7 +726,7 @@ properties:
           memoryInGb: 1
       ports:
       - port: 8080
-      - port: 9090
+      - port: 50051
       environmentVariables:
       - name: GATEWAY_MODE
         value: control
@@ -743,7 +743,7 @@ properties:
     - protocol: tcp
       port: 8080
     - protocol: tcp
-      port: 9090
+      port: 50051
 tags:
   app: microgateway
   component: control
@@ -806,21 +806,21 @@ GRPC_AUTH_TOKEN=global-token \
 
 # US East Edge
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=us-west-control.company.com:9090 \
+CONTROL_ENDPOINT=us-west-control.company.com:50051 \
 EDGE_NAMESPACE=us-east \
 EDGE_AUTH_TOKEN=global-token \
 ./microgateway
 
 # Europe Edge
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=us-west-control.company.com:9090 \
+CONTROL_ENDPOINT=us-west-control.company.com:50051 \
 EDGE_NAMESPACE=europe \
 EDGE_AUTH_TOKEN=global-token \
 ./microgateway
 
 # Asia Edge
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=us-west-control.company.com:9090 \
+CONTROL_ENDPOINT=us-west-control.company.com:50051 \
 EDGE_NAMESPACE=asia \
 EDGE_AUTH_TOKEN=global-token \
 ./microgateway
@@ -869,7 +869,7 @@ GRPC_AUTH_TOKEN=dev-token
 
 # Dev Edge
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=dev-control.internal:9090
+CONTROL_ENDPOINT=dev-control.internal:50051
 EDGE_NAMESPACE=development
 EDGE_AUTH_TOKEN=dev-token
 ```
@@ -883,7 +883,7 @@ GRPC_AUTH_TOKEN=staging-token
 
 # Staging Edge
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=staging-control.internal:9090
+CONTROL_ENDPOINT=staging-control.internal:50051
 EDGE_NAMESPACE=staging
 EDGE_AUTH_TOKEN=staging-token
 ```
@@ -898,7 +898,7 @@ GRPC_AUTH_TOKEN=production-token
 
 # Production Edge
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=prod-control.internal:9090
+CONTROL_ENDPOINT=prod-control.internal:50051
 EDGE_NAMESPACE=production
 EDGE_TLS_ENABLED=true
 EDGE_AUTH_TOKEN=production-token

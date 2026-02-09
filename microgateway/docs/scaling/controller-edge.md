@@ -19,7 +19,7 @@ Controller-to-edge communication enables:
 Control Instance (Hub)           Edge Instance (Spoke)
 ┌─────────────────┐              ┌─────────────────┐
 │  gRPC Server    │◄────────────►│  gRPC Client    │
-│  Port 9090      │              │  Reconnecting   │
+│  Port 50051     │              │  Reconnecting   │
 │  Database       │              │  Local Cache    │
 └─────────────────┘              └─────────────────┘
 ```
@@ -39,7 +39,7 @@ Control Instance (Hub)           Edge Instance (Spoke)
 GATEWAY_MODE=control
 
 # gRPC server configuration
-GRPC_PORT=9090
+GRPC_PORT=50051
 GRPC_HOST=0.0.0.0
 GRPC_TLS_ENABLED=false
 GRPC_TLS_CERT_PATH=/path/to/cert.pem
@@ -60,7 +60,7 @@ CONFIG_PROPAGATION_TIMEOUT=30s
 ```bash
 # Start control instance
 GATEWAY_MODE=control \
-GRPC_PORT=9090 \
+GRPC_PORT=50051 \
 GRPC_AUTH_TOKEN=my-secure-token \
 DATABASE_TYPE=postgres \
 DATABASE_DSN="postgres://user:pass@localhost/control_db" \
@@ -68,7 +68,7 @@ DATABASE_DSN="postgres://user:pass@localhost/control_db" \
 
 # Control instance provides:
 # - HTTP API on port 8080 (default)
-# - gRPC API on port 9090
+# - gRPC API on port 50051
 # - Configuration management
 # - Edge monitoring
 ```
@@ -81,7 +81,7 @@ DATABASE_DSN="postgres://user:pass@localhost/control_db" \
 GATEWAY_MODE=edge
 
 # Control connection
-CONTROL_ENDPOINT=control.example.com:9090
+CONTROL_ENDPOINT=control.example.com:50051
 EDGE_ID=edge-region-1
 EDGE_NAMESPACE=production
 EDGE_AUTH_TOKEN=secure-auth-token
@@ -104,7 +104,7 @@ EDGE_MAX_RECONNECT_ATTEMPTS=10
 ```bash
 # Start edge instance
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control.example.com:9090 \
+CONTROL_ENDPOINT=control.example.com:50051 \
 EDGE_ID=edge-region-1 \
 EDGE_NAMESPACE=production \
 EDGE_AUTH_TOKEN=my-secure-token \
@@ -226,15 +226,15 @@ EDGE_TLS_KEY_PATH=/etc/ssl/private/edge.key
 ```bash
 # Control instance (inbound)
 # Port 8080: HTTP API
-# Port 9090: gRPC API
+# Port 50051: gRPC API
 
 # Edge instance (outbound)
-# Port 9090: gRPC to control instance
+# Port 50051: gRPC to control instance
 # Port 8080: HTTP API (local)
 
 # Example firewall rules
-iptables -A INPUT -p tcp --dport 9090 -s edge-subnet -j ACCEPT  # Control
-iptables -A OUTPUT -p tcp --dport 9090 -d control-host -j ACCEPT # Edge
+iptables -A INPUT -p tcp --dport 50051 -s edge-subnet -j ACCEPT  # Control
+iptables -A OUTPUT -p tcp --dport 50051 -d control-host -j ACCEPT # Edge
 ```
 
 ## High Availability
@@ -246,28 +246,28 @@ services:
   control-1:
     environment:
       GATEWAY_MODE: control
-      GRPC_PORT: 9090
+      GRPC_PORT: 50051
       DATABASE_DSN: postgres://user:pass@postgres-cluster:5432/microgateway
-  
+
   control-2:
     environment:
       GATEWAY_MODE: control
-      GRPC_PORT: 9090
+      GRPC_PORT: 50051
       DATABASE_DSN: postgres://user:pass@postgres-cluster:5432/microgateway
   
   # Load balancer for edge connections
   control-lb:
     ports:
-      - "9090:9090"
+      - "50051:50051"
     upstream:
-      - control-1:9090
-      - control-2:9090
+      - control-1:50051
+      - control-2:50051
 ```
 
 ### Edge Failover
 ```bash
 # Edge with multiple control endpoints
-CONTROL_ENDPOINT=control-primary.company.com:9090,control-backup.company.com:9090
+CONTROL_ENDPOINT=control-primary.company.com:50051,control-backup.company.com:50051
 EDGE_FAILOVER_ENABLED=true
 EDGE_FAILOVER_TIMEOUT=30s
 
@@ -367,7 +367,7 @@ GRPC_GO_LOG_SEVERITY_LEVEL=info \
 ### Connection Issues
 ```bash
 # Test network connectivity
-nc -zv control.example.com 9090
+nc -zv control.example.com 50051
 
 # Check authentication
 curl -H "Authorization: Bearer $EDGE_AUTH_TOKEN" \
@@ -392,7 +392,7 @@ echo $EDGE_NAMESPACE
 ### Performance Issues
 ```bash
 # Monitor gRPC performance
-ss -tulpn | grep :9090
+ss -tulpn | grep :50051
 
 # Check database performance (control)
 EXPLAIN SELECT * FROM llms WHERE namespace = 'tenant-1';
@@ -416,13 +416,13 @@ services:
       GRPC_AUTH_TOKEN: secure-token
     ports:
       - "8080:8080"
-      - "9090:9090"
+      - "50051:50051"
   
   edge-1:
     image: microgateway:latest
     environment:
       GATEWAY_MODE: edge
-      CONTROL_ENDPOINT: control:9090
+      CONTROL_ENDPOINT: control:50051
       EDGE_ID: edge-1
       EDGE_NAMESPACE: production
       EDGE_AUTH_TOKEN: secure-token
@@ -461,7 +461,7 @@ spec:
               key: dsn
         ports:
         - containerPort: 8080
-        - containerPort: 9090
+        - containerPort: 50051
 
 ---
 apiVersion: apps/v1
@@ -479,7 +479,7 @@ spec:
         - name: GATEWAY_MODE
           value: "edge"
         - name: CONTROL_ENDPOINT
-          value: "control-service:9090"
+          value: "control-service:50051"
         - name: EDGE_NAMESPACE
           value: "production"
         ports:
@@ -716,7 +716,7 @@ effective_cache_size = 1GB
 ```bash
 # 1. Deploy edge instance with configuration
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control:9090 \
+CONTROL_ENDPOINT=control:50051 \
 EDGE_ID=new-edge-region-2 \
 EDGE_NAMESPACE=production \
 ./microgateway

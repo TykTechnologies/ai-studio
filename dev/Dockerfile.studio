@@ -54,8 +54,8 @@ ENV BUILD_TAGS=""
 # 3000 - Frontend dev server (when running npm start)
 # 8080 - Backend REST API
 # 9090 - embedded gateway
-# 9091 - gRPC Control Server
-EXPOSE 3000 8080 9090 9091
+# 50051 - gRPC Control Server
+EXPOSE 3000 8080 9090 50051
 
 # Default command uses Air for hot reloading
 # Can be overridden in docker-compose

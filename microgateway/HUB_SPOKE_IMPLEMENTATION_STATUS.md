@@ -90,7 +90,7 @@ GATEWAY_MODE=standalone ./microgateway
 GATEWAY_MODE=control ./microgateway
 
 # Edge mode (spoke) - validates configuration
-GATEWAY_MODE=edge CONTROL_ENDPOINT=control:9090 EDGE_ID=edge-1 ./microgateway
+GATEWAY_MODE=edge CONTROL_ENDPOINT=control:50051 EDGE_ID=edge-1 ./microgateway
 ```
 
 ### **Configuration Push System (Working):**
