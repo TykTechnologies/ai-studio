@@ -371,6 +371,12 @@ test-package-smoke: package-ce
 
 test-package-smoke-ent: package-ent
 	@echo "🧪 Running package smoke tests (ENT)..."
+	@# Source license from dev/.env.secrets if available
+	$(eval export TYK_AI_LICENSE=$(shell grep -s '^TYK_AI_LICENSE=' dev/.env.secrets | cut -d= -f2-))
+	@if [ -z "$$TYK_AI_LICENSE" ]; then \
+		echo "⚠️  Warning: TYK_AI_LICENSE not set. ENT smoke tests may fail."; \
+		echo "   Set it in dev/.env.secrets or export TYK_AI_LICENSE=..."; \
+	fi
 	docker compose -f tests/packaging/compose.yml up -d --build --wait
 	cd tests/packaging && npx playwright install --with-deps chromium && npx playwright test --reporter=list || \
 		(docker compose -f ../../tests/packaging/compose.yml logs && exit 1)

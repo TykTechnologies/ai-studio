@@ -82,10 +82,27 @@ test.describe('Package Installation Smoke Tests', () => {
 
     await test.step('Dismiss quick-start wizard if present', async () => {
       // The first-time login shows a quick-start dialog that blocks the UI
-      const dismissBtn = page.locator('button:has-text("Explore by myself"), button:has-text("Skip"), button:has-text("Close"), [aria-label="close"]').first();
-      if (await dismissBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await dismissBtn.click();
-        await page.waitForLoadState('networkidle', { timeout: 5000 });
+      // Try multiple dismiss strategies
+      const dismissSelectors = [
+        'button:has-text("Explore by myself")',
+        'button:has-text("Skip quick start")',
+        'button:has-text("Skip")',
+        'button:has-text("Close")',
+        '[aria-label="close"]',
+      ];
+      for (const selector of dismissSelectors) {
+        const btn = page.locator(selector).first();
+        if (await btn.isVisible({ timeout: 1000 }).catch(() => false)) {
+          await btn.click({ force: true });
+          await page.waitForTimeout(1000);
+          break;
+        }
+      }
+      // If dialog is still there, press Escape to close it
+      const dialog = page.locator('[role="presentation"].MuiDialog-root');
+      if (await dialog.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(1000);
       }
     });
 

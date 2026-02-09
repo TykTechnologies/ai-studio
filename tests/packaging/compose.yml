@@ -9,6 +9,9 @@ services:
       - "8081:8081"   # Microgateway proxy
       - "8989:8989"   # Docs server
       - "50051:50051" # gRPC control plane
+    environment:
+      # Pass license key from host for ENT builds (ignored by CE)
+      - TYK_AI_LICENSE=${TYK_AI_LICENSE:-}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 5s
