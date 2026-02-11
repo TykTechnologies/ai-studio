@@ -36,7 +36,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/pb33f/libopenapi"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/schema"
 )
 
 const (
@@ -63,7 +62,45 @@ type SearchQuery struct {
 }
 
 type SearchResults struct {
-	Documents []schema.Document `json:"documents"`
+	Documents []DatasourceDocument `json:"documents"`
+}
+
+// DatasourceDocument is the REST response format for datasource search results.
+type DatasourceDocument struct {
+	Content         string         `json:"content"`
+	Metadata        map[string]any `json:"metadata"`
+	SimilarityScore float32        `json:"similarity_score"`
+}
+
+// VectorSearchQuery is the request body for vector-based similarity search.
+type VectorSearchQuery struct {
+	Embedding           []float32 `json:"embedding"`
+	N                   int       `json:"n"`
+	SimilarityThreshold float64   `json:"similarity_threshold"`
+}
+
+// MetadataQuery is the request body for metadata-only document queries.
+type MetadataQuery struct {
+	Filter     map[string]string `json:"filter"`
+	FilterMode string            `json:"filter_mode"`
+	Limit      int               `json:"limit"`
+	Offset     int               `json:"offset"`
+}
+
+// MetadataResults is the response for metadata queries with pagination.
+type MetadataResults struct {
+	Documents  []DatasourceDocument `json:"documents"`
+	TotalCount int                  `json:"total_count"`
+}
+
+// EmbeddingRequest is the request body for embedding generation.
+type EmbeddingRequest struct {
+	Texts []string `json:"texts"`
+}
+
+// EmbeddingResponse is the response containing generated embedding vectors.
+type EmbeddingResponse struct {
+	Vectors [][]float32 `json:"vectors"`
 }
 
 type OpenAPICache struct {
@@ -283,6 +320,9 @@ func (p *Proxy) createHandler() http.Handler {
 				http.HandlerFunc(p.handleUnifiedLLMRequest))))
 
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
+	r.HandleFunc("/datasource/{dsSlug}/vector", p.handleDatasourceVectorSearch).Methods("POST")
+	r.HandleFunc("/datasource/{dsSlug}/metadata", p.handleDatasourceMetadataQuery).Methods("POST")
+	r.HandleFunc("/datasource/{dsSlug}/embeddings", p.handleDatasourceGenerateEmbedding).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}", p.handleToolRequest).Methods("GET", "POST", "PUT", "DELETE")
 	r.HandleFunc("/tools/{toolSlug}/mcp", p.handleMCPToolStreamable).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}/mcp/sse", p.handleMCPToolSSE).Methods("GET")
@@ -742,7 +782,169 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusInternalServerError, "failed to search", err, false)
 		return
 	}
-	resJSON, err := json.Marshal(SearchResults{Documents: results})
+	docs := make([]DatasourceDocument, len(results))
+	for i, r := range results {
+		docs[i] = DatasourceDocument{
+			Content:         r.PageContent,
+			Metadata:        r.Metadata,
+			SimilarityScore: r.Score,
+		}
+	}
+	resJSON, err := json.Marshal(SearchResults{Documents: docs})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resJSON)
+}
+
+func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Request) {
+	dsSlug := mux.Vars(r)["dsSlug"]
+	ds, ok := p.GetDatasource(dsSlug)
+	if !ok {
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err, false)
+		return
+	}
+	var query VectorSearchQuery
+	if err := json.Unmarshal(body, &query); err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
+		return
+	}
+	if len(query.Embedding) == 0 {
+		respondWithError(w, http.StatusBadRequest, "embedding vector is required", nil, false)
+		return
+	}
+	n := query.N
+	if n <= 0 {
+		n = 10
+	}
+
+	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
+	results, err := session.SearchByVector(ds.ID, query.Embedding, n)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to search by vector", err, false)
+		return
+	}
+
+	docs := make([]DatasourceDocument, 0, len(results))
+	for _, r := range results {
+		if query.SimilarityThreshold > 0 && float64(r.Score) < query.SimilarityThreshold {
+			continue
+		}
+		docs = append(docs, DatasourceDocument{
+			Content:         r.PageContent,
+			Metadata:        r.Metadata,
+			SimilarityScore: r.Score,
+		})
+	}
+
+	resJSON, err := json.Marshal(SearchResults{Documents: docs})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resJSON)
+}
+
+func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Request) {
+	dsSlug := mux.Vars(r)["dsSlug"]
+	ds, ok := p.GetDatasource(dsSlug)
+	if !ok {
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err, false)
+		return
+	}
+	var query MetadataQuery
+	if err := json.Unmarshal(body, &query); err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
+		return
+	}
+	if len(query.Filter) == 0 {
+		respondWithError(w, http.StatusBadRequest, "filter is required", nil, false)
+		return
+	}
+
+	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
+	results, totalCount, err := session.QueryByMetadataOnly(ds.ID, query.Filter, query.FilterMode, query.Limit, query.Offset)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to query by metadata", err, false)
+		return
+	}
+
+	docs := make([]DatasourceDocument, len(results))
+	for i, r := range results {
+		docs[i] = DatasourceDocument{
+			Content:         r.PageContent,
+			Metadata:        r.Metadata,
+			SimilarityScore: r.Score,
+		}
+	}
+
+	resJSON, err := json.Marshal(MetadataResults{Documents: docs, TotalCount: totalCount})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resJSON)
+}
+
+func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http.Request) {
+	dsSlug := mux.Vars(r)["dsSlug"]
+	ds, ok := p.GetDatasource(dsSlug)
+	if !ok {
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
+		return
+	}
+
+	if ds.EmbedVendor == "" || ds.EmbedModel == "" {
+		respondWithError(w, http.StatusBadRequest, "datasource does not have an embedder configured", nil, false)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err, false)
+		return
+	}
+	var req EmbeddingRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
+		return
+	}
+	if len(req.Texts) == 0 {
+		respondWithError(w, http.StatusBadRequest, "texts array is required and must not be empty", nil, false)
+		return
+	}
+	if len(req.Texts) > 100 {
+		respondWithError(w, http.StatusBadRequest, "texts array must not exceed 100 items", nil, false)
+		return
+	}
+
+	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
+	vectors, err := session.CreateEmbedding(ds.ID, req.Texts)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to generate embeddings", err, false)
+		return
+	}
+
+	resJSON, err := json.Marshal(EmbeddingResponse{Vectors: vectors})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
