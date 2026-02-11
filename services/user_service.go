@@ -357,6 +357,11 @@ func (s *Service) DeleteUser(user *models.User) error {
 		return err
 	}
 
+	// Handle orphaned community resources (UGC)
+	if err := s.HandleUserDeletionForUGC(user.ID); err != nil {
+		logger.Warn(fmt.Sprintf("Failed to handle UGC orphan management for user %d: %v", user.ID, err))
+	}
+
 	// Execute "after_delete" hooks
 	if s.HookManager != nil {
 		_, err := s.HookManager.ExecuteHooks(

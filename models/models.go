@@ -75,6 +75,10 @@ func InitModels(db *gorm.DB) error {
 		&SchedulerLease{},          // Scheduler leader election
 		// Export Models
 		&ProxyLogExport{}, // Proxy log export jobs (Enterprise)
+		// UGC (User-Generated Content) Models
+		&Submission{},          // Community resource submissions
+		&AttestationTemplate{}, // Admin-configurable attestation templates
+		&SubmissionVersion{},   // Resource version snapshots for rollback
 	); err != nil {
 		return err
 	}

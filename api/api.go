@@ -484,6 +484,21 @@ func (a *API) setupRoutes() {
 	authed.PUT("/api/v1/notifications/:id/read", notificationHandlers.MarkAsRead)
 	authed.PUT("/api/v1/notifications/read-all", notificationHandlers.MarkAllAsRead)
 
+	// UGC Submission routes (portal users)
+	authed.POST("/submissions", a.createSubmission)
+	authed.GET("/submissions", a.listMySubmissions)
+	authed.GET("/submissions/:id", a.getMySubmission)
+	authed.PATCH("/submissions/:id", a.updateMySubmission)
+	authed.DELETE("/submissions/:id", a.deleteMySubmission)
+	authed.POST("/submissions/:id/submit", a.submitSubmission)
+	authed.GET("/submissions/attestation-templates", a.getAttestationTemplatesForSubmission)
+	authed.POST("/submissions/update", a.createUpdateSubmission)
+	authed.POST("/submissions/validate-spec", a.validateOASSpec)
+	authed.POST("/submissions/test-datasource", a.testDatasourceConnectivity)
+	authed.POST("/submissions/check-duplicates", a.checkDuplicates)
+	authed.POST("/submissions/nominate/datasource/:id", a.nominateDatasource)
+	authed.POST("/submissions/nominate/tool/:id", a.nominateTool)
+
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
 	v1.Use(a.auth.AdminOnly())
@@ -814,6 +829,25 @@ func (a *API) setupRoutes() {
 		marketplaceAdmin.POST("/validate", adminHandlers.ValidateMarketplaceURL)
 		marketplaceAdmin.POST("/:id/sync", adminHandlers.SyncMarketplace)
 	}
+
+	// UGC Submission routes (admin review)
+	v1.GET("/submissions", a.adminListSubmissions)
+	v1.GET("/submissions/:id", a.adminGetSubmission)
+	v1.POST("/submissions/:id/review", a.adminStartReview)
+	v1.POST("/submissions/:id/approve", a.adminApproveSubmission)
+	v1.POST("/submissions/:id/reject", a.adminRejectSubmission)
+	v1.POST("/submissions/:id/request-changes", a.adminRequestChanges)
+	v1.POST("/submissions/:id/test", a.adminTestSubmission)
+	v1.GET("/submissions/:id/versions", a.adminListVersions)
+	v1.POST("/submissions/:id/rollback/:version_id", a.adminRollbackVersion)
+	v1.GET("/submissions/orphaned", a.adminGetOrphanedResources)
+
+	// Attestation Template routes (admin)
+	v1.GET("/attestation-templates", a.adminListAttestationTemplates)
+	v1.GET("/attestation-templates/:id", a.adminGetAttestationTemplate)
+	v1.POST("/attestation-templates", a.adminCreateAttestationTemplate)
+	v1.PATCH("/attestation-templates/:id", a.adminUpdateAttestationTemplate)
+	v1.DELETE("/attestation-templates/:id", a.adminDeleteAttestationTemplate)
 
 	// Chat History Record routes
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)

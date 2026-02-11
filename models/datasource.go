@@ -30,6 +30,10 @@ type Datasource struct {
 
 	Active bool
 
+	// UGC (User-Generated Content) fields
+	CommunitySubmitted bool  `json:"community_submitted"`
+	SubmissionID       *uint `json:"submission_id"`
+
 	// Plugin-stored metadata
 	Metadata JSONMap `json:"metadata" gorm:"type:json"`
 }

@@ -27,6 +27,13 @@ type Tool struct {
 	Dependencies []*Tool     `gorm:"many2many:tool_dependencies" json:"dependencies"`
 	Apps         []*App      `gorm:"many2many:app_tools;" json:"apps"`
 
+	// Ownership
+	UserID uint `json:"user_id"`
+
+	// UGC (User-Generated Content) fields
+	CommunitySubmitted bool  `json:"community_submitted"`
+	SubmissionID       *uint `json:"submission_id"`
+
 	// Plugin-stored metadata
 	Metadata JSONMap `json:"metadata" gorm:"type:json"`
 }
