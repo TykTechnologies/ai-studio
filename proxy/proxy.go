@@ -827,38 +827,47 @@ func (p *Proxy) datasourceMaxEmbedTexts() int {
 	return 100
 }
 
-// checkDatasourceAccess verifies the authenticated app has access to the datasource.
-// Returns true if access is allowed, false if denied (and writes the error response).
-func (p *Proxy) checkDatasourceAccess(w http.ResponseWriter, r *http.Request, ds *models.Datasource) bool {
-	app, ok := r.Context().Value("app").(*models.App)
-	if !ok {
-		respondWithError(w, http.StatusUnauthorized, "app authentication required for datasource access", nil, false)
-		return false
-	}
-	for _, d := range app.Datasources {
-		if d.ID == ds.ID {
-			return true
-		}
-	}
-	respondWithError(w, http.StatusForbidden, "app does not have access to this datasource", nil, false)
-	return false
-}
-
-func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Request) {
+// prepareDatasourceRequest resolves the datasource from the URL slug, checks app access,
+// and reads the request body with size limits. Returns the datasource and body on success,
+// or nil if an error response was already written.
+func (p *Proxy) prepareDatasourceRequest(w http.ResponseWriter, r *http.Request) (*models.Datasource, []byte) {
 	dsSlug := mux.Vars(r)["dsSlug"]
 	ds, ok := p.GetDatasource(dsSlug)
 	if !ok {
 		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
-		return
+		return nil, nil
 	}
-	if !p.checkDatasourceAccess(w, r, ds) {
-		return
+
+	app, ok := r.Context().Value("app").(*models.App)
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "app authentication required for datasource access", nil, false)
+		return nil, nil
+	}
+	hasAccess := false
+	for _, d := range app.Datasources {
+		if d.ID == ds.ID {
+			hasAccess = true
+			break
+		}
+	}
+	if !hasAccess {
+		respondWithError(w, http.StatusForbidden, "app does not have access to this datasource", nil, false)
+		return nil, nil
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, p.datasourceMaxBodyBytes())
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
+		return nil, nil
+	}
+
+	return ds, body
+}
+
+func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Request) {
+	ds, body := p.prepareDatasourceRequest(w, r)
+	if ds == nil {
 		return
 	}
 	var query VectorSearchQuery
@@ -908,20 +917,8 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 }
 
 func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Request) {
-	dsSlug := mux.Vars(r)["dsSlug"]
-	ds, ok := p.GetDatasource(dsSlug)
-	if !ok {
-		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
-		return
-	}
-	if !p.checkDatasourceAccess(w, r, ds) {
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, p.datasourceMaxBodyBytes())
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
+	ds, body := p.prepareDatasourceRequest(w, r)
+	if ds == nil {
 		return
 	}
 	var query MetadataQuery
@@ -975,13 +972,8 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 }
 
 func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http.Request) {
-	dsSlug := mux.Vars(r)["dsSlug"]
-	ds, ok := p.GetDatasource(dsSlug)
-	if !ok {
-		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
-		return
-	}
-	if !p.checkDatasourceAccess(w, r, ds) {
+	ds, body := p.prepareDatasourceRequest(w, r)
+	if ds == nil {
 		return
 	}
 
@@ -990,12 +982,6 @@ func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, p.datasourceMaxBodyBytes())
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
-		return
-	}
 	var req EmbeddingRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
