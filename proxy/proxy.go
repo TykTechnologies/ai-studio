@@ -142,6 +142,11 @@ type Proxy struct {
 
 type Config struct {
 	Port int
+
+	// Datasource endpoint limits (zero values use defaults)
+	DatasourceMaxBodyBytes   int64 // Max request body size in bytes (default: 1MB)
+	DatasourceMaxResults     int   // Max documents returned per query (default: 100)
+	DatasourceMaxEmbedTexts  int   // Max texts per embedding request (default: 100)
 }
 
 // New creates a new Proxy instance using the unified services interface.
@@ -801,7 +806,26 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 	w.Write(resJSON)
 }
 
-const datasourceMaxBodyBytes = 1 << 20 // 1MB max request body for datasource endpoints
+func (p *Proxy) datasourceMaxBodyBytes() int64 {
+	if p.config != nil && p.config.DatasourceMaxBodyBytes > 0 {
+		return p.config.DatasourceMaxBodyBytes
+	}
+	return 1 << 20 // 1MB default
+}
+
+func (p *Proxy) datasourceMaxResults() int {
+	if p.config != nil && p.config.DatasourceMaxResults > 0 {
+		return p.config.DatasourceMaxResults
+	}
+	return 100
+}
+
+func (p *Proxy) datasourceMaxEmbedTexts() int {
+	if p.config != nil && p.config.DatasourceMaxEmbedTexts > 0 {
+		return p.config.DatasourceMaxEmbedTexts
+	}
+	return 100
+}
 
 // checkDatasourceAccess verifies the authenticated app has access to the datasource.
 // Returns true if access is allowed, false if denied (and writes the error response).
@@ -831,7 +855,7 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, datasourceMaxBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, p.datasourceMaxBodyBytes())
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
@@ -850,8 +874,8 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 	if n <= 0 {
 		n = 10
 	}
-	if n > 100 {
-		n = 100
+	if maxN := p.datasourceMaxResults(); n > maxN {
+		n = maxN
 	}
 
 	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
@@ -894,7 +918,7 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, datasourceMaxBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, p.datasourceMaxBodyBytes())
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
@@ -913,8 +937,8 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 		respondWithError(w, http.StatusBadRequest, "filter_mode must be 'AND' or 'OR'", nil, false)
 		return
 	}
-	if query.Limit > 100 {
-		respondWithError(w, http.StatusBadRequest, "limit must not exceed 100", nil, false)
+	if maxResults := p.datasourceMaxResults(); query.Limit > maxResults {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("limit must not exceed %d", maxResults), nil, false)
 		return
 	}
 	for k, v := range query.Filter {
@@ -966,7 +990,7 @@ func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, datasourceMaxBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, p.datasourceMaxBodyBytes())
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
@@ -981,8 +1005,8 @@ func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http
 		respondWithError(w, http.StatusBadRequest, "texts array is required and must not be empty", nil, false)
 		return
 	}
-	if len(req.Texts) > 100 {
-		respondWithError(w, http.StatusBadRequest, "texts array must not exceed 100 items", nil, false)
+	if maxTexts := p.datasourceMaxEmbedTexts(); len(req.Texts) > maxTexts {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("texts array must not exceed %d items", maxTexts), nil, false)
 		return
 	}
 
