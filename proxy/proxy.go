@@ -801,6 +801,25 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 	w.Write(resJSON)
 }
 
+const datasourceMaxBodyBytes = 1 << 20 // 1MB max request body for datasource endpoints
+
+// checkDatasourceAccess verifies the authenticated app has access to the datasource.
+// Returns true if access is allowed, false if denied (and writes the error response).
+func (p *Proxy) checkDatasourceAccess(w http.ResponseWriter, r *http.Request, ds *models.Datasource) bool {
+	app, ok := r.Context().Value("app").(*models.App)
+	if !ok {
+		// No app in context (e.g., OAuth flow) — allow access
+		return true
+	}
+	for _, d := range app.Datasources {
+		if d.ID == ds.ID {
+			return true
+		}
+	}
+	respondWithError(w, http.StatusForbidden, "app does not have access to this datasource", nil, false)
+	return false
+}
+
 func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Request) {
 	dsSlug := mux.Vars(r)["dsSlug"]
 	ds, ok := p.GetDatasource(dsSlug)
@@ -808,10 +827,14 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
 		return
 	}
+	if !p.checkDatasourceAccess(w, r, ds) {
+		return
+	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, datasourceMaxBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err, false)
+		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
 		return
 	}
 	var query VectorSearchQuery
@@ -826,6 +849,9 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 	n := query.N
 	if n <= 0 {
 		n = 10
+	}
+	if n > 100 {
+		n = 100
 	}
 
 	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
@@ -864,10 +890,14 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
 		return
 	}
+	if !p.checkDatasourceAccess(w, r, ds) {
+		return
+	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, datasourceMaxBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err, false)
+		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
 		return
 	}
 	var query MetadataQuery
@@ -886,6 +916,12 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 	if query.Limit > 100 {
 		respondWithError(w, http.StatusBadRequest, "limit must not exceed 100", nil, false)
 		return
+	}
+	for k, v := range query.Filter {
+		if len(k) > 256 || len(v) > 1024 {
+			respondWithError(w, http.StatusBadRequest, "filter keys must not exceed 256 characters and values must not exceed 1024 characters", nil, false)
+			return
+		}
 	}
 
 	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
@@ -921,15 +957,19 @@ func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http
 		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
 		return
 	}
+	if !p.checkDatasourceAccess(w, r, ds) {
+		return
+	}
 
 	if ds.EmbedVendor == "" || ds.EmbedModel == "" {
 		respondWithError(w, http.StatusBadRequest, "datasource does not have an embedder configured", nil, false)
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, datasourceMaxBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err, false)
+		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
 		return
 	}
 	var req EmbeddingRequest

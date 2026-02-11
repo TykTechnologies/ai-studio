@@ -2,14 +2,17 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -40,6 +43,20 @@ func callHandler(handler http.HandlerFunc, vars map[string]string, body interfac
 	bodyBytes, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/datasource/test-ds", bytes.NewReader(bodyBytes))
 	req = mux.SetURLVars(req, vars)
+	w := httptest.NewRecorder()
+	handler(w, req)
+	return w
+}
+
+// callHandlerWithApp invokes a handler with an app set in the request context.
+func callHandlerWithApp(handler http.HandlerFunc, vars map[string]string, body interface{}, app *models.App) *httptest.ResponseRecorder {
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/datasource/test-ds", bytes.NewReader(bodyBytes))
+	req = mux.SetURLVars(req, vars)
+	if app != nil {
+		ctx := context.WithValue(req.Context(), "app", app)
+		req = req.WithContext(ctx)
+	}
 	w := httptest.NewRecorder()
 	handler(w, req)
 	return w
@@ -140,6 +157,24 @@ func TestHandleDatasourceMetadataQuery(t *testing.T) {
 		})
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
+
+	t.Run("filter key too long returns 400", func(t *testing.T) {
+		longKey := strings.Repeat("k", 257)
+		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
+			Filter: map[string]string{longKey: "val"},
+		})
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "filter keys must not exceed")
+	})
+
+	t.Run("filter value too long returns 400", func(t *testing.T) {
+		longVal := strings.Repeat("v", 1025)
+		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
+			Filter: map[string]string{"key": longVal},
+		})
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "values must not exceed")
+	})
 }
 
 func TestHandleDatasourceGenerateEmbedding(t *testing.T) {
@@ -190,6 +225,77 @@ func TestHandleDatasourceGenerateEmbedding(t *testing.T) {
 		notFoundVars := map[string]string{"dsSlug": "nonexistent"}
 		w := callHandler(p.handleDatasourceGenerateEmbedding, notFoundVars, EmbeddingRequest{Texts: []string{"hello"}})
 		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+func TestDatasourceAccessControl(t *testing.T) {
+	ds := &models.Datasource{Name: "Test DS", Active: true, DBSourceType: "pinecone"}
+	ds.ID = 1
+
+	t.Run("app without datasource access returns 403", func(t *testing.T) {
+		p := newTestProxyWithDatasource(t, ds)
+		vars := map[string]string{"dsSlug": "test-ds"}
+		app := &models.App{
+			Model:       gorm.Model{ID: 1},
+			Name:        "Test App",
+			Datasources: []models.Datasource{}, // no datasources
+		}
+		w := callHandlerWithApp(p.handleDatasourceVectorSearch, vars,
+			VectorSearchQuery{Embedding: []float32{0.1}}, app)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+		assert.Contains(t, w.Body.String(), "does not have access")
+	})
+
+	t.Run("app with matching datasource is allowed", func(t *testing.T) {
+		p := newTestProxyWithDatasource(t, ds)
+		vars := map[string]string{"dsSlug": "test-ds"}
+		matchingDS := models.Datasource{}
+		matchingDS.ID = 1 // matches ds.ID
+		app := &models.App{
+			Model: gorm.Model{ID: 1},
+			Name:  "Test App",
+			Datasources: []models.Datasource{matchingDS},
+		}
+		w := callHandlerWithApp(p.handleDatasourceVectorSearch, vars,
+			VectorSearchQuery{Embedding: []float32{0.1}}, app)
+		// Should pass access check (will fail at vector store layer, but not 403)
+		assert.NotEqual(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("no app in context allows access", func(t *testing.T) {
+		p := newTestProxyWithDatasource(t, ds)
+		vars := map[string]string{"dsSlug": "test-ds"}
+		// callHandler does NOT set app in context
+		w := callHandler(p.handleDatasourceVectorSearch, vars,
+			VectorSearchQuery{Embedding: []float32{0.1}})
+		// Should pass access check (no app = OAuth flow, allowed)
+		assert.NotEqual(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("access check applies to metadata endpoint", func(t *testing.T) {
+		p := newTestProxyWithDatasource(t, ds)
+		vars := map[string]string{"dsSlug": "test-ds"}
+		app := &models.App{
+			Model:       gorm.Model{ID: 1},
+			Datasources: []models.Datasource{},
+		}
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, vars,
+			MetadataQuery{Filter: map[string]string{"k": "v"}}, app)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("access check applies to embeddings endpoint", func(t *testing.T) {
+		dsEmbed := &models.Datasource{Name: "Test DS", Active: true, EmbedVendor: "openai", EmbedModel: "m"}
+		dsEmbed.ID = 1
+		p := newTestProxyWithDatasource(t, dsEmbed)
+		vars := map[string]string{"dsSlug": "test-ds"}
+		app := &models.App{
+			Model:       gorm.Model{ID: 1},
+			Datasources: []models.Datasource{},
+		}
+		w := callHandlerWithApp(p.handleDatasourceGenerateEmbedding, vars,
+			EmbeddingRequest{Texts: []string{"hello"}}, app)
+		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
 }
 
