@@ -66,10 +66,11 @@ type SearchResults struct {
 }
 
 // DatasourceDocument is the REST response format for datasource search results.
+// Field names match the original schema.Document marshaling for backward compatibility.
 type DatasourceDocument struct {
-	Content         string         `json:"content"`
-	Metadata        map[string]any `json:"metadata"`
-	SimilarityScore float32        `json:"similarity_score"`
+	PageContent string         `json:"PageContent"`
+	Metadata    map[string]any `json:"Metadata"`
+	Score       float32        `json:"Score"`
 }
 
 // VectorSearchQuery is the request body for vector-based similarity search.
@@ -785,9 +786,9 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 	docs := make([]DatasourceDocument, len(results))
 	for i, r := range results {
 		docs[i] = DatasourceDocument{
-			Content:         r.PageContent,
+			PageContent: r.PageContent,
 			Metadata:        r.Metadata,
-			SimilarityScore: r.Score,
+			Score: r.Score,
 		}
 	}
 	resJSON, err := json.Marshal(SearchResults{Documents: docs})
@@ -840,9 +841,9 @@ func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Requ
 			continue
 		}
 		docs = append(docs, DatasourceDocument{
-			Content:         r.PageContent,
+			PageContent: r.PageContent,
 			Metadata:        r.Metadata,
-			SimilarityScore: r.Score,
+			Score: r.Score,
 		})
 	}
 
@@ -878,6 +879,14 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 		respondWithError(w, http.StatusBadRequest, "filter is required", nil, false)
 		return
 	}
+	if query.FilterMode != "" && query.FilterMode != "AND" && query.FilterMode != "OR" {
+		respondWithError(w, http.StatusBadRequest, "filter_mode must be 'AND' or 'OR'", nil, false)
+		return
+	}
+	if query.Limit > 100 {
+		respondWithError(w, http.StatusBadRequest, "limit must not exceed 100", nil, false)
+		return
+	}
 
 	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
 	results, totalCount, err := session.QueryByMetadataOnly(ds.ID, query.Filter, query.FilterMode, query.Limit, query.Offset)
@@ -889,9 +898,9 @@ func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Req
 	docs := make([]DatasourceDocument, len(results))
 	for i, r := range results {
 		docs[i] = DatasourceDocument{
-			Content:         r.PageContent,
+			PageContent: r.PageContent,
 			Metadata:        r.Metadata,
-			SimilarityScore: r.Score,
+			Score: r.Score,
 		}
 	}
 

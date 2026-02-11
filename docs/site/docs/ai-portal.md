@@ -85,12 +85,12 @@ Perform semantic search using a natural language query. The query text is automa
     {
       "documents": [
         {
-          "content": "text content of the document chunk",
-          "metadata": {
+          "PageContent": "text content of the document chunk",
+          "Metadata": {
             "source": "filename.pdf",
             "page": 42
           },
-          "similarity_score": 0.92
+          "Score": 0.92
         }
       ]
     }
@@ -115,12 +115,12 @@ Perform similarity search using a pre-computed embedding vector. Useful when you
     {
       "documents": [
         {
-          "content": "text content of the document chunk",
-          "metadata": {
+          "PageContent": "text content of the document chunk",
+          "Metadata": {
             "source": "filename.pdf",
             "page": 42
           },
-          "similarity_score": 0.92
+          "Score": 0.92
         }
       ]
     }
@@ -149,12 +149,12 @@ Query documents using metadata filters only (no vector similarity search). Suppo
     {
       "documents": [
         {
-          "content": "text content of the document chunk",
-          "metadata": {
+          "PageContent": "text content of the document chunk",
+          "Metadata": {
             "source": "filename.pdf",
             "category": "technical"
           },
-          "similarity_score": 0.0
+          "Score": 0.0
         }
       ],
       "total_count": 42
