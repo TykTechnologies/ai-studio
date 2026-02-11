@@ -61,14 +61,17 @@ While the AI Portal primarily provides a web-based user interface, it is built o
 *   **Authentication API:** `/api/v1/auth/...` endpoints for managing user sessions.
 *   **Chat API:** `/api/v1/chat/...` endpoints for programmatic access to chat functionality.
 *   **User Profile API:** `/api/v1/users/...` endpoints for managing user information.
-*   **Datasource API:** `/datasource/{dsSlug}` endpoint for directly querying configured data sources.
+*   **Datasource API:** `/datasource/{dsSlug}` endpoints for querying configured data sources, generating embeddings, and metadata filtering.
 
 ### Datasource API
 
-The Datasource API allows direct semantic search against configured vector stores:
+The Datasource API provides direct access to configured vector stores for semantic search, vector-based search, metadata filtering, and embedding generation.
 
-*   **Endpoint:** `/datasource/{dsSlug}` (where `{dsSlug}` is the datasource identifier)
-*   **Method:** POST
+#### Text Search
+
+Perform semantic search using a natural language query. The query text is automatically converted to an embedding vector.
+
+*   **Endpoint:** `POST /datasource/{dsSlug}`
 *   **Authentication:** Bearer token required
 *   **Request Format:**
     ```json
@@ -82,18 +85,105 @@ The Datasource API allows direct semantic search against configured vector store
     {
       "documents": [
         {
-          "content": "text content of the document chunk",
-          "metadata": {
+          "PageContent": "text content of the document chunk",
+          "Metadata": {
             "source": "filename.pdf",
             "page": 42
-          }
-        },
-        // additional results...
+          },
+          "Score": 0.92
+        }
       ]
     }
     ```
 
-**Important Note:** The endpoint does not accept a trailing slash. Use `/datasource/{dsSlug}` and not `/datasource/{dsSlug}/`.
+#### Vector Search
+
+Perform similarity search using a pre-computed embedding vector. Useful when you have already generated embeddings or want to use a custom embedding strategy.
+
+*   **Endpoint:** `POST /datasource/{dsSlug}/vector`
+*   **Authentication:** Bearer token required
+*   **Request Format:**
+    ```json
+    {
+      "embedding": [0.1, 0.2, 0.3, ...],
+      "n": 10,                    // optional, max results (default: 10)
+      "similarity_threshold": 0.7  // optional, minimum score filter (default: 0.0)
+    }
+    ```
+*   **Response Format:**
+    ```json
+    {
+      "documents": [
+        {
+          "PageContent": "text content of the document chunk",
+          "Metadata": {
+            "source": "filename.pdf",
+            "page": 42
+          },
+          "Score": 0.92
+        }
+      ]
+    }
+    ```
+
+#### Metadata Query
+
+Query documents using metadata filters only (no vector similarity search). Supports pagination.
+
+*   **Endpoint:** `POST /datasource/{dsSlug}/metadata`
+*   **Authentication:** Bearer token required
+*   **Request Format:**
+    ```json
+    {
+      "filter": {
+        "source": "filename.pdf",
+        "category": "technical"
+      },
+      "filter_mode": "AND",  // optional, "AND" or "OR" (default: "AND")
+      "limit": 10,           // optional, max results (default: 10, max: 100)
+      "offset": 0            // optional, pagination offset (default: 0)
+    }
+    ```
+*   **Response Format:**
+    ```json
+    {
+      "documents": [
+        {
+          "PageContent": "text content of the document chunk",
+          "Metadata": {
+            "source": "filename.pdf",
+            "category": "technical"
+          },
+          "Score": 0.0
+        }
+      ],
+      "total_count": 42
+    }
+    ```
+
+#### Generate Embeddings
+
+Generate embedding vectors for text chunks without storing them. The datasource must have an embedder configured.
+
+*   **Endpoint:** `POST /datasource/{dsSlug}/embeddings`
+*   **Authentication:** Bearer token required
+*   **Request Format:**
+    ```json
+    {
+      "texts": ["first text chunk", "second text chunk"]  // max 100 items
+    }
+    ```
+*   **Response Format:**
+    ```json
+    {
+      "vectors": [
+        [0.1, 0.2, 0.3, ...],
+        [0.4, 0.5, 0.6, ...]
+      ]
+    }
+    ```
+
+**Important Note:** Datasource endpoints do not accept a trailing slash. Use `/datasource/{dsSlug}` not `/datasource/{dsSlug}/`.
 
 This API-first approach ensures that all functionality available through the AI Portal can also be accessed programmatically for custom applications or integrations.
 

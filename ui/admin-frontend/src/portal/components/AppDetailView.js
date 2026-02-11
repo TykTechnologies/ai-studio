@@ -903,6 +903,139 @@ const AppDetailView = () => {
                     </IconButton>
                   </Box>
                 </Box>
+
+                <Accordion
+                  sx={{
+                    mt: 3,
+                    boxShadow: 'none',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    '&:before': { display: 'none' }
+                  }}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    sx={{
+                      bgcolor: 'background.default',
+                      '& .MuiAccordionSummary-content': {
+                        alignItems: 'center'
+                      }
+                    }}
+                  >
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Additional Endpoints
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      These endpoints provide advanced datasource capabilities including vector search, metadata filtering, and embedding generation.
+                    </Typography>
+
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <FieldLabel sx={{ minWidth: "140px" }}>Vector Search:</FieldLabel>
+                        <Box>
+                          <Tooltip title="POST a JSON body with an 'embedding' vector array, optional 'n' (max results) and 'similarity_threshold' to perform similarity search using a pre-computed embedding">
+                            <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                          </Tooltip>
+                        </Box>
+                        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                          <Typography
+                            variant="body2"
+                            component="code"
+                            sx={{
+                              fontFamily: "monospace",
+                              bgcolor: "background.paper",
+                              p: 1,
+                              borderRadius: 1,
+                              flexGrow: 1,
+                            }}
+                          >
+                            {generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/vector"}
+                          </Typography>
+                          <IconButton
+                            onClick={() =>
+                              copyToClipboard(
+                                generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/vector"
+                              )
+                            }
+                            size="small"
+                          >
+                            <ContentCopyIcon />
+                          </IconButton>
+                        </Box>
+                      </Box>
+
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <FieldLabel sx={{ minWidth: "140px" }}>Metadata Query:</FieldLabel>
+                        <Box>
+                          <Tooltip title="POST a JSON body with a 'filter' object (key-value pairs), optional 'filter_mode' (AND/OR), 'limit' and 'offset' for paginated metadata-only queries">
+                            <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                          </Tooltip>
+                        </Box>
+                        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                          <Typography
+                            variant="body2"
+                            component="code"
+                            sx={{
+                              fontFamily: "monospace",
+                              bgcolor: "background.paper",
+                              p: 1,
+                              borderRadius: 1,
+                              flexGrow: 1,
+                            }}
+                          >
+                            {generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/metadata"}
+                          </Typography>
+                          <IconButton
+                            onClick={() =>
+                              copyToClipboard(
+                                generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/metadata"
+                              )
+                            }
+                            size="small"
+                          >
+                            <ContentCopyIcon />
+                          </IconButton>
+                        </Box>
+                      </Box>
+
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <FieldLabel sx={{ minWidth: "140px" }}>Embeddings:</FieldLabel>
+                        <Box>
+                          <Tooltip title="POST a JSON body with a 'texts' array (max 100 items) to generate embedding vectors without storing them">
+                            <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                          </Tooltip>
+                        </Box>
+                        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                          <Typography
+                            variant="body2"
+                            component="code"
+                            sx={{
+                              fontFamily: "monospace",
+                              bgcolor: "background.paper",
+                              p: 1,
+                              borderRadius: 1,
+                              flexGrow: 1,
+                            }}
+                          >
+                            {generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/embeddings"}
+                          </Typography>
+                          <IconButton
+                            onClick={() =>
+                              copyToClipboard(
+                                generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/embeddings"
+                              )
+                            }
+                            size="small"
+                          >
+                            <ContentCopyIcon />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </AccordionDetails>
+                </Accordion>
               </CardContent>
             </Card>
           ))
