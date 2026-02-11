@@ -38,14 +38,15 @@ func newTestProxyWithDatasource(t *testing.T, ds *models.Datasource) *Proxy {
 	return p
 }
 
-// callHandler invokes a Proxy handler directly with mux vars and a JSON body.
-func callHandler(handler http.HandlerFunc, vars map[string]string, body interface{}) *httptest.ResponseRecorder {
-	bodyBytes, _ := json.Marshal(body)
-	req := httptest.NewRequest(http.MethodPost, "/datasource/test-ds", bytes.NewReader(bodyBytes))
-	req = mux.SetURLVars(req, vars)
-	w := httptest.NewRecorder()
-	handler(w, req)
-	return w
+// testAppWithDatasource returns an App that has access to the given datasource.
+func testAppWithDatasource(ds *models.Datasource) *models.App {
+	matchingDS := models.Datasource{}
+	matchingDS.ID = ds.ID
+	return &models.App{
+		Model:       gorm.Model{ID: 1},
+		Name:        "Test App",
+		Datasources: []models.Datasource{matchingDS},
+	}
 }
 
 // callHandlerWithApp invokes a handler with an app set in the request context.
@@ -62,35 +63,46 @@ func callHandlerWithApp(handler http.HandlerFunc, vars map[string]string, body i
 	return w
 }
 
+// callHandlerRaw invokes a handler with raw bytes (no JSON marshaling) and an app context.
+func callHandlerRaw(handler http.HandlerFunc, vars map[string]string, body []byte, app *models.App) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/datasource/test-ds", bytes.NewReader(body))
+	req = mux.SetURLVars(req, vars)
+	if app != nil {
+		ctx := context.WithValue(req.Context(), "app", app)
+		req = req.WithContext(ctx)
+	}
+	w := httptest.NewRecorder()
+	handler(w, req)
+	return w
+}
+
 func TestHandleDatasourceVectorSearch(t *testing.T) {
 	ds := &models.Datasource{Name: "Test DS", Active: true, DBSourceType: "pinecone"}
 	ds.ID = 1
 	p := newTestProxyWithDatasource(t, ds)
+	app := testAppWithDatasource(ds)
 	vars := map[string]string{"dsSlug": "test-ds"}
 
 	t.Run("missing embedding returns 400", func(t *testing.T) {
-		w := callHandler(p.handleDatasourceVectorSearch, vars, VectorSearchQuery{})
+		w := callHandlerWithApp(p.handleDatasourceVectorSearch, vars, VectorSearchQuery{}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "embedding vector is required")
 	})
 
 	t.Run("empty embedding array returns 400", func(t *testing.T) {
-		w := callHandler(p.handleDatasourceVectorSearch, vars, VectorSearchQuery{Embedding: []float32{}})
+		w := callHandlerWithApp(p.handleDatasourceVectorSearch, vars, VectorSearchQuery{Embedding: []float32{}}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "embedding vector is required")
 	})
 
 	t.Run("datasource not found returns 404", func(t *testing.T) {
 		notFoundVars := map[string]string{"dsSlug": "nonexistent"}
-		w := callHandler(p.handleDatasourceVectorSearch, notFoundVars, VectorSearchQuery{Embedding: []float32{0.1}})
+		w := callHandlerWithApp(p.handleDatasourceVectorSearch, notFoundVars, VectorSearchQuery{Embedding: []float32{0.1}}, app)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
 	t.Run("invalid JSON returns 400", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/datasource/test-ds", bytes.NewReader([]byte("not json")))
-		req = mux.SetURLVars(req, vars)
-		w := httptest.NewRecorder()
-		p.handleDatasourceVectorSearch(w, req)
+		w := callHandlerRaw(p.handleDatasourceVectorSearch, vars, []byte("not json"), app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }
@@ -99,79 +111,80 @@ func TestHandleDatasourceMetadataQuery(t *testing.T) {
 	ds := &models.Datasource{Name: "Test DS", Active: true, DBSourceType: "pinecone"}
 	ds.ID = 1
 	p := newTestProxyWithDatasource(t, ds)
+	app := testAppWithDatasource(ds)
 	vars := map[string]string{"dsSlug": "test-ds"}
 
 	t.Run("missing filter returns 400", func(t *testing.T) {
-		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{})
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, vars, MetadataQuery{}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "filter is required")
 	})
 
 	t.Run("invalid filter_mode returns 400", func(t *testing.T) {
-		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
 			Filter:     map[string]string{"key": "val"},
 			FilterMode: "INVALID",
-		})
+		}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "filter_mode must be")
 	})
 
 	t.Run("limit exceeding 100 returns 400", func(t *testing.T) {
-		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
 			Filter: map[string]string{"key": "val"},
 			Limit:  200,
-		})
+		}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "limit must not exceed 100")
 	})
 
 	t.Run("valid filter_mode AND is accepted", func(t *testing.T) {
-		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
 			Filter:     map[string]string{"key": "val"},
 			FilterMode: "AND",
-		})
+		}, app)
 		// Will fail at the data session layer (no real vector store), but should NOT be 400
 		assert.NotEqual(t, http.StatusBadRequest, w.Code)
 	})
 
 	t.Run("valid filter_mode OR is accepted", func(t *testing.T) {
-		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
 			Filter:     map[string]string{"key": "val"},
 			FilterMode: "OR",
-		})
+		}, app)
 		assert.NotEqual(t, http.StatusBadRequest, w.Code)
 	})
 
 	t.Run("empty filter_mode defaults without error", func(t *testing.T) {
-		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
 			Filter: map[string]string{"key": "val"},
-		})
+		}, app)
 		// Empty string is allowed (data session layer defaults to "AND")
 		assert.NotEqual(t, http.StatusBadRequest, w.Code)
 	})
 
 	t.Run("datasource not found returns 404", func(t *testing.T) {
 		notFoundVars := map[string]string{"dsSlug": "nonexistent"}
-		w := callHandler(p.handleDatasourceMetadataQuery, notFoundVars, MetadataQuery{
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, notFoundVars, MetadataQuery{
 			Filter: map[string]string{"key": "val"},
-		})
+		}, app)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
 	t.Run("filter key too long returns 400", func(t *testing.T) {
 		longKey := strings.Repeat("k", 257)
-		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
 			Filter: map[string]string{longKey: "val"},
-		})
+		}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "filter keys must not exceed")
 	})
 
 	t.Run("filter value too long returns 400", func(t *testing.T) {
 		longVal := strings.Repeat("v", 1025)
-		w := callHandler(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
+		w := callHandlerWithApp(p.handleDatasourceMetadataQuery, vars, MetadataQuery{
 			Filter: map[string]string{"key": longVal},
-		})
+		}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "values must not exceed")
 	})
@@ -194,36 +207,40 @@ func TestHandleDatasourceGenerateEmbedding(t *testing.T) {
 
 	t.Run("missing embedder returns 400", func(t *testing.T) {
 		p := newTestProxyWithDatasource(t, dsWithoutEmbedder)
+		app := testAppWithDatasource(dsWithoutEmbedder)
 		vars := map[string]string{"dsSlug": "test-ds"}
-		w := callHandler(p.handleDatasourceGenerateEmbedding, vars, EmbeddingRequest{Texts: []string{"hello"}})
+		w := callHandlerWithApp(p.handleDatasourceGenerateEmbedding, vars, EmbeddingRequest{Texts: []string{"hello"}}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "embedder configured")
 	})
 
 	t.Run("empty texts returns 400", func(t *testing.T) {
 		p := newTestProxyWithDatasource(t, dsWithEmbedder)
+		app := testAppWithDatasource(dsWithEmbedder)
 		vars := map[string]string{"dsSlug": "test-ds"}
-		w := callHandler(p.handleDatasourceGenerateEmbedding, vars, EmbeddingRequest{Texts: []string{}})
+		w := callHandlerWithApp(p.handleDatasourceGenerateEmbedding, vars, EmbeddingRequest{Texts: []string{}}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "texts array is required")
 	})
 
 	t.Run("exceeding 100 texts returns 400", func(t *testing.T) {
 		p := newTestProxyWithDatasource(t, dsWithEmbedder)
+		app := testAppWithDatasource(dsWithEmbedder)
 		vars := map[string]string{"dsSlug": "test-ds"}
 		texts := make([]string, 101)
 		for i := range texts {
 			texts[i] = "text"
 		}
-		w := callHandler(p.handleDatasourceGenerateEmbedding, vars, EmbeddingRequest{Texts: texts})
+		w := callHandlerWithApp(p.handleDatasourceGenerateEmbedding, vars, EmbeddingRequest{Texts: texts}, app)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 		assert.Contains(t, w.Body.String(), "must not exceed 100")
 	})
 
 	t.Run("datasource not found returns 404", func(t *testing.T) {
 		p := newTestProxyWithDatasource(t, dsWithEmbedder)
+		app := testAppWithDatasource(dsWithEmbedder)
 		notFoundVars := map[string]string{"dsSlug": "nonexistent"}
-		w := callHandler(p.handleDatasourceGenerateEmbedding, notFoundVars, EmbeddingRequest{Texts: []string{"hello"}})
+		w := callHandlerWithApp(p.handleDatasourceGenerateEmbedding, notFoundVars, EmbeddingRequest{Texts: []string{"hello"}}, app)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 }
@@ -249,27 +266,21 @@ func TestDatasourceAccessControl(t *testing.T) {
 	t.Run("app with matching datasource is allowed", func(t *testing.T) {
 		p := newTestProxyWithDatasource(t, ds)
 		vars := map[string]string{"dsSlug": "test-ds"}
-		matchingDS := models.Datasource{}
-		matchingDS.ID = 1 // matches ds.ID
-		app := &models.App{
-			Model: gorm.Model{ID: 1},
-			Name:  "Test App",
-			Datasources: []models.Datasource{matchingDS},
-		}
+		app := testAppWithDatasource(ds)
 		w := callHandlerWithApp(p.handleDatasourceVectorSearch, vars,
 			VectorSearchQuery{Embedding: []float32{0.1}}, app)
 		// Should pass access check (will fail at vector store layer, but not 403)
 		assert.NotEqual(t, http.StatusForbidden, w.Code)
 	})
 
-	t.Run("no app in context allows access", func(t *testing.T) {
+	t.Run("no app in context returns 401", func(t *testing.T) {
 		p := newTestProxyWithDatasource(t, ds)
 		vars := map[string]string{"dsSlug": "test-ds"}
-		// callHandler does NOT set app in context
-		w := callHandler(p.handleDatasourceVectorSearch, vars,
-			VectorSearchQuery{Embedding: []float32{0.1}})
-		// Should pass access check (no app = OAuth flow, allowed)
-		assert.NotEqual(t, http.StatusForbidden, w.Code)
+		// callHandlerWithApp with nil app = no app in context
+		w := callHandlerWithApp(p.handleDatasourceVectorSearch, vars,
+			VectorSearchQuery{Embedding: []float32{0.1}}, nil)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.Contains(t, w.Body.String(), "app authentication required")
 	})
 
 	t.Run("access check applies to metadata endpoint", func(t *testing.T) {

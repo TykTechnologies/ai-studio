@@ -808,8 +808,8 @@ const datasourceMaxBodyBytes = 1 << 20 // 1MB max request body for datasource en
 func (p *Proxy) checkDatasourceAccess(w http.ResponseWriter, r *http.Request, ds *models.Datasource) bool {
 	app, ok := r.Context().Value("app").(*models.App)
 	if !ok {
-		// No app in context (e.g., OAuth flow) — allow access
-		return true
+		respondWithError(w, http.StatusUnauthorized, "app authentication required for datasource access", nil, false)
+		return false
 	}
 	for _, d := range app.Datasources {
 		if d.ID == ds.ID {
