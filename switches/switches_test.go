@@ -380,6 +380,7 @@ func TestFetchDriver_WithHTTPClient_AllVendors(t *testing.T) {
 		vendor    models.Vendor
 		llmConfig *models.LLM
 		settings  *models.LLMSettings
+		wantErr   bool
 	}{
 		{
 			name:   "OpenAI with custom HTTP client",
@@ -427,6 +428,15 @@ func TestFetchDriver_WithHTTPClient_AllVendors(t *testing.T) {
 				ModelName: "gemini-pro",
 			},
 		},
+		{
+			name:   "Unsupported LLM",
+			vendor: models.MOCK_VENDOR,
+			llmConfig: &models.LLM{
+				Vendor: models.MOCK_VENDOR,
+				APIKey: "test-key",
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -443,7 +453,11 @@ func TestFetchDriver_WithHTTPClient_AllVendors(t *testing.T) {
 				nil,
 				WithHTTPClient(httpClient),
 			)
-			assert.NoError(t, err)
+			if tt.wantErr {
+				assert.Error(t, err, "FetchDriver() succeeded unexpectedly")
+				return
+			}
+
 			assert.NotNil(t, driver, "FetchDriver() returned nil driver")
 		})
 	}
