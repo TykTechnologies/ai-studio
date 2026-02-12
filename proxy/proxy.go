@@ -537,6 +537,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			logger.Debugf("REST proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
 		}
 		req.Host = upstreamURL.Host
+		// Clear the Auth header, some vendors don't use it for auth and return error if its present(e.g Google AI)
+		req.Header.Del("Authorization")
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
 			logger.Errorf("ERROR setting vendor auth header in director: %v", err)
 			// Cannot write http error from director. This needs robust handling or pre-flight check.
