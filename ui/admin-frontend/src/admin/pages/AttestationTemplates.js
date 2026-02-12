@@ -326,7 +326,7 @@ const AttestationTemplates = () => {
             rows={3}
             required
             sx={{ mt: 2 }}
-            helperText="The text the submitter must agree to"
+            helperText="Supports Markdown — use [link text](https://url) for links"
           />
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Applies To</InputLabel>

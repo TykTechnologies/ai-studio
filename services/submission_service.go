@@ -121,12 +121,19 @@ func (s *Service) SubmitSubmission(id, submitterID uint) (*models.Submission, er
 	}
 
 	now := time.Now()
+	wasChangesRequested := submission.Status == models.SubmissionStatusChangesRequested
 	submission.Status = models.SubmissionStatusSubmitted
 	submission.SubmittedAt = &now
 
 	if err := submission.Update(s.DB); err != nil {
 		return nil, err
 	}
+
+	activityType := models.ActivityTypeSubmitted
+	if wasChangesRequested {
+		activityType = models.ActivityTypeResubmitted
+	}
+	s.RecordSubmissionActivity(submission.ID, submitterID, "", activityType, "", "")
 
 	if s.NotificationService != nil {
 		s.notifyAdminsOfSubmission(submission)
@@ -199,6 +206,9 @@ func (s *Service) StartReview(submissionID, reviewerID uint) (*models.Submission
 	if err := submission.Update(s.DB); err != nil {
 		return nil, err
 	}
+
+	s.RecordSubmissionActivity(submission.ID, reviewerID, "", models.ActivityTypeReviewStarted, "", "")
+
 	return submission, nil
 }
 
@@ -242,6 +252,8 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 		return nil, err
 	}
 
+	s.RecordSubmissionActivity(submissionID, reviewerID, "", models.ActivityTypeApproved, "", reviewNotes)
+
 	// Notify submitter
 	if s.NotificationService != nil {
 		s.notifySubmitterOfDecision(submission, "approved")
@@ -272,6 +284,8 @@ func (s *Service) RejectSubmission(submissionID, reviewerID uint, feedback, revi
 		return nil, err
 	}
 
+	s.RecordSubmissionActivity(submissionID, reviewerID, "", models.ActivityTypeRejected, feedback, reviewNotes)
+
 	if s.NotificationService != nil {
 		s.notifySubmitterOfDecision(submission, "rejected")
 	}
@@ -298,6 +312,8 @@ func (s *Service) RequestChanges(submissionID, reviewerID uint, feedback, review
 	if err := submission.Update(s.DB); err != nil {
 		return nil, err
 	}
+
+	s.RecordSubmissionActivity(submissionID, reviewerID, "", models.ActivityTypeChangesRequested, feedback, reviewNotes)
 
 	if s.NotificationService != nil {
 		s.notifySubmitterOfDecision(submission, "changes_requested")

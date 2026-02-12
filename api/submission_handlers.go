@@ -874,6 +874,93 @@ func (a *API) adminTestSubmission(c *gin.Context) {
 	}
 }
 
+// --- Activity/audit trail endpoints ---
+
+// adminGetSubmissionActivities handles GET /api/v1/submissions/:id/activities
+func (a *API) adminGetSubmissionActivities(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "invalid submission ID"}},
+		})
+		return
+	}
+
+	activities, err := a.service.GetSubmissionActivities(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": activities})
+}
+
+// getMySubmissionActivities handles GET /common/submissions/:id/activities (portal users — hides internal notes)
+func (a *API) getMySubmissionActivities(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "invalid submission ID"}},
+		})
+		return
+	}
+
+	// Verify ownership
+	submission, err := a.service.GetSubmissionByID(uint(id))
+	if err != nil || submission.SubmitterID != currentUser.ID {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "not authorized"}},
+		})
+		return
+	}
+
+	activities, err := a.service.GetSubmissionActivities(uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	// Strip internal notes for portal users
+	sanitized := make([]gin.H, len(activities))
+	for i, a := range activities {
+		sanitized[i] = gin.H{
+			"id":            a.ID,
+			"activity_type": a.ActivityType,
+			"actor_name":    a.ActorName,
+			"feedback":      a.Feedback,
+			"created_at":    a.CreatedAt,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": sanitized})
+}
+
 // --- Admin submission handlers ---
 
 // adminListSubmissions handles GET /api/v1/submissions

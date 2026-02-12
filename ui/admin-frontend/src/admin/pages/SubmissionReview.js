@@ -41,6 +41,7 @@ const SubmissionReview = () => {
   const [testResult, setTestResult] = useState(null);
   const [testing, setTesting] = useState(false);
   const [versions, setVersions] = useState([]);
+  const [activities, setActivities] = useState([]);
 
   // Dialog state
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
@@ -79,6 +80,16 @@ const SubmissionReview = () => {
         } catch (e) {
           // Versions may not exist
         }
+      }
+
+      // Fetch activity audit trail
+      try {
+        const activitiesResponse = await apiClient.get(
+          `/submissions/${id}/activities`
+        );
+        setActivities(activitiesResponse.data.data || []);
+      } catch (e) {
+        // Activities may not exist yet
       }
     } catch (err) {
       setSnackbar({
@@ -492,6 +503,57 @@ const SubmissionReview = () => {
                 </Box>
               )}
             </Paper>
+
+            {/* Activity audit trail */}
+            {activities.length > 0 && (
+              <Paper sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Review History
+                </Typography>
+                {activities.map((activity) => (
+                  <Box
+                    key={activity.id || activity.ID}
+                    sx={{
+                      py: 1.5,
+                      borderBottom: "1px solid rgba(0,0,0,0.08)",
+                      "&:last-child": { borderBottom: "none" },
+                    }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                      <Chip
+                        label={activity.activity_type?.replace("_", " ")}
+                        size="small"
+                        sx={{ textTransform: "capitalize", fontWeight: "bold" }}
+                        color={
+                          activity.activity_type === "approved" ? "success" :
+                          activity.activity_type === "rejected" ? "error" :
+                          activity.activity_type === "changes_requested" ? "warning" :
+                          "default"
+                        }
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {activity.actor_name || `User #${activity.actor_id}`} —{" "}
+                        {new Date(activity.created_at || activity.CreatedAt).toLocaleString()}
+                      </Typography>
+                    </Box>
+                    {activity.feedback && (
+                      <Alert severity="info" variant="outlined" sx={{ mt: 0.5, py: 0 }}>
+                        <Typography variant="body2">
+                          <strong>Feedback:</strong> {activity.feedback}
+                        </Typography>
+                      </Alert>
+                    )}
+                    {activity.internal_note && (
+                      <Alert severity="warning" variant="outlined" sx={{ mt: 0.5, py: 0 }}>
+                        <Typography variant="body2">
+                          <strong>Internal note:</strong> {activity.internal_note}
+                        </Typography>
+                      </Alert>
+                    )}
+                  </Box>
+                ))}
+              </Paper>
+            )}
 
             {/* Version history */}
             {versions.length > 0 && (

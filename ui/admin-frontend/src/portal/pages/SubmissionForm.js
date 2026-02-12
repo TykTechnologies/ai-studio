@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 import pubClient from "../../admin/utils/pubClient";
 import {
   Container,
@@ -206,20 +207,52 @@ const SubmissionForm = () => {
     }
   };
 
-  const validateForm = () => {
+  const validateForm = (submitForReview = false) => {
     const newErrors = {};
     if (!resourceType) newErrors.resource_type = "Please select a resource type";
     if (!payload.name?.trim()) newErrors.name = "Name is required";
+    if (payload.name && payload.name.length > 200) newErrors.name = "Name must be under 200 characters";
+
+    // Validate documentation URL format
+    if (meta.documentation_url && meta.documentation_url.trim()) {
+      try {
+        new URL(meta.documentation_url);
+      } catch {
+        newErrors.documentation_url = "Must be a valid URL (e.g., https://docs.example.com)";
+      }
+    }
+
+    // Validate primary contact has at minimum some content
+    if (submitForReview && !meta.primary_contact?.trim()) {
+      newErrors.primary_contact = "Primary contact is required when submitting for review";
+    }
+
+    // Validate email-like pattern in contacts if provided
+    const emailPattern = /\S+@\S+\.\S+/;
+    if (meta.primary_contact && meta.primary_contact.includes("@") && !emailPattern.test(meta.primary_contact)) {
+      newErrors.primary_contact = "Contact must include a valid email address";
+    }
 
     if (resourceType === "datasource") {
       if (!payload.db_source_type)
         newErrors.db_source_type = "Vector DB type is required";
       if (!payload.embed_vendor)
         newErrors.embed_vendor = "Embedder vendor is required";
+      if (!payload.embed_model?.trim())
+        newErrors.embed_model = "Embedding model is required";
     }
 
     if (resourceType === "tool") {
       if (!payload.oas_spec) newErrors.oas_spec = "OAS spec is required";
+      if (!payload.tool_type) {
+        // Auto-set tool_type for tools
+        payload.tool_type = "REST";
+      }
+    }
+
+    // Privacy score range validation
+    if (meta.suggested_privacy < 0 || meta.suggested_privacy > 100) {
+      newErrors.suggested_privacy = "Privacy score must be between 0 and 100";
     }
 
     setErrors(newErrors);
@@ -227,7 +260,7 @@ const SubmissionForm = () => {
   };
 
   const handleSave = async (submitForReview = false) => {
-    if (!validateForm()) return;
+    if (!validateForm(submitForReview)) return;
 
     // Check required attestations for submit
     if (submitForReview) {
@@ -866,7 +899,8 @@ const SubmissionForm = () => {
                     onChange={(e) =>
                       handleMetaChange("primary_contact", e.target.value)
                     }
-                    helperText="Name and email"
+                    error={!!errors.primary_contact}
+                    helperText={errors.primary_contact || "Name and email"}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -887,6 +921,8 @@ const SubmissionForm = () => {
                     onChange={(e) =>
                       handleMetaChange("documentation_url", e.target.value)
                     }
+                    error={!!errors.documentation_url}
+                    helperText={errors.documentation_url}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -937,8 +973,23 @@ const SubmissionForm = () => {
                     />
                   }
                   label={
-                    <Typography variant="body2">
-                      {att.text}
+                    <Box sx={{ "& p": { m: 0 }, "& a": { color: "primary.main" } }}>
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => (
+                            <Typography variant="body2" component="span">
+                              {children}
+                            </Typography>
+                          ),
+                          a: ({ href, children }) => (
+                            <a href={href} target="_blank" rel="noopener noreferrer">
+                              {children}
+                            </a>
+                          ),
+                        }}
+                      >
+                        {att.text}
+                      </ReactMarkdown>
                       {att.required && (
                         <Typography
                           component="span"
@@ -949,7 +1000,7 @@ const SubmissionForm = () => {
                           (required)
                         </Typography>
                       )}
-                    </Typography>
+                    </Box>
                   }
                 />
               ))}

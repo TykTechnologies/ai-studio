@@ -498,6 +498,7 @@ func (a *API) setupRoutes() {
 	authed.POST("/submissions/check-duplicates", a.checkDuplicates)
 	authed.POST("/submissions/nominate/datasource/:id", a.nominateDatasource)
 	authed.POST("/submissions/nominate/tool/:id", a.nominateTool)
+	authed.GET("/submissions/:id/activities", a.getMySubmissionActivities)
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
@@ -841,6 +842,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/submissions/:id/versions", a.adminListVersions)
 	v1.POST("/submissions/:id/rollback/:version_id", a.adminRollbackVersion)
 	v1.GET("/submissions/orphaned", a.adminGetOrphanedResources)
+	v1.GET("/submissions/:id/activities", a.adminGetSubmissionActivities)
 
 	// Attestation Template routes (admin)
 	v1.GET("/attestation-templates", a.adminListAttestationTemplates)
