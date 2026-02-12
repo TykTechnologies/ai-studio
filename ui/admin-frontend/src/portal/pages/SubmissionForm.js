@@ -630,39 +630,7 @@ const SubmissionForm = () => {
                         }}
                       />
                     </Grid>
-                    <Grid item xs={12}>
-                      <PrimaryOutlineButton
-                        onClick={handleTestDatasource}
-                        disabled={
-                          !payload.embed_vendor || !payload.embed_model
-                        }
-                      >
-                        Test Embedder Connection
-                      </PrimaryOutlineButton>
-                      {testResult && (
-                        <Alert
-                          severity={
-                            testResult.embed_test_passed
-                              ? "success"
-                              : "error"
-                          }
-                          sx={{ mt: 1 }}
-                          icon={
-                            testResult.embed_test_passed ? (
-                              <CheckCircleIcon />
-                            ) : (
-                              <ErrorIcon />
-                            )
-                          }
-                        >
-                          {testResult.embed_test_passed
-                            ? "Embedder connection successful"
-                            : testResult.embedder_error ||
-                              testResult.embed_test_error ||
-                              "Connection failed"}
-                        </Alert>
-                      )}
-                    </Grid>
+                    {/* Connection testing is admin-only — available during review */}
                   </Grid>
                 </AccordionDetails>
               </Accordion>

@@ -6,13 +6,27 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-// CreateAttestationTemplate creates a new attestation template (admin)
-func (s *Service) CreateAttestationTemplate(name, text, appliesToType string, required, active bool, sortOrder int) (*models.AttestationTemplate, error) {
+// validateAttestationTemplateInput checks length limits and type validity for attestation template fields.
+func validateAttestationTemplateInput(name, text, appliesToType string) error {
+	if len(name) > 255 {
+		return fmt.Errorf("name must not exceed 255 characters")
+	}
+	if len(text) > 10000 {
+		return fmt.Errorf("text must not exceed 10,000 characters")
+	}
 	if appliesToType != models.AttestationAppliesToDatasource &&
 		appliesToType != models.AttestationAppliesToTool &&
 		appliesToType != models.AttestationAppliesToAll {
-		return nil, fmt.Errorf("invalid applies_to_type: must be '%s', '%s', or '%s'",
+		return fmt.Errorf("invalid applies_to_type: must be '%s', '%s', or '%s'",
 			models.AttestationAppliesToDatasource, models.AttestationAppliesToTool, models.AttestationAppliesToAll)
+	}
+	return nil
+}
+
+// CreateAttestationTemplate creates a new attestation template (admin)
+func (s *Service) CreateAttestationTemplate(name, text, appliesToType string, required, active bool, sortOrder int) (*models.AttestationTemplate, error) {
+	if err := validateAttestationTemplateInput(name, text, appliesToType); err != nil {
+		return nil, err
 	}
 
 	template := &models.AttestationTemplate{
@@ -46,11 +60,8 @@ func (s *Service) UpdateAttestationTemplate(id uint, name, text, appliesToType s
 		return nil, err
 	}
 
-	if appliesToType != models.AttestationAppliesToDatasource &&
-		appliesToType != models.AttestationAppliesToTool &&
-		appliesToType != models.AttestationAppliesToAll {
-		return nil, fmt.Errorf("invalid applies_to_type: must be '%s', '%s', or '%s'",
-			models.AttestationAppliesToDatasource, models.AttestationAppliesToTool, models.AttestationAppliesToAll)
+	if err := validateAttestationTemplateInput(name, text, appliesToType); err != nil {
+		return nil, err
 	}
 
 	template.Name = name

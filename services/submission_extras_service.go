@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -46,36 +45,43 @@ func (s *Service) findDuplicateDatasources(getString func(string) string) []Dupl
 
 	name := getString("name")
 	connString := getString("db_conn_string")
-	dbName := getString("db_name")
 
-	var datasources models.Datasources
-	s.DB.Find(&datasources)
-
-	for _, ds := range datasources {
-		// Check connection string match (strongest signal)
-		if connString != "" && ds.DBConnString != "" && ds.DBConnString == connString {
-			reason := "Same database connection string"
-			if dbName != "" && ds.DBName == dbName {
-				reason = "Same database connection string and namespace"
-			}
+	// Query DB directly instead of loading all records into memory
+	if connString != "" {
+		var connMatches []models.Datasource
+		s.DB.Where("db_conn_string = ?", connString).Limit(10).Find(&connMatches)
+		for _, ds := range connMatches {
 			candidates = append(candidates, DuplicateCandidate{
 				ID: ds.ID, Name: ds.Name,
-				ResourceType: models.SubmissionResourceTypeDatasource,
-				MatchReason: reason, PrivacyScore: ds.PrivacyScore,
+				ResourceType:      models.SubmissionResourceTypeDatasource,
+				MatchReason:       "Same database connection string",
+				PrivacyScore:      ds.PrivacyScore,
 				CommunitySubmitted: ds.CommunitySubmitted,
 			})
-			continue
 		}
+	}
 
-		// Check name similarity (weaker signal)
-		if name != "" && strings.EqualFold(ds.Name, name) {
-			candidates = append(candidates, DuplicateCandidate{
-				ID: ds.ID, Name: ds.Name,
-				ResourceType: models.SubmissionResourceTypeDatasource,
-				MatchReason: "Same name (case-insensitive)",
-				PrivacyScore: ds.PrivacyScore,
-				CommunitySubmitted: ds.CommunitySubmitted,
-			})
+	if name != "" {
+		var nameMatches []models.Datasource
+		s.DB.Where("LOWER(name) = LOWER(?)", name).Limit(10).Find(&nameMatches)
+		for _, ds := range nameMatches {
+			// Skip if already matched by connection string
+			alreadyMatched := false
+			for _, c := range candidates {
+				if c.ID == ds.ID {
+					alreadyMatched = true
+					break
+				}
+			}
+			if !alreadyMatched {
+				candidates = append(candidates, DuplicateCandidate{
+					ID: ds.ID, Name: ds.Name,
+					ResourceType:      models.SubmissionResourceTypeDatasource,
+					MatchReason:       "Same name (case-insensitive)",
+					PrivacyScore:      ds.PrivacyScore,
+					CommunitySubmitted: ds.CommunitySubmitted,
+				})
+			}
 		}
 	}
 
@@ -87,17 +93,15 @@ func (s *Service) findDuplicateTools(getString func(string) string) []DuplicateC
 
 	name := getString("name")
 
-	var tools models.Tools
-	s.DB.Find(&tools)
-
-	for _, tool := range tools {
-		// Check name match
-		if name != "" && strings.EqualFold(tool.Name, name) {
+	if name != "" {
+		var nameMatches []models.Tool
+		s.DB.Where("LOWER(name) = LOWER(?)", name).Limit(10).Find(&nameMatches)
+		for _, tool := range nameMatches {
 			candidates = append(candidates, DuplicateCandidate{
 				ID: tool.ID, Name: tool.Name,
-				ResourceType: models.SubmissionResourceTypeTool,
-				MatchReason: "Same name (case-insensitive)",
-				PrivacyScore: tool.PrivacyScore,
+				ResourceType:      models.SubmissionResourceTypeTool,
+				MatchReason:       "Same name (case-insensitive)",
+				PrivacyScore:      tool.PrivacyScore,
 				CommunitySubmitted: tool.CommunitySubmitted,
 			})
 		}
@@ -229,13 +233,21 @@ func (s *Service) NominateExistingDatasource(userID, datasourceID uint) (*models
 		payload["tags"] = tagNames
 	}
 
+	// Clamp privacy score to valid range for the submission
+	privacyScore := ds.PrivacyScore
+	if privacyScore < minPrivacyScore {
+		privacyScore = minPrivacyScore
+	} else if privacyScore > maxPrivacyScore {
+		privacyScore = maxPrivacyScore
+	}
+
 	return s.CreateSubmission(
 		userID,
 		models.SubmissionResourceTypeDatasource,
 		models.SubmissionStatusDraft,
 		payload,
 		nil,
-		ds.PrivacyScore,
+		privacyScore,
 		"",
 		"", "", "", nil, "", "",
 	)
@@ -270,13 +282,21 @@ func (s *Service) NominateExistingTool(userID, toolID uint) (*models.Submission,
 		// AuthKey intentionally omitted — submitter must re-enter
 	}
 
+	// Clamp privacy score to valid range for the submission
+	toolPrivacy := tool.PrivacyScore
+	if toolPrivacy < minPrivacyScore {
+		toolPrivacy = minPrivacyScore
+	} else if toolPrivacy > maxPrivacyScore {
+		toolPrivacy = maxPrivacyScore
+	}
+
 	return s.CreateSubmission(
 		userID,
 		models.SubmissionResourceTypeTool,
 		models.SubmissionStatusDraft,
 		payload,
 		nil,
-		tool.PrivacyScore,
+		toolPrivacy,
 		"",
 		"", "", "", nil, "", "",
 	)

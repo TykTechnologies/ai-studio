@@ -51,7 +51,7 @@ func TestCreateSubmission_Draft(t *testing.T) {
 		models.SubmissionResourceTypeDatasource,
 		models.SubmissionStatusDraft,
 		models.JSONMap{"name": "My Vector DB", "db_source_type": "pgvector"},
-		nil, 50, "Contains product data only",
+		nil, 5, "Contains product data only",
 		"submitter@test.com", "", "", nil, "", "",
 	)
 	assert.NoError(t, err)
@@ -72,7 +72,7 @@ func TestCreateSubmission_Submitted(t *testing.T) {
 		models.SubmissionResourceTypeTool,
 		models.SubmissionStatusSubmitted,
 		models.JSONMap{"name": "Weather API", "tool_type": "REST"},
-		nil, 30, "Public API",
+		nil, 3, "Public API",
 		"submitter@test.com", "", "", nil, "", "",
 	)
 	assert.NoError(t, err)
@@ -87,7 +87,7 @@ func TestCreateSubmission_InvalidResourceType(t *testing.T) {
 
 	_, err := service.CreateSubmission(
 		user.ID, "invalid_type", models.SubmissionStatusDraft,
-		models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid resource type")
@@ -100,7 +100,7 @@ func TestCreateSubmission_InvalidInitialStatus(t *testing.T) {
 
 	_, err := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusApproved,
-		models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "initial status must be")
@@ -113,16 +113,16 @@ func TestUpdateSubmission_DraftOnly(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-		models.JSONMap{"name": "Original"}, nil, 50, "", "contact@test.com", "", "", nil, "", "",
+		models.JSONMap{"name": "Original"}, nil, 5, "", "contact@test.com", "", "", nil, "", "",
 	)
 
 	updated, err := service.UpdateSubmission(
 		submission.ID, user.ID,
-		models.JSONMap{"name": "Updated"}, nil, 60, "Updated justification",
+		models.JSONMap{"name": "Updated"}, nil, 6, "Updated justification",
 		"new-contact@test.com", "", "", nil, "", "",
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, 60, updated.SuggestedPrivacy)
+	assert.Equal(t, 6, updated.SuggestedPrivacy)
 	assert.Equal(t, "new-contact@test.com", updated.PrimaryContact)
 }
 
@@ -134,11 +134,11 @@ func TestUpdateSubmission_WrongUser(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user1.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-		models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	_, err := service.UpdateSubmission(
-		submission.ID, user2.ID, models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		submission.ID, user2.ID, models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not authorized")
@@ -151,11 +151,11 @@ func TestUpdateSubmission_CannotUpdateSubmittedStatus(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
-		models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	_, err := service.UpdateSubmission(
-		submission.ID, user.ID, models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		submission.ID, user.ID, models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "can only update submissions")
@@ -168,7 +168,7 @@ func TestSubmitSubmission(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-		models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	submitted, err := service.SubmitSubmission(submission.ID, user.ID)
@@ -185,7 +185,7 @@ func TestSubmitSubmission_WrongUser(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user1.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-		models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	_, err := service.SubmitSubmission(submission.ID, user2.ID)
@@ -200,7 +200,7 @@ func TestDeleteSubmission_DraftOnly(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-		models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	err := service.DeleteSubmission(submission.ID, user.ID)
@@ -217,7 +217,7 @@ func TestDeleteSubmission_CannotDeleteSubmitted(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
-		models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	err := service.DeleteSubmission(submission.ID, user.ID)
@@ -230,9 +230,9 @@ func TestGetSubmissionsBySubmitter(t *testing.T) {
 	service := NewService(db)
 	user := createSubmissionTestUser(t, service, "submitter@test.com")
 
-	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft, models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "")
-	service.CreateSubmission(user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 30, "", "", "", "", nil, "", "")
-	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft, models.JSONMap{}, nil, 60, "", "", "", "", nil, "", "")
+	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft, models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "")
+	service.CreateSubmission(user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 3, "", "", "", "", nil, "", "")
+	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft, models.JSONMap{}, nil, 6, "", "", "", "", nil, "", "")
 
 	// All submissions
 	submissions, totalCount, _, err := service.GetSubmissionsBySubmitter(user.ID, "", 10, 1)
@@ -261,7 +261,7 @@ func TestAdminReviewWorkflow(t *testing.T) {
 			"embed_vendor":   "openai",
 			"embed_model":    "text-embedding-3-small",
 		},
-		nil, 50, "Low sensitivity data",
+		nil, 5, "Low sensitivity data",
 		"contact@test.com", "", "", nil, "", "",
 	)
 
@@ -297,16 +297,16 @@ func TestAdminApproveSubmission_Datasource(t *testing.T) {
 			"embed_model":      "text-embedding-3-small",
 			"active":           true,
 		},
-		nil, 50, "Low sensitivity",
+		nil, 5, "Low sensitivity",
 		"contact@test.com", "", "", nil, "", "",
 	)
 
-	approved, err := service.ApproveSubmission(submission.ID, admin.ID, 45, models.JSONMap{"catalogue_ids": []int{1}}, "Looks good")
+	approved, err := service.ApproveSubmission(submission.ID, admin.ID, 5, models.JSONMap{"catalogue_ids": []int{1}}, "Looks good")
 	assert.NoError(t, err)
 	assert.Equal(t, models.SubmissionStatusApproved, approved.Status)
 	assert.NotNil(t, approved.ResourceID)
 	assert.NotNil(t, approved.ReviewCompletedAt)
-	finalScore := 45
+	finalScore := 5
 	assert.Equal(t, &finalScore, approved.FinalPrivacyScore)
 
 	// Verify the datasource was created
@@ -314,7 +314,7 @@ func TestAdminApproveSubmission_Datasource(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "Community Vector DB", ds.Name)
 	assert.True(t, ds.CommunitySubmitted)
-	assert.Equal(t, 45, ds.PrivacyScore)
+	assert.Equal(t, 5, ds.PrivacyScore)
 	assert.Equal(t, user.ID, ds.UserID)
 }
 
@@ -332,11 +332,11 @@ func TestAdminApproveSubmission_Tool(t *testing.T) {
 			"tool_type":   "REST",
 			"oas_spec":    "dGVzdA==", // base64 of "test"
 		},
-		nil, 20, "Public API",
+		nil, 2, "Public API",
 		"contact@test.com", "", "", nil, "", "",
 	)
 
-	approved, err := service.ApproveSubmission(submission.ID, admin.ID, 15, nil, "Approved")
+	approved, err := service.ApproveSubmission(submission.ID, admin.ID, 2, nil, "Approved")
 	assert.NoError(t, err)
 	assert.Equal(t, models.SubmissionStatusApproved, approved.Status)
 	assert.NotNil(t, approved.ResourceID)
@@ -347,7 +347,7 @@ func TestAdminApproveSubmission_Tool(t *testing.T) {
 	assert.Equal(t, "Weather API", tool.Name)
 	assert.True(t, tool.CommunitySubmitted)
 	assert.Equal(t, user.ID, tool.UserID)
-	assert.Equal(t, 15, tool.PrivacyScore)
+	assert.Equal(t, 2, tool.PrivacyScore)
 }
 
 func TestAdminRejectSubmission(t *testing.T) {
@@ -358,7 +358,7 @@ func TestAdminRejectSubmission(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
-		models.JSONMap{"name": "Bad DS"}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{"name": "Bad DS"}, nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	rejected, err := service.RejectSubmission(submission.ID, admin.ID, "Insufficient documentation", "Internal: not enough info")
@@ -378,7 +378,7 @@ func TestAdminRequestChanges(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
-		models.JSONMap{"name": "Needs Work"}, nil, 50, "", "", "", "", nil, "", "",
+		models.JSONMap{"name": "Needs Work"}, nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	changed, err := service.RequestChanges(submission.ID, admin.ID, "Please add documentation URL", "")
@@ -390,7 +390,7 @@ func TestAdminRequestChanges(t *testing.T) {
 	updated, err := service.UpdateSubmission(
 		submission.ID, user.ID,
 		models.JSONMap{"name": "Needs Work", "documentation_url": "https://docs.example.com"},
-		nil, 50, "", "", "", "", nil, "https://docs.example.com", "",
+		nil, 5, "", "", "", "", nil, "https://docs.example.com", "",
 	)
 	assert.NoError(t, err)
 	assert.Equal(t, "https://docs.example.com", updated.DocumentationURL)
@@ -406,9 +406,9 @@ func TestGetAllSubmissions_AdminFiltering(t *testing.T) {
 	service := NewService(db)
 	user := createSubmissionTestUser(t, service, "submitter@test.com")
 
-	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft, models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "")
-	service.CreateSubmission(user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 30, "", "", "", "", nil, "", "")
-	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 60, "", "", "", "", nil, "", "")
+	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft, models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "")
+	service.CreateSubmission(user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 3, "", "", "", "", nil, "", "")
+	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 6, "", "", "", "", nil, "", "")
 
 	// No filter
 	all, count, _, err := service.GetAllSubmissions("", "", 10, 1)
@@ -434,9 +434,9 @@ func TestGetSubmissionStatusCounts(t *testing.T) {
 	service := NewService(db)
 	user := createSubmissionTestUser(t, service, "submitter@test.com")
 
-	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft, models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "")
-	service.CreateSubmission(user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 30, "", "", "", "", nil, "", "")
-	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 60, "", "", "", "", nil, "", "")
+	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft, models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "")
+	service.CreateSubmission(user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 3, "", "", "", "", nil, "", "")
+	service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted, models.JSONMap{}, nil, 6, "", "", "", "", nil, "", "")
 
 	counts, err := service.GetSubmissionStatusCounts()
 	assert.NoError(t, err)

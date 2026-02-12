@@ -494,7 +494,6 @@ func (a *API) setupRoutes() {
 	authed.GET("/submissions/attestation-templates", a.getAttestationTemplatesForSubmission)
 	authed.POST("/submissions/update", a.createUpdateSubmission)
 	authed.POST("/submissions/validate-spec", a.validateOASSpec)
-	authed.POST("/submissions/test-datasource", a.testDatasourceConnectivity)
 	authed.POST("/submissions/check-duplicates", a.checkDuplicates)
 	authed.POST("/submissions/nominate/datasource/:id", a.nominateDatasource)
 	authed.POST("/submissions/nominate/tool/:id", a.nominateTool)
@@ -843,6 +842,7 @@ func (a *API) setupRoutes() {
 	v1.POST("/submissions/:id/rollback/:version_id", a.adminRollbackVersion)
 	v1.GET("/submissions/orphaned", a.adminGetOrphanedResources)
 	v1.GET("/submissions/:id/activities", a.adminGetSubmissionActivities)
+	v1.POST("/submissions/test-datasource", a.testDatasourceConnectivity)
 
 	// Attestation Template routes (admin)
 	v1.GET("/attestation-templates", a.adminListAttestationTemplates)

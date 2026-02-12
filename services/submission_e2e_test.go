@@ -85,7 +85,7 @@ func TestE2E_DatasourceSubmission_FullLifecycle(t *testing.T) {
 		models.JSONMap{"attestations": []interface{}{
 			map[string]interface{}{"template_id": tmpl.ID, "accepted": true},
 		}},
-		50, "Contains only public product review data",
+		5, "Contains only public product review data",
 		"dev@company.com", "team-lead@company.com",
 		"99.9% uptime during business hours", nil,
 		"https://docs.internal.com/product-embeddings", "First version of our product embedding DB",
@@ -122,7 +122,7 @@ func TestE2E_DatasourceSubmission_FullLifecycle(t *testing.T) {
 
 	// ---- Step 6: Admin approves ----
 	t.Log("Step 6: Admin approves submission")
-	approved, err := svc.ApproveSubmission(draft.ID, admin.ID, 45, models.JSONMap{"catalogue_ids": []int{1}}, "Good quality data source")
+	approved, err := svc.ApproveSubmission(draft.ID, admin.ID, 5, models.JSONMap{"catalogue_ids": []int{1}}, "Good quality data source")
 	require.NoError(t, err)
 	assert.Equal(t, models.SubmissionStatusApproved, approved.Status)
 	assert.NotNil(t, approved.ResourceID)
@@ -134,7 +134,7 @@ func TestE2E_DatasourceSubmission_FullLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Product Embeddings", ds.Name)
 	assert.Equal(t, "pgvector", ds.DBSourceType)
-	assert.Equal(t, 45, ds.PrivacyScore) // admin-set score
+	assert.Equal(t, 5, ds.PrivacyScore) // admin-set score
 	assert.Equal(t, developer.ID, ds.UserID)
 	assert.True(t, ds.CommunitySubmitted)
 
@@ -146,7 +146,7 @@ func TestE2E_DatasourceSubmission_FullLifecycle(t *testing.T) {
 			"name":              "Product Embeddings v2",
 			"short_description": "Updated with 2024 reviews",
 		},
-		nil, 50, "", "dev@company.com", "", "", nil, "", "Added 2024 review data",
+		nil, 5, "", "dev@company.com", "", "", nil, "", "Added 2024 review data",
 		models.SubmissionStatusSubmitted,
 	)
 	require.NoError(t, err)
@@ -155,7 +155,7 @@ func TestE2E_DatasourceSubmission_FullLifecycle(t *testing.T) {
 
 	// ---- Step 9: Admin approves update → version created ----
 	t.Log("Step 9: Admin approves update")
-	approvedUpdate, err := svc.ApproveSubmission(updateSub.ID, admin.ID, 45, nil, "Update approved")
+	approvedUpdate, err := svc.ApproveSubmission(updateSub.ID, admin.ID, 5, nil, "Update approved")
 	require.NoError(t, err)
 	assert.Equal(t, models.SubmissionStatusApproved, approvedUpdate.Status)
 
@@ -255,7 +255,7 @@ components:
 
 	submission, err := svc.CreateSubmission(
 		developer.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusSubmitted,
-		toolPayload, nil, 20, "Public weather API, no sensitive data",
+		toolPayload, nil, 2, "Public weather API, no sensitive data",
 		"dev@company.com", "", "", nil,
 		"https://docs.weather.example.com", "",
 	)
@@ -288,7 +288,7 @@ components:
 
 	resubmission, err := svc.CreateSubmission(
 		developer.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusSubmitted,
-		improvedPayload, nil, 20, "Public weather API",
+		improvedPayload, nil, 2, "Public weather API",
 		"dev@company.com", "", "", nil,
 		"https://docs.weather.example.com",
 		"Rate limit: 100 req/min. Error codes documented in description.",
@@ -297,7 +297,7 @@ components:
 
 	// ---- Step 5: Admin approves ----
 	t.Log("Step 5: Admin approves improved submission")
-	approved, err := svc.ApproveSubmission(resubmission.ID, admin.ID, 15, nil, "Much better, approved")
+	approved, err := svc.ApproveSubmission(resubmission.ID, admin.ID, 2, nil, "Much better, approved")
 	require.NoError(t, err)
 	assert.Equal(t, models.SubmissionStatusApproved, approved.Status)
 	assert.NotNil(t, approved.ResourceID)
@@ -309,7 +309,7 @@ components:
 	assert.Equal(t, "Weather API", tool.Name)
 	assert.True(t, tool.CommunitySubmitted)
 	assert.Equal(t, developer.ID, tool.UserID)
-	assert.Equal(t, 15, tool.PrivacyScore)
+	assert.Equal(t, 2, tool.PrivacyScore)
 	assert.Contains(t, tool.Description, "Rate limit")
 }
 
@@ -332,7 +332,7 @@ func TestE2E_ChangesRequestedFlow(t *testing.T) {
 			"embed_model":    "text-embedding-3-small",
 			"active":         true,
 		},
-		nil, 70, "", "dev@company.com", "", "", nil, "", "",
+		nil, 7, "", "dev@company.com", "", "", nil, "", "",
 	)
 	require.NoError(t, err)
 
@@ -356,11 +356,11 @@ func TestE2E_ChangesRequestedFlow(t *testing.T) {
 			"embed_model":    "text-embedding-3-small",
 			"active":         true,
 		},
-		nil, 85, "Contains anonymized customer interaction data. PII has been stripped.",
+		nil, 8, "Contains anonymized customer interaction data. PII has been stripped.",
 		"dev@company.com", "team-lead@company.com", "", nil, "", "",
 	)
 	require.NoError(t, err)
-	assert.Equal(t, 85, updated.SuggestedPrivacy)
+	assert.Equal(t, 8, updated.SuggestedPrivacy)
 	assert.Equal(t, "team-lead@company.com", updated.SecondaryContact)
 
 	// ---- Step 4: Developer resubmits ----
@@ -371,7 +371,7 @@ func TestE2E_ChangesRequestedFlow(t *testing.T) {
 
 	// ---- Step 5: Admin approves ----
 	t.Log("Step 5: Admin approves")
-	approved, err := svc.ApproveSubmission(submission.ID, admin.ID, 85, nil, "Privacy justified, approved")
+	approved, err := svc.ApproveSubmission(submission.ID, admin.ID, 8, nil, "Privacy justified, approved")
 	require.NoError(t, err)
 	assert.Equal(t, models.SubmissionStatusApproved, approved.Status)
 	assert.NotNil(t, approved.ResourceID)
@@ -379,7 +379,7 @@ func TestE2E_ChangesRequestedFlow(t *testing.T) {
 	ds, err := svc.GetDatasourceByID(*approved.ResourceID)
 	require.NoError(t, err)
 	assert.Equal(t, "Customer DB", ds.Name)
-	assert.Equal(t, 85, ds.PrivacyScore)
+	assert.Equal(t, 8, ds.PrivacyScore)
 }
 
 // TestE2E_DuplicateDetection verifies that duplicate resources are flagged
@@ -398,9 +398,9 @@ func TestE2E_DuplicateDetection(t *testing.T) {
 			"db_conn_string": "postgresql://vectordb:5432/products",
 			"db_name": "products", "embed_vendor": "openai",
 			"embed_model": "text-embedding-3-small", "active": true,
-		}, nil, 50, "", "", "", "", nil, "", "",
+		}, nil, 5, "", "", "", "", nil, "", "",
 	)
-	svc.ApproveSubmission(sub.ID, admin.ID, 45, nil, "")
+	svc.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
 
 	// ---- Check for duplicates: same connection string ----
 	t.Log("Check: same connection string detected as duplicate")
@@ -489,9 +489,9 @@ func TestE2E_OrphanManagement(t *testing.T) {
 			"name": "Dev's DS", "db_source_type": "pgvector",
 			"embed_vendor": "openai", "embed_model": "text-embedding-3-small",
 			"active": true,
-		}, nil, 50, "", "", "", "", nil, "", "",
+		}, nil, 5, "", "", "", "", nil, "", "",
 	)
-	approved, _ := svc.ApproveSubmission(sub.ID, admin.ID, 45, nil, "")
+	approved, _ := svc.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
 	dsID := *approved.ResourceID
 
 	// Verify it's active
@@ -579,25 +579,25 @@ func TestE2E_InvalidStateTransitions(t *testing.T) {
 
 	// Create a submission in each state for testing
 	draft, _ := svc.CreateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-		models.JSONMap{"name": "Draft DS"}, nil, 50, "", "", "", "", nil, "", "")
+		models.JSONMap{"name": "Draft DS"}, nil, 5, "", "", "", "", nil, "", "")
 
 	submitted, _ := svc.CreateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
 		models.JSONMap{"name": "Submitted DS", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true},
-		nil, 50, "", "", "", "", nil, "", "")
+		nil, 5, "", "", "", "", nil, "", "")
 
 	// Get one to approved state
 	toApprove, _ := svc.CreateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
 		models.JSONMap{"name": "To Approve", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true},
-		nil, 50, "", "", "", "", nil, "", "")
-	approved, _ := svc.ApproveSubmission(toApprove.ID, admin.ID, 45, nil, "")
+		nil, 5, "", "", "", "", nil, "", "")
+	approved, _ := svc.ApproveSubmission(toApprove.ID, admin.ID, 5, nil, "")
 
 	// Get one to rejected state
 	toReject, _ := svc.CreateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
-		models.JSONMap{"name": "To Reject"}, nil, 50, "", "", "", "", nil, "", "")
+		models.JSONMap{"name": "To Reject"}, nil, 5, "", "", "", "", nil, "", "")
 	svc.RejectSubmission(toReject.ID, admin.ID, "No good", "")
 
 	t.Run("CannotApproveDraft", func(t *testing.T) {
-		_, err := svc.ApproveSubmission(draft.ID, admin.ID, 50, nil, "")
+		_, err := svc.ApproveSubmission(draft.ID, admin.ID, 5, nil, "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "can only approve")
 	})
@@ -621,7 +621,7 @@ func TestE2E_InvalidStateTransitions(t *testing.T) {
 	})
 
 	t.Run("CannotApproveAlreadyApproved", func(t *testing.T) {
-		_, err := svc.ApproveSubmission(approved.ID, admin.ID, 50, nil, "")
+		_, err := svc.ApproveSubmission(approved.ID, admin.ID, 5, nil, "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "can only approve")
 	})
@@ -639,7 +639,7 @@ func TestE2E_InvalidStateTransitions(t *testing.T) {
 	})
 
 	t.Run("CannotUpdateSubmittedSubmission", func(t *testing.T) {
-		_, err := svc.UpdateSubmission(submitted.ID, developer.ID, models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "")
+		_, err := svc.UpdateSubmission(submitted.ID, developer.ID, models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "can only update")
 	})
@@ -662,16 +662,16 @@ func TestE2E_AuthorizationBoundaries(t *testing.T) {
 
 	// Alice creates a draft
 	aliceDraft, _ := svc.CreateSubmission(alice.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-		models.JSONMap{"name": "Alice's DS"}, nil, 50, "", "", "", "", nil, "", "")
+		models.JSONMap{"name": "Alice's DS"}, nil, 5, "", "", "", "", nil, "", "")
 
 	// Alice creates and gets a resource approved
 	aliceSub, _ := svc.CreateSubmission(alice.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
 		models.JSONMap{"name": "Alice's Published DS", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true},
-		nil, 50, "", "", "", "", nil, "", "")
-	aliceApproved, _ := svc.ApproveSubmission(aliceSub.ID, admin.ID, 45, nil, "")
+		nil, 5, "", "", "", "", nil, "", "")
+	aliceApproved, _ := svc.ApproveSubmission(aliceSub.ID, admin.ID, 5, nil, "")
 
 	t.Run("BobCannotUpdateAlicesDraft", func(t *testing.T) {
-		_, err := svc.UpdateSubmission(aliceDraft.ID, bob.ID, models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "")
+		_, err := svc.UpdateSubmission(aliceDraft.ID, bob.ID, models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "not authorized")
 	})
@@ -691,7 +691,7 @@ func TestE2E_AuthorizationBoundaries(t *testing.T) {
 	t.Run("BobCannotProposeUpdateToAlicesResource", func(t *testing.T) {
 		_, err := svc.CreateUpdateSubmission(
 			bob.ID, models.SubmissionResourceTypeDatasource, *aliceApproved.ResourceID,
-			models.JSONMap{"name": "Hijacked"}, nil, 50, "", "", "", "", nil, "", "", "",
+			models.JSONMap{"name": "Hijacked"}, nil, 5, "", "", "", "", nil, "", "", "",
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "not authorized")
@@ -700,7 +700,7 @@ func TestE2E_AuthorizationBoundaries(t *testing.T) {
 	t.Run("AliceCanOnlySeeOwnSubmissions", func(t *testing.T) {
 		// Bob creates his own submission
 		svc.CreateSubmission(bob.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-			models.JSONMap{"name": "Bob's DS"}, nil, 50, "", "", "", "", nil, "", "")
+			models.JSONMap{"name": "Bob's DS"}, nil, 5, "", "", "", "", nil, "", "")
 
 		aliceSubs, count, _, err := svc.GetSubmissionsBySubmitter(alice.ID, "", 10, 1)
 		assert.NoError(t, err)
@@ -729,7 +729,7 @@ func TestE2E_UpdateWorkflow_FailureScenarios(t *testing.T) {
 	t.Run("CannotUpdateNonOwnedResource", func(t *testing.T) {
 		_, err := svc.CreateUpdateSubmission(
 			developer.ID, models.SubmissionResourceTypeDatasource, adminDS.ID,
-			models.JSONMap{"name": "Hijacked"}, nil, 50, "", "", "", "", nil, "", "", "",
+			models.JSONMap{"name": "Hijacked"}, nil, 5, "", "", "", "", nil, "", "", "",
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "not authorized")
@@ -738,7 +738,7 @@ func TestE2E_UpdateWorkflow_FailureScenarios(t *testing.T) {
 	t.Run("CannotUpdateNonExistentResource", func(t *testing.T) {
 		_, err := svc.CreateUpdateSubmission(
 			developer.ID, models.SubmissionResourceTypeDatasource, 99999,
-			models.JSONMap{"name": "Ghost"}, nil, 50, "", "", "", "", nil, "", "", "",
+			models.JSONMap{"name": "Ghost"}, nil, 5, "", "", "", "", nil, "", "", "",
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
@@ -747,7 +747,7 @@ func TestE2E_UpdateWorkflow_FailureScenarios(t *testing.T) {
 	t.Run("CannotUpdateWithInvalidResourceType", func(t *testing.T) {
 		_, err := svc.CreateUpdateSubmission(
 			developer.ID, "invalid_type", 1,
-			models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "", "",
+			models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "", "",
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid resource type")
@@ -757,14 +757,14 @@ func TestE2E_UpdateWorkflow_FailureScenarios(t *testing.T) {
 		// Create a community DS, approve, update, then try rollback with wrong version
 		sub, _ := svc.CreateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
 			models.JSONMap{"name": "Rollback Test", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true},
-			nil, 50, "", "", "", "", nil, "", "")
-		approved, _ := svc.ApproveSubmission(sub.ID, admin.ID, 45, nil, "")
+			nil, 5, "", "", "", "", nil, "", "")
+		approved, _ := svc.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
 		dsID := *approved.ResourceID
 
 		// Update to create a version
 		updateSub, _ := svc.CreateUpdateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, dsID,
-			models.JSONMap{"name": "Updated"}, nil, 50, "", "", "", "", nil, "", "", models.SubmissionStatusSubmitted)
-		svc.ApproveSubmission(updateSub.ID, admin.ID, 50, nil, "")
+			models.JSONMap{"name": "Updated"}, nil, 5, "", "", "", "", nil, "", "", models.SubmissionStatusSubmitted)
+		svc.ApproveSubmission(updateSub.ID, admin.ID, 5, nil, "")
 
 		// Try rollback with non-existent version
 		err := svc.RollbackResource(models.SubmissionResourceTypeDatasource, dsID, 99999, admin.ID)
@@ -782,14 +782,14 @@ func TestE2E_SubmissionCreation_EdgeCases(t *testing.T) {
 
 	t.Run("InvalidResourceType", func(t *testing.T) {
 		_, err := svc.CreateSubmission(developer.ID, "llm", models.SubmissionStatusDraft,
-			models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "")
+			models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid resource type")
 	})
 
 	t.Run("InvalidInitialStatus", func(t *testing.T) {
 		_, err := svc.CreateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusApproved,
-			models.JSONMap{}, nil, 50, "", "", "", "", nil, "", "")
+			models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "initial status must be")
 	})
@@ -797,7 +797,7 @@ func TestE2E_SubmissionCreation_EdgeCases(t *testing.T) {
 	t.Run("CanCreateWithEmptyPayload", func(t *testing.T) {
 		// Drafts should allow empty payload (user fills in incrementally)
 		sub, err := svc.CreateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-			models.JSONMap{}, nil, 0, "", "", "", "", nil, "", "")
+			models.JSONMap{}, nil, 1, "", "", "", "", nil, "", "")
 		assert.NoError(t, err)
 		assert.NotZero(t, sub.ID)
 	})
@@ -845,7 +845,7 @@ func TestE2E_NominationFailures(t *testing.T) {
 
 	t.Run("NominateToolNotInYourApps", func(t *testing.T) {
 		// Create a tool owned by someone else
-		tool, _ := svc.CreateTool("Other's Tool", "desc", "REST", "", 50, "", "")
+		tool, _ := svc.CreateTool("Other's Tool", "desc", "REST", "", 5, "", "")
 		tool.UserID = otherUser.ID
 		tool.Update(svc.DB)
 
@@ -867,28 +867,28 @@ func TestE2E_ConcurrentSubmissionsForSameResource(t *testing.T) {
 	// Create a community datasource
 	sub, _ := svc.CreateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
 		models.JSONMap{"name": "Shared DS", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true},
-		nil, 50, "", "", "", "", nil, "", "")
-	approved, _ := svc.ApproveSubmission(sub.ID, admin.ID, 45, nil, "")
+		nil, 5, "", "", "", "", nil, "", "")
+	approved, _ := svc.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
 	dsID := *approved.ResourceID
 
 	// Developer submits two updates for the same resource
 	update1, err := svc.CreateUpdateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, dsID,
-		models.JSONMap{"name": "Update 1"}, nil, 50, "", "", "", "", nil, "", "First update", models.SubmissionStatusSubmitted)
+		models.JSONMap{"name": "Update 1"}, nil, 5, "", "", "", "", nil, "", "First update", models.SubmissionStatusSubmitted)
 	require.NoError(t, err)
 
 	update2, err := svc.CreateUpdateSubmission(developer.ID, models.SubmissionResourceTypeDatasource, dsID,
-		models.JSONMap{"name": "Update 2"}, nil, 50, "", "", "", "", nil, "", "Second update", models.SubmissionStatusSubmitted)
+		models.JSONMap{"name": "Update 2"}, nil, 5, "", "", "", "", nil, "", "Second update", models.SubmissionStatusSubmitted)
 	require.NoError(t, err)
 
 	// Admin approves update1 first
-	_, err = svc.ApproveSubmission(update1.ID, admin.ID, 45, nil, "")
+	_, err = svc.ApproveSubmission(update1.ID, admin.ID, 5, nil, "")
 	require.NoError(t, err)
 
 	ds, _ := svc.GetDatasourceByID(dsID)
 	assert.Equal(t, "Update 1", ds.Name)
 
 	// Admin can still approve update2 (applies on top of update1)
-	_, err = svc.ApproveSubmission(update2.ID, admin.ID, 45, nil, "")
+	_, err = svc.ApproveSubmission(update2.ID, admin.ID, 5, nil, "")
 	require.NoError(t, err)
 
 	ds, _ = svc.GetDatasourceByID(dsID)

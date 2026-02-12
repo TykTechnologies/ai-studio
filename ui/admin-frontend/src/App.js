@@ -310,11 +310,15 @@ function App() {
                 </Suspense>
               } />
 
-              {/* Admin Routes */}
+              {/* Admin Routes — guarded: non-admin users are redirected */}
               <Route path="/admin/*" element={
-                <Suspense fallback={<RouteLoadingFallback />}>
-                  <AdminRoutes uiOptions={entitlements?.ui_options} />
-                </Suspense>
+                entitlements?.is_admin ? (
+                  <Suspense fallback={<RouteLoadingFallback />}>
+                    <AdminRoutes uiOptions={entitlements?.ui_options} />
+                  </Suspense>
+                ) : (
+                  <Navigate to="/" replace />
+                )
               } />
 
               {/* Common Routes */}

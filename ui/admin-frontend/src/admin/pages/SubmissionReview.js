@@ -350,13 +350,17 @@ const SubmissionReview = () => {
               {submission.documentation_url && (
                 <Typography variant="body2">
                   <strong>Docs:</strong>{" "}
-                  <a
-                    href={submission.documentation_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {submission.documentation_url}
-                  </a>
+                  {/^https?:\/\//i.test(submission.documentation_url) ? (
+                    <a
+                      href={submission.documentation_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {submission.documentation_url}
+                    </a>
+                  ) : (
+                    submission.documentation_url
+                  )}
                 </Typography>
               )}
               {submission.notes && (

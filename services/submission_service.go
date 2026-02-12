@@ -1,12 +1,96 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
+
+// Input length limits for submission fields
+const (
+	maxTextFieldLength    = 10000 // notes, privacy_justification, sla_expectation
+	maxShortFieldLength   = 255   // primary_contact, secondary_contact
+	maxURLFieldLength     = 2048  // documentation_url
+	minPrivacyScore       = 0
+	maxPrivacyScore       = 100
+)
+
+// validateDocumentationURL ensures the URL uses a safe protocol (http/https only).
+// This prevents XSS via javascript: URIs being rendered as clickable links.
+func validateDocumentationURL(url string) error {
+	if url == "" {
+		return nil
+	}
+	lower := strings.ToLower(strings.TrimSpace(url))
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return fmt.Errorf("documentation_url must start with http:// or https://")
+	}
+	return nil
+}
+
+// validateSubmissionInput validates all user-provided submission fields for length
+// and content safety. Call this before persisting any submission data.
+func validateSubmissionInput(
+	suggestedPrivacy int,
+	privacyJustification string,
+	primaryContact, secondaryContact, slaExpectation string,
+	documentationURL, notes string,
+	resourcePayload models.JSONMap,
+) error {
+	// Privacy score range
+	if suggestedPrivacy < minPrivacyScore || suggestedPrivacy > maxPrivacyScore {
+		return fmt.Errorf("suggested_privacy must be between %d and %d", minPrivacyScore, maxPrivacyScore)
+	}
+
+	// Text field lengths
+	if len(notes) > maxTextFieldLength {
+		return fmt.Errorf("notes must not exceed %d characters", maxTextFieldLength)
+	}
+	if len(privacyJustification) > maxTextFieldLength {
+		return fmt.Errorf("privacy_justification must not exceed %d characters", maxTextFieldLength)
+	}
+	if len(slaExpectation) > maxTextFieldLength {
+		return fmt.Errorf("sla_expectation must not exceed %d characters", maxTextFieldLength)
+	}
+
+	// Short field lengths
+	if len(primaryContact) > maxShortFieldLength {
+		return fmt.Errorf("primary_contact must not exceed %d characters", maxShortFieldLength)
+	}
+	if len(secondaryContact) > maxShortFieldLength {
+		return fmt.Errorf("secondary_contact must not exceed %d characters", maxShortFieldLength)
+	}
+
+	// URL validation
+	if len(documentationURL) > maxURLFieldLength {
+		return fmt.Errorf("documentation_url must not exceed %d characters", maxURLFieldLength)
+	}
+	if err := validateDocumentationURL(documentationURL); err != nil {
+		return err
+	}
+
+	// Resource payload size (configurable via MAX_RESOURCE_PAYLOAD_SIZE env var)
+	if resourcePayload != nil {
+		payloadBytes, err := json.Marshal(resourcePayload)
+		if err != nil {
+			return fmt.Errorf("invalid resource_payload: %w", err)
+		}
+		maxSize := 5 * 1024 * 1024 // default 5MB
+		if appConf := config.Get(""); appConf != nil && appConf.MaxResourcePayloadSize > 0 {
+			maxSize = appConf.MaxResourcePayloadSize
+		}
+		if len(payloadBytes) > maxSize {
+			return fmt.Errorf("resource_payload must not exceed %d bytes", maxSize)
+		}
+	}
+
+	return nil
+}
 
 // CreateSubmission creates a new submission (draft or submitted)
 func (s *Service) CreateSubmission(submitterID uint, resourceType, status string, payload models.JSONMap,
@@ -16,6 +100,10 @@ func (s *Service) CreateSubmission(submitterID uint, resourceType, status string
 
 	if resourceType != models.SubmissionResourceTypeDatasource && resourceType != models.SubmissionResourceTypeTool {
 		return nil, fmt.Errorf("invalid resource type: must be '%s' or '%s'", models.SubmissionResourceTypeDatasource, models.SubmissionResourceTypeTool)
+	}
+
+	if err := validateSubmissionInput(suggestedPrivacy, privacyJustification, primaryContact, secondaryContact, slaExpectation, documentationURL, notes, payload); err != nil {
+		return nil, err
 	}
 
 	if status == "" {
@@ -88,6 +176,10 @@ func (s *Service) UpdateSubmission(id uint, submitterID uint, payload models.JSO
 		return nil, fmt.Errorf("can only update submissions in '%s' or '%s' status", models.SubmissionStatusDraft, models.SubmissionStatusChangesRequested)
 	}
 
+	if err := validateSubmissionInput(suggestedPrivacy, privacyJustification, primaryContact, secondaryContact, slaExpectation, documentationURL, notes, payload); err != nil {
+		return nil, err
+	}
+
 	submission.ResourcePayload = payload
 	submission.Attestations = attestations
 	submission.SuggestedPrivacy = suggestedPrivacy
@@ -99,7 +191,7 @@ func (s *Service) UpdateSubmission(id uint, submitterID uint, payload models.JSO
 	submission.DocumentationURL = documentationURL
 	submission.Notes = notes
 
-	if err := submission.Update(s.DB); err != nil {
+	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
 	return submission, nil
@@ -125,7 +217,7 @@ func (s *Service) SubmitSubmission(id, submitterID uint) (*models.Submission, er
 	submission.Status = models.SubmissionStatusSubmitted
 	submission.SubmittedAt = &now
 
-	if err := submission.Update(s.DB); err != nil {
+	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
 
@@ -203,7 +295,7 @@ func (s *Service) StartReview(submissionID, reviewerID uint) (*models.Submission
 	submission.ReviewerID = &reviewerID
 	submission.ReviewStartedAt = &now
 
-	if err := submission.Update(s.DB); err != nil {
+	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
 
@@ -221,6 +313,10 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 
 	if submission.Status != models.SubmissionStatusInReview && submission.Status != models.SubmissionStatusSubmitted {
 		return nil, fmt.Errorf("can only approve submissions in '%s' or '%s' status", models.SubmissionStatusInReview, models.SubmissionStatusSubmitted)
+	}
+
+	if finalPrivacyScore < minPrivacyScore || finalPrivacyScore > maxPrivacyScore {
+		return nil, fmt.Errorf("final_privacy_score must be between %d and %d", minPrivacyScore, maxPrivacyScore)
 	}
 
 	var resourceID uint
@@ -248,7 +344,7 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 	submission.ReviewNotes = reviewNotes
 	submission.ReviewCompletedAt = &now
 
-	if err := submission.Update(s.DB); err != nil {
+	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
 
@@ -280,7 +376,7 @@ func (s *Service) RejectSubmission(submissionID, reviewerID uint, feedback, revi
 	submission.ReviewNotes = reviewNotes
 	submission.ReviewCompletedAt = &now
 
-	if err := submission.Update(s.DB); err != nil {
+	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
 
@@ -309,7 +405,7 @@ func (s *Service) RequestChanges(submissionID, reviewerID uint, feedback, review
 	submission.SubmitterFeedback = feedback
 	submission.ReviewNotes = reviewNotes
 
-	if err := submission.Update(s.DB); err != nil {
+	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
 
@@ -468,8 +564,15 @@ func (s *Service) CreateUpdateSubmission(submitterID uint, resourceType string, 
 		return nil, fmt.Errorf("invalid resource type: %s", resourceType)
 	}
 
+	if err := validateSubmissionInput(suggestedPrivacy, privacyJustification, primaryContact, secondaryContact, slaExpectation, documentationURL, notes, payload); err != nil {
+		return nil, err
+	}
+
 	if status == "" {
 		status = models.SubmissionStatusDraft
+	}
+	if status != models.SubmissionStatusDraft && status != models.SubmissionStatusSubmitted {
+		return nil, fmt.Errorf("initial status must be '%s' or '%s'", models.SubmissionStatusDraft, models.SubmissionStatusSubmitted)
 	}
 
 	submission := &models.Submission{

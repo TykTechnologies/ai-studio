@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -24,6 +25,7 @@ type Submission struct {
 	ResourceType string `json:"resource_type" gorm:"index"` // datasource | tool
 	ResourceID   *uint  `json:"resource_id"`                 // set after approval creates the resource
 	Status       string `json:"status" gorm:"index"`         // draft | submitted | in_review | approved | rejected | changes_requested
+	LockVersion  int    `json:"lock_version"`                // optimistic concurrency control
 
 	// Update workflow: when IsUpdate is true, this submission proposes changes to an existing resource
 	IsUpdate         bool  `json:"is_update"`
@@ -78,6 +80,27 @@ func (s *Submission) Get(db *gorm.DB, id uint) error {
 
 func (s *Submission) Update(db *gorm.DB) error {
 	return db.Save(s).Error
+}
+
+// UpdateWithLock performs an optimistic concurrency update.
+// Returns an error if the lock_version has changed since the submission was read.
+func (s *Submission) UpdateWithLock(db *gorm.DB) error {
+	currentVersion := s.LockVersion
+	s.LockVersion = currentVersion + 1
+
+	// Use raw UPDATE with WHERE lock_version check — GORM's Save ignores Where clauses
+	result := db.Exec(
+		"UPDATE submissions SET status = ?, lock_version = ?, reviewer_id = ?, resource_id = ?, submitted_at = ?, review_started_at = ?, review_completed_at = ?, submitter_feedback = ?, review_notes = ?, final_privacy_score = ?, assigned_catalogues = ?, suggested_privacy = ?, privacy_justification = ?, primary_contact = ?, secondary_contact = ?, resource_payload = ?, attestations = ?, sla_expectation = ?, documentation_url = ?, notes = ?, data_cutoff_date = ?, is_update = ?, target_resource_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND lock_version = ? AND deleted_at IS NULL",
+		s.Status, s.LockVersion, s.ReviewerID, s.ResourceID, s.SubmittedAt, s.ReviewStartedAt, s.ReviewCompletedAt, s.SubmitterFeedback, s.ReviewNotes, s.FinalPrivacyScore, s.AssignedCatalogues, s.SuggestedPrivacy, s.PrivacyJustification, s.PrimaryContact, s.SecondaryContact, s.ResourcePayload, s.Attestations, s.SLAExpectation, s.DocumentationURL, s.Notes, s.DataCutoffDate, s.IsUpdate, s.TargetResourceID,
+		s.ID, currentVersion,
+	)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("concurrent modification detected: submission was modified by another request")
+	}
+	return nil
 }
 
 func (s *Submission) Delete(db *gorm.DB) error {

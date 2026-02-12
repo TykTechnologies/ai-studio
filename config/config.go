@@ -96,6 +96,9 @@ type AppConf struct {
 	// Docs Server Configuration
 	DocsPort     int
 	DocsDisabled bool
+
+	// Submission Configuration
+	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
 }
 
 // QueueConfig holds configuration for message queues
@@ -491,6 +494,17 @@ func getConfigFromEnv(envFile string) *AppConf {
 
 	// Session duration configuration
 	conf.SessionDuration = parseDurationWithDefault("SESSION_DURATION", 6*time.Hour)
+
+	// Max resource payload size for submissions (default: 5MB)
+	conf.MaxResourcePayloadSize = 5 * 1024 * 1024
+	if maxPayloadStr := os.Getenv("MAX_RESOURCE_PAYLOAD_SIZE"); maxPayloadStr != "" {
+		if maxPayload, err := strconv.Atoi(maxPayloadStr); err == nil && maxPayload > 0 {
+			conf.MaxResourcePayloadSize = maxPayload
+			cfgLog.Info().Msgf("Max resource payload size set to: %d bytes", maxPayload)
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid MAX_RESOURCE_PAYLOAD_SIZE value: %s, using default 5MB", maxPayloadStr)
+		}
+	}
 
 	// Default app budget configuration
 	if defaultBudgetStr := os.Getenv("DEFAULT_APP_BUDGET"); defaultBudgetStr != "" {

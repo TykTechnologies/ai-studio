@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -59,6 +60,19 @@ type UpdateSubmissionInput struct {
 			Notes                string         `json:"notes"`
 		} `json:"attributes"`
 	} `json:"data"`
+}
+
+const maxAdminReviewFieldLength = 10000
+
+// validateAdminReviewInput checks length limits on admin review fields.
+func validateAdminReviewInput(reviewNotes, feedback string) error {
+	if len(reviewNotes) > maxAdminReviewFieldLength {
+		return fmt.Errorf("review_notes must not exceed %d characters", maxAdminReviewFieldLength)
+	}
+	if len(feedback) > maxAdminReviewFieldLength {
+		return fmt.Errorf("feedback must not exceed %d characters", maxAdminReviewFieldLength)
+	}
+	return nil
 }
 
 // --- User-facing submission handlers ---
@@ -134,7 +148,7 @@ func (a *API) createSubmission(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusCreated, gin.H{"data": serializeSubmissionForPortal(submission)})
 }
 
 // listMySubmissions handles GET /common/submissions
@@ -152,6 +166,9 @@ func (a *API) listMySubmissions(c *gin.Context) {
 	if ps := c.Query("page_size"); ps != "" {
 		if v, err := strconv.Atoi(ps); err == nil && v > 0 {
 			pageSize = v
+			if pageSize > 100 {
+				pageSize = 100
+			}
 		}
 	}
 	if pn := c.Query("page_number"); pn != "" {
@@ -173,7 +190,7 @@ func (a *API) listMySubmissions(c *gin.Context) {
 
 	serialized := make([]gin.H, len(submissions))
 	for i, s := range submissions {
-		serialized[i] = serializeSubmission(&s)
+		serialized[i] = serializeSubmissionForPortal(&s)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -227,7 +244,7 @@ func (a *API) getMySubmission(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForPortal(submission)})
 }
 
 // updateMySubmission handles PATCH /common/submissions/:id
@@ -301,7 +318,7 @@ func (a *API) updateMySubmission(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForPortal(submission)})
 }
 
 // deleteMySubmission handles DELETE /common/submissions/:id
@@ -368,7 +385,7 @@ func (a *API) submitSubmission(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForPortal(submission)})
 }
 
 // getAttestationTemplatesForSubmission handles GET /common/submissions/attestation-templates
@@ -468,7 +485,7 @@ func (a *API) createUpdateSubmission(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusCreated, gin.H{"data": serializeSubmissionForPortal(submission)})
 }
 
 // adminListVersions handles GET /api/v1/submissions/:id/versions
@@ -509,6 +526,11 @@ func (a *API) adminListVersions(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Redact secrets from version snapshot payloads
+	for i := range versions {
+		versions[i].Payload = redactPayloadSecrets(versions[i].Payload)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": versions})
@@ -644,7 +666,7 @@ func (a *API) nominateDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusCreated, gin.H{"data": serializeSubmissionForPortal(submission)})
 }
 
 // nominateTool handles POST /common/submissions/nominate/tool/:id
@@ -678,7 +700,7 @@ func (a *API) nominateTool(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusCreated, gin.H{"data": serializeSubmissionForPortal(submission)})
 }
 
 // --- Admin orphan management ---
@@ -972,6 +994,9 @@ func (a *API) adminListSubmissions(c *gin.Context) {
 	if ps := c.Query("page_size"); ps != "" {
 		if v, err := strconv.Atoi(ps); err == nil && v > 0 {
 			pageSize = v
+			if pageSize > 100 {
+				pageSize = 100
+			}
 		}
 	}
 	if pn := c.Query("page_number"); pn != "" {
@@ -996,7 +1021,7 @@ func (a *API) adminListSubmissions(c *gin.Context) {
 
 	serialized := make([]gin.H, len(submissions))
 	for i, s := range submissions {
-		serialized[i] = serializeSubmission(&s)
+		serialized[i] = serializeSubmissionForAdmin(&s)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -1033,7 +1058,7 @@ func (a *API) adminGetSubmission(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForAdmin(submission)})
 }
 
 // adminStartReview handles POST /api/v1/submissions/:id/review
@@ -1067,7 +1092,7 @@ func (a *API) adminStartReview(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForAdmin(submission)})
 }
 
 // adminApproveSubmission handles POST /api/v1/submissions/:id/approve
@@ -1102,6 +1127,16 @@ func (a *API) adminApproveSubmission(c *gin.Context) {
 	}
 
 	attrs := input.Data.Attributes
+	if err := validateAdminReviewInput(attrs.ReviewNotes, attrs.Feedback); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	submission, err := a.service.ApproveSubmission(uint(id), currentUser.ID, attrs.FinalPrivacyScore, attrs.AssignedCatalogues, attrs.ReviewNotes)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -1113,7 +1148,7 @@ func (a *API) adminApproveSubmission(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForAdmin(submission)})
 }
 
 // adminRejectSubmission handles POST /api/v1/submissions/:id/reject
@@ -1148,6 +1183,16 @@ func (a *API) adminRejectSubmission(c *gin.Context) {
 	}
 
 	attrs := input.Data.Attributes
+	if err := validateAdminReviewInput(attrs.ReviewNotes, attrs.Feedback); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	submission, err := a.service.RejectSubmission(uint(id), currentUser.ID, attrs.Feedback, attrs.ReviewNotes)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -1159,7 +1204,7 @@ func (a *API) adminRejectSubmission(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForAdmin(submission)})
 }
 
 // adminRequestChanges handles POST /api/v1/submissions/:id/request-changes
@@ -1194,6 +1239,16 @@ func (a *API) adminRequestChanges(c *gin.Context) {
 	}
 
 	attrs := input.Data.Attributes
+	if err := validateAdminReviewInput(attrs.ReviewNotes, attrs.Feedback); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	submission, err := a.service.RequestChanges(uint(id), currentUser.ID, attrs.Feedback, attrs.ReviewNotes)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -1205,12 +1260,44 @@ func (a *API) adminRequestChanges(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSubmission(submission)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForAdmin(submission)})
 }
 
 // --- Serializer ---
 
-func serializeSubmission(s *models.Submission) gin.H {
+// secretPayloadFields are credential fields that must be redacted before returning to any client
+var secretPayloadFields = []string{
+	"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string",
+}
+
+// redactPayloadSecrets returns a copy of the payload with secret fields replaced by "[redacted]"
+func redactPayloadSecrets(payload models.JSONMap) models.JSONMap {
+	if payload == nil {
+		return nil
+	}
+	redacted := make(models.JSONMap, len(payload))
+	for k, v := range payload {
+		redacted[k] = v
+	}
+	for _, field := range secretPayloadFields {
+		if _, ok := redacted[field]; ok {
+			redacted[field] = "[redacted]"
+		}
+	}
+	return redacted
+}
+
+// serializeSubmissionForAdmin returns full submission data with secrets redacted but review_notes visible
+func serializeSubmissionForAdmin(s *models.Submission) gin.H {
+	return serializeSubmissionInternal(s, true)
+}
+
+// serializeSubmissionForPortal returns submission data with secrets redacted AND review_notes stripped
+func serializeSubmissionForPortal(s *models.Submission) gin.H {
+	return serializeSubmissionInternal(s, false)
+}
+
+func serializeSubmissionInternal(s *models.Submission, includeInternalNotes bool) gin.H {
 	result := gin.H{
 		"id":                    s.ID,
 		"resource_type":         s.ResourceType,
@@ -1220,7 +1307,7 @@ func serializeSubmission(s *models.Submission) gin.H {
 		"target_resource_id":    s.TargetResourceID,
 		"submitter_id":          s.SubmitterID,
 		"reviewer_id":           s.ReviewerID,
-		"resource_payload":      s.ResourcePayload,
+		"resource_payload":      redactPayloadSecrets(s.ResourcePayload),
 		"attestations":          s.Attestations,
 		"suggested_privacy":     s.SuggestedPrivacy,
 		"privacy_justification": s.PrivacyJustification,
@@ -1230,7 +1317,6 @@ func serializeSubmission(s *models.Submission) gin.H {
 		"data_cutoff_date":      s.DataCutoffDate,
 		"documentation_url":     s.DocumentationURL,
 		"notes":                 s.Notes,
-		"review_notes":          s.ReviewNotes,
 		"submitter_feedback":    s.SubmitterFeedback,
 		"assigned_catalogues":   s.AssignedCatalogues,
 		"final_privacy_score":   s.FinalPrivacyScore,
@@ -1239,6 +1325,10 @@ func serializeSubmission(s *models.Submission) gin.H {
 		"review_completed_at":   s.ReviewCompletedAt,
 		"created_at":            s.CreatedAt,
 		"updated_at":            s.UpdatedAt,
+	}
+
+	if includeInternalNotes {
+		result["review_notes"] = s.ReviewNotes
 	}
 
 	if s.Submitter != nil {

@@ -31,9 +31,9 @@ func TestCreateUpdateSubmission(t *testing.T) {
 			"name": "Original DS", "short_description": "Original",
 			"db_source_type": "pgvector", "embed_vendor": "openai",
 			"embed_model": "text-embedding-3-small", "active": true,
-		}, nil, 50, "", "contact@test.com", "", "", nil, "", "",
+		}, nil, 5, "", "contact@test.com", "", "", nil, "", "",
 	)
-	approved, err := service.ApproveSubmission(submission.ID, admin.ID, 45, nil, "")
+	approved, err := service.ApproveSubmission(submission.ID, admin.ID, 5, nil, "")
 	assert.NoError(t, err)
 	dsID := *approved.ResourceID
 
@@ -41,7 +41,7 @@ func TestCreateUpdateSubmission(t *testing.T) {
 		updateSub, err := service.CreateUpdateSubmission(
 			user.ID, models.SubmissionResourceTypeDatasource, dsID,
 			models.JSONMap{"name": "Updated DS", "short_description": "Updated description"},
-			nil, 50, "", "contact@test.com", "", "", nil, "", "Updated the description",
+			nil, 5, "", "contact@test.com", "", "", nil, "", "Updated the description",
 			models.SubmissionStatusSubmitted,
 		)
 		assert.NoError(t, err)
@@ -53,7 +53,7 @@ func TestCreateUpdateSubmission(t *testing.T) {
 		otherUser := createSubmissionTestUser(t, service, "other@test.com")
 		_, err := service.CreateUpdateSubmission(
 			otherUser.ID, models.SubmissionResourceTypeDatasource, dsID,
-			models.JSONMap{"name": "Hijacked"}, nil, 50, "", "", "", "", nil, "", "", "",
+			models.JSONMap{"name": "Hijacked"}, nil, 5, "", "", "", "", nil, "", "", "",
 		)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "not authorized")
@@ -74,9 +74,9 @@ func TestApproveUpdateSubmission_CreatesVersion(t *testing.T) {
 			"name": "Original DS", "short_description": "Original desc",
 			"db_source_type": "pgvector", "embed_vendor": "openai",
 			"embed_model": "text-embedding-3-small", "active": true,
-		}, nil, 50, "", "contact@test.com", "", "", nil, "", "",
+		}, nil, 5, "", "contact@test.com", "", "", nil, "", "",
 	)
-	approved, _ := service.ApproveSubmission(sub.ID, admin.ID, 45, nil, "")
+	approved, _ := service.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
 	dsID := *approved.ResourceID
 
 	// Verify original state
@@ -87,12 +87,12 @@ func TestApproveUpdateSubmission_CreatesVersion(t *testing.T) {
 	updateSub, _ := service.CreateUpdateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, dsID,
 		models.JSONMap{"name": "Updated DS", "short_description": "New description"},
-		nil, 60, "", "contact@test.com", "", "", nil, "", "Changed name and desc",
+		nil, 6, "", "contact@test.com", "", "", nil, "", "Changed name and desc",
 		models.SubmissionStatusSubmitted,
 	)
 
 	// Approve the update
-	approvedUpdate, err := service.ApproveSubmission(updateSub.ID, admin.ID, 55, nil, "Update looks good")
+	approvedUpdate, err := service.ApproveSubmission(updateSub.ID, admin.ID, 6, nil, "Update looks good")
 	assert.NoError(t, err)
 	assert.Equal(t, models.SubmissionStatusApproved, approvedUpdate.Status)
 
@@ -100,7 +100,7 @@ func TestApproveUpdateSubmission_CreatesVersion(t *testing.T) {
 	updatedDS, _ := service.GetDatasourceByID(dsID)
 	assert.Equal(t, "Updated DS", updatedDS.Name)
 	assert.Equal(t, "New description", updatedDS.ShortDescription)
-	assert.Equal(t, 55, updatedDS.PrivacyScore)
+	assert.Equal(t, 6, updatedDS.PrivacyScore)
 
 	// Verify a version snapshot was created
 	versions, err := service.GetResourceVersions(models.SubmissionResourceTypeDatasource, dsID)
@@ -123,21 +123,21 @@ func TestApproveUpdateSubmission_Tool(t *testing.T) {
 		models.JSONMap{
 			"name": "Weather API", "description": "Get weather",
 			"tool_type": "REST", "oas_spec": "dGVzdA==",
-		}, nil, 20, "", "contact@test.com", "", "", nil, "", "",
+		}, nil, 2, "", "contact@test.com", "", "", nil, "", "",
 	)
-	approved, _ := service.ApproveSubmission(sub.ID, admin.ID, 15, nil, "")
+	approved, _ := service.ApproveSubmission(sub.ID, admin.ID, 2, nil, "")
 	toolID := *approved.ResourceID
 
 	// Submit an update
 	updateSub, _ := service.CreateUpdateSubmission(
 		user.ID, models.SubmissionResourceTypeTool, toolID,
 		models.JSONMap{"name": "Weather API v2", "description": "Updated weather data"},
-		nil, 25, "", "contact@test.com", "", "", nil, "", "v2 update",
+		nil, 3, "", "contact@test.com", "", "", nil, "", "v2 update",
 		models.SubmissionStatusSubmitted,
 	)
 
 	// Approve the update
-	_, err := service.ApproveSubmission(updateSub.ID, admin.ID, 20, nil, "")
+	_, err := service.ApproveSubmission(updateSub.ID, admin.ID, 2, nil, "")
 	assert.NoError(t, err)
 
 	// Verify tool was updated
@@ -164,19 +164,19 @@ func TestRollbackResource(t *testing.T) {
 			"name": "Original DS", "short_description": "Original desc",
 			"db_source_type": "pgvector", "embed_vendor": "openai",
 			"embed_model": "text-embedding-3-small", "active": true,
-		}, nil, 50, "", "contact@test.com", "", "", nil, "", "",
+		}, nil, 5, "", "contact@test.com", "", "", nil, "", "",
 	)
-	approved, _ := service.ApproveSubmission(sub.ID, admin.ID, 45, nil, "")
+	approved, _ := service.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
 	dsID := *approved.ResourceID
 
 	// Submit and approve an update
 	updateSub, _ := service.CreateUpdateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, dsID,
 		models.JSONMap{"name": "Updated DS"},
-		nil, 60, "", "contact@test.com", "", "", nil, "", "",
+		nil, 6, "", "contact@test.com", "", "", nil, "", "",
 		models.SubmissionStatusSubmitted,
 	)
-	service.ApproveSubmission(updateSub.ID, admin.ID, 55, nil, "")
+	service.ApproveSubmission(updateSub.ID, admin.ID, 6, nil, "")
 
 	// Verify updated state
 	ds, _ := service.GetDatasourceByID(dsID)
@@ -211,20 +211,20 @@ func TestRollbackResource_WrongResource(t *testing.T) {
 	// Create two datasources
 	sub1, _ := service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
 		models.JSONMap{"name": "DS1", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true},
-		nil, 50, "", "", "", "", nil, "", "")
-	approved1, _ := service.ApproveSubmission(sub1.ID, admin.ID, 45, nil, "")
+		nil, 5, "", "", "", "", nil, "", "")
+	approved1, _ := service.ApproveSubmission(sub1.ID, admin.ID, 5, nil, "")
 	ds1ID := *approved1.ResourceID
 
 	sub2, _ := service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
 		models.JSONMap{"name": "DS2", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true},
-		nil, 50, "", "", "", "", nil, "", "")
-	approved2, _ := service.ApproveSubmission(sub2.ID, admin.ID, 45, nil, "")
+		nil, 5, "", "", "", "", nil, "", "")
+	approved2, _ := service.ApproveSubmission(sub2.ID, admin.ID, 5, nil, "")
 	ds2ID := *approved2.ResourceID
 
 	// Update DS1 to create a version
 	updateSub, _ := service.CreateUpdateSubmission(user.ID, models.SubmissionResourceTypeDatasource, ds1ID,
-		models.JSONMap{"name": "Updated DS1"}, nil, 50, "", "", "", "", nil, "", "", models.SubmissionStatusSubmitted)
-	service.ApproveSubmission(updateSub.ID, admin.ID, 50, nil, "")
+		models.JSONMap{"name": "Updated DS1"}, nil, 5, "", "", "", "", nil, "", "", models.SubmissionStatusSubmitted)
+	service.ApproveSubmission(updateSub.ID, admin.ID, 5, nil, "")
 
 	versions, _ := service.GetResourceVersions(models.SubmissionResourceTypeDatasource, ds1ID)
 
@@ -244,15 +244,15 @@ func TestMultipleUpdates_IncrementingVersions(t *testing.T) {
 	// Create original
 	sub, _ := service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
 		models.JSONMap{"name": "v1", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true},
-		nil, 50, "", "", "", "", nil, "", "")
-	approved, _ := service.ApproveSubmission(sub.ID, admin.ID, 45, nil, "")
+		nil, 5, "", "", "", "", nil, "", "")
+	approved, _ := service.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
 	dsID := *approved.ResourceID
 
 	// Three updates
 	for _, name := range []string{"v2", "v3", "v4"} {
 		updateSub, _ := service.CreateUpdateSubmission(user.ID, models.SubmissionResourceTypeDatasource, dsID,
-			models.JSONMap{"name": name}, nil, 50, "", "", "", "", nil, "", "", models.SubmissionStatusSubmitted)
-		service.ApproveSubmission(updateSub.ID, admin.ID, 50, nil, "")
+			models.JSONMap{"name": name}, nil, 5, "", "", "", "", nil, "", "", models.SubmissionStatusSubmitted)
+		service.ApproveSubmission(updateSub.ID, admin.ID, 5, nil, "")
 	}
 
 	// Should have 3 version snapshots
