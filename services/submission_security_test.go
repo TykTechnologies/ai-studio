@@ -556,3 +556,80 @@ func TestSecurity_AttestationValidation_RequiredAttestationsEnforced(t *testing.
 		assert.Equal(t, models.SubmissionStatusSubmitted, submitted.Status)
 	})
 }
+
+// =============================================================================
+// Credential preservation on resubmission
+// =============================================================================
+
+func TestSecurity_CredentialPreservation_RedactedValuesPreserved(t *testing.T) {
+	db := setupSecurityTestDB(t)
+	svc := NewService(db)
+
+	user := createSubmissionTestUser(t, svc, "dev@test.com")
+
+	// Create a draft with real credentials
+	draft, err := svc.CreateSubmission(
+		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
+		models.JSONMap{
+			"name":            "Credential Test",
+			"db_conn_string":  "postgresql://real-host:5432/db",
+			"db_conn_api_key": "real-secret-key",
+			"embed_api_key":   "sk-real-embed-key",
+		},
+		nil, 5, "", "", "", "", nil, "", "",
+	)
+	require.NoError(t, err)
+
+	// Update with [redacted] values (simulating what happens when user edits after API returns redacted data)
+	updated, err := svc.UpdateSubmission(
+		draft.ID, user.ID,
+		models.JSONMap{
+			"name":            "Credential Test Updated",
+			"db_conn_string":  "[redacted]",
+			"db_conn_api_key": "[redacted]",
+			"embed_api_key":   "[redacted]",
+		},
+		nil, 5, "", "", "", "", nil, "", "",
+	)
+	require.NoError(t, err)
+
+	// The original credentials should be preserved, not overwritten with "[redacted]"
+	assert.Equal(t, "Credential Test Updated", updated.ResourcePayload["name"])
+	assert.Equal(t, "postgresql://real-host:5432/db", updated.ResourcePayload["db_conn_string"])
+	assert.Equal(t, "real-secret-key", updated.ResourcePayload["db_conn_api_key"])
+	assert.Equal(t, "sk-real-embed-key", updated.ResourcePayload["embed_api_key"])
+}
+
+func TestSecurity_CredentialPreservation_NewValuesOverwrite(t *testing.T) {
+	db := setupSecurityTestDB(t)
+	svc := NewService(db)
+
+	user := createSubmissionTestUser(t, svc, "dev@test.com")
+
+	draft, err := svc.CreateSubmission(
+		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
+		models.JSONMap{
+			"name":            "Overwrite Test",
+			"db_conn_api_key": "old-key",
+			"embed_api_key":   "old-embed-key",
+		},
+		nil, 5, "", "", "", "", nil, "", "",
+	)
+	require.NoError(t, err)
+
+	// Update with new actual values (not [redacted])
+	updated, err := svc.UpdateSubmission(
+		draft.ID, user.ID,
+		models.JSONMap{
+			"name":            "Overwrite Test",
+			"db_conn_api_key": "new-key",
+			"embed_api_key":   "new-embed-key",
+		},
+		nil, 5, "", "", "", "", nil, "", "",
+	)
+	require.NoError(t, err)
+
+	// New values should be written
+	assert.Equal(t, "new-key", updated.ResourcePayload["db_conn_api_key"])
+	assert.Equal(t, "new-embed-key", updated.ResourcePayload["embed_api_key"])
+}

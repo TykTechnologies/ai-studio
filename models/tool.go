@@ -11,7 +11,7 @@ import (
 type Tool struct {
 	gorm.Model
 	ID          uint   `json:"id" gorm:"primary_key"`
-	Name        string `json:"name"`
+	Name        string `json:"name" gorm:"index"`
 	Slug        string `json:"slug" gorm:"index"`
 	Description string `json:"description"`
 
@@ -28,10 +28,10 @@ type Tool struct {
 	Apps         []*App      `gorm:"many2many:app_tools;" json:"apps"`
 
 	// Ownership
-	UserID uint `json:"user_id"`
+	UserID uint `json:"user_id" gorm:"index:idx_tool_user_community"`
 
 	// UGC (User-Generated Content) fields
-	CommunitySubmitted bool  `json:"community_submitted"`
+	CommunitySubmitted bool  `json:"community_submitted" gorm:"index:idx_tool_user_community"`
 	SubmissionID       *uint `json:"submission_id"`
 
 	// Plugin-stored metadata

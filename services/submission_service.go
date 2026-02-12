@@ -181,7 +181,8 @@ func (s *Service) UpdateSubmission(id uint, submitterID uint, payload models.JSO
 		return nil, err
 	}
 
-	submission.ResourcePayload = payload
+	// Preserve original credentials when new payload contains "[redacted]" placeholders
+	submission.ResourcePayload = mergePayloadPreservingCredentials(submission.ResourcePayload, payload)
 	submission.Attestations = attestations
 	submission.SuggestedPrivacy = suggestedPrivacy
 	submission.PrivacyJustification = privacyJustification
@@ -622,7 +623,7 @@ func (s *Service) snapshotAndUpdateResourceTx(tx *gorm.DB, submission *models.Su
 		return fmt.Errorf("failed to get version number: %w", err)
 	}
 
-	// Snapshot and apply using tx for all reads/writes (avoids SQLite lock conflicts)
+	// Snapshot using struct marshaling (captures all fields automatically)
 	var snapshotPayload models.JSONMap
 	switch submission.ResourceType {
 	case models.SubmissionResourceTypeDatasource:
@@ -630,26 +631,18 @@ func (s *Service) snapshotAndUpdateResourceTx(tx *gorm.DB, submission *models.Su
 		if err := tx.Preload("Tags").Preload("Files").First(ds, targetID).Error; err != nil {
 			return fmt.Errorf("failed to snapshot datasource: %w", err)
 		}
-		snapshotPayload = models.JSONMap{
-			"name": ds.Name, "short_description": ds.ShortDescription,
-			"long_description": ds.LongDescription, "icon": ds.Icon, "url": ds.Url,
-			"privacy_score": ds.PrivacyScore, "db_conn_string": ds.DBConnString,
-			"db_source_type": ds.DBSourceType, "db_conn_api_key": ds.DBConnAPIKey,
-			"db_name": ds.DBName, "embed_vendor": string(ds.EmbedVendor),
-			"embed_url": ds.EmbedUrl, "embed_api_key": ds.EmbedAPIKey,
-			"embed_model": ds.EmbedModel, "active": ds.Active,
+		snapshotPayload, err = structToJSONMap(ds)
+		if err != nil {
+			return fmt.Errorf("failed to marshal datasource snapshot: %w", err)
 		}
 	case models.SubmissionResourceTypeTool:
 		tool := &models.Tool{}
 		if err := tx.First(tool, targetID).Error; err != nil {
 			return fmt.Errorf("failed to snapshot tool: %w", err)
 		}
-		snapshotPayload = models.JSONMap{
-			"name": tool.Name, "description": tool.Description,
-			"tool_type": tool.ToolType, "oas_spec": tool.OASSpec,
-			"privacy_score": tool.PrivacyScore, "auth_key": tool.AuthKey,
-			"auth_schema_name": tool.AuthSchemaName,
-			"available_operations": tool.AvailableOperations,
+		snapshotPayload, err = structToJSONMap(tool)
+		if err != nil {
+			return fmt.Errorf("failed to marshal tool snapshot: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported resource type: %s", submission.ResourceType)
@@ -665,38 +658,43 @@ func (s *Service) snapshotAndUpdateResourceTx(tx *gorm.DB, submission *models.Su
 		return fmt.Errorf("failed to create version snapshot: %w", err)
 	}
 
-	// Apply updates using tx
-	payload := submission.ResourcePayload
-	getString := func(key string) string {
-		if v, ok := payload[key]; ok {
-			if str, ok := v.(string); ok {
-				return str
-			}
-		}
-		return ""
-	}
+	// Apply updates from payload — build updates map dynamically from non-empty string fields
+	updates := payloadToUpdatesMap(submission.ResourcePayload)
+	updates["privacy_score"] = privacyScore
 
 	switch submission.ResourceType {
 	case models.SubmissionResourceTypeDatasource:
-		updates := map[string]interface{}{"privacy_score": privacyScore}
-		if v := getString("name"); v != "" { updates["name"] = v }
-		if v := getString("short_description"); v != "" { updates["short_description"] = v }
-		if v := getString("long_description"); v != "" { updates["long_description"] = v }
-		if v := getString("db_source_type"); v != "" { updates["db_source_type"] = v }
-		if v := getString("db_name"); v != "" { updates["db_name"] = v }
-		if v := getString("embed_vendor"); v != "" { updates["embed_vendor"] = v }
-		if v := getString("embed_model"); v != "" { updates["embed_model"] = v }
 		return tx.Model(&models.Datasource{}).Where("id = ?", targetID).Updates(updates).Error
-
 	case models.SubmissionResourceTypeTool:
-		updates := map[string]interface{}{"privacy_score": privacyScore}
-		if v := getString("name"); v != "" { updates["name"] = v }
-		if v := getString("description"); v != "" { updates["description"] = v }
-		if v := getString("oas_spec"); v != "" { updates["oas_spec"] = v }
-		if v := getString("available_operations"); v != "" { updates["available_operations"] = v }
 		return tx.Model(&models.Tool{}).Where("id = ?", targetID).Updates(updates).Error
 	}
 	return nil
+}
+
+// payloadToUpdatesMap converts a JSONMap payload into a map suitable for GORM Updates,
+// including only non-empty string values and non-nil values.
+func payloadToUpdatesMap(payload models.JSONMap) map[string]interface{} {
+	updates := make(map[string]interface{})
+	// Skip GORM metadata fields and credential fields (those are handled separately)
+	skipFields := map[string]bool{
+		"id": true, "ID": true, "CreatedAt": true, "UpdatedAt": true, "DeletedAt": true,
+		"created_at": true, "updated_at": true, "deleted_at": true,
+		"tags": true, "files": true, "file_stores": true, "filters": true,
+		"dependencies": true, "apps": true, "metadata": true,
+	}
+	for k, v := range payload {
+		if skipFields[k] {
+			continue
+		}
+		if str, ok := v.(string); ok {
+			if str != "" && str != "[redacted]" {
+				updates[k] = v
+			}
+		} else if v != nil {
+			updates[k] = v
+		}
+	}
+	return updates
 }
 
 // --- Update workflow: snapshot + apply ---
@@ -823,28 +821,26 @@ func (s *Service) snapshotAndUpdateResource(submission *models.Submission, revie
 	return nil
 }
 
+// structToJSONMap converts any struct to a models.JSONMap via JSON marshaling.
+// This ensures all json-tagged fields are captured automatically.
+func structToJSONMap(v interface{}) (models.JSONMap, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal struct: %w", err)
+	}
+	var result models.JSONMap
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal to map: %w", err)
+	}
+	return result, nil
+}
+
 func (s *Service) snapshotDatasource(id uint) (models.JSONMap, error) {
 	ds, err := s.GetDatasourceByID(id)
 	if err != nil {
 		return nil, err
 	}
-	return models.JSONMap{
-		"name":              ds.Name,
-		"short_description": ds.ShortDescription,
-		"long_description":  ds.LongDescription,
-		"icon":              ds.Icon,
-		"url":               ds.Url,
-		"privacy_score":     ds.PrivacyScore,
-		"db_conn_string":    ds.DBConnString,
-		"db_source_type":    ds.DBSourceType,
-		"db_conn_api_key":   ds.DBConnAPIKey,
-		"db_name":           ds.DBName,
-		"embed_vendor":      string(ds.EmbedVendor),
-		"embed_url":         ds.EmbedUrl,
-		"embed_api_key":     ds.EmbedAPIKey,
-		"embed_model":       ds.EmbedModel,
-		"active":            ds.Active,
-	}, nil
+	return structToJSONMap(ds)
 }
 
 func (s *Service) snapshotTool(id uint) (models.JSONMap, error) {
@@ -852,101 +848,19 @@ func (s *Service) snapshotTool(id uint) (models.JSONMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return models.JSONMap{
-		"name":                 tool.Name,
-		"description":          tool.Description,
-		"tool_type":            tool.ToolType,
-		"oas_spec":             tool.OASSpec,
-		"privacy_score":        tool.PrivacyScore,
-		"auth_key":             tool.AuthKey,
-		"auth_schema_name":     tool.AuthSchemaName,
-		"available_operations": tool.AvailableOperations,
-	}, nil
+	return structToJSONMap(tool)
 }
 
 func (s *Service) applyDatasourceUpdate(id uint, payload models.JSONMap, privacyScore int) error {
-	ds, err := s.GetDatasourceByID(id)
-	if err != nil {
-		return err
-	}
-
-	getString := func(key string) string {
-		if v, ok := payload[key]; ok {
-			if str, ok := v.(string); ok {
-				return str
-			}
-		}
-		return ""
-	}
-
-	if v := getString("name"); v != "" {
-		ds.Name = v
-	}
-	if v := getString("short_description"); v != "" {
-		ds.ShortDescription = v
-	}
-	if v := getString("long_description"); v != "" {
-		ds.LongDescription = v
-	}
-	if v := getString("icon"); v != "" {
-		ds.Icon = v
-	}
-	if v := getString("url"); v != "" {
-		ds.Url = v
-	}
-	ds.PrivacyScore = privacyScore
-	if v := getString("db_conn_string"); v != "" {
-		ds.DBConnString = v
-	}
-	if v := getString("db_source_type"); v != "" {
-		ds.DBSourceType = v
-	}
-	if v := getString("db_name"); v != "" {
-		ds.DBName = v
-	}
-	if v := getString("embed_vendor"); v != "" {
-		ds.EmbedVendor = models.Vendor(v)
-	}
-	if v := getString("embed_url"); v != "" {
-		ds.EmbedUrl = v
-	}
-	if v := getString("embed_model"); v != "" {
-		ds.EmbedModel = v
-	}
-
-	return ds.Update(s.DB)
+	updates := payloadToUpdatesMap(payload)
+	updates["privacy_score"] = privacyScore
+	return s.DB.Model(&models.Datasource{}).Where("id = ?", id).Updates(updates).Error
 }
 
 func (s *Service) applyToolUpdate(id uint, payload models.JSONMap, privacyScore int) error {
-	tool, err := s.GetToolByID(id)
-	if err != nil {
-		return err
-	}
-
-	getString := func(key string) string {
-		if v, ok := payload[key]; ok {
-			if str, ok := v.(string); ok {
-				return str
-			}
-		}
-		return ""
-	}
-
-	if v := getString("name"); v != "" {
-		tool.Name = v
-	}
-	if v := getString("description"); v != "" {
-		tool.Description = v
-	}
-	if v := getString("oas_spec"); v != "" {
-		tool.OASSpec = v
-	}
-	if v := getString("available_operations"); v != "" {
-		tool.AvailableOperations = v
-	}
-	tool.PrivacyScore = privacyScore
-
-	return tool.Update(s.DB)
+	updates := payloadToUpdatesMap(payload)
+	updates["privacy_score"] = privacyScore
+	return s.DB.Model(&models.Tool{}).Where("id = ?", id).Updates(updates).Error
 }
 
 // --- Version listing and rollback ---
@@ -1038,6 +952,42 @@ func (s *Service) RollbackResource(resourceType string, resourceID uint, version
 	s.DB.Save(version)
 
 	return nil
+}
+
+// --- Credential preservation ---
+
+// credentialFields are payload keys that contain secrets and get redacted in API responses.
+var credentialFields = []string{"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string"}
+
+// mergePayloadPreservingCredentials returns the new payload, but for any credential field
+// where the new value is "[redacted]", preserves the original value from the existing payload.
+func mergePayloadPreservingCredentials(existing, incoming models.JSONMap) models.JSONMap {
+	if incoming == nil {
+		return existing
+	}
+	if existing == nil {
+		return incoming
+	}
+
+	merged := make(models.JSONMap, len(incoming))
+	for k, v := range incoming {
+		merged[k] = v
+	}
+
+	for _, field := range credentialFields {
+		newVal, hasNew := merged[field]
+		if !hasNew {
+			continue
+		}
+		if str, ok := newVal.(string); ok && str == "[redacted]" {
+			// Preserve the original credential value
+			if origVal, hasOrig := existing[field]; hasOrig {
+				merged[field] = origVal
+			}
+		}
+	}
+
+	return merged
 }
 
 // --- Attestation validation ---

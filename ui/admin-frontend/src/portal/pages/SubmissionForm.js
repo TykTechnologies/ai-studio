@@ -513,6 +513,11 @@ const SubmissionForm = () => {
                           )
                         }
                         onBlur={checkDuplicates}
+                        helperText={
+                          payload.db_conn_string === "[redacted]"
+                            ? "Saved credential — clear and re-enter to change"
+                            : undefined
+                        }
                       />
                     </Grid>
                     <Grid item xs={12}>
@@ -526,6 +531,11 @@ const SubmissionForm = () => {
                             "db_conn_api_key",
                             e.target.value
                           )
+                        }
+                        helperText={
+                          payload.db_conn_api_key === "[redacted]"
+                            ? "Saved credential — clear and re-enter to change"
+                            : undefined
                         }
                         InputProps={{
                           endAdornment: (
@@ -609,6 +619,11 @@ const SubmissionForm = () => {
                             "embed_api_key",
                             e.target.value
                           )
+                        }
+                        helperText={
+                          payload.embed_api_key === "[redacted]"
+                            ? "Saved credential — clear and re-enter to change"
+                            : undefined
                         }
                         InputProps={{
                           endAdornment: (
@@ -798,6 +813,11 @@ const SubmissionForm = () => {
                       value={payload.auth_key || ""}
                       onChange={(e) =>
                         handlePayloadChange("auth_key", e.target.value)
+                      }
+                      helperText={
+                        payload.auth_key === "[redacted]"
+                          ? "Saved credential — clear and re-enter to change"
+                          : undefined
                       }
                     />
                   </Grid>

@@ -6,6 +6,12 @@ import testTheme from "../../admin/utils/testTheme";
 import { MemoryRouter } from "react-router-dom";
 import SubmissionForm from "./SubmissionForm";
 
+// Mock react-markdown (ESM module that Jest can't handle)
+jest.mock("react-markdown", () => ({
+  __esModule: true,
+  default: ({ children }) => <div data-testid="markdown">{children}</div>,
+}));
+
 jest.mock("../../admin/utils/pubClient", () => ({
   __esModule: true,
   default: {
@@ -44,6 +50,12 @@ describe("SubmissionForm", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     pubClient.get.mockResolvedValue({ data: { data: [] } });
+    // Re-set vendorUtils mock after clearAllMocks
+    const { fetchVendors } = require("../../admin/utils/vendorUtils");
+    fetchVendors.mockResolvedValue({
+      embedders: [{ code: "openai" }, { code: "ollama" }],
+      vectorStores: [{ code: "pgvector" }, { code: "chroma" }],
+    });
   });
 
   it("renders the page title", async () => {
@@ -56,7 +68,8 @@ describe("SubmissionForm", () => {
   it("shows resource type selector label", async () => {
     renderWithProviders(<SubmissionForm />);
     await waitFor(() => {
-      expect(screen.getByText("Resource Type")).toBeInTheDocument();
+      const elements = screen.getAllByText("Resource Type");
+      expect(elements.length).toBeGreaterThan(0);
     });
   });
 
