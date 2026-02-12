@@ -89,6 +89,19 @@ const Drawer = () => {
           : []),
       ],
     },
+    ...(features.feature_portal
+      ? [
+          {
+            id: 'community',
+            text: 'Community',
+            icon: <Icon name="puzzle-piece" />,
+            subItems: [
+              { id: 'submission-queue', text: 'Submission Queue', path: '/admin/submissions' },
+              { id: 'attestation-templates', text: 'Attestation Templates', path: '/admin/attestation-templates' },
+            ],
+          },
+        ]
+      : []),
     {
       id: 'Governance',
       text: 'Governance',

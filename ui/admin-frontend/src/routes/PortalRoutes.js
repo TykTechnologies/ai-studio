@@ -8,6 +8,9 @@ import AppBuilder from "../portal/components/AppBuilder";
 import AppListView from "../portal/components/AppListView";
 import AppDetailView from "../portal/components/AppDetailView";
 import ToolDocumentationPage from "../portal/pages/ToolDocumentationPage";
+import MyContributions from "../portal/pages/MyContributions";
+import SubmissionForm from "../portal/pages/SubmissionForm";
+import SubmissionDetail from "../portal/pages/SubmissionDetail";
 import { Navigate } from "react-router-dom";
 
 const PortalRoutes = () => (
@@ -21,6 +24,10 @@ const PortalRoutes = () => (
     <Route path="/app/new" element={<AppBuilder />} />
     <Route path="/apps" element={<AppListView />} />
     <Route path="/apps/:id" element={<AppDetailView />} />
+    <Route path="/contributions" element={<MyContributions />} />
+    <Route path="/submissions/new" element={<SubmissionForm />} />
+    <Route path="/submissions/edit/:id" element={<SubmissionForm />} />
+    <Route path="/submissions/:id" element={<SubmissionDetail />} />
   </Routes>
 );
 
