@@ -50,10 +50,6 @@ func TestLLMRequestHandling(t *testing.T) {
 	err = db.Create(llm).Error
 	require.NoError(t, err)
 
-	// Force reload
-	err = proxy.loadResources()
-	require.NoError(t, err)
-
 	// Mock upstream
 	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
@@ -77,6 +73,10 @@ func TestLLMRequestHandling(t *testing.T) {
 
 	llm.APIEndpoint = mockUpstream.URL
 	err = db.Save(llm).Error
+	require.NoError(t, err)
+
+	// Force reload with mockUpstream URL added
+	err = proxy.loadResources()
 	require.NoError(t, err)
 
 	proxy.credValidator.RegisterValidator(string(models.MOCK_VENDOR), func(r *http.Request) (string, error) {
