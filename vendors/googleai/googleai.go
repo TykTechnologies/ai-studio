@@ -111,18 +111,17 @@ func (v *GoogleAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, st
 	return llm, app, aggregate, nil
 }
 
+// ProxySetAuthHeader injects the required Google AI authentication credentials into the
+// outgoing request. It modifies the request in-place, ensuring the API key is present
+// in both the 'x-goog-api-key' header and the 'key' query parameter
+// to satisfy different versions of the Vertex/Gemini APIs.
 func (v *GoogleAI) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
-	params := r.URL.Query()
-	_, ok := params["key"]
-	if ok {
-		params.Del("key")
-		params.Add("key", llm.APIKey)
-		r.URL.RawQuery = params.Encode()
-	}
+	r.Header.Set("x-goog-api-key", llm.APIKey)
 
-	hKey := r.Header.Get("x-goog-api-key")
-	if hKey != "" {
-		r.Header.Set("x-goog-api-key", llm.APIKey)
+	q := r.URL.Query()
+	if q.Get("key") != llm.APIKey {
+		q.Set("key", llm.APIKey)
+		r.URL.RawQuery = q.Encode()
 	}
 
 	return nil
