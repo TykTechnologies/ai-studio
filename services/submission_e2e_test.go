@@ -82,8 +82,8 @@ func TestE2E_DatasourceSubmission_FullLifecycle(t *testing.T) {
 	draft, err := svc.CreateSubmission(
 		developer.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
 		dsPayload,
-		models.JSONMap{"attestations": []interface{}{
-			map[string]interface{}{"template_id": tmpl.ID, "accepted": true},
+		models.JSONMap{"accepted": []interface{}{
+			map[string]interface{}{"template_id": float64(tmpl.ID), "accepted_at": "2024-01-15T10:00:00Z"},
 		}},
 		5, "Contains only public product review data",
 		"dev@company.com", "team-lead@company.com",

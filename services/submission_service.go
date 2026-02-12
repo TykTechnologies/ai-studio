@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"gorm.io/gorm"
 )
 
 // Input length limits for submission fields
@@ -212,6 +213,11 @@ func (s *Service) SubmitSubmission(id, submitterID uint) (*models.Submission, er
 		return nil, fmt.Errorf("can only submit from '%s' or '%s' status", models.SubmissionStatusDraft, models.SubmissionStatusChangesRequested)
 	}
 
+	// Validate required attestations are present
+	if err := s.validateAttestations(submission); err != nil {
+		return nil, err
+	}
+
 	now := time.Now()
 	wasChangesRequested := submission.Status == models.SubmissionStatusChangesRequested
 	submission.Status = models.SubmissionStatusSubmitted
@@ -304,7 +310,8 @@ func (s *Service) StartReview(submissionID, reviewerID uint) (*models.Submission
 	return submission, nil
 }
 
-// ApproveSubmission approves a submission and creates or updates the resource (admin)
+// ApproveSubmission approves a submission and creates or updates the resource (admin).
+// All operations are wrapped in a DB transaction to prevent orphaned resources.
 func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyScore int, catalogueIDs models.JSONMap, reviewNotes string) (*models.Submission, error) {
 	submission, err := s.GetSubmissionByID(submissionID)
 	if err != nil {
@@ -315,22 +322,24 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 		return nil, fmt.Errorf("can only approve submissions in '%s' or '%s' status", models.SubmissionStatusInReview, models.SubmissionStatusSubmitted)
 	}
 
-	if finalPrivacyScore < minPrivacyScore || finalPrivacyScore > maxPrivacyScore {
-		return nil, fmt.Errorf("final_privacy_score must be between %d and %d", minPrivacyScore, maxPrivacyScore)
+	// Begin transaction — all writes must succeed or all roll back
+	tx := s.DB.Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
 	}
 
 	var resourceID uint
 
 	if submission.IsUpdate && submission.TargetResourceID != nil {
-		// Update workflow: snapshot current state, then apply changes
 		resourceID = *submission.TargetResourceID
-		if err := s.snapshotAndUpdateResource(submission, reviewerID, finalPrivacyScore); err != nil {
+		if err := s.snapshotAndUpdateResourceTx(tx, submission, reviewerID, finalPrivacyScore); err != nil {
+			tx.Rollback()
 			return nil, fmt.Errorf("failed to update resource: %w", err)
 		}
 	} else {
-		// New submission: create the resource
-		resourceID, err = s.createResourceFromSubmission(submission, finalPrivacyScore)
+		resourceID, err = s.createResourceFromSubmissionTx(tx, submission, finalPrivacyScore)
 		if err != nil {
+			tx.Rollback()
 			return nil, fmt.Errorf("failed to create resource: %w", err)
 		}
 	}
@@ -344,13 +353,28 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 	submission.ReviewNotes = reviewNotes
 	submission.ReviewCompletedAt = &now
 
-	if err := submission.UpdateWithLock(s.DB); err != nil {
+	if err := submission.UpdateWithLock(tx); err != nil {
+		tx.Rollback()
 		return nil, err
 	}
 
-	s.RecordSubmissionActivity(submissionID, reviewerID, "", models.ActivityTypeApproved, "", reviewNotes)
+	// Record activity within the transaction
+	activity := &models.SubmissionActivity{
+		SubmissionID: submissionID,
+		ActorID:      reviewerID,
+		ActivityType: models.ActivityTypeApproved,
+		InternalNote: reviewNotes,
+	}
+	if err := activity.Create(tx); err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("failed to record activity: %w", err)
+	}
 
-	// Notify submitter
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+
+	// Notifications are sent after commit (non-transactional, fire-and-forget)
 	if s.NotificationService != nil {
 		s.notifySubmitterOfDecision(submission, "approved")
 	}
@@ -532,6 +556,147 @@ func (s *Service) createToolFromPayload(payload models.JSONMap, submitterID uint
 	}
 
 	return tool.ID, nil
+}
+
+// --- Transaction-aware resource creation (for ApproveSubmission) ---
+
+func (s *Service) createResourceFromSubmissionTx(tx *gorm.DB, submission *models.Submission, privacyScore int) (uint, error) {
+	payload := submission.ResourcePayload
+	getString := func(key string) string {
+		if v, ok := payload[key]; ok {
+			if str, ok := v.(string); ok {
+				return str
+			}
+		}
+		return ""
+	}
+	getBool := func(key string) bool {
+		if v, ok := payload[key]; ok {
+			if b, ok := v.(bool); ok {
+				return b
+			}
+		}
+		return false
+	}
+
+	switch submission.ResourceType {
+	case models.SubmissionResourceTypeDatasource:
+		ds := &models.Datasource{
+			Name: getString("name"), ShortDescription: getString("short_description"),
+			LongDescription: getString("long_description"), Icon: getString("icon"),
+			Url: getString("url"), PrivacyScore: privacyScore, UserID: submission.SubmitterID,
+			DBConnString: getString("db_conn_string"), DBSourceType: getString("db_source_type"),
+			DBConnAPIKey: getString("db_conn_api_key"), DBName: getString("db_name"),
+			EmbedVendor: models.Vendor(getString("embed_vendor")), EmbedUrl: getString("embed_url"),
+			EmbedAPIKey: getString("embed_api_key"), EmbedModel: getString("embed_model"),
+			Active: getBool("active"), CommunitySubmitted: true,
+		}
+		if err := tx.Create(ds).Error; err != nil {
+			return 0, err
+		}
+		return ds.ID, nil
+
+	case models.SubmissionResourceTypeTool:
+		tool := &models.Tool{
+			Name: getString("name"), Description: getString("description"),
+			ToolType: getString("tool_type"), OASSpec: getString("oas_spec"),
+			PrivacyScore: privacyScore, AuthSchemaName: getString("auth_schema_name"),
+			AuthKey: getString("auth_key"), AvailableOperations: getString("available_operations"),
+			UserID: submission.SubmitterID, CommunitySubmitted: true,
+		}
+		if err := tx.Create(tool).Error; err != nil {
+			return 0, err
+		}
+		return tool.ID, nil
+
+	default:
+		return 0, fmt.Errorf("unsupported resource type: %s", submission.ResourceType)
+	}
+}
+
+func (s *Service) snapshotAndUpdateResourceTx(tx *gorm.DB, submission *models.Submission, reviewerID uint, privacyScore int) error {
+	targetID := *submission.TargetResourceID
+
+	currentVersion, err := models.GetLatestVersionNumber(tx, submission.ResourceType, targetID)
+	if err != nil {
+		return fmt.Errorf("failed to get version number: %w", err)
+	}
+
+	// Snapshot and apply using tx for all reads/writes (avoids SQLite lock conflicts)
+	var snapshotPayload models.JSONMap
+	switch submission.ResourceType {
+	case models.SubmissionResourceTypeDatasource:
+		ds := &models.Datasource{}
+		if err := tx.Preload("Tags").Preload("Files").First(ds, targetID).Error; err != nil {
+			return fmt.Errorf("failed to snapshot datasource: %w", err)
+		}
+		snapshotPayload = models.JSONMap{
+			"name": ds.Name, "short_description": ds.ShortDescription,
+			"long_description": ds.LongDescription, "icon": ds.Icon, "url": ds.Url,
+			"privacy_score": ds.PrivacyScore, "db_conn_string": ds.DBConnString,
+			"db_source_type": ds.DBSourceType, "db_conn_api_key": ds.DBConnAPIKey,
+			"db_name": ds.DBName, "embed_vendor": string(ds.EmbedVendor),
+			"embed_url": ds.EmbedUrl, "embed_api_key": ds.EmbedAPIKey,
+			"embed_model": ds.EmbedModel, "active": ds.Active,
+		}
+	case models.SubmissionResourceTypeTool:
+		tool := &models.Tool{}
+		if err := tx.First(tool, targetID).Error; err != nil {
+			return fmt.Errorf("failed to snapshot tool: %w", err)
+		}
+		snapshotPayload = models.JSONMap{
+			"name": tool.Name, "description": tool.Description,
+			"tool_type": tool.ToolType, "oas_spec": tool.OASSpec,
+			"privacy_score": tool.PrivacyScore, "auth_key": tool.AuthKey,
+			"auth_schema_name": tool.AuthSchemaName,
+			"available_operations": tool.AvailableOperations,
+		}
+	default:
+		return fmt.Errorf("unsupported resource type: %s", submission.ResourceType)
+	}
+
+	version := &models.SubmissionVersion{
+		SubmissionID: submission.ID, ResourceID: targetID,
+		ResourceType: submission.ResourceType, VersionNumber: currentVersion + 1,
+		Payload: snapshotPayload, ChangedBy: submission.SubmitterID,
+		ApprovedBy: reviewerID, ChangeNotes: submission.Notes,
+	}
+	if err := tx.Create(version).Error; err != nil {
+		return fmt.Errorf("failed to create version snapshot: %w", err)
+	}
+
+	// Apply updates using tx
+	payload := submission.ResourcePayload
+	getString := func(key string) string {
+		if v, ok := payload[key]; ok {
+			if str, ok := v.(string); ok {
+				return str
+			}
+		}
+		return ""
+	}
+
+	switch submission.ResourceType {
+	case models.SubmissionResourceTypeDatasource:
+		updates := map[string]interface{}{"privacy_score": privacyScore}
+		if v := getString("name"); v != "" { updates["name"] = v }
+		if v := getString("short_description"); v != "" { updates["short_description"] = v }
+		if v := getString("long_description"); v != "" { updates["long_description"] = v }
+		if v := getString("db_source_type"); v != "" { updates["db_source_type"] = v }
+		if v := getString("db_name"); v != "" { updates["db_name"] = v }
+		if v := getString("embed_vendor"); v != "" { updates["embed_vendor"] = v }
+		if v := getString("embed_model"); v != "" { updates["embed_model"] = v }
+		return tx.Model(&models.Datasource{}).Where("id = ?", targetID).Updates(updates).Error
+
+	case models.SubmissionResourceTypeTool:
+		updates := map[string]interface{}{"privacy_score": privacyScore}
+		if v := getString("name"); v != "" { updates["name"] = v }
+		if v := getString("description"); v != "" { updates["description"] = v }
+		if v := getString("oas_spec"); v != "" { updates["oas_spec"] = v }
+		if v := getString("available_operations"); v != "" { updates["available_operations"] = v }
+		return tx.Model(&models.Tool{}).Where("id = ?", targetID).Updates(updates).Error
+	}
+	return nil
 }
 
 // --- Update workflow: snapshot + apply ---
@@ -871,6 +1036,64 @@ func (s *Service) RollbackResource(resourceType string, resourceID uint, version
 	version.RolledBackAt = &now
 	version.RolledBackBy = &adminID
 	s.DB.Save(version)
+
+	return nil
+}
+
+// --- Attestation validation ---
+
+// validateAttestations checks that all required attestation templates for the resource type
+// are acknowledged in the submission's attestations map.
+func (s *Service) validateAttestations(submission *models.Submission) error {
+	requiredTemplates, err := s.GetAttestationTemplatesByType(submission.ResourceType, true)
+	if err != nil {
+		return fmt.Errorf("failed to fetch attestation templates: %w", err)
+	}
+
+	// Filter to only required templates
+	var required []models.AttestationTemplate
+	for _, t := range requiredTemplates {
+		if t.Required {
+			required = append(required, t)
+		}
+	}
+
+	if len(required) == 0 {
+		return nil // No required attestations configured
+	}
+
+	// Parse the accepted attestation IDs from the submission
+	acceptedIDs := make(map[uint]bool)
+	if submission.Attestations != nil {
+		if accepted, ok := submission.Attestations["accepted"]; ok {
+			if acceptedList, ok := accepted.([]interface{}); ok {
+				for _, item := range acceptedList {
+					if m, ok := item.(map[string]interface{}); ok {
+						if id, ok := m["template_id"]; ok {
+							switch v := id.(type) {
+							case float64:
+								acceptedIDs[uint(v)] = true
+							case int:
+								acceptedIDs[uint(v)] = true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Check each required template is acknowledged
+	var missing []string
+	for _, t := range required {
+		if !acceptedIDs[t.ID] {
+			missing = append(missing, t.Name)
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("required attestations not accepted: %s", strings.Join(missing, ", "))
+	}
 
 	return nil
 }

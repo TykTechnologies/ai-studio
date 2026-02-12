@@ -244,9 +244,9 @@ const SubmissionForm = () => {
 
     if (resourceType === "tool") {
       if (!payload.oas_spec) newErrors.oas_spec = "OAS spec is required";
+      // Default tool_type is set via setPayload, not by mutating state directly
       if (!payload.tool_type) {
-        // Auto-set tool_type for tools
-        payload.tool_type = "REST";
+        setPayload((prev) => ({ ...prev, tool_type: "REST" }));
       }
     }
 
@@ -654,14 +654,15 @@ const SubmissionForm = () => {
                       value={payload.oas_spec_raw || ""}
                       onChange={(e) => {
                         handlePayloadChange("oas_spec_raw", e.target.value);
-                        // Base64 encode for backend
+                        // Base64 encode for backend (Unicode-safe)
                         try {
-                          handlePayloadChange(
-                            "oas_spec",
-                            btoa(e.target.value)
+                          const encoded = btoa(
+                            unescape(encodeURIComponent(e.target.value))
                           );
+                          handlePayloadChange("oas_spec", encoded);
                         } catch (err) {
-                          // Non-ASCII chars
+                          // Encoding failed — clear the encoded value
+                          handlePayloadChange("oas_spec", "");
                         }
                       }}
                       error={!!errors.oas_spec}

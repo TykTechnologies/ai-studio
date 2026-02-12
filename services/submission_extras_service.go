@@ -5,6 +5,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"gorm.io/gorm"
 )
 
 // DuplicateCandidate represents a potential duplicate found during submission
@@ -112,13 +113,18 @@ func (s *Service) findDuplicateTools(getString func(string) string) []DuplicateC
 
 // --- Orphan management ---
 
-// HandleUserDeletionForUGC flags community resources owned by a deleted/deactivated user
-// and notifies admins. Call this when a user is deleted.
+// HandleUserDeletionForUGC flags community resources owned by a deleted/deactivated user.
+// Delegates to HandleUserDeletionForUGCTx with the default DB connection.
 func (s *Service) HandleUserDeletionForUGC(userID uint) error {
+	return s.HandleUserDeletionForUGCTx(s.DB, userID)
+}
+
+// HandleUserDeletionForUGCTx is the transaction-aware version of HandleUserDeletionForUGC.
+func (s *Service) HandleUserDeletionForUGCTx(db *gorm.DB, userID uint) error {
 	var orphanedCount int
 
 	// Flag community datasources
-	result := s.DB.Model(&models.Datasource{}).
+	result := db.Model(&models.Datasource{}).
 		Where("user_id = ? AND community_submitted = ?", userID, true).
 		Update("active", false)
 	if result.Error != nil {
@@ -126,24 +132,16 @@ func (s *Service) HandleUserDeletionForUGC(userID uint) error {
 	}
 	orphanedCount += int(result.RowsAffected)
 
-	// Flag community tools
-	result = s.DB.Model(&models.Tool{}).
-		Where("user_id = ? AND community_submitted = ?", userID, true).
-		Update("community_submitted", true) // already true, but ensures query runs; we track via active state
-	if result.Error != nil {
-		return fmt.Errorf("failed to process community tools: %w", result.Error)
-	}
-
-	// Count orphaned tools
+	// Count community tools (Tool model has no Active field, so we track via admin notification)
 	var toolCount int64
-	s.DB.Model(&models.Tool{}).Where("user_id = ? AND community_submitted = ?", userID, true).Count(&toolCount)
+	db.Model(&models.Tool{}).Where("user_id = ? AND community_submitted = ?", userID, true).Count(&toolCount)
 	orphanedCount += int(toolCount)
 
 	// Notify admins if there are orphaned community resources
 	if orphanedCount > 0 && s.NotificationService != nil {
 		// Get user info for the notification
 		user := &models.User{}
-		s.DB.First(user, userID)
+		db.First(user, userID)
 
 		title := fmt.Sprintf("Community resources orphaned: %d resources need reassignment", orphanedCount)
 		notificationID := fmt.Sprintf("ugc_orphan_%d", userID)

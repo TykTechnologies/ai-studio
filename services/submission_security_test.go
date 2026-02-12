@@ -329,3 +329,230 @@ func TestSecurity_AuditTrail_RecordsAllTransitions(t *testing.T) {
 	assert.Equal(t, models.ActivityTypeResubmitted, activities[2].ActivityType)
 	assert.Equal(t, models.ActivityTypeApproved, activities[3].ActivityType)
 }
+
+// =============================================================================
+// Item 1: Transaction atomicity — approval failure rolls back resource creation
+// =============================================================================
+
+func TestSecurity_ApprovalTransaction_CannotApproveAlreadyApproved(t *testing.T) {
+	db := setupSecurityTestDB(t)
+	svc := NewService(db)
+
+	user := createSubmissionTestUser(t, svc, "dev@test.com")
+	admin := createSubmissionTestAdmin(t, svc, "admin@test.com")
+
+	// Create and approve a submission
+	sub, err := svc.CreateSubmission(
+		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
+		models.JSONMap{
+			"name": "First Approval", "db_source_type": "pgvector",
+			"embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true,
+		}, nil, 5, "", "", "", "", nil, "", "",
+	)
+	require.NoError(t, err)
+
+	_, err = svc.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
+	require.NoError(t, err)
+
+	// Count datasources before second attempt
+	var countBefore int64
+	db.Model(&models.Datasource{}).Count(&countBefore)
+
+	// Attempt to approve again — should fail (already approved)
+	_, err = svc.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "can only approve")
+
+	// No new datasource should have been created
+	var countAfter int64
+	db.Model(&models.Datasource{}).Count(&countAfter)
+	assert.Equal(t, countBefore, countAfter, "no new resource should be created on failed re-approval")
+}
+
+func TestSecurity_ApprovalTransaction_ResourceAndSubmissionConsistent(t *testing.T) {
+	db := setupSecurityTestDB(t)
+	svc := NewService(db)
+
+	user := createSubmissionTestUser(t, svc, "dev@test.com")
+	admin := createSubmissionTestAdmin(t, svc, "admin@test.com")
+
+	sub, err := svc.CreateSubmission(
+		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
+		models.JSONMap{
+			"name": "Consistent Test", "db_source_type": "pgvector",
+			"embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true,
+		}, nil, 5, "", "", "", "", nil, "", "",
+	)
+	require.NoError(t, err)
+
+	// Approve — both resource and submission should be created/updated atomically
+	approved, err := svc.ApproveSubmission(sub.ID, admin.ID, 5, nil, "All good")
+	require.NoError(t, err)
+	require.NotNil(t, approved.ResourceID)
+
+	// Verify resource exists
+	ds, err := svc.GetDatasourceByID(*approved.ResourceID)
+	require.NoError(t, err)
+	assert.Equal(t, "Consistent Test", ds.Name)
+	assert.True(t, ds.CommunitySubmitted)
+
+	// Verify submission points to resource
+	fetched, err := svc.GetSubmissionByID(sub.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.SubmissionStatusApproved, fetched.Status)
+	assert.Equal(t, *approved.ResourceID, *fetched.ResourceID)
+
+	// Verify activity was recorded
+	activities, err := svc.GetSubmissionActivities(sub.ID)
+	require.NoError(t, err)
+	found := false
+	for _, a := range activities {
+		if a.ActivityType == models.ActivityTypeApproved {
+			found = true
+		}
+	}
+	assert.True(t, found, "approval activity should be recorded in the same transaction")
+}
+
+// =============================================================================
+// Item 7: HandleUserDeletionForUGC runs inside user deletion transaction
+// =============================================================================
+
+func TestSecurity_UserDeletion_UGCCleanupIsTransactional(t *testing.T) {
+	db := setupSecurityTestDB(t)
+	svc := NewService(db)
+
+	user := createSubmissionTestUser(t, svc, "dev@test.com")
+	admin := createSubmissionTestAdmin(t, svc, "admin@test.com")
+
+	// Create a community datasource via approval
+	sub, _ := svc.CreateSubmission(
+		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
+		models.JSONMap{
+			"name": "Dev's Community DS", "db_source_type": "pgvector",
+			"embed_vendor": "openai", "embed_model": "text-embedding-3-small", "active": true,
+		}, nil, 5, "", "", "", "", nil, "", "",
+	)
+	approved, _ := svc.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
+	dsID := *approved.ResourceID
+
+	// Verify datasource is active before deletion
+	ds := &models.Datasource{}
+	db.First(ds, dsID)
+	assert.True(t, ds.Active)
+	assert.True(t, ds.CommunitySubmitted)
+
+	// Delete the user
+	err := svc.DeleteUser(user)
+	require.NoError(t, err)
+
+	// Verify community datasource was deactivated as part of the deletion
+	deactivatedDS := &models.Datasource{}
+	db.First(deactivatedDS, dsID)
+	assert.False(t, deactivatedDS.Active, "community datasource should be deactivated when owner is deleted")
+}
+
+// =============================================================================
+// Item 8: Attestation validation enforced on submit
+// =============================================================================
+
+func TestSecurity_AttestationValidation_RequiredAttestationsEnforced(t *testing.T) {
+	db := setupSecurityTestDB(t)
+	svc := NewService(db)
+
+	user := createSubmissionTestUser(t, svc, "dev@test.com")
+
+	// Create a required attestation template
+	tmpl, err := svc.CreateAttestationTemplate(
+		"Data Authority",
+		"I confirm I have authority to share these credentials",
+		models.AttestationAppliesToDatasource,
+		true, true, 1,
+	)
+	require.NoError(t, err)
+
+	t.Run("SubmitWithoutRequiredAttestationFails", func(t *testing.T) {
+		// Create draft with no attestations
+		draft, err := svc.CreateSubmission(
+			user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
+			models.JSONMap{"name": "No Attestation DS"}, nil, 5, "",
+			"", "", "", nil, "", "",
+		)
+		require.NoError(t, err)
+
+		// Try to submit — should fail
+		_, err = svc.SubmitSubmission(draft.ID, user.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "required attestations not accepted")
+		assert.Contains(t, err.Error(), "Data Authority")
+	})
+
+	t.Run("SubmitWithWrongAttestationIDFails", func(t *testing.T) {
+		draft, err := svc.CreateSubmission(
+			user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
+			models.JSONMap{"name": "Wrong Attestation DS"},
+			models.JSONMap{"accepted": []interface{}{
+				map[string]interface{}{"template_id": float64(99999)},
+			}},
+			5, "", "", "", "", nil, "", "",
+		)
+		require.NoError(t, err)
+
+		_, err = svc.SubmitSubmission(draft.ID, user.ID)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "required attestations not accepted")
+	})
+
+	t.Run("SubmitWithCorrectAttestationSucceeds", func(t *testing.T) {
+		draft, err := svc.CreateSubmission(
+			user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
+			models.JSONMap{"name": "Valid Attestation DS"},
+			models.JSONMap{"accepted": []interface{}{
+				map[string]interface{}{"template_id": float64(tmpl.ID), "accepted_at": "2024-01-15T10:00:00Z"},
+			}},
+			5, "", "", "", "", nil, "", "",
+		)
+		require.NoError(t, err)
+
+		submitted, err := svc.SubmitSubmission(draft.ID, user.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusSubmitted, submitted.Status)
+	})
+
+	t.Run("ToolSubmissionIgnoresDatasourceAttestations", func(t *testing.T) {
+		// The template applies to datasources only — tools should not be blocked
+		draft, err := svc.CreateSubmission(
+			user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusDraft,
+			models.JSONMap{"name": "Tool No Attestation"},
+			nil, 5, "", "", "", "", nil, "", "",
+		)
+		require.NoError(t, err)
+
+		submitted, err := svc.SubmitSubmission(draft.ID, user.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusSubmitted, submitted.Status)
+	})
+
+	t.Run("OptionalAttestationDoesNotBlock", func(t *testing.T) {
+		// Create an optional attestation template
+		svc.CreateAttestationTemplate(
+			"Nice to Have", "I promise to be nice",
+			models.AttestationAppliesToDatasource, false, true, 2,
+		)
+
+		// Submit without the optional one — should succeed (only required matters)
+		draft, err := svc.CreateSubmission(
+			user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
+			models.JSONMap{"name": "Optional Attestation DS"},
+			models.JSONMap{"accepted": []interface{}{
+				map[string]interface{}{"template_id": float64(tmpl.ID)},
+			}},
+			5, "", "", "", "", nil, "", "",
+		)
+		require.NoError(t, err)
+
+		submitted, err := svc.SubmitSubmission(draft.ID, user.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusSubmitted, submitted.Status)
+	})
+}

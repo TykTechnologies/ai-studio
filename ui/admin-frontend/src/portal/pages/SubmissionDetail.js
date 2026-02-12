@@ -318,13 +318,7 @@ const SubmissionDetail = () => {
         )}
         {submission.status === "approved" && submission.resource_id && (
           <PrimaryOutlineButton
-            onClick={() =>
-              navigate(
-                submission.resource_type === "datasource"
-                  ? `/portal/databases/1`
-                  : `/portal/tools/1`
-              )
-            }
+            onClick={() => navigate("/portal/dashboard")}
           >
             View in Catalogue
           </PrimaryOutlineButton>
