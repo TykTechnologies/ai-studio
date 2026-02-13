@@ -56,9 +56,13 @@ func TestSecurity_SnapshotDoesNotLeakRawCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, versions, 1)
 
-	// The raw snapshot in DB will have the values, but the API layer redacts them.
-	// Verify the snapshot was created (the API handler applies redaction, not the service).
+	// Verify snapshot was created and credentials are redacted at storage time
 	assert.NotNil(t, versions[0].Payload)
+	assert.Equal(t, "[redacted]", versions[0].Payload["db_conn_string"], "db_conn_string should be redacted in version snapshot")
+	assert.Equal(t, "[redacted]", versions[0].Payload["db_conn_api_key"], "db_conn_api_key should be redacted in version snapshot")
+	assert.Equal(t, "[redacted]", versions[0].Payload["embed_api_key"], "embed_api_key should be redacted in version snapshot")
+	// Non-secret fields should be preserved
+	assert.Equal(t, "Secret DS", versions[0].Payload["name"])
 }
 
 // =============================================================================
