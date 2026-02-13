@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"gorm.io/gorm"
 )
 
@@ -68,6 +69,37 @@ type Submissions []Submission
 
 func NewSubmission() *Submission {
 	return &Submission{}
+}
+
+// payloadCredentialFields are the keys in ResourcePayload that contain secrets
+var payloadCredentialFields = []string{"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string"}
+
+// BeforeSave encrypts credential fields in ResourcePayload before writing to DB
+func (s *Submission) BeforeSave(tx *gorm.DB) error {
+	if s.ResourcePayload != nil {
+		for _, field := range payloadCredentialFields {
+			if val, ok := s.ResourcePayload[field]; ok {
+				if str, ok := val.(string); ok && str != "" && str != "[redacted]" {
+					s.ResourcePayload[field] = secrets.EncryptValue(str)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// AfterFind decrypts credential fields in ResourcePayload after reading from DB
+func (s *Submission) AfterFind(tx *gorm.DB) error {
+	if s.ResourcePayload != nil {
+		for _, field := range payloadCredentialFields {
+			if val, ok := s.ResourcePayload[field]; ok {
+				if str, ok := val.(string); ok {
+					s.ResourcePayload[field] = secrets.DecryptValue(str)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Submission) Create(db *gorm.DB) error {
