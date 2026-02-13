@@ -42,7 +42,7 @@ Tools bridge the gap between conversational AI and external functionalities. By 
 
 ## Availability
 
-> **Important:** Tools are only available through **AI Studio** (via the embedded gateway). They are **not** proxied by the Microgateway. Both gateways share the same core library and access control mechanisms, but tool execution currently remains in AI Studio. This may change in future releases.
+Tools are available on both **AI Studio** (embedded gateway) and **Microgateway** (edge gateways). Tool configurations, OpenAPI specs, auth credentials, and app access associations are synced to edge gateways via the hub-spoke configuration system. Tools support namespace filtering for enterprise multi-tenant deployments.
 
 Tools are accessible in three ways:
 

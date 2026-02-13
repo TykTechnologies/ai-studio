@@ -48,7 +48,7 @@ The primary goal is to enhance LLM interactions by:
 
 ## Availability
 
-> **Important:** Data Sources are only available through **AI Studio** (via the embedded gateway). They are **not** proxied by the Microgateway. Both gateways share the same core library and access control mechanisms, but data source queries and RAG remain in AI Studio. This may change in future releases.
+Data Sources are available on both **AI Studio** (embedded gateway) and **Microgateway** (edge gateways). Datasource configurations including vector store connection strings, API keys, and embedder credentials are synced to edge gateways via the hub-spoke configuration system with encryption in transit. Datasources support namespace filtering for enterprise multi-tenant deployments. All four proxy endpoints (search, vector search, metadata query, and embedding generation) are functional on edge gateways.
 
 ## How RAG Works in the Chat Interface
 
