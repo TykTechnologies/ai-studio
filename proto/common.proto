@@ -246,6 +246,7 @@ message AccessTokenConfig {
   google.protobuf.Timestamp expires_at = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
+  string token_hash = 9;                // SHA-256 hash for O(1) lookup on edge (no decryption needed)
 }
 
 // ConfigurationSnapshot represents a complete configuration state

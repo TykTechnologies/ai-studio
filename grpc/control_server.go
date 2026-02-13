@@ -6,6 +6,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -1663,17 +1664,16 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Convert Tools to protobuf
 	for _, tool := range tools {
-		// Resolve and encrypt auth key for edge transit
+		// Resolve and encrypt auth key for edge transit (fail-closed: skip tool if encryption fails)
 		resolvedAuthKey := secrets.GetValue(tool.AuthKey, false)
 		encryptedAuthKey := ""
 		if resolvedAuthKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
 			if err != nil {
-				log.Error().Err(err).Uint("tool_id", tool.ID).Msg("Failed to encrypt tool auth key for microgateway")
-				encryptedAuthKey = resolvedAuthKey // Fallback to plaintext
-			} else {
-				encryptedAuthKey = encrypted
+				log.Error().Err(err).Uint("tool_id", tool.ID).Msg("Failed to encrypt tool auth key - excluding tool from snapshot")
+				continue
 			}
+			encryptedAuthKey = encrypted
 		}
 
 		// Serialize metadata to JSON string
@@ -1743,40 +1743,40 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		dsAppMap[assoc.DatasourceID] = append(dsAppMap[assoc.DatasourceID], uint32(assoc.AppID))
 	}
 
-	// Convert Datasources to protobuf
+	// Convert Datasources to protobuf (fail-closed: skip datasource if any secret encryption fails)
 	for _, ds := range datasources {
 		// Resolve and encrypt secrets for edge transit
 		resolvedConnString := secrets.GetValue(ds.DBConnString, false)
 		encryptedConnString := ""
 		if resolvedConnString != "" {
-			if encrypted, err := s.encryptForMicrogateway(resolvedConnString); err == nil {
-				encryptedConnString = encrypted
-			} else {
-				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource connection string")
-				encryptedConnString = resolvedConnString
+			encrypted, err := s.encryptForMicrogateway(resolvedConnString)
+			if err != nil {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource connection string - excluding from snapshot")
+				continue
 			}
+			encryptedConnString = encrypted
 		}
 
 		resolvedConnAPIKey := secrets.GetValue(ds.DBConnAPIKey, false)
 		encryptedConnAPIKey := ""
 		if resolvedConnAPIKey != "" {
-			if encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey); err == nil {
-				encryptedConnAPIKey = encrypted
-			} else {
-				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource API key")
-				encryptedConnAPIKey = resolvedConnAPIKey
+			encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey)
+			if err != nil {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource API key - excluding from snapshot")
+				continue
 			}
+			encryptedConnAPIKey = encrypted
 		}
 
 		resolvedEmbedAPIKey := secrets.GetValue(ds.EmbedAPIKey, false)
 		encryptedEmbedAPIKey := ""
 		if resolvedEmbedAPIKey != "" {
-			if encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey); err == nil {
-				encryptedEmbedAPIKey = encrypted
-			} else {
-				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt embedder API key")
-				encryptedEmbedAPIKey = resolvedEmbedAPIKey
+			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)
+			if err != nil {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt embedder API key - excluding from snapshot")
+				continue
 			}
+			encryptedEmbedAPIKey = encrypted
 		}
 
 		// Serialize metadata to JSON string
@@ -1847,20 +1847,25 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	for _, token := range accessTokens {
-		// Encrypt token string for secure transit
+		// Encrypt token string for secure transit (fail-closed: skip token if encryption fails)
 		encryptedToken := ""
+		tokenHash := ""
 		if token.Token != "" {
-			if encrypted, err := s.encryptForMicrogateway(token.Token); err == nil {
-				encryptedToken = encrypted
-			} else {
-				log.Error().Err(err).Uint("token_id", token.ID).Msg("Failed to encrypt access token for microgateway")
-				encryptedToken = token.Token
+			encrypted, err := s.encryptForMicrogateway(token.Token)
+			if err != nil {
+				log.Error().Err(err).Uint("token_id", token.ID).Msg("Failed to encrypt access token - excluding from snapshot")
+				continue
 			}
+			encryptedToken = encrypted
+			// Compute SHA-256 hash for O(1) lookup on edge (avoids iterating all tokens)
+			h := sha256.Sum256([]byte(token.Token))
+			tokenHash = fmt.Sprintf("%x", h[:])
 		}
 
 		pbToken := &pb.AccessTokenConfig{
 			Id:             uint32(token.ID),
 			TokenEncrypted: encryptedToken,
+			TokenHash:      tokenHash,
 			ClientId:       token.ClientID,
 			UserId:         uint32(token.UserID),
 			Scope:          token.Scope,

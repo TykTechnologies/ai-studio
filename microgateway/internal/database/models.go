@@ -513,7 +513,8 @@ type OAuthClientEdge struct {
 // AccessTokenEdge represents an OAuth 2.0 access token (synced from control plane for MCP auth)
 type AccessTokenEdge struct {
 	gorm.Model
-	TokenEncrypted string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"token_encrypted"`
+	TokenHash      string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"token_hash"` // SHA-256 hash for O(1) lookup
+	TokenEncrypted string    `gorm:"type:varchar(255);not null" json:"token_encrypted"`       // Encrypted token (for returning to caller)
 	ClientID       string    `gorm:"type:varchar(255);not null" json:"client_id"`
 	UserID         uint      `gorm:"not null" json:"user_id"`
 	Scope          string    `gorm:"type:varchar(255)" json:"scope"`

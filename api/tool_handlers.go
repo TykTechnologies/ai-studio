@@ -90,8 +90,25 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
-	// Set namespace (after creation since CreateTool doesn't accept it)
-	tool.Namespace = input.Data.Attributes.Namespace
+	// Set namespace (requires admin authorization for non-empty namespace)
+	if input.Data.Attributes.Namespace != "" {
+		user, exists := c.Get("user")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+			return
+		}
+		if u, ok := user.(*models.User); !ok || !u.IsAdmin {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "Only administrators can assign namespace"}}})
+			return
+		}
+		tool.Namespace = input.Data.Attributes.Namespace
+	}
 
 	// Add operations (after tool is created and has an ID)
 	for _, op := range input.Data.Attributes.Operations {
@@ -204,6 +221,18 @@ func (a *API) updateTool(c *gin.Context) {
 	tool.PrivacyScore = input.Data.Attributes.PrivacyScore
 	tool.AuthSchemaName = input.Data.Attributes.AuthSchemaName
 	tool.AuthKey = input.Data.Attributes.AuthKey
+
+	// Namespace change requires admin authorization
+	if input.Data.Attributes.Namespace != tool.Namespace {
+		user, exists := c.Get("user")
+		if !exists || func() bool { u, ok := user.(*models.User); return !ok || !u.IsAdmin }() {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "Only administrators can change namespace"}}})
+			return
+		}
+	}
 	tool.Namespace = input.Data.Attributes.Namespace
 
 	// Update operations

@@ -710,25 +710,12 @@ func (s *EdgeSyncService) syncTools(tx *gorm.DB, tools []*pb.ToolConfig) error {
 			}
 		}
 
-		// Create app_tools join table entries
-		for _, appID := range pbTool.AppIds {
-			appTool := &database.AppTool{
-				AppID:     uint(appID),
-				ToolID:    uint(pbTool.Id),
-				CreatedAt: time.Now(),
-			}
-			// Use FirstOrCreate since syncApps may have already created these
-			if err := tx.Where("app_id = ? AND tool_id = ?", appID, pbTool.Id).
-				FirstOrCreate(appTool).Error; err != nil {
-				return fmt.Errorf("failed to create app_tool (app=%d, tool=%d): %w", appID, pbTool.Id, err)
-			}
-		}
+		// Note: app_tools join table entries are created by syncApps (sole authority for app relationships)
 
 		log.Debug().
 			Uint32("tool_id", pbTool.Id).
 			Str("tool_slug", pbTool.Slug).
 			Int("filter_count", len(pbTool.FilterIds)).
-			Int("app_count", len(pbTool.AppIds)).
 			Msg("Tool synced to SQLite")
 	}
 
@@ -771,25 +758,12 @@ func (s *EdgeSyncService) syncDatasources(tx *gorm.DB, datasources []*pb.Datasou
 			return fmt.Errorf("failed to insert Datasource %d: %w", pbDS.Id, err)
 		}
 
-		// Create app_datasources join table entries
-		for _, appID := range pbDS.AppIds {
-			appDS := &database.AppDatasource{
-				AppID:        uint(appID),
-				DatasourceID: uint(pbDS.Id),
-				CreatedAt:    time.Now(),
-			}
-			// Use FirstOrCreate since syncApps may have already created these
-			if err := tx.Where("app_id = ? AND datasource_id = ?", appID, pbDS.Id).
-				FirstOrCreate(appDS).Error; err != nil {
-				return fmt.Errorf("failed to create app_datasource (app=%d, ds=%d): %w", appID, pbDS.Id, err)
-			}
-		}
+		// Note: app_datasources join table entries are created by syncApps (sole authority for app relationships)
 
 		log.Debug().
 			Uint32("ds_id", pbDS.Id).
 			Str("ds_name", pbDS.Name).
 			Str("db_type", pbDS.DbSourceType).
-			Int("app_count", len(pbDS.AppIds)).
 			Msg("Datasource synced to SQLite")
 	}
 
@@ -846,6 +820,7 @@ func (s *EdgeSyncService) syncAccessTokens(tx *gorm.DB, tokens []*pb.AccessToken
 				CreatedAt: pbToken.CreatedAt.AsTime(),
 				UpdatedAt: pbToken.UpdatedAt.AsTime(),
 			},
+			TokenHash:      pbToken.TokenHash,
 			TokenEncrypted: pbToken.TokenEncrypted,
 			ClientID:       pbToken.ClientId,
 			UserID:         uint(pbToken.UserId),

@@ -11,12 +11,16 @@ import (
 )
 
 // CreateDatasource creates a new datasource using the default DB connection.
-func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool) (*models.Datasource, error) {
-	return s.CreateDatasourceWithDB(s.DB, name, shortDesc, longDesc, icon, url, privacyScore, userID, tagNames, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel, active)
+func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool, namespace ...string) (*models.Datasource, error) {
+	ns := ""
+	if len(namespace) > 0 {
+		ns = namespace[0]
+	}
+	return s.CreateDatasourceWithDB(s.DB, name, shortDesc, longDesc, icon, url, privacyScore, userID, tagNames, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel, active, ns)
 }
 
 // CreateDatasourceWithDB creates a new datasource using the provided DB connection (supports transactions).
-func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool) (*models.Datasource, error) {
+func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool, namespace ...string) (*models.Datasource, error) {
 	datasource := &models.Datasource{
 		Name:             name,
 		ShortDescription: shortDesc,
@@ -34,6 +38,9 @@ func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc,
 		EmbedAPIKey:      embedAPIKey,
 		EmbedModel:       embedModel,
 		Active:           active,
+	}
+	if len(namespace) > 0 {
+		datasource.Namespace = namespace[0]
 	}
 
 	// Execute "before_create" hooks
@@ -104,7 +111,7 @@ func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc,
 	return datasource, nil
 }
 
-func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool, tagNames []string, userID uint) (*models.Datasource, error) {
+func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool, tagNames []string, userID uint, namespace ...string) (*models.Datasource, error) {
 	datasource, err := s.GetDatasourceByID(id)
 	if err != nil {
 		return nil, err
@@ -156,6 +163,9 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	datasource.DBName = dbName
 	datasource.Active = active
 	datasource.UserID = userID
+	if len(namespace) > 0 {
+		datasource.Namespace = namespace[0]
+	}
 
 	oldTags := []string{}
 	for _, tag := range datasource.Tags {

@@ -3,6 +3,7 @@ package services
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -555,39 +556,32 @@ func (a *GatewayServiceAdapter) AddUserToGroup(userID, groupID uint) error {
 }
 
 // GetValidAccessTokenByToken validates an OAuth access token from local SQLite
+// Uses SHA-256 hash for O(1) indexed lookup instead of iterating all tokens
 func (a *GatewayServiceAdapter) GetValidAccessTokenByToken(token string) (*models.AccessToken, error) {
 	if a.db == nil {
 		return nil, fmt.Errorf("OAuth access tokens not available (no DB)")
 	}
 
-	// Query all non-expired access tokens and decrypt to find match
-	var dbTokens []database.AccessTokenEdge
-	if err := a.db.Where("expires_at > ?", time.Now()).Find(&dbTokens).Error; err != nil {
-		return nil, fmt.Errorf("failed to query access tokens: %w", err)
+	// Compute SHA-256 hash of the presented token for indexed lookup
+	h := sha256.Sum256([]byte(token))
+	tokenHash := fmt.Sprintf("%x", h[:])
+
+	// Direct indexed lookup by hash + expiry check (O(1) instead of scanning all tokens)
+	var dbToken database.AccessTokenEdge
+	if err := a.db.Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).
+		First(&dbToken).Error; err != nil {
+		return nil, fmt.Errorf("invalid or expired access token")
 	}
 
-	for _, dbToken := range dbTokens {
-		// Decrypt the stored token
-		decryptedToken, err := a.crypto.Decrypt(dbToken.TokenEncrypted)
-		if err != nil {
-			log.Warn().Err(err).Uint("token_id", dbToken.ID).Msg("Failed to decrypt access token, skipping")
-			continue
-		}
-
-		if decryptedToken == token {
-			at := &models.AccessToken{
-				Token:     token,
-				ClientID:  dbToken.ClientID,
-				UserID:    dbToken.UserID,
-				Scope:     dbToken.Scope,
-				ExpiresAt: dbToken.ExpiresAt,
-			}
-			at.ID = dbToken.ID
-			return at, nil
-		}
+	at := &models.AccessToken{
+		Token:     token,
+		ClientID:  dbToken.ClientID,
+		UserID:    dbToken.UserID,
+		Scope:     dbToken.Scope,
+		ExpiresAt: dbToken.ExpiresAt,
 	}
-
-	return nil, fmt.Errorf("invalid or expired access token")
+	at.ID = dbToken.ID
+	return at, nil
 }
 
 // GetOAuthClient returns an OAuth client from local SQLite

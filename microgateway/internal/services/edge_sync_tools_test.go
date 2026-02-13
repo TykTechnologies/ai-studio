@@ -136,6 +136,7 @@ func createFullSnapshot(namespace string) *pb.ConfigurationSnapshot {
 		AccessTokens: []*pb.AccessTokenConfig{
 			{
 				Id:             1,
+				TokenHash:      "6f56259054ada428a17e58137714a263b55ca44ed3e7933ef78986a5a3581c2b", // SHA-256 of "encrypted-token-xyz"
 				TokenEncrypted: "encrypted-token-xyz",
 				ClientId:       "mcp-client-abc",
 				UserId:         1,

@@ -36,6 +36,25 @@ func (a *API) createDatasource(c *gin.Context) {
 		return
 	}
 
+	// Namespace authorization: only admins can assign non-empty namespace
+	if input.Data.Attributes.Namespace != "" {
+		user, exists := c.Get("user")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+			return
+		}
+		if u, ok := user.(*models.User); !ok || !u.IsAdmin {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "Only administrators can assign namespace"}}})
+			return
+		}
+	}
+
 	datasource, err := a.service.CreateDatasource(
 		input.Data.Attributes.Name,
 		input.Data.Attributes.ShortDescription,
@@ -54,6 +73,7 @@ func (a *API) createDatasource(c *gin.Context) {
 		input.Data.Attributes.EmbedAPIKey,
 		input.Data.Attributes.EmbedModel,
 		input.Data.Attributes.Active,
+		input.Data.Attributes.Namespace,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -63,20 +83,6 @@ func (a *API) createDatasource(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
-	}
-
-	// Set namespace (after creation since CreateDatasource doesn't accept it)
-	if input.Data.Attributes.Namespace != "" {
-		datasource.Namespace = input.Data.Attributes.Namespace
-		if err := datasource.Update(a.config.DB); err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: "Failed to set namespace: " + err.Error()}},
-			})
-			return
-		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"data": serializeDatasource(datasource)})
@@ -154,6 +160,18 @@ func (a *API) updateDatasource(c *gin.Context) {
 		return
 	}
 
+	// Namespace change requires admin authorization
+	if input.Data.Attributes.Namespace != "" {
+		user, exists := c.Get("user")
+		if !exists || func() bool { u, ok := user.(*models.User); return !ok || !u.IsAdmin }() {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "Only administrators can change namespace"}}})
+			return
+		}
+	}
+
 	datasource, err := a.service.UpdateDatasource(
 		uint(id),
 		input.Data.Attributes.Name,
@@ -173,6 +191,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 		input.Data.Attributes.Active,
 		input.Data.Attributes.Tags,
 		input.Data.Attributes.UserID,
+		input.Data.Attributes.Namespace,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -180,18 +199,6 @@ func (a *API) updateDatasource(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
-		return
-	}
-
-	// Update namespace (UpdateDatasource doesn't handle it)
-	datasource.Namespace = input.Data.Attributes.Namespace
-	if err := datasource.Update(a.config.DB); err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: "Failed to update namespace: " + err.Error()}},
 		})
 		return
 	}
