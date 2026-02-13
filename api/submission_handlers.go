@@ -1016,8 +1016,11 @@ func (a *API) adminListSubmissions(c *gin.Context) {
 		return
 	}
 
-	// Get status counts for dashboard
-	counts, _ := a.service.GetSubmissionStatusCounts()
+	// Get status counts for dashboard (non-fatal if this fails)
+	counts, err := a.service.GetSubmissionStatusCounts()
+	if err != nil || counts == nil {
+		counts = make(map[string]int64)
+	}
 
 	serialized := make([]gin.H, len(submissions))
 	for i, s := range submissions {

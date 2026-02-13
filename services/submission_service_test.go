@@ -168,7 +168,8 @@ func TestSubmitSubmission(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-		models.JSONMap{}, nil, 5, "", "", "", "", nil, "", "",
+		models.JSONMap{"name": "Submit Test", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small"},
+		nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	submitted, err := service.SubmitSubmission(submission.ID, user.ID)
@@ -378,7 +379,8 @@ func TestAdminRequestChanges(t *testing.T) {
 
 	submission, _ := service.CreateSubmission(
 		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
-		models.JSONMap{"name": "Needs Work"}, nil, 5, "", "", "", "", nil, "", "",
+		models.JSONMap{"name": "Needs Work", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small"},
+		nil, 5, "", "", "", "", nil, "", "",
 	)
 
 	changed, err := service.RequestChanges(submission.ID, admin.ID, "Please add documentation URL", "")
@@ -389,7 +391,7 @@ func TestAdminRequestChanges(t *testing.T) {
 	// Submitter can update after changes requested
 	updated, err := service.UpdateSubmission(
 		submission.ID, user.ID,
-		models.JSONMap{"name": "Needs Work", "documentation_url": "https://docs.example.com"},
+		models.JSONMap{"name": "Needs Work", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small", "documentation_url": "https://docs.example.com"},
 		nil, 5, "", "", "", "", nil, "https://docs.example.com", "",
 	)
 	assert.NoError(t, err)

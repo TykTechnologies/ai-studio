@@ -213,10 +213,13 @@ const SubmissionForm = () => {
     if (!payload.name?.trim()) newErrors.name = "Name is required";
     if (payload.name && payload.name.length > 200) newErrors.name = "Name must be under 200 characters";
 
-    // Validate documentation URL format
+    // Validate documentation URL — must be http or https (prevent javascript: XSS)
     if (meta.documentation_url && meta.documentation_url.trim()) {
       try {
-        new URL(meta.documentation_url);
+        const parsed = new URL(meta.documentation_url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          newErrors.documentation_url = "URL must use http or https protocol";
+        }
       } catch {
         newErrors.documentation_url = "Must be a valid URL (e.g., https://docs.example.com)";
       }

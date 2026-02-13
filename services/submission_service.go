@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	neturl "net/url"
 	"strings"
 	"time"
 
@@ -23,13 +24,16 @@ const (
 
 // validateDocumentationURL ensures the URL uses a safe protocol (http/https only).
 // This prevents XSS via javascript: URIs being rendered as clickable links.
-func validateDocumentationURL(url string) error {
-	if url == "" {
+func validateDocumentationURL(rawURL string) error {
+	if rawURL == "" {
 		return nil
 	}
-	lower := strings.ToLower(strings.TrimSpace(url))
-	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
-		return fmt.Errorf("documentation_url must start with http:// or https://")
+	parsed, err := neturl.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return fmt.Errorf("documentation_url is not a valid URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("documentation_url must use http or https protocol")
 	}
 	return nil
 }
@@ -212,6 +216,11 @@ func (s *Service) SubmitSubmission(id, submitterID uint) (*models.Submission, er
 
 	if submission.Status != models.SubmissionStatusDraft && submission.Status != models.SubmissionStatusChangesRequested {
 		return nil, fmt.Errorf("can only submit from '%s' or '%s' status", models.SubmissionStatusDraft, models.SubmissionStatusChangesRequested)
+	}
+
+	// Validate resource payload has required fields for the resource type
+	if err := validateResourcePayload(submission.ResourceType, submission.ResourcePayload); err != nil {
+		return nil, err
 	}
 
 	// Validate required attestations are present
@@ -648,6 +657,9 @@ func (s *Service) snapshotAndUpdateResourceTx(tx *gorm.DB, submission *models.Su
 		return fmt.Errorf("unsupported resource type: %s", submission.ResourceType)
 	}
 
+	// Redact credentials before storing snapshot — credentials should never be in version history
+	snapshotPayload = redactSnapshotCredentials(snapshotPayload)
+
 	version := &models.SubmissionVersion{
 		SubmissionID: submission.ID, ResourceID: targetID,
 		ResourceType: submission.ResourceType, VersionNumber: currentVersion + 1,
@@ -801,6 +813,9 @@ func (s *Service) snapshotAndUpdateResource(submission *models.Submission, revie
 	if err != nil {
 		return fmt.Errorf("failed to snapshot resource: %w", err)
 	}
+
+	// Redact credentials before storing
+	snapshotPayload = redactSnapshotCredentials(snapshotPayload)
 
 	// Create version record
 	version := &models.SubmissionVersion{
@@ -960,6 +975,48 @@ func (s *Service) RollbackResource(resourceType string, resourceID uint, version
 	return nil
 }
 
+// --- Resource payload validation ---
+
+// validateResourcePayload checks that the payload contains required fields for the resource type.
+// Called during SubmitSubmission to catch invalid submissions before they enter the review queue.
+func validateResourcePayload(resourceType string, payload models.JSONMap) error {
+	if payload == nil {
+		return fmt.Errorf("resource_payload is required")
+	}
+
+	getString := func(key string) string {
+		if v, ok := payload[key]; ok {
+			if str, ok := v.(string); ok {
+				return str
+			}
+		}
+		return ""
+	}
+
+	if getString("name") == "" {
+		return fmt.Errorf("resource_payload must include a non-empty 'name' field")
+	}
+
+	switch resourceType {
+	case models.SubmissionResourceTypeDatasource:
+		if getString("db_source_type") == "" {
+			return fmt.Errorf("datasource payload must include 'db_source_type'")
+		}
+		if getString("embed_vendor") == "" {
+			return fmt.Errorf("datasource payload must include 'embed_vendor'")
+		}
+		if getString("embed_model") == "" {
+			return fmt.Errorf("datasource payload must include 'embed_model'")
+		}
+	case models.SubmissionResourceTypeTool:
+		if getString("oas_spec") == "" {
+			return fmt.Errorf("tool payload must include 'oas_spec'")
+		}
+	}
+
+	return nil
+}
+
 // --- Credential preservation ---
 
 // credentialFields are payload keys that contain secrets and get redacted in API responses.
@@ -1052,6 +1109,23 @@ func (s *Service) validateAttestations(submission *models.Submission) error {
 	}
 
 	return nil
+}
+
+// --- Snapshot credential redaction ---
+
+// redactSnapshotCredentials removes sensitive credential values from a snapshot payload
+// before storing to the submission_versions table. Credentials should never be stored
+// in version history — they exist on the live resource only.
+func redactSnapshotCredentials(payload models.JSONMap) models.JSONMap {
+	if payload == nil {
+		return nil
+	}
+	for _, field := range credentialFields {
+		if _, ok := payload[field]; ok {
+			payload[field] = "[redacted]"
+		}
+	}
+	return payload
 }
 
 // --- Notification helpers ---

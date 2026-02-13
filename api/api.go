@@ -494,9 +494,6 @@ func (a *API) setupRoutes() {
 	authed.GET("/submissions/attestation-templates", a.getAttestationTemplatesForSubmission)
 	authed.POST("/submissions/update", a.createUpdateSubmission)
 	authed.POST("/submissions/validate-spec", a.validateOASSpec)
-	authed.POST("/submissions/check-duplicates", a.checkDuplicates)
-	authed.POST("/submissions/nominate/datasource/:id", a.nominateDatasource)
-	authed.POST("/submissions/nominate/tool/:id", a.nominateTool)
 	authed.GET("/submissions/:id/activities", a.getMySubmissionActivities)
 
 	v1 := public.Group("/api/v1")

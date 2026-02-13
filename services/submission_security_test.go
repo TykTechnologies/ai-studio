@@ -475,7 +475,7 @@ func TestSecurity_AttestationValidation_RequiredAttestationsEnforced(t *testing.
 		// Create draft with no attestations
 		draft, err := svc.CreateSubmission(
 			user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-			models.JSONMap{"name": "No Attestation DS"}, nil, 5, "",
+			models.JSONMap{"name": "No Attestation DS", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small"}, nil, 5, "",
 			"", "", "", nil, "", "",
 		)
 		require.NoError(t, err)
@@ -490,7 +490,7 @@ func TestSecurity_AttestationValidation_RequiredAttestationsEnforced(t *testing.
 	t.Run("SubmitWithWrongAttestationIDFails", func(t *testing.T) {
 		draft, err := svc.CreateSubmission(
 			user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-			models.JSONMap{"name": "Wrong Attestation DS"},
+			models.JSONMap{"name": "Wrong Attestation DS", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small"},
 			models.JSONMap{"accepted": []interface{}{
 				map[string]interface{}{"template_id": float64(99999)},
 			}},
@@ -506,7 +506,7 @@ func TestSecurity_AttestationValidation_RequiredAttestationsEnforced(t *testing.
 	t.Run("SubmitWithCorrectAttestationSucceeds", func(t *testing.T) {
 		draft, err := svc.CreateSubmission(
 			user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-			models.JSONMap{"name": "Valid Attestation DS"},
+			models.JSONMap{"name": "Valid Attestation DS", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small"},
 			models.JSONMap{"accepted": []interface{}{
 				map[string]interface{}{"template_id": float64(tmpl.ID), "accepted_at": "2024-01-15T10:00:00Z"},
 			}},
@@ -523,7 +523,7 @@ func TestSecurity_AttestationValidation_RequiredAttestationsEnforced(t *testing.
 		// The template applies to datasources only — tools should not be blocked
 		draft, err := svc.CreateSubmission(
 			user.ID, models.SubmissionResourceTypeTool, models.SubmissionStatusDraft,
-			models.JSONMap{"name": "Tool No Attestation"},
+			models.JSONMap{"name": "Tool No Attestation", "oas_spec": "dGVzdA=="},
 			nil, 5, "", "", "", "", nil, "", "",
 		)
 		require.NoError(t, err)
@@ -543,7 +543,7 @@ func TestSecurity_AttestationValidation_RequiredAttestationsEnforced(t *testing.
 		// Submit without the optional one — should succeed (only required matters)
 		draft, err := svc.CreateSubmission(
 			user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
-			models.JSONMap{"name": "Optional Attestation DS"},
+			models.JSONMap{"name": "Optional Attestation DS", "db_source_type": "pgvector", "embed_vendor": "openai", "embed_model": "text-embedding-3-small"},
 			models.JSONMap{"accepted": []interface{}{
 				map[string]interface{}{"template_id": float64(tmpl.ID)},
 			}},

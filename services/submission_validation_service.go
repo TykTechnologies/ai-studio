@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -192,9 +193,11 @@ func (s *Service) TestDatasourceConnectivity(embedVendor, embedURL, embedAPIKey,
 	}
 	result.EmbedderValid = true
 
-	// Step 2: Attempt a test embedding to verify actual connectivity
+	// Step 2: Attempt a test embedding to verify actual connectivity (with timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	testTexts := []string{"connectivity test"}
-	_, err = embedder.EmbedDocuments(context.Background(), testTexts)
+	_, err = embedder.EmbedDocuments(ctx, testTexts)
 	if err != nil {
 		result.EmbedTestPassed = false
 		result.EmbedTestError = fmt.Sprintf("Embedding test failed: %v", err)
