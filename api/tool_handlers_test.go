@@ -26,6 +26,7 @@ func TestToolEndpoints(t *testing.T) {
 				AuthKey        string   `json:"auth_key"`
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
+				Namespace      string   `json:"namespace"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -38,6 +39,7 @@ func TestToolEndpoints(t *testing.T) {
 				AuthKey        string   `json:"auth_key"`
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
+				Namespace      string   `json:"namespace"`
 			}{
 				Name:         "Test Tool",
 				Description:  "A test tool",
@@ -76,6 +78,7 @@ func TestToolEndpoints(t *testing.T) {
 				AuthKey        string   `json:"auth_key"`
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
+				Namespace      string   `json:"namespace"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -88,6 +91,7 @@ func TestToolEndpoints(t *testing.T) {
 				AuthKey        string   `json:"auth_key"`
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
+				Namespace      string   `json:"namespace"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
@@ -161,6 +165,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				AuthKey        string   `json:"auth_key"`
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
+				Namespace      string   `json:"namespace"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -173,6 +178,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				AuthKey        string   `json:"auth_key"`
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
+				Namespace      string   `json:"namespace"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
@@ -203,6 +209,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				AuthKey        string   `json:"auth_key"`
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
+				Namespace      string   `json:"namespace"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -215,6 +222,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				AuthKey        string   `json:"auth_key"`
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
+				Namespace      string   `json:"namespace"`
 			}{
 				Name:         "",
 				Description:  "",

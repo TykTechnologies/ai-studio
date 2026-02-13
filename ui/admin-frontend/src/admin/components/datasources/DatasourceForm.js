@@ -53,6 +53,7 @@ import {
   getEmbedderDefaultUrl,
   fetchVendors,
 } from "../../utils/vendorUtils";
+import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -79,6 +80,7 @@ const DatasourceForm = () => {
     tags: [],
     db_name: "",
     user_id: "",
+    namespace: "",
   });
 
   const [users, setUsers] = useState([]);
@@ -280,6 +282,11 @@ const DatasourceForm = () => {
       ...datasource,
       tags: datasource.tags.filter((tag) => tag !== tagToDelete),
     });
+  };
+
+  const handleNamespaceChange = (namespaces) => {
+    const namespaceString = Array.isArray(namespaces) ? namespaces.join(', ') : namespaces;
+    setDatasource({ ...datasource, namespace: namespaceString });
   };
 
   const validateForm = () => {
@@ -788,6 +795,13 @@ const DatasourceForm = () => {
               </AccordionDetails>
             </StyledAccordion>
           )}
+
+          {/* Edge Availability Section (Enterprise only) */}
+          <EdgeAvailabilitySection
+            value={datasource.namespace}
+            onChange={handleNamespaceChange}
+            defaultExpanded={false}
+          />
 
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">

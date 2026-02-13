@@ -65,6 +65,20 @@ func (a *API) createDatasource(c *gin.Context) {
 		return
 	}
 
+	// Set namespace (after creation since CreateDatasource doesn't accept it)
+	if input.Data.Attributes.Namespace != "" {
+		datasource.Namespace = input.Data.Attributes.Namespace
+		if err := datasource.Update(a.config.DB); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: "Failed to set namespace: " + err.Error()}},
+			})
+			return
+		}
+	}
+
 	c.JSON(http.StatusCreated, gin.H{"data": serializeDatasource(datasource)})
 }
 
@@ -166,6 +180,18 @@ func (a *API) updateDatasource(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+
+	// Update namespace (UpdateDatasource doesn't handle it)
+	datasource.Namespace = input.Data.Attributes.Namespace
+	if err := datasource.Update(a.config.DB); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to update namespace: " + err.Error()}},
 		})
 		return
 	}
@@ -568,7 +594,8 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			HasEmbedAPIKey   bool                `json:"has_embed_api_key"`
 			EmbedModel       string              `json:"embed_model"`
 			Active           bool                `json:"active"`
-			Files            []FileStoreResponse `json:"files"` // Added Files field
+			Namespace        string              `json:"namespace"`
+			Files            []FileStoreResponse `json:"files"`
 		}{
 			Name:             datasource.Name,
 			ShortDescription: datasource.ShortDescription,
@@ -589,7 +616,8 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			HasEmbedAPIKey:   datasource.EmbedAPIKey != "",
 			EmbedModel:       datasource.EmbedModel,
 			Active:           datasource.Active,
-			Files:            serializeFileStores(datasource.Files), // Added Files field
+			Namespace:        datasource.Namespace,
+			Files:            serializeFileStores(datasource.Files),
 		},
 	}
 }

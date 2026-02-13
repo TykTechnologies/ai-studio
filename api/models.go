@@ -265,6 +265,7 @@ type DatasourceInput struct {
 			EmbedAPIKey      string   `json:"embed_api_key"`
 			EmbedModel       string   `json:"embed_model"`
 			Active           bool     `json:"active"`
+			Namespace        string   `json:"namespace"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -294,6 +295,7 @@ type DatasourceResponse struct {
 		HasEmbedAPIKey   bool                `json:"has_embed_api_key"`
 		EmbedModel       string              `json:"embed_model"`
 		Active           bool                `json:"active"`
+		Namespace        string              `json:"namespace"`
 		Files            []FileStoreResponse `json:"files"`
 	} `json:"attributes"`
 }
@@ -512,6 +514,7 @@ type ToolInput struct {
 			AuthKey        string   `json:"auth_key"`
 			AuthSchemaName string   `json:"auth_schema_name"`
 			Operations     []string `json:"operations"`
+			Namespace      string   `json:"namespace"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -531,6 +534,7 @@ type ToolResponse struct {
 		AuthKey        string              `json:"auth_key"`
 		AuthSchemaName string              `json:"auth_schema_name"`
 		Active         bool                `json:"active"`
+		Namespace      string              `json:"namespace"`
 		FileStores     []FileStoreResponse `json:"file_stores"`
 		Filters        []FilterResponse    `json:"filters"`
 		Dependencies   []ToolResponse      `json:"dependencies"`

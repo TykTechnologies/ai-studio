@@ -92,6 +92,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				EmbedAPIKey      string   `json:"embed_api_key"`
 				EmbedModel       string   `json:"embed_model"`
 				Active           bool     `json:"active"`
+				Namespace        string   `json:"namespace"`
 			} `json:"attributes"`
 		}{
 			Type: "datasources",
@@ -113,6 +114,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				EmbedAPIKey      string   `json:"embed_api_key"`
 				EmbedModel       string   `json:"embed_model"`
 				Active           bool     `json:"active"`
+				Namespace        string   `json:"namespace"`
 			}{
 				Name:             "Test Datasource",
 				ShortDescription: "Test datasource with secret refs",
