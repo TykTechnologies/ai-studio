@@ -677,19 +677,25 @@ func payloadToUpdatesMap(payload models.JSONMap) map[string]interface{} {
 	updates := make(map[string]interface{})
 	// Skip GORM metadata fields and credential fields (those are handled separately)
 	skipFields := map[string]bool{
+		// GORM metadata
 		"id": true, "ID": true, "CreatedAt": true, "UpdatedAt": true, "DeletedAt": true,
 		"created_at": true, "updated_at": true, "deleted_at": true,
+		// Relationships (managed separately)
 		"tags": true, "files": true, "file_stores": true, "filters": true,
 		"dependencies": true, "apps": true, "metadata": true,
+		// Ownership and status flags (must not be user-modifiable via payload)
+		"user_id": true, "community_submitted": true, "submission_id": true,
+		"slug": true, // auto-generated from name
 	}
 	for k, v := range payload {
 		if skipFields[k] {
 			continue
 		}
 		if str, ok := v.(string); ok {
-			if str != "" && str != "[redacted]" {
-				updates[k] = v
+			if str == "[redacted]" {
+				continue // Skip redacted placeholders — originals preserved upstream
 			}
+			updates[k] = v // Empty strings are valid (intentional clearing)
 		} else if v != nil {
 			updates[k] = v
 		}
