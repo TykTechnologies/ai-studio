@@ -61,6 +61,30 @@ func ComputeSnapshotChecksum(snapshot *pb.ConfigurationSnapshot) (string, error)
 		router.UpdatedAt = nil
 	}
 
+	// Clear volatile fields from nested ToolConfig messages
+	for _, tool := range checksumSnapshot.Tools {
+		tool.CreatedAt = nil
+		tool.UpdatedAt = nil
+	}
+
+	// Clear volatile fields from nested DatasourceConfig messages
+	for _, ds := range checksumSnapshot.Datasources {
+		ds.CreatedAt = nil
+		ds.UpdatedAt = nil
+	}
+
+	// Clear volatile fields from nested OAuthClientConfig messages
+	for _, client := range checksumSnapshot.OauthClients {
+		client.CreatedAt = nil
+		client.UpdatedAt = nil
+	}
+
+	// Clear volatile fields from nested AccessTokenConfig messages
+	for _, token := range checksumSnapshot.AccessTokens {
+		token.CreatedAt = nil
+		token.UpdatedAt = nil
+	}
+
 	// Use deterministic marshaling to ensure consistent byte order for maps and repeated fields
 	opts := proto.MarshalOptions{Deterministic: true}
 	data, err := opts.Marshal(checksumSnapshot)

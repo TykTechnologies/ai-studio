@@ -22,6 +22,7 @@ type Tool struct {
 	AuthKey             string `json:"auth_key"`
 	AuthSchemaName      string `json:"auth_schema_name"`
 	Active              bool   `json:"active" gorm:"default:true"`
+	Namespace           string `json:"namespace" gorm:"default:'';index:idx_tool_namespace"`
 
 	FileStores   []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
 	Filters      []Filter    `gorm:"many2many:tool_filters;" json:"filters"`

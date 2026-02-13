@@ -120,7 +120,27 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 		return fmt.Errorf("failed to sync ModelRouters: %w", err)
 	}
 
-	// 6. Commit transaction
+	// 6. Sync Tools with filter and app associations
+	if err := s.syncTools(tx, config.Tools); err != nil {
+		return fmt.Errorf("failed to sync Tools: %w", err)
+	}
+
+	// 7. Sync Datasources with app associations
+	if err := s.syncDatasources(tx, config.Datasources); err != nil {
+		return fmt.Errorf("failed to sync Datasources: %w", err)
+	}
+
+	// 8. Sync OAuth Clients (for MCP authentication on edge)
+	if err := s.syncOAuthClients(tx, config.OauthClients); err != nil {
+		return fmt.Errorf("failed to sync OAuthClients: %w", err)
+	}
+
+	// 9. Sync Access Tokens (for MCP authentication on edge)
+	if err := s.syncAccessTokens(tx, config.AccessTokens); err != nil {
+		return fmt.Errorf("failed to sync AccessTokens: %w", err)
+	}
+
+	// 10. Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("failed to commit sync transaction: %w", err)
 	}
@@ -137,38 +157,64 @@ func (s *EdgeSyncService) SyncConfiguration(config *pb.ConfigurationSnapshot) er
 func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 	log.Debug().Str("namespace", s.namespace).Msg("Clearing existing configuration data")
 
-	// Clear join tables first (foreign key constraints)
+	// Clear ALL join tables first (before main tables, so subqueries still work)
 	if err := tx.Exec("DELETE FROM app_llms WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear app_llms: %w", err)
 	}
-	
+
 	if err := tx.Exec("DELETE FROM llm_plugins WHERE llm_id IN (SELECT id FROM llms WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear llm_plugins: %w", err)
 	}
-	
+
 	if err := tx.Exec("DELETE FROM llm_filters WHERE llm_id IN (SELECT id FROM llms WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear llm_filters: %w", err)
 	}
 
-	// Clear main tables
+	// Tool/Datasource join tables (must clear before apps and tools are deleted)
+	if err := tx.Exec("DELETE FROM app_tools WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear app_tools (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM app_datasources WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear app_datasources (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM tool_filters WHERE tool_id IN (SELECT id FROM tools WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear tool_filters (table may not exist)")
+	}
+
+	// Clear main entity tables (after all join tables are cleared)
 	if err := tx.Exec("DELETE FROM apps WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear apps: %w", err)
 	}
-	
+
 	if err := tx.Exec("DELETE FROM llms WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear llms: %w", err)
 	}
-	
+
 	if err := tx.Exec("DELETE FROM filters WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear filters: %w", err)
 	}
-	
+
 	if err := tx.Exec("DELETE FROM plugins WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear plugins: %w", err)
 	}
 
 	if err := tx.Exec("DELETE FROM model_prices WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear model_prices: %w", err)
+	}
+
+	if err := tx.Exec("DELETE FROM tools WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear tools (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM datasources WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear datasources (table may not exist)")
+	}
+
+	// Clear OAuth tables (global, not namespaced)
+	if err := tx.Exec("DELETE FROM oauth_clients").Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear oauth_clients (table may not exist)")
+	}
+	if err := tx.Exec("DELETE FROM access_tokens").Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to clear access_tokens (table may not exist)")
 	}
 
 	// Clear Model Router tables (cascade from routers to pools to vendors/mappings)
@@ -320,11 +366,37 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 				Msg("Created app_llm relationship in SQLite")
 		}
 
+		// Recreate app_tools join table relationships
+		for _, toolID := range pbApp.ToolIds {
+			appTool := &database.AppTool{
+				AppID:     uint(pbApp.Id),
+				ToolID:    uint(toolID),
+				CreatedAt: time.Now(),
+			}
+			if err := tx.Create(appTool).Error; err != nil {
+				return fmt.Errorf("failed to create app_tool relationship (app=%d, tool=%d): %w", pbApp.Id, toolID, err)
+			}
+		}
+
+		// Recreate app_datasources join table relationships
+		for _, dsID := range pbApp.DatasourceIds {
+			appDS := &database.AppDatasource{
+				AppID:        uint(pbApp.Id),
+				DatasourceID: uint(dsID),
+				CreatedAt:    time.Now(),
+			}
+			if err := tx.Create(appDS).Error; err != nil {
+				return fmt.Errorf("failed to create app_datasource relationship (app=%d, ds=%d): %w", pbApp.Id, dsID, err)
+			}
+		}
+
 		log.Debug().
 			Uint32("app_id", pbApp.Id).
 			Str("app_name", pbApp.Name).
 			Int("llm_access_count", len(pbApp.LlmIds)).
-			Msg("App synced to SQLite with LLM access relationships")
+			Int("tool_access_count", len(pbApp.ToolIds)).
+			Int("ds_access_count", len(pbApp.DatasourceIds)).
+			Msg("App synced to SQLite with LLM/Tool/Datasource access relationships")
 
 		// Initialize budget usage from control server's current_period_usage
 		// This ensures edge budget enforcement respects usage tracked by the control plane
@@ -590,6 +662,207 @@ func (s *EdgeSyncService) syncModelRouters(tx *gorm.DB, modelRouters []*pb.Model
 			Str("router_slug", pbRouter.Slug).
 			Int("pool_count", len(pbRouter.Pools)).
 			Msg("Model Router synced to SQLite")
+	}
+
+	return nil
+}
+
+// syncTools syncs Tool entities with filter and app associations
+func (s *EdgeSyncService) syncTools(tx *gorm.DB, tools []*pb.ToolConfig) error {
+	if len(tools) == 0 {
+		return nil
+	}
+	log.Debug().Int("count", len(tools)).Msg("Syncing Tools to local SQLite")
+
+	for _, pbTool := range tools {
+		tool := &database.Tool{
+			Model: gorm.Model{
+				ID:        uint(pbTool.Id),
+				CreatedAt: pbTool.CreatedAt.AsTime(),
+				UpdatedAt: pbTool.UpdatedAt.AsTime(),
+			},
+			Name:                pbTool.Name,
+			Slug:                pbTool.Slug,
+			Description:         pbTool.Description,
+			ToolType:            pbTool.ToolType,
+			OASSpec:             pbTool.OasSpec,
+			AvailableOperations: pbTool.AvailableOperations,
+			PrivacyScore:        int(pbTool.PrivacyScore),
+			AuthKeyEncrypted:    pbTool.AuthKeyEncrypted,
+			AuthSchemaName:      pbTool.AuthSchemaName,
+			Active:              pbTool.IsActive,
+			Namespace:           pbTool.Namespace,
+		}
+
+		if err := tx.Create(tool).Error; err != nil {
+			return fmt.Errorf("failed to insert Tool %d: %w", pbTool.Id, err)
+		}
+
+		// Create tool_filters join table entries
+		for _, filterID := range pbTool.FilterIds {
+			toolFilter := &database.ToolFilter{
+				ToolID:    uint(pbTool.Id),
+				FilterID:  uint(filterID),
+				CreatedAt: time.Now(),
+			}
+			if err := tx.Create(toolFilter).Error; err != nil {
+				return fmt.Errorf("failed to create tool_filter (tool=%d, filter=%d): %w", pbTool.Id, filterID, err)
+			}
+		}
+
+		// Create app_tools join table entries
+		for _, appID := range pbTool.AppIds {
+			appTool := &database.AppTool{
+				AppID:     uint(appID),
+				ToolID:    uint(pbTool.Id),
+				CreatedAt: time.Now(),
+			}
+			// Use FirstOrCreate since syncApps may have already created these
+			if err := tx.Where("app_id = ? AND tool_id = ?", appID, pbTool.Id).
+				FirstOrCreate(appTool).Error; err != nil {
+				return fmt.Errorf("failed to create app_tool (app=%d, tool=%d): %w", appID, pbTool.Id, err)
+			}
+		}
+
+		log.Debug().
+			Uint32("tool_id", pbTool.Id).
+			Str("tool_slug", pbTool.Slug).
+			Int("filter_count", len(pbTool.FilterIds)).
+			Int("app_count", len(pbTool.AppIds)).
+			Msg("Tool synced to SQLite")
+	}
+
+	return nil
+}
+
+// syncDatasources syncs Datasource entities with app associations
+func (s *EdgeSyncService) syncDatasources(tx *gorm.DB, datasources []*pb.DatasourceConfig) error {
+	if len(datasources) == 0 {
+		return nil
+	}
+	log.Debug().Int("count", len(datasources)).Msg("Syncing Datasources to local SQLite")
+
+	for _, pbDS := range datasources {
+		ds := &database.Datasource{
+			Model: gorm.Model{
+				ID:        uint(pbDS.Id),
+				CreatedAt: pbDS.CreatedAt.AsTime(),
+				UpdatedAt: pbDS.UpdatedAt.AsTime(),
+			},
+			Name:                  pbDS.Name,
+			ShortDescription:      pbDS.ShortDescription,
+			LongDescription:       pbDS.LongDescription,
+			Icon:                  pbDS.Icon,
+			Url:                   pbDS.Url,
+			PrivacyScore:          int(pbDS.PrivacyScore),
+			DBSourceType:          pbDS.DbSourceType,
+			DBConnStringEncrypted: pbDS.DbConnStringEncrypted,
+			DBConnAPIKeyEncrypted: pbDS.DbConnApiKeyEncrypted,
+			DBName:                pbDS.DbName,
+			EmbedVendor:           pbDS.EmbedVendor,
+			EmbedUrl:              pbDS.EmbedUrl,
+			EmbedAPIKeyEncrypted:  pbDS.EmbedApiKeyEncrypted,
+			EmbedModel:            pbDS.EmbedModel,
+			Active:                pbDS.IsActive,
+			Namespace:             pbDS.Namespace,
+		}
+
+		if err := tx.Create(ds).Error; err != nil {
+			return fmt.Errorf("failed to insert Datasource %d: %w", pbDS.Id, err)
+		}
+
+		// Create app_datasources join table entries
+		for _, appID := range pbDS.AppIds {
+			appDS := &database.AppDatasource{
+				AppID:        uint(appID),
+				DatasourceID: uint(pbDS.Id),
+				CreatedAt:    time.Now(),
+			}
+			// Use FirstOrCreate since syncApps may have already created these
+			if err := tx.Where("app_id = ? AND datasource_id = ?", appID, pbDS.Id).
+				FirstOrCreate(appDS).Error; err != nil {
+				return fmt.Errorf("failed to create app_datasource (app=%d, ds=%d): %w", appID, pbDS.Id, err)
+			}
+		}
+
+		log.Debug().
+			Uint32("ds_id", pbDS.Id).
+			Str("ds_name", pbDS.Name).
+			Str("db_type", pbDS.DbSourceType).
+			Int("app_count", len(pbDS.AppIds)).
+			Msg("Datasource synced to SQLite")
+	}
+
+	return nil
+}
+
+// syncOAuthClients syncs OAuth client records for MCP authentication on edge
+func (s *EdgeSyncService) syncOAuthClients(tx *gorm.DB, clients []*pb.OAuthClientConfig) error {
+	if len(clients) == 0 {
+		return nil
+	}
+	log.Debug().Int("count", len(clients)).Msg("Syncing OAuth Clients to local SQLite")
+
+	for _, pbClient := range clients {
+		client := &database.OAuthClientEdge{
+			Model: gorm.Model{
+				ID:        uint(pbClient.Id),
+				CreatedAt: pbClient.CreatedAt.AsTime(),
+				UpdatedAt: pbClient.UpdatedAt.AsTime(),
+			},
+			ClientID:     pbClient.ClientId,
+			ClientSecret: pbClient.ClientSecretHash, // Already bcrypt hashed
+			ClientName:   pbClient.ClientName,
+			RedirectURIs: pbClient.RedirectUris,
+			UserID:       uint(pbClient.UserId),
+			Scope:        pbClient.Scope,
+		}
+
+		if err := tx.Create(client).Error; err != nil {
+			return fmt.Errorf("failed to insert OAuthClient %d: %w", pbClient.Id, err)
+		}
+
+		log.Debug().
+			Uint32("client_id_num", pbClient.Id).
+			Str("client_id", pbClient.ClientId).
+			Str("client_name", pbClient.ClientName).
+			Msg("OAuth Client synced to SQLite")
+	}
+
+	return nil
+}
+
+// syncAccessTokens syncs OAuth access tokens for MCP authentication on edge
+func (s *EdgeSyncService) syncAccessTokens(tx *gorm.DB, tokens []*pb.AccessTokenConfig) error {
+	if len(tokens) == 0 {
+		return nil
+	}
+	log.Debug().Int("count", len(tokens)).Msg("Syncing Access Tokens to local SQLite")
+
+	for _, pbToken := range tokens {
+		token := &database.AccessTokenEdge{
+			Model: gorm.Model{
+				ID:        uint(pbToken.Id),
+				CreatedAt: pbToken.CreatedAt.AsTime(),
+				UpdatedAt: pbToken.UpdatedAt.AsTime(),
+			},
+			TokenEncrypted: pbToken.TokenEncrypted,
+			ClientID:       pbToken.ClientId,
+			UserID:         uint(pbToken.UserId),
+			Scope:          pbToken.Scope,
+			ExpiresAt:      pbToken.ExpiresAt.AsTime(),
+		}
+
+		if err := tx.Create(token).Error; err != nil {
+			return fmt.Errorf("failed to insert AccessToken %d: %w", pbToken.Id, err)
+		}
+
+		log.Debug().
+			Uint32("token_id", pbToken.Id).
+			Str("client_id", pbToken.ClientId).
+			Uint32("user_id", pbToken.UserId).
+			Time("expires_at", pbToken.ExpiresAt.AsTime()).
+			Msg("Access Token synced to SQLite")
 	}
 
 	return nil

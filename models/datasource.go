@@ -28,7 +28,8 @@ type Datasource struct {
 
 	Files []FileStore `gorm:"many2many:datasource_filestores;" json:"files"`
 
-	Active bool
+	Active    bool
+	Namespace string `json:"namespace" gorm:"default:'';index:idx_datasource_namespace"`
 
 	// UGC (User-Generated Content) fields
 	CommunitySubmitted bool  `json:"community_submitted" gorm:"index:idx_ds_user_community"`

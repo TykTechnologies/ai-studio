@@ -738,10 +738,10 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		return nil, status.Error(codes.Internal, "token validation failed")
 	}
 
-	// Get the associated app with LLM relationships (preload for pull-on-miss sync)
+	// Get the associated app with LLM/Tool/Datasource relationships (preload for pull-on-miss sync)
 	var app models.App
 	if err := s.db.Where("credential_id = ? AND is_active = ?", credential.ID, true).
-		Preload("LLMs").First(&app).Error; err != nil {
+		Preload("LLMs").Preload("Tools").Preload("Datasources").First(&app).Error; err != nil {
 		log.Debug().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
@@ -1192,7 +1192,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Get Apps for namespace with relationships
 	var apps []models.App
-	appQuery := s.db.Preload("LLMs").Where("is_active = ?", true)
+	appQuery := s.db.Preload("LLMs").Preload("Tools").Preload("Datasources").Where("is_active = ?", true)
 	if namespace == "" {
 		// Global namespace - only global apps
 		appQuery = appQuery.Where("namespace = ''")
@@ -1253,6 +1253,18 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 		}
 
+		// Get associated Tool IDs
+		toolIDs := make([]uint32, len(app.Tools))
+		for i, tool := range app.Tools {
+			toolIDs[i] = uint32(tool.ID)
+		}
+
+		// Get associated Datasource IDs
+		datasourceIDs := make([]uint32, len(app.Datasources))
+		for i, ds := range app.Datasources {
+			datasourceIDs[i] = uint32(ds.ID)
+		}
+
 		pbApp := &pb.AppConfig{
 			Id:                 uint32(app.ID),
 			Name:               app.Name,
@@ -1265,6 +1277,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Namespace:          app.Namespace,
 			UserId:             uint32(app.UserID), // Owner user ID for analytics tracking
 			LlmIds:             llmIDs,
+			ToolIds:            toolIDs,
+			DatasourceIds:      datasourceIDs,
 			CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
 			CreatedAt:          timestamppb.New(app.CreatedAt),
 			UpdatedAt:          timestamppb.New(app.UpdatedAt),
@@ -1586,6 +1600,277 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Msg("Model Router synced to snapshot")
 	}
 
+	// Get Tools for namespace with relationships
+	var tools []models.Tool
+	toolQuery := s.db.Preload("Filters").Where("active = ?", true)
+	if namespace == "" {
+		toolQuery = toolQuery.Where("namespace = ''")
+	} else {
+		toolQuery = toolQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+
+	if err := toolQuery.Find(&tools).Error; err != nil {
+		return nil, fmt.Errorf("failed to get Tools: %w", err)
+	}
+
+	// Query tool_filters join table for filter IDs
+	var toolFilterAssociations []struct {
+		ToolID   uint
+		FilterID uint
+	}
+	if len(tools) > 0 {
+		var toolIDs []uint
+		for _, tool := range tools {
+			toolIDs = append(toolIDs, tool.ID)
+		}
+		if err := s.db.Table("tool_filters").
+			Select("tool_id, filter_id").
+			Where("tool_id IN ?", toolIDs).
+			Find(&toolFilterAssociations).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to query tool_filters associations")
+		}
+	}
+
+	// Build map of tool_id -> []filter_id
+	toolFilterMap := make(map[uint][]uint32)
+	for _, assoc := range toolFilterAssociations {
+		toolFilterMap[assoc.ToolID] = append(toolFilterMap[assoc.ToolID], uint32(assoc.FilterID))
+	}
+
+	// Query app_tools join table for app IDs
+	var appToolAssociations []struct {
+		ToolID uint
+		AppID  uint
+	}
+	if len(tools) > 0 {
+		var toolIDs []uint
+		for _, tool := range tools {
+			toolIDs = append(toolIDs, tool.ID)
+		}
+		if err := s.db.Table("app_tools").
+			Select("tool_id, app_id").
+			Where("tool_id IN ?", toolIDs).
+			Find(&appToolAssociations).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to query app_tools associations")
+		}
+	}
+
+	// Build map of tool_id -> []app_id
+	toolAppMap := make(map[uint][]uint32)
+	for _, assoc := range appToolAssociations {
+		toolAppMap[assoc.ToolID] = append(toolAppMap[assoc.ToolID], uint32(assoc.AppID))
+	}
+
+	// Convert Tools to protobuf
+	for _, tool := range tools {
+		// Resolve and encrypt auth key for edge transit
+		resolvedAuthKey := secrets.GetValue(tool.AuthKey, false)
+		encryptedAuthKey := ""
+		if resolvedAuthKey != "" {
+			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
+			if err != nil {
+				log.Error().Err(err).Uint("tool_id", tool.ID).Msg("Failed to encrypt tool auth key for microgateway")
+				encryptedAuthKey = resolvedAuthKey // Fallback to plaintext
+			} else {
+				encryptedAuthKey = encrypted
+			}
+		}
+
+		// Serialize metadata to JSON string
+		var metadataJSON string
+		if tool.Metadata != nil {
+			if metadataBytes, err := json.Marshal(tool.Metadata); err == nil {
+				metadataJSON = string(metadataBytes)
+			}
+		}
+
+		pbTool := &pb.ToolConfig{
+			Id:                  uint32(tool.ID),
+			Name:                tool.Name,
+			Slug:                tool.Slug,
+			Description:         tool.Description,
+			ToolType:            tool.ToolType,
+			OasSpec:             tool.OASSpec,
+			AvailableOperations: tool.AvailableOperations,
+			PrivacyScore:        int32(tool.PrivacyScore),
+			AuthKeyEncrypted:    encryptedAuthKey,
+			AuthSchemaName:      tool.AuthSchemaName,
+			IsActive:            tool.Active,
+			Namespace:           tool.Namespace,
+			Metadata:            metadataJSON,
+			FilterIds:           toolFilterMap[tool.ID],
+			AppIds:              toolAppMap[tool.ID],
+			CreatedAt:           timestamppb.New(tool.CreatedAt),
+			UpdatedAt:           timestamppb.New(tool.UpdatedAt),
+		}
+		snapshot.Tools = append(snapshot.Tools, pbTool)
+	}
+
+	// Get Datasources for namespace
+	var datasources []models.Datasource
+	dsQuery := s.db.Where("active = ?", true)
+	if namespace == "" {
+		dsQuery = dsQuery.Where("namespace = ''")
+	} else {
+		dsQuery = dsQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+
+	if err := dsQuery.Find(&datasources).Error; err != nil {
+		return nil, fmt.Errorf("failed to get Datasources: %w", err)
+	}
+
+	// Query app_datasources join table for app IDs
+	var appDsAssociations []struct {
+		DatasourceID uint
+		AppID        uint
+	}
+	if len(datasources) > 0 {
+		var dsIDs []uint
+		for _, ds := range datasources {
+			dsIDs = append(dsIDs, ds.ID)
+		}
+		if err := s.db.Table("app_datasources").
+			Select("datasource_id, app_id").
+			Where("datasource_id IN ?", dsIDs).
+			Find(&appDsAssociations).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to query app_datasources associations")
+		}
+	}
+
+	// Build map of datasource_id -> []app_id
+	dsAppMap := make(map[uint][]uint32)
+	for _, assoc := range appDsAssociations {
+		dsAppMap[assoc.DatasourceID] = append(dsAppMap[assoc.DatasourceID], uint32(assoc.AppID))
+	}
+
+	// Convert Datasources to protobuf
+	for _, ds := range datasources {
+		// Resolve and encrypt secrets for edge transit
+		resolvedConnString := secrets.GetValue(ds.DBConnString, false)
+		encryptedConnString := ""
+		if resolvedConnString != "" {
+			if encrypted, err := s.encryptForMicrogateway(resolvedConnString); err == nil {
+				encryptedConnString = encrypted
+			} else {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource connection string")
+				encryptedConnString = resolvedConnString
+			}
+		}
+
+		resolvedConnAPIKey := secrets.GetValue(ds.DBConnAPIKey, false)
+		encryptedConnAPIKey := ""
+		if resolvedConnAPIKey != "" {
+			if encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey); err == nil {
+				encryptedConnAPIKey = encrypted
+			} else {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource API key")
+				encryptedConnAPIKey = resolvedConnAPIKey
+			}
+		}
+
+		resolvedEmbedAPIKey := secrets.GetValue(ds.EmbedAPIKey, false)
+		encryptedEmbedAPIKey := ""
+		if resolvedEmbedAPIKey != "" {
+			if encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey); err == nil {
+				encryptedEmbedAPIKey = encrypted
+			} else {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt embedder API key")
+				encryptedEmbedAPIKey = resolvedEmbedAPIKey
+			}
+		}
+
+		// Serialize metadata to JSON string
+		var metadataJSON string
+		if ds.Metadata != nil {
+			if metadataBytes, err := json.Marshal(ds.Metadata); err == nil {
+				metadataJSON = string(metadataBytes)
+			}
+		}
+
+		pbDS := &pb.DatasourceConfig{
+			Id:                     uint32(ds.ID),
+			Name:                   ds.Name,
+			ShortDescription:       ds.ShortDescription,
+			LongDescription:        ds.LongDescription,
+			Icon:                   ds.Icon,
+			Url:                    ds.Url,
+			PrivacyScore:           int32(ds.PrivacyScore),
+			DbSourceType:           ds.DBSourceType,
+			DbConnStringEncrypted:  encryptedConnString,
+			DbConnApiKeyEncrypted:  encryptedConnAPIKey,
+			DbName:                 ds.DBName,
+			EmbedVendor:            string(ds.EmbedVendor),
+			EmbedUrl:               ds.EmbedUrl,
+			EmbedApiKeyEncrypted:   encryptedEmbedAPIKey,
+			EmbedModel:             ds.EmbedModel,
+			IsActive:               ds.Active,
+			Namespace:              ds.Namespace,
+			Metadata:               metadataJSON,
+			AppIds:                 dsAppMap[ds.ID],
+			CreatedAt:              timestamppb.New(ds.CreatedAt),
+			UpdatedAt:              timestamppb.New(ds.UpdatedAt),
+		}
+		snapshot.Datasources = append(snapshot.Datasources, pbDS)
+	}
+
+	// Get OAuth Clients for MCP authentication on edges
+	var oauthClients []models.OAuthClient
+	if err := s.db.Find(&oauthClients).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to get OAuth clients for edge sync")
+		// Don't fail - OAuth is optional
+	}
+
+	for _, client := range oauthClients {
+		var userID uint32
+		if client.UserID != nil {
+			userID = uint32(*client.UserID)
+		}
+		pbClient := &pb.OAuthClientConfig{
+			Id:               uint32(client.ID),
+			ClientId:         client.ClientID,
+			ClientSecretHash: client.ClientSecret, // Already bcrypt hashed, safe to transmit
+			ClientName:       client.ClientName,
+			RedirectUris:     client.RedirectURIs,
+			UserId:           userID,
+			Scope:            client.Scope,
+			CreatedAt:        timestamppb.New(client.CreatedAt),
+			UpdatedAt:        timestamppb.New(client.UpdatedAt),
+		}
+		snapshot.OauthClients = append(snapshot.OauthClients, pbClient)
+	}
+
+	// Get non-expired Access Tokens for MCP authentication on edges
+	var accessTokens []models.AccessToken
+	if err := s.db.Where("expires_at > ?", time.Now()).Find(&accessTokens).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to get access tokens for edge sync")
+		// Don't fail - OAuth is optional
+	}
+
+	for _, token := range accessTokens {
+		// Encrypt token string for secure transit
+		encryptedToken := ""
+		if token.Token != "" {
+			if encrypted, err := s.encryptForMicrogateway(token.Token); err == nil {
+				encryptedToken = encrypted
+			} else {
+				log.Error().Err(err).Uint("token_id", token.ID).Msg("Failed to encrypt access token for microgateway")
+				encryptedToken = token.Token
+			}
+		}
+
+		pbToken := &pb.AccessTokenConfig{
+			Id:             uint32(token.ID),
+			TokenEncrypted: encryptedToken,
+			ClientId:       token.ClientID,
+			UserId:         uint32(token.UserID),
+			Scope:          token.Scope,
+			ExpiresAt:      timestamppb.New(token.ExpiresAt),
+			CreatedAt:      timestamppb.New(token.CreatedAt),
+			UpdatedAt:      timestamppb.New(token.UpdatedAt),
+		}
+		snapshot.AccessTokens = append(snapshot.AccessTokens, pbToken)
+	}
+
 	log.Debug().
 		Str("namespace", namespace).
 		Int("llm_count", len(snapshot.Llms)).
@@ -1594,6 +1879,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		Int("price_count", len(snapshot.ModelPrices)).
 		Int("plugin_count", len(snapshot.Plugins)).
 		Int("model_router_count", len(snapshot.ModelRouters)).
+		Int("tool_count", len(snapshot.Tools)).
+		Int("datasource_count", len(snapshot.Datasources)).
+		Int("oauth_client_count", len(snapshot.OauthClients)).
+		Int("access_token_count", len(snapshot.AccessTokens)).
 		Msg("Generated configuration snapshot for edge")
 
 	// Compute checksum for the snapshot
@@ -1988,6 +2277,18 @@ func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 		llmIDs[i] = uint32(llm.ID)
 	}
 
+	// Get associated Tool IDs
+	toolIDs := make([]uint32, len(app.Tools))
+	for i, tool := range app.Tools {
+		toolIDs[i] = uint32(tool.ID)
+	}
+
+	// Get associated Datasource IDs
+	datasourceIDs := make([]uint32, len(app.Datasources))
+	for i, ds := range app.Datasources {
+		datasourceIDs[i] = uint32(ds.ID)
+	}
+
 	// Handle optional monthly budget
 	var monthlyBudget float64
 	if app.MonthlyBudget != nil {
@@ -2025,6 +2326,8 @@ func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 		Namespace:          app.Namespace,
 		UserId:             uint32(app.UserID), // Owner user ID for analytics tracking
 		LlmIds:             llmIDs,
+		ToolIds:            toolIDs,
+		DatasourceIds:      datasourceIDs,
 		CurrentPeriodUsage: 0, // Intentionally 0 - edge tracks budget locally
 		CreatedAt:          timestamppb.New(app.CreatedAt),
 		UpdatedAt:          timestamppb.New(app.UpdatedAt),
