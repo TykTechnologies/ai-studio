@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -50,17 +51,25 @@ func MockValidator(r *http.Request) (string, error) {
 	return h, nil
 }
 
+// GoogleAIValidator extracts and validates the API key from the incoming request.
+// It checks both the 'x-goog-api-key' header and the 'key' query parameter.
 func GoogleAIValidator(r *http.Request) (string, error) {
-	params := r.URL.Query()
-	h := params.Get("key")
-	if h == "" {
-		h2 := r.Header.Get("x-goog-api-key")
-		if h2 == "" {
-			return "", fmt.Errorf("missing authorization key or header")
-		}
+	headerKey := r.Header.Get("x-goog-api-key")
+	queryKey := r.URL.Query().Get("key")
+
+	if headerKey != "" && queryKey != "" && headerKey != queryKey {
+		return "", errors.New("ambiguous credentials: header and query keys do not match")
 	}
 
-	return h, nil
+	if headerKey != "" {
+		return headerKey, nil
+	}
+
+	if queryKey != "" {
+		return queryKey, nil
+	}
+
+	return "", errors.New("missing authorization: 'x-goog-api-key' header or 'key' query parameter")
 }
 
 func VertexValidator(r *http.Request) (string, error) {
