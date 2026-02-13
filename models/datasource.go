@@ -7,16 +7,16 @@ import (
 type Datasource struct {
 	gorm.Model
 	ID               uint   `json:"id" gorm:"primaryKey"`
-	Name             string `json:"name"`
+	Name             string `json:"name" gorm:"index"`
 	ShortDescription string `json:"short_description"`
 	LongDescription  string `json:"long_description"`
 	Icon             string `json:"icon"`
 	Url              string `json:"url"`
 	PrivacyScore     int    `json:"privacy_score"`
-	UserID           uint   `json:"user_id" gorm:"foreignKey:ID"`
+	UserID           uint   `json:"user_id" gorm:"foreignKey:ID;index:idx_ds_user_community"`
 	Tags             []Tag  `json:"tags" gorm:"many2many:datasource_tags;"`
 
-	DBConnString string `json:"db_conn_string"`
+	DBConnString string `json:"db_conn_string" gorm:"index"`
 	DBSourceType string `json:"db_source_type"`
 	DBConnAPIKey string `json:"db_conn_api_key"`
 	DBName       string `json:"db_name"`
@@ -29,6 +29,10 @@ type Datasource struct {
 	Files []FileStore `gorm:"many2many:datasource_filestores;" json:"files"`
 
 	Active bool
+
+	// UGC (User-Generated Content) fields
+	CommunitySubmitted bool  `json:"community_submitted" gorm:"index:idx_ds_user_community"`
+	SubmissionID       *uint `json:"submission_id"`
 
 	// Plugin-stored metadata
 	Metadata JSONMap `json:"metadata" gorm:"type:json"`

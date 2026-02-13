@@ -37,6 +37,23 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
         path: '/portal/apps'
       },
       {
+        id: 'contributions',
+        text: 'Community',
+        icon: <Icon name="puzzle-piece" />,
+        subItems: [
+          {
+            id: 'my-contributions',
+            text: 'My Contributions',
+            path: '/portal/contributions'
+          },
+          {
+            id: 'submit-resource',
+            text: 'Submit Resource',
+            path: '/portal/submissions/new'
+          }
+        ]
+      },
+      {
         id: 'catalogs',
         text: 'Catalogs',
         icon: <Icon name="rectangle-history" />,

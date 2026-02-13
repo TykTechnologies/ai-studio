@@ -15,6 +15,7 @@ import {
 import pubClient from "../../admin/utils/pubClient";
 
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
+import CommunityBadge from "../../admin/components/submissions/CommunityBadge";
 
 // Function to get color based on tool type
 const getToolTypeColor = (type) => {
@@ -132,7 +133,7 @@ const ToolListView = () => {
                       <Chip
                         label="MCP"
                         size="small"
-                        sx={{ 
+                        sx={{
                           bgcolor: '#00BCD4',
                           color: '#fff',
                           fontWeight: 'bold',
@@ -140,6 +141,7 @@ const ToolListView = () => {
                         }}
                       />
                     )}
+                    <CommunityBadge show={tool.attributes.community_submitted} />
                   </Box>
                 </Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>

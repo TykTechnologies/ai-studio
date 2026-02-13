@@ -21,6 +21,7 @@ import {
 } from "../../admin/utils/vendorUtils";
 import DetailModal from "./DetailModal";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
+import CommunityBadge from "../../admin/components/submissions/CommunityBadge";
 
 const defaultIcon = "/generic-datasource-icon.png";
 
@@ -117,9 +118,12 @@ const DataSourceListView = () => {
                 }}
               />
               <CardContent sx={{ flexGrow: 1 }}>
-                <Typography gutterBottom variant="h6" component="div">
-                  {dataSource.attributes.name}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  <Typography gutterBottom variant="h6" component="div" sx={{ mb: 0 }}>
+                    {dataSource.attributes.name}
+                  </Typography>
+                  <CommunityBadge show={dataSource.attributes.community_submitted} />
+                </Box>
                 <Typography variant="body2" color="text.defaultSubdued">
                   {dataSource.attributes.short_description}
                 </Typography>

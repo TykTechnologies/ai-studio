@@ -245,6 +245,7 @@ func (a *API) getCommonToolCatalogueTools(c *gin.Context) {
 				Operations     []string            `json:"operations"`
 				AuthKey        string              `json:"auth_key"`
 				AuthSchemaName string              `json:"auth_schema_name"`
+				Active         bool                `json:"active"`
 				FileStores     []FileStoreResponse `json:"file_stores"`
 				Filters        []FilterResponse    `json:"filters"`
 				Dependencies   []ToolResponse      `json:"dependencies"`
@@ -254,6 +255,7 @@ func (a *API) getCommonToolCatalogueTools(c *gin.Context) {
 				ToolType:     tool.ToolType,
 				PrivacyScore: tool.PrivacyScore,
 				Operations:   tool.GetOperations(),
+				Active:       tool.Active,
 			},
 		}
 	}
@@ -975,6 +977,7 @@ func (a *API) getUserAccessibleTools(c *gin.Context) {
 				Operations     []string            `json:"operations"`
 				AuthKey        string              `json:"auth_key"`
 				AuthSchemaName string              `json:"auth_schema_name"`
+				Active         bool                `json:"active"`
 				FileStores     []FileStoreResponse `json:"file_stores"`
 				Filters        []FilterResponse    `json:"filters"`
 				Dependencies   []ToolResponse      `json:"dependencies"`
@@ -984,6 +987,7 @@ func (a *API) getUserAccessibleTools(c *gin.Context) {
 				ToolType:     tool.ToolType,
 				PrivacyScore: tool.PrivacyScore,
 				Operations:   tool.GetOperations(),
+				Active:       tool.Active,
 				// Note: We're not including OASSpec and AuthKey for security reasons
 			},
 		}
