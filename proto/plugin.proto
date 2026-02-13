@@ -61,6 +61,11 @@ service PluginService {
     // Called when an edge plugin sends data via SendToControl
     rpc AcceptEdgePayload(EdgePayloadRequest) returns (EdgePayloadResponse);
 
+    // Custom Endpoint Methods — plugins serve custom HTTP endpoints under /plugins/{slug}/
+    rpc GetEndpointRegistrations(GetEndpointRegistrationsRequest) returns (GetEndpointRegistrationsResponse);
+    rpc HandleEndpointRequest(EndpointRequest) returns (EndpointResponse);
+    rpc HandleEndpointRequestStream(EndpointRequest) returns (stream EndpointResponseChunk);
+
     // Session management for long-lived broker access
     // OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
     // Host should call this in a loop after Initialize() to maintain broker connectivity
@@ -545,4 +550,68 @@ message CloseSessionRequest {
 message CloseSessionResponse {
     bool success = 1;
     string error_message = 2;
+}
+
+// --- Custom Endpoint Messages ---
+// These enable plugins to register and serve custom HTTP endpoints on the gateway
+
+message GetEndpointRegistrationsRequest {
+    // Empty - plugin returns its endpoint registrations
+}
+
+message GetEndpointRegistrationsResponse {
+    repeated EndpointRegistration registrations = 1;
+}
+
+message EndpointRegistration {
+    string path = 1;                     // Relative path (e.g., "/*", "/.well-known/openid-configuration")
+    repeated string methods = 2;         // HTTP methods: GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD
+    string description = 3;              // Human-readable description
+    bool require_auth = 4;               // Whether the gateway should enforce auth before forwarding
+    bool stream_response = 5;            // If true, gateway uses HandleEndpointRequestStream (SSE)
+    map<string, string> metadata = 6;    // Plugin-defined metadata
+}
+
+// EndpointRequest carries a full HTTP request to the plugin
+message EndpointRequest {
+    string method = 1;                   // HTTP method
+    string path = 2;                     // Full request path (/plugins/{slug}/users/123/profile)
+    string relative_path = 3;            // Path relative to plugin mount (/users/123/profile)
+    repeated string path_segments = 4;   // Pre-split relative path segments: ["users", "123", "profile"]
+    map<string, string> headers = 5;     // Request headers
+    bytes body = 6;                      // Request body
+    string query_string = 7;             // Raw query string
+    string remote_addr = 8;              // Client IP
+    string host = 9;                     // Request Host header
+    string protocol = 10;                // "http" (future: "websocket", "sse")
+    PluginContext context = 11;          // Request ID, metadata
+
+    // Auth context (populated when require_auth=true and token is valid)
+    bool authenticated = 12;             // Whether request was authenticated
+    App app = 13;                        // Full App object (ID, name, metadata, etc.)
+    repeated string scopes = 14;         // Token scopes
+}
+
+// EndpointResponse — unary response for non-streaming endpoints
+message EndpointResponse {
+    int32 status_code = 1;               // HTTP status code
+    map<string, string> headers = 2;     // Response headers
+    bytes body = 3;                      // Response body
+    string error_message = 4;            // Error (empty on success)
+}
+
+// EndpointResponseChunk — streaming response for SSE/streaming endpoints
+// Protocol: HEADERS (first) → BODY* (zero or more) → DONE (final)
+message EndpointResponseChunk {
+    enum ChunkType {
+        HEADERS = 0;    // First chunk: status code + headers (no body)
+        BODY = 1;       // Body data chunk (may be sent multiple times)
+        DONE = 2;       // Stream complete signal
+        ERROR = 3;      // Error during streaming
+    }
+    ChunkType type = 1;
+    int32 status_code = 2;               // Set on HEADERS chunk
+    map<string, string> headers = 3;     // Set on HEADERS chunk
+    bytes data = 4;                      // Set on BODY chunks (raw bytes to flush)
+    string error_message = 5;            // Set on ERROR chunk
 }

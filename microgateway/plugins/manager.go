@@ -111,6 +111,18 @@ type PluginHealthStatus struct {
 	LoadTime     time.Duration `json:"load_time,omitempty"` // Time to load/pre-warm
 }
 
+// EndpointRoute stores the mapping from an HTTP route to a specific plugin endpoint
+type EndpointRoute struct {
+	PluginID     uint
+	PluginName   string
+	Path         string   // Registration path pattern (e.g., "/*", "/.well-known/openid-configuration")
+	Methods      []string // Allowed HTTP methods
+	RequireAuth  bool
+	StreamResponse bool
+	Description  string
+	Metadata     map[string]string
+}
+
 // PluginManager manages the lifecycle of plugins
 type PluginManager struct {
 	mu              sync.RWMutex
@@ -142,6 +154,10 @@ type PluginManager struct {
 
 	// Session management for long-lived broker connections
 	pluginSessions map[uint]context.CancelFunc // Plugin ID -> session cancel function
+
+	// Custom endpoint routing
+	endpointRoutes  map[string]*EndpointRoute // "METHOD:pluginName/subpath" -> route
+	pluginEndpoints map[uint][]*EndpointRoute // Plugin ID -> registered routes (for cleanup)
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -181,6 +197,8 @@ func NewPluginManager(pluginService PluginServiceInterface) *PluginManager {
 		pluginHealth:            make(map[uint]*PluginHealthStatus),
 		preWarmingInProgress:    make(map[uint]bool),
 		pluginSessions:          make(map[uint]context.CancelFunc),
+		endpointRoutes:          make(map[string]*EndpointRoute),
+		pluginEndpoints:         make(map[uint][]*EndpointRoute),
 	}
 }
 
@@ -423,6 +441,9 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 			Msg("⚠️ Plugin does NOT support session loop (not a MicrogatewayPluginClient)")
 	}
 
+	// Register custom endpoints from the plugin (non-blocking, best-effort)
+	pm.registerPluginEndpoints(pluginID, loadedPlugin)
+
 	// Mark as ready (success) - call safe version after releasing lock
 	loadTime := time.Since(startTime)
 	pm.mu.Unlock()
@@ -495,6 +516,9 @@ func (pm *PluginManager) UnloadPlugin(pluginID uint) error {
 		}
 		pm.llmPluginMap[llmID] = newPluginIDs
 	}
+
+	// Unregister custom endpoints for this plugin
+	pm.unregisterPluginEndpoints(pluginID)
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -813,6 +837,8 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 	pm.llmPluginMap = make(map[uint][]uint)
 	pm.pluginHealth = make(map[uint]*PluginHealthStatus)
 	pm.preWarmingInProgress = make(map[uint]bool)
+	pm.endpointRoutes = make(map[string]*EndpointRoute)
+	pm.pluginEndpoints = make(map[uint][]*EndpointRoute)
 
 	// Shutdown OCI client if available
 	if pm.ociClient != nil {
@@ -2451,4 +2477,257 @@ func (pm *PluginManager) closePluginSession(pluginID uint, client *MicrogatewayP
 			Uint("plugin_id", pluginID).
 			Msg("Plugin session closed")
 	}
+}
+
+// --- Custom Endpoint Registration & Dispatch ---
+
+// validHTTPMethods is the set of HTTP methods that plugin endpoints may declare.
+var validHTTPMethods = map[string]bool{
+	"GET": true, "POST": true, "PUT": true, "DELETE": true,
+	"PATCH": true, "OPTIONS": true, "HEAD": true,
+}
+
+// registerPluginEndpoints queries a loaded plugin for its custom endpoint
+// registrations and stores them in the routing table.
+// Assumes pm.mu is held by the caller.
+func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin) {
+	if lp.GRPCClient == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp, err := lp.GRPCClient.GetEndpointRegistrations(ctx, &pb.GetEndpointRegistrationsRequest{})
+	if err != nil {
+		// Plugin may not implement custom endpoints — this is not an error.
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", lp.Name).
+			Err(err).
+			Msg("Plugin does not provide custom endpoint registrations (OK)")
+		return
+	}
+
+	if len(resp.Registrations) == 0 {
+		return
+	}
+
+	for _, reg := range resp.Registrations {
+		if !isValidEndpointPath(reg.Path) {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("path", reg.Path).
+				Msg("Skipping invalid endpoint path from plugin")
+			continue
+		}
+
+		methods := validateHTTPMethods(reg.Methods)
+		if len(methods) == 0 {
+			// Default to all methods when none specified
+			methods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"}
+		}
+
+		route := &EndpointRoute{
+			PluginID:       pluginID,
+			PluginName:     lp.Name,
+			Path:           reg.Path,
+			Methods:        methods,
+			RequireAuth:    reg.RequireAuth,
+			StreamResponse: reg.StreamResponse,
+			Description:    reg.Description,
+			Metadata:       reg.Metadata,
+		}
+
+		// Build route keys: "METHOD:pluginName/subpath"
+		for _, method := range methods {
+			key := endpointRouteKey(method, lp.Name, reg.Path)
+			pm.endpointRoutes[key] = route
+		}
+
+		pm.pluginEndpoints[pluginID] = append(pm.pluginEndpoints[pluginID], route)
+
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", lp.Name).
+			Str("path", reg.Path).
+			Strs("methods", methods).
+			Bool("require_auth", reg.RequireAuth).
+			Bool("stream", reg.StreamResponse).
+			Msg("Registered custom plugin endpoint")
+	}
+}
+
+// unregisterPluginEndpoints removes all endpoint routes for a given plugin.
+// Assumes pm.mu is held by the caller.
+func (pm *PluginManager) unregisterPluginEndpoints(pluginID uint) {
+	routes, exists := pm.pluginEndpoints[pluginID]
+	if !exists {
+		return
+	}
+
+	pluginName := ""
+	if lp, ok := pm.loadedPlugins[pluginID]; ok {
+		pluginName = lp.Name
+	}
+
+	for _, route := range routes {
+		for _, method := range route.Methods {
+			key := endpointRouteKey(method, route.PluginName, route.Path)
+			delete(pm.endpointRoutes, key)
+		}
+	}
+	delete(pm.pluginEndpoints, pluginID)
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", pluginName).
+		Int("routes_removed", len(routes)).
+		Msg("Unregistered custom plugin endpoints")
+}
+
+// RefreshAllEndpoints re-queries every loaded plugin for endpoint registrations.
+// This is useful after a bulk config reload.
+func (pm *PluginManager) RefreshAllEndpoints() {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	// Clear existing endpoint data
+	pm.endpointRoutes = make(map[string]*EndpointRoute)
+	pm.pluginEndpoints = make(map[uint][]*EndpointRoute)
+
+	for pluginID, lp := range pm.loadedPlugins {
+		pm.registerPluginEndpoints(pluginID, lp)
+	}
+
+	log.Debug().
+		Int("total_routes", len(pm.endpointRoutes)).
+		Int("plugins_with_endpoints", len(pm.pluginEndpoints)).
+		Msg("Refreshed all plugin endpoint registrations")
+}
+
+// GetEndpointRoute looks up a route for the given HTTP method, plugin name, and sub-path.
+// Returns nil when no matching route is found.
+func (pm *PluginManager) GetEndpointRoute(method, pluginName, subPath string) *EndpointRoute {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	// Try exact match first
+	key := endpointRouteKey(method, pluginName, subPath)
+	if route, ok := pm.endpointRoutes[key]; ok {
+		return route
+	}
+
+	// Try wildcard match: the plugin registered "/*"
+	wildcardKey := endpointRouteKey(method, pluginName, "/*")
+	if route, ok := pm.endpointRoutes[wildcardKey]; ok {
+		return route
+	}
+
+	return nil
+}
+
+// HandleEndpointRequest dispatches a unary endpoint request to the appropriate plugin.
+func (pm *PluginManager) HandleEndpointRequest(ctx context.Context, pluginID uint, req *pb.EndpointRequest) (*pb.EndpointResponse, error) {
+	pm.mu.RLock()
+	lp, exists := pm.loadedPlugins[pluginID]
+	pm.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if lp.GRPCClient == nil {
+		return nil, fmt.Errorf("plugin %d has no gRPC client", pluginID)
+	}
+
+	return lp.GRPCClient.HandleEndpointRequest(ctx, req)
+}
+
+// HandleEndpointRequestStream dispatches a streaming endpoint request to the appropriate plugin.
+func (pm *PluginManager) HandleEndpointRequestStream(ctx context.Context, pluginID uint, req *pb.EndpointRequest) (interface{ Recv() (*pb.EndpointResponseChunk, error) }, error) {
+	pm.mu.RLock()
+	lp, exists := pm.loadedPlugins[pluginID]
+	pm.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if lp.GRPCClient == nil {
+		return nil, fmt.Errorf("plugin %d has no gRPC client", pluginID)
+	}
+
+	return lp.GRPCClient.HandleEndpointRequestStream(ctx, req)
+}
+
+// --- Endpoint helper functions ---
+
+// endpointRouteKey builds the map key used for endpoint route lookups.
+func endpointRouteKey(method, pluginName, path string) string {
+	return strings.ToUpper(method) + ":" + pluginName + path
+}
+
+// parsePluginEndpointPath splits a request path of the form /plugins/{pluginName}/...
+// into the plugin name and the remaining sub-path.
+// Returns ("", "", false) when the path does not match the expected prefix.
+func parsePluginEndpointPath(fullPath string) (pluginName string, subPath string, ok bool) {
+	// Strip leading slash and the "plugins/" prefix
+	trimmed := strings.TrimPrefix(fullPath, "/plugins/")
+	if trimmed == fullPath {
+		return "", "", false
+	}
+
+	// Split into pluginName and the rest
+	slashIdx := strings.Index(trimmed, "/")
+	if slashIdx < 0 {
+		// Path is /plugins/{pluginName} with no trailing sub-path
+		return trimmed, "/", true
+	}
+
+	pluginName = trimmed[:slashIdx]
+	subPath = trimmed[slashIdx:] // includes leading "/"
+
+	if pluginName == "" {
+		return "", "", false
+	}
+
+	return pluginName, subPath, true
+}
+
+// isValidEndpointPath checks that a registration path is safe and well-formed.
+func isValidEndpointPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	// Must start with /
+	if path[0] != '/' {
+		return false
+	}
+	// Reject directory traversal
+	if strings.Contains(path, "..") {
+		return false
+	}
+	return true
+}
+
+// validateHTTPMethods filters a list of methods to only those that are valid HTTP methods.
+func validateHTTPMethods(methods []string) []string {
+	var valid []string
+	for _, m := range methods {
+		upper := strings.ToUpper(m)
+		if validHTTPMethods[upper] {
+			valid = append(valid, upper)
+		}
+	}
+	return valid
+}
+
+// splitPathSegments splits a path like "/users/123/profile" into ["users", "123", "profile"].
+func splitPathSegments(path string) []string {
+	trimmed := strings.Trim(path, "/")
+	if trimmed == "" {
+		return nil
+	}
+	return strings.Split(trimmed, "/")
 }

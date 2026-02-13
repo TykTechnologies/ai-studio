@@ -595,6 +595,39 @@ func (w *pluginServerWrapper) AcceptEdgePayload(ctx context.Context, req *pb.Edg
 	}, nil
 }
 
+// GetEndpointRegistrations implements pb.PluginServiceServer
+func (w *pluginServerWrapper) GetEndpointRegistrations(ctx context.Context, req *pb.GetEndpointRegistrationsRequest) (*pb.GetEndpointRegistrationsResponse, error) {
+	handler, ok := w.plugin.(CustomEndpointHandler)
+	if !ok {
+		return &pb.GetEndpointRegistrationsResponse{}, nil
+	}
+	regs, err := handler.GetEndpointRegistrations()
+	if err != nil {
+		return nil, fmt.Errorf("get endpoint registrations: %w", err)
+	}
+	return &pb.GetEndpointRegistrationsResponse{Registrations: regs}, nil
+}
+
+// HandleEndpointRequest implements pb.PluginServiceServer
+func (w *pluginServerWrapper) HandleEndpointRequest(ctx context.Context, req *pb.EndpointRequest) (*pb.EndpointResponse, error) {
+	handler, ok := w.plugin.(CustomEndpointHandler)
+	if !ok {
+		return &pb.EndpointResponse{StatusCode: 501, ErrorMessage: "plugin does not implement custom endpoints"}, nil
+	}
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	return handler.HandleEndpointRequest(pluginCtx, req)
+}
+
+// HandleEndpointRequestStream implements pb.PluginServiceServer
+func (w *pluginServerWrapper) HandleEndpointRequestStream(req *pb.EndpointRequest, stream pb.PluginService_HandleEndpointRequestStreamServer) error {
+	handler, ok := w.plugin.(CustomEndpointHandler)
+	if !ok {
+		return fmt.Errorf("plugin does not implement streaming custom endpoints")
+	}
+	pluginCtx := w.createPluginContext(stream.Context(), req.Context)
+	return handler.HandleEndpointRequestStream(pluginCtx, req, stream)
+}
+
 // OpenSession implements pb.PluginServiceServer
 // This is the key method for session-based broker management.
 // It blocks until timeout or CloseSession is called, keeping the broker alive.

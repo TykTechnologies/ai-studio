@@ -345,6 +345,21 @@ func (c *AIStudioPluginClient) CloseSession(ctx context.Context, req *pb.CloseSe
 	return c.pluginStub.CloseSession(ctx, req, opts...)
 }
 
+// GetEndpointRegistrations queries the plugin for custom endpoint registrations.
+func (c *AIStudioPluginClient) GetEndpointRegistrations(ctx context.Context, req *pb.GetEndpointRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetEndpointRegistrationsResponse, error) {
+	return c.pluginStub.GetEndpointRegistrations(ctx, req, opts...)
+}
+
+// HandleEndpointRequest forwards an HTTP request to the plugin's custom endpoint handler.
+func (c *AIStudioPluginClient) HandleEndpointRequest(ctx context.Context, req *pb.EndpointRequest, opts ...grpc.CallOption) (*pb.EndpointResponse, error) {
+	return c.pluginStub.HandleEndpointRequest(ctx, req, opts...)
+}
+
+// HandleEndpointRequestStream forwards a streaming HTTP request to the plugin.
+func (c *AIStudioPluginClient) HandleEndpointRequestStream(ctx context.Context, req *pb.EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.EndpointResponseChunk], error) {
+	return c.pluginStub.HandleEndpointRequestStream(ctx, req, opts...)
+}
+
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
 // Uses a universal handshake that works with any plugin type
 type ConfigOnlyGRPC struct {

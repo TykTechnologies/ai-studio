@@ -3,14 +3,18 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -248,6 +252,12 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		}
 	}
 
+	// Custom plugin endpoints - dispatches /plugins/{pluginName}/... to the owning plugin
+	if config.PluginManager != nil {
+		log.Debug().Msg("Mounting custom plugin endpoint handler at /plugins/*path")
+		router.Any("/plugins/*path", handlePluginEndpoint(config))
+	}
+
 	// Metrics endpoint if enabled
 	if config.EnableMetrics {
 		router.GET("/metrics", handlers.PrometheusMetrics())
@@ -259,4 +269,308 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	}
 
 	return router
+}
+
+// handlePluginEndpoint dispatches HTTP requests to the appropriate plugin's custom endpoint handler.
+// URL format: /plugins/{pluginName}/{subPath...}
+func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		fullPath := c.Request.URL.Path
+
+		// Parse the path into plugin name + sub-path
+		pluginName, subPath, ok := parsePluginPath(fullPath)
+		if !ok || pluginName == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "invalid plugin endpoint path"})
+			return
+		}
+
+		method := c.Request.Method
+
+		// Look up route
+		route := config.PluginManager.GetEndpointRoute(method, pluginName, subPath)
+		if route == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("no endpoint registered for %s /plugins/%s%s", method, pluginName, subPath)})
+			return
+		}
+
+		// Get request ID from context
+		requestID := ""
+		if rid := c.Request.Context().Value("request_id"); rid != nil {
+			requestID, _ = rid.(string)
+		}
+
+		// Read request body
+		var body []byte
+		if c.Request.Body != nil {
+			var err error
+			body, err = io.ReadAll(c.Request.Body)
+			if err != nil {
+				log.Error().Err(err).Msg("Failed to read plugin endpoint request body")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+				return
+			}
+		}
+
+		// Collect headers
+		hdrs := make(map[string]string)
+		for k, vals := range c.Request.Header {
+			if len(vals) > 0 {
+				hdrs[k] = vals[0]
+			}
+		}
+
+		// Build path segments from the relative sub-path
+		segments := splitPluginPathSegments(subPath)
+
+		// Build the endpoint request
+		endpointReq := &pb.EndpointRequest{
+			Method:       method,
+			Path:         fullPath,
+			RelativePath: subPath,
+			PathSegments: segments,
+			Headers:      hdrs,
+			Body:         body,
+			QueryString:  c.Request.URL.RawQuery,
+			RemoteAddr:   c.ClientIP(),
+			Host:         c.Request.Host,
+			Protocol:     "http",
+			Context: &pb.PluginContext{
+				RequestId: requestID,
+			},
+		}
+
+		// Handle authentication if required
+		if route.RequireAuth {
+			token := extractBearerToken(c)
+			if token == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+				return
+			}
+
+			authResult, err := config.AuthProvider.ValidateToken(token)
+			if err != nil || !authResult.Valid {
+				errMsg := "invalid token"
+				if err != nil {
+					errMsg = err.Error()
+				} else if authResult.Error != "" {
+					errMsg = authResult.Error
+				}
+				c.JSON(http.StatusUnauthorized, gin.H{"error": errMsg})
+				return
+			}
+
+			endpointReq.Authenticated = true
+			endpointReq.Scopes = authResult.Scopes
+
+			// Fetch the full App object for the plugin
+			if config.Services != nil && config.Services.Management != nil && authResult.AppID > 0 {
+				dbApp, err := config.Services.Management.GetApp(authResult.AppID)
+				if err != nil {
+					log.Warn().Uint("app_id", authResult.AppID).Err(err).Msg("Failed to fetch app for plugin endpoint auth context")
+				} else if dbApp != nil {
+					// Convert metadata JSON to map
+					metadataMap := make(map[string]string)
+					if dbApp.Metadata != nil {
+						var rawMeta map[string]interface{}
+						if err := json.Unmarshal(dbApp.Metadata, &rawMeta); err == nil {
+							for k, v := range rawMeta {
+								if s, ok := v.(string); ok {
+									metadataMap[k] = s
+								}
+							}
+						}
+					}
+
+					endpointReq.App = &pb.App{
+						Id:            uint32(dbApp.ID),
+						Name:          dbApp.Name,
+						Description:   dbApp.Description,
+						OwnerEmail:    dbApp.OwnerEmail,
+						IsActive:      dbApp.IsActive,
+						MonthlyBudget: dbApp.MonthlyBudget,
+						RateLimit:     int32(dbApp.RateLimitRPM),
+						Metadata:      metadataMap,
+					}
+				}
+			}
+		}
+
+		log.Debug().
+			Str("plugin_name", pluginName).
+			Uint("plugin_id", route.PluginID).
+			Str("method", method).
+			Str("sub_path", subPath).
+			Bool("stream", route.StreamResponse).
+			Bool("require_auth", route.RequireAuth).
+			Str("request_id", requestID).
+			Msg("Dispatching custom plugin endpoint request")
+
+		// Dispatch to plugin
+		if route.StreamResponse {
+			handlePluginEndpointStream(c, config, route.PluginID, endpointReq)
+		} else {
+			handlePluginEndpointUnary(c, config, route.PluginID, endpointReq)
+		}
+	}
+}
+
+// handlePluginEndpointUnary handles a non-streaming plugin endpoint request
+func handlePluginEndpointUnary(c *gin.Context, config *RouterConfig, pluginID uint, req *pb.EndpointRequest) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+
+	resp, err := config.PluginManager.HandleEndpointRequest(ctx, pluginID, req)
+	if err != nil {
+		log.Error().Uint("plugin_id", pluginID).Err(err).Msg("Plugin endpoint request failed")
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("plugin endpoint error: %v", err)})
+		return
+	}
+
+	if resp.ErrorMessage != "" {
+		statusCode := int(resp.StatusCode)
+		if statusCode == 0 {
+			statusCode = http.StatusInternalServerError
+		}
+		c.JSON(statusCode, gin.H{"error": resp.ErrorMessage})
+		return
+	}
+
+	// Write response headers
+	for k, v := range resp.Headers {
+		c.Header(k, v)
+	}
+
+	statusCode := int(resp.StatusCode)
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+
+	c.Data(statusCode, c.Writer.Header().Get("Content-Type"), resp.Body)
+}
+
+// handlePluginEndpointStream handles a streaming plugin endpoint request (SSE)
+func handlePluginEndpointStream(c *gin.Context, config *RouterConfig, pluginID uint, req *pb.EndpointRequest) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
+	defer cancel()
+
+	stream, err := config.PluginManager.HandleEndpointRequestStream(ctx, pluginID, req)
+	if err != nil {
+		log.Error().Uint("plugin_id", pluginID).Err(err).Msg("Plugin streaming endpoint request failed")
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("plugin streaming endpoint error: %v", err)})
+		return
+	}
+
+	// Get the http.Flusher for streaming
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming not supported"})
+		return
+	}
+
+	headersWritten := false
+
+	for {
+		chunk, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			if headersWritten {
+				// Already started writing, best effort log
+				log.Error().Uint("plugin_id", pluginID).Err(err).Msg("Error during plugin streaming endpoint")
+			} else {
+				c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("stream error: %v", err)})
+			}
+			return
+		}
+
+		switch chunk.Type {
+		case pb.EndpointResponseChunk_HEADERS:
+			// Write status code and headers
+			for k, v := range chunk.Headers {
+				c.Header(k, v)
+			}
+			statusCode := int(chunk.StatusCode)
+			if statusCode == 0 {
+				statusCode = http.StatusOK
+			}
+			c.Status(statusCode)
+			flusher.Flush()
+			headersWritten = true
+
+		case pb.EndpointResponseChunk_BODY:
+			if !headersWritten {
+				c.Status(http.StatusOK)
+				headersWritten = true
+			}
+			if len(chunk.Data) > 0 {
+				_, writeErr := c.Writer.Write(chunk.Data)
+				if writeErr != nil {
+					log.Debug().Err(writeErr).Msg("Client disconnected during plugin stream")
+					return
+				}
+				flusher.Flush()
+			}
+
+		case pb.EndpointResponseChunk_DONE:
+			// Stream complete
+			return
+
+		case pb.EndpointResponseChunk_ERROR:
+			if !headersWritten {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": chunk.ErrorMessage})
+			} else {
+				log.Error().Str("error", chunk.ErrorMessage).Msg("Error chunk received during plugin stream")
+			}
+			return
+		}
+	}
+}
+
+// --- Router-local helper functions ---
+
+// parsePluginPath splits /plugins/{pluginName}/{subPath...} into (pluginName, subPath).
+func parsePluginPath(fullPath string) (pluginName string, subPath string, ok bool) {
+	trimmed := strings.TrimPrefix(fullPath, "/plugins/")
+	if trimmed == fullPath {
+		return "", "", false
+	}
+
+	slashIdx := strings.Index(trimmed, "/")
+	if slashIdx < 0 {
+		// /plugins/{pluginName} with no trailing sub-path
+		if trimmed == "" {
+			return "", "", false
+		}
+		return trimmed, "/", true
+	}
+
+	pluginName = trimmed[:slashIdx]
+	subPath = trimmed[slashIdx:]
+
+	if pluginName == "" {
+		return "", "", false
+	}
+	return pluginName, subPath, true
+}
+
+// splitPluginPathSegments splits "/users/123/profile" into ["users", "123", "profile"].
+func splitPluginPathSegments(path string) []string {
+	trimmed := strings.Trim(path, "/")
+	if trimmed == "" {
+		return nil
+	}
+	return strings.Split(trimmed, "/")
+}
+
+// extractBearerToken extracts a Bearer token from the Authorization header or query param.
+func extractBearerToken(c *gin.Context) string {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		return c.Query("token")
+	}
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		return strings.TrimPrefix(authHeader, "Bearer ")
+	}
+	return authHeader
 }
