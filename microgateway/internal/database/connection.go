@@ -92,6 +92,14 @@ func Migrate(db *gorm.DB) error {
 		&ModelPool{},
 		&PoolVendor{},
 		&ModelMapping{},
+		// Tool, Datasource, and OAuth models (for edge tool/datasource proxy)
+		&Tool{},
+		&Datasource{},
+		&OAuthClientEdge{},
+		&AccessTokenEdge{},
+		&AppTool{},
+		&AppDatasource{},
+		&ToolFilter{},
 	)
 }
 

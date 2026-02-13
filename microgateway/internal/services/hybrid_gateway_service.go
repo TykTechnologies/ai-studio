@@ -161,7 +161,7 @@ func (h *HybridGatewayService) GetAppByTokenID(tokenID uint) (*database.App, err
 	// For on-demand validation, token_id equals app_id
 	// Get the app directly from local SQLite (now has full relationships!)
 	var app database.App
-	if err := h.db.Where("id = ?", tokenID).Preload("LLMs").First(&app).Error; err != nil {
+	if err := h.db.Where("id = ?", tokenID).Preload("LLMs").Preload("Tools.Filters").Preload("Datasources").First(&app).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			log.Debug().Uint("app_id", tokenID).Msg("App not found in local SQLite")
 			return nil, fmt.Errorf("app not found: %d", tokenID)
@@ -359,6 +359,40 @@ func (h *HybridGatewayService) storeAppFromPullOnMiss(pbApp *pb.AppConfig) error
 			}
 		}
 
+		// Clear existing app_tools for this app and recreate
+		if err := tx.Exec("DELETE FROM app_tools WHERE app_id = ?", pbApp.Id).Error; err != nil {
+			log.Warn().Err(err).Uint32("app_id", pbApp.Id).Msg("Failed to clear app_tools (table may not exist)")
+		}
+
+		// Recreate app_tools join table entries
+		for _, toolID := range pbApp.ToolIds {
+			appTool := &database.AppTool{
+				AppID:     uint(pbApp.Id),
+				ToolID:    uint(toolID),
+				CreatedAt: time.Now(),
+			}
+			if err := tx.Create(appTool).Error; err != nil {
+				return fmt.Errorf("failed to create app_tool (app=%d, tool=%d): %w", pbApp.Id, toolID, err)
+			}
+		}
+
+		// Clear existing app_datasources for this app and recreate
+		if err := tx.Exec("DELETE FROM app_datasources WHERE app_id = ?", pbApp.Id).Error; err != nil {
+			log.Warn().Err(err).Uint32("app_id", pbApp.Id).Msg("Failed to clear app_datasources (table may not exist)")
+		}
+
+		// Recreate app_datasources join table entries
+		for _, dsID := range pbApp.DatasourceIds {
+			appDS := &database.AppDatasource{
+				AppID:        uint(pbApp.Id),
+				DatasourceID: uint(dsID),
+				CreatedAt:    time.Now(),
+			}
+			if err := tx.Create(appDS).Error; err != nil {
+				return fmt.Errorf("failed to create app_datasource (app=%d, ds=%d): %w", pbApp.Id, dsID, err)
+			}
+		}
+
 		// Note: Budget usage is NOT initialized here for pull-on-miss sync.
 		// The edge gateway tracks budget locally via its own analytics.
 		// Initializing it here with 0 would overwrite existing local budget data.
@@ -367,6 +401,8 @@ func (h *HybridGatewayService) storeAppFromPullOnMiss(pbApp *pb.AppConfig) error
 			Uint32("app_id", pbApp.Id).
 			Str("app_name", pbApp.Name).
 			Int("llm_count", len(pbApp.LlmIds)).
+			Int("tool_count", len(pbApp.ToolIds)).
+			Int("ds_count", len(pbApp.DatasourceIds)).
 			Msg("Stored App from pull-on-miss token validation")
 
 		return nil

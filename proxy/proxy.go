@@ -768,18 +768,11 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) {
-	dsSlug := mux.Vars(r)["dsSlug"]
-	ds, ok := p.GetDatasource(dsSlug)
-	if !ok {
-		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
-		return
+	ds, body := p.prepareDatasourceRequest(w, r)
+	if ds == nil {
+		return // Error already written by prepareDatasourceRequest
 	}
 	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err, false)
-		return
-	}
 	var query SearchQuery
 	if err := json.Unmarshal(body, &query); err != nil {
 		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)

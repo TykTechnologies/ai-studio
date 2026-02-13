@@ -3,6 +3,8 @@ package services
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -13,9 +15,11 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/rs/zerolog/log"
+	"gorm.io/gorm"
 )
 
 // CurrentRequestContext stores the current request context for auth plugin selection
@@ -70,6 +74,7 @@ type GatewayServiceAdapter struct {
 	gatewayService GatewayServiceInterface
 	management     ManagementServiceInterface
 	analytics      AnalyticsServiceInterface
+	db             *gorm.DB // Direct DB access for tool/datasource/OAuth queries
 
 	// Cache for ephemeral plugin auth credentials (not stored in DB)
 	pluginAuthCredentials sync.Map // credID (int) -> *models.Credential
@@ -80,6 +85,7 @@ type GatewayServiceAdapter struct {
 }
 
 // NewGatewayServiceAdapter creates a new adapter that implements services.ServiceInterface
+// The optional db parameter provides direct DB access for tool/datasource/OAuth queries.
 func NewGatewayServiceAdapter(
 	gatewayService GatewayServiceInterface,
 	management ManagementServiceInterface,
@@ -88,6 +94,7 @@ func NewGatewayServiceAdapter(
 	filterService FilterServiceInterface,
 	pluginService PluginServiceInterface,
 	pluginManager PluginManagerInterface,
+	db ...*gorm.DB,
 ) services.ServiceInterface {
 	adapter := &GatewayServiceAdapter{
 		gatewayService: gatewayService,
@@ -97,6 +104,11 @@ func NewGatewayServiceAdapter(
 		filterService:  filterService,
 		pluginService:  pluginService,
 		pluginManager:  pluginManager,
+	}
+
+	// Optional DB parameter for tool/datasource/OAuth queries
+	if len(db) > 0 && db[0] != nil {
+		adapter.db = db[0]
 	}
 	
 	log.Debug().Msg("GatewayServiceAdapter created - testing LLM loading...")
@@ -156,14 +168,39 @@ func (a *GatewayServiceAdapter) GetLLMSettingsByID(id uint) (*models.LLMSettings
 	return nil, fmt.Errorf("LLM settings not implemented in microgateway")
 }
 
-// GetActiveDatasources returns active datasources (empty for microgateway)
+// GetActiveDatasources returns active datasources from local SQLite
 func (a *GatewayServiceAdapter) GetActiveDatasources() ([]models.Datasource, error) {
-	return []models.Datasource{}, nil
+	if a.db == nil {
+		return []models.Datasource{}, nil
+	}
+
+	var dbDatasources []database.Datasource
+	if err := a.db.Where("active = ?", true).Find(&dbDatasources).Error; err != nil {
+		return nil, fmt.Errorf("failed to get active datasources: %w", err)
+	}
+
+	result := make([]models.Datasource, len(dbDatasources))
+	for i := range dbDatasources {
+		result[i] = a.convertDatabaseDatasourceToModel(&dbDatasources[i])
+	}
+
+	log.Debug().Int("count", len(result)).Msg("GetActiveDatasources: returned datasources from edge SQLite")
+	return result, nil
 }
 
-// GetDatasourceByID returns a datasource by ID (not implemented)
+// GetDatasourceByID returns a datasource by ID from local SQLite
 func (a *GatewayServiceAdapter) GetDatasourceByID(id uint) (*models.Datasource, error) {
-	return nil, fmt.Errorf("datasource with ID %d not found", id)
+	if a.db == nil {
+		return nil, fmt.Errorf("datasource with ID %d not found (no DB)", id)
+	}
+
+	var dbDS database.Datasource
+	if err := a.db.Where("id = ? AND active = ?", id, true).First(&dbDS).Error; err != nil {
+		return nil, fmt.Errorf("datasource with ID %d not found: %w", id, err)
+	}
+
+	ds := a.convertDatabaseDatasourceToModel(&dbDS)
+	return &ds, nil
 }
 
 // GetCredentialBySecret validates API tokens and returns credential info
@@ -518,14 +555,55 @@ func (a *GatewayServiceAdapter) AddUserToGroup(userID, groupID uint) error {
 	return fmt.Errorf("user group management not supported in microgateway")
 }
 
-// GetValidAccessTokenByToken returns an access token (not implemented)
+// GetValidAccessTokenByToken validates an OAuth access token from local SQLite
+// Uses SHA-256 hash for O(1) indexed lookup instead of iterating all tokens
 func (a *GatewayServiceAdapter) GetValidAccessTokenByToken(token string) (*models.AccessToken, error) {
-	return nil, fmt.Errorf("OAuth access tokens not supported in microgateway")
+	if a.db == nil {
+		return nil, fmt.Errorf("OAuth access tokens not available (no DB)")
+	}
+
+	// Compute SHA-256 hash of the presented token for indexed lookup
+	h := sha256.Sum256([]byte(token))
+	tokenHash := fmt.Sprintf("%x", h[:])
+
+	// Direct indexed lookup by hash + expiry check (O(1) instead of scanning all tokens)
+	var dbToken database.AccessTokenEdge
+	if err := a.db.Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).
+		First(&dbToken).Error; err != nil {
+		return nil, fmt.Errorf("invalid or expired access token")
+	}
+
+	at := &models.AccessToken{
+		Token:     token,
+		ClientID:  dbToken.ClientID,
+		UserID:    dbToken.UserID,
+		Scope:     dbToken.Scope,
+		ExpiresAt: dbToken.ExpiresAt,
+	}
+	at.ID = dbToken.ID
+	return at, nil
 }
 
-// GetOAuthClient returns an OAuth client (not implemented)
+// GetOAuthClient returns an OAuth client from local SQLite
 func (a *GatewayServiceAdapter) GetOAuthClient(clientID string) (*models.OAuthClient, error) {
-	return nil, fmt.Errorf("OAuth clients not supported in microgateway")
+	if a.db == nil {
+		return nil, fmt.Errorf("OAuth clients not available (no DB)")
+	}
+
+	var dbClient database.OAuthClientEdge
+	if err := a.db.Where("client_id = ?", clientID).First(&dbClient).Error; err != nil {
+		return nil, fmt.Errorf("OAuth client not found: %w", err)
+	}
+
+	userID := dbClient.UserID
+	return &models.OAuthClient{
+		ClientID:     dbClient.ClientID,
+		ClientSecret: dbClient.ClientSecret, // bcrypt hash
+		ClientName:   dbClient.ClientName,
+		RedirectURIs: dbClient.RedirectURIs,
+		UserID:       &userID,
+		Scope:        dbClient.Scope,
+	}, nil
 }
 
 // GetAppByCredentialID returns an app by credential ID
@@ -660,19 +738,76 @@ func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, 
 	return nil, fmt.Errorf("gateway service type not supported for app lookup")
 }
 
-// GetToolByID returns a tool by ID (not implemented)
+// GetToolByID returns a tool by ID from local SQLite
 func (a *GatewayServiceAdapter) GetToolByID(id uint) (*models.Tool, error) {
-	return nil, fmt.Errorf("tool with ID %d not found", id)
+	if a.db == nil {
+		return nil, fmt.Errorf("tool with ID %d not found (no DB)", id)
+	}
+
+	var dbTool database.Tool
+	if err := a.db.Where("id = ? AND active = ?", id, true).
+		Preload("Filters").First(&dbTool).Error; err != nil {
+		return nil, fmt.Errorf("tool with ID %d not found: %w", id, err)
+	}
+
+	tool := a.convertDatabaseToolToModel(&dbTool)
+	return &tool, nil
 }
 
-// GetToolBySlug returns a tool by slug (not implemented)
+// GetToolBySlug returns a tool by slug from local SQLite
 func (a *GatewayServiceAdapter) GetToolBySlug(slug string) (*models.Tool, error) {
-	return nil, fmt.Errorf("tool with slug %s not found", slug)
+	if a.db == nil {
+		return nil, fmt.Errorf("tool with slug %s not found (no DB)", slug)
+	}
+
+	var dbTool database.Tool
+	if err := a.db.Where("slug = ? AND active = ?", slug, true).
+		Preload("Filters").First(&dbTool).Error; err != nil {
+		return nil, fmt.Errorf("tool with slug %s not found: %w", slug, err)
+	}
+
+	tool := a.convertDatabaseToolToModel(&dbTool)
+	return &tool, nil
 }
 
-// CallToolOperation executes a tool operation (not implemented)
+// CallToolOperation executes a tool operation using the universalclient
 func (a *GatewayServiceAdapter) CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
-	return nil, fmt.Errorf("tool operations not supported in microgateway")
+	tool, err := a.GetToolByID(toolID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
+	}
+
+	if tool.OASSpec == "" {
+		return nil, fmt.Errorf("tool %d has no OpenAPI specification", toolID)
+	}
+
+	// Decode the base64 OpenAPI spec
+	decodedSpec, err := base64.StdEncoding.DecodeString(tool.OASSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode tool OpenAPI spec: %w", err)
+	}
+
+	// Build client options with auth if configured
+	opts := []universalclient.ClientOption{}
+	if tool.AuthKey != "" {
+		schemaName := tool.AuthSchemaName
+		if schemaName == "" {
+			schemaName = "apiKey"
+		}
+		opts = append(opts, universalclient.WithAuth(schemaName, tool.AuthKey))
+	}
+
+	client, err := universalclient.NewClient(decodedSpec, "", opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create universal client for tool %d: %w", toolID, err)
+	}
+
+	result, err := client.CallOperation(operationID, params, payload, headers)
+	if err != nil {
+		return nil, fmt.Errorf("tool operation %s failed: %w", operationID, err)
+	}
+
+	return result, nil
 }
 
 // GetModelPriceByModelNameAndVendor returns model pricing from database
@@ -849,6 +984,18 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 			Msg("App has access to LLM")
 	}
 
+	// Convert Tool associations to models.Tool slice
+	tools := make([]models.Tool, len(dbApp.Tools))
+	for i, dbTool := range dbApp.Tools {
+		tools[i] = a.convertDatabaseToolToModel(&dbTool)
+	}
+
+	// Convert Datasource associations to models.Datasource slice
+	datasources := make([]models.Datasource, len(dbApp.Datasources))
+	for i, dbDS := range dbApp.Datasources {
+		datasources[i] = a.convertDatabaseDatasourceToModel(&dbDS)
+	}
+
 	modelApp := models.App{
 		ID:              dbApp.ID,
 		Name:            dbApp.Name,
@@ -857,13 +1004,112 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		CredentialID:    dbApp.ID, // Use app ID as credential reference
 		MonthlyBudget:   &dbApp.MonthlyBudget,
 		BudgetStartDate: dbApp.BudgetStartDate,
-		LLMs:            llms, // Include LLM associations for access control
+		LLMs:            llms,        // Include LLM associations for access control
+		Tools:           tools,       // Include Tool associations for access control
+		Datasources:     datasources, // Include Datasource associations for access control
 	}
 
 	log.Debug().
 		Uint("app_id", modelApp.ID).
 		Uint("user_id", modelApp.UserID).
+		Int("llm_count", len(llms)).
+		Int("tool_count", len(tools)).
+		Int("ds_count", len(datasources)).
 		Msg("Created models.App with UserID for analytics tracking")
 
 	return modelApp
+}
+
+// convertDatabaseToolToModel converts a database Tool to a models.Tool
+func (a *GatewayServiceAdapter) convertDatabaseToolToModel(dbTool *database.Tool) models.Tool {
+	// Decrypt auth key
+	authKey := ""
+	if dbTool.AuthKeyEncrypted != "" {
+		decryptedKey, err := a.crypto.Decrypt(dbTool.AuthKeyEncrypted)
+		if err != nil {
+			log.Error().Err(err).Uint("tool_id", dbTool.ID).Msg("Failed to decrypt tool auth key")
+		} else {
+			authKey = decryptedKey
+		}
+	}
+
+	// Convert associated filters
+	var filters []models.Filter
+	for _, dbFilter := range dbTool.Filters {
+		filters = append(filters, models.Filter{
+			ID:             dbFilter.ID,
+			Name:           dbFilter.Name,
+			Description:    dbFilter.Description,
+			Script:         []byte(dbFilter.Script),
+			ResponseFilter: dbFilter.ResponseFilter,
+			Namespace:      dbFilter.Namespace,
+		})
+	}
+
+	return models.Tool{
+		ID:                  dbTool.ID,
+		Name:                dbTool.Name,
+		Slug:                dbTool.Slug,
+		Description:         dbTool.Description,
+		ToolType:            dbTool.ToolType,
+		OASSpec:             dbTool.OASSpec,
+		AvailableOperations: dbTool.AvailableOperations,
+		PrivacyScore:        dbTool.PrivacyScore,
+		AuthKey:             authKey,
+		AuthSchemaName:      dbTool.AuthSchemaName,
+		Active:              dbTool.Active,
+		Namespace:           dbTool.Namespace,
+		Filters:             filters,
+	}
+}
+
+// convertDatabaseDatasourceToModel converts a database Datasource to a models.Datasource
+func (a *GatewayServiceAdapter) convertDatabaseDatasourceToModel(dbDS *database.Datasource) models.Datasource {
+	// Decrypt connection strings and API keys
+	connString := ""
+	if dbDS.DBConnStringEncrypted != "" {
+		if decrypted, err := a.crypto.Decrypt(dbDS.DBConnStringEncrypted); err == nil {
+			connString = decrypted
+		} else {
+			log.Error().Err(err).Uint("ds_id", dbDS.ID).Msg("Failed to decrypt datasource connection string")
+		}
+	}
+
+	connAPIKey := ""
+	if dbDS.DBConnAPIKeyEncrypted != "" {
+		if decrypted, err := a.crypto.Decrypt(dbDS.DBConnAPIKeyEncrypted); err == nil {
+			connAPIKey = decrypted
+		} else {
+			log.Error().Err(err).Uint("ds_id", dbDS.ID).Msg("Failed to decrypt datasource API key")
+		}
+	}
+
+	embedAPIKey := ""
+	if dbDS.EmbedAPIKeyEncrypted != "" {
+		if decrypted, err := a.crypto.Decrypt(dbDS.EmbedAPIKeyEncrypted); err == nil {
+			embedAPIKey = decrypted
+		} else {
+			log.Error().Err(err).Uint("ds_id", dbDS.ID).Msg("Failed to decrypt embedder API key")
+		}
+	}
+
+	return models.Datasource{
+		ID:               dbDS.ID,
+		Name:             dbDS.Name,
+		ShortDescription: dbDS.ShortDescription,
+		LongDescription:  dbDS.LongDescription,
+		Icon:             dbDS.Icon,
+		Url:              dbDS.Url,
+		PrivacyScore:     dbDS.PrivacyScore,
+		DBSourceType:     dbDS.DBSourceType,
+		DBConnString:     connString,
+		DBConnAPIKey:     connAPIKey,
+		DBName:           dbDS.DBName,
+		EmbedVendor:      models.Vendor(dbDS.EmbedVendor),
+		EmbedUrl:         dbDS.EmbedUrl,
+		EmbedAPIKey:      embedAPIKey,
+		EmbedModel:       dbDS.EmbedModel,
+		Active:           dbDS.Active,
+		Namespace:        dbDS.Namespace,
+	}
 }

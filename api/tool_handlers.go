@@ -90,12 +90,32 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
+	// Set namespace (requires admin authorization for non-empty namespace)
+	if input.Data.Attributes.Namespace != "" {
+		user, exists := c.Get("user")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+			return
+		}
+		if u, ok := user.(*models.User); !ok || !u.IsAdmin {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "Only administrators can assign namespace"}}})
+			return
+		}
+		tool.Namespace = input.Data.Attributes.Namespace
+	}
+
 	// Add operations (after tool is created and has an ID)
 	for _, op := range input.Data.Attributes.Operations {
 		tool.AddOperation(op)
 	}
 
-	// Update tool with operations
+	// Update tool with operations + namespace
 	if err := tool.Update(a.config.DB); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -201,6 +221,19 @@ func (a *API) updateTool(c *gin.Context) {
 	tool.PrivacyScore = input.Data.Attributes.PrivacyScore
 	tool.AuthSchemaName = input.Data.Attributes.AuthSchemaName
 	tool.AuthKey = input.Data.Attributes.AuthKey
+
+	// Namespace change requires admin authorization
+	if input.Data.Attributes.Namespace != tool.Namespace {
+		user, exists := c.Get("user")
+		if !exists || func() bool { u, ok := user.(*models.User); return !ok || !u.IsAdmin }() {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "Only administrators can change namespace"}}})
+			return
+		}
+	}
+	tool.Namespace = input.Data.Attributes.Namespace
 
 	// Update operations
 	tool.AvailableOperations = ""
@@ -1009,6 +1042,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthKey        string              `json:"auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
 			Active         bool                `json:"active"`
+			Namespace      string              `json:"namespace"`
 			FileStores     []FileStoreResponse `json:"file_stores"`
 			Filters        []FilterResponse    `json:"filters"`
 			Dependencies   []ToolResponse      `json:"dependencies"`
@@ -1022,6 +1056,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthKey:        tool.AuthKey,
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
+			Namespace:      tool.Namespace,
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointers(dependencies, db),
@@ -1067,6 +1102,7 @@ func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthKey        string              `json:"auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
 			Active         bool                `json:"active"`
+			Namespace      string              `json:"namespace"`
 			FileStores     []FileStoreResponse `json:"file_stores"`
 			Filters        []FilterResponse    `json:"filters"`
 			Dependencies   []ToolResponse      `json:"dependencies"`
@@ -1080,6 +1116,7 @@ func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthKey:        "", // Omit sensitive auth key
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
+			Namespace:      tool.Namespace,
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointersSlim(dependencies, db),

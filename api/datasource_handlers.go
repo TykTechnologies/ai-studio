@@ -36,6 +36,25 @@ func (a *API) createDatasource(c *gin.Context) {
 		return
 	}
 
+	// Namespace authorization: only admins can assign non-empty namespace
+	if input.Data.Attributes.Namespace != "" {
+		user, exists := c.Get("user")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unauthorized", Detail: "User not found in context"}}})
+			return
+		}
+		if u, ok := user.(*models.User); !ok || !u.IsAdmin {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "Only administrators can assign namespace"}}})
+			return
+		}
+	}
+
 	datasource, err := a.service.CreateDatasource(
 		input.Data.Attributes.Name,
 		input.Data.Attributes.ShortDescription,
@@ -54,6 +73,7 @@ func (a *API) createDatasource(c *gin.Context) {
 		input.Data.Attributes.EmbedAPIKey,
 		input.Data.Attributes.EmbedModel,
 		input.Data.Attributes.Active,
+		input.Data.Attributes.Namespace,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -140,6 +160,28 @@ func (a *API) updateDatasource(c *gin.Context) {
 		return
 	}
 
+	// Fetch existing datasource to check namespace change
+	existingDS, err := a.service.GetDatasourceByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Not Found", Detail: "Datasource not found"}}})
+		return
+	}
+
+	// Any namespace change (including clearing to global) requires admin authorization
+	if input.Data.Attributes.Namespace != existingDS.Namespace {
+		user, exists := c.Get("user")
+		if !exists || func() bool { u, ok := user.(*models.User); return !ok || !u.IsAdmin }() {
+			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "Only administrators can change namespace"}}})
+			return
+		}
+	}
+
 	datasource, err := a.service.UpdateDatasource(
 		uint(id),
 		input.Data.Attributes.Name,
@@ -159,6 +201,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 		input.Data.Attributes.Active,
 		input.Data.Attributes.Tags,
 		input.Data.Attributes.UserID,
+		input.Data.Attributes.Namespace,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -568,7 +611,8 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			HasEmbedAPIKey   bool                `json:"has_embed_api_key"`
 			EmbedModel       string              `json:"embed_model"`
 			Active           bool                `json:"active"`
-			Files            []FileStoreResponse `json:"files"` // Added Files field
+			Namespace        string              `json:"namespace"`
+			Files            []FileStoreResponse `json:"files"`
 		}{
 			Name:             datasource.Name,
 			ShortDescription: datasource.ShortDescription,
@@ -589,7 +633,8 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			HasEmbedAPIKey:   datasource.EmbedAPIKey != "",
 			EmbedModel:       datasource.EmbedModel,
 			Active:           datasource.Active,
-			Files:            serializeFileStores(datasource.Files), // Added Files field
+			Namespace:        datasource.Namespace,
+			Files:            serializeFileStores(datasource.Files),
 		},
 	}
 }

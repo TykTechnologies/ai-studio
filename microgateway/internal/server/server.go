@@ -48,6 +48,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		serviceContainer.FilterService,
 		serviceContainer.PluginService,
 		serviceContainer.PluginManager,
+		serviceContainer.DB,
 	)
 
 	budgetServiceAdapter := services.NewBudgetServiceAdapter(
