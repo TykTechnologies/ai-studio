@@ -160,8 +160,18 @@ func (a *API) updateDatasource(c *gin.Context) {
 		return
 	}
 
-	// Namespace change requires admin authorization
-	if input.Data.Attributes.Namespace != "" {
+	// Fetch existing datasource to check namespace change
+	existingDS, err := a.service.GetDatasourceByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Not Found", Detail: "Datasource not found"}}})
+		return
+	}
+
+	// Any namespace change (including clearing to global) requires admin authorization
+	if input.Data.Attributes.Namespace != existingDS.Namespace {
 		user, exists := c.Get("user")
 		if !exists || func() bool { u, ok := user.(*models.User); return !ok || !u.IsAdmin }() {
 			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {

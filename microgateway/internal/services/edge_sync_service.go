@@ -172,13 +172,13 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 
 	// Tool/Datasource join tables (must clear before apps and tools are deleted)
 	if err := tx.Exec("DELETE FROM app_tools WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to clear app_tools (table may not exist)")
+		return fmt.Errorf("failed to clear app_tools: %w", err)
 	}
 	if err := tx.Exec("DELETE FROM app_datasources WHERE app_id IN (SELECT id FROM apps WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to clear app_datasources (table may not exist)")
+		return fmt.Errorf("failed to clear app_datasources: %w", err)
 	}
 	if err := tx.Exec("DELETE FROM tool_filters WHERE tool_id IN (SELECT id FROM tools WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to clear tool_filters (table may not exist)")
+		return fmt.Errorf("failed to clear tool_filters: %w", err)
 	}
 
 	// Clear main entity tables (after all join tables are cleared)
@@ -203,18 +203,18 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 	}
 
 	if err := tx.Exec("DELETE FROM tools WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to clear tools (table may not exist)")
+		return fmt.Errorf("failed to clear tools: %w", err)
 	}
 	if err := tx.Exec("DELETE FROM datasources WHERE namespace = ? OR namespace = ''", s.namespace).Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to clear datasources (table may not exist)")
+		return fmt.Errorf("failed to clear datasources: %w", err)
 	}
 
 	// Clear OAuth tables (global, not namespaced)
 	if err := tx.Exec("DELETE FROM oauth_clients").Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to clear oauth_clients (table may not exist)")
+		return fmt.Errorf("failed to clear oauth_clients: %w", err)
 	}
 	if err := tx.Exec("DELETE FROM access_tokens").Error; err != nil {
-		log.Warn().Err(err).Msg("Failed to clear access_tokens (table may not exist)")
+		return fmt.Errorf("failed to clear access_tokens: %w", err)
 	}
 
 	// Clear Model Router tables (cascade from routers to pools to vendors/mappings)
@@ -309,6 +309,11 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 	log.Debug().Int("count", len(apps)).Msg("Syncing Apps to local SQLite")
 
+	// Collect join table records across all apps for batch insert
+	var allAppLLMs []database.AppLLM
+	var allAppTools []database.AppTool
+	var allAppDatasources []database.AppDatasource
+
 	for _, pbApp := range apps {
 		// Insert main App record
 		app := &database.App{
@@ -347,47 +352,22 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 			return fmt.Errorf("failed to insert App %d: %w", pbApp.Id, err)
 		}
 
-		// Recreate app_llms join table relationships - THE CRITICAL MISSING PIECE
+		// Collect join table records for batch insert
+		now := time.Now()
 		for _, llmID := range pbApp.LlmIds {
-			appLLM := &database.AppLLM{
-				AppID:    uint(pbApp.Id),
-				LLMID:    uint(llmID),
-				IsActive: true,
-				CreatedAt: time.Now(),
-			}
-
-			if err := tx.Create(appLLM).Error; err != nil {
-				return fmt.Errorf("failed to create app_llm relationship (app=%d, llm=%d): %w", pbApp.Id, llmID, err)
-			}
-
-			log.Debug().
-				Uint32("app_id", pbApp.Id).
-				Uint32("llm_id", llmID).
-				Msg("Created app_llm relationship in SQLite")
+			allAppLLMs = append(allAppLLMs, database.AppLLM{
+				AppID: uint(pbApp.Id), LLMID: uint(llmID), IsActive: true, CreatedAt: now,
+			})
 		}
-
-		// Recreate app_tools join table relationships
 		for _, toolID := range pbApp.ToolIds {
-			appTool := &database.AppTool{
-				AppID:     uint(pbApp.Id),
-				ToolID:    uint(toolID),
-				CreatedAt: time.Now(),
-			}
-			if err := tx.Create(appTool).Error; err != nil {
-				return fmt.Errorf("failed to create app_tool relationship (app=%d, tool=%d): %w", pbApp.Id, toolID, err)
-			}
+			allAppTools = append(allAppTools, database.AppTool{
+				AppID: uint(pbApp.Id), ToolID: uint(toolID), CreatedAt: now,
+			})
 		}
-
-		// Recreate app_datasources join table relationships
 		for _, dsID := range pbApp.DatasourceIds {
-			appDS := &database.AppDatasource{
-				AppID:        uint(pbApp.Id),
-				DatasourceID: uint(dsID),
-				CreatedAt:    time.Now(),
-			}
-			if err := tx.Create(appDS).Error; err != nil {
-				return fmt.Errorf("failed to create app_datasource relationship (app=%d, ds=%d): %w", pbApp.Id, dsID, err)
-			}
+			allAppDatasources = append(allAppDatasources, database.AppDatasource{
+				AppID: uint(pbApp.Id), DatasourceID: uint(dsID), CreatedAt: now,
+			})
 		}
 
 		log.Debug().
@@ -436,6 +416,23 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 					Time("period_start", periodStart).
 					Msg("Initialized budget usage from control server snapshot")
 			}
+		}
+	}
+
+	// Batch insert all join table records
+	if len(allAppLLMs) > 0 {
+		if err := tx.Create(&allAppLLMs).Error; err != nil {
+			return fmt.Errorf("failed to batch insert app_llms: %w", err)
+		}
+	}
+	if len(allAppTools) > 0 {
+		if err := tx.Create(&allAppTools).Error; err != nil {
+			return fmt.Errorf("failed to batch insert app_tools: %w", err)
+		}
+	}
+	if len(allAppDatasources) > 0 {
+		if err := tx.Create(&allAppDatasources).Error; err != nil {
+			return fmt.Errorf("failed to batch insert app_datasources: %w", err)
 		}
 	}
 
@@ -667,15 +664,19 @@ func (s *EdgeSyncService) syncModelRouters(tx *gorm.DB, modelRouters []*pb.Model
 	return nil
 }
 
-// syncTools syncs Tool entities with filter and app associations
+// syncTools syncs Tool entities with filter associations (batch insert)
 func (s *EdgeSyncService) syncTools(tx *gorm.DB, tools []*pb.ToolConfig) error {
 	if len(tools) == 0 {
 		return nil
 	}
 	log.Debug().Int("count", len(tools)).Msg("Syncing Tools to local SQLite")
 
+	// Build batch of tool records
+	toolRecords := make([]database.Tool, 0, len(tools))
+	var toolFilterRecords []database.ToolFilter
+
 	for _, pbTool := range tools {
-		tool := &database.Tool{
+		toolRecords = append(toolRecords, database.Tool{
 			Model: gorm.Model{
 				ID:        uint(pbTool.Id),
 				CreatedAt: pbTool.CreatedAt.AsTime(),
@@ -692,45 +693,47 @@ func (s *EdgeSyncService) syncTools(tx *gorm.DB, tools []*pb.ToolConfig) error {
 			AuthSchemaName:      pbTool.AuthSchemaName,
 			Active:              pbTool.IsActive,
 			Namespace:           pbTool.Namespace,
-		}
+		})
 
-		if err := tx.Create(tool).Error; err != nil {
-			return fmt.Errorf("failed to insert Tool %d: %w", pbTool.Id, err)
-		}
-
-		// Create tool_filters join table entries
+		// Collect tool_filter join table entries
+		now := time.Now()
 		for _, filterID := range pbTool.FilterIds {
-			toolFilter := &database.ToolFilter{
+			toolFilterRecords = append(toolFilterRecords, database.ToolFilter{
 				ToolID:    uint(pbTool.Id),
 				FilterID:  uint(filterID),
-				CreatedAt: time.Now(),
-			}
-			if err := tx.Create(toolFilter).Error; err != nil {
-				return fmt.Errorf("failed to create tool_filter (tool=%d, filter=%d): %w", pbTool.Id, filterID, err)
-			}
+				CreatedAt: now,
+			})
 		}
-
-		// Note: app_tools join table entries are created by syncApps (sole authority for app relationships)
-
-		log.Debug().
-			Uint32("tool_id", pbTool.Id).
-			Str("tool_slug", pbTool.Slug).
-			Int("filter_count", len(pbTool.FilterIds)).
-			Msg("Tool synced to SQLite")
 	}
 
+	// Batch insert tools
+	if err := tx.Create(&toolRecords).Error; err != nil {
+		return fmt.Errorf("failed to batch insert tools: %w", err)
+	}
+
+	// Batch insert tool_filters
+	if len(toolFilterRecords) > 0 {
+		if err := tx.Create(&toolFilterRecords).Error; err != nil {
+			return fmt.Errorf("failed to batch insert tool_filters: %w", err)
+		}
+	}
+
+	// Note: app_tools join table entries are created by syncApps (sole authority for app relationships)
+
+	log.Debug().Int("tool_count", len(toolRecords)).Int("filter_count", len(toolFilterRecords)).Msg("Tools batch synced to SQLite")
 	return nil
 }
 
-// syncDatasources syncs Datasource entities with app associations
+// syncDatasources syncs Datasource entities (batch insert)
 func (s *EdgeSyncService) syncDatasources(tx *gorm.DB, datasources []*pb.DatasourceConfig) error {
 	if len(datasources) == 0 {
 		return nil
 	}
 	log.Debug().Int("count", len(datasources)).Msg("Syncing Datasources to local SQLite")
 
+	records := make([]database.Datasource, 0, len(datasources))
 	for _, pbDS := range datasources {
-		ds := &database.Datasource{
+		records = append(records, database.Datasource{
 			Model: gorm.Model{
 				ID:        uint(pbDS.Id),
 				CreatedAt: pbDS.CreatedAt.AsTime(),
@@ -752,69 +755,62 @@ func (s *EdgeSyncService) syncDatasources(tx *gorm.DB, datasources []*pb.Datasou
 			EmbedModel:            pbDS.EmbedModel,
 			Active:                pbDS.IsActive,
 			Namespace:             pbDS.Namespace,
-		}
-
-		if err := tx.Create(ds).Error; err != nil {
-			return fmt.Errorf("failed to insert Datasource %d: %w", pbDS.Id, err)
-		}
-
-		// Note: app_datasources join table entries are created by syncApps (sole authority for app relationships)
-
-		log.Debug().
-			Uint32("ds_id", pbDS.Id).
-			Str("ds_name", pbDS.Name).
-			Str("db_type", pbDS.DbSourceType).
-			Msg("Datasource synced to SQLite")
+		})
 	}
 
+	// Batch insert datasources
+	if err := tx.Create(&records).Error; err != nil {
+		return fmt.Errorf("failed to batch insert datasources: %w", err)
+	}
+
+	// Note: app_datasources join table entries are created by syncApps (sole authority for app relationships)
+
+	log.Debug().Int("count", len(records)).Msg("Datasources batch synced to SQLite")
 	return nil
 }
 
-// syncOAuthClients syncs OAuth client records for MCP authentication on edge
+// syncOAuthClients syncs OAuth client records for MCP authentication on edge (batch insert)
 func (s *EdgeSyncService) syncOAuthClients(tx *gorm.DB, clients []*pb.OAuthClientConfig) error {
 	if len(clients) == 0 {
 		return nil
 	}
 	log.Debug().Int("count", len(clients)).Msg("Syncing OAuth Clients to local SQLite")
 
+	records := make([]database.OAuthClientEdge, 0, len(clients))
 	for _, pbClient := range clients {
-		client := &database.OAuthClientEdge{
+		records = append(records, database.OAuthClientEdge{
 			Model: gorm.Model{
 				ID:        uint(pbClient.Id),
 				CreatedAt: pbClient.CreatedAt.AsTime(),
 				UpdatedAt: pbClient.UpdatedAt.AsTime(),
 			},
 			ClientID:     pbClient.ClientId,
-			ClientSecret: pbClient.ClientSecretHash, // Already bcrypt hashed
+			ClientSecret: pbClient.ClientSecretHash,
 			ClientName:   pbClient.ClientName,
 			RedirectURIs: pbClient.RedirectUris,
 			UserID:       uint(pbClient.UserId),
 			Scope:        pbClient.Scope,
-		}
-
-		if err := tx.Create(client).Error; err != nil {
-			return fmt.Errorf("failed to insert OAuthClient %d: %w", pbClient.Id, err)
-		}
-
-		log.Debug().
-			Uint32("client_id_num", pbClient.Id).
-			Str("client_id", pbClient.ClientId).
-			Str("client_name", pbClient.ClientName).
-			Msg("OAuth Client synced to SQLite")
+		})
 	}
 
+	if err := tx.Create(&records).Error; err != nil {
+		return fmt.Errorf("failed to batch insert OAuth clients: %w", err)
+	}
+
+	log.Debug().Int("count", len(records)).Msg("OAuth Clients batch synced to SQLite")
 	return nil
 }
 
-// syncAccessTokens syncs OAuth access tokens for MCP authentication on edge
+// syncAccessTokens syncs OAuth access tokens for MCP authentication on edge (batch insert)
 func (s *EdgeSyncService) syncAccessTokens(tx *gorm.DB, tokens []*pb.AccessTokenConfig) error {
 	if len(tokens) == 0 {
 		return nil
 	}
 	log.Debug().Int("count", len(tokens)).Msg("Syncing Access Tokens to local SQLite")
 
+	records := make([]database.AccessTokenEdge, 0, len(tokens))
 	for _, pbToken := range tokens {
-		token := &database.AccessTokenEdge{
+		records = append(records, database.AccessTokenEdge{
 			Model: gorm.Model{
 				ID:        uint(pbToken.Id),
 				CreatedAt: pbToken.CreatedAt.AsTime(),
@@ -826,19 +822,13 @@ func (s *EdgeSyncService) syncAccessTokens(tx *gorm.DB, tokens []*pb.AccessToken
 			UserID:         uint(pbToken.UserId),
 			Scope:          pbToken.Scope,
 			ExpiresAt:      pbToken.ExpiresAt.AsTime(),
-		}
-
-		if err := tx.Create(token).Error; err != nil {
-			return fmt.Errorf("failed to insert AccessToken %d: %w", pbToken.Id, err)
-		}
-
-		log.Debug().
-			Uint32("token_id", pbToken.Id).
-			Str("client_id", pbToken.ClientId).
-			Uint32("user_id", pbToken.UserId).
-			Time("expires_at", pbToken.ExpiresAt.AsTime()).
-			Msg("Access Token synced to SQLite")
+		})
 	}
 
+	if err := tx.Create(&records).Error; err != nil {
+		return fmt.Errorf("failed to batch insert access tokens: %w", err)
+	}
+
+	log.Debug().Int("count", len(records)).Msg("Access Tokens batch synced to SQLite")
 	return nil
 }
