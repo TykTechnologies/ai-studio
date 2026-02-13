@@ -143,7 +143,7 @@ func TestGoogleAIRequestHandling(t *testing.T) {
 
 	mockGoogleAIServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Empty(t, r.Header.Get("Authorization"), "Authorization header must be omitted")
-		require.NotEmpty(t, r.Header.Get("x-goog-api-key"), "X-Goog-Api-Key header must be attached")
+		require.Equal(t, "api-key", r.Header.Get("x-goog-api-key"))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
