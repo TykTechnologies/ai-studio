@@ -116,43 +116,19 @@ func (s *Submission) Update(db *gorm.DB) error {
 
 // UpdateWithLock performs an optimistic concurrency update.
 // Returns an error if the lock_version has changed since the submission was read.
-// Uses GORM's Updates with a WHERE clause on lock_version for maintainability.
+// Uses GORM's Select("*") to automatically include all struct fields — no manual map needed.
 func (s *Submission) UpdateWithLock(db *gorm.DB) error {
 	currentVersion := s.LockVersion
 	s.LockVersion = currentVersion + 1
 	s.UpdatedAt = time.Now()
 
-	// Convert struct to map for GORM Updates (which respects Where clauses unlike Save)
-	updates := map[string]interface{}{
-		"status":                s.Status,
-		"lock_version":          s.LockVersion,
-		"reviewer_id":           s.ReviewerID,
-		"resource_id":           s.ResourceID,
-		"submitted_at":          s.SubmittedAt,
-		"review_started_at":     s.ReviewStartedAt,
-		"review_completed_at":   s.ReviewCompletedAt,
-		"submitter_feedback":    s.SubmitterFeedback,
-		"review_notes":          s.ReviewNotes,
-		"final_privacy_score":   s.FinalPrivacyScore,
-		"assigned_catalogues":   s.AssignedCatalogues,
-		"suggested_privacy":     s.SuggestedPrivacy,
-		"privacy_justification": s.PrivacyJustification,
-		"primary_contact":       s.PrimaryContact,
-		"secondary_contact":     s.SecondaryContact,
-		"resource_payload":      s.ResourcePayload,
-		"attestations":          s.Attestations,
-		"sla_expectation":       s.SLAExpectation,
-		"documentation_url":     s.DocumentationURL,
-		"notes":                 s.Notes,
-		"data_cutoff_date":      s.DataCutoffDate,
-		"is_update":             s.IsUpdate,
-		"target_resource_id":    s.TargetResourceID,
-		"updated_at":            s.UpdatedAt,
-	}
-
-	result := db.Model(&Submission{}).
+	// Select("*") tells GORM to update all fields from the struct, Omit protects immutable fields.
+	// This is maintainable: adding a new field to the Submission struct automatically includes it.
+	result := db.Model(s).
 		Where("id = ? AND lock_version = ? AND deleted_at IS NULL", s.ID, currentVersion).
-		Updates(updates)
+		Select("*").
+		Omit("id", "created_at", "deleted_at").
+		Updates(s)
 	if result.Error != nil {
 		return result.Error
 	}
