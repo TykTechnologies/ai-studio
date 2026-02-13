@@ -359,6 +359,7 @@ func toSecureToolResponse(tool *models.Tool) ToolResponse {
 			Operations     []string            `json:"operations"`
 			AuthKey        string              `json:"auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
+			Active         bool                `json:"active"`
 			FileStores     []FileStoreResponse `json:"file_stores"`
 			Filters        []FilterResponse    `json:"filters"`
 			Dependencies   []ToolResponse      `json:"dependencies"`
@@ -371,6 +372,7 @@ func toSecureToolResponse(tool *models.Tool) ToolResponse {
 			Operations:     ops,
 			AuthKey:        "", // Hide auth key for security
 			AuthSchemaName: tool.AuthSchemaName,
+			Active:         tool.Active,
 		},
 	}
 }
@@ -389,6 +391,7 @@ func toToolResponse(tool *models.Tool) ToolResponse {
 			Operations     []string            `json:"operations"`
 			AuthKey        string              `json:"auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
+			Active         bool                `json:"active"`
 			FileStores     []FileStoreResponse `json:"file_stores"`
 			Filters        []FilterResponse    `json:"filters"`
 			Dependencies   []ToolResponse      `json:"dependencies"`
@@ -401,6 +404,7 @@ func toToolResponse(tool *models.Tool) ToolResponse {
 			Operations:     ops,
 			AuthKey:        tool.AuthKey,
 			AuthSchemaName: tool.AuthSchemaName,
+			Active:         tool.Active,
 		},
 	}
 }

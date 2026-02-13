@@ -29,6 +29,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Install Air for Go hot reloading
 RUN go install github.com/air-verse/air@latest
 
+# Install cosign for OCI plugin signature verification
+RUN curl -fsSL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-$(dpkg --print-architecture) -o /usr/local/bin/cosign \
+    && chmod +x /usr/local/bin/cosign
+
 # Set working directory
 WORKDIR /app
 

@@ -28,6 +28,13 @@ func NewPluginService(db *gorm.DB) *PluginService {
 	}
 }
 
+// SetSecurityService sets the enterprise security service for OCI signature verification
+func (s *PluginService) SetSecurityService(service ociplugins.SecurityService) {
+	if s.ociClient != nil {
+		s.ociClient.SetSecurityService(service)
+	}
+}
+
 // SetPluginManager sets the AI Studio plugin manager (to avoid circular dependency)
 func (s *PluginService) SetPluginManager(pluginManager *AIStudioPluginManager) {
 	s.pluginManager = pluginManager

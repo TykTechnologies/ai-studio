@@ -117,6 +117,15 @@ func (m *AIStudioPluginManager) SetManifestService(manifestService *PluginManife
 	m.manifestService = manifestService
 }
 
+// SetSecurityService sets the enterprise security service for OCI signature verification
+func (m *AIStudioPluginManager) SetSecurityService(service ociplugins.SecurityService) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ociClient != nil {
+		m.ociClient.SetSecurityService(service)
+	}
+}
+
 // SetService sets the main service reference (to avoid circular dependency)
 func (m *AIStudioPluginManager) SetService(service *Service) {
 	m.mu.Lock()

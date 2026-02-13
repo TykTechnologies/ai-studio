@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"gorm.io/gorm"
 )
 
@@ -114,6 +115,22 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	} else {
 		logger.Debugf("Failed to wire plugin manager to plugin service (plugin_service_nil: %v, ai_studio_plugin_manager_nil: %v)",
 			pluginService == nil, aiStudioPluginManager == nil)
+	}
+
+	// Wire enterprise security service to OCI clients for signature verification
+	if ociConfig != nil {
+		secConfig := &plugin_security.Config{
+			OCIConfig:                  ociConfig,
+			AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+		}
+		secService := plugin_security.NewService(secConfig)
+		if pluginService != nil {
+			pluginService.SetSecurityService(secService)
+		}
+		if aiStudioPluginManager != nil {
+			aiStudioPluginManager.SetSecurityService(secService)
+		}
+		logger.Debug("Wired plugin security service to OCI clients")
 	}
 
 	// Initialize plugin metadata loader with enhanced config provider support
