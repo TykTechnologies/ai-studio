@@ -57,6 +57,8 @@ func GoogleAIValidator(r *http.Request) (string, error) {
 	headerKey := r.Header.Get("x-goog-api-key")
 	queryKey := r.URL.Query().Get("key")
 
+	// This strict validation prevents "Parameter Pollution" where a client might
+	// unintentionally (or maliciously) send conflicting credentials.
 	if headerKey != "" && queryKey != "" && headerKey != queryKey {
 		return "", errors.New("ambiguous credentials: header and query keys do not match")
 	}
