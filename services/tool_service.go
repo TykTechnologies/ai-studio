@@ -16,7 +16,13 @@ import (
 )
 
 // CreateTool creates a new tool with validity checks
+// CreateTool creates a new tool using the default DB connection.
 func (s *Service) CreateTool(name, description, toolType string, oasSpec string, privacyScore int, schemaName, APIKey string) (*models.Tool, error) {
+	return s.CreateToolWithDB(s.DB, name, description, toolType, oasSpec, privacyScore, schemaName, APIKey)
+}
+
+// CreateToolWithDB creates a new tool using the provided DB connection (supports transactions).
+func (s *Service) CreateToolWithDB(db *gorm.DB, name, description, toolType string, oasSpec string, privacyScore int, schemaName, APIKey string) (*models.Tool, error) {
 	tool := &models.Tool{
 		Name:           name,
 		Description:    description,
@@ -58,7 +64,7 @@ func (s *Service) CreateTool(name, description, toolType string, oasSpec string,
 		}
 	}
 
-	if err := tool.Create(s.DB); err != nil {
+	if err := tool.Create(db); err != nil {
 		return nil, err
 	}
 

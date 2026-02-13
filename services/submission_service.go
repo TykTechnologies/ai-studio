@@ -570,6 +570,8 @@ func (s *Service) createToolFromPayload(payload models.JSONMap, submitterID uint
 
 // --- Transaction-aware resource creation (for ApproveSubmission) ---
 
+// createResourceFromSubmissionTx creates a Datasource or Tool using the canonical service methods
+// with the provided transaction, ensuring all validation, hooks, and catalogue assignment run.
 func (s *Service) createResourceFromSubmissionTx(tx *gorm.DB, submission *models.Submission, privacyScore int) (uint, error) {
 	payload := submission.ResourcePayload
 	getString := func(key string) string {
@@ -589,32 +591,52 @@ func (s *Service) createResourceFromSubmissionTx(tx *gorm.DB, submission *models
 		return false
 	}
 
+	var tagNames []string
+	if tags, ok := payload["tags"]; ok {
+		if tagList, ok := tags.([]interface{}); ok {
+			for _, t := range tagList {
+				if tagStr, ok := t.(string); ok {
+					tagNames = append(tagNames, tagStr)
+				}
+			}
+		}
+	}
+
 	switch submission.ResourceType {
 	case models.SubmissionResourceTypeDatasource:
-		ds := &models.Datasource{
-			Name: getString("name"), ShortDescription: getString("short_description"),
-			LongDescription: getString("long_description"), Icon: getString("icon"),
-			Url: getString("url"), PrivacyScore: privacyScore, UserID: submission.SubmitterID,
-			DBConnString: getString("db_conn_string"), DBSourceType: getString("db_source_type"),
-			DBConnAPIKey: getString("db_conn_api_key"), DBName: getString("db_name"),
-			EmbedVendor: models.Vendor(getString("embed_vendor")), EmbedUrl: getString("embed_url"),
-			EmbedAPIKey: getString("embed_api_key"), EmbedModel: getString("embed_model"),
-			Active: getBool("active"), CommunitySubmitted: true,
+		ds, err := s.CreateDatasourceWithDB(tx,
+			getString("name"), getString("short_description"), getString("long_description"),
+			getString("icon"), getString("url"), privacyScore, submission.SubmitterID, tagNames,
+			getString("db_conn_string"), getString("db_source_type"), getString("db_conn_api_key"),
+			getString("db_name"), getString("embed_vendor"), getString("embed_url"),
+			getString("embed_api_key"), getString("embed_model"), getBool("active"),
+		)
+		if err != nil {
+			return 0, err
 		}
-		if err := tx.Create(ds).Error; err != nil {
+		// Mark as community submitted
+		ds.CommunitySubmitted = true
+		if err := tx.Model(ds).Update("community_submitted", true).Error; err != nil {
 			return 0, err
 		}
 		return ds.ID, nil
 
 	case models.SubmissionResourceTypeTool:
-		tool := &models.Tool{
-			Name: getString("name"), Description: getString("description"),
-			ToolType: getString("tool_type"), OASSpec: getString("oas_spec"),
-			PrivacyScore: privacyScore, AuthSchemaName: getString("auth_schema_name"),
-			AuthKey: getString("auth_key"), AvailableOperations: getString("available_operations"),
-			UserID: submission.SubmitterID, CommunitySubmitted: true, Active: true,
+		tool, err := s.CreateToolWithDB(tx,
+			getString("name"), getString("description"), getString("tool_type"),
+			getString("oas_spec"), privacyScore, getString("auth_schema_name"), getString("auth_key"),
+		)
+		if err != nil {
+			return 0, err
 		}
-		if err := tx.Create(tool).Error; err != nil {
+		// Set operations, community flag, owner, and active
+		updates := map[string]interface{}{
+			"community_submitted":  true,
+			"user_id":              submission.SubmitterID,
+			"active":               true,
+			"available_operations": getString("available_operations"),
+		}
+		if err := tx.Model(tool).Updates(updates).Error; err != nil {
 			return 0, err
 		}
 		return tool.ID, nil

@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
+	neturl "net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -169,11 +172,62 @@ func (s *Service) ValidateOASSpec(oasSpecBase64 string) (*SpecValidationResult, 
 	return result, nil
 }
 
+// isPrivateIP checks if an IP address is in a private/reserved range
+func isPrivateIP(ip net.IP) bool {
+	privateRanges := []string{
+		"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+		"127.0.0.0/8", "169.254.0.0/16", "::1/128", "fc00::/7",
+	}
+	for _, cidr := range privateRanges {
+		_, network, _ := net.ParseCIDR(cidr)
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// validateEmbedURLForSSRF checks that the embed URL does not target internal network addresses.
+// Skipped if ALLOW_INTERNAL_NETWORK_ACCESS is set to "true".
+func validateEmbedURLForSSRF(rawURL string) error {
+	if rawURL == "" {
+		return nil
+	}
+	if os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true" {
+		return nil
+	}
+
+	parsed, err := neturl.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid embed URL: %w", err)
+	}
+
+	hostname := parsed.Hostname()
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return fmt.Errorf("cannot resolve embed URL hostname %q: %w", hostname, err)
+	}
+
+	for _, ip := range ips {
+		if isPrivateIP(ip) {
+			return fmt.Errorf("embed URL %q resolves to private/internal IP %s — blocked for security", rawURL, ip)
+		}
+	}
+	return nil
+}
+
 // TestDatasourceConnectivity tests that an embedder can be created and optionally performs a test embedding
 func (s *Service) TestDatasourceConnectivity(embedVendor, embedURL, embedAPIKey, embedModel string) (*DatasourceTestResult, error) {
 	result := &DatasourceTestResult{
 		EmbedderVendor: embedVendor,
 		EmbedderModel:  embedModel,
+	}
+
+	// Validate URL against SSRF before making any outbound requests
+	if err := validateEmbedURLForSSRF(embedURL); err != nil {
+		result.EmbedderValid = false
+		result.EmbedderError = err.Error()
+		return result, nil
 	}
 
 	// Build a temporary datasource model for the switches package

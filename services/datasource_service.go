@@ -7,9 +7,16 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"gorm.io/gorm"
 )
 
+// CreateDatasource creates a new datasource using the default DB connection.
 func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool) (*models.Datasource, error) {
+	return s.CreateDatasourceWithDB(s.DB, name, shortDesc, longDesc, icon, url, privacyScore, userID, tagNames, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel, active)
+}
+
+// CreateDatasourceWithDB creates a new datasource using the provided DB connection (supports transactions).
+func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc, icon, url string, privacyScore int, userID uint, tagNames []string, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool) (*models.Datasource, error) {
 	datasource := &models.Datasource{
 		Name:             name,
 		ShortDescription: shortDesc,
@@ -60,11 +67,11 @@ func (s *Service) CreateDatasource(name, shortDesc, longDesc, icon, url string, 
 		}
 	}
 
-	if err := datasource.Create(s.DB); err != nil {
+	if err := datasource.Create(db); err != nil {
 		return nil, err
 	}
 
-	if err := datasource.AddTags(s.DB, tagNames); err != nil {
+	if err := datasource.AddTags(db, tagNames); err != nil {
 		return nil, err
 	}
 
