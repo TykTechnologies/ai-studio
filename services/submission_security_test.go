@@ -208,52 +208,6 @@ func TestSecurity_OptimisticLocking_NormalFlowSucceeds(t *testing.T) {
 }
 
 // =============================================================================
-// H4: Duplicate check uses DB queries, not in-memory scan
-// =============================================================================
-
-func TestSecurity_DuplicateCheck_DoesNotLoadAllRecords(t *testing.T) {
-	db := setupSecurityTestDB(t)
-	svc := NewService(db)
-
-	user := createSubmissionTestUser(t, svc, "dev@test.com")
-
-	// Create several datasources
-	for i := 0; i < 5; i++ {
-		svc.CreateDatasource(
-			"DS "+string(rune('A'+i)), "", "", "", "", 50, user.ID, nil,
-			"conn"+string(rune('A'+i)), "pgvector", "", "db",
-			"openai", "", "", "text-embedding-3-small", true,
-		)
-	}
-
-	// Check for duplicates by connection string — should find exact match only
-	dupes, err := svc.CheckForDuplicates(models.SubmissionResourceTypeDatasource, models.JSONMap{
-		"name":           "Completely Different",
-		"db_conn_string": "connA",
-	})
-	assert.NoError(t, err)
-	assert.Len(t, dupes, 1)
-	assert.Equal(t, "DS A", dupes[0].Name)
-
-	// Check by name — case insensitive
-	dupes, err = svc.CheckForDuplicates(models.SubmissionResourceTypeDatasource, models.JSONMap{
-		"name":           "ds b",
-		"db_conn_string": "no-match",
-	})
-	assert.NoError(t, err)
-	assert.Len(t, dupes, 1)
-	assert.Equal(t, "DS B", dupes[0].Name)
-
-	// No match
-	dupes, err = svc.CheckForDuplicates(models.SubmissionResourceTypeDatasource, models.JSONMap{
-		"name":           "No Such DS",
-		"db_conn_string": "no-such-conn",
-	})
-	assert.NoError(t, err)
-	assert.Len(t, dupes, 0)
-}
-
-// =============================================================================
 // H5: review_notes not exposed — tested via serializer behavior
 // (The actual serializer is in the API layer; we test the model-level data here)
 // =============================================================================

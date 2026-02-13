@@ -530,6 +530,7 @@ type ToolResponse struct {
 		Operations     []string            `json:"operations"`
 		AuthKey        string              `json:"auth_key"`
 		AuthSchemaName string              `json:"auth_schema_name"`
+		Active         bool                `json:"active"`
 		FileStores     []FileStoreResponse `json:"file_stores"`
 		Filters        []FilterResponse    `json:"filters"`
 		Dependencies   []ToolResponse      `json:"dependencies"`

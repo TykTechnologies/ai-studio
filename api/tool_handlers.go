@@ -1008,6 +1008,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			Operations     []string            `json:"operations"`
 			AuthKey        string              `json:"auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
+			Active         bool                `json:"active"`
 			FileStores     []FileStoreResponse `json:"file_stores"`
 			Filters        []FilterResponse    `json:"filters"`
 			Dependencies   []ToolResponse      `json:"dependencies"`
@@ -1020,6 +1021,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			Operations:     tool.GetOperations(),
 			AuthKey:        tool.AuthKey,
 			AuthSchemaName: tool.AuthSchemaName,
+			Active:         tool.Active,
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointers(dependencies, db),
@@ -1064,6 +1066,7 @@ func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
 			Operations     []string            `json:"operations"`
 			AuthKey        string              `json:"auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
+			Active         bool                `json:"active"`
 			FileStores     []FileStoreResponse `json:"file_stores"`
 			Filters        []FilterResponse    `json:"filters"`
 			Dependencies   []ToolResponse      `json:"dependencies"`
@@ -1076,6 +1079,7 @@ func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
 			Operations:     tool.GetOperations(),
 			AuthKey:        "", // Omit sensitive auth key
 			AuthSchemaName: tool.AuthSchemaName,
+			Active:         tool.Active,
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointersSlim(dependencies, db),

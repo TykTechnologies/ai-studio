@@ -612,7 +612,7 @@ func (s *Service) createResourceFromSubmissionTx(tx *gorm.DB, submission *models
 			ToolType: getString("tool_type"), OASSpec: getString("oas_spec"),
 			PrivacyScore: privacyScore, AuthSchemaName: getString("auth_schema_name"),
 			AuthKey: getString("auth_key"), AvailableOperations: getString("available_operations"),
-			UserID: submission.SubmitterID, CommunitySubmitted: true,
+			UserID: submission.SubmitterID, CommunitySubmitted: true, Active: true,
 		}
 		if err := tx.Create(tool).Error; err != nil {
 			return 0, err
@@ -695,9 +695,10 @@ func payloadToUpdatesMap(payload models.JSONMap) map[string]interface{} {
 		// Relationships (managed separately)
 		"tags": true, "files": true, "file_stores": true, "filters": true,
 		"dependencies": true, "apps": true, "metadata": true,
-		// Ownership and status flags (must not be user-modifiable via payload)
+		// Ownership, status, and admin-controlled flags (must not be user-modifiable via payload)
 		"user_id": true, "community_submitted": true, "submission_id": true,
-		"slug": true, // auto-generated from name
+		"slug": true,   // auto-generated from name
+		"active": true, // admin-controlled, not settable via UGC
 	}
 	for k, v := range payload {
 		if skipFields[k] {
