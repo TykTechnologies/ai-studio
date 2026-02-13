@@ -64,6 +64,21 @@ func (pd *PluginData) SupportsHookType(hookType string) bool {
 	return false
 }
 
+// HasAnySupportedGatewayHook returns true if this plugin declares at least one
+// hook type that the microgateway supports. Plugins that only declare Studio-only
+// hooks (studio_ui, agent, object_hooks) return false.
+func (pd *PluginData) HasAnySupportedGatewayHook() bool {
+	if interfaces.IsSupportedGatewayHookType(pd.HookType) {
+		return true
+	}
+	for _, ht := range pd.HookTypes {
+		if interfaces.IsSupportedGatewayHookType(ht) {
+			return true
+		}
+	}
+	return false
+}
+
 // LoadedPlugin represents a loaded plugin instance
 type LoadedPlugin struct {
 	ID            uint
@@ -113,14 +128,15 @@ type PluginHealthStatus struct {
 
 // EndpointRoute stores the mapping from an HTTP route to a specific plugin endpoint
 type EndpointRoute struct {
-	PluginID     uint
-	PluginName   string
-	Path         string   // Registration path pattern (e.g., "/*", "/.well-known/openid-configuration")
-	Methods      []string // Allowed HTTP methods
-	RequireAuth  bool
+	PluginID       uint
+	PluginName     string
+	PluginSlug     string   // URL slug used in /plugins/{slug}/ (from config["slug"])
+	Path           string   // Registration path pattern (e.g., "/*", "/.well-known/openid-configuration")
+	Methods        []string // Allowed HTTP methods
+	RequireAuth    bool
 	StreamResponse bool
-	Description  string
-	Metadata     map[string]string
+	Description    string
+	Metadata       map[string]string
 }
 
 // PluginManager manages the lifecycle of plugins
@@ -2069,9 +2085,35 @@ func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
 		}
 
 		for _, plugin := range plugins {
-			if !pluginsSeen[plugin.ID] {
+			if pluginsSeen[plugin.ID] {
+				continue
+			}
+			// Skip plugins that only declare Studio-only hooks
+			if !plugin.HasAnySupportedGatewayHook() {
+				continue
+			}
+			pluginsSeen[plugin.ID] = true
+			pluginsToLoad = append(pluginsToLoad, plugin)
+		}
+	}
+
+	// Also include standalone plugins (custom_endpoint, etc.) that aren't tied to LLMs
+	allPlugins, err := pm.service.GetAllPlugins()
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to get all plugins for standalone pre-warming")
+	} else {
+		for _, plugin := range allPlugins {
+			if !plugin.IsActive || pluginsSeen[plugin.ID] {
+				continue
+			}
+			// Load plugins with custom_endpoint hook type (they're not associated with LLMs)
+			if plugin.HookType == "custom_endpoint" || plugin.SupportsHookType("custom_endpoint") {
 				pluginsSeen[plugin.ID] = true
 				pluginsToLoad = append(pluginsToLoad, plugin)
+				log.Debug().
+					Uint("plugin_id", plugin.ID).
+					Str("plugin_name", plugin.Name).
+					Msg("Including standalone custom_endpoint plugin in pre-warm")
 			}
 		}
 	}
@@ -2156,9 +2198,19 @@ func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
 	var ociPluginCount int
 	var preWarmErrors []error
 
-	// Pre-warm all OCI plugins
+	// Pre-warm OCI plugins that have gateway-supported hook types
 	for _, plugin := range allPlugins {
 		if !strings.HasPrefix(plugin.Command, "oci://") {
+			continue
+		}
+
+		// Skip plugins that only declare Studio-only hooks (studio_ui, agent, object_hooks)
+		if !plugin.HasAnySupportedGatewayHook() {
+			log.Debug().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Str("hook_type", plugin.HookType).
+				Msg("Skipping OCI pre-warm for non-gateway plugin")
 			continue
 		}
 
@@ -2513,6 +2565,28 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 		return
 	}
 
+	// Resolve slug from plugin config — this is the URL path component
+	slug := ""
+	if lp.Config != nil {
+		if s, ok := lp.Config["slug"].(string); ok && s != "" {
+			slug = s
+		}
+	}
+	if slug == "" {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", lp.Name).
+			Msg("Plugin has endpoint registrations but no 'slug' in config — endpoints will not be reachable. Set config.slug to the desired URL path component.")
+		return
+	}
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", lp.Name).
+		Str("slug", slug).
+		Int("registrations", len(resp.Registrations)).
+		Msg("Registering custom plugin endpoints")
+
 	for _, reg := range resp.Registrations {
 		if !isValidEndpointPath(reg.Path) {
 			log.Warn().
@@ -2531,6 +2605,7 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 		route := &EndpointRoute{
 			PluginID:       pluginID,
 			PluginName:     lp.Name,
+			PluginSlug:     slug,
 			Path:           reg.Path,
 			Methods:        methods,
 			RequireAuth:    reg.RequireAuth,
@@ -2539,9 +2614,9 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 			Metadata:       reg.Metadata,
 		}
 
-		// Build route keys: "METHOD:pluginName/subpath"
+		// Build route keys using slug: "METHOD:slug/subpath"
 		for _, method := range methods {
-			key := endpointRouteKey(method, lp.Name, reg.Path)
+			key := endpointRouteKey(method, slug, reg.Path)
 			pm.endpointRoutes[key] = route
 		}
 
@@ -2550,6 +2625,7 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 		log.Debug().
 			Uint("plugin_id", pluginID).
 			Str("plugin_name", lp.Name).
+			Str("slug", slug).
 			Str("path", reg.Path).
 			Strs("methods", methods).
 			Bool("require_auth", reg.RequireAuth).
@@ -2573,7 +2649,7 @@ func (pm *PluginManager) unregisterPluginEndpoints(pluginID uint) {
 
 	for _, route := range routes {
 		for _, method := range route.Methods {
-			key := endpointRouteKey(method, route.PluginName, route.Path)
+			key := endpointRouteKey(method, route.PluginSlug, route.Path)
 			delete(pm.endpointRoutes, key)
 		}
 	}

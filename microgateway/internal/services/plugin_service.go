@@ -417,7 +417,7 @@ func (s *PluginService) PluginSlugExists(slug string) (bool, error) {
 
 // isValidHookType validates hook type values
 func isValidHookType(hookType string) bool {
-	validTypes := []string{"pre_auth", "auth", "post_auth", "on_response"}
+	validTypes := []string{"pre_auth", "auth", "post_auth", "on_response", "data_collection", "custom_endpoint"}
 	for _, validType := range validTypes {
 		if hookType == validType {
 			return true

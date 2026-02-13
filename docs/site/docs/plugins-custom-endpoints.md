@@ -12,6 +12,10 @@ Custom Endpoints provide plugins with the ability to:
 - **Authenticate requests** using the gateway's existing token system, with full App context (including metadata)
 - **Support any HTTP method** (GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD)
 
+### Working Example
+
+See [`examples/plugins/gateway/custom-echo-endpoint/`](../../../examples/plugins/gateway/custom-echo-endpoint/) for a complete, working example that combines **CustomEndpointHandler** + **UIProvider** + **ConfigProvider**. It echoes request metadata and serves content configurable via the Studio admin UI.
+
 ### URL Pattern
 
 All custom endpoints are mounted under:
@@ -172,24 +176,70 @@ func (p *MyPlugin) HandleEndpointRequestStream(
 | `DONE` | Final chunk | — |
 | `ERROR` | On failure | `error_message` |
 
-### Step 4: Configure the Plugin Slug
+### Step 4: Configure the Plugin Slug and Register
 
-The plugin slug (used in the URL path) must be set explicitly in the plugin's config:
+The plugin slug (used in the URL path) must be set explicitly in the plugin's config map. The slug determines the URL namespace: `/plugins/{slug}/...`.
+
+#### Manifest
+
+Declare `custom_endpoint` in the manifest's capabilities:
 
 ```json
 {
-    "name": "My MCP Proxy",
-    "slug": "my-mcp",
-    "command": "file:///path/to/my-mcp-plugin",
-    "hook_type": "custom_endpoint",
-    "is_active": true,
-    "config": {
-        "slug": "my-mcp"
-    }
+  "id": "com.example.my-plugin",
+  "name": "My Custom Endpoint",
+  "version": "1.0.0",
+  "capabilities": {
+    "hooks": ["custom_endpoint"],
+    "primary_hook": "custom_endpoint"
+  }
 }
 ```
 
-Requests to `/plugins/my-mcp/...` will be routed to this plugin.
+If the plugin also provides a Studio UI, include `"studio_ui"` in hooks:
+
+```json
+"hooks": ["custom_endpoint", "studio_ui"]
+```
+
+#### Registration via AI Studio
+
+Register the plugin in AI Studio (Admin > Plugins) with:
+
+| Field | Value |
+|-------|-------|
+| **Hook type** | `custom_endpoint` |
+| **Hook types** | `["custom_endpoint"]` (add `"studio_ui"` if plugin has UI) |
+| **Config** | Must include `"slug"` key — e.g., `{"slug": "my-mcp"}` |
+
+The `slug` in the config determines the URL path on the gateway. For example, `{"slug": "my-mcp"}` makes endpoints available at `http://gateway:8081/plugins/my-mcp/...`.
+
+**Important:** The `slug` must be set in the config map. Without it, endpoints will not be registered and you'll see a warning in the gateway logs:
+```
+Plugin has endpoint registrations but no 'slug' in config
+```
+
+#### Building and Deploying
+
+```bash
+# Build the plugin
+cd examples/plugins/gateway/custom-echo-endpoint
+go build -o custom-echo-endpoint
+
+# Register with file:// for local development
+# Command: file:///path/to/custom-echo-endpoint
+# Config: {"slug": "custom-echo-endpoint", "custom_content": "Hello World"}
+```
+
+#### Gateway Loading
+
+Custom endpoint plugins are loaded automatically at gateway startup via the pre-warming system. The gateway:
+1. Queries all active plugins with `custom_endpoint` hook type
+2. Loads each plugin (starts the binary, initializes via gRPC)
+3. Calls `GetEndpointRegistrations()` to discover endpoints
+4. Registers routes using the `slug` from config
+
+After a control plane config sync, routes are refreshed automatically.
 
 ## EndpointRequest Fields
 

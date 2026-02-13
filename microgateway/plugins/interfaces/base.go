@@ -10,7 +10,18 @@ const (
 	HookTypePostAuth       HookType = "post_auth"
 	HookTypeOnResponse     HookType = "on_response"
 	HookTypeDataCollection HookType = "data_collection"
+	HookTypeCustomEndpoint HookType = "custom_endpoint"
 )
+
+// IsSupportedGatewayHookType returns true if the hook type is supported by the microgateway.
+// Studio-only hooks (studio_ui, agent, object_hooks) return false.
+func IsSupportedGatewayHookType(hookType string) bool {
+	switch HookType(hookType) {
+	case HookTypePreAuth, HookTypeAuth, HookTypePostAuth, HookTypeOnResponse, HookTypeDataCollection, HookTypeCustomEndpoint:
+		return true
+	}
+	return false
+}
 
 // BasePlugin defines the base interface that all plugins must implement
 type BasePlugin interface {

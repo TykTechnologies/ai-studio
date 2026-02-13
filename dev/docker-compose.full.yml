@@ -13,6 +13,11 @@
 #   - plugins:  Plugin watcher and builder
 
 services:
+  # Studio - mount plugin builds volume
+  studio:
+    volumes:
+      - plugin_builds:/app/bin/plugins
+
   # Microgateway - Edge Proxy (with Air hot reloading)
   gateway:
     build:
@@ -32,6 +37,8 @@ services:
       - go_cache:/root/go/pkg/mod
       # Gateway data directory
       - gateway_data:/app/data/gateway
+      # Built plugins from plugin watcher
+      - plugin_builds:/app/bin/plugins
     ports:
       - "8081:8080"   # Gateway HTTP API (mapped to 8081 to avoid conflict)
     env_file:

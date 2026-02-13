@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Custom Echo Endpoint Configuration",
+  "description": "Configuration for the custom echo endpoint plugin",
+  "properties": {
+    "slug": {
+      "type": "string",
+      "title": "URL Slug",
+      "description": "The URL slug used in the gateway endpoint path: /plugins/{slug}/...",
+      "default": "custom-echo-endpoint"
+    },
+    "custom_content": {
+      "type": "string",
+      "title": "Custom Content",
+      "description": "The custom message included in every echo response from the gateway endpoint",
+      "default": "Hello from custom-echo-endpoint! Edit this in the Studio UI."
+    }
+  },
+  "required": ["slug"]
+}

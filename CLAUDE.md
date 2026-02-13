@@ -164,7 +164,7 @@ For detailed architecture, see `docs/site/docs/edge-gateways.md`.
 The system uses a **Unified Plugin SDK** (`pkg/plugin_sdk/`) that works in both AI Studio and Microgateway contexts with automatic runtime detection:
 
 - **Single SDK**: One import, one API, works everywhere
-- **10 Capabilities**: PreAuth, Auth, PostAuth, Response, DataCollection, ObjectHooks, Agent, UIProvider, ConfigProvider, EdgePayload
+- **11 Capabilities**: PreAuth, Auth, PostAuth, Response, DataCollection, CustomEndpoints, ObjectHooks, Agent, UIProvider, ConfigProvider, EdgePayload
 - **Runtime-aware**: Use `ctx.Runtime` to detect Studio vs Gateway context
 - **Type-safe**: Clean Go types, no manual proto handling
 - **Context-aware**: Rich context with app/user/LLM metadata
@@ -181,6 +181,7 @@ The system uses a **Unified Plugin SDK** (`pkg/plugin_sdk/`) that works in both 
 | PostAuth | ✓ | ✓ | Process after authentication (most common) |
 | Response | ✓ | ✓ | Modify responses |
 | DataCollection | ✓ | ✓ | Telemetry/analytics |
+| CustomEndpoints | ✗ | ✓ | Custom HTTP endpoints under /plugins/{slug}/ |
 | ObjectHooks | ✓ | ✗ | CRUD interception |
 | Agent | ✓ | ✗ | Conversational AI |
 | UIProvider | ✓ | ✗ | Dashboard extensions |
