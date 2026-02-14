@@ -42,6 +42,7 @@ const (
 	AIStudioManagementService_CreateApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/CreateApp"
 	AIStudioManagementService_UpdateApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateApp"
 	AIStudioManagementService_DeleteApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteApp"
+	AIStudioManagementService_PatchAppMetadata_FullMethodName            = "/ai_studio_management.AIStudioManagementService/PatchAppMetadata"
 	AIStudioManagementService_ListTools_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/ListTools"
 	AIStudioManagementService_GetTool_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/GetTool"
 	AIStudioManagementService_GetToolOperations_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GetToolOperations"
@@ -139,6 +140,7 @@ type AIStudioManagementServiceClient interface {
 	CreateApp(ctx context.Context, in *CreateAppRequest, opts ...grpc.CallOption) (*CreateAppResponse, error)
 	UpdateApp(ctx context.Context, in *UpdateAppRequest, opts ...grpc.CallOption) (*UpdateAppResponse, error)
 	DeleteApp(ctx context.Context, in *DeleteAppRequest, opts ...grpc.CallOption) (*DeleteAppResponse, error)
+	PatchAppMetadata(ctx context.Context, in *PatchAppMetadataRequest, opts ...grpc.CallOption) (*PatchAppMetadataResponse, error)
 	// Tool Management Operations (High Priority)
 	ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error)
 	GetTool(ctx context.Context, in *GetToolRequest, opts ...grpc.CallOption) (*GetToolResponse, error)
@@ -447,6 +449,16 @@ func (c *aIStudioManagementServiceClient) DeleteApp(ctx context.Context, in *Del
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteAppResponse)
 	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteApp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) PatchAppMetadata(ctx context.Context, in *PatchAppMetadataRequest, opts ...grpc.CallOption) (*PatchAppMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PatchAppMetadataResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_PatchAppMetadata_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1097,6 +1109,7 @@ type AIStudioManagementServiceServer interface {
 	CreateApp(context.Context, *CreateAppRequest) (*CreateAppResponse, error)
 	UpdateApp(context.Context, *UpdateAppRequest) (*UpdateAppResponse, error)
 	DeleteApp(context.Context, *DeleteAppRequest) (*DeleteAppResponse, error)
+	PatchAppMetadata(context.Context, *PatchAppMetadataRequest) (*PatchAppMetadataResponse, error)
 	// Tool Management Operations (High Priority)
 	ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error)
 	GetTool(context.Context, *GetToolRequest) (*GetToolResponse, error)
@@ -1249,6 +1262,9 @@ func (UnimplementedAIStudioManagementServiceServer) UpdateApp(context.Context, *
 }
 func (UnimplementedAIStudioManagementServiceServer) DeleteApp(context.Context, *DeleteAppRequest) (*DeleteAppResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteApp not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) PatchAppMetadata(context.Context, *PatchAppMetadataRequest) (*PatchAppMetadataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PatchAppMetadata not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTools not implemented")
@@ -1862,6 +1878,24 @@ func _AIStudioManagementService_DeleteApp_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AIStudioManagementServiceServer).DeleteApp(ctx, req.(*DeleteAppRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_PatchAppMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PatchAppMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).PatchAppMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_PatchAppMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).PatchAppMetadata(ctx, req.(*PatchAppMetadataRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3037,6 +3071,10 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteApp",
 			Handler:    _AIStudioManagementService_DeleteApp_Handler,
+		},
+		{
+			MethodName: "PatchAppMetadata",
+			Handler:    _AIStudioManagementService_PatchAppMetadata_Handler,
 		},
 		{
 			MethodName: "ListTools",

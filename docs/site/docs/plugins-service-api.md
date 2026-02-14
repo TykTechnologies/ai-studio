@@ -1025,6 +1025,43 @@ for _, app := range appsResp.Apps {
 }
 ```
 
+### List Apps with Filters
+
+```go
+func ListAppsWithFilters(ctx context.Context, page, limit int32, opts *ListAppsOptions) (*mgmtpb.ListAppsResponse, error)
+```
+
+`ListAppsOptions` supports filtering by:
+- `IsActive *bool` — Filter by active/inactive status
+- `Namespace string` — Filter by namespace (empty = all namespaces)
+- `UserID *uint32` — Filter by owner user ID
+
+Example — list only the current user's apps:
+```go
+userID := uint32(ctx.UserID)
+appsResp, err := ai_studio_sdk.ListAppsWithFilters(ctx, 1, 10, &ai_studio_sdk.ListAppsOptions{
+    UserID: &userID,
+})
+if err != nil {
+    return err
+}
+
+for _, app := range appsResp.Apps {
+    log.Printf("My app: %s (namespace: %s)", app.Name, app.Namespace)
+}
+```
+
+Example — list active apps in a namespace:
+```go
+active := true
+appsResp, err := ai_studio_sdk.ListAppsWithFilters(ctx, 1, 20, &ai_studio_sdk.ListAppsOptions{
+    IsActive:  &active,
+    Namespace: "production",
+})
+```
+
+The original `ListApps(ctx, page, limit)` function is still available for backward compatibility and returns all apps without filtering.
+
 ### Get App by ID
 
 ```go
@@ -1041,6 +1078,48 @@ if err != nil {
 log.Printf("App: %s - Description: %s", app.Name, app.Description)
 ```
 
+### Patch App Metadata
+
+```go
+func PatchAppMetadata(ctx context.Context, appID uint32, key, value string, deleteKey bool) (*mgmtpb.PatchAppMetadataResponse, error)
+```
+
+Atomically updates a single metadata key on an app without requiring a full app update. This is safer than `UpdateAppWithMetadata` for concurrent modifications since it uses database-level transactions with row locking.
+
+**Set a metadata key** (value must be JSON-encoded):
+```go
+resp, err := ai_studio_sdk.PatchAppMetadata(ctx, appID, "cache_enabled", `true`, false)
+if err != nil {
+    return err
+}
+log.Printf("Updated metadata: %s", resp.Metadata) // Full metadata JSON
+```
+
+**Set complex values:**
+```go
+// String value
+ai_studio_sdk.PatchAppMetadata(ctx, appID, "tier", `"premium"`, false)
+
+// Numeric value
+ai_studio_sdk.PatchAppMetadata(ctx, appID, "max_requests", `1000`, false)
+
+// Object value
+ai_studio_sdk.PatchAppMetadata(ctx, appID, "settings", `{"timeout": 30, "retries": 3}`, false)
+```
+
+**Delete a metadata key:**
+```go
+resp, err := ai_studio_sdk.PatchAppMetadata(ctx, appID, "deprecated_field", "", true)
+```
+
+**Via the plugin_sdk interface:**
+```go
+// Returns the full metadata JSON string after the operation
+metadataJSON, err := ctx.Services.Studio().PatchAppMetadata(ctx, appID, "tier", `"premium"`, false)
+```
+
+Requires: `apps.write` scope.
+
 ## KV Storage Operations
 
 Requires: `kv.read` or `kv.readwrite` scope
@@ -1048,10 +1127,10 @@ Requires: `kv.read` or `kv.readwrite` scope
 ### Write Data
 
 ```go
-func WritePluginKV(ctx context.Context, key string, value []byte) (bool, error)
+func WritePluginKV(ctx context.Context, key string, value []byte, expireAt *time.Time) (bool, error)
 ```
 
-Returns `true` if created, `false` if updated.
+Returns `true` if created, `false` if updated. Pass `nil` for `expireAt` for no expiration.
 
 Example:
 ```go
@@ -1061,7 +1140,7 @@ settings := map[string]interface{}{
 }
 
 data, _ := json.Marshal(settings)
-created, err := ai_studio_sdk.WritePluginKV(ctx, "settings", data)
+created, err := ai_studio_sdk.WritePluginKV(ctx, "settings", data, nil)
 if err != nil {
     return err
 }
@@ -1072,6 +1151,26 @@ if created {
     log.Println("Settings updated")
 }
 ```
+
+### Write Data with TTL
+
+```go
+func WritePluginKVWithTTL(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)
+```
+
+Convenience function that writes data with a relative time-to-live. The entry is automatically expired and cleaned up after the TTL elapses.
+
+Example:
+```go
+// Cache a response for 1 hour
+data, _ := json.Marshal(cachedResponse)
+created, err := ai_studio_sdk.WritePluginKVWithTTL(ctx, "cache:response:123", data, 1*time.Hour)
+if err != nil {
+    return err
+}
+```
+
+Expired keys are automatically cleaned up by the platform. Reads on expired keys return a not-found error.
 
 ### Read Data
 
@@ -1314,8 +1413,8 @@ llmsResp, err := ai_studio_sdk.ListLLMs(ctx, 1, 10)
 | ListTools, GetTool | `tools.read` |
 | ExecuteTool | `tools.execute` |
 | CreateTool, UpdateTool | `tools.write` |
-| ListApps, GetApp | `apps.read` |
-| CreateApp, UpdateApp | `apps.write` |
+| ListApps, ListAppsWithFilters, GetApp | `apps.read` |
+| CreateApp, UpdateApp, PatchAppMetadata | `apps.write` |
 | ListPlugins, GetPlugin | `plugins.read` |
 | ReadPluginKV, ListPluginKVKeys | `kv.read` |
 | WritePluginKV, DeletePluginKV | `kv.readwrite` |

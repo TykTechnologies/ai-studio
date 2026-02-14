@@ -579,9 +579,28 @@ Custom endpoint routes are managed automatically across all plugin lifecycle eve
 | No route match | 404 Not Found |
 | Plugin not loaded / unhealthy | 503 Service Unavailable |
 | Plugin returns error via gRPC | 502 Bad Gateway |
-| gRPC timeout (60s unary / 5min stream) | 504 Gateway Timeout |
+| gRPC timeout (60s unary / configurable stream) | 504 Gateway Timeout |
 | Auth required but missing/invalid | 401 Unauthorized |
 | Streaming error after headers sent | Connection closed, error logged |
+
+## Configuration
+
+### Streaming Timeout
+
+The streaming endpoint timeout is configurable via environment variable:
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `PLUGIN_ENDPOINT_STREAM_TIMEOUT` | `5m` | Maximum duration for streaming endpoint responses (SSE) |
+| `PLUGIN_ENDPOINT_MAX_BODY_SIZE` | `1048576` (1MB) | Maximum request body size for custom plugin endpoints |
+
+For long-running streaming connections (e.g., MCP proxy, real-time data feeds), increase the timeout:
+
+```bash
+PLUGIN_ENDPOINT_STREAM_TIMEOUT=30m
+```
+
+The upstream server should send periodic data to keep the connection alive within the timeout window.
 
 ## Related Documentation
 
