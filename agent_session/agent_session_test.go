@@ -197,6 +197,18 @@ func (m *MockPluginServiceClient) CloseSession(ctx context.Context, in *pb.Close
 	return nil, nil
 }
 
+func (m *MockPluginServiceClient) GetEndpointRegistrations(ctx context.Context, in *pb.GetEndpointRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetEndpointRegistrationsResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) HandleEndpointRequest(ctx context.Context, in *pb.EndpointRequest, opts ...grpc.CallOption) (*pb.EndpointResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) HandleEndpointRequestStream(ctx context.Context, in *pb.EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.EndpointResponseChunk], error) {
+	return nil, nil
+}
+
 // MockAgentMessageStream implements the gRPC stream interface
 type MockAgentMessageStream struct {
 	grpc.ClientStream
