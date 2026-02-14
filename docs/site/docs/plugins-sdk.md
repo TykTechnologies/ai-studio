@@ -596,8 +596,20 @@ if ctx.Runtime == plugin_sdk.RuntimeStudio {
     // Get app
     app, err := ctx.Services.Studio().GetApp(ctx, appID)
 
-    // Update app with metadata
+    // List apps (basic)
+    apps, err := ctx.Services.Studio().ListApps(ctx, page, limit)
+
+    // List apps with filtering (by owner, namespace, active status)
+    apps, err := ctx.Services.Studio().ListAppsWithFilters(ctx, page, limit, &plugin_sdk.ListAppsOptions{
+        UserID: &ownerID,
+        Namespace: "production",
+    })
+
+    // Update app with metadata (full replacement)
     err := ctx.Services.Studio().UpdateAppWithMetadata(ctx, appID, metadata)
+
+    // Patch a single metadata key (atomic, safe for concurrent use)
+    metadataJSON, err := ctx.Services.Studio().PatchAppMetadata(ctx, appID, "tier", `"premium"`, false)
 
     // List LLMs
     llms, err := ctx.Services.Studio().ListLLMs(ctx, page, limit)

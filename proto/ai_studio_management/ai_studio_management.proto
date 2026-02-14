@@ -41,6 +41,7 @@ service AIStudioManagementService {
     rpc CreateApp(CreateAppRequest) returns (CreateAppResponse);
     rpc UpdateApp(UpdateAppRequest) returns (UpdateAppResponse);
     rpc DeleteApp(DeleteAppRequest) returns (DeleteAppResponse);
+    rpc PatchAppMetadata(PatchAppMetadataRequest) returns (PatchAppMetadataResponse);
 
     // Tool Management Operations (High Priority)
     rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
@@ -403,6 +404,9 @@ message ListAppsRequest {
     // Pagination
     int32 page = 4;
     int32 limit = 5;
+
+    // Owner filtering
+    optional uint32 user_id = 6;
 }
 
 message ListAppsResponse {
@@ -480,6 +484,21 @@ message DeleteAppRequest {
 message DeleteAppResponse {
     bool success = 1;
     string message = 2;
+}
+
+// PatchAppMetadata atomically updates a single metadata key on an app
+message PatchAppMetadataRequest {
+    PluginContext context = 1;
+    uint32 app_id = 2;
+    string key = 3;       // Metadata key to set or delete
+    string value = 4;     // JSON-encoded value (ignored if delete=true)
+    bool delete = 5;      // If true, removes the key instead of setting it
+}
+
+message PatchAppMetadataResponse {
+    bool success = 1;
+    string message = 2;
+    string metadata = 3;  // Full metadata JSON after the operation
 }
 
 // Tool Management Messages

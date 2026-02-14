@@ -295,6 +295,35 @@ func ListApps(ctx context.Context, page, limit int32) (*mgmtpb.ListAppsResponse,
 	})
 }
 
+// ListAppsOptions provides optional filters for ListAppsWithFilters
+type ListAppsOptions struct {
+	IsActive  *bool
+	Namespace string
+	UserID    *uint32
+}
+
+// ListAppsWithFilters returns apps with optional filtering by user_id, namespace, and is_active
+func ListAppsWithFilters(ctx context.Context, page, limit int32, opts *ListAppsOptions) (*mgmtpb.ListAppsResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	req := &mgmtpb.ListAppsRequest{
+		Context: createPluginContext(AvailableScopes.AppsRead),
+		Page:    page,
+		Limit:   limit,
+	}
+
+	if opts != nil {
+		req.IsActive = opts.IsActive
+		req.Namespace = opts.Namespace
+		req.UserId = opts.UserID
+	}
+
+	return client.ListApps(ctx, req)
+}
+
 // GetPluginsCount returns the total number of plugins (helper function)
 func GetPluginsCount(ctx context.Context) (int, error) {
 	resp, err := ListPlugins(ctx, 1, 1)
@@ -567,6 +596,24 @@ func UpdateAppWithMetadata(ctx context.Context, appID uint32, name, description 
 		DatasourceIds: datasourceIDs,
 		MonthlyBudget: monthlyBudget,
 		Metadata:      metadata,
+	})
+}
+
+// PatchAppMetadata atomically updates a single metadata key on an app.
+// Pass deleteKey=true to remove the key, or provide a JSON-encoded value to set it.
+// Returns the full metadata JSON after the operation.
+func PatchAppMetadata(ctx context.Context, appID uint32, key, value string, deleteKey bool) (*mgmtpb.PatchAppMetadataResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.PatchAppMetadata(ctx, &mgmtpb.PatchAppMetadataRequest{
+		Context: createPluginContext(AvailableScopes.AppsWrite),
+		AppId:   appID,
+		Key:     key,
+		Value:   value,
+		Delete:  deleteKey,
 	})
 }
 

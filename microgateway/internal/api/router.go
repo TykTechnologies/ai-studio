@@ -96,8 +96,9 @@ type RouterConfig struct {
 	ModelRouterService        *services.ModelRouterService // Enterprise: Model router service
 	EnableSwagger             bool
 	EnableMetrics             bool
-	PluginEndpointMaxBodySize int64 // Max request body for custom plugin endpoints (default 1MB)
-	Version                   string
+	PluginEndpointMaxBodySize    int64         // Max request body for custom plugin endpoints (default 1MB)
+	PluginEndpointStreamTimeout time.Duration // Timeout for streaming plugin endpoints (default 5m)
+	Version                     string
 	BuildHash                 string
 	BuildTime                 string
 }
@@ -527,7 +528,11 @@ func handlePluginEndpointUnary(c *gin.Context, config *RouterConfig, pluginID ui
 
 // handlePluginEndpointStream handles a streaming plugin endpoint request (SSE)
 func handlePluginEndpointStream(c *gin.Context, config *RouterConfig, pluginID uint, req *pb.EndpointRequest) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
+	streamTimeout := config.PluginEndpointStreamTimeout
+	if streamTimeout == 0 {
+		streamTimeout = 5 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), streamTimeout)
 	defer cancel()
 
 	stream, err := config.PluginManager.HandleEndpointRequestStream(ctx, pluginID, req)

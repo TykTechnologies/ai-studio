@@ -908,3 +908,161 @@ func TestValidatePrivacyScores(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestPatchAppMetadata(t *testing.T) {
+	service, _ := setupAppTest(t)
+
+	user := createTestAppUser(t, service, "patch-meta@test.com", "Patch Meta User")
+	llm := createTestAppLLM(t, service, "patch-meta-llm", 5)
+
+	// Create app with initial metadata
+	initialMeta := map[string]interface{}{
+		"tier":     "free",
+		"org_name": "Acme Corp",
+	}
+	app, err := service.CreateAppWithNamespace("Meta App", "Description", user.ID, []uint{}, []uint{llm.ID}, []uint{}, nil, nil, "", initialMeta)
+	assert.NoError(t, err)
+	assert.NotNil(t, app)
+
+	t.Run("Set a new metadata key with string value", func(t *testing.T) {
+		result, err := service.PatchAppMetadata(app.ID, "region", `"us-east-1"`, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "us-east-1", result["region"])
+		// Existing keys should be preserved
+		assert.Equal(t, "free", result["tier"])
+		assert.Equal(t, "Acme Corp", result["org_name"])
+	})
+
+	t.Run("Update existing metadata key", func(t *testing.T) {
+		result, err := service.PatchAppMetadata(app.ID, "tier", `"premium"`, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "premium", result["tier"])
+		// Other keys should be preserved
+		assert.Equal(t, "us-east-1", result["region"])
+	})
+
+	t.Run("Set metadata with numeric value", func(t *testing.T) {
+		result, err := service.PatchAppMetadata(app.ID, "max_requests", `1000`, false)
+		assert.NoError(t, err)
+		assert.Equal(t, float64(1000), result["max_requests"])
+	})
+
+	t.Run("Set metadata with boolean value", func(t *testing.T) {
+		result, err := service.PatchAppMetadata(app.ID, "cache_enabled", `true`, false)
+		assert.NoError(t, err)
+		assert.Equal(t, true, result["cache_enabled"])
+	})
+
+	t.Run("Set metadata with nested object", func(t *testing.T) {
+		result, err := service.PatchAppMetadata(app.ID, "settings", `{"timeout": 30, "retries": 3}`, false)
+		assert.NoError(t, err)
+		settings, ok := result["settings"].(map[string]interface{})
+		assert.True(t, ok)
+		assert.Equal(t, float64(30), settings["timeout"])
+		assert.Equal(t, float64(3), settings["retries"])
+	})
+
+	t.Run("Set metadata with plain string (non-JSON)", func(t *testing.T) {
+		result, err := service.PatchAppMetadata(app.ID, "note", "just a plain string", false)
+		assert.NoError(t, err)
+		assert.Equal(t, "just a plain string", result["note"])
+	})
+
+	t.Run("Delete a metadata key", func(t *testing.T) {
+		result, err := service.PatchAppMetadata(app.ID, "note", "", true)
+		assert.NoError(t, err)
+		_, exists := result["note"]
+		assert.False(t, exists)
+		// Other keys preserved
+		assert.Equal(t, "premium", result["tier"])
+	})
+
+	t.Run("Delete non-existent key is a no-op", func(t *testing.T) {
+		result, err := service.PatchAppMetadata(app.ID, "nonexistent", "", true)
+		assert.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+
+	t.Run("Patch on non-existent app returns error", func(t *testing.T) {
+		result, err := service.PatchAppMetadata(99999, "key", `"value"`, false)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("Patch on app with nil metadata initializes it", func(t *testing.T) {
+		// Create app without metadata
+		app2, err := service.CreateAppWithNamespace("No Meta App", "Description", user.ID, []uint{}, []uint{llm.ID}, []uint{}, nil, nil, "", nil)
+		assert.NoError(t, err)
+
+		result, err := service.PatchAppMetadata(app2.ID, "first_key", `"first_value"`, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "first_value", result["first_key"])
+	})
+}
+
+func TestListAppsWithFiltersUserID(t *testing.T) {
+	service, _ := setupAppTest(t)
+
+	user1 := createTestAppUser(t, service, "owner1@test.com", "Owner One")
+	user2 := createTestAppUser(t, service, "owner2@test.com", "Owner Two")
+	llm := createTestAppLLM(t, service, "filter-user-llm", 5)
+
+	// Create apps for user1
+	service.CreateAppWithNamespace("User1 App A", "Description", user1.ID, []uint{}, []uint{llm.ID}, []uint{}, nil, nil, "production", nil)
+	service.CreateAppWithNamespace("User1 App B", "Description", user1.ID, []uint{}, []uint{llm.ID}, []uint{}, nil, nil, "production", nil)
+	service.CreateAppWithNamespace("User1 App C", "Description", user1.ID, []uint{}, []uint{llm.ID}, []uint{}, nil, nil, "development", nil)
+
+	// Create apps for user2
+	service.CreateAppWithNamespace("User2 App A", "Description", user2.ID, []uint{}, []uint{llm.ID}, []uint{}, nil, nil, "production", nil)
+
+	t.Run("Filter by user_id returns only that user's apps", func(t *testing.T) {
+		apps, totalCount, _, err := service.ListAppsWithFilters(10, 1, false, "name", "", nil, user1.ID)
+		assert.NoError(t, err)
+		assert.Len(t, apps, 3)
+		assert.Equal(t, int64(3), totalCount)
+		for _, app := range apps {
+			assert.Equal(t, user1.ID, app.UserID)
+		}
+	})
+
+	t.Run("Filter by user_id for second user", func(t *testing.T) {
+		apps, totalCount, _, err := service.ListAppsWithFilters(10, 1, false, "name", "", nil, user2.ID)
+		assert.NoError(t, err)
+		assert.Len(t, apps, 1)
+		assert.Equal(t, int64(1), totalCount)
+		assert.Equal(t, user2.ID, apps[0].UserID)
+	})
+
+	t.Run("Filter by user_id and namespace combined", func(t *testing.T) {
+		apps, totalCount, _, err := service.ListAppsWithFilters(10, 1, false, "name", "production", nil, user1.ID)
+		assert.NoError(t, err)
+		assert.Len(t, apps, 2)
+		assert.Equal(t, int64(2), totalCount)
+		for _, app := range apps {
+			assert.Equal(t, user1.ID, app.UserID)
+			assert.Equal(t, "production", app.Namespace)
+		}
+	})
+
+	t.Run("No user_id filter returns all apps", func(t *testing.T) {
+		apps, totalCount, _, err := service.ListAppsWithFilters(10, 1, false, "name", "", nil)
+		assert.NoError(t, err)
+		assert.Len(t, apps, 4)
+		assert.Equal(t, int64(4), totalCount)
+	})
+
+	t.Run("Non-existent user_id returns empty", func(t *testing.T) {
+		apps, totalCount, _, err := service.ListAppsWithFilters(10, 1, false, "name", "", nil, 99999)
+		assert.NoError(t, err)
+		assert.Len(t, apps, 0)
+		assert.Equal(t, int64(0), totalCount)
+	})
+
+	t.Run("Filter by is_active and user_id", func(t *testing.T) {
+		isActive := true
+		apps, _, _, err := service.ListAppsWithFilters(10, 1, false, "name", "", &isActive, user1.ID)
+		assert.NoError(t, err)
+		// All apps are active by default
+		assert.Len(t, apps, 3)
+	})
+}

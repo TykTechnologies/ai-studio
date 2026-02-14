@@ -187,24 +187,32 @@ func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedReques
 
 ### Use Connection Pooling
 
-Reuse HTTP clients and database connections:
+Reuse HTTP clients and database connections. The SDK provides a `DefaultHTTPClient()` with sensible defaults (30s timeout, connection pooling, TLS handshake timeout):
 
 ```go
 func NewMyPlugin() *MyPlugin {
     return &MyPlugin{
         BasePlugin: plugin_sdk.NewBasePlugin("my-plugin", "1.0.0", "desc"),
-        // Reuse client across requests
-        httpClient: &http.Client{
-            Timeout: 10 * time.Second,
-            Transport: &http.Transport{
-                MaxIdleConns:        100,
-                MaxIdleConnsPerHost: 10,
-                IdleConnTimeout:     90 * time.Second,
-            },
-        },
+        // Use the SDK default client with connection pooling
+        httpClient: plugin_sdk.DefaultHTTPClient(),
     }
 }
 ```
+
+You can also configure your own client if you need different settings:
+
+```go
+httpClient: &http.Client{
+    Timeout: 10 * time.Second,
+    Transport: &http.Transport{
+        MaxIdleConns:        100,
+        MaxIdleConnsPerHost: 10,
+        IdleConnTimeout:     90 * time.Second,
+    },
+}
+```
+
+**Important**: Always use `http.NewRequestWithContext(ctx, ...)` to respect context cancellation and timeouts. Never use the default `http.Client{}` with zero timeout in production plugins.
 
 ### Cache Frequently Accessed Data
 
