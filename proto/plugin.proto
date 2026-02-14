@@ -44,6 +44,10 @@ service PluginService {
     // Generic RPC call method (for AI Studio plugins)
     rpc Call(CallRequest) returns (CallResponse);
 
+    // Portal RPC call method (for portal-facing plugin endpoints)
+    // Separate from Call to enforce security boundary between admin and portal contexts
+    rpc PortalCall(PortalCallRequest) returns (PortalCallResponse);
+
     // Configuration schema method (for both systems)
     rpc GetConfigSchema(GetConfigSchemaRequest) returns (GetConfigSchemaResponse);
 
@@ -343,6 +347,33 @@ message CallResponse {
     bool success = 1;
     string data = 2;          // JSON response data as string
     string error_message = 3;
+}
+
+// Portal RPC call messages (for portal-facing plugin endpoints)
+// These are separate from Call/CallResponse to enforce security boundaries
+// between admin UI and portal UI plugin interactions.
+message PortalCallRequest {
+    string method = 1;                       // RPC method name (e.g., "submit_feedback", "get_user_data")
+    string payload = 2;                      // JSON payload as string
+    uint32 service_broker_id = 3;            // Broker ID for service API access during RPC
+    PortalUserContext user_context = 4;      // Authenticated portal user info
+}
+
+message PortalCallResponse {
+    bool success = 1;
+    string data = 2;                         // JSON response data as string
+    string error_message = 3;
+}
+
+// PortalUserContext provides information about the authenticated portal user
+// This is passed to plugins on portal RPC calls so they can make authorization decisions
+message PortalUserContext {
+    uint32 user_id = 1;
+    string email = 2;
+    string name = 3;
+    bool is_admin = 4;
+    repeated string groups = 5;              // Group names the user belongs to
+    map<string, string> metadata = 6;        // Additional user metadata
 }
 
 // Configuration schema messages

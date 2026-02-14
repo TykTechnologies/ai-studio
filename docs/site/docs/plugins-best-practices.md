@@ -859,5 +859,6 @@ ctx.Services.Logger().Info("Processing items",
 
 - **[Plugin SDK Reference](plugins-sdk.md)** - Core SDK documentation
 - **[Plugin Examples](plugins-examples.md)** - Browse working examples
+- **[AI Portal UI Plugins Guide](plugins-portal-ui.md)** - Build portal-facing pages and forms
 - **[Service API Reference](plugins-service-api.md)** - Complete API documentation
 - **[Plugin Deployment](plugins-deployment.md)** - Production deployment

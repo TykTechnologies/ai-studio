@@ -168,6 +168,10 @@ func (c *MicrogatewayPluginClient) Call(ctx context.Context, req *pb.CallRequest
 	return c.pluginStub.Call(ctx, req, opts...)
 }
 
+func (c *MicrogatewayPluginClient) PortalCall(ctx context.Context, req *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+	return c.pluginStub.PortalCall(ctx, req, opts...)
+}
+
 func (c *MicrogatewayPluginClient) ProcessPreAuth(ctx context.Context, req *pb.PluginRequest, opts ...grpc.CallOption) (*pb.PluginResponse, error) {
 	return c.pluginStub.ProcessPreAuth(ctx, req, opts...)
 }

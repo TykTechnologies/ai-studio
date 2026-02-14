@@ -165,6 +165,10 @@ func (m *MockPluginServiceClient) Call(ctx context.Context, in *pb.CallRequest, 
 	return nil, nil
 }
 
+func (m *MockPluginServiceClient) PortalCall(ctx context.Context, in *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+	return nil, nil
+}
+
 func (m *MockPluginServiceClient) GetConfigSchema(ctx context.Context, in *pb.GetConfigSchemaRequest, opts ...grpc.CallOption) (*pb.GetConfigSchemaResponse, error) {
 	return nil, nil
 }
