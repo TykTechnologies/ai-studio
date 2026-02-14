@@ -457,14 +457,17 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 			Msg("⚠️ Plugin does NOT support session loop (not a MicrogatewayPluginClient)")
 	}
 
-	// Register custom endpoints from the plugin (non-blocking, best-effort)
-	pm.registerPluginEndpoints(pluginID, loadedPlugin)
-
-	// Mark as ready (success) - call safe version after releasing lock
-	loadTime := time.Since(startTime)
+	// Fetch custom endpoint registrations outside the write lock (blocking gRPC call).
+	// Store the plugin reference before releasing the lock so we can use it.
 	pm.mu.Unlock()
-	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusReady, nil, loadTime)
+	endpointRoutes := pm.fetchPluginEndpoints(pluginID, loadedPlugin)
+	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusReady, nil, time.Since(startTime))
 	pm.mu.Lock()
+
+	// Store routes under write lock (fast, no I/O)
+	if len(endpointRoutes) > 0 {
+		pm.storePluginEndpoints(pluginID, endpointRoutes)
+	}
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -2539,12 +2542,12 @@ var validHTTPMethods = map[string]bool{
 	"PATCH": true, "OPTIONS": true, "HEAD": true,
 }
 
-// registerPluginEndpoints queries a loaded plugin for its custom endpoint
-// registrations and stores them in the routing table.
-// Assumes pm.mu is held by the caller.
-func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin) {
+// fetchPluginEndpoints queries a plugin for its custom endpoint registrations via gRPC.
+// This performs a blocking network call and must NOT be called while holding pm.mu.
+// Returns nil if the plugin does not implement custom endpoints or has no registrations.
+func (pm *PluginManager) fetchPluginEndpoints(pluginID uint, lp *LoadedPlugin) []*EndpointRoute {
 	if lp.GRPCClient == nil {
-		return
+		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -2552,20 +2555,19 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 
 	resp, err := lp.GRPCClient.GetEndpointRegistrations(ctx, &pb.GetEndpointRegistrationsRequest{})
 	if err != nil {
-		// Plugin may not implement custom endpoints — this is not an error.
 		log.Debug().
 			Uint("plugin_id", pluginID).
 			Str("plugin_name", lp.Name).
 			Err(err).
 			Msg("Plugin does not provide custom endpoint registrations (OK)")
-		return
+		return nil
 	}
 
 	if len(resp.Registrations) == 0 {
-		return
+		return nil
 	}
 
-	// Resolve slug from plugin config — this is the URL path component
+	// Resolve slug from plugin config
 	slug := ""
 	if lp.Config != nil {
 		if s, ok := lp.Config["slug"].(string); ok && s != "" {
@@ -2577,7 +2579,7 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 			Uint("plugin_id", pluginID).
 			Str("plugin_name", lp.Name).
 			Msg("Plugin has endpoint registrations but no 'slug' in config — endpoints will not be reachable. Set config.slug to the desired URL path component.")
-		return
+		return nil
 	}
 
 	log.Debug().
@@ -2585,8 +2587,9 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 		Str("plugin_name", lp.Name).
 		Str("slug", slug).
 		Int("registrations", len(resp.Registrations)).
-		Msg("Registering custom plugin endpoints")
+		Msg("Fetched custom plugin endpoint registrations")
 
+	var routes []*EndpointRoute
 	for _, reg := range resp.Registrations {
 		if !isValidEndpointPath(reg.Path) {
 			log.Warn().
@@ -2605,7 +2608,7 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 			continue
 		}
 
-		route := &EndpointRoute{
+		routes = append(routes, &EndpointRoute{
 			PluginID:       pluginID,
 			PluginName:     lp.Name,
 			PluginSlug:     slug,
@@ -2615,24 +2618,26 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 			StreamResponse: reg.StreamResponse,
 			Description:    reg.Description,
 			Metadata:       reg.Metadata,
-		}
+		})
+	}
+	return routes
+}
 
-		// Build route keys using slug: "METHOD:slug/subpath"
-		for _, method := range methods {
-			key := endpointRouteKey(method, slug, reg.Path)
+// storePluginEndpoints writes pre-fetched routes into the routing tables.
+// Assumes pm.mu write lock is held by the caller.
+func (pm *PluginManager) storePluginEndpoints(pluginID uint, routes []*EndpointRoute) {
+	for _, route := range routes {
+		for _, method := range route.Methods {
+			key := endpointRouteKey(method, route.PluginSlug, route.Path)
 			pm.endpointRoutes[key] = route
 		}
-
 		pm.pluginEndpoints[pluginID] = append(pm.pluginEndpoints[pluginID], route)
 
 		log.Debug().
 			Uint("plugin_id", pluginID).
-			Str("plugin_name", lp.Name).
-			Str("slug", slug).
-			Str("path", reg.Path).
-			Strs("methods", methods).
-			Bool("require_auth", reg.RequireAuth).
-			Bool("stream", reg.StreamResponse).
+			Str("slug", route.PluginSlug).
+			Str("path", route.Path).
+			Strs("methods", route.Methods).
 			Msg("Registered custom plugin endpoint")
 	}
 }
@@ -2667,17 +2672,41 @@ func (pm *PluginManager) unregisterPluginEndpoints(pluginID uint) {
 
 // RefreshAllEndpoints re-queries every loaded plugin for endpoint registrations.
 // This is useful after a bulk config reload.
+// gRPC calls are performed outside the lock to avoid blocking request routing.
 func (pm *PluginManager) RefreshAllEndpoints() {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
+	// Phase 1: snapshot loaded plugins under read lock (no I/O)
+	pm.mu.RLock()
+	type pluginSnapshot struct {
+		id     uint
+		plugin *LoadedPlugin
+	}
+	snapshots := make([]pluginSnapshot, 0, len(pm.loadedPlugins))
+	for id, lp := range pm.loadedPlugins {
+		snapshots = append(snapshots, pluginSnapshot{id: id, plugin: lp})
+	}
+	pm.mu.RUnlock()
 
-	// Clear existing endpoint data
+	// Phase 2: fetch registrations outside lock (blocking gRPC, potentially slow)
+	type fetchResult struct {
+		pluginID uint
+		routes   []*EndpointRoute
+	}
+	var results []fetchResult
+	for _, snap := range snapshots {
+		routes := pm.fetchPluginEndpoints(snap.id, snap.plugin)
+		if len(routes) > 0 {
+			results = append(results, fetchResult{pluginID: snap.id, routes: routes})
+		}
+	}
+
+	// Phase 3: swap route tables under write lock (fast, no I/O)
+	pm.mu.Lock()
 	pm.endpointRoutes = make(map[string]*EndpointRoute)
 	pm.pluginEndpoints = make(map[uint][]*EndpointRoute)
-
-	for pluginID, lp := range pm.loadedPlugins {
-		pm.registerPluginEndpoints(pluginID, lp)
+	for _, res := range results {
+		pm.storePluginEndpoints(res.pluginID, res.routes)
 	}
+	pm.mu.Unlock()
 
 	log.Debug().
 		Int("total_routes", len(pm.endpointRoutes)).
