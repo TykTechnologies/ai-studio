@@ -3,6 +3,7 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 )
@@ -147,6 +148,52 @@ func (a *PluginServiceAdapter) GetPluginsForLLM(llmID uint) ([]plugins.PluginDat
 			Config:    configBytes,
 			Checksum:  dbPlugin.Checksum,
 			IsActive:  dbPlugin.IsActive,
+		}
+	}
+
+	return result, nil
+}
+
+// GetAllActiveGatewayPlugins implements plugins.PluginServiceInterface.
+// Returns all active plugins that should run on a gateway: LLM-associated plugins
+// plus standalone custom_endpoint plugins, deduplicated by ID.
+func (a *PluginServiceAdapter) GetAllActiveGatewayPlugins() ([]plugins.PluginData, error) {
+	// Step 1: get all LLM IDs
+	llmIDs, err := a.GetAllLLMIDs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LLM IDs: %w", err)
+	}
+
+	seen := make(map[uint]bool)
+	var result []plugins.PluginData
+
+	// Step 2: collect plugins from all LLMs
+	for _, llmID := range llmIDs {
+		llmPlugins, err := a.GetPluginsForLLM(llmID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get plugins for LLM %d: %w", llmID, err)
+		}
+		for _, p := range llmPlugins {
+			if seen[p.ID] || !p.IsActive || !p.HasAnySupportedGatewayHook() {
+				continue
+			}
+			seen[p.ID] = true
+			result = append(result, p)
+		}
+	}
+
+	// Step 3: add standalone custom_endpoint plugins
+	allPlugins, err := a.GetAllPlugins()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all plugins: %w", err)
+	}
+	for _, p := range allPlugins {
+		if seen[p.ID] || !p.IsActive {
+			continue
+		}
+		if p.HookType == "custom_endpoint" || p.SupportsHookType("custom_endpoint") {
+			seen[p.ID] = true
+			result = append(result, p)
 		}
 	}
 

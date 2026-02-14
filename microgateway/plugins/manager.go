@@ -34,7 +34,8 @@ type PluginServiceInterface interface {
 	GetPluginsByLLMID(llmID uint) ([]PluginData, error)
 	GetPluginsForLLM(llmID uint) ([]PluginData, error)
 	GetAllPlugins() ([]PluginData, error)
-	GetAllLLMIDs() ([]uint, error) // Get all LLM IDs for pre-warming plugins
+	GetAllLLMIDs() ([]uint, error)                  // Get all LLM IDs for pre-warming plugins
+	GetAllActiveGatewayPlugins() ([]PluginData, error) // Get all plugins that should run on a gateway (LLM-associated + standalone endpoint)
 }
 
 // PluginData represents plugin data from database (minimal interface)
@@ -2070,58 +2071,15 @@ func (pm *PluginManager) PreFetchOCIPlugin(command string) error {
 func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
 	log.Debug().Msg("Starting plugin pre-warming for event subscriptions")
 
-	// Get all LLM IDs on this edge
-	llmIDs, err := pm.service.GetAllLLMIDs()
+	desiredState, err := pm.getDesiredPluginState()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get LLM IDs for pre-warming")
-		return fmt.Errorf("failed to get LLM IDs for pre-warming: %w", err)
+		log.Error().Err(err).Msg("Failed to get desired plugin state for pre-warming")
+		return fmt.Errorf("failed to get desired plugin state for pre-warming: %w", err)
 	}
 
-	log.Debug().Int("llm_count", len(llmIDs)).Msg("Found LLMs for plugin pre-warming")
-
-	// Collect unique plugins from all LLMs
-	pluginsSeen := make(map[uint]bool)
-	var pluginsToLoad []PluginData
-
-	for _, llmID := range llmIDs {
-		plugins, err := pm.service.GetPluginsForLLM(llmID)
-		if err != nil {
-			log.Warn().Uint("llm_id", llmID).Err(err).Msg("Failed to get plugins for LLM")
-			continue
-		}
-
-		for _, plugin := range plugins {
-			if pluginsSeen[plugin.ID] {
-				continue
-			}
-			// Skip plugins that only declare Studio-only hooks
-			if !plugin.HasAnySupportedGatewayHook() {
-				continue
-			}
-			pluginsSeen[plugin.ID] = true
-			pluginsToLoad = append(pluginsToLoad, plugin)
-		}
-	}
-
-	// Also include standalone plugins (custom_endpoint, etc.) that aren't tied to LLMs
-	allPlugins, err := pm.service.GetAllPlugins()
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to get all plugins for standalone pre-warming")
-	} else {
-		for _, plugin := range allPlugins {
-			if !plugin.IsActive || pluginsSeen[plugin.ID] {
-				continue
-			}
-			// Load plugins with custom_endpoint hook type (they're not associated with LLMs)
-			if plugin.HookType == "custom_endpoint" || plugin.SupportsHookType("custom_endpoint") {
-				pluginsSeen[plugin.ID] = true
-				pluginsToLoad = append(pluginsToLoad, plugin)
-				log.Debug().
-					Uint("plugin_id", plugin.ID).
-					Str("plugin_name", plugin.Name).
-					Msg("Including standalone custom_endpoint plugin in pre-warm")
-			}
-		}
+	pluginsToLoad := make([]PluginData, 0, len(desiredState))
+	for _, p := range desiredState {
+		pluginsToLoad = append(pluginsToLoad, p)
 	}
 
 	log.Debug().Int("unique_plugins", len(pluginsToLoad)).Msg("Found unique plugins to pre-warm")
@@ -2178,7 +2136,7 @@ func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
 	} else {
 		log.Info().
 			Int("plugins_prewarmed", loadedCount).
-			Int("llms_checked", len(llmIDs)).
+			Int("desired_plugins", len(pluginsToLoad)).
 			Msg("Plugin pre-warming completed successfully - event subscriptions should be active")
 	}
 
@@ -2717,6 +2675,23 @@ func (pm *PluginManager) RefreshAllEndpoints() {
 		Msg("Refreshed all plugin endpoint registrations")
 }
 
+// getDesiredPluginState queries the database for all plugins that should be active
+// on this gateway (LLM-associated + standalone endpoint plugins) and returns a map
+// of pluginID -> PluginData. Returns an error if any database query fails, to avoid
+// operating on partial state.
+func (pm *PluginManager) getDesiredPluginState() (map[uint]PluginData, error) {
+	plugins, err := pm.service.GetAllActiveGatewayPlugins()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get desired plugin state: %w", err)
+	}
+
+	result := make(map[uint]PluginData, len(plugins))
+	for _, p := range plugins {
+		result[p.ID] = p
+	}
+	return result, nil
+}
+
 // ReconcilePlugins compares currently loaded plugins with the database state and
 // reconciles differences: unloads removed plugins, reloads changed plugins, loads
 // new plugins, and refreshes endpoint registrations. Call this after a configuration
@@ -2738,41 +2713,10 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 	}
 	pm.mu.RUnlock()
 
-	// Phase 2: Build desired state from database
-	desiredPlugins := make(map[uint]string) // pluginID -> checksum
-
-	// Get LLM-associated plugins (same logic as PrewarmAllPlugins)
-	llmIDs, err := pm.service.GetAllLLMIDs()
+	// Phase 2: Build desired state from database (abort on any DB error)
+	desiredPlugins, err := pm.getDesiredPluginState()
 	if err != nil {
-		return fmt.Errorf("reconcile: failed to get LLM IDs: %w", err)
-	}
-	for _, llmID := range llmIDs {
-		plugins, err := pm.service.GetPluginsForLLM(llmID)
-		if err != nil {
-			log.Warn().Uint("llm_id", llmID).Err(err).Msg("reconcile: failed to get plugins for LLM")
-			continue
-		}
-		for _, p := range plugins {
-			if !p.IsActive || !p.HasAnySupportedGatewayHook() {
-				continue
-			}
-			desiredPlugins[p.ID] = p.Checksum
-		}
-	}
-
-	// Get standalone plugins (custom_endpoint, etc.)
-	allPlugins, err := pm.service.GetAllPlugins()
-	if err != nil {
-		log.Warn().Err(err).Msg("reconcile: failed to get all plugins")
-	} else {
-		for _, p := range allPlugins {
-			if !p.IsActive {
-				continue
-			}
-			if p.HookType == "custom_endpoint" || p.SupportsHookType("custom_endpoint") {
-				desiredPlugins[p.ID] = p.Checksum
-			}
-		}
+		return fmt.Errorf("reconcile aborted: %w", err)
 	}
 
 	// Phase 3: Compute diff
@@ -2780,10 +2724,10 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 	var toReload []uint
 
 	for id, loadedChecksum := range loadedChecksums {
-		desiredChecksum, exists := desiredPlugins[id]
+		desired, exists := desiredPlugins[id]
 		if !exists {
 			toUnload = append(toUnload, id)
-		} else if loadedChecksum != desiredChecksum {
+		} else if loadedChecksum != desired.Checksum {
 			toReload = append(toReload, id)
 		}
 	}
