@@ -2598,8 +2598,11 @@ func (pm *PluginManager) registerPluginEndpoints(pluginID uint, lp *LoadedPlugin
 
 		methods := validateHTTPMethods(reg.Methods)
 		if len(methods) == 0 {
-			// Default to all methods when none specified
-			methods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"}
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("path", reg.Path).
+				Msg("Skipping endpoint registration with no valid HTTP methods — plugin must explicitly declare methods")
+			continue
 		}
 
 		route := &EndpointRoute{

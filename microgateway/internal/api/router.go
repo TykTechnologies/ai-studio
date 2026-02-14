@@ -286,6 +286,15 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 			return
 		}
 
+		// Defense-in-depth: reject path traversal sequences.
+		// Go's net/http and Gin/httprouter already clean ".." from paths before routing,
+		// so this is belt-and-suspenders — the path is a string forwarded to the plugin,
+		// not used for file operations by the gateway.
+		if strings.Contains(subPath, "..") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "path traversal not allowed"})
+			return
+		}
+
 		method := c.Request.Method
 
 		// Look up route
