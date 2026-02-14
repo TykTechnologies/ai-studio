@@ -32,6 +32,9 @@ type EdgeReloadHandler struct {
 
 	// Callback to reload gateway after config sync
 	gatewayReloader func() error
+
+	// Callback to reconcile plugins after config sync
+	pluginReconciler func() error
 }
 
 // NewEdgeReloadHandler creates a new edge reload handler
@@ -60,6 +63,14 @@ func (h *EdgeReloadHandler) SetGatewayReloader(reloader func() error) {
 	defer h.reloadMutex.Unlock()
 	h.gatewayReloader = reloader
 	log.Debug().Msg("Gateway reloader callback set for edge reload handler")
+}
+
+// SetPluginReconciler sets the plugin reconciliation callback
+func (h *EdgeReloadHandler) SetPluginReconciler(reconciler func() error) {
+	h.reloadMutex.Lock()
+	defer h.reloadMutex.Unlock()
+	h.pluginReconciler = reconciler
+	log.Debug().Msg("Plugin reconciler callback set for edge reload handler")
 }
 
 // HandleReloadRequest processes a configuration reload request from control
@@ -122,6 +133,15 @@ func (h *EdgeReloadHandler) HandleReloadRequest(req *pb.ConfigurationReloadReque
 		} else {
 			log.Info().Msg("Gateway reloaded with new configuration")
 		}
+	}
+
+	// Reconcile running plugins with updated DB state (async, non-blocking)
+	if h.pluginReconciler != nil {
+		go func() {
+			if err := h.pluginReconciler(); err != nil {
+				log.Error().Err(err).Msg("Failed to reconcile plugins after config sync")
+			}
+		}()
 	}
 
 	// Phase 4: UPDATED - Configuration applied to SQLite

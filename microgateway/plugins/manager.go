@@ -174,6 +174,9 @@ type PluginManager struct {
 	// Custom endpoint routing
 	endpointRoutes  map[string]*EndpointRoute // "METHOD:pluginName/subpath" -> route
 	pluginEndpoints map[uint][]*EndpointRoute // Plugin ID -> registered routes (for cleanup)
+
+	// Serializes concurrent ReconcilePlugins calls
+	reconcileMu sync.Mutex
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -2712,6 +2715,112 @@ func (pm *PluginManager) RefreshAllEndpoints() {
 		Int("total_routes", len(pm.endpointRoutes)).
 		Int("plugins_with_endpoints", len(pm.pluginEndpoints)).
 		Msg("Refreshed all plugin endpoint registrations")
+}
+
+// ReconcilePlugins compares currently loaded plugins with the database state and
+// reconciles differences: unloads removed plugins, reloads changed plugins, loads
+// new plugins, and refreshes endpoint registrations. Call this after a configuration
+// sync to ensure running plugin processes match the latest snapshot.
+func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
+	pm.reconcileMu.Lock()
+	defer pm.reconcileMu.Unlock()
+
+	log.Info().Msg("Starting plugin reconciliation after configuration sync")
+
+	// Phase 1: Snapshot currently loaded (non-global, non-builtin) plugins
+	pm.mu.RLock()
+	loadedChecksums := make(map[uint]string, len(pm.loadedPlugins))
+	for id, lp := range pm.loadedPlugins {
+		if lp.IsGlobal || lp.BuiltinPlugin != nil {
+			continue
+		}
+		loadedChecksums[id] = lp.Checksum
+	}
+	pm.mu.RUnlock()
+
+	// Phase 2: Build desired state from database
+	desiredPlugins := make(map[uint]string) // pluginID -> checksum
+
+	// Get LLM-associated plugins (same logic as PrewarmAllPlugins)
+	llmIDs, err := pm.service.GetAllLLMIDs()
+	if err != nil {
+		return fmt.Errorf("reconcile: failed to get LLM IDs: %w", err)
+	}
+	for _, llmID := range llmIDs {
+		plugins, err := pm.service.GetPluginsForLLM(llmID)
+		if err != nil {
+			log.Warn().Uint("llm_id", llmID).Err(err).Msg("reconcile: failed to get plugins for LLM")
+			continue
+		}
+		for _, p := range plugins {
+			if !p.IsActive || !p.HasAnySupportedGatewayHook() {
+				continue
+			}
+			desiredPlugins[p.ID] = p.Checksum
+		}
+	}
+
+	// Get standalone plugins (custom_endpoint, etc.)
+	allPlugins, err := pm.service.GetAllPlugins()
+	if err != nil {
+		log.Warn().Err(err).Msg("reconcile: failed to get all plugins")
+	} else {
+		for _, p := range allPlugins {
+			if !p.IsActive {
+				continue
+			}
+			if p.HookType == "custom_endpoint" || p.SupportsHookType("custom_endpoint") {
+				desiredPlugins[p.ID] = p.Checksum
+			}
+		}
+	}
+
+	// Phase 3: Compute diff
+	var toUnload []uint
+	var toReload []uint
+
+	for id, loadedChecksum := range loadedChecksums {
+		desiredChecksum, exists := desiredPlugins[id]
+		if !exists {
+			toUnload = append(toUnload, id)
+		} else if loadedChecksum != desiredChecksum {
+			toReload = append(toReload, id)
+		}
+	}
+
+	log.Info().
+		Int("to_unload", len(toUnload)).
+		Int("to_reload", len(toReload)).
+		Int("loaded_count", len(loadedChecksums)).
+		Int("desired_count", len(desiredPlugins)).
+		Msg("Plugin reconciliation diff computed")
+
+	// Phase 4: Apply changes
+
+	for _, id := range toUnload {
+		log.Info().Uint("plugin_id", id).Msg("Unloading removed plugin")
+		if err := pm.UnloadPlugin(id); err != nil {
+			log.Error().Uint("plugin_id", id).Err(err).Msg("Failed to unload removed plugin")
+		}
+	}
+
+	for _, id := range toReload {
+		log.Info().Uint("plugin_id", id).Msg("Reloading changed plugin")
+		if err := pm.ReloadPlugin(id); err != nil {
+			log.Error().Uint("plugin_id", id).Err(err).Msg("Failed to reload changed plugin")
+		}
+	}
+
+	// Load new plugins (PrewarmAllPlugins skips already-loaded)
+	if err := pm.PrewarmAllPlugins(ctx); err != nil {
+		log.Warn().Err(err).Msg("Some new plugins failed to load during reconciliation")
+	}
+
+	// Refresh endpoint routing table
+	pm.RefreshAllEndpoints()
+
+	log.Info().Msg("Plugin reconciliation completed")
+	return nil
 }
 
 // GetEndpointRoute looks up a route for the given HTTP method, plugin name, and sub-path.
