@@ -52,17 +52,18 @@ func RequestIDMiddleware() gin.HandlerFunc {
 
 // RouterConfig holds configuration for the API router
 type RouterConfig struct {
-	AuthProvider       auth.AuthProvider
-	Services           *services.ServiceContainer
-	Gateway            aigateway.Gateway
-	PluginManager      PluginManagerInterface
-	ReloadCoordinator  *services.ReloadCoordinator
-	ModelRouterService *services.ModelRouterService // Enterprise: Model router service
-	EnableSwagger      bool
-	EnableMetrics      bool
-	Version            string
-	BuildHash          string
-	BuildTime          string
+	AuthProvider              auth.AuthProvider
+	Services                  *services.ServiceContainer
+	Gateway                   aigateway.Gateway
+	PluginManager             PluginManagerInterface
+	ReloadCoordinator         *services.ReloadCoordinator
+	ModelRouterService        *services.ModelRouterService // Enterprise: Model router service
+	EnableSwagger             bool
+	EnableMetrics             bool
+	PluginEndpointMaxBodySize int64 // Max request body for custom plugin endpoints (default 1MB)
+	Version                   string
+	BuildHash                 string
+	BuildTime                 string
 }
 
 // SetupRouter configures and returns the main application router
@@ -300,8 +301,11 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 			requestID, _ = rid.(string)
 		}
 
-		// Read request body with size limit (default 1MB, prevents DoS via large payloads)
-		const maxBodySize = 1 << 20 // 1 MB
+		// Read request body with size limit (configurable via PLUGIN_ENDPOINT_MAX_BODY_SIZE, default 1MB)
+		maxBodySize := config.PluginEndpointMaxBodySize
+		if maxBodySize <= 0 {
+			maxBodySize = 1 << 20 // 1 MB default
+		}
 		var body []byte
 		if c.Request.Body != nil {
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodySize)
