@@ -365,6 +365,35 @@ func (p *GRPCProvider) GetPluginsForLLM(llmID uint) ([]database.Plugin, error) {
 	return plugins, nil
 }
 
+// GetAllLLMAssociatedPlugins returns all active plugins linked to at least one LLM
+// from the in-memory gRPC cache.
+func (p *GRPCProvider) GetAllLLMAssociatedPlugins() ([]database.Plugin, error) {
+	if err := p.ensureCacheValid(); err != nil {
+		return nil, err
+	}
+
+	p.cacheMutex.RLock()
+	defer p.cacheMutex.RUnlock()
+
+	seen := make(map[uint32]bool)
+	var plugins []database.Plugin
+
+	for _, pbPlugin := range p.configCache.Plugins {
+		if !pbPlugin.IsActive || seen[pbPlugin.Id] {
+			continue
+		}
+		if !p.namespaceFilter.MatchesNamespace(pbPlugin.Namespace, p.namespace) {
+			continue
+		}
+		if len(pbPlugin.LlmIds) > 0 {
+			seen[pbPlugin.Id] = true
+			plugins = append(plugins, *p.convertPBPluginToDatabase(pbPlugin))
+		}
+	}
+
+	return plugins, nil
+}
+
 // ListPlugins retrieves plugins from the gRPC cache
 func (p *GRPCProvider) ListPlugins(namespace string, hookType string, active bool) ([]database.Plugin, error) {
 	if err := p.ensureCacheValid(); err != nil {

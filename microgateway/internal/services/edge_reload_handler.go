@@ -135,10 +135,12 @@ func (h *EdgeReloadHandler) HandleReloadRequest(req *pb.ConfigurationReloadReque
 		}
 	}
 
-	// Reconcile running plugins with updated DB state (async, non-blocking)
-	if h.pluginReconciler != nil {
+	// Reconcile running plugins with updated DB state (async, non-blocking).
+	// Capture the callback value while holding the lock to avoid a data race
+	// with concurrent SetPluginReconciler calls.
+	if reconciler := h.pluginReconciler; reconciler != nil {
 		go func() {
-			if err := h.pluginReconciler(); err != nil {
+			if err := reconciler(); err != nil {
 				log.Error().Err(err).Msg("Failed to reconcile plugins after config sync")
 			}
 		}()
