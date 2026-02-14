@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/gin-gonic/gin"
@@ -278,7 +279,7 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 		fullPath := c.Request.URL.Path
 
 		// Parse the path into plugin name + sub-path
-		pluginName, subPath, ok := parsePluginPath(fullPath)
+		pluginName, subPath, ok := plugins.ParsePluginEndpointPath(fullPath)
 		if !ok || pluginName == "" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "invalid plugin endpoint path"})
 			return
@@ -299,12 +300,18 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 			requestID, _ = rid.(string)
 		}
 
-		// Read request body
+		// Read request body with size limit (default 1MB, prevents DoS via large payloads)
+		const maxBodySize = 1 << 20 // 1 MB
 		var body []byte
 		if c.Request.Body != nil {
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodySize)
 			var err error
 			body, err = io.ReadAll(c.Request.Body)
 			if err != nil {
+				if err.Error() == "http: request body too large" {
+					c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large (max 1MB)"})
+					return
+				}
 				log.Error().Err(err).Msg("Failed to read plugin endpoint request body")
 				c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
 				return
@@ -320,7 +327,7 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 		}
 
 		// Build path segments from the relative sub-path
-		segments := splitPluginPathSegments(subPath)
+		segments := plugins.SplitPathSegments(subPath)
 
 		// Build the endpoint request
 		endpointReq := &pb.EndpointRequest{
@@ -525,42 +532,6 @@ func handlePluginEndpointStream(c *gin.Context, config *RouterConfig, pluginID u
 			return
 		}
 	}
-}
-
-// --- Router-local helper functions ---
-
-// parsePluginPath splits /plugins/{pluginName}/{subPath...} into (pluginName, subPath).
-func parsePluginPath(fullPath string) (pluginName string, subPath string, ok bool) {
-	trimmed := strings.TrimPrefix(fullPath, "/plugins/")
-	if trimmed == fullPath {
-		return "", "", false
-	}
-
-	slashIdx := strings.Index(trimmed, "/")
-	if slashIdx < 0 {
-		// /plugins/{pluginName} with no trailing sub-path
-		if trimmed == "" {
-			return "", "", false
-		}
-		return trimmed, "/", true
-	}
-
-	pluginName = trimmed[:slashIdx]
-	subPath = trimmed[slashIdx:]
-
-	if pluginName == "" {
-		return "", "", false
-	}
-	return pluginName, subPath, true
-}
-
-// splitPluginPathSegments splits "/users/123/profile" into ["users", "123", "profile"].
-func splitPluginPathSegments(path string) []string {
-	trimmed := strings.Trim(path, "/")
-	if trimmed == "" {
-		return nil
-	}
-	return strings.Split(trimmed, "/")
 }
 
 // extractBearerToken extracts a Bearer token from the Authorization header or query param.

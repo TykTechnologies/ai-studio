@@ -2744,25 +2744,25 @@ func endpointRouteKey(method, pluginName, path string) string {
 	return strings.ToUpper(method) + ":" + pluginName + path
 }
 
-// parsePluginEndpointPath splits a request path of the form /plugins/{pluginName}/...
-// into the plugin name and the remaining sub-path.
+// ParsePluginEndpointPath splits a request path of the form /plugins/{pluginName}/...
+// into the plugin name (slug) and the remaining sub-path.
 // Returns ("", "", false) when the path does not match the expected prefix.
-func parsePluginEndpointPath(fullPath string) (pluginName string, subPath string, ok bool) {
-	// Strip leading slash and the "plugins/" prefix
+func ParsePluginEndpointPath(fullPath string) (pluginName string, subPath string, ok bool) {
 	trimmed := strings.TrimPrefix(fullPath, "/plugins/")
 	if trimmed == fullPath {
 		return "", "", false
 	}
 
-	// Split into pluginName and the rest
 	slashIdx := strings.Index(trimmed, "/")
 	if slashIdx < 0 {
-		// Path is /plugins/{pluginName} with no trailing sub-path
+		if trimmed == "" {
+			return "", "", false
+		}
 		return trimmed, "/", true
 	}
 
 	pluginName = trimmed[:slashIdx]
-	subPath = trimmed[slashIdx:] // includes leading "/"
+	subPath = trimmed[slashIdx:]
 
 	if pluginName == "" {
 		return "", "", false
@@ -2799,8 +2799,8 @@ func validateHTTPMethods(methods []string) []string {
 	return valid
 }
 
-// splitPathSegments splits a path like "/users/123/profile" into ["users", "123", "profile"].
-func splitPathSegments(path string) []string {
+// SplitPathSegments splits a path like "/users/123/profile" into ["users", "123", "profile"].
+func SplitPathSegments(path string) []string {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
 		return nil
