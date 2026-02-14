@@ -57,9 +57,10 @@ const (
 	HookTypeDataCollection = "data_collection"
 
 	// AI Studio plugin hook types
-	HookTypeStudioUI   = "studio_ui"   // AI Studio UI extension plugins
-	HookTypeAgent      = "agent"       // AI Studio agent plugins
-	HookTypeObjectHooks = "object_hooks" // AI Studio object interaction hooks (CRUD operations)
+	HookTypeStudioUI       = "studio_ui"        // AI Studio UI extension plugins
+	HookTypeAgent          = "agent"             // AI Studio agent plugins
+	HookTypeObjectHooks    = "object_hooks"      // AI Studio object interaction hooks (CRUD operations)
+	HookTypeCustomEndpoint = "custom_endpoint"   // Custom HTTP endpoints served by plugin
 )
 
 // validHookTypes contains all valid hook type constants
@@ -72,6 +73,7 @@ var validHookTypes = []string{
 	HookTypeStudioUI,
 	HookTypeAgent,
 	HookTypeObjectHooks,
+	HookTypeCustomEndpoint,
 }
 
 // IsValidHookType validates if a hook type string is valid
@@ -183,7 +185,7 @@ func (p *Plugin) GetCapabilityCategory() string {
 
 	for _, ht := range hooks {
 		switch ht {
-		case HookTypeAuth, HookTypePreAuth, HookTypePostAuth, HookTypeOnResponse, HookTypeDataCollection:
+		case HookTypeAuth, HookTypePreAuth, HookTypePostAuth, HookTypeOnResponse, HookTypeDataCollection, HookTypeCustomEndpoint:
 			hasGateway = true
 		case HookTypeStudioUI:
 			hasUI = true

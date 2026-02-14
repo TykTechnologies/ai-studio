@@ -401,6 +401,12 @@ func (a *API) setupRoutes() {
 			return
 		}
 
+		// Reject WebSocket/dev-server paths that shouldn't be handled by the SPA
+		if c.Request.URL.Path == "/ws" {
+			c.Status(http.StatusNotFound)
+			return
+		}
+
 		// For all other routes, serve the frontend application
 		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
 		if err != nil {

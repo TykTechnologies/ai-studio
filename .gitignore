@@ -119,6 +119,7 @@ examples/plugins/gateway/legacy-collectors/file_analytics_collector/file_analyti
 examples/plugins/gateway/legacy-collectors/file_budget_collector/file_budget_collector
 examples/plugins/gateway/legacy-collectors/file_proxy_collector/file_proxy_collector
 examples/plugins/studio/scheduler-demo/scheduler-demo
+examples/plugins/gateway/custom-echo-endpoint/custom-echo-endpoint
 build-commands.sh
 data/exports
 data/exports/*

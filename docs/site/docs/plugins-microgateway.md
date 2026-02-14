@@ -86,6 +86,24 @@ Intercepts data before database storage. Use for:
 - [`examples/plugins/unified/data-collectors/file-proxy-collector/`](../../../examples/plugins/unified/data-collectors/file-proxy-collector/) (unified SDK)
 - [`examples/plugins/gateway/elasticsearch_collector/`](../../../examples/plugins/gateway/elasticsearch_collector/)
 
+### 6. CustomEndpointHandler
+
+**Interface**: `CustomEndpointHandler`
+**Methods**:
+- `GetEndpointRegistrations() ([]*pb.EndpointRegistration, error)`
+- `HandleEndpointRequest(ctx Context, req *pb.EndpointRequest) (*pb.EndpointResponse, error)`
+- `HandleEndpointRequestStream(ctx Context, req *pb.EndpointRequest, stream grpc.ServerStreamingServer[pb.EndpointResponseChunk]) error`
+
+Registers and serves custom HTTP endpoints under `/plugins/{slug}/`. Plugins have full control over the response. Use for:
+- Custom APIs (OAuth endpoints, webhooks, health checks)
+- MCP Streamable HTTP proxy servers
+- Protocol-specific proxies
+- Any endpoint that doesn't fit the LLM/Tool/Datasource model
+
+Supports both unary responses and streaming (SSE) via the `stream_response` flag on endpoint registrations.
+
+**Full Guide**: [Custom Endpoints Guide](plugins-custom-endpoints.md)
+
 ## Quick Start
 
 ### 1. Project Setup

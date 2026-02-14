@@ -82,12 +82,13 @@ type CacheConfig struct {
 
 // GatewayConfig holds gateway-specific configuration
 type GatewayConfig struct {
-	Timeout         time.Duration `env:"GATEWAY_TIMEOUT" envDefault:"30s"`
-	MaxRequestSize  int64         `env:"GATEWAY_MAX_REQUEST_SIZE" envDefault:"10485760"`   // 10MB
-	MaxResponseSize int64         `env:"GATEWAY_MAX_RESPONSE_SIZE" envDefault:"52428800"` // 50MB
-	RateLimitRPM    int           `env:"GATEWAY_DEFAULT_RATE_LIMIT" envDefault:"100"`
-	EnableFilters   bool          `env:"GATEWAY_ENABLE_FILTERS" envDefault:"true"`
-	EnableAnalytics bool          `env:"GATEWAY_ENABLE_ANALYTICS" envDefault:"true"`
+	Timeout                   time.Duration `env:"GATEWAY_TIMEOUT" envDefault:"30s"`
+	MaxRequestSize            int64         `env:"GATEWAY_MAX_REQUEST_SIZE" envDefault:"10485760"`   // 10MB
+	MaxResponseSize           int64         `env:"GATEWAY_MAX_RESPONSE_SIZE" envDefault:"52428800"`  // 50MB
+	RateLimitRPM              int           `env:"GATEWAY_DEFAULT_RATE_LIMIT" envDefault:"100"`
+	EnableFilters             bool          `env:"GATEWAY_ENABLE_FILTERS" envDefault:"true"`
+	EnableAnalytics           bool          `env:"GATEWAY_ENABLE_ANALYTICS" envDefault:"true"`
+	PluginEndpointMaxBodySize int64         `env:"PLUGIN_ENDPOINT_MAX_BODY_SIZE" envDefault:"1048576"` // 1MB max request body for custom plugin endpoints
 }
 
 // HubSpokeConfig holds hub-and-spoke architecture configuration

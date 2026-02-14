@@ -95,4 +95,10 @@ type (
 	// Agent types
 	AgentMessageRequest = pb.AgentMessageRequest
 	AgentMessageChunk   = pb.AgentMessageChunk
+
+	// Custom endpoint types
+	EndpointRegistration  = pb.EndpointRegistration
+	EndpointRequest       = pb.EndpointRequest
+	EndpointResponse      = pb.EndpointResponse
+	EndpointResponseChunk = pb.EndpointResponseChunk
 )

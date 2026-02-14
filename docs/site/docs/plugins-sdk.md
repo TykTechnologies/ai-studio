@@ -51,7 +51,7 @@ func main() {
 
 ## Plugin Capabilities
 
-Plugins implement one or more capability interfaces. The SDK supports 12 distinct capabilities:
+Plugins implement one or more capability interfaces. The SDK supports 13 distinct capabilities:
 
 | Capability | Interface | Where It Works | Purpose |
 |------------|-----------|----------------|---------|
@@ -60,6 +60,7 @@ Plugins implement one or more capability interfaces. The SDK supports 12 distinc
 | **Post-Auth** | `PostAuthHandler` | Studio + Gateway | Process requests after authentication (most common) |
 | **Response** | `ResponseHandler` | Studio + Gateway | Modify response headers and body |
 | **Data Collection** | `DataCollector` | Studio + Gateway | Collect telemetry (analytics, budgets, proxy logs) |
+| **[Custom Endpoints](plugins-custom-endpoints.md)** | `CustomEndpointHandler` | Gateway | Serve custom HTTP endpoints under `/plugins/{slug}/` |
 | **UI Provider** | `UIProvider` | Studio only | Serve web UI assets |
 | **Config Provider** | `ConfigProvider` | Studio + Gateway | Provide JSON Schema configuration |
 | **Manifest Provider** | `ManifestProvider` | Gateway only | Provide plugin manifest (gateway-only plugins) |

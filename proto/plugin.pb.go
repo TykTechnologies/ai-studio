@@ -131,6 +131,58 @@ func (OpenSessionResponse_CloseReason) EnumDescriptor() ([]byte, []int) {
 	return file_plugin_proto_rawDescGZIP(), []int{56, 0}
 }
 
+type EndpointResponseChunk_ChunkType int32
+
+const (
+	EndpointResponseChunk_HEADERS EndpointResponseChunk_ChunkType = 0 // First chunk: status code + headers (no body)
+	EndpointResponseChunk_BODY    EndpointResponseChunk_ChunkType = 1 // Body data chunk (may be sent multiple times)
+	EndpointResponseChunk_DONE    EndpointResponseChunk_ChunkType = 2 // Stream complete signal
+	EndpointResponseChunk_ERROR   EndpointResponseChunk_ChunkType = 3 // Error during streaming
+)
+
+// Enum value maps for EndpointResponseChunk_ChunkType.
+var (
+	EndpointResponseChunk_ChunkType_name = map[int32]string{
+		0: "HEADERS",
+		1: "BODY",
+		2: "DONE",
+		3: "ERROR",
+	}
+	EndpointResponseChunk_ChunkType_value = map[string]int32{
+		"HEADERS": 0,
+		"BODY":    1,
+		"DONE":    2,
+		"ERROR":   3,
+	}
+)
+
+func (x EndpointResponseChunk_ChunkType) Enum() *EndpointResponseChunk_ChunkType {
+	p := new(EndpointResponseChunk_ChunkType)
+	*p = x
+	return p
+}
+
+func (x EndpointResponseChunk_ChunkType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EndpointResponseChunk_ChunkType) Descriptor() protoreflect.EnumDescriptor {
+	return file_plugin_proto_enumTypes[2].Descriptor()
+}
+
+func (EndpointResponseChunk_ChunkType) Type() protoreflect.EnumType {
+	return &file_plugin_proto_enumTypes[2]
+}
+
+func (x EndpointResponseChunk_ChunkType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EndpointResponseChunk_ChunkType.Descriptor instead.
+func (EndpointResponseChunk_ChunkType) EnumDescriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{64, 0}
+}
+
 type InitRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Config        map[string]string      `protobuf:"bytes,1,rep,name=config,proto3" json:"config,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -4207,6 +4259,467 @@ func (x *CloseSessionResponse) GetErrorMessage() string {
 	return ""
 }
 
+type GetEndpointRegistrationsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEndpointRegistrationsRequest) Reset() {
+	*x = GetEndpointRegistrationsRequest{}
+	mi := &file_plugin_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEndpointRegistrationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEndpointRegistrationsRequest) ProtoMessage() {}
+
+func (x *GetEndpointRegistrationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEndpointRegistrationsRequest.ProtoReflect.Descriptor instead.
+func (*GetEndpointRegistrationsRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{59}
+}
+
+type GetEndpointRegistrationsResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Registrations []*EndpointRegistration `protobuf:"bytes,1,rep,name=registrations,proto3" json:"registrations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEndpointRegistrationsResponse) Reset() {
+	*x = GetEndpointRegistrationsResponse{}
+	mi := &file_plugin_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEndpointRegistrationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEndpointRegistrationsResponse) ProtoMessage() {}
+
+func (x *GetEndpointRegistrationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEndpointRegistrationsResponse.ProtoReflect.Descriptor instead.
+func (*GetEndpointRegistrationsResponse) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *GetEndpointRegistrationsResponse) GetRegistrations() []*EndpointRegistration {
+	if x != nil {
+		return x.Registrations
+	}
+	return nil
+}
+
+type EndpointRegistration struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Path           string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`                                                                                   // Relative path (e.g., "/*", "/.well-known/openid-configuration")
+	Methods        []string               `protobuf:"bytes,2,rep,name=methods,proto3" json:"methods,omitempty"`                                                                             // HTTP methods: GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD
+	Description    string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`                                                                     // Human-readable description
+	RequireAuth    bool                   `protobuf:"varint,4,opt,name=require_auth,json=requireAuth,proto3" json:"require_auth,omitempty"`                                                 // Whether the gateway should enforce auth before forwarding
+	StreamResponse bool                   `protobuf:"varint,5,opt,name=stream_response,json=streamResponse,proto3" json:"stream_response,omitempty"`                                        // If true, gateway uses HandleEndpointRequestStream (SSE)
+	Metadata       map[string]string      `protobuf:"bytes,6,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Plugin-defined metadata
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *EndpointRegistration) Reset() {
+	*x = EndpointRegistration{}
+	mi := &file_plugin_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndpointRegistration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndpointRegistration) ProtoMessage() {}
+
+func (x *EndpointRegistration) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndpointRegistration.ProtoReflect.Descriptor instead.
+func (*EndpointRegistration) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *EndpointRegistration) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *EndpointRegistration) GetMethods() []string {
+	if x != nil {
+		return x.Methods
+	}
+	return nil
+}
+
+func (x *EndpointRegistration) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *EndpointRegistration) GetRequireAuth() bool {
+	if x != nil {
+		return x.RequireAuth
+	}
+	return false
+}
+
+func (x *EndpointRegistration) GetStreamResponse() bool {
+	if x != nil {
+		return x.StreamResponse
+	}
+	return false
+}
+
+func (x *EndpointRegistration) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+// EndpointRequest carries a full HTTP request to the plugin
+type EndpointRequest struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Method       string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`                                                                             // HTTP method
+	Path         string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`                                                                                 // Full request path (/plugins/{slug}/users/123/profile)
+	RelativePath string                 `protobuf:"bytes,3,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`                                             // Path relative to plugin mount (/users/123/profile)
+	PathSegments []string               `protobuf:"bytes,4,rep,name=path_segments,json=pathSegments,proto3" json:"path_segments,omitempty"`                                             // Pre-split relative path segments: ["users", "123", "profile"]
+	Headers      map[string]string      `protobuf:"bytes,5,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Request headers
+	Body         []byte                 `protobuf:"bytes,6,opt,name=body,proto3" json:"body,omitempty"`                                                                                 // Request body
+	QueryString  string                 `protobuf:"bytes,7,opt,name=query_string,json=queryString,proto3" json:"query_string,omitempty"`                                                // Raw query string
+	RemoteAddr   string                 `protobuf:"bytes,8,opt,name=remote_addr,json=remoteAddr,proto3" json:"remote_addr,omitempty"`                                                   // Client IP
+	Host         string                 `protobuf:"bytes,9,opt,name=host,proto3" json:"host,omitempty"`                                                                                 // Request Host header
+	Protocol     string                 `protobuf:"bytes,10,opt,name=protocol,proto3" json:"protocol,omitempty"`                                                                        // "http" (future: "websocket", "sse")
+	Context      *PluginContext         `protobuf:"bytes,11,opt,name=context,proto3" json:"context,omitempty"`                                                                          // Request ID, metadata
+	// Auth context (populated when require_auth=true and token is valid)
+	Authenticated bool     `protobuf:"varint,12,opt,name=authenticated,proto3" json:"authenticated,omitempty"` // Whether request was authenticated
+	App           *App     `protobuf:"bytes,13,opt,name=app,proto3" json:"app,omitempty"`                      // Full App object (ID, name, metadata, etc.)
+	Scopes        []string `protobuf:"bytes,14,rep,name=scopes,proto3" json:"scopes,omitempty"`                // Token scopes
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndpointRequest) Reset() {
+	*x = EndpointRequest{}
+	mi := &file_plugin_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndpointRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndpointRequest) ProtoMessage() {}
+
+func (x *EndpointRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndpointRequest.ProtoReflect.Descriptor instead.
+func (*EndpointRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *EndpointRequest) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *EndpointRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *EndpointRequest) GetRelativePath() string {
+	if x != nil {
+		return x.RelativePath
+	}
+	return ""
+}
+
+func (x *EndpointRequest) GetPathSegments() []string {
+	if x != nil {
+		return x.PathSegments
+	}
+	return nil
+}
+
+func (x *EndpointRequest) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *EndpointRequest) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *EndpointRequest) GetQueryString() string {
+	if x != nil {
+		return x.QueryString
+	}
+	return ""
+}
+
+func (x *EndpointRequest) GetRemoteAddr() string {
+	if x != nil {
+		return x.RemoteAddr
+	}
+	return ""
+}
+
+func (x *EndpointRequest) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *EndpointRequest) GetProtocol() string {
+	if x != nil {
+		return x.Protocol
+	}
+	return ""
+}
+
+func (x *EndpointRequest) GetContext() *PluginContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *EndpointRequest) GetAuthenticated() bool {
+	if x != nil {
+		return x.Authenticated
+	}
+	return false
+}
+
+func (x *EndpointRequest) GetApp() *App {
+	if x != nil {
+		return x.App
+	}
+	return nil
+}
+
+func (x *EndpointRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+// EndpointResponse — unary response for non-streaming endpoints
+type EndpointResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StatusCode    int32                  `protobuf:"varint,1,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"`                                                  // HTTP status code
+	Headers       map[string]string      `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Response headers
+	Body          []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`                                                                                 // Response body
+	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`                                             // Error (empty on success)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndpointResponse) Reset() {
+	*x = EndpointResponse{}
+	mi := &file_plugin_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndpointResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndpointResponse) ProtoMessage() {}
+
+func (x *EndpointResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndpointResponse.ProtoReflect.Descriptor instead.
+func (*EndpointResponse) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *EndpointResponse) GetStatusCode() int32 {
+	if x != nil {
+		return x.StatusCode
+	}
+	return 0
+}
+
+func (x *EndpointResponse) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *EndpointResponse) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *EndpointResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+// EndpointResponseChunk — streaming response for SSE/streaming endpoints
+// Protocol: HEADERS (first) → BODY* (zero or more) → DONE (final)
+type EndpointResponseChunk struct {
+	state         protoimpl.MessageState          `protogen:"open.v1"`
+	Type          EndpointResponseChunk_ChunkType `protobuf:"varint,1,opt,name=type,proto3,enum=plugin.EndpointResponseChunk_ChunkType" json:"type,omitempty"`
+	StatusCode    int32                           `protobuf:"varint,2,opt,name=status_code,json=statusCode,proto3" json:"status_code,omitempty"`                                                  // Set on HEADERS chunk
+	Headers       map[string]string               `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Set on HEADERS chunk
+	Data          []byte                          `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`                                                                                 // Set on BODY chunks (raw bytes to flush)
+	ErrorMessage  string                          `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`                                             // Set on ERROR chunk
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndpointResponseChunk) Reset() {
+	*x = EndpointResponseChunk{}
+	mi := &file_plugin_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndpointResponseChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndpointResponseChunk) ProtoMessage() {}
+
+func (x *EndpointResponseChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndpointResponseChunk.ProtoReflect.Descriptor instead.
+func (*EndpointResponseChunk) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *EndpointResponseChunk) GetType() EndpointResponseChunk_ChunkType {
+	if x != nil {
+		return x.Type
+	}
+	return EndpointResponseChunk_HEADERS
+}
+
+func (x *EndpointResponseChunk) GetStatusCode() int32 {
+	if x != nil {
+		return x.StatusCode
+	}
+	return 0
+}
+
+func (x *EndpointResponseChunk) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *EndpointResponseChunk) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *EndpointResponseChunk) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 var File_plugin_proto protoreflect.FileDescriptor
 
 const file_plugin_proto_rawDesc = "" +
@@ -4626,7 +5139,64 @@ const file_plugin_proto_rawDesc = "" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\"U\n" +
 	"\x14CloseSessionResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage2\x81\x0f\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"!\n" +
+	"\x1fGetEndpointRegistrationsRequest\"f\n" +
+	" GetEndpointRegistrationsResponse\x12B\n" +
+	"\rregistrations\x18\x01 \x03(\v2\x1c.plugin.EndpointRegistrationR\rregistrations\"\xb7\x02\n" +
+	"\x14EndpointRegistration\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\amethods\x18\x02 \x03(\tR\amethods\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12!\n" +
+	"\frequire_auth\x18\x04 \x01(\bR\vrequireAuth\x12'\n" +
+	"\x0fstream_response\x18\x05 \x01(\bR\x0estreamResponse\x12F\n" +
+	"\bmetadata\x18\x06 \x03(\v2*.plugin.EndpointRegistration.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x99\x04\n" +
+	"\x0fEndpointRequest\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12#\n" +
+	"\rrelative_path\x18\x03 \x01(\tR\frelativePath\x12#\n" +
+	"\rpath_segments\x18\x04 \x03(\tR\fpathSegments\x12>\n" +
+	"\aheaders\x18\x05 \x03(\v2$.plugin.EndpointRequest.HeadersEntryR\aheaders\x12\x12\n" +
+	"\x04body\x18\x06 \x01(\fR\x04body\x12!\n" +
+	"\fquery_string\x18\a \x01(\tR\vqueryString\x12\x1f\n" +
+	"\vremote_addr\x18\b \x01(\tR\n" +
+	"remoteAddr\x12\x12\n" +
+	"\x04host\x18\t \x01(\tR\x04host\x12\x1a\n" +
+	"\bprotocol\x18\n" +
+	" \x01(\tR\bprotocol\x12/\n" +
+	"\acontext\x18\v \x01(\v2\x15.plugin.PluginContextR\acontext\x12$\n" +
+	"\rauthenticated\x18\f \x01(\bR\rauthenticated\x12\x1d\n" +
+	"\x03app\x18\r \x01(\v2\v.plugin.AppR\x03app\x12\x16\n" +
+	"\x06scopes\x18\x0e \x03(\tR\x06scopes\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe9\x01\n" +
+	"\x10EndpointResponse\x12\x1f\n" +
+	"\vstatus_code\x18\x01 \x01(\x05R\n" +
+	"statusCode\x12?\n" +
+	"\aheaders\x18\x02 \x03(\v2%.plugin.EndpointResponse.HeadersEntryR\aheaders\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\fR\x04body\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe9\x02\n" +
+	"\x15EndpointResponseChunk\x12;\n" +
+	"\x04type\x18\x01 \x01(\x0e2'.plugin.EndpointResponseChunk.ChunkTypeR\x04type\x12\x1f\n" +
+	"\vstatus_code\x18\x02 \x01(\x05R\n" +
+	"statusCode\x12D\n" +
+	"\aheaders\x18\x03 \x03(\v2*.plugin.EndpointResponseChunk.HeadersEntryR\aheaders\x12\x12\n" +
+	"\x04data\x18\x04 \x01(\fR\x04data\x12#\n" +
+	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"7\n" +
+	"\tChunkType\x12\v\n" +
+	"\aHEADERS\x10\x00\x12\b\n" +
+	"\x04BODY\x10\x01\x12\b\n" +
+	"\x04DONE\x10\x02\x12\t\n" +
+	"\x05ERROR\x10\x032\x95\x11\n" +
 	"\rPluginService\x127\n" +
 	"\n" +
 	"Initialize\x12\x13.plugin.InitRequest\x1a\x14.plugin.InitResponse\x121\n" +
@@ -4653,7 +5223,10 @@ const file_plugin_proto_rawDesc = "" +
 	"\x1aGetObjectHookRegistrations\x12).plugin.GetObjectHookRegistrationsRequest\x1a*.plugin.GetObjectHookRegistrationsResponse\x12I\n" +
 	"\x10HandleObjectHook\x12\x19.plugin.ObjectHookRequest\x1a\x1a.plugin.ObjectHookResponse\x12a\n" +
 	"\x14ExecuteScheduledTask\x12#.plugin.ExecuteScheduledTaskRequest\x1a$.plugin.ExecuteScheduledTaskResponse\x12L\n" +
-	"\x11AcceptEdgePayload\x12\x1a.plugin.EdgePayloadRequest\x1a\x1b.plugin.EdgePayloadResponse\x12F\n" +
+	"\x11AcceptEdgePayload\x12\x1a.plugin.EdgePayloadRequest\x1a\x1b.plugin.EdgePayloadResponse\x12m\n" +
+	"\x18GetEndpointRegistrations\x12'.plugin.GetEndpointRegistrationsRequest\x1a(.plugin.GetEndpointRegistrationsResponse\x12J\n" +
+	"\x15HandleEndpointRequest\x12\x17.plugin.EndpointRequest\x1a\x18.plugin.EndpointResponse\x12W\n" +
+	"\x1bHandleEndpointRequestStream\x12\x17.plugin.EndpointRequest\x1a\x1d.plugin.EndpointResponseChunk0\x01\x12F\n" +
 	"\vOpenSession\x12\x1a.plugin.OpenSessionRequest\x1a\x1b.plugin.OpenSessionResponse\x12I\n" +
 	"\fCloseSession\x12\x1b.plugin.CloseSessionRequest\x1a\x1c.plugin.CloseSessionResponseB/Z-github.com/TykTechnologies/midsommar/v2/protob\x06proto3"
 
@@ -4669,198 +5242,223 @@ func file_plugin_proto_rawDescGZIP() []byte {
 	return file_plugin_proto_rawDescData
 }
 
-var file_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
+var file_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 90)
 var file_plugin_proto_goTypes = []any{
 	(AgentMessageChunk_ChunkType)(0),           // 0: plugin.AgentMessageChunk.ChunkType
 	(OpenSessionResponse_CloseReason)(0),       // 1: plugin.OpenSessionResponse.CloseReason
-	(*InitRequest)(nil),                        // 2: plugin.InitRequest
-	(*InitResponse)(nil),                       // 3: plugin.InitResponse
-	(*PingRequest)(nil),                        // 4: plugin.PingRequest
-	(*PingResponse)(nil),                       // 5: plugin.PingResponse
-	(*ShutdownRequest)(nil),                    // 6: plugin.ShutdownRequest
-	(*ShutdownResponse)(nil),                   // 7: plugin.ShutdownResponse
-	(*PluginContext)(nil),                      // 8: plugin.PluginContext
-	(*PluginRequest)(nil),                      // 9: plugin.PluginRequest
-	(*PluginResponse)(nil),                     // 10: plugin.PluginResponse
-	(*AuthRequest)(nil),                        // 11: plugin.AuthRequest
-	(*AuthResponse)(nil),                       // 12: plugin.AuthResponse
-	(*EnrichedRequest)(nil),                    // 13: plugin.EnrichedRequest
-	(*HeadersRequest)(nil),                     // 14: plugin.HeadersRequest
-	(*HeadersResponse)(nil),                    // 15: plugin.HeadersResponse
-	(*ResponseWriteRequest)(nil),               // 16: plugin.ResponseWriteRequest
-	(*ResponseWriteResponse)(nil),              // 17: plugin.ResponseWriteResponse
-	(*StreamCompleteRequest)(nil),              // 18: plugin.StreamCompleteRequest
-	(*StreamCompleteResponse)(nil),             // 19: plugin.StreamCompleteResponse
-	(*GetAppRequest)(nil),                      // 20: plugin.GetAppRequest
-	(*GetAppResponse)(nil),                     // 21: plugin.GetAppResponse
-	(*GetUserRequest)(nil),                     // 22: plugin.GetUserRequest
-	(*GetUserResponse)(nil),                    // 23: plugin.GetUserResponse
-	(*App)(nil),                                // 24: plugin.App
-	(*User)(nil),                               // 25: plugin.User
-	(*ProxyLogRequest)(nil),                    // 26: plugin.ProxyLogRequest
-	(*AnalyticsRequest)(nil),                   // 27: plugin.AnalyticsRequest
-	(*BudgetUsageRequest)(nil),                 // 28: plugin.BudgetUsageRequest
-	(*DataCollectionResponse)(nil),             // 29: plugin.DataCollectionResponse
-	(*GetAssetRequest)(nil),                    // 30: plugin.GetAssetRequest
-	(*GetAssetResponse)(nil),                   // 31: plugin.GetAssetResponse
-	(*ListAssetsRequest)(nil),                  // 32: plugin.ListAssetsRequest
-	(*ListAssetsResponse)(nil),                 // 33: plugin.ListAssetsResponse
-	(*AssetInfo)(nil),                          // 34: plugin.AssetInfo
-	(*GetManifestRequest)(nil),                 // 35: plugin.GetManifestRequest
-	(*GetManifestResponse)(nil),                // 36: plugin.GetManifestResponse
-	(*CallRequest)(nil),                        // 37: plugin.CallRequest
-	(*CallResponse)(nil),                       // 38: plugin.CallResponse
-	(*GetConfigSchemaRequest)(nil),             // 39: plugin.GetConfigSchemaRequest
-	(*GetConfigSchemaResponse)(nil),            // 40: plugin.GetConfigSchemaResponse
-	(*AgentMessageRequest)(nil),                // 41: plugin.AgentMessageRequest
-	(*AgentMessageChunk)(nil),                  // 42: plugin.AgentMessageChunk
-	(*AgentToolInfo)(nil),                      // 43: plugin.AgentToolInfo
-	(*AgentDatasourceInfo)(nil),                // 44: plugin.AgentDatasourceInfo
-	(*AgentLLMInfo)(nil),                       // 45: plugin.AgentLLMInfo
-	(*AgentConversationMessage)(nil),           // 46: plugin.AgentConversationMessage
-	(*GetObjectHookRegistrationsRequest)(nil),  // 47: plugin.GetObjectHookRegistrationsRequest
-	(*GetObjectHookRegistrationsResponse)(nil), // 48: plugin.GetObjectHookRegistrationsResponse
-	(*ObjectHookRegistration)(nil),             // 49: plugin.ObjectHookRegistration
-	(*ObjectHookRequest)(nil),                  // 50: plugin.ObjectHookRequest
-	(*ObjectHookResponse)(nil),                 // 51: plugin.ObjectHookResponse
-	(*ExecuteScheduledTaskRequest)(nil),        // 52: plugin.ExecuteScheduledTaskRequest
-	(*ExecuteScheduledTaskResponse)(nil),       // 53: plugin.ExecuteScheduledTaskResponse
-	(*ScheduleDefinition)(nil),                 // 54: plugin.ScheduleDefinition
-	(*EdgePayloadRequest)(nil),                 // 55: plugin.EdgePayloadRequest
-	(*EdgePayloadResponse)(nil),                // 56: plugin.EdgePayloadResponse
-	(*OpenSessionRequest)(nil),                 // 57: plugin.OpenSessionRequest
-	(*OpenSessionResponse)(nil),                // 58: plugin.OpenSessionResponse
-	(*CloseSessionRequest)(nil),                // 59: plugin.CloseSessionRequest
-	(*CloseSessionResponse)(nil),               // 60: plugin.CloseSessionResponse
-	nil,                                        // 61: plugin.InitRequest.ConfigEntry
-	nil,                                        // 62: plugin.PluginContext.MetadataEntry
-	nil,                                        // 63: plugin.PluginContext.TraceContextEntry
-	nil,                                        // 64: plugin.PluginRequest.HeadersEntry
-	nil,                                        // 65: plugin.PluginResponse.HeadersEntry
-	nil,                                        // 66: plugin.PluginResponse.ContextUpdatesEntry
-	nil,                                        // 67: plugin.AuthResponse.ClaimsEntry
-	nil,                                        // 68: plugin.EnrichedRequest.AuthClaimsEntry
-	nil,                                        // 69: plugin.HeadersRequest.HeadersEntry
-	nil,                                        // 70: plugin.HeadersResponse.HeadersEntry
-	nil,                                        // 71: plugin.ResponseWriteRequest.HeadersEntry
-	nil,                                        // 72: plugin.ResponseWriteResponse.HeadersEntry
-	nil,                                        // 73: plugin.StreamCompleteRequest.HeadersEntry
-	nil,                                        // 74: plugin.App.MetadataEntry
-	nil,                                        // 75: plugin.User.MetadataEntry
-	nil,                                        // 76: plugin.DataCollectionResponse.MetadataEntry
-	nil,                                        // 77: plugin.ObjectHookRequest.MetadataEntry
-	nil,                                        // 78: plugin.ObjectHookResponse.PluginMetadataEntry
-	nil,                                        // 79: plugin.EdgePayloadRequest.MetadataEntry
-	nil,                                        // 80: plugin.EdgePayloadResponse.MetadataEntry
-	nil,                                        // 81: plugin.OpenSessionRequest.MetadataEntry
+	(EndpointResponseChunk_ChunkType)(0),       // 2: plugin.EndpointResponseChunk.ChunkType
+	(*InitRequest)(nil),                        // 3: plugin.InitRequest
+	(*InitResponse)(nil),                       // 4: plugin.InitResponse
+	(*PingRequest)(nil),                        // 5: plugin.PingRequest
+	(*PingResponse)(nil),                       // 6: plugin.PingResponse
+	(*ShutdownRequest)(nil),                    // 7: plugin.ShutdownRequest
+	(*ShutdownResponse)(nil),                   // 8: plugin.ShutdownResponse
+	(*PluginContext)(nil),                      // 9: plugin.PluginContext
+	(*PluginRequest)(nil),                      // 10: plugin.PluginRequest
+	(*PluginResponse)(nil),                     // 11: plugin.PluginResponse
+	(*AuthRequest)(nil),                        // 12: plugin.AuthRequest
+	(*AuthResponse)(nil),                       // 13: plugin.AuthResponse
+	(*EnrichedRequest)(nil),                    // 14: plugin.EnrichedRequest
+	(*HeadersRequest)(nil),                     // 15: plugin.HeadersRequest
+	(*HeadersResponse)(nil),                    // 16: plugin.HeadersResponse
+	(*ResponseWriteRequest)(nil),               // 17: plugin.ResponseWriteRequest
+	(*ResponseWriteResponse)(nil),              // 18: plugin.ResponseWriteResponse
+	(*StreamCompleteRequest)(nil),              // 19: plugin.StreamCompleteRequest
+	(*StreamCompleteResponse)(nil),             // 20: plugin.StreamCompleteResponse
+	(*GetAppRequest)(nil),                      // 21: plugin.GetAppRequest
+	(*GetAppResponse)(nil),                     // 22: plugin.GetAppResponse
+	(*GetUserRequest)(nil),                     // 23: plugin.GetUserRequest
+	(*GetUserResponse)(nil),                    // 24: plugin.GetUserResponse
+	(*App)(nil),                                // 25: plugin.App
+	(*User)(nil),                               // 26: plugin.User
+	(*ProxyLogRequest)(nil),                    // 27: plugin.ProxyLogRequest
+	(*AnalyticsRequest)(nil),                   // 28: plugin.AnalyticsRequest
+	(*BudgetUsageRequest)(nil),                 // 29: plugin.BudgetUsageRequest
+	(*DataCollectionResponse)(nil),             // 30: plugin.DataCollectionResponse
+	(*GetAssetRequest)(nil),                    // 31: plugin.GetAssetRequest
+	(*GetAssetResponse)(nil),                   // 32: plugin.GetAssetResponse
+	(*ListAssetsRequest)(nil),                  // 33: plugin.ListAssetsRequest
+	(*ListAssetsResponse)(nil),                 // 34: plugin.ListAssetsResponse
+	(*AssetInfo)(nil),                          // 35: plugin.AssetInfo
+	(*GetManifestRequest)(nil),                 // 36: plugin.GetManifestRequest
+	(*GetManifestResponse)(nil),                // 37: plugin.GetManifestResponse
+	(*CallRequest)(nil),                        // 38: plugin.CallRequest
+	(*CallResponse)(nil),                       // 39: plugin.CallResponse
+	(*GetConfigSchemaRequest)(nil),             // 40: plugin.GetConfigSchemaRequest
+	(*GetConfigSchemaResponse)(nil),            // 41: plugin.GetConfigSchemaResponse
+	(*AgentMessageRequest)(nil),                // 42: plugin.AgentMessageRequest
+	(*AgentMessageChunk)(nil),                  // 43: plugin.AgentMessageChunk
+	(*AgentToolInfo)(nil),                      // 44: plugin.AgentToolInfo
+	(*AgentDatasourceInfo)(nil),                // 45: plugin.AgentDatasourceInfo
+	(*AgentLLMInfo)(nil),                       // 46: plugin.AgentLLMInfo
+	(*AgentConversationMessage)(nil),           // 47: plugin.AgentConversationMessage
+	(*GetObjectHookRegistrationsRequest)(nil),  // 48: plugin.GetObjectHookRegistrationsRequest
+	(*GetObjectHookRegistrationsResponse)(nil), // 49: plugin.GetObjectHookRegistrationsResponse
+	(*ObjectHookRegistration)(nil),             // 50: plugin.ObjectHookRegistration
+	(*ObjectHookRequest)(nil),                  // 51: plugin.ObjectHookRequest
+	(*ObjectHookResponse)(nil),                 // 52: plugin.ObjectHookResponse
+	(*ExecuteScheduledTaskRequest)(nil),        // 53: plugin.ExecuteScheduledTaskRequest
+	(*ExecuteScheduledTaskResponse)(nil),       // 54: plugin.ExecuteScheduledTaskResponse
+	(*ScheduleDefinition)(nil),                 // 55: plugin.ScheduleDefinition
+	(*EdgePayloadRequest)(nil),                 // 56: plugin.EdgePayloadRequest
+	(*EdgePayloadResponse)(nil),                // 57: plugin.EdgePayloadResponse
+	(*OpenSessionRequest)(nil),                 // 58: plugin.OpenSessionRequest
+	(*OpenSessionResponse)(nil),                // 59: plugin.OpenSessionResponse
+	(*CloseSessionRequest)(nil),                // 60: plugin.CloseSessionRequest
+	(*CloseSessionResponse)(nil),               // 61: plugin.CloseSessionResponse
+	(*GetEndpointRegistrationsRequest)(nil),    // 62: plugin.GetEndpointRegistrationsRequest
+	(*GetEndpointRegistrationsResponse)(nil),   // 63: plugin.GetEndpointRegistrationsResponse
+	(*EndpointRegistration)(nil),               // 64: plugin.EndpointRegistration
+	(*EndpointRequest)(nil),                    // 65: plugin.EndpointRequest
+	(*EndpointResponse)(nil),                   // 66: plugin.EndpointResponse
+	(*EndpointResponseChunk)(nil),              // 67: plugin.EndpointResponseChunk
+	nil,                                        // 68: plugin.InitRequest.ConfigEntry
+	nil,                                        // 69: plugin.PluginContext.MetadataEntry
+	nil,                                        // 70: plugin.PluginContext.TraceContextEntry
+	nil,                                        // 71: plugin.PluginRequest.HeadersEntry
+	nil,                                        // 72: plugin.PluginResponse.HeadersEntry
+	nil,                                        // 73: plugin.PluginResponse.ContextUpdatesEntry
+	nil,                                        // 74: plugin.AuthResponse.ClaimsEntry
+	nil,                                        // 75: plugin.EnrichedRequest.AuthClaimsEntry
+	nil,                                        // 76: plugin.HeadersRequest.HeadersEntry
+	nil,                                        // 77: plugin.HeadersResponse.HeadersEntry
+	nil,                                        // 78: plugin.ResponseWriteRequest.HeadersEntry
+	nil,                                        // 79: plugin.ResponseWriteResponse.HeadersEntry
+	nil,                                        // 80: plugin.StreamCompleteRequest.HeadersEntry
+	nil,                                        // 81: plugin.App.MetadataEntry
+	nil,                                        // 82: plugin.User.MetadataEntry
+	nil,                                        // 83: plugin.DataCollectionResponse.MetadataEntry
+	nil,                                        // 84: plugin.ObjectHookRequest.MetadataEntry
+	nil,                                        // 85: plugin.ObjectHookResponse.PluginMetadataEntry
+	nil,                                        // 86: plugin.EdgePayloadRequest.MetadataEntry
+	nil,                                        // 87: plugin.EdgePayloadResponse.MetadataEntry
+	nil,                                        // 88: plugin.OpenSessionRequest.MetadataEntry
+	nil,                                        // 89: plugin.EndpointRegistration.MetadataEntry
+	nil,                                        // 90: plugin.EndpointRequest.HeadersEntry
+	nil,                                        // 91: plugin.EndpointResponse.HeadersEntry
+	nil,                                        // 92: plugin.EndpointResponseChunk.HeadersEntry
 }
 var file_plugin_proto_depIdxs = []int32{
-	61, // 0: plugin.InitRequest.config:type_name -> plugin.InitRequest.ConfigEntry
-	62, // 1: plugin.PluginContext.metadata:type_name -> plugin.PluginContext.MetadataEntry
-	63, // 2: plugin.PluginContext.trace_context:type_name -> plugin.PluginContext.TraceContextEntry
-	64, // 3: plugin.PluginRequest.headers:type_name -> plugin.PluginRequest.HeadersEntry
-	8,  // 4: plugin.PluginRequest.context:type_name -> plugin.PluginContext
-	65, // 5: plugin.PluginResponse.headers:type_name -> plugin.PluginResponse.HeadersEntry
-	66, // 6: plugin.PluginResponse.context_updates:type_name -> plugin.PluginResponse.ContextUpdatesEntry
-	9,  // 7: plugin.AuthRequest.request:type_name -> plugin.PluginRequest
-	8,  // 8: plugin.AuthRequest.context:type_name -> plugin.PluginContext
-	67, // 9: plugin.AuthResponse.claims:type_name -> plugin.AuthResponse.ClaimsEntry
-	9,  // 10: plugin.EnrichedRequest.request:type_name -> plugin.PluginRequest
-	68, // 11: plugin.EnrichedRequest.auth_claims:type_name -> plugin.EnrichedRequest.AuthClaimsEntry
-	69, // 12: plugin.HeadersRequest.headers:type_name -> plugin.HeadersRequest.HeadersEntry
-	8,  // 13: plugin.HeadersRequest.context:type_name -> plugin.PluginContext
-	70, // 14: plugin.HeadersResponse.headers:type_name -> plugin.HeadersResponse.HeadersEntry
-	71, // 15: plugin.ResponseWriteRequest.headers:type_name -> plugin.ResponseWriteRequest.HeadersEntry
-	8,  // 16: plugin.ResponseWriteRequest.context:type_name -> plugin.PluginContext
-	72, // 17: plugin.ResponseWriteResponse.headers:type_name -> plugin.ResponseWriteResponse.HeadersEntry
-	73, // 18: plugin.StreamCompleteRequest.headers:type_name -> plugin.StreamCompleteRequest.HeadersEntry
-	8,  // 19: plugin.StreamCompleteRequest.context:type_name -> plugin.PluginContext
-	8,  // 20: plugin.GetAppRequest.context:type_name -> plugin.PluginContext
-	24, // 21: plugin.GetAppResponse.app:type_name -> plugin.App
-	8,  // 22: plugin.GetUserRequest.context:type_name -> plugin.PluginContext
-	25, // 23: plugin.GetUserResponse.user:type_name -> plugin.User
-	74, // 24: plugin.App.metadata:type_name -> plugin.App.MetadataEntry
-	75, // 25: plugin.User.metadata:type_name -> plugin.User.MetadataEntry
-	8,  // 26: plugin.ProxyLogRequest.context:type_name -> plugin.PluginContext
-	8,  // 27: plugin.AnalyticsRequest.context:type_name -> plugin.PluginContext
-	8,  // 28: plugin.BudgetUsageRequest.context:type_name -> plugin.PluginContext
-	76, // 29: plugin.DataCollectionResponse.metadata:type_name -> plugin.DataCollectionResponse.MetadataEntry
-	34, // 30: plugin.ListAssetsResponse.assets:type_name -> plugin.AssetInfo
-	43, // 31: plugin.AgentMessageRequest.available_tools:type_name -> plugin.AgentToolInfo
-	44, // 32: plugin.AgentMessageRequest.available_datasources:type_name -> plugin.AgentDatasourceInfo
-	45, // 33: plugin.AgentMessageRequest.available_llms:type_name -> plugin.AgentLLMInfo
-	46, // 34: plugin.AgentMessageRequest.history:type_name -> plugin.AgentConversationMessage
-	8,  // 35: plugin.AgentMessageRequest.context:type_name -> plugin.PluginContext
+	68, // 0: plugin.InitRequest.config:type_name -> plugin.InitRequest.ConfigEntry
+	69, // 1: plugin.PluginContext.metadata:type_name -> plugin.PluginContext.MetadataEntry
+	70, // 2: plugin.PluginContext.trace_context:type_name -> plugin.PluginContext.TraceContextEntry
+	71, // 3: plugin.PluginRequest.headers:type_name -> plugin.PluginRequest.HeadersEntry
+	9,  // 4: plugin.PluginRequest.context:type_name -> plugin.PluginContext
+	72, // 5: plugin.PluginResponse.headers:type_name -> plugin.PluginResponse.HeadersEntry
+	73, // 6: plugin.PluginResponse.context_updates:type_name -> plugin.PluginResponse.ContextUpdatesEntry
+	10, // 7: plugin.AuthRequest.request:type_name -> plugin.PluginRequest
+	9,  // 8: plugin.AuthRequest.context:type_name -> plugin.PluginContext
+	74, // 9: plugin.AuthResponse.claims:type_name -> plugin.AuthResponse.ClaimsEntry
+	10, // 10: plugin.EnrichedRequest.request:type_name -> plugin.PluginRequest
+	75, // 11: plugin.EnrichedRequest.auth_claims:type_name -> plugin.EnrichedRequest.AuthClaimsEntry
+	76, // 12: plugin.HeadersRequest.headers:type_name -> plugin.HeadersRequest.HeadersEntry
+	9,  // 13: plugin.HeadersRequest.context:type_name -> plugin.PluginContext
+	77, // 14: plugin.HeadersResponse.headers:type_name -> plugin.HeadersResponse.HeadersEntry
+	78, // 15: plugin.ResponseWriteRequest.headers:type_name -> plugin.ResponseWriteRequest.HeadersEntry
+	9,  // 16: plugin.ResponseWriteRequest.context:type_name -> plugin.PluginContext
+	79, // 17: plugin.ResponseWriteResponse.headers:type_name -> plugin.ResponseWriteResponse.HeadersEntry
+	80, // 18: plugin.StreamCompleteRequest.headers:type_name -> plugin.StreamCompleteRequest.HeadersEntry
+	9,  // 19: plugin.StreamCompleteRequest.context:type_name -> plugin.PluginContext
+	9,  // 20: plugin.GetAppRequest.context:type_name -> plugin.PluginContext
+	25, // 21: plugin.GetAppResponse.app:type_name -> plugin.App
+	9,  // 22: plugin.GetUserRequest.context:type_name -> plugin.PluginContext
+	26, // 23: plugin.GetUserResponse.user:type_name -> plugin.User
+	81, // 24: plugin.App.metadata:type_name -> plugin.App.MetadataEntry
+	82, // 25: plugin.User.metadata:type_name -> plugin.User.MetadataEntry
+	9,  // 26: plugin.ProxyLogRequest.context:type_name -> plugin.PluginContext
+	9,  // 27: plugin.AnalyticsRequest.context:type_name -> plugin.PluginContext
+	9,  // 28: plugin.BudgetUsageRequest.context:type_name -> plugin.PluginContext
+	83, // 29: plugin.DataCollectionResponse.metadata:type_name -> plugin.DataCollectionResponse.MetadataEntry
+	35, // 30: plugin.ListAssetsResponse.assets:type_name -> plugin.AssetInfo
+	44, // 31: plugin.AgentMessageRequest.available_tools:type_name -> plugin.AgentToolInfo
+	45, // 32: plugin.AgentMessageRequest.available_datasources:type_name -> plugin.AgentDatasourceInfo
+	46, // 33: plugin.AgentMessageRequest.available_llms:type_name -> plugin.AgentLLMInfo
+	47, // 34: plugin.AgentMessageRequest.history:type_name -> plugin.AgentConversationMessage
+	9,  // 35: plugin.AgentMessageRequest.context:type_name -> plugin.PluginContext
 	0,  // 36: plugin.AgentMessageChunk.type:type_name -> plugin.AgentMessageChunk.ChunkType
-	49, // 37: plugin.GetObjectHookRegistrationsResponse.registrations:type_name -> plugin.ObjectHookRegistration
-	8,  // 38: plugin.ObjectHookRequest.context:type_name -> plugin.PluginContext
-	77, // 39: plugin.ObjectHookRequest.metadata:type_name -> plugin.ObjectHookRequest.MetadataEntry
-	78, // 40: plugin.ObjectHookResponse.plugin_metadata:type_name -> plugin.ObjectHookResponse.PluginMetadataEntry
-	8,  // 41: plugin.ExecuteScheduledTaskRequest.context:type_name -> plugin.PluginContext
-	54, // 42: plugin.ExecuteScheduledTaskRequest.schedule:type_name -> plugin.ScheduleDefinition
-	79, // 43: plugin.EdgePayloadRequest.metadata:type_name -> plugin.EdgePayloadRequest.MetadataEntry
-	8,  // 44: plugin.EdgePayloadRequest.context:type_name -> plugin.PluginContext
-	80, // 45: plugin.EdgePayloadResponse.metadata:type_name -> plugin.EdgePayloadResponse.MetadataEntry
-	81, // 46: plugin.OpenSessionRequest.metadata:type_name -> plugin.OpenSessionRequest.MetadataEntry
+	50, // 37: plugin.GetObjectHookRegistrationsResponse.registrations:type_name -> plugin.ObjectHookRegistration
+	9,  // 38: plugin.ObjectHookRequest.context:type_name -> plugin.PluginContext
+	84, // 39: plugin.ObjectHookRequest.metadata:type_name -> plugin.ObjectHookRequest.MetadataEntry
+	85, // 40: plugin.ObjectHookResponse.plugin_metadata:type_name -> plugin.ObjectHookResponse.PluginMetadataEntry
+	9,  // 41: plugin.ExecuteScheduledTaskRequest.context:type_name -> plugin.PluginContext
+	55, // 42: plugin.ExecuteScheduledTaskRequest.schedule:type_name -> plugin.ScheduleDefinition
+	86, // 43: plugin.EdgePayloadRequest.metadata:type_name -> plugin.EdgePayloadRequest.MetadataEntry
+	9,  // 44: plugin.EdgePayloadRequest.context:type_name -> plugin.PluginContext
+	87, // 45: plugin.EdgePayloadResponse.metadata:type_name -> plugin.EdgePayloadResponse.MetadataEntry
+	88, // 46: plugin.OpenSessionRequest.metadata:type_name -> plugin.OpenSessionRequest.MetadataEntry
 	1,  // 47: plugin.OpenSessionResponse.close_reason:type_name -> plugin.OpenSessionResponse.CloseReason
-	2,  // 48: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
-	4,  // 49: plugin.PluginService.Ping:input_type -> plugin.PingRequest
-	6,  // 50: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
-	9,  // 51: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
-	11, // 52: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
-	20, // 53: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
-	22, // 54: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
-	13, // 55: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
-	14, // 56: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
-	16, // 57: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
-	18, // 58: plugin.PluginService.OnStreamComplete:input_type -> plugin.StreamCompleteRequest
-	26, // 59: plugin.PluginService.HandleProxyLog:input_type -> plugin.ProxyLogRequest
-	27, // 60: plugin.PluginService.HandleAnalytics:input_type -> plugin.AnalyticsRequest
-	28, // 61: plugin.PluginService.HandleBudgetUsage:input_type -> plugin.BudgetUsageRequest
-	30, // 62: plugin.PluginService.GetAsset:input_type -> plugin.GetAssetRequest
-	32, // 63: plugin.PluginService.ListAssets:input_type -> plugin.ListAssetsRequest
-	35, // 64: plugin.PluginService.GetManifest:input_type -> plugin.GetManifestRequest
-	37, // 65: plugin.PluginService.Call:input_type -> plugin.CallRequest
-	39, // 66: plugin.PluginService.GetConfigSchema:input_type -> plugin.GetConfigSchemaRequest
-	41, // 67: plugin.PluginService.HandleAgentMessage:input_type -> plugin.AgentMessageRequest
-	47, // 68: plugin.PluginService.GetObjectHookRegistrations:input_type -> plugin.GetObjectHookRegistrationsRequest
-	50, // 69: plugin.PluginService.HandleObjectHook:input_type -> plugin.ObjectHookRequest
-	52, // 70: plugin.PluginService.ExecuteScheduledTask:input_type -> plugin.ExecuteScheduledTaskRequest
-	55, // 71: plugin.PluginService.AcceptEdgePayload:input_type -> plugin.EdgePayloadRequest
-	57, // 72: plugin.PluginService.OpenSession:input_type -> plugin.OpenSessionRequest
-	59, // 73: plugin.PluginService.CloseSession:input_type -> plugin.CloseSessionRequest
-	3,  // 74: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
-	5,  // 75: plugin.PluginService.Ping:output_type -> plugin.PingResponse
-	7,  // 76: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
-	10, // 77: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
-	12, // 78: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
-	21, // 79: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
-	23, // 80: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
-	10, // 81: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
-	15, // 82: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
-	17, // 83: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
-	19, // 84: plugin.PluginService.OnStreamComplete:output_type -> plugin.StreamCompleteResponse
-	29, // 85: plugin.PluginService.HandleProxyLog:output_type -> plugin.DataCollectionResponse
-	29, // 86: plugin.PluginService.HandleAnalytics:output_type -> plugin.DataCollectionResponse
-	29, // 87: plugin.PluginService.HandleBudgetUsage:output_type -> plugin.DataCollectionResponse
-	31, // 88: plugin.PluginService.GetAsset:output_type -> plugin.GetAssetResponse
-	33, // 89: plugin.PluginService.ListAssets:output_type -> plugin.ListAssetsResponse
-	36, // 90: plugin.PluginService.GetManifest:output_type -> plugin.GetManifestResponse
-	38, // 91: plugin.PluginService.Call:output_type -> plugin.CallResponse
-	40, // 92: plugin.PluginService.GetConfigSchema:output_type -> plugin.GetConfigSchemaResponse
-	42, // 93: plugin.PluginService.HandleAgentMessage:output_type -> plugin.AgentMessageChunk
-	48, // 94: plugin.PluginService.GetObjectHookRegistrations:output_type -> plugin.GetObjectHookRegistrationsResponse
-	51, // 95: plugin.PluginService.HandleObjectHook:output_type -> plugin.ObjectHookResponse
-	53, // 96: plugin.PluginService.ExecuteScheduledTask:output_type -> plugin.ExecuteScheduledTaskResponse
-	56, // 97: plugin.PluginService.AcceptEdgePayload:output_type -> plugin.EdgePayloadResponse
-	58, // 98: plugin.PluginService.OpenSession:output_type -> plugin.OpenSessionResponse
-	60, // 99: plugin.PluginService.CloseSession:output_type -> plugin.CloseSessionResponse
-	74, // [74:100] is the sub-list for method output_type
-	48, // [48:74] is the sub-list for method input_type
-	48, // [48:48] is the sub-list for extension type_name
-	48, // [48:48] is the sub-list for extension extendee
-	0,  // [0:48] is the sub-list for field type_name
+	64, // 48: plugin.GetEndpointRegistrationsResponse.registrations:type_name -> plugin.EndpointRegistration
+	89, // 49: plugin.EndpointRegistration.metadata:type_name -> plugin.EndpointRegistration.MetadataEntry
+	90, // 50: plugin.EndpointRequest.headers:type_name -> plugin.EndpointRequest.HeadersEntry
+	9,  // 51: plugin.EndpointRequest.context:type_name -> plugin.PluginContext
+	25, // 52: plugin.EndpointRequest.app:type_name -> plugin.App
+	91, // 53: plugin.EndpointResponse.headers:type_name -> plugin.EndpointResponse.HeadersEntry
+	2,  // 54: plugin.EndpointResponseChunk.type:type_name -> plugin.EndpointResponseChunk.ChunkType
+	92, // 55: plugin.EndpointResponseChunk.headers:type_name -> plugin.EndpointResponseChunk.HeadersEntry
+	3,  // 56: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
+	5,  // 57: plugin.PluginService.Ping:input_type -> plugin.PingRequest
+	7,  // 58: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
+	10, // 59: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
+	12, // 60: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
+	21, // 61: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
+	23, // 62: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
+	14, // 63: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
+	15, // 64: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
+	17, // 65: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
+	19, // 66: plugin.PluginService.OnStreamComplete:input_type -> plugin.StreamCompleteRequest
+	27, // 67: plugin.PluginService.HandleProxyLog:input_type -> plugin.ProxyLogRequest
+	28, // 68: plugin.PluginService.HandleAnalytics:input_type -> plugin.AnalyticsRequest
+	29, // 69: plugin.PluginService.HandleBudgetUsage:input_type -> plugin.BudgetUsageRequest
+	31, // 70: plugin.PluginService.GetAsset:input_type -> plugin.GetAssetRequest
+	33, // 71: plugin.PluginService.ListAssets:input_type -> plugin.ListAssetsRequest
+	36, // 72: plugin.PluginService.GetManifest:input_type -> plugin.GetManifestRequest
+	38, // 73: plugin.PluginService.Call:input_type -> plugin.CallRequest
+	40, // 74: plugin.PluginService.GetConfigSchema:input_type -> plugin.GetConfigSchemaRequest
+	42, // 75: plugin.PluginService.HandleAgentMessage:input_type -> plugin.AgentMessageRequest
+	48, // 76: plugin.PluginService.GetObjectHookRegistrations:input_type -> plugin.GetObjectHookRegistrationsRequest
+	51, // 77: plugin.PluginService.HandleObjectHook:input_type -> plugin.ObjectHookRequest
+	53, // 78: plugin.PluginService.ExecuteScheduledTask:input_type -> plugin.ExecuteScheduledTaskRequest
+	56, // 79: plugin.PluginService.AcceptEdgePayload:input_type -> plugin.EdgePayloadRequest
+	62, // 80: plugin.PluginService.GetEndpointRegistrations:input_type -> plugin.GetEndpointRegistrationsRequest
+	65, // 81: plugin.PluginService.HandleEndpointRequest:input_type -> plugin.EndpointRequest
+	65, // 82: plugin.PluginService.HandleEndpointRequestStream:input_type -> plugin.EndpointRequest
+	58, // 83: plugin.PluginService.OpenSession:input_type -> plugin.OpenSessionRequest
+	60, // 84: plugin.PluginService.CloseSession:input_type -> plugin.CloseSessionRequest
+	4,  // 85: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
+	6,  // 86: plugin.PluginService.Ping:output_type -> plugin.PingResponse
+	8,  // 87: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
+	11, // 88: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
+	13, // 89: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
+	22, // 90: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
+	24, // 91: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
+	11, // 92: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
+	16, // 93: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
+	18, // 94: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
+	20, // 95: plugin.PluginService.OnStreamComplete:output_type -> plugin.StreamCompleteResponse
+	30, // 96: plugin.PluginService.HandleProxyLog:output_type -> plugin.DataCollectionResponse
+	30, // 97: plugin.PluginService.HandleAnalytics:output_type -> plugin.DataCollectionResponse
+	30, // 98: plugin.PluginService.HandleBudgetUsage:output_type -> plugin.DataCollectionResponse
+	32, // 99: plugin.PluginService.GetAsset:output_type -> plugin.GetAssetResponse
+	34, // 100: plugin.PluginService.ListAssets:output_type -> plugin.ListAssetsResponse
+	37, // 101: plugin.PluginService.GetManifest:output_type -> plugin.GetManifestResponse
+	39, // 102: plugin.PluginService.Call:output_type -> plugin.CallResponse
+	41, // 103: plugin.PluginService.GetConfigSchema:output_type -> plugin.GetConfigSchemaResponse
+	43, // 104: plugin.PluginService.HandleAgentMessage:output_type -> plugin.AgentMessageChunk
+	49, // 105: plugin.PluginService.GetObjectHookRegistrations:output_type -> plugin.GetObjectHookRegistrationsResponse
+	52, // 106: plugin.PluginService.HandleObjectHook:output_type -> plugin.ObjectHookResponse
+	54, // 107: plugin.PluginService.ExecuteScheduledTask:output_type -> plugin.ExecuteScheduledTaskResponse
+	57, // 108: plugin.PluginService.AcceptEdgePayload:output_type -> plugin.EdgePayloadResponse
+	63, // 109: plugin.PluginService.GetEndpointRegistrations:output_type -> plugin.GetEndpointRegistrationsResponse
+	66, // 110: plugin.PluginService.HandleEndpointRequest:output_type -> plugin.EndpointResponse
+	67, // 111: plugin.PluginService.HandleEndpointRequestStream:output_type -> plugin.EndpointResponseChunk
+	59, // 112: plugin.PluginService.OpenSession:output_type -> plugin.OpenSessionResponse
+	61, // 113: plugin.PluginService.CloseSession:output_type -> plugin.CloseSessionResponse
+	85, // [85:114] is the sub-list for method output_type
+	56, // [56:85] is the sub-list for method input_type
+	56, // [56:56] is the sub-list for extension type_name
+	56, // [56:56] is the sub-list for extension extendee
+	0,  // [0:56] is the sub-list for field type_name
 }
 
 func init() { file_plugin_proto_init() }
@@ -4873,8 +5471,8 @@ func file_plugin_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_proto_rawDesc), len(file_plugin_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   80,
+			NumEnums:      3,
+			NumMessages:   90,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
