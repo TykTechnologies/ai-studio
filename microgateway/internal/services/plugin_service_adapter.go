@@ -3,7 +3,9 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 
+	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 )
 
@@ -24,6 +26,27 @@ func NewPluginServiceAdapter(pluginService PluginServiceInterface) *PluginServic
 // SetManagementService sets the management service for LLM queries
 func (a *PluginServiceAdapter) SetManagementService(mgmt ManagementServiceInterface) {
 	a.managementService = mgmt
+}
+
+// convertDBPlugin converts a database.Plugin to plugins.PluginData.
+func (a *PluginServiceAdapter) convertDBPlugin(dbPlugin database.Plugin) plugins.PluginData {
+	configBytes, _ := json.Marshal(dbPlugin.Config)
+
+	var hookTypes []string
+	if len(dbPlugin.HookTypes) > 0 {
+		_ = json.Unmarshal(dbPlugin.HookTypes, &hookTypes)
+	}
+
+	return plugins.PluginData{
+		ID:        dbPlugin.ID,
+		Name:      dbPlugin.Name,
+		HookType:  dbPlugin.HookType,
+		HookTypes: hookTypes,
+		Command:   dbPlugin.Command,
+		Config:    configBytes,
+		Checksum:  dbPlugin.Checksum,
+		IsActive:  dbPlugin.IsActive,
+	}
 }
 
 // GetPlugin implements plugins.PluginServiceInterface
@@ -147,6 +170,45 @@ func (a *PluginServiceAdapter) GetPluginsForLLM(llmID uint) ([]plugins.PluginDat
 			Config:    configBytes,
 			Checksum:  dbPlugin.Checksum,
 			IsActive:  dbPlugin.IsActive,
+		}
+	}
+
+	return result, nil
+}
+
+// GetAllActiveGatewayPlugins implements plugins.PluginServiceInterface.
+// Returns all active plugins that should run on a gateway: LLM-associated plugins
+// plus standalone custom_endpoint plugins, deduplicated by ID.
+func (a *PluginServiceAdapter) GetAllActiveGatewayPlugins() ([]plugins.PluginData, error) {
+	seen := make(map[uint]bool)
+	var result []plugins.PluginData
+
+	// Step 1: get all LLM-associated plugins in a single query
+	dbPlugins, err := a.pluginService.GetAllLLMAssociatedPlugins()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LLM-associated plugins: %w", err)
+	}
+	for _, dbPlugin := range dbPlugins {
+		pd := a.convertDBPlugin(dbPlugin)
+		if !pd.HasAnySupportedGatewayHook() {
+			continue
+		}
+		seen[pd.ID] = true
+		result = append(result, pd)
+	}
+
+	// Step 2: add standalone custom_endpoint plugins
+	allPlugins, err := a.GetAllPlugins()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all plugins: %w", err)
+	}
+	for _, p := range allPlugins {
+		if seen[p.ID] || !p.IsActive {
+			continue
+		}
+		if p.HookType == "custom_endpoint" || p.SupportsHookType("custom_endpoint") {
+			seen[p.ID] = true
+			result = append(result, p)
 		}
 	}
 

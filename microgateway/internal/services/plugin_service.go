@@ -256,6 +256,21 @@ func (s *PluginService) GetPluginsForLLM(llmID uint) ([]database.Plugin, error) 
 	return result, nil
 }
 
+// GetAllLLMAssociatedPlugins returns all active plugins that are linked to at least
+// one active LLM, using a single query with a JOIN to avoid N+1.
+func (s *PluginService) GetAllLLMAssociatedPlugins() ([]database.Plugin, error) {
+	var plugins []database.Plugin
+	err := s.db.
+		Distinct("plugins.*").
+		Joins("JOIN llm_plugins ON llm_plugins.plugin_id = plugins.id AND llm_plugins.is_active = ?", true).
+		Where("plugins.is_active = ? AND plugins.deleted_at IS NULL", true).
+		Find(&plugins).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all LLM-associated plugins: %w", err)
+	}
+	return plugins, nil
+}
+
 // UpdateLLMPlugins updates plugin associations for an LLM
 func (s *PluginService) UpdateLLMPlugins(llmID uint, pluginIDs []uint) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {

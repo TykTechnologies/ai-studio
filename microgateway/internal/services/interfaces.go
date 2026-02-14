@@ -150,6 +150,7 @@ type PluginServiceInterface interface {
 	
 	// LLM associations
 	GetPluginsForLLM(llmID uint) ([]database.Plugin, error)
+	GetAllLLMAssociatedPlugins() ([]database.Plugin, error) // All active plugins linked to any LLM (single query)
 	UpdateLLMPlugins(llmID uint, pluginIDs []uint) error
 	GetLLMPluginConfig(llmID, pluginID uint) (map[string]interface{}, error)
 	

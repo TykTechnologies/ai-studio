@@ -351,6 +351,10 @@ func (s *ProviderAwarePluginService) GetPluginsForLLM(llmID uint) ([]database.Pl
 	return s.provider.GetPluginsForLLM(llmID)
 }
 
+func (s *ProviderAwarePluginService) GetAllLLMAssociatedPlugins() ([]database.Plugin, error) {
+	return s.provider.GetAllLLMAssociatedPlugins()
+}
+
 func (s *ProviderAwarePluginService) UpdateLLMPlugins(llmID uint, pluginIDs []uint) error {
 	return fmt.Errorf("LLM plugin updates not supported on edge instances")
 }
