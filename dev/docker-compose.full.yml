@@ -80,13 +80,14 @@ services:
         echo '  - examples/plugins/';
         echo '  - community/plugins/ (if present)';
         echo '  - enterprise/plugins/ (if present)';
+        echo '  - tyk-internal/plugins/ (if present)';
         echo '';
 
         build_plugins() {
           echo 'Building all plugins...';
 
           # Build from all plugin directories that exist
-          for plugin_root in examples/plugins community/plugins enterprise/plugins; do
+          for plugin_root in examples/plugins community/plugins enterprise/plugins tyk-internal/plugins; do
             if [ -d \"\$$plugin_root\" ]; then
               echo \"Scanning \$$plugin_root...\";
               find \"\$$plugin_root\" -name 'go.mod' 2>/dev/null | while read modfile; do
@@ -118,6 +119,7 @@ services:
         [ -d /app/examples/plugins ] && watch_paths=\"\$$watch_paths /app/examples/plugins\";
         [ -d /app/community/plugins ] && watch_paths=\"\$$watch_paths /app/community/plugins\";
         [ -d /app/enterprise/plugins ] && watch_paths=\"\$$watch_paths /app/enterprise/plugins\";
+        [ -d /app/tyk-internal/plugins ] && watch_paths=\"\$$watch_paths /app/tyk-internal/plugins\";
 
         # Watch for changes and rebuild
         while true; do
