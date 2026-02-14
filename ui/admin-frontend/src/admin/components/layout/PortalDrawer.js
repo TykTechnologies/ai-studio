@@ -1,16 +1,35 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import BaseDrawer from './base-drawer';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
 import useUserEntitlements from '../../hooks/useUserEntitlements';
 import Icon from '../../../components/common/Icon';
+import portalPluginLoaderService from '../../../portal/services/portalPluginLoaderService';
 
 const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
   const { features, loading: featuresLoading } = useSystemFeatures();
-  const { 
-    userEntitlements, 
-    uiOptions, 
-    loading: entitlementsLoading 
+  const {
+    userEntitlements,
+    uiOptions,
+    loading: entitlementsLoading
   } = useUserEntitlements();
+  const [pluginMenuItems, setPluginMenuItems] = useState([]);
+
+  // Load portal plugin sidebar items
+  useEffect(() => {
+    const loadPluginMenuItems = async () => {
+      try {
+        const menuItems = await portalPluginLoaderService.getSidebarMenuItems();
+        setPluginMenuItems(menuItems);
+      } catch (error) {
+        console.error('Failed to load portal plugin menu items:', error);
+      }
+    };
+    loadPluginMenuItems();
+
+    const handlePluginRefresh = () => loadPluginMenuItems();
+    window.addEventListener('portal-plugin-loader-refreshed', handlePluginRefresh);
+    return () => window.removeEventListener('portal-plugin-loader-refreshed', handlePluginRefresh);
+  }, []);
 
   if (featuresLoading || entitlementsLoading) {
     return null;
@@ -87,6 +106,22 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
           }
         ]
       },
+      // Portal plugin sidebar items (dynamically loaded from plugins with portal_ui capability)
+      ...pluginMenuItems.map(pluginSection => ({
+        id: pluginSection.id,
+        text: pluginSection.label,
+        icon: <Icon name="puzzle-piece" />,
+        ...(pluginSection.sub_items && pluginSection.sub_items.length === 1
+          ? { path: pluginSection.sub_items[0].path }
+          : {
+              subItems: (pluginSection.sub_items || []).map(subItem => ({
+                id: subItem.id,
+                text: subItem.text,
+                path: subItem.path,
+              }))
+            }
+        )
+      })),
     ];
   };
 

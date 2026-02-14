@@ -58,6 +58,7 @@ const (
 
 	// AI Studio plugin hook types
 	HookTypeStudioUI       = "studio_ui"        // AI Studio UI extension plugins
+	HookTypePortalUI       = "portal_ui"        // AI Portal UI extension plugins (end-user facing)
 	HookTypeAgent          = "agent"             // AI Studio agent plugins
 	HookTypeObjectHooks    = "object_hooks"      // AI Studio object interaction hooks (CRUD operations)
 	HookTypeCustomEndpoint = "custom_endpoint"   // Custom HTTP endpoints served by plugin
@@ -71,6 +72,7 @@ var validHookTypes = []string{
 	HookTypeOnResponse,
 	HookTypeDataCollection,
 	HookTypeStudioUI,
+	HookTypePortalUI,
 	HookTypeAgent,
 	HookTypeObjectHooks,
 	HookTypeCustomEndpoint,

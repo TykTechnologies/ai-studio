@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: plugin.proto
+// source: proto/plugin.proto
 
 package proto
 
@@ -37,6 +37,7 @@ const (
 	PluginService_ListAssets_FullMethodName                  = "/plugin.PluginService/ListAssets"
 	PluginService_GetManifest_FullMethodName                 = "/plugin.PluginService/GetManifest"
 	PluginService_Call_FullMethodName                        = "/plugin.PluginService/Call"
+	PluginService_PortalCall_FullMethodName                  = "/plugin.PluginService/PortalCall"
 	PluginService_GetConfigSchema_FullMethodName             = "/plugin.PluginService/GetConfigSchema"
 	PluginService_HandleAgentMessage_FullMethodName          = "/plugin.PluginService/HandleAgentMessage"
 	PluginService_GetObjectHookRegistrations_FullMethodName  = "/plugin.PluginService/GetObjectHookRegistrations"
@@ -84,6 +85,9 @@ type PluginServiceClient interface {
 	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
 	// Generic RPC call method (for AI Studio plugins)
 	Call(ctx context.Context, in *CallRequest, opts ...grpc.CallOption) (*CallResponse, error)
+	// Portal RPC call method (for portal-facing plugin endpoints)
+	// Separate from Call to enforce security boundary between admin and portal contexts
+	PortalCall(ctx context.Context, in *PortalCallRequest, opts ...grpc.CallOption) (*PortalCallResponse, error)
 	// Configuration schema method (for both systems)
 	GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error)
 	// Agent Plugin Methods
@@ -295,6 +299,16 @@ func (c *pluginServiceClient) Call(ctx context.Context, in *CallRequest, opts ..
 	return out, nil
 }
 
+func (c *pluginServiceClient) PortalCall(ctx context.Context, in *PortalCallRequest, opts ...grpc.CallOption) (*PortalCallResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PortalCallResponse)
+	err := c.cc.Invoke(ctx, PluginService_PortalCall_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginServiceClient) GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetConfigSchemaResponse)
@@ -457,6 +471,9 @@ type PluginServiceServer interface {
 	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
 	// Generic RPC call method (for AI Studio plugins)
 	Call(context.Context, *CallRequest) (*CallResponse, error)
+	// Portal RPC call method (for portal-facing plugin endpoints)
+	// Separate from Call to enforce security boundary between admin and portal contexts
+	PortalCall(context.Context, *PortalCallRequest) (*PortalCallResponse, error)
 	// Configuration schema method (for both systems)
 	GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error)
 	// Agent Plugin Methods
@@ -541,6 +558,9 @@ func (UnimplementedPluginServiceServer) GetManifest(context.Context, *GetManifes
 }
 func (UnimplementedPluginServiceServer) Call(context.Context, *CallRequest) (*CallResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Call not implemented")
+}
+func (UnimplementedPluginServiceServer) PortalCall(context.Context, *PortalCallRequest) (*PortalCallResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PortalCall not implemented")
 }
 func (UnimplementedPluginServiceServer) GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfigSchema not implemented")
@@ -920,6 +940,24 @@ func _PluginService_Call_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_PortalCall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PortalCallRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).PortalCall(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_PortalCall_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).PortalCall(ctx, req.(*PortalCallRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginService_GetConfigSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetConfigSchemaRequest)
 	if err := dec(in); err != nil {
@@ -1184,6 +1222,10 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _PluginService_Call_Handler,
 		},
 		{
+			MethodName: "PortalCall",
+			Handler:    _PluginService_PortalCall_Handler,
+		},
+		{
 			MethodName: "GetConfigSchema",
 			Handler:    _PluginService_GetConfigSchema_Handler,
 		},
@@ -1232,5 +1274,5 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "plugin.proto",
+	Metadata: "proto/plugin.proto",
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -1645,6 +1646,21 @@ func (a *API) parsePluginManifest(c *gin.Context) {
 		}
 	}
 
+	// Update hook_types from manifest capabilities (if not customized by user)
+	if manifest.Capabilities != nil && !plugin.HookTypesCustomized && len(manifest.Capabilities.Hooks) > 0 {
+		updateReq := &services.UpdatePluginRequest{
+			HookTypes: manifest.Capabilities.Hooks,
+		}
+		if manifest.Capabilities.PrimaryHook != "" {
+			updateReq.HookType = &manifest.Capabilities.PrimaryHook
+		}
+		if _, updateErr := a.service.PluginService.UpdatePlugin(plugin.ID, updateReq); updateErr != nil {
+			log.Printf("Warning: Failed to update plugin hook types from manifest: %v", updateErr)
+		} else {
+			log.Printf("Updated plugin hook_types from manifest: %v", manifest.Capabilities.Hooks)
+		}
+	}
+
 	// Register UI components
 	log.Printf("DEBUG MANIFEST: About to register UI for plugin ID %d, name %s", plugin.ID, plugin.Name)
 	log.Printf("DEBUG MANIFEST: Manifest parsed successfully - ID=%s, Version=%s", manifest.ID, manifest.Version)
@@ -2149,4 +2165,217 @@ func (a *API) refreshPluginConfigSchema(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// ==================== Portal Plugin Handlers ====================
+
+// getPortalUIRegistry returns the portal-scoped UI registry filtered by the user's groups
+func (a *API) getPortalUIRegistry(c *gin.Context) {
+	if a.service.PluginManifestService == nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Error", Detail: "Plugin manifest service not available"}},
+		})
+		return
+	}
+
+	userGroups := extractUserGroupNames(c)
+
+	entries, err := a.service.PluginManifestService.GetPortalUIRegistryForUser(userGroups)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Error", Detail: "Failed to get portal UI registry"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": entries})
+}
+
+// getPortalSidebarMenuItems returns portal sidebar items from plugins filtered by the user's groups
+func (a *API) getPortalSidebarMenuItems(c *gin.Context) {
+	if a.service.PluginManifestService == nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Error", Detail: "Plugin manifest service not available"}},
+		})
+		return
+	}
+
+	userGroups := extractUserGroupNames(c)
+
+	menuItems, err := a.service.PluginManifestService.GetPortalSidebarMenuItemsForUser(userGroups)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Error", Detail: "Failed to get portal sidebar menu items"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": menuItems})
+}
+
+// callPortalPluginRPC calls a plugin's portal RPC method with the authenticated user's context.
+// This endpoint is accessible to all authenticated portal users (not admin-only).
+func (a *API) callPortalPluginRPC(c *gin.Context) {
+	if a.service.AIStudioPluginManager == nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Error", Detail: "Plugin manager not available"}},
+		})
+		return
+	}
+
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid plugin ID"}},
+		})
+		return
+	}
+
+	method := c.Param("method")
+	if method == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Method name is required"}},
+		})
+		return
+	}
+
+	// Extract authenticated user
+	userInterface, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unauthorized", Detail: "User not authenticated"}},
+		})
+		return
+	}
+	user, ok := userInterface.(*models.User)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unauthorized", Detail: "Invalid user context"}},
+		})
+		return
+	}
+
+	// Get request payload
+	var payload map[string]interface{}
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		payload = make(map[string]interface{})
+	}
+
+	// Validate plugin exists and is active
+	plugin, err := a.service.PluginService.GetPlugin(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Plugin not found"}},
+		})
+		return
+	}
+
+	if !plugin.IsActive {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Plugin is not active"}},
+		})
+		return
+	}
+
+	if !a.service.AIStudioPluginManager.IsPluginLoaded(uint(id)) {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "Plugin not loaded"}},
+		})
+		return
+	}
+
+	// Validate plugin supports portal_ui
+	if !plugin.SupportsHookType(models.HookTypePortalUI) {
+		c.JSON(http.StatusForbidden, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "Plugin does not support portal RPC"}},
+		})
+		return
+	}
+
+	// Build portal user context from authenticated user
+	groups := make([]string, 0, len(user.Groups))
+	for _, g := range user.Groups {
+		groups = append(groups, g.Name)
+	}
+	portalUserCtx := &pb.PortalUserContext{
+		UserId:   uint32(user.ID),
+		Email:    user.Email,
+		Name:     user.Name,
+		IsAdmin:  user.IsAdmin,
+		Groups:   groups,
+		Metadata: make(map[string]string),
+	}
+
+	response, err := a.service.AIStudioPluginManager.CallPluginPortalRPC(
+		uint(id), method, payload, portalUserCtx,
+	)
+	if err != nil {
+		log.Printf("Portal plugin RPC error: plugin=%d method=%s error=%v", id, method, err)
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Error", Detail: fmt.Sprintf("Portal RPC call failed: %s", err.Error())}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+// extractUserGroupNames extracts group names from the authenticated user in gin context
+func extractUserGroupNames(c *gin.Context) []string {
+	userInterface, exists := c.Get("user")
+	if !exists {
+		return nil
+	}
+	user, ok := userInterface.(*models.User)
+	if !ok {
+		return nil
+	}
+	groups := make([]string, 0, len(user.Groups))
+	for _, g := range user.Groups {
+		groups = append(groups, g.Name)
+	}
+	return groups
 }

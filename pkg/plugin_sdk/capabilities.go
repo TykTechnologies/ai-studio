@@ -105,6 +105,36 @@ type UIProvider interface {
 	HandleRPC(method string, payload []byte) ([]byte, error)
 }
 
+// PortalUserContext provides information about the authenticated portal user.
+// This is passed to plugins on portal RPC calls so they can make authorization decisions.
+type PortalUserContext struct {
+	UserID   uint32
+	Email    string
+	Name     string
+	IsAdmin  bool
+	Groups   []string
+	Metadata map[string]string
+}
+
+// PortalUIProvider serves portal-facing UI pages and handles portal RPC calls.
+// This is SEPARATE from UIProvider to enforce security boundaries between admin and portal contexts.
+// Plugins can implement both UIProvider (for admin UI) and PortalUIProvider (for portal UI).
+//
+// Note: PortalUIProvider does not include GetAsset/GetManifest - those come from UIProvider.
+// A plugin that wants portal UI must implement both UIProvider (for assets/manifest) and
+// PortalUIProvider (for portal RPC).
+type PortalUIProvider interface {
+	Plugin
+
+	// HandlePortalRPC processes RPC calls from the portal (end-user) UI.
+	// This is SEPARATE from HandleRPC which only handles admin UI calls.
+	// method: The RPC method name (e.g., "submit_feedback", "get_user_data")
+	// payload: JSON payload as bytes from the portal frontend
+	// userCtx: Authenticated portal user context (never nil)
+	// Returns: JSON response as bytes
+	HandlePortalRPC(method string, payload []byte, userCtx *PortalUserContext) ([]byte, error)
+}
+
 // ConfigProvider provides configuration schema for the plugin.
 // This is used by the admin UI to generate configuration forms.
 type ConfigProvider interface {

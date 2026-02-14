@@ -35,7 +35,7 @@ const (
 	DefaultSlug    = "custom-echo-endpoint"
 )
 
-// CustomEchoEndpointPlugin demonstrates combining CustomEndpointHandler + UIProvider + ConfigProvider. And stuff
+// CustomEchoEndpointPlugin demonstrates combining CustomEndpointHandler + UIProvider + ConfigProvider
 //
 //   - CustomEndpointHandler: serves a catch-all HTTP endpoint on the gateway that echoes back
 //     request metadata along with user-configured custom content.

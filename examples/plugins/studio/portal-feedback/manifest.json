@@ -1,0 +1,58 @@
+{
+  "id": "com.example.portal-feedback",
+  "version": "1.0.0",
+  "name": "Portal Feedback",
+  "description": "Example plugin demonstrating portal UI with user feedback form",
+  "capabilities": {
+    "hooks": ["studio_ui", "portal_ui"]
+  },
+  "permissions": {
+    "ui": ["sidebar.register", "route.register"],
+    "portal_ui": ["sidebar.register", "route.register"],
+    "kv": ["read", "write"],
+    "rpc": ["call"]
+  },
+  "ui": {
+    "slots": [
+      {
+        "slot": "sidebar.section",
+        "label": "Feedback Admin",
+        "icon": "feedback",
+        "items": [
+          {
+            "type": "route",
+            "path": "/admin/feedback",
+            "title": "All Feedback",
+            "mount": {
+              "kind": "webc",
+              "tag": "feedback-admin-view",
+              "entry": "/ui/admin-feedback.js"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "portal": {
+    "slots": [
+      {
+        "slot": "portal_sidebar.section",
+        "label": "Feedback",
+        "icon": "feedback",
+        "groups": [],
+        "items": [
+          {
+            "type": "route",
+            "path": "/portal/plugins/feedback",
+            "title": "Send Feedback",
+            "mount": {
+              "kind": "webc",
+              "tag": "feedback-portal-form",
+              "entry": "/ui/portal-feedback.js"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

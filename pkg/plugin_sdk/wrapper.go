@@ -415,6 +415,59 @@ func (w *pluginServerWrapper) Call(ctx context.Context, req *pb.CallRequest) (*p
 	}, nil
 }
 
+// PortalCall implements pb.PluginServiceServer
+// This handles portal-scoped RPC calls (separate from admin Call) with user context.
+func (w *pluginServerWrapper) PortalCall(ctx context.Context, req *pb.PortalCallRequest) (*pb.PortalCallResponse, error) {
+	// Check if plugin provides portal RPC support
+	provider, ok := w.plugin.(PortalUIProvider)
+	if !ok {
+		return &pb.PortalCallResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not support portal RPC calls",
+		}, nil
+	}
+
+	// Set service broker ID if provided (for service API access)
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		stdlog.Printf("[PortalCall] Setting ai_studio_sdk broker ID to %d for portal RPC method %s", req.ServiceBrokerId, req.Method)
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	// Build portal user context from proto
+	var userCtx *PortalUserContext
+	if req.UserContext != nil {
+		userCtx = &PortalUserContext{
+			UserID:   req.UserContext.UserId,
+			Email:    req.UserContext.Email,
+			Name:     req.UserContext.Name,
+			IsAdmin:  req.UserContext.IsAdmin,
+			Groups:   req.UserContext.Groups,
+			Metadata: req.UserContext.Metadata,
+		}
+	} else {
+		// Provide empty context if none passed (should not happen in practice)
+		userCtx = &PortalUserContext{
+			Metadata: make(map[string]string),
+		}
+	}
+
+	payload := []byte(req.Payload)
+
+	// Call the plugin's portal RPC handler
+	response, err := provider.HandlePortalRPC(req.Method, payload, userCtx)
+	if err != nil {
+		return &pb.PortalCallResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.PortalCallResponse{
+		Success: true,
+		Data:    string(response),
+	}, nil
+}
+
 // GetConfigSchema implements pb.PluginServiceServer
 func (w *pluginServerWrapper) GetConfigSchema(ctx context.Context, req *pb.GetConfigSchemaRequest) (*pb.GetConfigSchemaResponse, error) {
 	// Check if plugin provides config schema

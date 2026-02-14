@@ -490,6 +490,12 @@ func (a *API) setupRoutes() {
 	authed.PUT("/api/v1/notifications/:id/read", notificationHandlers.MarkAsRead)
 	authed.PUT("/api/v1/notifications/read-all", notificationHandlers.MarkAllAsRead)
 
+	// Portal plugin routes (any authenticated user, no admin required)
+	authed.GET("/plugins/portal-ui-registry", a.getPortalUIRegistry)
+	authed.GET("/plugins/portal-sidebar-menu", a.getPortalSidebarMenuItems)
+	authed.POST("/plugins/:id/portal-rpc/:method", a.callPortalPluginRPC)
+	authed.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)
+
 	// UGC Submission routes (portal users)
 	authed.POST("/submissions", a.createSubmission)
 	authed.GET("/submissions", a.listMySubmissions)
