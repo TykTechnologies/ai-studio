@@ -432,8 +432,24 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 							var rawMeta map[string]interface{}
 							if err := json.Unmarshal(dbApp.Metadata, &rawMeta); err == nil {
 								for k, v := range rawMeta {
-									if s, ok := v.(string); ok {
-										metadataMap[k] = s
+									switch val := v.(type) {
+									case string:
+										metadataMap[k] = val
+									case float64:
+										if val == float64(int64(val)) {
+											metadataMap[k] = fmt.Sprintf("%d", int64(val))
+										} else {
+											metadataMap[k] = fmt.Sprintf("%g", val)
+										}
+									case bool:
+										metadataMap[k] = fmt.Sprintf("%t", val)
+									case nil:
+										metadataMap[k] = ""
+									default:
+										// Arrays, nested objects → serialize as JSON string
+										if b, err := json.Marshal(val); err == nil {
+											metadataMap[k] = string(b)
+										}
 									}
 								}
 							}
