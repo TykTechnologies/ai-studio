@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,10 +10,12 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -98,8 +101,6 @@ func TestExtractUserGroupNames(t *testing.T) {
 
 // --- callPortalPluginRPC handler tests ---
 
-// setupPortalRPCTest creates a minimal API with real DB, PluginService, and
-// AIStudioPluginManager to test the callPortalPluginRPC handler logic branches.
 func setupPortalRPCTest(t *testing.T) (*API, *gorm.DB) {
 	gin.SetMode(gin.TestMode)
 
@@ -121,7 +122,6 @@ func setupPortalRPCTest(t *testing.T) (*API, *gorm.DB) {
 	return api, db
 }
 
-// makePortalRPCRouter sets up a gin router with optional user injection middleware
 func makePortalRPCRouter(api *API, user *models.User) *gin.Engine {
 	router := gin.New()
 	group := router.Group("/common")
@@ -209,7 +209,7 @@ func TestCallPortalPluginRPC_PluginState(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
-	t.Run("returns 403 for plugin without portal_ui hook type", func(t *testing.T) {
+	t.Run("returns 403 for loaded plugin without portal_ui hook type", func(t *testing.T) {
 		plugin := &models.Plugin{
 			Name:      "No Portal Plugin",
 			Command:   "file:///test/no-portal",
@@ -219,25 +219,23 @@ func TestCallPortalPluginRPC_PluginState(t *testing.T) {
 		}
 		require.NoError(t, db.Create(plugin).Error)
 
-		// We can't easily mock IsPluginLoaded on a real AIStudioPluginManager
-		// but we can verify the hook type check by testing a plugin that
-		// IS in the loaded map. Since we can't load a real plugin in unit tests,
-		// we skip the IsPluginLoaded check by checking the test indirectly:
-		// the handler will return 404 (not loaded) before reaching the 403 check.
+		// Inject as loaded so we get past the IsPluginLoaded check
+		api.service.AIStudioPluginManager.InjectTestPlugin(plugin.ID, plugin.Name, &mockPortalPluginClient{})
+		defer api.service.AIStudioPluginManager.RemoveTestPlugin(plugin.ID)
+
 		router := makePortalRPCRouter(api, user)
 		w := doPortalRPC(router, fmt.Sprintf("%d", plugin.ID), "test_method", map[string]interface{}{})
-		// Returns 404 because plugin isn't loaded - the hook type check comes after
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
 }
 
-func TestCallPortalPluginRPC_AcceptsPayload(t *testing.T) {
+func TestCallPortalPluginRPC_HappyPath(t *testing.T) {
 	api, db := setupPortalRPCTest(t)
 
 	// Create a plugin that supports portal_ui
 	plugin := &models.Plugin{
-		Name:      "Portal Plugin",
-		Command:   "file:///test/portal",
+		Name:      "Portal Happy Plugin",
+		Command:   "file:///test/portal-happy",
 		HookType:  "studio_ui",
 		HookTypes: []string{"studio_ui", "portal_ui"},
 		IsActive:  true,
@@ -250,28 +248,112 @@ func TestCallPortalPluginRPC_AcceptsPayload(t *testing.T) {
 		IsAdmin: false,
 		Groups: []models.Group{
 			{Name: "engineering"},
+			{Name: "premium"},
 		},
 	}
 
-	t.Run("accepts empty payload", func(t *testing.T) {
+	t.Run("successful portal RPC call returns 200 with data", func(t *testing.T) {
+		mockClient := &mockPortalPluginClient{
+			portalCallFn: func(ctx context.Context, req *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+				// Verify the request was constructed correctly
+				assert.Equal(t, "get_user_data", req.Method)
+				assert.NotEmpty(t, req.Payload)
+				assert.NotNil(t, req.UserContext)
+				assert.Equal(t, "portal@example.com", req.UserContext.Email)
+				assert.Equal(t, "Portal User", req.UserContext.Name)
+				assert.False(t, req.UserContext.IsAdmin)
+				assert.ElementsMatch(t, []string{"engineering", "premium"}, req.UserContext.Groups)
+
+				return &pb.PortalCallResponse{
+					Success: true,
+					Data:    `{"message":"hello from plugin","user_id":0}`,
+				}, nil
+			},
+		}
+
+		api.service.AIStudioPluginManager.InjectTestPlugin(plugin.ID, plugin.Name, mockClient)
+		defer api.service.AIStudioPluginManager.RemoveTestPlugin(plugin.ID)
+
 		router := makePortalRPCRouter(api, user)
-		w := doPortalRPC(router, fmt.Sprintf("%d", plugin.ID), "test_method", nil)
-		// Will return 404 (not loaded) but validates payload parsing doesn't fail
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		w := doPortalRPC(router, fmt.Sprintf("%d", plugin.ID), "get_user_data", map[string]interface{}{"key": "value"})
+
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response struct {
+			Data map[string]interface{} `json:"data"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, "hello from plugin", response.Data["message"])
 	})
 
-	t.Run("accepts JSON payload", func(t *testing.T) {
+	t.Run("portal RPC returns 500 when plugin returns error", func(t *testing.T) {
+		mockClient := &mockPortalPluginClient{
+			portalCallFn: func(ctx context.Context, req *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+				return &pb.PortalCallResponse{
+					Success:      false,
+					ErrorMessage: "something went wrong in plugin",
+				}, nil
+			},
+		}
+
+		api.service.AIStudioPluginManager.InjectTestPlugin(plugin.ID, plugin.Name, mockClient)
+		defer api.service.AIStudioPluginManager.RemoveTestPlugin(plugin.ID)
+
 		router := makePortalRPCRouter(api, user)
-		w := doPortalRPC(router, fmt.Sprintf("%d", plugin.ID), "test_method", map[string]interface{}{
-			"title":   "Test Feedback",
-			"message": "Great product!",
-			"rating":  5,
-		})
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		w := doPortalRPC(router, fmt.Sprintf("%d", plugin.ID), "failing_method", map[string]interface{}{})
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("portal RPC works with empty payload", func(t *testing.T) {
+		mockClient := &mockPortalPluginClient{
+			portalCallFn: func(ctx context.Context, req *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+				return &pb.PortalCallResponse{
+					Success: true,
+					Data:    `{"items":[]}`,
+				}, nil
+			},
+		}
+
+		api.service.AIStudioPluginManager.InjectTestPlugin(plugin.ID, plugin.Name, mockClient)
+		defer api.service.AIStudioPluginManager.RemoveTestPlugin(plugin.ID)
+
+		router := makePortalRPCRouter(api, user)
+		w := doPortalRPC(router, fmt.Sprintf("%d", plugin.ID), "list_items", nil)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("admin user can also call portal RPC", func(t *testing.T) {
+		adminUser := &models.User{
+			Email:   "admin@example.com",
+			Name:    "Admin User",
+			IsAdmin: true,
+			Groups:  []models.Group{{Name: "admins"}},
+		}
+
+		mockClient := &mockPortalPluginClient{
+			portalCallFn: func(ctx context.Context, req *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+				assert.True(t, req.UserContext.IsAdmin)
+				return &pb.PortalCallResponse{
+					Success: true,
+					Data:    `{"admin":true}`,
+				}, nil
+			},
+		}
+
+		api.service.AIStudioPluginManager.InjectTestPlugin(plugin.ID, plugin.Name, mockClient)
+		defer api.service.AIStudioPluginManager.RemoveTestPlugin(plugin.ID)
+
+		router := makePortalRPCRouter(api, adminUser)
+		w := doPortalRPC(router, fmt.Sprintf("%d", plugin.ID), "admin_test", map[string]interface{}{})
+
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 }
 
-// --- Portal UI registry and sidebar endpoint tests ---
+// --- Portal UI registry endpoint tests via full router ---
 
 func TestPortalUIRegistryEndpoints_ViaFullRouter(t *testing.T) {
 	api, _ := setupTestAPI(t)
@@ -285,4 +367,110 @@ func TestPortalUIRegistryEndpoints_ViaFullRouter(t *testing.T) {
 		w := performRequest(api.router, "POST", "/common/plugins/99999/portal-rpc/test_method", map[string]interface{}{})
 		assert.NotEqual(t, http.StatusOK, w.Code)
 	})
+}
+
+// --- Mock plugin client for testing ---
+
+// mockPortalPluginClient implements pb.PluginServiceClient with a configurable
+// PortalCall handler for testing the happy path.
+type mockPortalPluginClient struct {
+	pb.UnimplementedPluginServiceServer // Embed for all unimplemented methods
+	portalCallFn                        func(ctx context.Context, req *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error)
+}
+
+// PortalCall delegates to the test-provided function
+func (m *mockPortalPluginClient) PortalCall(ctx context.Context, req *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+	if m.portalCallFn != nil {
+		return m.portalCallFn(ctx, req, opts...)
+	}
+	return &pb.PortalCallResponse{Success: true, Data: `{}`}, nil
+}
+
+// Stub methods required by pb.PluginServiceClient interface
+func (m *mockPortalPluginClient) Initialize(ctx context.Context, in *pb.InitRequest, opts ...grpc.CallOption) (*pb.InitResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) Ping(ctx context.Context, in *pb.PingRequest, opts ...grpc.CallOption) (*pb.PingResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) Shutdown(ctx context.Context, in *pb.ShutdownRequest, opts ...grpc.CallOption) (*pb.ShutdownResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) ProcessPreAuth(ctx context.Context, in *pb.PluginRequest, opts ...grpc.CallOption) (*pb.PluginResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) Authenticate(ctx context.Context, in *pb.AuthRequest, opts ...grpc.CallOption) (*pb.AuthResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) GetAppByCredential(ctx context.Context, in *pb.GetAppRequest, opts ...grpc.CallOption) (*pb.GetAppResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) GetUserByCredential(ctx context.Context, in *pb.GetUserRequest, opts ...grpc.CallOption) (*pb.GetUserResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) ProcessPostAuth(ctx context.Context, in *pb.EnrichedRequest, opts ...grpc.CallOption) (*pb.PluginResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) OnBeforeWriteHeaders(ctx context.Context, in *pb.HeadersRequest, opts ...grpc.CallOption) (*pb.HeadersResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) OnBeforeWrite(ctx context.Context, in *pb.ResponseWriteRequest, opts ...grpc.CallOption) (*pb.ResponseWriteResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) OnStreamComplete(ctx context.Context, in *pb.StreamCompleteRequest, opts ...grpc.CallOption) (*pb.StreamCompleteResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) HandleProxyLog(ctx context.Context, in *pb.ProxyLogRequest, opts ...grpc.CallOption) (*pb.DataCollectionResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) HandleAnalytics(ctx context.Context, in *pb.AnalyticsRequest, opts ...grpc.CallOption) (*pb.DataCollectionResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) HandleBudgetUsage(ctx context.Context, in *pb.BudgetUsageRequest, opts ...grpc.CallOption) (*pb.DataCollectionResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) GetAsset(ctx context.Context, in *pb.GetAssetRequest, opts ...grpc.CallOption) (*pb.GetAssetResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) ListAssets(ctx context.Context, in *pb.ListAssetsRequest, opts ...grpc.CallOption) (*pb.ListAssetsResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) GetManifest(ctx context.Context, in *pb.GetManifestRequest, opts ...grpc.CallOption) (*pb.GetManifestResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) Call(ctx context.Context, in *pb.CallRequest, opts ...grpc.CallOption) (*pb.CallResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) GetConfigSchema(ctx context.Context, in *pb.GetConfigSchemaRequest, opts ...grpc.CallOption) (*pb.GetConfigSchemaResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) HandleAgentMessage(ctx context.Context, in *pb.AgentMessageRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.AgentMessageChunk], error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) GetObjectHookRegistrations(ctx context.Context, in *pb.GetObjectHookRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetObjectHookRegistrationsResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) HandleObjectHook(ctx context.Context, in *pb.ObjectHookRequest, opts ...grpc.CallOption) (*pb.ObjectHookResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) ExecuteScheduledTask(ctx context.Context, in *pb.ExecuteScheduledTaskRequest, opts ...grpc.CallOption) (*pb.ExecuteScheduledTaskResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) AcceptEdgePayload(ctx context.Context, in *pb.EdgePayloadRequest, opts ...grpc.CallOption) (*pb.EdgePayloadResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) OpenSession(ctx context.Context, in *pb.OpenSessionRequest, opts ...grpc.CallOption) (*pb.OpenSessionResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) CloseSession(ctx context.Context, in *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) GetEndpointRegistrations(ctx context.Context, in *pb.GetEndpointRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetEndpointRegistrationsResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) HandleEndpointRequest(ctx context.Context, in *pb.EndpointRequest, opts ...grpc.CallOption) (*pb.EndpointResponse, error) {
+	return nil, nil
+}
+func (m *mockPortalPluginClient) HandleEndpointRequestStream(ctx context.Context, in *pb.EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.EndpointResponseChunk], error) {
+	return nil, nil
 }
