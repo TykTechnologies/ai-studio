@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api/handlers"
@@ -19,6 +20,41 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
+
+// --- App cache for custom plugin endpoints ---
+
+const appCacheTTL = 30 * time.Second // How long App objects are cached
+
+type cachedAppEntry struct {
+	app       *pb.App
+	expiresAt time.Time
+}
+
+// pluginAppCache caches pb.App objects by AppID to avoid hitting the DB on every
+// authenticated request to a custom plugin endpoint. TTL-based expiry ensures
+// changes to App config propagate within a bounded time.
+type pluginAppCache struct {
+	mu    sync.RWMutex
+	items map[uint]*cachedAppEntry
+}
+
+var endpointAppCache = &pluginAppCache{items: make(map[uint]*cachedAppEntry)}
+
+func (c *pluginAppCache) get(appID uint) (*pb.App, bool) {
+	c.mu.RLock()
+	entry, ok := c.items[appID]
+	c.mu.RUnlock()
+	if !ok || time.Now().After(entry.expiresAt) {
+		return nil, false
+	}
+	return entry.app, true
+}
+
+func (c *pluginAppCache) set(appID uint, app *pb.App) {
+	c.mu.Lock()
+	c.items[appID] = &cachedAppEntry{app: app, expiresAt: time.Now().Add(appCacheTTL)}
+	c.mu.Unlock()
+}
 
 // RequestIDMiddleware generates a canonical request ID for every request
 // This MUST be the first middleware in the chain to ensure all downstream code uses the same ID
@@ -382,34 +418,39 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 			endpointReq.Authenticated = true
 			endpointReq.Scopes = authResult.Scopes
 
-			// Fetch the full App object for the plugin
-			if config.Services != nil && config.Services.Management != nil && authResult.AppID > 0 {
-				dbApp, err := config.Services.Management.GetApp(authResult.AppID)
-				if err != nil {
-					log.Warn().Uint("app_id", authResult.AppID).Err(err).Msg("Failed to fetch app for plugin endpoint auth context")
-				} else if dbApp != nil {
-					// Convert metadata JSON to map
-					metadataMap := make(map[string]string)
-					if dbApp.Metadata != nil {
-						var rawMeta map[string]interface{}
-						if err := json.Unmarshal(dbApp.Metadata, &rawMeta); err == nil {
-							for k, v := range rawMeta {
-								if s, ok := v.(string); ok {
-									metadataMap[k] = s
+			// Fetch the full App object for the plugin (cached, 30s TTL)
+			if authResult.AppID > 0 {
+				if cached, ok := endpointAppCache.get(authResult.AppID); ok {
+					endpointReq.App = cached
+				} else if config.Services != nil && config.Services.Management != nil {
+					dbApp, err := config.Services.Management.GetApp(authResult.AppID)
+					if err != nil {
+						log.Warn().Uint("app_id", authResult.AppID).Err(err).Msg("Failed to fetch app for plugin endpoint auth context")
+					} else if dbApp != nil {
+						metadataMap := make(map[string]string)
+						if dbApp.Metadata != nil {
+							var rawMeta map[string]interface{}
+							if err := json.Unmarshal(dbApp.Metadata, &rawMeta); err == nil {
+								for k, v := range rawMeta {
+									if s, ok := v.(string); ok {
+										metadataMap[k] = s
+									}
 								}
 							}
 						}
-					}
 
-					endpointReq.App = &pb.App{
-						Id:            uint32(dbApp.ID),
-						Name:          dbApp.Name,
-						Description:   dbApp.Description,
-						OwnerEmail:    dbApp.OwnerEmail,
-						IsActive:      dbApp.IsActive,
-						MonthlyBudget: dbApp.MonthlyBudget,
-						RateLimit:     int32(dbApp.RateLimitRPM),
-						Metadata:      metadataMap,
+						pbApp := &pb.App{
+							Id:            uint32(dbApp.ID),
+							Name:          dbApp.Name,
+							Description:   dbApp.Description,
+							OwnerEmail:    dbApp.OwnerEmail,
+							IsActive:      dbApp.IsActive,
+							MonthlyBudget: dbApp.MonthlyBudget,
+							RateLimit:     int32(dbApp.RateLimitRPM),
+							Metadata:      metadataMap,
+						}
+						endpointAppCache.set(authResult.AppID, pbApp)
+						endpointReq.App = pbApp
 					}
 				}
 			}
