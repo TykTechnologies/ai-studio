@@ -397,6 +397,8 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 		}
 
 		// Handle authentication if required
+		// Uses the same GatewayService.ValidateAPIToken path as the LLM/Tool/Datasource proxy
+		// to ensure consistent token validation across all gateway endpoints.
 		if route.RequireAuth {
 			token := extractBearerToken(c)
 			if token == "" {
@@ -404,29 +406,22 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 				return
 			}
 
-			authResult, err := config.AuthProvider.ValidateToken(token)
-			if err != nil || !authResult.Valid {
-				errMsg := "invalid token"
-				if err != nil {
-					errMsg = err.Error()
-				} else if authResult.Error != "" {
-					errMsg = authResult.Error
-				}
-				c.JSON(http.StatusUnauthorized, gin.H{"error": errMsg})
+			tokenResult, err := config.Services.GatewayService.ValidateAPIToken(token)
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 				return
 			}
 
 			endpointReq.Authenticated = true
-			endpointReq.Scopes = authResult.Scopes
 
 			// Fetch the full App object for the plugin (cached, 30s TTL)
-			if authResult.AppID > 0 {
-				if cached, ok := endpointAppCache.get(authResult.AppID); ok {
+			if tokenResult.AppID > 0 {
+				if cached, ok := endpointAppCache.get(tokenResult.AppID); ok {
 					endpointReq.App = cached
 				} else if config.Services != nil && config.Services.Management != nil {
-					dbApp, err := config.Services.Management.GetApp(authResult.AppID)
+					dbApp, err := config.Services.Management.GetApp(tokenResult.AppID)
 					if err != nil {
-						log.Warn().Uint("app_id", authResult.AppID).Err(err).Msg("Failed to fetch app for plugin endpoint auth context")
+						log.Warn().Uint("app_id", tokenResult.AppID).Err(err).Msg("Failed to fetch app for plugin endpoint auth context")
 					} else if dbApp != nil {
 						metadataMap := make(map[string]string)
 						if dbApp.Metadata != nil {
@@ -466,7 +461,7 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 							RateLimit:     int32(dbApp.RateLimitRPM),
 							Metadata:      metadataMap,
 						}
-						endpointAppCache.set(authResult.AppID, pbApp)
+						endpointAppCache.set(tokenResult.AppID, pbApp)
 						endpointReq.App = pbApp
 					}
 				}

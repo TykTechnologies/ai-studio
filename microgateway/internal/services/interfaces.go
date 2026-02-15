@@ -29,6 +29,10 @@ type GatewayServiceInterface interface {
 	// ValidateAppAccess validates if app can access the specified LLM
 	ValidateAppAccess(appID uint, llmSlug string) error
 
+	// ValidateAPIToken validates an API token and returns token information
+	// Used by both the LLM proxy and custom endpoint authentication
+	ValidateAPIToken(token string) (*TokenValidationResult, error)
+
 	// Reload reloads the gateway configuration
 	Reload() error
 }
