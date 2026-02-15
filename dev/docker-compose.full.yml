@@ -53,6 +53,8 @@ services:
       ENCRYPTION_KEY: ${MICROGATEWAY_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
       # License from main .env (if enterprise)
       TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT: ${OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT:-}
+      OCI_PLUGINS_CACHE_DIR: /app/oci-cache
     depends_on:
       studio:
         condition: service_healthy

@@ -20,6 +20,15 @@ func InitModels(db *gorm.DB) error {
 		}
 	}
 
+	// Migration: Drop orphaned slug column from plugins table
+	// The slug field was removed from the Plugin model but the column remained
+	// in the database with a NOT NULL constraint, causing INSERT failures.
+	if db.Migrator().HasColumn(&Plugin{}, "slug") {
+		if err := db.Migrator().DropColumn(&Plugin{}, "slug"); err != nil {
+			// Log but don't fail - column might already be dropped
+		}
+	}
+
 	if err := db.AutoMigrate(
 		&User{},      //Done
 		&Group{},     //Done

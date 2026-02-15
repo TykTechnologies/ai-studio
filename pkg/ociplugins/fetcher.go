@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -191,6 +192,11 @@ func (f *ORASFetcher) configureAuth(repo *remote.Repository, registry, authConfi
 	var authConfig RegistryAuth
 	var exists bool
 
+	fmt.Printf("[OCI Auth] configureAuth: registry=%q authConfigName=%q available_auths=%d\n", registry, authConfigName, len(f.config.RegistryAuth))
+	for k := range f.config.RegistryAuth {
+		fmt.Printf("[OCI Auth]   available key: %q\n", k)
+	}
+
 	if authConfigName != "" {
 		authConfig, exists = f.config.RegistryAuth[authConfigName]
 	} else {
@@ -199,14 +205,37 @@ func (f *ORASFetcher) configureAuth(repo *remote.Repository, registry, authConfi
 	}
 
 	if !exists {
-		// No auth configured, continue with anonymous access
+		fmt.Printf("[OCI Auth] NO auth found for registry %q - using anonymous access\n", registry)
 		return nil
 	}
 
+	fmt.Printf("[OCI Auth] auth found: entitlement=%t entitlementEnv=%t token=%t username=%t\n",
+		authConfig.Entitlement != "", authConfig.EntitlementEnv != "", authConfig.Token != "", authConfig.Username != "")
+
 	// Create credential function
 	var creds auth.Credential
-	if authConfig.Token != "" || authConfig.TokenEnv != "" {
-		// Token-based authentication
+	if authConfig.Entitlement != "" || authConfig.EntitlementEnv != "" {
+		// Entitlement token authentication (e.g. Cloudsmith)
+		// Sent as basic auth with username "token" and the entitlement token as password
+		entitlement := authConfig.Entitlement
+		if authConfig.EntitlementEnv != "" {
+			entitlement = os.Getenv(authConfig.EntitlementEnv)
+		}
+		if entitlement == "" {
+			return fmt.Errorf("entitlement token authentication configured but token is empty")
+		}
+
+		username := authConfig.EntitlementUsername
+		if username == "" {
+			username = "token"
+		}
+
+		creds = auth.Credential{
+			Username: username,
+			Password: entitlement,
+		}
+	} else if authConfig.Token != "" || authConfig.TokenEnv != "" {
+		// Token-based authentication (OAuth2 style)
 		token := authConfig.Token
 		if authConfig.TokenEnv != "" {
 			token = os.Getenv(authConfig.TokenEnv)
@@ -235,14 +264,41 @@ func (f *ORASFetcher) configureAuth(repo *remote.Repository, registry, authConfi
 		}
 	}
 
-	// Configure repository client with credentials
-	repo.Client = &auth.Client{
-		Credential: func(ctx context.Context, hostport string) (auth.Credential, error) {
-			return creds, nil
-		},
+	// For entitlement auth (e.g. Cloudsmith), bypass the Docker token exchange
+	// entirely and send Basic auth on every request. This avoids issues where
+	// Cloudsmith's token endpoint requests multiple scopes (including namespace-level
+	// scopes) that a repository-scoped entitlement cannot satisfy.
+	if authConfig.Entitlement != "" || authConfig.EntitlementEnv != "" {
+		repo.Client = &basicAuthHTTPClient{
+			username: creds.Username,
+			password: creds.Password,
+			inner:    http.DefaultClient,
+		}
+	} else {
+		// Standard Docker token exchange for username/password and token auth
+		repo.Client = &auth.Client{
+			Credential: func(ctx context.Context, hostport string) (auth.Credential, error) {
+				return creds, nil
+			},
+		}
 	}
 
 	return nil
+}
+
+// basicAuthHTTPClient is an http.Client wrapper that injects Basic auth on every request,
+// bypassing the Docker V2 token exchange. Required for registries like Cloudsmith
+// where entitlement tokens are repository-scoped and the token exchange requests
+// additional namespace-level scopes that the entitlement cannot satisfy.
+type basicAuthHTTPClient struct {
+	username string
+	password string
+	inner    *http.Client
+}
+
+func (c *basicAuthHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	req.SetBasicAuth(c.username, c.password)
+	return c.inner.Do(req)
 }
 
 // extractBinary finds and extracts the plugin binary from the manifest layers
