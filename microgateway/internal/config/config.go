@@ -129,6 +129,10 @@ type HubSpokeConfig struct {
 	TokenCacheTTL        time.Duration `env:"EDGE_TOKEN_CACHE_TTL" envDefault:"5m"`
 	TokenCacheMaxSize    int           `env:"EDGE_TOKEN_CACHE_MAX_SIZE" envDefault:"1000"`
 	TokenCacheCleanupInt time.Duration `env:"EDGE_TOKEN_CACHE_CLEANUP_INTERVAL" envDefault:"1m"`
+
+	// gRPC message size limits (bytes). Default 16MB.
+	// Increase if config snapshots exceed the limit (many plugins, LLMs, tools, apps).
+	MaxMessageSize int `env:"GRPC_MAX_MESSAGE_SIZE" envDefault:"16777216"` // 16MB
 }
 
 // ControlPayloadConfig holds configuration for edge-to-control plugin data transmission

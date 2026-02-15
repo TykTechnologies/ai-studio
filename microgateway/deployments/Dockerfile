@@ -72,7 +72,12 @@ RUN apk add --no-cache \
     tzdata \
     sqlite \
     wget \
-    curl
+    curl && \
+    # Install cosign for OCI plugin signature verification (Enterprise)
+    COSIGN_VERSION=2.4.1 && \
+    ARCH=$(uname -m | sed 's/aarch64/arm64/' | sed 's/x86_64/amd64/') && \
+    wget -q "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-${ARCH}" -O /usr/local/bin/cosign && \
+    chmod +x /usr/local/bin/cosign
 
 # Create non-root user
 RUN addgroup -g 1000 gateway && \

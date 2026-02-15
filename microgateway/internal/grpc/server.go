@@ -125,7 +125,16 @@ func (s *ControlServer) Start() error {
 	// Add authentication interceptor
 	opts = append(opts, grpc.UnaryInterceptor(s.authInterceptor))
 	opts = append(opts, grpc.StreamInterceptor(s.streamAuthInterceptor))
-	
+
+	// Configure max message sizes (default 16MB, configurable via GRPC_MAX_MESSAGE_SIZE)
+	// Config snapshots can exceed the gRPC default of 4MB with many plugins, LLMs, tools, and apps
+	maxMsgSize := s.config.HubSpoke.MaxMessageSize
+	if maxMsgSize <= 0 {
+		maxMsgSize = 16 * 1024 * 1024 // 16MB fallback
+	}
+	opts = append(opts, grpc.MaxSendMsgSize(maxMsgSize))
+	opts = append(opts, grpc.MaxRecvMsgSize(maxMsgSize))
+
 	// Create gRPC server
 	s.grpcServer = grpc.NewServer(opts...)
 	pb.RegisterConfigurationSyncServiceServer(s.grpcServer, s)
