@@ -16,11 +16,10 @@ module.exports = function(app) {
 
   // Proxy all API routes to the backend
   app.use(
-    ['/api', '/auth', '/common', '/ws', '/csrf-token', '/health'],
+    ['/api', '/auth', '/common', '/csrf-token', '/health'],
     createProxyMiddleware({
       target: target,
       changeOrigin: true,
-      ws: true, // Enable WebSocket proxy
       onError: (err, req, res) => {
         console.error(`[setupProxy] Proxy error: ${err.message}`);
       },

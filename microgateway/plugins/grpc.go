@@ -168,6 +168,10 @@ func (c *MicrogatewayPluginClient) Call(ctx context.Context, req *pb.CallRequest
 	return c.pluginStub.Call(ctx, req, opts...)
 }
 
+func (c *MicrogatewayPluginClient) PortalCall(ctx context.Context, req *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+	return c.pluginStub.PortalCall(ctx, req, opts...)
+}
+
 func (c *MicrogatewayPluginClient) ProcessPreAuth(ctx context.Context, req *pb.PluginRequest, opts ...grpc.CallOption) (*pb.PluginResponse, error) {
 	return c.pluginStub.ProcessPreAuth(ctx, req, opts...)
 }
@@ -241,4 +245,19 @@ func (c *MicrogatewayPluginClient) OpenSession(ctx context.Context, req *pb.Open
 // CloseSession explicitly closes an active session.
 func (c *MicrogatewayPluginClient) CloseSession(ctx context.Context, req *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
 	return c.pluginStub.CloseSession(ctx, req, opts...)
+}
+
+// GetEndpointRegistrations queries the plugin for custom endpoint registrations.
+func (c *MicrogatewayPluginClient) GetEndpointRegistrations(ctx context.Context, req *pb.GetEndpointRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetEndpointRegistrationsResponse, error) {
+	return c.pluginStub.GetEndpointRegistrations(ctx, req, opts...)
+}
+
+// HandleEndpointRequest forwards an HTTP request to the plugin's custom endpoint handler.
+func (c *MicrogatewayPluginClient) HandleEndpointRequest(ctx context.Context, req *pb.EndpointRequest, opts ...grpc.CallOption) (*pb.EndpointResponse, error) {
+	return c.pluginStub.HandleEndpointRequest(ctx, req, opts...)
+}
+
+// HandleEndpointRequestStream forwards a streaming HTTP request to the plugin.
+func (c *MicrogatewayPluginClient) HandleEndpointRequestStream(ctx context.Context, req *pb.EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.EndpointResponseChunk], error) {
+	return c.pluginStub.HandleEndpointRequestStream(ctx, req, opts...)
 }

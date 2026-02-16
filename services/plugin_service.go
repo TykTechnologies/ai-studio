@@ -494,6 +494,7 @@ func isValidHookType(hookType string) bool {
 		models.HookTypeStudioUI,
 		models.HookTypeAgent,
 		models.HookTypeObjectHooks,
+		models.HookTypeCustomEndpoint,
 	}
 	for _, validType := range validTypes {
 		if hookType == validType {

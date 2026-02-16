@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
@@ -263,6 +265,53 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	}
 
 	return app, nil
+}
+
+// PatchAppMetadata atomically updates a single metadata key on an app.
+// If deleteKey is true, the key is removed. Otherwise, the value (JSON string) is set.
+// Uses a database transaction for safe concurrent access. PostgreSQL uses FOR UPDATE
+// row locking; SQLite serializes transactions implicitly.
+func (s *Service) PatchAppMetadata(appID uint, key, value string, deleteKey bool) (map[string]interface{}, error) {
+	var resultMetadata map[string]interface{}
+
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		var app models.App
+		query := tx
+		// Use FOR UPDATE row locking on PostgreSQL; skip on SQLite (not supported)
+		if s.DB.Dialector.Name() == "postgres" {
+			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+		}
+		if err := query.First(&app, appID).Error; err != nil {
+			return err
+		}
+
+		if app.Metadata == nil {
+			app.Metadata = make(map[string]interface{})
+		}
+
+		if deleteKey {
+			delete(app.Metadata, key)
+		} else {
+			// Parse the JSON value to store typed data
+			var parsed interface{}
+			if err := json.Unmarshal([]byte(value), &parsed); err != nil {
+				// If not valid JSON, store as plain string
+				app.Metadata[key] = value
+			} else {
+				app.Metadata[key] = parsed
+			}
+		}
+
+		// Use Save to properly trigger GORM's JSON serializer for the metadata field
+		if err := tx.Save(&app).Error; err != nil {
+			return err
+		}
+
+		resultMetadata = app.Metadata
+		return nil
+	})
+
+	return resultMetadata, err
 }
 
 // Helper function to convert string IDs to uint IDs
@@ -702,9 +751,13 @@ func (s *Service) SearchApps(searchTerm string, pageSize, pageNumber int, all bo
 }
 
 // ListAppsWithFilters returns a paginated list of apps with namespace and active status filtering
-func (s *Service) ListAppsWithFilters(pageSize, pageNumber int, all bool, sort, namespace string, isActive *bool) (models.Apps, int64, int, error) {
+func (s *Service) ListAppsWithFilters(pageSize, pageNumber int, all bool, sort, namespace string, isActive *bool, userID ...uint) (models.Apps, int64, int, error) {
 	var apps models.Apps
-	totalCount, totalPages, err := apps.ListWithFilters(s.DB, pageSize, pageNumber, all, sort, namespace, isActive)
+	var userIDPtr *uint
+	if len(userID) > 0 && userID[0] > 0 {
+		userIDPtr = &userID[0]
+	}
+	totalCount, totalPages, err := apps.ListWithFilters(s.DB, pageSize, pageNumber, all, sort, namespace, isActive, userIDPtr)
 	return apps, totalCount, totalPages, err
 }
 

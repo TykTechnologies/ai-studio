@@ -66,16 +66,19 @@ Tyk AI Studio uses a checksum-based system to track configuration synchronizatio
 The configuration checksum includes objects that need to be synchronized to edge gateways for request processing:
 
 - **LLM Configurations** - AI provider settings and credentials
+- **Tools** - REST API tool configurations with OpenAPI specs and encrypted auth keys
+- **Datasources** - Vector store configurations with encrypted connection strings and embedder credentials
 - **Filters** - Request/response processing rules
 - **Plugins** - Gateway plugin configurations
 - **Model Prices** - Cost tracking configurations
 - **Model Routers** - Request routing rules (Enterprise)
+- **OAuth Clients & Access Tokens** - MCP authentication state for tool access via OAuth
 
 Any create, update, or delete operation on these objects triggers a checksum recalculation.
 
 ### Apps and Credentials
 
-**Apps** are synced as part of the configuration snapshot but are **not** included in the checksum calculation. This is because Apps change frequently (users create and update them regularly), and including them in the checksum would cause unnecessary sync churn.
+**Apps** are synced as part of the configuration snapshot but are **not** included in the checksum calculation. This is because Apps change frequently (users create and update them regularly), and including them in the checksum would cause unnecessary sync churn. App associations (LLM access, tool access, datasource access) are included in the snapshot to enable access control on edges.
 
 **Credentials** (access tokens) are **not** pulled during the initial configuration snapshot. Instead, Microgateways use a **pull-on-miss** caching strategy:
 
@@ -84,8 +87,6 @@ Any create, update, or delete operation on these objects triggers a checksum rec
 3. This ensures the admin retains ongoing control — disabling a credential in AI Studio takes effect as soon as the gateway's cache expires or the next pull-on-miss occurs.
 
 This approach balances performance (no need to sync every credential change) with security (admin can revoke access without waiting for a full config push).
-
-> **Note:** Tools and Datasources are used by AI Studio's chat functionality and RAG system respectively. They are not proxied by edge gateways and are not part of the edge gateway configuration. See [Architecture Overview](./architecture.md) for details on this design decision.
 
 ### Sync Status Values
 

@@ -254,6 +254,10 @@ func (c *AIStudioPluginClient) Call(ctx context.Context, req *pb.CallRequest, op
 	return c.pluginStub.Call(ctx, req, opts...)
 }
 
+func (c *AIStudioPluginClient) PortalCall(ctx context.Context, req *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+	return c.pluginStub.PortalCall(ctx, req, opts...)
+}
+
 func (c *AIStudioPluginClient) GetAsset(ctx context.Context, req *pb.GetAssetRequest, opts ...grpc.CallOption) (*pb.GetAssetResponse, error) {
 	return c.pluginStub.GetAsset(ctx, req, opts...)
 }
@@ -343,6 +347,21 @@ func (c *AIStudioPluginClient) OpenSession(ctx context.Context, req *pb.OpenSess
 // CloseSession explicitly closes an active session.
 func (c *AIStudioPluginClient) CloseSession(ctx context.Context, req *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
 	return c.pluginStub.CloseSession(ctx, req, opts...)
+}
+
+// GetEndpointRegistrations queries the plugin for custom endpoint registrations.
+func (c *AIStudioPluginClient) GetEndpointRegistrations(ctx context.Context, req *pb.GetEndpointRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetEndpointRegistrationsResponse, error) {
+	return c.pluginStub.GetEndpointRegistrations(ctx, req, opts...)
+}
+
+// HandleEndpointRequest forwards an HTTP request to the plugin's custom endpoint handler.
+func (c *AIStudioPluginClient) HandleEndpointRequest(ctx context.Context, req *pb.EndpointRequest, opts ...grpc.CallOption) (*pb.EndpointResponse, error) {
+	return c.pluginStub.HandleEndpointRequest(ctx, req, opts...)
+}
+
+// HandleEndpointRequestStream forwards a streaming HTTP request to the plugin.
+func (c *AIStudioPluginClient) HandleEndpointRequestStream(ctx context.Context, req *pb.EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.EndpointResponseChunk], error) {
+	return c.pluginStub.HandleEndpointRequestStream(ctx, req, opts...)
 }
 
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
@@ -1204,6 +1223,68 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 	var responseData interface{}
 	if err := json.Unmarshal([]byte(resp.Data), &responseData); err != nil {
 		// If not valid JSON, return as string
+		return resp.Data, nil
+	}
+
+	return responseData, nil
+}
+
+// CallPluginPortalRPC calls a plugin's portal RPC method via gRPC with user context.
+// This is the portal-scoped equivalent of CallPluginRPC, using PortalCall instead of Call.
+func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string, payload map[string]interface{}, userCtx *pb.PortalUserContext) (interface{}, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if !loadedPlugin.IsHealthy {
+		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal portal RPC payload: %w", err)
+	}
+
+	serviceBrokerID := loadedPlugin.SessionBrokerID
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("method", method).
+		Uint32("session_broker_id", serviceBrokerID).
+		Uint32("user_id", userCtx.GetUserId()).
+		Msg("Calling plugin portal RPC")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := loadedPlugin.GRPCClient.PortalCall(ctx, &pb.PortalCallRequest{
+		Method:          method,
+		Payload:         string(payloadBytes),
+		ServiceBrokerId: serviceBrokerID,
+		UserContext:     userCtx,
+	})
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("method", method).
+		Bool("success", resp != nil && resp.Success).
+		Err(err).
+		Msg("Plugin portal RPC returned")
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to call plugin portal RPC method: %w", err)
+	}
+
+	if !resp.Success {
+		return nil, fmt.Errorf("plugin portal RPC call failed: %s", resp.ErrorMessage)
+	}
+
+	var responseData interface{}
+	if err := json.Unmarshal([]byte(resp.Data), &responseData); err != nil {
 		return resp.Data, nil
 	}
 

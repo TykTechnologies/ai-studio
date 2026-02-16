@@ -28,6 +28,7 @@ func TestManifestScopeExtraction(t *testing.T) {
 				RPC         []string `json:"rpc"`
 				Routes      []string `json:"routes"`
 				UI          []string `json:"ui"`
+				PortalUI    []string `json:"portal_ui"`
 				Services    []string `json:"services"`
 				ObjectHooks []string `json:"object_hooks"`
 			}{
@@ -65,6 +66,7 @@ func TestManifestScopeExtraction(t *testing.T) {
 				RPC         []string `json:"rpc"`
 				Routes      []string `json:"routes"`
 				UI          []string `json:"ui"`
+				PortalUI    []string `json:"portal_ui"`
 				Services    []string `json:"services"`
 				ObjectHooks []string `json:"object_hooks"`
 			}{
@@ -93,6 +95,7 @@ func TestManifestScopeExtraction(t *testing.T) {
 				RPC         []string `json:"rpc"`
 				Routes      []string `json:"routes"`
 				UI          []string `json:"ui"`
+				PortalUI    []string `json:"portal_ui"`
 				Services    []string `json:"services"`
 				ObjectHooks []string `json:"object_hooks"`
 			}{
@@ -117,6 +120,7 @@ func TestManifestScopeExtraction(t *testing.T) {
 				RPC         []string `json:"rpc"`
 				Routes      []string `json:"routes"`
 				UI          []string `json:"ui"`
+				PortalUI    []string `json:"portal_ui"`
 				Services    []string `json:"services"`
 				ObjectHooks []string `json:"object_hooks"`
 			}{
@@ -136,6 +140,7 @@ func TestManifestScopeExtraction(t *testing.T) {
 				RPC         []string `json:"rpc"`
 				Routes      []string `json:"routes"`
 				UI          []string `json:"ui"`
+				PortalUI    []string `json:"portal_ui"`
 				Services    []string `json:"services"`
 				ObjectHooks []string `json:"object_hooks"`
 			}{
@@ -281,6 +286,7 @@ func TestPluginManifestJSONSerialization(t *testing.T) {
 				RPC         []string `json:"rpc"`
 				Routes      []string `json:"routes"`
 				UI          []string `json:"ui"`
+				PortalUI    []string `json:"portal_ui"`
 				Services    []string `json:"services"`
 				ObjectHooks []string `json:"object_hooks"`
 			}{

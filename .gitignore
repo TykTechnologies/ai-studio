@@ -119,6 +119,7 @@ examples/plugins/gateway/legacy-collectors/file_analytics_collector/file_analyti
 examples/plugins/gateway/legacy-collectors/file_budget_collector/file_budget_collector
 examples/plugins/gateway/legacy-collectors/file_proxy_collector/file_proxy_collector
 examples/plugins/studio/scheduler-demo/scheduler-demo
+examples/plugins/gateway/custom-echo-endpoint/custom-echo-endpoint
 build-commands.sh
 data/exports
 data/exports/*
@@ -134,5 +135,7 @@ examples/plugins/data-collectors/file-budget-collector/file-budget-collector
 examples/plugins/data-collectors/file-proxy-collector/file-proxy-collector
 examples/plugins/studio/custom-auth-ui/server/server
 examples/plugins/studio/echo-agent/server/server
+tyk-internal-marketplace
 tests/postgres_data_ci/
 .playwright-mcp
+oci-cache

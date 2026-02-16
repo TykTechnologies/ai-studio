@@ -9,3 +9,7 @@
 [submodule "community"]
 	path = community
 	url = git@github.com:TykTechnologies/ai-studio-community-plugins.git
+[submodule "tyk-internal"]
+	path = tyk-internal
+	url = git@github.com:TykTechnologies/tyk-studio-plugins-internal.git
+	branch = main

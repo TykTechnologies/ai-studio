@@ -16,7 +16,7 @@ All plugins now use a single SDK (`pkg/plugin_sdk`) that works seamlessly in bot
 
 ## Plugin Capabilities
 
-Plugins implement one or more of these 10 capabilities:
+Plugins implement one or more of these 12 capabilities:
 
 | Capability | Where It Works | Purpose | Common Use Cases |
 |------------|----------------|---------|------------------|
@@ -25,9 +25,11 @@ Plugins implement one or more of these 10 capabilities:
 | **Post-Auth** | Studio + Gateway | Process after authentication | Request enrichment, policy enforcement |
 | **Response** | Studio + Gateway | Modify responses | Content filtering, header injection |
 | **Data Collection** | Studio + Gateway | Collect telemetry | Export to Elasticsearch, ClickHouse |
+| **Custom Endpoints** | Gateway | Serve custom HTTP endpoints | MCP proxy, OAuth provider, webhooks |
 | **Object Hooks** | Studio only | Intercept CRUD operations | Validation, approval workflows |
 | **Agent** | Studio only | Conversational AI | Chat-based agents, LLM wrapping |
 | **UI Provider** | Studio only | Dashboard extensions | Custom dashboards, admin tools |
+| **Portal UI** | Studio only | Portal extensions | User-facing forms, pages, dashboards |
 | **Config Provider** | Studio + Gateway | Provide JSON Schema config | Dynamic configuration |
 | **Manifest Provider** | Gateway only | Plugin manifest | Gateway-only plugins |
 
@@ -488,8 +490,10 @@ func main() {
 - **[Plugin SDK Reference](plugins-sdk.md)** - Complete SDK documentation
 - **[Plugin Examples](plugins-examples.md)** - Browse working examples (including production-ready community plugins)
 - **[Object Hooks Guide](plugins-object-hooks.md)** - Intercept CRUD operations
+- **[Custom Endpoints Guide](plugins-custom-endpoints.md)** - Serve custom HTTP endpoints (MCP, OAuth, webhooks)
 - **[Microgateway Plugins Guide](plugins-microgateway.md)** - Gateway-specific patterns
-- **[AI Studio UI Plugins Guide](plugins-studio-ui.md)** - Build plugin UIs
+- **[AI Studio UI Plugins Guide](plugins-studio-ui.md)** - Build admin plugin UIs
+- **[AI Portal UI Plugins Guide](plugins-portal-ui.md)** - Build portal-facing plugin pages and forms
 - **[AI Studio Agent Plugins Guide](plugins-studio-agent.md)** - Build conversational agents
 - **[Service API Reference](plugins-service-api.md)** - Complete API documentation
 - **[Plugin Deployment](plugins-deployment.md)** - Production deployment options

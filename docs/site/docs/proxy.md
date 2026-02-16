@@ -8,12 +8,10 @@ The proxy core library is shared between two gateway variants:
 
 | Variant | Where it runs | Capabilities | Use case |
 |---------|---------------|-------------|----------|
-| **Embedded Gateway** | Inside AI Studio | Basic LLM proxying only. No filters, no middleware, no plugins. | Testing LLM configurations, powering the Chat interface |
-| **Microgateway** | Standalone binary, deployed at edge | Full middleware pipeline: authentication, filters, plugins, analytics, budget enforcement | Production data plane in hub-and-spoke deployments |
+| **Embedded Gateway** | Inside AI Studio | LLM proxying, tool calling (REST + MCP), datasource querying. No filters, no middleware, no plugins. | Testing LLM configurations, powering the Chat interface |
+| **Microgateway** | Standalone binary, deployed at edge | Full middleware pipeline: authentication, filters, plugins, analytics, budget enforcement, tool calling (REST + MCP), datasource querying | Production data plane in hub-and-spoke deployments |
 
-Both variants use the same core proxy library and access control mechanisms. The key difference is that the embedded gateway is intentionally lightweight, while the Microgateway provides the complete feature set.
-
-> **Note:** Tools and Data Sources are only available through the embedded gateway in AI Studio. They are not proxied by the Microgateway. See [Architecture Overview](./architecture.md) for details.
+Both variants use the same core proxy library and access control mechanisms. The key difference is that the embedded gateway is intentionally lightweight, while the Microgateway provides the complete feature set. Tools, datasources, and OAuth state are synced to edge gateways via the hub-spoke configuration system.
 
 ## Purpose
 

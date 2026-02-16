@@ -51,7 +51,7 @@ func main() {
 
 ## Plugin Capabilities
 
-Plugins implement one or more capability interfaces. The SDK supports 12 distinct capabilities:
+Plugins implement one or more capability interfaces. The SDK supports 14 distinct capabilities:
 
 | Capability | Interface | Where It Works | Purpose |
 |------------|-----------|----------------|---------|
@@ -60,7 +60,9 @@ Plugins implement one or more capability interfaces. The SDK supports 12 distinc
 | **Post-Auth** | `PostAuthHandler` | Studio + Gateway | Process requests after authentication (most common) |
 | **Response** | `ResponseHandler` | Studio + Gateway | Modify response headers and body |
 | **Data Collection** | `DataCollector` | Studio + Gateway | Collect telemetry (analytics, budgets, proxy logs) |
-| **UI Provider** | `UIProvider` | Studio only | Serve web UI assets |
+| **[Custom Endpoints](plugins-custom-endpoints.md)** | `CustomEndpointHandler` | Gateway | Serve custom HTTP endpoints under `/plugins/{slug}/` |
+| **UI Provider** | `UIProvider` | Studio only | Serve admin web UI assets |
+| **[Portal UI](plugins-portal-ui.md)** | `PortalUIProvider` | Studio only | Portal-facing pages and forms with user context |
 | **Config Provider** | `ConfigProvider` | Studio + Gateway | Provide JSON Schema configuration |
 | **Manifest Provider** | `ManifestProvider` | Gateway only | Provide plugin manifest (gateway-only plugins) |
 | **Agent** | `AgentPlugin` | Studio only | Conversational AI agent with streaming |
@@ -594,8 +596,20 @@ if ctx.Runtime == plugin_sdk.RuntimeStudio {
     // Get app
     app, err := ctx.Services.Studio().GetApp(ctx, appID)
 
-    // Update app with metadata
+    // List apps (basic)
+    apps, err := ctx.Services.Studio().ListApps(ctx, page, limit)
+
+    // List apps with filtering (by owner, namespace, active status)
+    apps, err := ctx.Services.Studio().ListAppsWithFilters(ctx, page, limit, &plugin_sdk.ListAppsOptions{
+        UserID: &ownerID,
+        Namespace: "production",
+    })
+
+    // Update app with metadata (full replacement)
     err := ctx.Services.Studio().UpdateAppWithMetadata(ctx, appID, metadata)
+
+    // Patch a single metadata key (atomic, safe for concurrent use)
+    metadataJSON, err := ctx.Services.Studio().PatchAppMetadata(ctx, appID, "tier", `"premium"`, false)
 
     // List LLMs
     llms, err := ctx.Services.Studio().ListLLMs(ctx, page, limit)

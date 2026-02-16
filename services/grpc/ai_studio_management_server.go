@@ -218,8 +218,14 @@ func (s *AIStudioManagementServer) ListApps(ctx context.Context, req *pb.ListApp
 		isActive = &value
 	}
 
+	// Handle user_id parameter
+	var userIDArgs []uint
+	if req.UserId != nil && req.GetUserId() > 0 {
+		userIDArgs = append(userIDArgs, uint(req.GetUserId()))
+	}
+
 	// Call enhanced service method with filtering
-	apps, totalCount, _, err := s.service.ListAppsWithFilters(limit, page, false, "-created_at", namespace, isActive)
+	apps, totalCount, _, err := s.service.ListAppsWithFilters(limit, page, false, "-created_at", namespace, isActive, userIDArgs...)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list apps via gRPC")
 		return nil, status.Errorf(codes.Internal, "failed to list apps: %v", err)
@@ -406,6 +412,43 @@ func (s *AIStudioManagementServer) DeleteApp(ctx context.Context, req *pb.Delete
 	return &pb.DeleteAppResponse{
 		Success: true,
 		Message: "App deleted successfully",
+	}, nil
+}
+
+// PatchAppMetadata atomically updates a single metadata key on an app
+func (s *AIStudioManagementServer) PatchAppMetadata(ctx context.Context, req *pb.PatchAppMetadataRequest) (*pb.PatchAppMetadataResponse, error) {
+	appID := req.GetAppId()
+	if appID == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "app_id is required")
+	}
+	if req.GetKey() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "key is required")
+	}
+
+	resultMetadata, err := s.service.PatchAppMetadata(uint(appID), req.GetKey(), req.GetValue(), req.GetDelete())
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Errorf(codes.NotFound, "app not found: %d", appID)
+		}
+		log.Error().Err(err).Uint32("app_id", appID).Str("key", req.GetKey()).Msg("Failed to patch app metadata via gRPC")
+		return nil, status.Errorf(codes.Internal, "failed to patch app metadata: %v", err)
+	}
+
+	metadataJSON := "{}"
+	if metadataBytes, err := json.Marshal(resultMetadata); err == nil {
+		metadataJSON = string(metadataBytes)
+	}
+
+	log.Debug().
+		Uint32("app_id", appID).
+		Str("key", req.GetKey()).
+		Bool("delete", req.GetDelete()).
+		Msg("Patched app metadata via gRPC")
+
+	return &pb.PatchAppMetadataResponse{
+		Success:  true,
+		Message:  "Metadata updated",
+		Metadata: metadataJSON,
 	}, nil
 }
 

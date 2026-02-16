@@ -192,6 +192,9 @@ func main() {
 								log.Debug().Msg("Model routers reloaded after configuration sync")
 							}
 						}
+
+						// Reconcile running plugins with updated DB state
+						go serviceContainer.PluginManager.ReconcilePlugins(context.Background())
 					}
 
 					// Also update gRPC provider cache for compatibility
@@ -249,6 +252,9 @@ func main() {
 					nil, // Gateway reloader will be set after Server is created (srv.Reload)
 				)
 				edgeClient.SetReloadHandler(edgeReloadHandler)
+				edgeReloadHandler.SetPluginReconciler(func() error {
+					return serviceContainer.PluginManager.ReconcilePlugins(context.Background())
+				})
 				log.Debug().Msg("Edge reload handler created - gateway reloader will be set after server creation")
 
 				// Create and connect budget sync handler for multi-edge budget synchronization

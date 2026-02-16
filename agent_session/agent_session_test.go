@@ -165,6 +165,10 @@ func (m *MockPluginServiceClient) Call(ctx context.Context, in *pb.CallRequest, 
 	return nil, nil
 }
 
+func (m *MockPluginServiceClient) PortalCall(ctx context.Context, in *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+	return nil, nil
+}
+
 func (m *MockPluginServiceClient) GetConfigSchema(ctx context.Context, in *pb.GetConfigSchemaRequest, opts ...grpc.CallOption) (*pb.GetConfigSchemaResponse, error) {
 	return nil, nil
 }
@@ -194,6 +198,18 @@ func (m *MockPluginServiceClient) OpenSession(ctx context.Context, in *pb.OpenSe
 }
 
 func (m *MockPluginServiceClient) CloseSession(ctx context.Context, in *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) GetEndpointRegistrations(ctx context.Context, in *pb.GetEndpointRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetEndpointRegistrationsResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) HandleEndpointRequest(ctx context.Context, in *pb.EndpointRequest, opts ...grpc.CallOption) (*pb.EndpointResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) HandleEndpointRequestStream(ctx context.Context, in *pb.EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.EndpointResponseChunk], error) {
 	return nil, nil
 }
 

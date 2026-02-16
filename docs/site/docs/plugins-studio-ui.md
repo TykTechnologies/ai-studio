@@ -1,6 +1,8 @@
 # AI Studio UI Plugins Guide
 
-AI Studio UI plugins extend the dashboard with custom interfaces using WebComponents. Build rich admin panels, custom dashboards, monitoring tools, and specialized management interfaces that integrate seamlessly with the AI Studio platform using the **Unified Plugin SDK**.
+AI Studio UI plugins extend the **admin dashboard** with custom interfaces using WebComponents. Build rich admin panels, custom dashboards, monitoring tools, and specialized management interfaces that integrate seamlessly with the AI Studio platform using the **Unified Plugin SDK**.
+
+> **Looking for portal (end-user) pages?** See the [AI Portal UI Plugins Guide](plugins-portal-ui.md) for building pages visible to portal users, not just admins.
 
 ## Overview
 
@@ -1025,7 +1027,8 @@ customElements.define('rate-limiting-dashboard', RateLimitingDashboardElement);
 
 ## Next Steps
 
-- [Plugin Manifests & Permissions]([plugins-manifests](https://docs.claude.com/en/docs/plugins-manifests))
-- [Service API Reference]([plugins-service-api](https://docs.claude.com/en/docs/plugins-service-api))
-- [SDK Reference]([plugins-sdk](https://docs.claude.com/en/docs/plugins-sdk))
-- [Plugin Deployment]([plugins-deployment](https://docs.claude.com/en/docs/plugins-deployment))
+- **[AI Portal UI Plugins Guide](plugins-portal-ui.md)** - Build portal-facing pages visible to end users (not just admins)
+- [Plugin Manifests & Permissions](plugins-manifests.md)
+- [Service API Reference](plugins-service-api.md)
+- [SDK Reference](plugins-sdk.md)
+- [Plugin Deployment](plugins-deployment.md)

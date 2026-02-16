@@ -88,6 +88,8 @@ services:
       ANTHROPIC_AI_KEY: ${ANTHROPIC_AI_KEY:-}
       GOOGLE_AI_KEY: ${GOOGLE_AI_KEY:-}
       COHERE_API_KEY: ${COHERE_API_KEY:-}
+      OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT: ${OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT:-}
+      AI_STUDIO_OCI_CACHE_DIR: /app/oci-cache
       # Allow internal network access for local plugin development
       ALLOW_INTERNAL_NETWORK_ACCESS: "true"
     depends_on:

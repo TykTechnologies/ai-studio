@@ -239,11 +239,67 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 		}
 	}
 
+	// Register Portal UI components (separate scope from admin UI)
+	if manifest.Portal != nil {
+		for _, slot := range manifest.Portal.Slots {
+			for _, item := range slot.Items {
+				if item.Type == "route" {
+					log.Debug().
+						Uint("plugin_id", plugin.ID).
+						Str("original_path", item.Path).
+						Str("item_title", item.Title).
+						Msg("Processing portal route item from manifest")
+
+					uiEntry := models.UIRegistry{
+						PluginID:     plugin.ID,
+						SlotType:     slot.Slot,
+						RoutePattern: item.Path,
+						ComponentTag: item.Mount.Tag,
+						EntryPoint:   item.Mount.Entry,
+						MountConfig: map[string]interface{}{
+							"kind":   item.Mount.Kind,
+							"tag":    item.Mount.Tag,
+							"entry":  item.Mount.Entry,
+							"props":  item.Mount.Props,
+							"remote": item.Mount.Remote,
+							"exposed": item.Mount.Exposed,
+							"app":    item.Mount.App,
+							"title":  item.Title,
+							"label":  slot.Label,
+							"icon":   slot.Icon,
+						},
+						IsActive:      true,
+						LoadPriority:  0,
+						Scope:         "portal",
+						AllowedGroups: slot.Groups,
+					}
+
+					if err := s.db.Create(&uiEntry).Error; err != nil {
+						return fmt.Errorf("failed to register portal UI component: %w", err)
+					}
+
+					log.Debug().
+						Uint("plugin_id", plugin.ID).
+						Str("stored_route_pattern", uiEntry.RoutePattern).
+						Str("component_tag", uiEntry.ComponentTag).
+						Strs("allowed_groups", slot.Groups).
+						Msg("Successfully stored portal UI registry entry")
+				}
+			}
+		}
+	}
+
 	// Count UI components safely
 	uiComponentCount := 0
 	if manifest.UI != nil {
 		for _, slot := range manifest.UI.Slots {
 			uiComponentCount += len(slot.Items)
+		}
+	}
+	portalComponentCount := 0
+	if manifest.Portal != nil {
+		for _, slot := range manifest.Portal.Slots {
+			portalComponentCount += len(slot.Items)
 		}
 	}
 
@@ -252,6 +308,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 		Str("plugin_name", plugin.Name).
 		Str("manifest_version", manifest.Version).
 		Int("ui_components", uiComponentCount).
+		Int("portal_components", portalComponentCount).
 		Msg("Plugin UI components registered successfully")
 
 	return nil
@@ -307,11 +364,11 @@ func (s *PluginManifestService) UnloadPluginUI(pluginID uint) error {
 	return nil
 }
 
-// GetUIRegistry returns all active UI components for the frontend
+// GetUIRegistry returns all active admin UI components for the frontend
 func (s *PluginManifestService) GetUIRegistry() ([]models.UIRegistry, error) {
 	var entries []models.UIRegistry
 	err := s.db.Preload("Plugin").
-		Where("is_active = ?", true).
+		Where("is_active = ? AND (scope = ? OR scope = ? OR scope IS NULL)", true, "admin", "").
 		Order("load_priority DESC, created_at ASC").
 		Find(&entries).Error
 
@@ -320,6 +377,122 @@ func (s *PluginManifestService) GetUIRegistry() ([]models.UIRegistry, error) {
 	}
 
 	return entries, nil
+}
+
+// GetPortalUIRegistryForUser returns active portal UI components filtered by user's groups.
+// If AllowedGroups is empty for an entry, it is visible to all portal users.
+// If AllowedGroups has values, at least one of the user's groups must match.
+func (s *PluginManifestService) GetPortalUIRegistryForUser(userGroups []string) ([]models.UIRegistry, error) {
+	var entries []models.UIRegistry
+	err := s.db.Preload("Plugin").
+		Where("is_active = ? AND scope = ?", true, "portal").
+		Order("load_priority DESC, created_at ASC").
+		Find(&entries).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get portal UI registry: %w", err)
+	}
+
+	// Filter by group membership
+	var filtered []models.UIRegistry
+	for _, entry := range entries {
+		if len(entry.AllowedGroups) == 0 {
+			// No group restriction - visible to all portal users
+			filtered = append(filtered, entry)
+			continue
+		}
+		// Check if user is in any of the allowed groups
+		if groupsOverlap(userGroups, entry.AllowedGroups) {
+			filtered = append(filtered, entry)
+		}
+	}
+
+	return filtered, nil
+}
+
+// GetPortalSidebarMenuItemsForUser returns portal sidebar menu items filtered by user's groups
+func (s *PluginManifestService) GetPortalSidebarMenuItemsForUser(userGroups []string) ([]SidebarMenuItem, error) {
+	var entries []models.UIRegistry
+	err := s.db.Preload("Plugin").
+		Where("is_active = ? AND scope = ? AND slot_type = ?", true, "portal", "portal_sidebar.section").
+		Order("load_priority DESC, created_at ASC").
+		Find(&entries).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get portal sidebar menu items: %w", err)
+	}
+
+	// Filter by group membership
+	var filteredEntries []models.UIRegistry
+	for _, entry := range entries {
+		if len(entry.AllowedGroups) == 0 {
+			filteredEntries = append(filteredEntries, entry)
+			continue
+		}
+		if groupsOverlap(userGroups, entry.AllowedGroups) {
+			filteredEntries = append(filteredEntries, entry)
+		}
+	}
+
+	// Group entries by plugin to create collapsible sections
+	pluginGroups := make(map[uint][]models.UIRegistry)
+	for _, entry := range filteredEntries {
+		if entry.Plugin == nil {
+			continue
+		}
+		pluginGroups[entry.PluginID] = append(pluginGroups[entry.PluginID], entry)
+	}
+
+	var menuItems []SidebarMenuItem
+	for pluginID, pluginEntries := range pluginGroups {
+		if len(pluginEntries) == 0 {
+			continue
+		}
+
+		firstEntry := pluginEntries[0]
+		sectionLabel, _ := firstEntry.MountConfig["label"].(string)
+		sectionIcon, _ := firstEntry.MountConfig["icon"].(string)
+
+		var subItems []SidebarSubItem
+		for _, entry := range pluginEntries {
+			title, _ := entry.MountConfig["title"].(string)
+			subItems = append(subItems, SidebarSubItem{
+				ID:           fmt.Sprintf("portal_plugin_%d_%s", entry.PluginID, entry.ComponentTag),
+				Text:         title,
+				Path:         entry.RoutePattern,
+				ComponentTag: entry.ComponentTag,
+				EntryPoint:   entry.EntryPoint,
+				MountConfig:  entry.MountConfig,
+			})
+		}
+
+		menuItem := SidebarMenuItem{
+			ID:         fmt.Sprintf("portal_plugin_%d", pluginID),
+			Label:      sectionLabel,
+			Icon:       sectionIcon,
+			PluginID:   pluginID,
+			PluginName: firstEntry.Plugin.Name,
+			SubItems:   subItems,
+		}
+
+		menuItems = append(menuItems, menuItem)
+	}
+
+	return menuItems, nil
+}
+
+// groupsOverlap checks if any element in a exists in b
+func groupsOverlap(a, b []string) bool {
+	bSet := make(map[string]struct{}, len(b))
+	for _, s := range b {
+		bSet[s] = struct{}{}
+	}
+	for _, s := range a {
+		if _, ok := bSet[s]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // GetSidebarMenuItems returns sidebar menu items from registered plugins grouped by plugin

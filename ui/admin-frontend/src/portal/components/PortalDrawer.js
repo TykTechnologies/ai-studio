@@ -1,6 +1,10 @@
+// DEPRECATED: This PortalDrawer is no longer used by the main layout.
+// The active portal drawer is at: admin/components/layout/PortalDrawer.js
+// which uses the BaseDrawer component. This file is kept for reference only.
 import React, { useState, useEffect } from "react";
 import {
   Drawer,
+  Divider,
   List,
   ListItem,
   ListItemIcon,
@@ -20,11 +24,13 @@ import PsychologyIcon from "@mui/icons-material/Psychology";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import AppsIcon from "@mui/icons-material/Apps";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
-import ExtensionIcon from "@mui/icons-material/Extension"; // Import for Tools icon
-import SmartToyIcon from "@mui/icons-material/SmartToy"; // Import for Agents icon
+import ExtensionIcon from "@mui/icons-material/Extension";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
+import WidgetsIcon from "@mui/icons-material/Widgets";
 
 import pubClient from "../../admin/utils/pubClient";
 import useSystemFeatures from "../../admin/hooks/useSystemFeatures";
+import portalPluginLoaderService from "../services/portalPluginLoaderService";
 
 const drawerWidth = 280;
 const CACHE_KEY = "userEntitlements";
@@ -41,7 +47,30 @@ const PortalDrawer = () => {
   const [openDatabases, setOpenDatabases] = useState(false);
   const [openTools, setOpenTools] = useState(false); // State for Tools section
   const [openChatRooms, setOpenChatRooms] = useState(true);
+  const [pluginMenuItems, setPluginMenuItems] = useState([]);
+  const [openPluginSections, setOpenPluginSections] = useState({});
   const theme = useTheme();
+
+  // Load portal plugin sidebar items
+  useEffect(() => {
+    const loadPluginMenuItems = async () => {
+      try {
+        const menuItems = await portalPluginLoaderService.getSidebarMenuItems();
+        setPluginMenuItems(menuItems);
+      } catch (error) {
+        console.error("Failed to load portal plugin menu items:", error);
+      }
+    };
+    loadPluginMenuItems();
+
+    const handlePluginRefresh = () => loadPluginMenuItems();
+    window.addEventListener("portal-plugin-loader-refreshed", handlePluginRefresh);
+    return () => window.removeEventListener("portal-plugin-loader-refreshed", handlePluginRefresh);
+  }, []);
+
+  const togglePluginSection = (sectionId) => {
+    setOpenPluginSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
 
   useEffect(() => {
     const fetchUserEntitlements = async () => {
@@ -344,6 +373,72 @@ const PortalDrawer = () => {
                 primaryTypographyProps={{ noWrap: true }}
               />
             </ListItem>
+          </>
+        )}
+
+        {/* Portal plugin sidebar sections */}
+        {pluginMenuItems.length > 0 && (
+          <>
+            <Divider sx={{ my: 1 }} />
+            {pluginMenuItems.map((pluginSection) => (
+              <React.Fragment key={pluginSection.id}>
+                {pluginSection.sub_items && pluginSection.sub_items.length > 1 ? (
+                  <>
+                    <ListItem
+                      button
+                      onClick={() => togglePluginSection(pluginSection.id)}
+                      sx={{ mb: 1 }}
+                    >
+                      <ListItemIcon>
+                        <WidgetsIcon />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={pluginSection.label}
+                        primaryTypographyProps={{ noWrap: true }}
+                      />
+                      {openPluginSections[pluginSection.id] ? <ExpandLess /> : <ExpandMore />}
+                    </ListItem>
+                    <Collapse in={openPluginSections[pluginSection.id]} timeout="auto" unmountOnExit>
+                      <List component="div" disablePadding>
+                        {pluginSection.sub_items.map((subItem) => (
+                          <ListItem
+                            key={subItem.id}
+                            button
+                            component={Link}
+                            to={subItem.path}
+                            sx={{ pl: 4, mb: 1 }}
+                          >
+                            <ListItemText
+                              primary={subItem.text}
+                              primaryTypographyProps={{ noWrap: true }}
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Collapse>
+                  </>
+                ) : (
+                  // Single item - render directly without collapsible section
+                  pluginSection.sub_items?.map((subItem) => (
+                    <ListItem
+                      key={subItem.id}
+                      button
+                      component={Link}
+                      to={subItem.path}
+                      sx={{ mb: 1 }}
+                    >
+                      <ListItemIcon>
+                        <WidgetsIcon />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={subItem.text || pluginSection.label}
+                        primaryTypographyProps={{ noWrap: true }}
+                      />
+                    </ListItem>
+                  ))
+                )}
+              </React.Fragment>
+            ))}
           </>
         )}
       </List>

@@ -277,7 +277,59 @@ The following examples in `examples/plugins/` demonstrate specific patterns and 
 
 ---
 
+### Portal Feedback
+
+**Path**: [`examples/plugins/studio/portal-feedback/`](../../../examples/plugins/studio/portal-feedback/)
+
+**Capabilities**: UI Provider, Portal UI Provider
+
+**Description**: Example plugin demonstrating portal UI with user feedback form. Shows how to build pages visible to end-users in the AI Portal alongside an admin dashboard for managing submissions.
+
+**Key Features**:
+- Portal sidebar integration with group-based visibility
+- Portal RPC with authenticated user context (`HandlePortalRPC`)
+- Admin RPC for management operations (`HandleRPC`)
+- Separate WebComponents for portal and admin UIs
+- `waitForAPIAndLoad()` pattern for API injection timing
+- Shared asset serving between admin and portal contexts
+
+**Use Cases**:
+- Learning portal UI plugin development
+- User-facing forms and data collection
+- Dual admin/portal plugin architecture
+- Portal RPC with user context
+
+**Complexity**: Beginner
+
+---
+
 ## Gateway Plugins
+
+### Custom Echo Endpoint
+
+**Path**: [`examples/plugins/gateway/custom-echo-endpoint/`](../../../examples/plugins/gateway/custom-echo-endpoint/)
+
+**Capabilities**: CustomEndpointHandler, UIProvider, ConfigProvider
+
+**Description**: Demonstrates custom HTTP endpoints on the gateway combined with a Studio admin UI. Registers a catch-all endpoint at `/plugins/custom-echo-endpoint/` that echoes request metadata and user-configured content.
+
+**Key Features**:
+- CustomEndpointHandler with `/*` catch-all registration
+- Full request metadata echo (method, path, headers, query, body, path_segments)
+- Studio UI (WebComponent) for editing custom content
+- Config persistence via `ai_studio_sdk.UpdatePluginConfig()`
+- Config sync from Studio → Gateway via gRPC ConfigurationSnapshot
+- Manifest with `custom_endpoint` + `studio_ui` hooks
+
+**Use Cases**:
+- Learning custom endpoint basics
+- Understanding the config sync flow (Studio UI → DB → Gateway)
+- Combining CustomEndpointHandler with UIProvider
+- Reference implementation for custom endpoints
+
+**Complexity**: Beginner
+
+---
 
 ### Request Enricher
 
@@ -404,6 +456,32 @@ The following examples in `examples/plugins/` demonstrate specific patterns and 
 
 ---
 
+### Custom Echo Endpoint
+
+**Path**: [`examples/plugins/gateway/custom-echo-endpoint/`](../../../examples/plugins/gateway/custom-echo-endpoint/)
+
+**Capabilities**: CustomEndpoint, UI, Config
+
+**Description**: Serves a custom HTTP endpoint on the gateway that echoes back request metadata alongside user-configured custom content. Includes a Studio admin UI for editing the content.
+
+**Key Features**:
+- Custom endpoint registration (catch-all `/*`)
+- Request metadata echo (method, path, headers, query, body)
+- Configurable custom content via Studio UI
+- Config persistence via `UpdatePluginConfig` Service API
+- Config sync from Studio to gateway via gRPC
+- WebComponent-based admin UI
+
+**Use Cases**:
+- Learning custom endpoint development
+- Understanding Studio-to-gateway config flow
+- Multi-capability plugin patterns (CustomEndpoint + UI + Config)
+- MCP/webhook plugin starting point
+
+**Complexity**: Beginner
+
+---
+
 ### File Data Collectors (Unified SDK)
 
 **Path**: [`examples/plugins/unified/data-collectors/`](../../../examples/plugins/unified/data-collectors/)
@@ -467,10 +545,12 @@ data_collection_plugins:
 | **PostAuth** | **llm-cache** ★, **llm-firewall** ★, request_enricher, message_modifier, service-api-test, gateway-service-test |
 | **Response** | **llm-cache** ★, response_modifier, llm-rate-limiter-multiphase |
 | **DataCollector** | elasticsearch_collector, file-analytics-collector, file-budget-collector, file-proxy-collector |
-| **UI Provider** | **llm-cache** ★, **llm-firewall** ★, llm-rate-limiter-multiphase, custom-auth-ui |
+| **UI Provider** | **llm-cache** ★, **llm-firewall** ★, llm-rate-limiter-multiphase, custom-auth-ui, portal-feedback |
+| **Portal UI** | portal-feedback |
 | **Scheduler** | **github-rag-ingest** ★ |
 | **EdgePayloadReceiver** | **llm-cache** ★ |
-| **Multi-Capability** | **llm-cache** ★ (8 capabilities), llm-rate-limiter-multiphase (PostAuth + Response + UI) |
+| **Custom Endpoints** | custom-echo-endpoint |
+| **Multi-Capability** | **llm-cache** ★ (8 capabilities), llm-rate-limiter-multiphase (PostAuth + Response + UI), custom-echo-endpoint (CustomEndpoint + UI + Config) |
 
 ★ = Production-ready community/enterprise plugins (recommended as reference)
 
@@ -478,15 +558,15 @@ data_collection_plugins:
 
 | Runtime | Examples |
 |---------|----------|
-| **Studio Only** | echo-agent, llm-validator, hook-test-plugin, llm-rate-limiter-multiphase, custom-auth-ui, service-api-test |
+| **Studio Only** | echo-agent, llm-validator, hook-test-plugin, llm-rate-limiter-multiphase, custom-auth-ui, portal-feedback, service-api-test |
 | **Gateway Only** | request_enricher, response_modifier, message_modifier, elasticsearch_collector, gateway-service-test, file-analytics-collector, file-budget-collector, file-proxy-collector |
-| **Both** | (Any plugin can work in both if designed correctly) |
+| **Both** | custom-echo-endpoint (UI in Studio + CustomEndpoint on Gateway) |
 
 ### By Complexity
 
 | Level | Examples |
 |-------|----------|
-| **Beginner** | echo-agent, request_enricher, message_modifier, file-analytics-collector, file-budget-collector, file-proxy-collector |
+| **Beginner** | echo-agent, portal-feedback, request_enricher, message_modifier, custom-echo-endpoint, file-analytics-collector, file-budget-collector, file-proxy-collector |
 | **Intermediate** | llm-validator, hook-test-plugin, response_modifier, gateway-service-test |
 | **Advanced** | llm-rate-limiter-multiphase, service-api-test, elasticsearch_collector, custom-auth-ui |
 
@@ -599,6 +679,7 @@ if ctx.Runtime == plugin_sdk.RuntimeStudio {
 
 ### 1. Start with Basics
 - **request_enricher**: Learn PostAuth hooks
+- **custom-echo-endpoint**: Learn custom endpoints + Studio UI config flow
 - **echo-agent**: Learn agent basics and streaming
 
 ### 2. Explore Services
@@ -624,6 +705,8 @@ if ctx.Runtime == plugin_sdk.RuntimeStudio {
 - **[Plugin SDK Reference](plugins-sdk.md)** - Core SDK documentation
 - **[Service API Reference](plugins-service-api.md)** - All Service API operations
 - **[Microgateway Plugins Guide](plugins-microgateway.md)** - Gateway-specific patterns
+- **[AI Portal UI Plugins Guide](plugins-portal-ui.md)** - Build portal-facing pages and forms
 - **[AI Studio Agent Plugins Guide](plugins-studio-agent.md)** - Build conversational agents
 - **[Object Hooks Guide](plugins-object-hooks.md)** - Intercept CRUD operations
+- **[Custom Endpoints Guide](plugins-custom-endpoints.md)** - Serve custom HTTP endpoints
 - **[Plugin Best Practices](plugins-best-practices.md)** - Production-ready patterns

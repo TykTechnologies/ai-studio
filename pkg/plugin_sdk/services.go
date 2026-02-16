@@ -229,6 +229,24 @@ func (s *studioServicesImpl) UpdateAppWithMetadata(ctx context.Context, appID ui
 	return ai_studio_sdk.UpdateAppWithMetadata(ctx, appID, name, description, isActive, llmIDs, toolIDs, datasourceIDs, monthlyBudget, metadata)
 }
 
+func (s *studioServicesImpl) PatchAppMetadata(ctx context.Context, appID uint32, key, value string, deleteKey bool) (string, error) {
+	resp, err := ai_studio_sdk.PatchAppMetadata(ctx, appID, key, value, deleteKey)
+	if err != nil {
+		return "", err
+	}
+	return resp.Metadata, nil
+}
+
+func (s *studioServicesImpl) ListAppsWithFilters(ctx context.Context, page, limit int32, opts *ListAppsOptions) (interface{}, error) {
+	sdkOpts := &ai_studio_sdk.ListAppsOptions{}
+	if opts != nil {
+		sdkOpts.IsActive = opts.IsActive
+		sdkOpts.Namespace = opts.Namespace
+		sdkOpts.UserID = opts.UserID
+	}
+	return ai_studio_sdk.ListAppsWithFilters(ctx, page, limit, sdkOpts)
+}
+
 func (s *studioServicesImpl) GetLLM(ctx context.Context, llmID uint32) (interface{}, error) {
 	return ai_studio_sdk.GetLLM(ctx, llmID)
 }

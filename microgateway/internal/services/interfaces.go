@@ -29,6 +29,10 @@ type GatewayServiceInterface interface {
 	// ValidateAppAccess validates if app can access the specified LLM
 	ValidateAppAccess(appID uint, llmSlug string) error
 
+	// ValidateAPIToken validates an API token and returns token information
+	// Used by both the LLM proxy and custom endpoint authentication
+	ValidateAPIToken(token string) (*TokenValidationResult, error)
+
 	// Reload reloads the gateway configuration
 	Reload() error
 }
@@ -150,6 +154,7 @@ type PluginServiceInterface interface {
 	
 	// LLM associations
 	GetPluginsForLLM(llmID uint) ([]database.Plugin, error)
+	GetAllLLMAssociatedPlugins() ([]database.Plugin, error) // All active plugins linked to any LLM (single query)
 	UpdateLLMPlugins(llmID uint, pluginIDs []uint) error
 	GetLLMPluginConfig(llmID, pluginID uint) (map[string]interface{}, error)
 	

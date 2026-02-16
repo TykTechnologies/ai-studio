@@ -1,0 +1,40 @@
+{
+  "id": "com.tyk.custom-echo-endpoint",
+  "name": "Custom Echo Endpoint",
+  "version": "1.0.0",
+  "description": "Gateway custom endpoint that echoes request metadata with configurable content. Demonstrates CustomEndpointHandler + UIProvider.",
+  "capabilities": {
+    "hooks": ["custom_endpoint", "studio_ui"],
+    "primary_hook": "custom_endpoint"
+  },
+  "permissions": {
+    "services": ["plugins.read", "plugins.write", "kv.readwrite"],
+    "ui": ["sidebar.register", "route.register"],
+    "rpc": ["call"]
+  },
+  "ui": {
+    "slots": [
+      {
+        "slot": "sidebar.section",
+        "label": "Echo Endpoint",
+        "icon": "/assets/echo-icon.svg",
+        "items": [
+          {
+            "type": "route",
+            "path": "/admin/echo-endpoint/config",
+            "title": "Configure",
+            "mount": {
+              "kind": "webc",
+              "tag": "echo-config-editor",
+              "entry": "/ui/webc/config-editor.js"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "assets": [
+    "/assets/echo-icon.svg",
+    "/ui/webc/config-editor.js"
+  ]
+}

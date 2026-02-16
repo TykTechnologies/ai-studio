@@ -401,6 +401,12 @@ func (a *API) setupRoutes() {
 			return
 		}
 
+		// Reject WebSocket/dev-server paths that shouldn't be handled by the SPA
+		if c.Request.URL.Path == "/ws" {
+			c.Status(http.StatusNotFound)
+			return
+		}
+
 		// For all other routes, serve the frontend application
 		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
 		if err != nil {
@@ -483,6 +489,12 @@ func (a *API) setupRoutes() {
 	authed.GET("/api/v1/notifications/unread/count", notificationHandlers.UnreadCount)
 	authed.PUT("/api/v1/notifications/:id/read", notificationHandlers.MarkAsRead)
 	authed.PUT("/api/v1/notifications/read-all", notificationHandlers.MarkAllAsRead)
+
+	// Portal plugin routes (any authenticated user, no admin required)
+	authed.GET("/plugins/portal-ui-registry", a.getPortalUIRegistry)
+	authed.GET("/plugins/portal-sidebar-menu", a.getPortalSidebarMenuItems)
+	authed.POST("/plugins/:id/portal-rpc/:method", a.callPortalPluginRPC)
+	authed.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)
 
 	// UGC Submission routes (portal users)
 	authed.POST("/submissions", a.createSubmission)

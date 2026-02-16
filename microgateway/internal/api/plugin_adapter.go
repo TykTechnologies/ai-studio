@@ -2,30 +2,34 @@
 package api
 
 import (
+	"context"
+
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 )
+
+// pluginManagerFull is the full interface that the concrete *plugins.PluginManager satisfies.
+type pluginManagerFull interface {
+	ExecutePluginChain(llmID uint, hookType interfaces.HookType, input interface{}, pluginCtx *interfaces.PluginContext) (interface{}, error)
+	GetPluginsForLLM(llmID uint, hookType interfaces.HookType) ([]*plugins.LoadedPlugin, error)
+	IsPluginLoaded(pluginID uint) bool
+	RefreshLLMPluginMapping(llmID uint) error
+	GetEndpointRoute(method, pluginName, subPath string) *plugins.EndpointRoute
+	HandleEndpointRequest(ctx context.Context, pluginID uint, req *pb.EndpointRequest) (*pb.EndpointResponse, error)
+	HandleEndpointRequestStream(ctx context.Context, pluginID uint, req *pb.EndpointRequest) (interface{ Recv() (*pb.EndpointResponseChunk, error) }, error)
+}
 
 // PluginManagerAdapter adapts the plugins.PluginManager to work with the API middleware
 // This avoids circular imports between api and plugins packages
 type PluginManagerAdapter struct {
-	manager interface {
-		ExecutePluginChain(llmID uint, hookType interfaces.HookType, input interface{}, pluginCtx *interfaces.PluginContext) (interface{}, error)
-		GetPluginsForLLM(llmID uint, hookType interfaces.HookType) ([]*plugins.LoadedPlugin, error)
-		IsPluginLoaded(pluginID uint) bool
-		RefreshLLMPluginMapping(llmID uint) error
-	}
+	manager pluginManagerFull
 }
 
 // NewPluginManagerAdapter creates a new plugin manager adapter
 func NewPluginManagerAdapter(manager interface{}) PluginManagerInterface {
-	if pm, ok := manager.(interface {
-		ExecutePluginChain(llmID uint, hookType interfaces.HookType, input interface{}, pluginCtx *interfaces.PluginContext) (interface{}, error)
-		GetPluginsForLLM(llmID uint, hookType interfaces.HookType) ([]*plugins.LoadedPlugin, error)
-		IsPluginLoaded(pluginID uint) bool
-		RefreshLLMPluginMapping(llmID uint) error
-	}); ok {
+	if pm, ok := manager.(pluginManagerFull); ok {
 		return &PluginManagerAdapter{manager: pm}
 	}
 	log.Fatal().Interface("manager_type", manager).Msg("FATAL: Plugin manager type assertion failed - interface mismatch")
@@ -92,6 +96,34 @@ func (a *PluginManagerAdapter) IsPluginLoaded(pluginID uint) bool {
 // RefreshLLMPluginMapping passes through
 func (a *PluginManagerAdapter) RefreshLLMPluginMapping(llmID uint) error {
 	return a.manager.RefreshLLMPluginMapping(llmID)
+}
+
+// GetEndpointRoute looks up a custom plugin endpoint route and converts to API-layer type
+func (a *PluginManagerAdapter) GetEndpointRoute(method, pluginName, subPath string) *EndpointRouteInfo {
+	route := a.manager.GetEndpointRoute(method, pluginName, subPath)
+	if route == nil {
+		return nil
+	}
+	return &EndpointRouteInfo{
+		PluginID:       route.PluginID,
+		PluginName:     route.PluginName,
+		Path:           route.Path,
+		Methods:        route.Methods,
+		RequireAuth:    route.RequireAuth,
+		StreamResponse: route.StreamResponse,
+		Description:    route.Description,
+		Metadata:       route.Metadata,
+	}
+}
+
+// HandleEndpointRequest dispatches a unary endpoint request to the plugin
+func (a *PluginManagerAdapter) HandleEndpointRequest(ctx context.Context, pluginID uint, req *pb.EndpointRequest) (*pb.EndpointResponse, error) {
+	return a.manager.HandleEndpointRequest(ctx, pluginID, req)
+}
+
+// HandleEndpointRequestStream dispatches a streaming endpoint request to the plugin
+func (a *PluginManagerAdapter) HandleEndpointRequestStream(ctx context.Context, pluginID uint, req *pb.EndpointRequest) (interface{ Recv() (*pb.EndpointResponseChunk, error) }, error) {
+	return a.manager.HandleEndpointRequestStream(ctx, pluginID, req)
 }
 
 // Helper conversion functions

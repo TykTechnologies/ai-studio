@@ -1019,11 +1019,19 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 		PermitWithoutStream: true,             // Send pings even without active streams
 	}
 
+	// Configure max message size (default 16MB, configurable via GRPC_MAX_MESSAGE_SIZE)
+	maxMsgSize := c.config.HubSpoke.MaxMessageSize
+	if maxMsgSize <= 0 {
+		maxMsgSize = 16 * 1024 * 1024 // 16MB fallback
+	}
+
 	// Setup dial options
 	opts := []grpc.DialOption{
 		grpc.WithKeepaliveParams(keepaliveParams),
 		grpc.WithUnaryInterceptor(c.authUnaryInterceptor()),
 		grpc.WithStreamInterceptor(c.authStreamInterceptor()),
+		// Config snapshots can exceed the gRPC default of 4MB with many plugins, LLMs, tools, and apps
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)),
 	}
 
 	// Configure transport credentials (TLS or insecure)

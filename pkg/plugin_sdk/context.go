@@ -156,6 +156,13 @@ type GatewayServices interface {
 	SendToControlJSON(ctx context.Context, value interface{}, correlationID string, metadata map[string]string) (int64, error)
 }
 
+// ListAppsOptions provides optional filters for listing apps
+type ListAppsOptions struct {
+	IsActive  *bool
+	Namespace string
+	UserID    *uint32
+}
+
 // StudioServices provides access to AI Studio-specific services
 // Only available when Runtime == RuntimeStudio
 type StudioServices interface {
@@ -168,6 +175,15 @@ type StudioServices interface {
 
 	// UpdateAppWithMetadata updates app configuration including metadata
 	UpdateAppWithMetadata(ctx context.Context, appID uint32, name, description string, isActive bool, llmIDs, toolIDs, datasourceIDs []uint32, monthlyBudget *float64, metadata string) (interface{}, error)
+
+	// PatchAppMetadata atomically updates a single metadata key on an app.
+	// To set a key: PatchAppMetadata(ctx, appID, "mykey", `"myvalue"`, false)
+	// To delete a key: PatchAppMetadata(ctx, appID, "mykey", "", true)
+	// Returns the full metadata JSON string after the operation.
+	PatchAppMetadata(ctx context.Context, appID uint32, key, value string, deleteKey bool) (string, error)
+
+	// ListAppsWithFilters lists apps with optional filtering by user_id, namespace, and is_active
+	ListAppsWithFilters(ctx context.Context, page, limit int32, opts *ListAppsOptions) (interface{}, error)
 
 	// GetLLM retrieves LLM details from AI Studio database
 	GetLLM(ctx context.Context, llmID uint32) (interface{}, error)

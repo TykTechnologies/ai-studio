@@ -258,8 +258,8 @@ func (a *Apps) ListWithPagination(db *gorm.DB, pageSize int, pageNumber int, all
 	return totalCount, totalPages, err
 }
 
-// ListWithFilters returns a paginated list of apps with namespace and active status filtering
-func (a *Apps) ListWithFilters(db *gorm.DB, pageSize int, pageNumber int, all bool, sort, namespace string, isActive *bool) (int64, int, error) {
+// ListWithFilters returns a paginated list of apps with namespace, active status, and owner filtering
+func (a *Apps) ListWithFilters(db *gorm.DB, pageSize int, pageNumber int, all bool, sort, namespace string, isActive *bool, userID *uint) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&App{})
 
@@ -275,6 +275,11 @@ func (a *Apps) ListWithFilters(db *gorm.DB, pageSize int, pageNumber int, all bo
 	// Apply is_active filtering
 	if isActive != nil {
 		query = query.Where("is_active = ?", *isActive)
+	}
+
+	// Apply user_id (owner) filtering
+	if userID != nil {
+		query = query.Where("user_id = ?", *userID)
 	}
 
 	// Handle sorting
