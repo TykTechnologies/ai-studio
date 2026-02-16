@@ -137,6 +137,129 @@ func TestDatasourceRequestHandling(t *testing.T) {
 	// ...
 }
 
+func TestAuthFailures(t *testing.T) {
+	db, cancel := setupTest(t)
+	defer tearDownTest(db, cancel)
+
+	service := services.NewService(db)
+	notificationSvc := services.NewTestNotificationService(db)
+	budgetService := budget.NewService(db, notificationSvc)
+	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
+	require.NotNil(t, proxy)
+
+	user := &models.User{ID: 1, Email: "test@example.com"}
+	db.Create(user)
+
+	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("Upstream server should not be called in a failed auth test")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer mockUpstream.Close()
+
+	llm := &models.LLM{
+		Model:        gorm.Model{ID: 1},
+		Name:         "TestLLM",
+		Vendor:       models.MOCK_VENDOR,
+		DefaultModel: "test-model",
+		Active:       true,
+		APIEndpoint:  mockUpstream.URL,
+	}
+	db.Create(llm)
+
+	app := &models.App{
+		Model:  gorm.Model{ID: 1},
+		LLMs:   []models.LLM{*llm},
+		UserID: user.ID,
+	}
+	db.Create(app)
+
+	validCred, err := service.CreateCredential()
+	require.NoError(t, err)
+	err = service.ActivateCredential(validCred.ID)
+	require.NoError(t, err)
+
+	inactiveCred, err := service.CreateCredential()
+	require.NoError(t, err)
+
+	credNotLinked, err := service.CreateCredential()
+	require.NoError(t, err)
+	err = service.ActivateCredential(credNotLinked.ID)
+	require.NoError(t, err)
+
+	app.CredentialID = validCred.ID
+	db.Save(app)
+
+	err = proxy.loadResources()
+	require.NoError(t, err)
+
+	r := mux.NewRouter()
+	finalHandler := proxy.credValidator.Middleware(
+		proxy.streamDetectionMiddleware(
+			http.HandlerFunc(proxy.handleUnifiedLLMRequest),
+		),
+	)
+	r.Handle("/llm/call/{llmSlug}/{rest:.*}", finalHandler)
+	proxySrv := httptest.NewServer(r)
+	defer proxySrv.Close()
+
+	tests := []struct {
+		name               string
+		setupRequest       func(r *http.Request)
+		expectedStatusCode int
+	}{
+		{
+			name: "Auth/Failure/NoToken",
+			setupRequest: func(_ *http.Request) {
+			},
+			expectedStatusCode: http.StatusUnauthorized,
+		},
+		{
+			name: "Auth/Failure/InvalidToken",
+			setupRequest: func(r *http.Request) {
+				r.Header.Set("Authorization", "Bearer invalid-token")
+			},
+			expectedStatusCode: http.StatusUnauthorized,
+		},
+		{
+			name: "Auth/Failure/InactiveCredential",
+			setupRequest: func(r *http.Request) {
+				r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", inactiveCred.Secret))
+			},
+			expectedStatusCode: http.StatusUnauthorized,
+		},
+		{
+			name: "Auth/Failure/CredentialNotAssociatedWithApp",
+			setupRequest: func(r *http.Request) {
+				r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", credNotLinked.Secret))
+			},
+			expectedStatusCode: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reqBody := []byte(`{"messages": [{"role": "user", "content": "Hello"}]}`)
+			url := fmt.Sprintf("%s/llm/call/%s/v1/chat/completions", proxySrv.URL, strings.ToLower(llm.Name))
+			req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+			require.NoError(t, err)
+
+			tt.setupRequest(req)
+
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer func() {
+				if resp != nil && resp.Body != nil {
+					if err := resp.Body.Close(); err != nil {
+						t.Logf("error closing response body: %v", err)
+					}
+				}
+			}()
+
+			assert.Equal(t, tt.expectedStatusCode, resp.StatusCode, "Expected status code to match")
+		})
+	}
+}
+
 func TestGoogleAIRequestHandling(t *testing.T) {
 	db, cancel := setupTest(t)
 	defer tearDownTest(db, cancel)
