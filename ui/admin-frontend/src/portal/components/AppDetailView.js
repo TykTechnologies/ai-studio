@@ -659,12 +659,16 @@ const AppDetailView = () => {
                       flexGrow: 1,
                     }}
                   >
-                    {generateEndpointUrl("/llm/call/", llm.attributes.name)}
+                    {llm.attributes.vendor === "google_ai"
+                      ? joinUrlParts(generateEndpointUrl("/llm/call/", llm.attributes.name), "v1/models/YOUR_MODEL:generateContent")
+                      : generateEndpointUrl("/llm/call/", llm.attributes.name)}
                   </Typography>
                   <IconButton
                     onClick={() =>
                       copyToClipboard(
-                        generateEndpointUrl("/llm/call/", llm.attributes.name),
+                        llm.attributes.vendor === "google_ai"
+                          ? joinUrlParts(generateEndpointUrl("/llm/call/", llm.attributes.name), "v1/models/YOUR_MODEL:generateContent")
+                          : generateEndpointUrl("/llm/call/", llm.attributes.name),
                       )
                     }
                     size="small"
