@@ -211,7 +211,7 @@ func extractModelIDFromGoogleURL(url string) (string, error) {
 
 func extractModelIDFromGoogleURLAlternate(url string) (string, error) {
 	// Regular expression pattern to match the MODEL-ID in the new URL format
-	pattern := `/v1beta/models/([^/:]+)`
+	pattern := `/v1(?:beta)?/models/([^/:]+)`
 
 	// Compile the regular expression
 	re, err := regexp.Compile(pattern)
