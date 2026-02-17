@@ -24,6 +24,7 @@ type GoogleAIChatResponse struct {
 		CandidatesTokenCount    int `json:"candidatesTokenCount"`
 		TotalTokenCount         int `json:"totalTokenCount"`
 		CachedContentTokenCount int `json:"cachedContentTokenCount"`
+		ThoughtsTokenCount      int `json:"thoughtsTokenCount"`
 	} `json:"usageMetadata"`
 	Model string `json:"model"`
 }
@@ -47,6 +48,7 @@ type GoogleAIStreamChunk struct {
 		PromptTokenCount     int `json:"promptTokenCount"`
 		CandidatesTokenCount int `json:"candidatesTokenCount"`
 		TotalTokenCount      int `json:"totalTokenCount"`
+		ThoughtsTokenCount   int `json:"thoughtsTokenCount"`
 	} `json:"usageMetadata"`
 }
 
@@ -92,7 +94,14 @@ func (o *GoogleAIChatResponse) GetPromptTokens() int {
 }
 
 func (o *GoogleAIChatResponse) GetResponseTokens() int {
-	return o.UsageMetadata.CandidatesTokenCount
+	if o != nil {
+		// INFO: We have to include thoughts tokens as they're priced like response tokens
+		// More details: https://ai.google.dev/gemini-api/docs/thinking#go_5
+		return o.UsageMetadata.CandidatesTokenCount +
+			o.UsageMetadata.ThoughtsTokenCount
+	}
+
+	return 0
 }
 
 func (o *GoogleAIChatResponse) GetChoiceCount() int {

@@ -105,7 +105,8 @@ func (v *GoogleAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, st
 		}
 
 		aggregate.PromptTokens = gResp.UsageMetadata.PromptTokenCount
-		aggregate.CompletionTokens = gResp.UsageMetadata.CandidatesTokenCount
+		aggregate.CompletionTokens = gResp.UsageMetadata.CandidatesTokenCount +
+			gResp.UsageMetadata.ThoughtsTokenCount
 	}
 
 	return llm, app, aggregate, nil
