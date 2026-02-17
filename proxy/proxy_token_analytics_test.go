@@ -68,27 +68,22 @@ func startProxyServer(t *testing.T, proxy *Proxy) *httptest.Server {
 	t.Helper()
 
 	r := mux.NewRouter()
-	r.HandleFunc("/llm/rest/{llmSlug}/{rest:.*}", func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		newReq := r.Clone(r.Context())
-		newReq.Body = io.NopCloser(bytes.NewBuffer(body))
-		newReq.ContentLength = int64(len(body))
-		proxy.handleLLMRequest(w, newReq)
-	}).Methods("POST")
+	finalHandler := proxy.credValidator.Middleware(
+		proxy.streamDetectionMiddleware(
+			http.HandlerFunc(proxy.handleUnifiedLLMRequest),
+		),
+	)
+	r.Handle("/llm/call/{llmSlug}/{rest:.*}", finalHandler)
 
-	return httptest.NewServer(proxy.credValidator.Middleware(r))
+	return httptest.NewServer(r)
 }
 
 func sendProxyRequest(t *testing.T, proxyURL, llmSlug, secret, reqBody string, isStreaming bool) *http.Response {
 	t.Helper()
 
-	url := fmt.Sprintf("%s/llm/rest/%s/v1/models/gemini-2.5-flash:generateContent", proxyURL, llmSlug)
+	url := fmt.Sprintf("%s/llm/call/%s/v1/models/gemini-2.5-flash:generateContent", proxyURL, llmSlug)
 	if isStreaming {
-		url = fmt.Sprintf("%s/llm/rest/%s/v1/models/gemini-2.5-flash:streamGenerateContent", proxyURL, llmSlug)
+		url = fmt.Sprintf("%s/llm/call/%s/v1/models/gemini-2.5-flash:streamGenerateContent", proxyURL, llmSlug)
 	}
 	req, err := http.NewRequest("POST", url, bytes.NewBufferString(reqBody))
 	require.NoError(t, err)
@@ -357,7 +352,7 @@ func TestTokenAnalytics_NoPriceRecord(t *testing.T) {
 	assert.InDelta(t, 0.0, record.Cost, 0.01)
 }
 
-func TestTokenAnalytics_MultipleChoices(t *testing.T) {
+func TestTokenAnalytics_StreamingRequest(t *testing.T) {
 	db, cancel := setupTest(t)
 	defer tearDownTest(db, cancel)
 
@@ -457,12 +452,10 @@ func TestTokenAnalytics_MultipleChoices(t *testing.T) {
 	var record models.LLMChatRecord
 	require.NoError(t, db.First(&record).Error)
 
-	assert.Equal(t, 2, record.Choices)
+	assert.Equal(t, 1, record.Choices)
 	assert.Equal(t, 8, record.PromptTokens)
 	assert.Equal(t, 219, record.ResponseTokens)
-
-	// Cost = ((0.002 * 12) + (0.001 * 8)) * 10000 = (0.024 + 0.008) * 10000 = 320.0
-	// assert.InDelta(t, 320.0, record.Cost, 0.01)
+	assert.InDelta(t, 5.49, record.Cost, 0.01)
 }
 
 //
