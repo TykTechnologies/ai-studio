@@ -1284,6 +1284,41 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			CreatedAt:          timestamppb.New(app.CreatedAt),
 			UpdatedAt:          timestamppb.New(app.UpdatedAt),
 		}
+
+		// Add plugin resource associations
+		var appPluginResources []models.AppPluginResource
+		if err := s.db.Where("app_id = ?", app.ID).
+			Preload("PluginResourceType").
+			Find(&appPluginResources).Error; err == nil && len(appPluginResources) > 0 {
+
+			// Group by (plugin_id, resource_type_slug)
+			type prKey struct {
+				PluginID uint
+				Slug     string
+			}
+			grouped := make(map[prKey]*pb.PluginResourceAssociation)
+			for _, apr := range appPluginResources {
+				if apr.PluginResourceType == nil {
+					continue
+				}
+				k := prKey{apr.PluginResourceType.PluginID, apr.PluginResourceType.Slug}
+				if _, exists := grouped[k]; !exists {
+					grouped[k] = &pb.PluginResourceAssociation{
+						PluginId:         uint32(apr.PluginResourceType.PluginID),
+						ResourceTypeSlug: apr.PluginResourceType.Slug,
+					}
+				}
+				grouped[k].InstanceIds = append(grouped[k].InstanceIds, apr.InstanceID)
+				grouped[k].Instances = append(grouped[k].Instances, &pb.ResourceInstanceSnapshot{
+					Id:   apr.InstanceID,
+					Name: "", // Instance details can be populated via plugin RPC if needed
+				})
+			}
+			for _, pra := range grouped {
+				pbApp.PluginResources = append(pbApp.PluginResources, pra)
+			}
+		}
+
 		snapshot.Apps = append(snapshot.Apps, pbApp)
 	}
 

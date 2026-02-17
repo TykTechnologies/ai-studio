@@ -213,6 +213,22 @@ func (m *MockPluginServiceClient) HandleEndpointRequestStream(ctx context.Contex
 	return nil, nil
 }
 
+func (m *MockPluginServiceClient) GetResourceTypeRegistrations(ctx context.Context, in *pb.GetResourceTypeRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetResourceTypeRegistrationsResponse, error) {
+	return &pb.GetResourceTypeRegistrationsResponse{}, nil
+}
+func (m *MockPluginServiceClient) ListResourceInstances(ctx context.Context, in *pb.ListResourceInstancesRequest, opts ...grpc.CallOption) (*pb.ListResourceInstancesResponse, error) {
+	return &pb.ListResourceInstancesResponse{}, nil
+}
+func (m *MockPluginServiceClient) GetResourceInstance(ctx context.Context, in *pb.GetResourceInstanceRequest, opts ...grpc.CallOption) (*pb.GetResourceInstanceResponse, error) {
+	return &pb.GetResourceInstanceResponse{}, nil
+}
+func (m *MockPluginServiceClient) ValidateResourceSelection(ctx context.Context, in *pb.ValidateResourceSelectionRequest, opts ...grpc.CallOption) (*pb.ValidateResourceSelectionResponse, error) {
+	return &pb.ValidateResourceSelectionResponse{Valid: true}, nil
+}
+func (m *MockPluginServiceClient) CreateResourceInstance(ctx context.Context, in *pb.CreateResourceInstanceRequest, opts ...grpc.CallOption) (*pb.CreateResourceInstanceResponse, error) {
+	return &pb.CreateResourceInstanceResponse{}, nil
+}
+
 // MockAgentMessageStream implements the gRPC stream interface
 type MockAgentMessageStream struct {
 	grpc.ClientStream

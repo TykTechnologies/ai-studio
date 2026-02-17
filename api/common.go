@@ -435,44 +435,9 @@ func (a *API) createUserApp(c *gin.Context) {
 
 	currentAppTools := app.Tools // Explicitly copy/reference before response construction
 
-	// Prepare the response
-	response := AppResponse{
-		Type: "app",
-		ID:   strconv.FormatUint(uint64(app.ID), 10),
-		Attributes: struct {
-			Name            string                 `json:"name"`
-			Description     string                 `json:"description"`
-			UserID          uint                   `json:"user_id"`
-			CredentialID    uint                   `json:"credential_id"`
-			DatasourceIDs   []uint                 `json:"datasource_ids"`
-			LLMIDs          []uint                 `json:"llm_ids"`
-			ToolIDs         []uint                 `json:"tool_ids"`
-			MonthlyBudget   *float64               `json:"monthly_budget"`
-			BudgetStartDate *time.Time             `json:"budget_start_date"`
-			IsOrphaned      bool                   `json:"is_orphaned"`
-			Metadata        map[string]interface{} `json:"metadata,omitempty"`
-			Namespace       string                 `json:"namespace,omitempty"`
-		}{
-			Name:          app.Name,
-			Description:   app.Description,
-			UserID:        app.UserID,
-			CredentialID:  app.CredentialID,
-			DatasourceIDs: getDatasourceIDs(app.Datasources),
-			LLMIDs:        getLLMIDs(app.LLMs),
-			ToolIDs: func() []uint { // This was missing from the previous diff's Attributes block
-				ids := make([]uint, len(currentAppTools)) // Use the local variable
-				for i, tool := range currentAppTools {    // Use the local variable
-					ids[i] = tool.ID
-				}
-				return ids
-			}(),
-			MonthlyBudget:   app.MonthlyBudget,
-			BudgetStartDate: app.BudgetStartDate,
-			IsOrphaned:      app.IsOrphaned,
-			Metadata:        app.Metadata,
-			Namespace:       app.Namespace,
-		},
-	}
+	// Prepare the response (use shared serializer)
+	_ = currentAppTools // verified above for logging
+	response := serializeApp(app)
 
 	c.JSON(http.StatusCreated, response)
 }
@@ -618,55 +583,7 @@ func (a *API) getUserApps(c *gin.Context) {
 
 	response := make([]AppResponse, len(apps))
 	for i, app := range apps {
-		response[i] = AppResponse{
-			Type: "app",
-			ID:   strconv.FormatUint(uint64(app.ID), 10),
-			Attributes: struct {
-				Name            string                 `json:"name"`
-				Description     string                 `json:"description"`
-				UserID          uint                   `json:"user_id"`
-				CredentialID    uint                   `json:"credential_id"`
-				DatasourceIDs   []uint                 `json:"datasource_ids"`
-				LLMIDs          []uint                 `json:"llm_ids"`
-				ToolIDs         []uint                 `json:"tool_ids"`
-				MonthlyBudget   *float64               `json:"monthly_budget"`
-				BudgetStartDate *time.Time             `json:"budget_start_date"`
-				IsOrphaned      bool                   `json:"is_orphaned"`
-				Metadata        map[string]interface{} `json:"metadata,omitempty"`
-				Namespace       string                 `json:"namespace,omitempty"`
-			}{
-				Name:            app.Name,
-				Description:     app.Description,
-				UserID:          app.UserID,
-				CredentialID:    app.CredentialID,
-				MonthlyBudget:   app.MonthlyBudget,
-				BudgetStartDate: app.BudgetStartDate,
-				DatasourceIDs: func() []uint {
-					ids := make([]uint, len(app.Datasources))
-					for i, ds := range app.Datasources {
-						ids[i] = ds.ID
-					}
-					return ids
-				}(),
-				LLMIDs: func() []uint {
-					ids := make([]uint, len(app.LLMs))
-					for i, llm := range app.LLMs {
-						ids[i] = llm.ID
-					}
-					return ids
-				}(),
-				ToolIDs: func() []uint {
-					ids := make([]uint, len(app.Tools))
-					for i, tool := range app.Tools {
-						ids[i] = tool.ID
-					}
-					return ids
-				}(),
-				IsOrphaned: app.IsOrphaned,
-				Metadata:   app.Metadata,
-				Namespace:  app.Namespace,
-			},
-		}
+		response[i] = serializeApp(&app)
 	}
 
 	c.JSON(http.StatusOK, AppListResponse{

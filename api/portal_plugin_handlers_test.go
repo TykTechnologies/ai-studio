@@ -474,3 +474,18 @@ func (m *mockPortalPluginClient) HandleEndpointRequest(ctx context.Context, in *
 func (m *mockPortalPluginClient) HandleEndpointRequestStream(ctx context.Context, in *pb.EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.EndpointResponseChunk], error) {
 	return nil, nil
 }
+func (m *mockPortalPluginClient) GetResourceTypeRegistrations(ctx context.Context, in *pb.GetResourceTypeRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetResourceTypeRegistrationsResponse, error) {
+	return &pb.GetResourceTypeRegistrationsResponse{}, nil
+}
+func (m *mockPortalPluginClient) ListResourceInstances(ctx context.Context, in *pb.ListResourceInstancesRequest, opts ...grpc.CallOption) (*pb.ListResourceInstancesResponse, error) {
+	return &pb.ListResourceInstancesResponse{}, nil
+}
+func (m *mockPortalPluginClient) GetResourceInstance(ctx context.Context, in *pb.GetResourceInstanceRequest, opts ...grpc.CallOption) (*pb.GetResourceInstanceResponse, error) {
+	return &pb.GetResourceInstanceResponse{}, nil
+}
+func (m *mockPortalPluginClient) ValidateResourceSelection(ctx context.Context, in *pb.ValidateResourceSelectionRequest, opts ...grpc.CallOption) (*pb.ValidateResourceSelectionResponse, error) {
+	return &pb.ValidateResourceSelectionResponse{Valid: true}, nil
+}
+func (m *mockPortalPluginClient) CreateResourceInstance(ctx context.Context, in *pb.CreateResourceInstanceRequest, opts ...grpc.CallOption) (*pb.CreateResourceInstanceResponse, error) {
+	return &pb.CreateResourceInstanceResponse{}, nil
+}

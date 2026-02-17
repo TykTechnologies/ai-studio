@@ -65,6 +65,23 @@ type PluginManifest struct {
 
 	// Scheduled tasks
 	Schedules []ScheduleDefinition `json:"schedules,omitempty"`
+
+	// Resource types provided by this plugin (for ResourceProvider capability)
+	ResourceTypes []ManifestResourceType `json:"resource_types,omitempty"`
+}
+
+// ManifestResourceType declares a resource type in the plugin manifest
+type ManifestResourceType struct {
+	Slug                string `json:"slug" binding:"required"`
+	Name                string `json:"name" binding:"required"`
+	Description         string `json:"description"`
+	Icon                string `json:"icon"`
+	HasPrivacyScore     bool   `json:"has_privacy_score"`
+	SupportsSubmissions bool   `json:"supports_submissions"`
+	FormComponent       *struct {
+		Tag        string `json:"tag"`
+		EntryPoint string `json:"entry_point"`
+	} `json:"form_component,omitempty"`
 }
 
 // ScheduleDefinition represents a cron-based task schedule in the manifest

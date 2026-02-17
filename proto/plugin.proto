@@ -70,6 +70,13 @@ service PluginService {
     rpc HandleEndpointRequest(EndpointRequest) returns (EndpointResponse);
     rpc HandleEndpointRequestStream(EndpointRequest) returns (stream EndpointResponseChunk);
 
+    // Resource Provider Methods — plugins register custom resource types for Apps
+    rpc GetResourceTypeRegistrations(GetResourceTypeRegistrationsRequest) returns (GetResourceTypeRegistrationsResponse);
+    rpc ListResourceInstances(ListResourceInstancesRequest) returns (ListResourceInstancesResponse);
+    rpc GetResourceInstance(GetResourceInstanceRequest) returns (GetResourceInstanceResponse);
+    rpc ValidateResourceSelection(ValidateResourceSelectionRequest) returns (ValidateResourceSelectionResponse);
+    rpc CreateResourceInstance(CreateResourceInstanceRequest) returns (CreateResourceInstanceResponse);
+
     // Session management for long-lived broker access
     // OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
     // Host should call this in a loop after Initialize() to maintain broker connectivity
@@ -645,4 +652,91 @@ message EndpointResponseChunk {
     map<string, string> headers = 3;     // Set on HEADERS chunk
     bytes data = 4;                      // Set on BODY chunks (raw bytes to flush)
     string error_message = 5;            // Set on ERROR chunk
+}
+
+// --- Resource Provider Messages ---
+// These enable plugins to register custom resource types that can be
+// associated with Apps and participate in privacy validation.
+
+message GetResourceTypeRegistrationsRequest {
+    // Empty - plugin returns its resource type registrations
+}
+
+message GetResourceTypeRegistrationsResponse {
+    repeated ResourceTypeRegistrationProto registrations = 1;
+}
+
+message ResourceTypeRegistrationProto {
+    string slug = 1;                     // Machine-readable identifier (unique per plugin)
+    string name = 2;                     // Human-readable display name
+    string description = 3;              // Description of this resource type
+    string icon = 4;                     // Material icon name or asset path
+    bool has_privacy_score = 5;          // Whether instances carry privacy scores
+    bool supports_submissions = 6;       // Whether community submissions are supported
+    ResourceFormComponentProto form_component = 7;  // Optional custom form component
+}
+
+message ResourceFormComponentProto {
+    string tag = 1;                      // Web Component custom element tag
+    string entry_point = 2;              // JS asset path relative to plugin root
+}
+
+message ListResourceInstancesRequest {
+    string resource_type_slug = 1;       // Which resource type to list instances for
+    PluginContext context = 2;
+    uint32 service_broker_id = 3;
+}
+
+message ListResourceInstancesResponse {
+    bool success = 1;
+    repeated ResourceInstanceProto instances = 2;
+    string error_message = 3;
+}
+
+message ResourceInstanceProto {
+    string id = 1;                       // Plugin-assigned unique identifier
+    string name = 2;                     // Human-readable display name
+    string description = 3;              // Optional description
+    int32 privacy_score = 4;             // 0-100 (only meaningful if type has privacy)
+    bytes metadata = 5;                  // Opaque JSON metadata
+    bool is_active = 6;                  // Whether instance is currently usable
+}
+
+message GetResourceInstanceRequest {
+    string resource_type_slug = 1;
+    string instance_id = 2;
+    PluginContext context = 3;
+    uint32 service_broker_id = 4;
+}
+
+message GetResourceInstanceResponse {
+    bool success = 1;
+    ResourceInstanceProto instance = 2;
+    string error_message = 3;
+}
+
+message ValidateResourceSelectionRequest {
+    string resource_type_slug = 1;
+    repeated string instance_ids = 2;
+    uint32 app_id = 3;
+    PluginContext context = 4;
+    uint32 service_broker_id = 5;
+}
+
+message ValidateResourceSelectionResponse {
+    bool valid = 1;
+    string error_message = 2;
+}
+
+message CreateResourceInstanceRequest {
+    string resource_type_slug = 1;
+    bytes payload = 2;                   // JSON-encoded creation payload (plugin-defined schema)
+    PluginContext context = 3;
+    uint32 service_broker_id = 4;
+}
+
+message CreateResourceInstanceResponse {
+    bool success = 1;
+    ResourceInstanceProto instance = 2;
+    string error_message = 3;
 }

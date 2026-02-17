@@ -21,6 +21,7 @@ import useOverviewData from "../../hooks/useOverviewData";
 import GroupFormBasicInfo from "./components/GroupFormBasicInfo";
 import GroupMembersSection from "./components/GroupMembersSection";
 import GroupCatalogsSection from "./components/GroupCatalogsSection";
+import GroupPluginResourcesSection from "./components/GroupPluginResourcesSection";
 
 const GroupForm = () => {
   const { id } = useParams();
@@ -116,6 +117,10 @@ const GroupForm = () => {
               loading={catalogsLoading}
               features={features}
             />
+          )}
+
+          {!isGatewayOnly && (
+            <GroupPluginResourcesSection groupId={id} />
           )}
 
           <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 3, gap: 2 }}>
