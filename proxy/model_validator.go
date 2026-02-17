@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/gorilla/mux"
 )
 
@@ -192,7 +191,6 @@ func AnthropicModelExtractor(r *http.Request, body []byte) (string, error) {
 }
 
 func GoogleAIModelExtractor(r *http.Request, body []byte) (string, error) {
-	logger.Infof("Request URL: %s", r.URL.Path)
 	// Google AI can have model in different places depending on the API version
 	// Extract from URL path
 	parts := strings.Split(r.URL.Path, "/")
