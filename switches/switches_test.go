@@ -315,7 +315,7 @@ func TestFetchDriver_WithHTTPClient_GoogleAI(t *testing.T) {
 				ModelName: "gemini-pro",
 			},
 			wantErr:         false,
-			expectedBaseURL: "",
+			expectedBaseURL: "https://generativelanguage.googleapis.com",
 		},
 		{
 			name: "GoogleAI with custom HTTP client and empty settings",
@@ -361,15 +361,13 @@ func TestFetchDriver_WithHTTPClient_GoogleAI(t *testing.T) {
 			assert.Error(t, err, "GenerateContent() succeeded unexpectedly with mocked transport")
 			assert.Len(t, mockTransport.capturedRequests, 1)
 
-			if tt.expectedBaseURL != "" {
-				capturedReq := mockTransport.capturedRequests[0]
-				capturedReqURL := capturedReq.URL.Scheme + "://" + capturedReq.URL.Host
-				assert.Equal(t, tt.expectedBaseURL, capturedReqURL, fmt.Sprintf(
-					"Expected base URL %s, but got %s",
-					tt.expectedBaseURL,
-					capturedReqURL,
-				))
-			}
+			capturedReq := mockTransport.capturedRequests[0]
+			capturedReqURL := capturedReq.URL.Scheme + "://" + capturedReq.URL.Host
+			assert.Equal(t, tt.expectedBaseURL, capturedReqURL, fmt.Sprintf(
+				"Expected base URL %s, but got %s",
+				tt.expectedBaseURL,
+				capturedReqURL,
+			))
 		})
 	}
 }
