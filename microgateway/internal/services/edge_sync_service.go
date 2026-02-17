@@ -341,6 +341,13 @@ func (s *EdgeSyncService) syncApps(tx *gorm.DB, apps []*pb.AppConfig) error {
 			app.Metadata = datatypes.JSON(pbApp.Metadata)
 		}
 
+		// Serialize plugin resource associations for gateway access
+		if len(pbApp.PluginResources) > 0 {
+			if prJSON, err := json.Marshal(pbApp.PluginResources); err == nil {
+				app.PluginResourcesJSON = datatypes.JSON(prJSON)
+			}
+		}
+
 		// Handle budget start date if available  
 		if pbApp.BudgetStartDate != "" {
 			if startDate, err := time.Parse(time.RFC3339, pbApp.BudgetStartDate); err == nil {

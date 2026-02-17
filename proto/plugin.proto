@@ -237,6 +237,17 @@ message App {
     double monthly_budget = 6;
     int32 rate_limit = 7;
     map<string, string> metadata = 8;
+    repeated AppPluginResourceAssociation plugin_resources = 9;
+}
+
+// AppPluginResourceAssociation carries plugin resource bindings on the App proto.
+// This is populated by the gateway router so CustomEndpointHandler plugins can
+// access resource associations directly from EndpointRequest.App without
+// parsing metadata workarounds.
+message AppPluginResourceAssociation {
+    uint32 plugin_id = 1;
+    string resource_type_slug = 2;
+    repeated string instance_ids = 3;
 }
 
 message User {

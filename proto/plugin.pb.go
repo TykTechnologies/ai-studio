@@ -76,7 +76,7 @@ func (x AgentMessageChunk_ChunkType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AgentMessageChunk_ChunkType.Descriptor instead.
 func (AgentMessageChunk_ChunkType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{43, 0}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{44, 0}
 }
 
 type OpenSessionResponse_CloseReason int32
@@ -128,7 +128,7 @@ func (x OpenSessionResponse_CloseReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use OpenSessionResponse_CloseReason.Descriptor instead.
 func (OpenSessionResponse_CloseReason) EnumDescriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{59, 0}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{60, 0}
 }
 
 type EndpointResponseChunk_ChunkType int32
@@ -180,7 +180,7 @@ func (x EndpointResponseChunk_ChunkType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use EndpointResponseChunk_ChunkType.Descriptor instead.
 func (EndpointResponseChunk_ChunkType) EnumDescriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{67, 0}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{68, 0}
 }
 
 type InitRequest struct {
@@ -1561,17 +1561,18 @@ func (x *GetUserResponse) GetUser() *User {
 }
 
 type App struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	OwnerEmail    string                 `protobuf:"bytes,4,opt,name=owner_email,json=ownerEmail,proto3" json:"owner_email,omitempty"`
-	IsActive      bool                   `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
-	MonthlyBudget float64                `protobuf:"fixed64,6,opt,name=monthly_budget,json=monthlyBudget,proto3" json:"monthly_budget,omitempty"`
-	RateLimit     int32                  `protobuf:"varint,7,opt,name=rate_limit,json=rateLimit,proto3" json:"rate_limit,omitempty"`
-	Metadata      map[string]string      `protobuf:"bytes,8,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState          `protogen:"open.v1"`
+	Id              uint32                          `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name            string                          `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description     string                          `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	OwnerEmail      string                          `protobuf:"bytes,4,opt,name=owner_email,json=ownerEmail,proto3" json:"owner_email,omitempty"`
+	IsActive        bool                            `protobuf:"varint,5,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	MonthlyBudget   float64                         `protobuf:"fixed64,6,opt,name=monthly_budget,json=monthlyBudget,proto3" json:"monthly_budget,omitempty"`
+	RateLimit       int32                           `protobuf:"varint,7,opt,name=rate_limit,json=rateLimit,proto3" json:"rate_limit,omitempty"`
+	Metadata        map[string]string               `protobuf:"bytes,8,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	PluginResources []*AppPluginResourceAssociation `protobuf:"bytes,9,rep,name=plugin_resources,json=pluginResources,proto3" json:"plugin_resources,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *App) Reset() {
@@ -1660,6 +1661,77 @@ func (x *App) GetMetadata() map[string]string {
 	return nil
 }
 
+func (x *App) GetPluginResources() []*AppPluginResourceAssociation {
+	if x != nil {
+		return x.PluginResources
+	}
+	return nil
+}
+
+// AppPluginResourceAssociation carries plugin resource bindings on the App proto.
+// This is populated by the gateway router so CustomEndpointHandler plugins can
+// access resource associations directly from EndpointRequest.App without
+// parsing metadata workarounds.
+type AppPluginResourceAssociation struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	PluginId         uint32                 `protobuf:"varint,1,opt,name=plugin_id,json=pluginId,proto3" json:"plugin_id,omitempty"`
+	ResourceTypeSlug string                 `protobuf:"bytes,2,opt,name=resource_type_slug,json=resourceTypeSlug,proto3" json:"resource_type_slug,omitempty"`
+	InstanceIds      []string               `protobuf:"bytes,3,rep,name=instance_ids,json=instanceIds,proto3" json:"instance_ids,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AppPluginResourceAssociation) Reset() {
+	*x = AppPluginResourceAssociation{}
+	mi := &file_proto_plugin_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppPluginResourceAssociation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppPluginResourceAssociation) ProtoMessage() {}
+
+func (x *AppPluginResourceAssociation) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugin_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppPluginResourceAssociation.ProtoReflect.Descriptor instead.
+func (*AppPluginResourceAssociation) Descriptor() ([]byte, []int) {
+	return file_proto_plugin_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AppPluginResourceAssociation) GetPluginId() uint32 {
+	if x != nil {
+		return x.PluginId
+	}
+	return 0
+}
+
+func (x *AppPluginResourceAssociation) GetResourceTypeSlug() string {
+	if x != nil {
+		return x.ResourceTypeSlug
+	}
+	return ""
+}
+
+func (x *AppPluginResourceAssociation) GetInstanceIds() []string {
+	if x != nil {
+		return x.InstanceIds
+	}
+	return nil
+}
+
 type User struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1673,7 +1745,7 @@ type User struct {
 
 func (x *User) Reset() {
 	*x = User{}
-	mi := &file_proto_plugin_proto_msgTypes[23]
+	mi := &file_proto_plugin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1685,7 +1757,7 @@ func (x *User) String() string {
 func (*User) ProtoMessage() {}
 
 func (x *User) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[23]
+	mi := &file_proto_plugin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1698,7 +1770,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{23}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *User) GetId() uint32 {
@@ -1753,7 +1825,7 @@ type ProxyLogRequest struct {
 
 func (x *ProxyLogRequest) Reset() {
 	*x = ProxyLogRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[24]
+	mi := &file_proto_plugin_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1765,7 +1837,7 @@ func (x *ProxyLogRequest) String() string {
 func (*ProxyLogRequest) ProtoMessage() {}
 
 func (x *ProxyLogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[24]
+	mi := &file_proto_plugin_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1778,7 +1850,7 @@ func (x *ProxyLogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyLogRequest.ProtoReflect.Descriptor instead.
 func (*ProxyLogRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{24}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ProxyLogRequest) GetAppId() uint32 {
@@ -1869,7 +1941,7 @@ type AnalyticsRequest struct {
 
 func (x *AnalyticsRequest) Reset() {
 	*x = AnalyticsRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[25]
+	mi := &file_proto_plugin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1881,7 +1953,7 @@ func (x *AnalyticsRequest) String() string {
 func (*AnalyticsRequest) ProtoMessage() {}
 
 func (x *AnalyticsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[25]
+	mi := &file_proto_plugin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1894,7 +1966,7 @@ func (x *AnalyticsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyticsRequest.ProtoReflect.Descriptor instead.
 func (*AnalyticsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{25}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *AnalyticsRequest) GetLlmId() uint32 {
@@ -2036,7 +2108,7 @@ type BudgetUsageRequest struct {
 
 func (x *BudgetUsageRequest) Reset() {
 	*x = BudgetUsageRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[26]
+	mi := &file_proto_plugin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2048,7 +2120,7 @@ func (x *BudgetUsageRequest) String() string {
 func (*BudgetUsageRequest) ProtoMessage() {}
 
 func (x *BudgetUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[26]
+	mi := &file_proto_plugin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2061,7 +2133,7 @@ func (x *BudgetUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BudgetUsageRequest.ProtoReflect.Descriptor instead.
 func (*BudgetUsageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{26}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *BudgetUsageRequest) GetAppId() uint32 {
@@ -2160,7 +2232,7 @@ type DataCollectionResponse struct {
 
 func (x *DataCollectionResponse) Reset() {
 	*x = DataCollectionResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[27]
+	mi := &file_proto_plugin_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2172,7 +2244,7 @@ func (x *DataCollectionResponse) String() string {
 func (*DataCollectionResponse) ProtoMessage() {}
 
 func (x *DataCollectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[27]
+	mi := &file_proto_plugin_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2185,7 +2257,7 @@ func (x *DataCollectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DataCollectionResponse.ProtoReflect.Descriptor instead.
 func (*DataCollectionResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{27}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *DataCollectionResponse) GetSuccess() bool {
@@ -2225,7 +2297,7 @@ type GetAssetRequest struct {
 
 func (x *GetAssetRequest) Reset() {
 	*x = GetAssetRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[28]
+	mi := &file_proto_plugin_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2237,7 +2309,7 @@ func (x *GetAssetRequest) String() string {
 func (*GetAssetRequest) ProtoMessage() {}
 
 func (x *GetAssetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[28]
+	mi := &file_proto_plugin_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2250,7 +2322,7 @@ func (x *GetAssetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAssetRequest.ProtoReflect.Descriptor instead.
 func (*GetAssetRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{28}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetAssetRequest) GetAssetPath() string {
@@ -2273,7 +2345,7 @@ type GetAssetResponse struct {
 
 func (x *GetAssetResponse) Reset() {
 	*x = GetAssetResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[29]
+	mi := &file_proto_plugin_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2285,7 +2357,7 @@ func (x *GetAssetResponse) String() string {
 func (*GetAssetResponse) ProtoMessage() {}
 
 func (x *GetAssetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[29]
+	mi := &file_proto_plugin_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2298,7 +2370,7 @@ func (x *GetAssetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAssetResponse.ProtoReflect.Descriptor instead.
 func (*GetAssetResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{29}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetAssetResponse) GetSuccess() bool {
@@ -2345,7 +2417,7 @@ type ListAssetsRequest struct {
 
 func (x *ListAssetsRequest) Reset() {
 	*x = ListAssetsRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[30]
+	mi := &file_proto_plugin_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2357,7 +2429,7 @@ func (x *ListAssetsRequest) String() string {
 func (*ListAssetsRequest) ProtoMessage() {}
 
 func (x *ListAssetsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[30]
+	mi := &file_proto_plugin_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2370,7 +2442,7 @@ func (x *ListAssetsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAssetsRequest.ProtoReflect.Descriptor instead.
 func (*ListAssetsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{30}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListAssetsRequest) GetPathPrefix() string {
@@ -2391,7 +2463,7 @@ type ListAssetsResponse struct {
 
 func (x *ListAssetsResponse) Reset() {
 	*x = ListAssetsResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[31]
+	mi := &file_proto_plugin_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2403,7 +2475,7 @@ func (x *ListAssetsResponse) String() string {
 func (*ListAssetsResponse) ProtoMessage() {}
 
 func (x *ListAssetsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[31]
+	mi := &file_proto_plugin_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2416,7 +2488,7 @@ func (x *ListAssetsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAssetsResponse.ProtoReflect.Descriptor instead.
 func (*ListAssetsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{31}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListAssetsResponse) GetSuccess() bool {
@@ -2451,7 +2523,7 @@ type AssetInfo struct {
 
 func (x *AssetInfo) Reset() {
 	*x = AssetInfo{}
-	mi := &file_proto_plugin_proto_msgTypes[32]
+	mi := &file_proto_plugin_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2463,7 +2535,7 @@ func (x *AssetInfo) String() string {
 func (*AssetInfo) ProtoMessage() {}
 
 func (x *AssetInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[32]
+	mi := &file_proto_plugin_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2476,7 +2548,7 @@ func (x *AssetInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssetInfo.ProtoReflect.Descriptor instead.
 func (*AssetInfo) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{32}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *AssetInfo) GetPath() string {
@@ -2508,7 +2580,7 @@ type GetManifestRequest struct {
 
 func (x *GetManifestRequest) Reset() {
 	*x = GetManifestRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[33]
+	mi := &file_proto_plugin_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2520,7 +2592,7 @@ func (x *GetManifestRequest) String() string {
 func (*GetManifestRequest) ProtoMessage() {}
 
 func (x *GetManifestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[33]
+	mi := &file_proto_plugin_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2533,7 +2605,7 @@ func (x *GetManifestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetManifestRequest.ProtoReflect.Descriptor instead.
 func (*GetManifestRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{33}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{34}
 }
 
 type GetManifestResponse struct {
@@ -2547,7 +2619,7 @@ type GetManifestResponse struct {
 
 func (x *GetManifestResponse) Reset() {
 	*x = GetManifestResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[34]
+	mi := &file_proto_plugin_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2559,7 +2631,7 @@ func (x *GetManifestResponse) String() string {
 func (*GetManifestResponse) ProtoMessage() {}
 
 func (x *GetManifestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[34]
+	mi := &file_proto_plugin_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2572,7 +2644,7 @@ func (x *GetManifestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetManifestResponse.ProtoReflect.Descriptor instead.
 func (*GetManifestResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{34}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetManifestResponse) GetSuccess() bool {
@@ -2608,7 +2680,7 @@ type CallRequest struct {
 
 func (x *CallRequest) Reset() {
 	*x = CallRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[35]
+	mi := &file_proto_plugin_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2620,7 +2692,7 @@ func (x *CallRequest) String() string {
 func (*CallRequest) ProtoMessage() {}
 
 func (x *CallRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[35]
+	mi := &file_proto_plugin_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2633,7 +2705,7 @@ func (x *CallRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallRequest.ProtoReflect.Descriptor instead.
 func (*CallRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{35}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *CallRequest) GetMethod() string {
@@ -2668,7 +2740,7 @@ type CallResponse struct {
 
 func (x *CallResponse) Reset() {
 	*x = CallResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[36]
+	mi := &file_proto_plugin_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2680,7 +2752,7 @@ func (x *CallResponse) String() string {
 func (*CallResponse) ProtoMessage() {}
 
 func (x *CallResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[36]
+	mi := &file_proto_plugin_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2693,7 +2765,7 @@ func (x *CallResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallResponse.ProtoReflect.Descriptor instead.
 func (*CallResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{36}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *CallResponse) GetSuccess() bool {
@@ -2732,7 +2804,7 @@ type PortalCallRequest struct {
 
 func (x *PortalCallRequest) Reset() {
 	*x = PortalCallRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[37]
+	mi := &file_proto_plugin_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2744,7 +2816,7 @@ func (x *PortalCallRequest) String() string {
 func (*PortalCallRequest) ProtoMessage() {}
 
 func (x *PortalCallRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[37]
+	mi := &file_proto_plugin_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2757,7 +2829,7 @@ func (x *PortalCallRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PortalCallRequest.ProtoReflect.Descriptor instead.
 func (*PortalCallRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{37}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *PortalCallRequest) GetMethod() string {
@@ -2799,7 +2871,7 @@ type PortalCallResponse struct {
 
 func (x *PortalCallResponse) Reset() {
 	*x = PortalCallResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[38]
+	mi := &file_proto_plugin_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2811,7 +2883,7 @@ func (x *PortalCallResponse) String() string {
 func (*PortalCallResponse) ProtoMessage() {}
 
 func (x *PortalCallResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[38]
+	mi := &file_proto_plugin_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2824,7 +2896,7 @@ func (x *PortalCallResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PortalCallResponse.ProtoReflect.Descriptor instead.
 func (*PortalCallResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{38}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *PortalCallResponse) GetSuccess() bool {
@@ -2864,7 +2936,7 @@ type PortalUserContext struct {
 
 func (x *PortalUserContext) Reset() {
 	*x = PortalUserContext{}
-	mi := &file_proto_plugin_proto_msgTypes[39]
+	mi := &file_proto_plugin_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2876,7 +2948,7 @@ func (x *PortalUserContext) String() string {
 func (*PortalUserContext) ProtoMessage() {}
 
 func (x *PortalUserContext) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[39]
+	mi := &file_proto_plugin_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2889,7 +2961,7 @@ func (x *PortalUserContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PortalUserContext.ProtoReflect.Descriptor instead.
 func (*PortalUserContext) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{39}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *PortalUserContext) GetUserId() uint32 {
@@ -2943,7 +3015,7 @@ type GetConfigSchemaRequest struct {
 
 func (x *GetConfigSchemaRequest) Reset() {
 	*x = GetConfigSchemaRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[40]
+	mi := &file_proto_plugin_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2955,7 +3027,7 @@ func (x *GetConfigSchemaRequest) String() string {
 func (*GetConfigSchemaRequest) ProtoMessage() {}
 
 func (x *GetConfigSchemaRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[40]
+	mi := &file_proto_plugin_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2968,7 +3040,7 @@ func (x *GetConfigSchemaRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigSchemaRequest.ProtoReflect.Descriptor instead.
 func (*GetConfigSchemaRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{40}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{41}
 }
 
 type GetConfigSchemaResponse struct {
@@ -2982,7 +3054,7 @@ type GetConfigSchemaResponse struct {
 
 func (x *GetConfigSchemaResponse) Reset() {
 	*x = GetConfigSchemaResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[41]
+	mi := &file_proto_plugin_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2994,7 +3066,7 @@ func (x *GetConfigSchemaResponse) String() string {
 func (*GetConfigSchemaResponse) ProtoMessage() {}
 
 func (x *GetConfigSchemaResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[41]
+	mi := &file_proto_plugin_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3007,7 +3079,7 @@ func (x *GetConfigSchemaResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigSchemaResponse.ProtoReflect.Descriptor instead.
 func (*GetConfigSchemaResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{41}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetConfigSchemaResponse) GetSuccess() bool {
@@ -3048,7 +3120,7 @@ type AgentMessageRequest struct {
 
 func (x *AgentMessageRequest) Reset() {
 	*x = AgentMessageRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[42]
+	mi := &file_proto_plugin_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3060,7 +3132,7 @@ func (x *AgentMessageRequest) String() string {
 func (*AgentMessageRequest) ProtoMessage() {}
 
 func (x *AgentMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[42]
+	mi := &file_proto_plugin_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3073,7 +3145,7 @@ func (x *AgentMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentMessageRequest.ProtoReflect.Descriptor instead.
 func (*AgentMessageRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{42}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *AgentMessageRequest) GetSessionId() string {
@@ -3151,7 +3223,7 @@ type AgentMessageChunk struct {
 
 func (x *AgentMessageChunk) Reset() {
 	*x = AgentMessageChunk{}
-	mi := &file_proto_plugin_proto_msgTypes[43]
+	mi := &file_proto_plugin_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3163,7 +3235,7 @@ func (x *AgentMessageChunk) String() string {
 func (*AgentMessageChunk) ProtoMessage() {}
 
 func (x *AgentMessageChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[43]
+	mi := &file_proto_plugin_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3176,7 +3248,7 @@ func (x *AgentMessageChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentMessageChunk.ProtoReflect.Descriptor instead.
 func (*AgentMessageChunk) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{43}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *AgentMessageChunk) GetType() AgentMessageChunk_ChunkType {
@@ -3221,7 +3293,7 @@ type AgentToolInfo struct {
 
 func (x *AgentToolInfo) Reset() {
 	*x = AgentToolInfo{}
-	mi := &file_proto_plugin_proto_msgTypes[44]
+	mi := &file_proto_plugin_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3233,7 +3305,7 @@ func (x *AgentToolInfo) String() string {
 func (*AgentToolInfo) ProtoMessage() {}
 
 func (x *AgentToolInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[44]
+	mi := &file_proto_plugin_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3246,7 +3318,7 @@ func (x *AgentToolInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentToolInfo.ProtoReflect.Descriptor instead.
 func (*AgentToolInfo) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{44}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *AgentToolInfo) GetId() uint32 {
@@ -3304,7 +3376,7 @@ type AgentDatasourceInfo struct {
 
 func (x *AgentDatasourceInfo) Reset() {
 	*x = AgentDatasourceInfo{}
-	mi := &file_proto_plugin_proto_msgTypes[45]
+	mi := &file_proto_plugin_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3316,7 +3388,7 @@ func (x *AgentDatasourceInfo) String() string {
 func (*AgentDatasourceInfo) ProtoMessage() {}
 
 func (x *AgentDatasourceInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[45]
+	mi := &file_proto_plugin_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3329,7 +3401,7 @@ func (x *AgentDatasourceInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentDatasourceInfo.ProtoReflect.Descriptor instead.
 func (*AgentDatasourceInfo) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{45}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *AgentDatasourceInfo) GetId() uint32 {
@@ -3381,7 +3453,7 @@ type AgentLLMInfo struct {
 
 func (x *AgentLLMInfo) Reset() {
 	*x = AgentLLMInfo{}
-	mi := &file_proto_plugin_proto_msgTypes[46]
+	mi := &file_proto_plugin_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3393,7 +3465,7 @@ func (x *AgentLLMInfo) String() string {
 func (*AgentLLMInfo) ProtoMessage() {}
 
 func (x *AgentLLMInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[46]
+	mi := &file_proto_plugin_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3406,7 +3478,7 @@ func (x *AgentLLMInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentLLMInfo.ProtoReflect.Descriptor instead.
 func (*AgentLLMInfo) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{46}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *AgentLLMInfo) GetId() uint32 {
@@ -3463,7 +3535,7 @@ type AgentConversationMessage struct {
 
 func (x *AgentConversationMessage) Reset() {
 	*x = AgentConversationMessage{}
-	mi := &file_proto_plugin_proto_msgTypes[47]
+	mi := &file_proto_plugin_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3475,7 +3547,7 @@ func (x *AgentConversationMessage) String() string {
 func (*AgentConversationMessage) ProtoMessage() {}
 
 func (x *AgentConversationMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[47]
+	mi := &file_proto_plugin_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3488,7 +3560,7 @@ func (x *AgentConversationMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentConversationMessage.ProtoReflect.Descriptor instead.
 func (*AgentConversationMessage) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{47}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *AgentConversationMessage) GetRole() string {
@@ -3527,7 +3599,7 @@ type GetObjectHookRegistrationsRequest struct {
 
 func (x *GetObjectHookRegistrationsRequest) Reset() {
 	*x = GetObjectHookRegistrationsRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[48]
+	mi := &file_proto_plugin_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3539,7 +3611,7 @@ func (x *GetObjectHookRegistrationsRequest) String() string {
 func (*GetObjectHookRegistrationsRequest) ProtoMessage() {}
 
 func (x *GetObjectHookRegistrationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[48]
+	mi := &file_proto_plugin_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3552,7 +3624,7 @@ func (x *GetObjectHookRegistrationsRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetObjectHookRegistrationsRequest.ProtoReflect.Descriptor instead.
 func (*GetObjectHookRegistrationsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{48}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{49}
 }
 
 type GetObjectHookRegistrationsResponse struct {
@@ -3564,7 +3636,7 @@ type GetObjectHookRegistrationsResponse struct {
 
 func (x *GetObjectHookRegistrationsResponse) Reset() {
 	*x = GetObjectHookRegistrationsResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[49]
+	mi := &file_proto_plugin_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3576,7 +3648,7 @@ func (x *GetObjectHookRegistrationsResponse) String() string {
 func (*GetObjectHookRegistrationsResponse) ProtoMessage() {}
 
 func (x *GetObjectHookRegistrationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[49]
+	mi := &file_proto_plugin_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3589,7 +3661,7 @@ func (x *GetObjectHookRegistrationsResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetObjectHookRegistrationsResponse.ProtoReflect.Descriptor instead.
 func (*GetObjectHookRegistrationsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{49}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GetObjectHookRegistrationsResponse) GetRegistrations() []*ObjectHookRegistration {
@@ -3610,7 +3682,7 @@ type ObjectHookRegistration struct {
 
 func (x *ObjectHookRegistration) Reset() {
 	*x = ObjectHookRegistration{}
-	mi := &file_proto_plugin_proto_msgTypes[50]
+	mi := &file_proto_plugin_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3622,7 +3694,7 @@ func (x *ObjectHookRegistration) String() string {
 func (*ObjectHookRegistration) ProtoMessage() {}
 
 func (x *ObjectHookRegistration) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[50]
+	mi := &file_proto_plugin_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3635,7 +3707,7 @@ func (x *ObjectHookRegistration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectHookRegistration.ProtoReflect.Descriptor instead.
 func (*ObjectHookRegistration) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{50}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ObjectHookRegistration) GetObjectType() string {
@@ -3678,7 +3750,7 @@ type ObjectHookRequest struct {
 
 func (x *ObjectHookRequest) Reset() {
 	*x = ObjectHookRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[51]
+	mi := &file_proto_plugin_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3690,7 +3762,7 @@ func (x *ObjectHookRequest) String() string {
 func (*ObjectHookRequest) ProtoMessage() {}
 
 func (x *ObjectHookRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[51]
+	mi := &file_proto_plugin_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3703,7 +3775,7 @@ func (x *ObjectHookRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectHookRequest.ProtoReflect.Descriptor instead.
 func (*ObjectHookRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{51}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ObjectHookRequest) GetHookType() string {
@@ -3786,7 +3858,7 @@ type ObjectHookResponse struct {
 
 func (x *ObjectHookResponse) Reset() {
 	*x = ObjectHookResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[52]
+	mi := &file_proto_plugin_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3798,7 +3870,7 @@ func (x *ObjectHookResponse) String() string {
 func (*ObjectHookResponse) ProtoMessage() {}
 
 func (x *ObjectHookResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[52]
+	mi := &file_proto_plugin_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3811,7 +3883,7 @@ func (x *ObjectHookResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectHookResponse.ProtoReflect.Descriptor instead.
 func (*ObjectHookResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{52}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ObjectHookResponse) GetAllowOperation() bool {
@@ -3867,7 +3939,7 @@ type ExecuteScheduledTaskRequest struct {
 
 func (x *ExecuteScheduledTaskRequest) Reset() {
 	*x = ExecuteScheduledTaskRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[53]
+	mi := &file_proto_plugin_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3879,7 +3951,7 @@ func (x *ExecuteScheduledTaskRequest) String() string {
 func (*ExecuteScheduledTaskRequest) ProtoMessage() {}
 
 func (x *ExecuteScheduledTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[53]
+	mi := &file_proto_plugin_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3892,7 +3964,7 @@ func (x *ExecuteScheduledTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteScheduledTaskRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteScheduledTaskRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{53}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ExecuteScheduledTaskRequest) GetContext() *PluginContext {
@@ -3926,7 +3998,7 @@ type ExecuteScheduledTaskResponse struct {
 
 func (x *ExecuteScheduledTaskResponse) Reset() {
 	*x = ExecuteScheduledTaskResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[54]
+	mi := &file_proto_plugin_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3938,7 +4010,7 @@ func (x *ExecuteScheduledTaskResponse) String() string {
 func (*ExecuteScheduledTaskResponse) ProtoMessage() {}
 
 func (x *ExecuteScheduledTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[54]
+	mi := &file_proto_plugin_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3951,7 +4023,7 @@ func (x *ExecuteScheduledTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteScheduledTaskResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteScheduledTaskResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{54}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ExecuteScheduledTaskResponse) GetSuccess() bool {
@@ -3983,7 +4055,7 @@ type ScheduleDefinition struct {
 
 func (x *ScheduleDefinition) Reset() {
 	*x = ScheduleDefinition{}
-	mi := &file_proto_plugin_proto_msgTypes[55]
+	mi := &file_proto_plugin_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3995,7 +4067,7 @@ func (x *ScheduleDefinition) String() string {
 func (*ScheduleDefinition) ProtoMessage() {}
 
 func (x *ScheduleDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[55]
+	mi := &file_proto_plugin_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4008,7 +4080,7 @@ func (x *ScheduleDefinition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScheduleDefinition.ProtoReflect.Descriptor instead.
 func (*ScheduleDefinition) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{55}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ScheduleDefinition) GetId() string {
@@ -4079,7 +4151,7 @@ type EdgePayloadRequest struct {
 
 func (x *EdgePayloadRequest) Reset() {
 	*x = EdgePayloadRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[56]
+	mi := &file_proto_plugin_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4091,7 +4163,7 @@ func (x *EdgePayloadRequest) String() string {
 func (*EdgePayloadRequest) ProtoMessage() {}
 
 func (x *EdgePayloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[56]
+	mi := &file_proto_plugin_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4104,7 +4176,7 @@ func (x *EdgePayloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EdgePayloadRequest.ProtoReflect.Descriptor instead.
 func (*EdgePayloadRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{56}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *EdgePayloadRequest) GetPayload() []byte {
@@ -4183,7 +4255,7 @@ type EdgePayloadResponse struct {
 
 func (x *EdgePayloadResponse) Reset() {
 	*x = EdgePayloadResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[57]
+	mi := &file_proto_plugin_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4195,7 +4267,7 @@ func (x *EdgePayloadResponse) String() string {
 func (*EdgePayloadResponse) ProtoMessage() {}
 
 func (x *EdgePayloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[57]
+	mi := &file_proto_plugin_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4208,7 +4280,7 @@ func (x *EdgePayloadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EdgePayloadResponse.ProtoReflect.Descriptor instead.
 func (*EdgePayloadResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{57}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *EdgePayloadResponse) GetSuccess() bool {
@@ -4253,7 +4325,7 @@ type OpenSessionRequest struct {
 
 func (x *OpenSessionRequest) Reset() {
 	*x = OpenSessionRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[58]
+	mi := &file_proto_plugin_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4265,7 +4337,7 @@ func (x *OpenSessionRequest) String() string {
 func (*OpenSessionRequest) ProtoMessage() {}
 
 func (x *OpenSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[58]
+	mi := &file_proto_plugin_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4278,7 +4350,7 @@ func (x *OpenSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenSessionRequest.ProtoReflect.Descriptor instead.
 func (*OpenSessionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{58}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *OpenSessionRequest) GetServiceBrokerId() uint32 {
@@ -4322,7 +4394,7 @@ type OpenSessionResponse struct {
 
 func (x *OpenSessionResponse) Reset() {
 	*x = OpenSessionResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[59]
+	mi := &file_proto_plugin_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4334,7 +4406,7 @@ func (x *OpenSessionResponse) String() string {
 func (*OpenSessionResponse) ProtoMessage() {}
 
 func (x *OpenSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[59]
+	mi := &file_proto_plugin_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4347,7 +4419,7 @@ func (x *OpenSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenSessionResponse.ProtoReflect.Descriptor instead.
 func (*OpenSessionResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{59}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *OpenSessionResponse) GetSuccess() bool {
@@ -4388,7 +4460,7 @@ type CloseSessionRequest struct {
 
 func (x *CloseSessionRequest) Reset() {
 	*x = CloseSessionRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[60]
+	mi := &file_proto_plugin_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4400,7 +4472,7 @@ func (x *CloseSessionRequest) String() string {
 func (*CloseSessionRequest) ProtoMessage() {}
 
 func (x *CloseSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[60]
+	mi := &file_proto_plugin_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4413,7 +4485,7 @@ func (x *CloseSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseSessionRequest.ProtoReflect.Descriptor instead.
 func (*CloseSessionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{60}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *CloseSessionRequest) GetReason() string {
@@ -4434,7 +4506,7 @@ type CloseSessionResponse struct {
 
 func (x *CloseSessionResponse) Reset() {
 	*x = CloseSessionResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[61]
+	mi := &file_proto_plugin_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4446,7 +4518,7 @@ func (x *CloseSessionResponse) String() string {
 func (*CloseSessionResponse) ProtoMessage() {}
 
 func (x *CloseSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[61]
+	mi := &file_proto_plugin_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4459,7 +4531,7 @@ func (x *CloseSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseSessionResponse.ProtoReflect.Descriptor instead.
 func (*CloseSessionResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{61}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *CloseSessionResponse) GetSuccess() bool {
@@ -4484,7 +4556,7 @@ type GetEndpointRegistrationsRequest struct {
 
 func (x *GetEndpointRegistrationsRequest) Reset() {
 	*x = GetEndpointRegistrationsRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[62]
+	mi := &file_proto_plugin_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4496,7 +4568,7 @@ func (x *GetEndpointRegistrationsRequest) String() string {
 func (*GetEndpointRegistrationsRequest) ProtoMessage() {}
 
 func (x *GetEndpointRegistrationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[62]
+	mi := &file_proto_plugin_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4509,7 +4581,7 @@ func (x *GetEndpointRegistrationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEndpointRegistrationsRequest.ProtoReflect.Descriptor instead.
 func (*GetEndpointRegistrationsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{62}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{63}
 }
 
 type GetEndpointRegistrationsResponse struct {
@@ -4521,7 +4593,7 @@ type GetEndpointRegistrationsResponse struct {
 
 func (x *GetEndpointRegistrationsResponse) Reset() {
 	*x = GetEndpointRegistrationsResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[63]
+	mi := &file_proto_plugin_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4533,7 +4605,7 @@ func (x *GetEndpointRegistrationsResponse) String() string {
 func (*GetEndpointRegistrationsResponse) ProtoMessage() {}
 
 func (x *GetEndpointRegistrationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[63]
+	mi := &file_proto_plugin_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4546,7 +4618,7 @@ func (x *GetEndpointRegistrationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEndpointRegistrationsResponse.ProtoReflect.Descriptor instead.
 func (*GetEndpointRegistrationsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{63}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *GetEndpointRegistrationsResponse) GetRegistrations() []*EndpointRegistration {
@@ -4570,7 +4642,7 @@ type EndpointRegistration struct {
 
 func (x *EndpointRegistration) Reset() {
 	*x = EndpointRegistration{}
-	mi := &file_proto_plugin_proto_msgTypes[64]
+	mi := &file_proto_plugin_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4582,7 +4654,7 @@ func (x *EndpointRegistration) String() string {
 func (*EndpointRegistration) ProtoMessage() {}
 
 func (x *EndpointRegistration) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[64]
+	mi := &file_proto_plugin_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4595,7 +4667,7 @@ func (x *EndpointRegistration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndpointRegistration.ProtoReflect.Descriptor instead.
 func (*EndpointRegistration) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{64}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *EndpointRegistration) GetPath() string {
@@ -4664,7 +4736,7 @@ type EndpointRequest struct {
 
 func (x *EndpointRequest) Reset() {
 	*x = EndpointRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[65]
+	mi := &file_proto_plugin_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4676,7 +4748,7 @@ func (x *EndpointRequest) String() string {
 func (*EndpointRequest) ProtoMessage() {}
 
 func (x *EndpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[65]
+	mi := &file_proto_plugin_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4689,7 +4761,7 @@ func (x *EndpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndpointRequest.ProtoReflect.Descriptor instead.
 func (*EndpointRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{65}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *EndpointRequest) GetMethod() string {
@@ -4803,7 +4875,7 @@ type EndpointResponse struct {
 
 func (x *EndpointResponse) Reset() {
 	*x = EndpointResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[66]
+	mi := &file_proto_plugin_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4815,7 +4887,7 @@ func (x *EndpointResponse) String() string {
 func (*EndpointResponse) ProtoMessage() {}
 
 func (x *EndpointResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[66]
+	mi := &file_proto_plugin_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4828,7 +4900,7 @@ func (x *EndpointResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndpointResponse.ProtoReflect.Descriptor instead.
 func (*EndpointResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{66}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *EndpointResponse) GetStatusCode() int32 {
@@ -4874,7 +4946,7 @@ type EndpointResponseChunk struct {
 
 func (x *EndpointResponseChunk) Reset() {
 	*x = EndpointResponseChunk{}
-	mi := &file_proto_plugin_proto_msgTypes[67]
+	mi := &file_proto_plugin_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4886,7 +4958,7 @@ func (x *EndpointResponseChunk) String() string {
 func (*EndpointResponseChunk) ProtoMessage() {}
 
 func (x *EndpointResponseChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[67]
+	mi := &file_proto_plugin_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4899,7 +4971,7 @@ func (x *EndpointResponseChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndpointResponseChunk.ProtoReflect.Descriptor instead.
 func (*EndpointResponseChunk) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{67}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *EndpointResponseChunk) GetType() EndpointResponseChunk_ChunkType {
@@ -4945,7 +5017,7 @@ type GetResourceTypeRegistrationsRequest struct {
 
 func (x *GetResourceTypeRegistrationsRequest) Reset() {
 	*x = GetResourceTypeRegistrationsRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[68]
+	mi := &file_proto_plugin_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4957,7 +5029,7 @@ func (x *GetResourceTypeRegistrationsRequest) String() string {
 func (*GetResourceTypeRegistrationsRequest) ProtoMessage() {}
 
 func (x *GetResourceTypeRegistrationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[68]
+	mi := &file_proto_plugin_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4970,7 +5042,7 @@ func (x *GetResourceTypeRegistrationsRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use GetResourceTypeRegistrationsRequest.ProtoReflect.Descriptor instead.
 func (*GetResourceTypeRegistrationsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{68}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{69}
 }
 
 type GetResourceTypeRegistrationsResponse struct {
@@ -4982,7 +5054,7 @@ type GetResourceTypeRegistrationsResponse struct {
 
 func (x *GetResourceTypeRegistrationsResponse) Reset() {
 	*x = GetResourceTypeRegistrationsResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[69]
+	mi := &file_proto_plugin_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4994,7 +5066,7 @@ func (x *GetResourceTypeRegistrationsResponse) String() string {
 func (*GetResourceTypeRegistrationsResponse) ProtoMessage() {}
 
 func (x *GetResourceTypeRegistrationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[69]
+	mi := &file_proto_plugin_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5007,7 +5079,7 @@ func (x *GetResourceTypeRegistrationsResponse) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use GetResourceTypeRegistrationsResponse.ProtoReflect.Descriptor instead.
 func (*GetResourceTypeRegistrationsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{69}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *GetResourceTypeRegistrationsResponse) GetRegistrations() []*ResourceTypeRegistrationProto {
@@ -5032,7 +5104,7 @@ type ResourceTypeRegistrationProto struct {
 
 func (x *ResourceTypeRegistrationProto) Reset() {
 	*x = ResourceTypeRegistrationProto{}
-	mi := &file_proto_plugin_proto_msgTypes[70]
+	mi := &file_proto_plugin_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5044,7 +5116,7 @@ func (x *ResourceTypeRegistrationProto) String() string {
 func (*ResourceTypeRegistrationProto) ProtoMessage() {}
 
 func (x *ResourceTypeRegistrationProto) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[70]
+	mi := &file_proto_plugin_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5057,7 +5129,7 @@ func (x *ResourceTypeRegistrationProto) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceTypeRegistrationProto.ProtoReflect.Descriptor instead.
 func (*ResourceTypeRegistrationProto) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{70}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *ResourceTypeRegistrationProto) GetSlug() string {
@@ -5119,7 +5191,7 @@ type ResourceFormComponentProto struct {
 
 func (x *ResourceFormComponentProto) Reset() {
 	*x = ResourceFormComponentProto{}
-	mi := &file_proto_plugin_proto_msgTypes[71]
+	mi := &file_proto_plugin_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5131,7 +5203,7 @@ func (x *ResourceFormComponentProto) String() string {
 func (*ResourceFormComponentProto) ProtoMessage() {}
 
 func (x *ResourceFormComponentProto) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[71]
+	mi := &file_proto_plugin_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5144,7 +5216,7 @@ func (x *ResourceFormComponentProto) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceFormComponentProto.ProtoReflect.Descriptor instead.
 func (*ResourceFormComponentProto) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{71}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ResourceFormComponentProto) GetTag() string {
@@ -5172,7 +5244,7 @@ type ListResourceInstancesRequest struct {
 
 func (x *ListResourceInstancesRequest) Reset() {
 	*x = ListResourceInstancesRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[72]
+	mi := &file_proto_plugin_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5184,7 +5256,7 @@ func (x *ListResourceInstancesRequest) String() string {
 func (*ListResourceInstancesRequest) ProtoMessage() {}
 
 func (x *ListResourceInstancesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[72]
+	mi := &file_proto_plugin_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5197,7 +5269,7 @@ func (x *ListResourceInstancesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListResourceInstancesRequest.ProtoReflect.Descriptor instead.
 func (*ListResourceInstancesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{72}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ListResourceInstancesRequest) GetResourceTypeSlug() string {
@@ -5232,7 +5304,7 @@ type ListResourceInstancesResponse struct {
 
 func (x *ListResourceInstancesResponse) Reset() {
 	*x = ListResourceInstancesResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[73]
+	mi := &file_proto_plugin_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5244,7 +5316,7 @@ func (x *ListResourceInstancesResponse) String() string {
 func (*ListResourceInstancesResponse) ProtoMessage() {}
 
 func (x *ListResourceInstancesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[73]
+	mi := &file_proto_plugin_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5257,7 +5329,7 @@ func (x *ListResourceInstancesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListResourceInstancesResponse.ProtoReflect.Descriptor instead.
 func (*ListResourceInstancesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{73}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *ListResourceInstancesResponse) GetSuccess() bool {
@@ -5295,7 +5367,7 @@ type ResourceInstanceProto struct {
 
 func (x *ResourceInstanceProto) Reset() {
 	*x = ResourceInstanceProto{}
-	mi := &file_proto_plugin_proto_msgTypes[74]
+	mi := &file_proto_plugin_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5307,7 +5379,7 @@ func (x *ResourceInstanceProto) String() string {
 func (*ResourceInstanceProto) ProtoMessage() {}
 
 func (x *ResourceInstanceProto) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[74]
+	mi := &file_proto_plugin_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5320,7 +5392,7 @@ func (x *ResourceInstanceProto) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceInstanceProto.ProtoReflect.Descriptor instead.
 func (*ResourceInstanceProto) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{74}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *ResourceInstanceProto) GetId() string {
@@ -5377,7 +5449,7 @@ type GetResourceInstanceRequest struct {
 
 func (x *GetResourceInstanceRequest) Reset() {
 	*x = GetResourceInstanceRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[75]
+	mi := &file_proto_plugin_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5389,7 +5461,7 @@ func (x *GetResourceInstanceRequest) String() string {
 func (*GetResourceInstanceRequest) ProtoMessage() {}
 
 func (x *GetResourceInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[75]
+	mi := &file_proto_plugin_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5402,7 +5474,7 @@ func (x *GetResourceInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResourceInstanceRequest.ProtoReflect.Descriptor instead.
 func (*GetResourceInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{75}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *GetResourceInstanceRequest) GetResourceTypeSlug() string {
@@ -5444,7 +5516,7 @@ type GetResourceInstanceResponse struct {
 
 func (x *GetResourceInstanceResponse) Reset() {
 	*x = GetResourceInstanceResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[76]
+	mi := &file_proto_plugin_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5456,7 +5528,7 @@ func (x *GetResourceInstanceResponse) String() string {
 func (*GetResourceInstanceResponse) ProtoMessage() {}
 
 func (x *GetResourceInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[76]
+	mi := &file_proto_plugin_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5469,7 +5541,7 @@ func (x *GetResourceInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResourceInstanceResponse.ProtoReflect.Descriptor instead.
 func (*GetResourceInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{76}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *GetResourceInstanceResponse) GetSuccess() bool {
@@ -5506,7 +5578,7 @@ type ValidateResourceSelectionRequest struct {
 
 func (x *ValidateResourceSelectionRequest) Reset() {
 	*x = ValidateResourceSelectionRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[77]
+	mi := &file_proto_plugin_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5518,7 +5590,7 @@ func (x *ValidateResourceSelectionRequest) String() string {
 func (*ValidateResourceSelectionRequest) ProtoMessage() {}
 
 func (x *ValidateResourceSelectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[77]
+	mi := &file_proto_plugin_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5531,7 +5603,7 @@ func (x *ValidateResourceSelectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateResourceSelectionRequest.ProtoReflect.Descriptor instead.
 func (*ValidateResourceSelectionRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{77}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ValidateResourceSelectionRequest) GetResourceTypeSlug() string {
@@ -5579,7 +5651,7 @@ type ValidateResourceSelectionResponse struct {
 
 func (x *ValidateResourceSelectionResponse) Reset() {
 	*x = ValidateResourceSelectionResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[78]
+	mi := &file_proto_plugin_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5591,7 +5663,7 @@ func (x *ValidateResourceSelectionResponse) String() string {
 func (*ValidateResourceSelectionResponse) ProtoMessage() {}
 
 func (x *ValidateResourceSelectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[78]
+	mi := &file_proto_plugin_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5604,7 +5676,7 @@ func (x *ValidateResourceSelectionResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ValidateResourceSelectionResponse.ProtoReflect.Descriptor instead.
 func (*ValidateResourceSelectionResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{78}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *ValidateResourceSelectionResponse) GetValid() bool {
@@ -5633,7 +5705,7 @@ type CreateResourceInstanceRequest struct {
 
 func (x *CreateResourceInstanceRequest) Reset() {
 	*x = CreateResourceInstanceRequest{}
-	mi := &file_proto_plugin_proto_msgTypes[79]
+	mi := &file_proto_plugin_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5645,7 +5717,7 @@ func (x *CreateResourceInstanceRequest) String() string {
 func (*CreateResourceInstanceRequest) ProtoMessage() {}
 
 func (x *CreateResourceInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[79]
+	mi := &file_proto_plugin_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5658,7 +5730,7 @@ func (x *CreateResourceInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateResourceInstanceRequest.ProtoReflect.Descriptor instead.
 func (*CreateResourceInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{79}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *CreateResourceInstanceRequest) GetResourceTypeSlug() string {
@@ -5700,7 +5772,7 @@ type CreateResourceInstanceResponse struct {
 
 func (x *CreateResourceInstanceResponse) Reset() {
 	*x = CreateResourceInstanceResponse{}
-	mi := &file_proto_plugin_proto_msgTypes[80]
+	mi := &file_proto_plugin_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5712,7 +5784,7 @@ func (x *CreateResourceInstanceResponse) String() string {
 func (*CreateResourceInstanceResponse) ProtoMessage() {}
 
 func (x *CreateResourceInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugin_proto_msgTypes[80]
+	mi := &file_proto_plugin_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5725,7 +5797,7 @@ func (x *CreateResourceInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateResourceInstanceResponse.ProtoReflect.Descriptor instead.
 func (*CreateResourceInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugin_proto_rawDescGZIP(), []int{80}
+	return file_proto_plugin_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *CreateResourceInstanceResponse) GetSuccess() bool {
@@ -5899,7 +5971,7 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x0fGetUserResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12 \n" +
-	"\x04user\x18\x03 \x01(\v2\f.plugin.UserR\x04user\"\xc3\x02\n" +
+	"\x04user\x18\x03 \x01(\v2\f.plugin.UserR\x04user\"\x94\x03\n" +
 	"\x03App\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -5910,10 +5982,15 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x0emonthly_budget\x18\x06 \x01(\x01R\rmonthlyBudget\x12\x1d\n" +
 	"\n" +
 	"rate_limit\x18\a \x01(\x05R\trateLimit\x125\n" +
-	"\bmetadata\x18\b \x03(\v2\x19.plugin.App.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\b \x03(\v2\x19.plugin.App.MetadataEntryR\bmetadata\x12O\n" +
+	"\x10plugin_resources\x18\t \x03(\v2$.plugin.AppPluginResourceAssociationR\x0fpluginResources\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd2\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x01\n" +
+	"\x1cAppPluginResourceAssociation\x12\x1b\n" +
+	"\tplugin_id\x18\x01 \x01(\rR\bpluginId\x12,\n" +
+	"\x12resource_type_slug\x18\x02 \x01(\tR\x10resourceTypeSlug\x12!\n" +
+	"\finstance_ids\x18\x03 \x03(\tR\vinstanceIds\"\xd2\x01\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
@@ -6356,7 +6433,7 @@ func file_proto_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_proto_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 107)
+var file_proto_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 108)
 var file_proto_plugin_proto_goTypes = []any{
 	(AgentMessageChunk_ChunkType)(0),             // 0: plugin.AgentMessageChunk.ChunkType
 	(OpenSessionResponse_CloseReason)(0),         // 1: plugin.OpenSessionResponse.CloseReason
@@ -6384,234 +6461,236 @@ var file_proto_plugin_proto_goTypes = []any{
 	(*GetUserRequest)(nil),                       // 23: plugin.GetUserRequest
 	(*GetUserResponse)(nil),                      // 24: plugin.GetUserResponse
 	(*App)(nil),                                  // 25: plugin.App
-	(*User)(nil),                                 // 26: plugin.User
-	(*ProxyLogRequest)(nil),                      // 27: plugin.ProxyLogRequest
-	(*AnalyticsRequest)(nil),                     // 28: plugin.AnalyticsRequest
-	(*BudgetUsageRequest)(nil),                   // 29: plugin.BudgetUsageRequest
-	(*DataCollectionResponse)(nil),               // 30: plugin.DataCollectionResponse
-	(*GetAssetRequest)(nil),                      // 31: plugin.GetAssetRequest
-	(*GetAssetResponse)(nil),                     // 32: plugin.GetAssetResponse
-	(*ListAssetsRequest)(nil),                    // 33: plugin.ListAssetsRequest
-	(*ListAssetsResponse)(nil),                   // 34: plugin.ListAssetsResponse
-	(*AssetInfo)(nil),                            // 35: plugin.AssetInfo
-	(*GetManifestRequest)(nil),                   // 36: plugin.GetManifestRequest
-	(*GetManifestResponse)(nil),                  // 37: plugin.GetManifestResponse
-	(*CallRequest)(nil),                          // 38: plugin.CallRequest
-	(*CallResponse)(nil),                         // 39: plugin.CallResponse
-	(*PortalCallRequest)(nil),                    // 40: plugin.PortalCallRequest
-	(*PortalCallResponse)(nil),                   // 41: plugin.PortalCallResponse
-	(*PortalUserContext)(nil),                    // 42: plugin.PortalUserContext
-	(*GetConfigSchemaRequest)(nil),               // 43: plugin.GetConfigSchemaRequest
-	(*GetConfigSchemaResponse)(nil),              // 44: plugin.GetConfigSchemaResponse
-	(*AgentMessageRequest)(nil),                  // 45: plugin.AgentMessageRequest
-	(*AgentMessageChunk)(nil),                    // 46: plugin.AgentMessageChunk
-	(*AgentToolInfo)(nil),                        // 47: plugin.AgentToolInfo
-	(*AgentDatasourceInfo)(nil),                  // 48: plugin.AgentDatasourceInfo
-	(*AgentLLMInfo)(nil),                         // 49: plugin.AgentLLMInfo
-	(*AgentConversationMessage)(nil),             // 50: plugin.AgentConversationMessage
-	(*GetObjectHookRegistrationsRequest)(nil),    // 51: plugin.GetObjectHookRegistrationsRequest
-	(*GetObjectHookRegistrationsResponse)(nil),   // 52: plugin.GetObjectHookRegistrationsResponse
-	(*ObjectHookRegistration)(nil),               // 53: plugin.ObjectHookRegistration
-	(*ObjectHookRequest)(nil),                    // 54: plugin.ObjectHookRequest
-	(*ObjectHookResponse)(nil),                   // 55: plugin.ObjectHookResponse
-	(*ExecuteScheduledTaskRequest)(nil),          // 56: plugin.ExecuteScheduledTaskRequest
-	(*ExecuteScheduledTaskResponse)(nil),         // 57: plugin.ExecuteScheduledTaskResponse
-	(*ScheduleDefinition)(nil),                   // 58: plugin.ScheduleDefinition
-	(*EdgePayloadRequest)(nil),                   // 59: plugin.EdgePayloadRequest
-	(*EdgePayloadResponse)(nil),                  // 60: plugin.EdgePayloadResponse
-	(*OpenSessionRequest)(nil),                   // 61: plugin.OpenSessionRequest
-	(*OpenSessionResponse)(nil),                  // 62: plugin.OpenSessionResponse
-	(*CloseSessionRequest)(nil),                  // 63: plugin.CloseSessionRequest
-	(*CloseSessionResponse)(nil),                 // 64: plugin.CloseSessionResponse
-	(*GetEndpointRegistrationsRequest)(nil),      // 65: plugin.GetEndpointRegistrationsRequest
-	(*GetEndpointRegistrationsResponse)(nil),     // 66: plugin.GetEndpointRegistrationsResponse
-	(*EndpointRegistration)(nil),                 // 67: plugin.EndpointRegistration
-	(*EndpointRequest)(nil),                      // 68: plugin.EndpointRequest
-	(*EndpointResponse)(nil),                     // 69: plugin.EndpointResponse
-	(*EndpointResponseChunk)(nil),                // 70: plugin.EndpointResponseChunk
-	(*GetResourceTypeRegistrationsRequest)(nil),  // 71: plugin.GetResourceTypeRegistrationsRequest
-	(*GetResourceTypeRegistrationsResponse)(nil), // 72: plugin.GetResourceTypeRegistrationsResponse
-	(*ResourceTypeRegistrationProto)(nil),        // 73: plugin.ResourceTypeRegistrationProto
-	(*ResourceFormComponentProto)(nil),           // 74: plugin.ResourceFormComponentProto
-	(*ListResourceInstancesRequest)(nil),         // 75: plugin.ListResourceInstancesRequest
-	(*ListResourceInstancesResponse)(nil),        // 76: plugin.ListResourceInstancesResponse
-	(*ResourceInstanceProto)(nil),                // 77: plugin.ResourceInstanceProto
-	(*GetResourceInstanceRequest)(nil),           // 78: plugin.GetResourceInstanceRequest
-	(*GetResourceInstanceResponse)(nil),          // 79: plugin.GetResourceInstanceResponse
-	(*ValidateResourceSelectionRequest)(nil),     // 80: plugin.ValidateResourceSelectionRequest
-	(*ValidateResourceSelectionResponse)(nil),    // 81: plugin.ValidateResourceSelectionResponse
-	(*CreateResourceInstanceRequest)(nil),        // 82: plugin.CreateResourceInstanceRequest
-	(*CreateResourceInstanceResponse)(nil),       // 83: plugin.CreateResourceInstanceResponse
-	nil,                                          // 84: plugin.InitRequest.ConfigEntry
-	nil,                                          // 85: plugin.PluginContext.MetadataEntry
-	nil,                                          // 86: plugin.PluginContext.TraceContextEntry
-	nil,                                          // 87: plugin.PluginRequest.HeadersEntry
-	nil,                                          // 88: plugin.PluginResponse.HeadersEntry
-	nil,                                          // 89: plugin.PluginResponse.ContextUpdatesEntry
-	nil,                                          // 90: plugin.AuthResponse.ClaimsEntry
-	nil,                                          // 91: plugin.EnrichedRequest.AuthClaimsEntry
-	nil,                                          // 92: plugin.HeadersRequest.HeadersEntry
-	nil,                                          // 93: plugin.HeadersResponse.HeadersEntry
-	nil,                                          // 94: plugin.ResponseWriteRequest.HeadersEntry
-	nil,                                          // 95: plugin.ResponseWriteResponse.HeadersEntry
-	nil,                                          // 96: plugin.StreamCompleteRequest.HeadersEntry
-	nil,                                          // 97: plugin.App.MetadataEntry
-	nil,                                          // 98: plugin.User.MetadataEntry
-	nil,                                          // 99: plugin.DataCollectionResponse.MetadataEntry
-	nil,                                          // 100: plugin.PortalUserContext.MetadataEntry
-	nil,                                          // 101: plugin.ObjectHookRequest.MetadataEntry
-	nil,                                          // 102: plugin.ObjectHookResponse.PluginMetadataEntry
-	nil,                                          // 103: plugin.EdgePayloadRequest.MetadataEntry
-	nil,                                          // 104: plugin.EdgePayloadResponse.MetadataEntry
-	nil,                                          // 105: plugin.OpenSessionRequest.MetadataEntry
-	nil,                                          // 106: plugin.EndpointRegistration.MetadataEntry
-	nil,                                          // 107: plugin.EndpointRequest.HeadersEntry
-	nil,                                          // 108: plugin.EndpointResponse.HeadersEntry
-	nil,                                          // 109: plugin.EndpointResponseChunk.HeadersEntry
+	(*AppPluginResourceAssociation)(nil),         // 26: plugin.AppPluginResourceAssociation
+	(*User)(nil),                                 // 27: plugin.User
+	(*ProxyLogRequest)(nil),                      // 28: plugin.ProxyLogRequest
+	(*AnalyticsRequest)(nil),                     // 29: plugin.AnalyticsRequest
+	(*BudgetUsageRequest)(nil),                   // 30: plugin.BudgetUsageRequest
+	(*DataCollectionResponse)(nil),               // 31: plugin.DataCollectionResponse
+	(*GetAssetRequest)(nil),                      // 32: plugin.GetAssetRequest
+	(*GetAssetResponse)(nil),                     // 33: plugin.GetAssetResponse
+	(*ListAssetsRequest)(nil),                    // 34: plugin.ListAssetsRequest
+	(*ListAssetsResponse)(nil),                   // 35: plugin.ListAssetsResponse
+	(*AssetInfo)(nil),                            // 36: plugin.AssetInfo
+	(*GetManifestRequest)(nil),                   // 37: plugin.GetManifestRequest
+	(*GetManifestResponse)(nil),                  // 38: plugin.GetManifestResponse
+	(*CallRequest)(nil),                          // 39: plugin.CallRequest
+	(*CallResponse)(nil),                         // 40: plugin.CallResponse
+	(*PortalCallRequest)(nil),                    // 41: plugin.PortalCallRequest
+	(*PortalCallResponse)(nil),                   // 42: plugin.PortalCallResponse
+	(*PortalUserContext)(nil),                    // 43: plugin.PortalUserContext
+	(*GetConfigSchemaRequest)(nil),               // 44: plugin.GetConfigSchemaRequest
+	(*GetConfigSchemaResponse)(nil),              // 45: plugin.GetConfigSchemaResponse
+	(*AgentMessageRequest)(nil),                  // 46: plugin.AgentMessageRequest
+	(*AgentMessageChunk)(nil),                    // 47: plugin.AgentMessageChunk
+	(*AgentToolInfo)(nil),                        // 48: plugin.AgentToolInfo
+	(*AgentDatasourceInfo)(nil),                  // 49: plugin.AgentDatasourceInfo
+	(*AgentLLMInfo)(nil),                         // 50: plugin.AgentLLMInfo
+	(*AgentConversationMessage)(nil),             // 51: plugin.AgentConversationMessage
+	(*GetObjectHookRegistrationsRequest)(nil),    // 52: plugin.GetObjectHookRegistrationsRequest
+	(*GetObjectHookRegistrationsResponse)(nil),   // 53: plugin.GetObjectHookRegistrationsResponse
+	(*ObjectHookRegistration)(nil),               // 54: plugin.ObjectHookRegistration
+	(*ObjectHookRequest)(nil),                    // 55: plugin.ObjectHookRequest
+	(*ObjectHookResponse)(nil),                   // 56: plugin.ObjectHookResponse
+	(*ExecuteScheduledTaskRequest)(nil),          // 57: plugin.ExecuteScheduledTaskRequest
+	(*ExecuteScheduledTaskResponse)(nil),         // 58: plugin.ExecuteScheduledTaskResponse
+	(*ScheduleDefinition)(nil),                   // 59: plugin.ScheduleDefinition
+	(*EdgePayloadRequest)(nil),                   // 60: plugin.EdgePayloadRequest
+	(*EdgePayloadResponse)(nil),                  // 61: plugin.EdgePayloadResponse
+	(*OpenSessionRequest)(nil),                   // 62: plugin.OpenSessionRequest
+	(*OpenSessionResponse)(nil),                  // 63: plugin.OpenSessionResponse
+	(*CloseSessionRequest)(nil),                  // 64: plugin.CloseSessionRequest
+	(*CloseSessionResponse)(nil),                 // 65: plugin.CloseSessionResponse
+	(*GetEndpointRegistrationsRequest)(nil),      // 66: plugin.GetEndpointRegistrationsRequest
+	(*GetEndpointRegistrationsResponse)(nil),     // 67: plugin.GetEndpointRegistrationsResponse
+	(*EndpointRegistration)(nil),                 // 68: plugin.EndpointRegistration
+	(*EndpointRequest)(nil),                      // 69: plugin.EndpointRequest
+	(*EndpointResponse)(nil),                     // 70: plugin.EndpointResponse
+	(*EndpointResponseChunk)(nil),                // 71: plugin.EndpointResponseChunk
+	(*GetResourceTypeRegistrationsRequest)(nil),  // 72: plugin.GetResourceTypeRegistrationsRequest
+	(*GetResourceTypeRegistrationsResponse)(nil), // 73: plugin.GetResourceTypeRegistrationsResponse
+	(*ResourceTypeRegistrationProto)(nil),        // 74: plugin.ResourceTypeRegistrationProto
+	(*ResourceFormComponentProto)(nil),           // 75: plugin.ResourceFormComponentProto
+	(*ListResourceInstancesRequest)(nil),         // 76: plugin.ListResourceInstancesRequest
+	(*ListResourceInstancesResponse)(nil),        // 77: plugin.ListResourceInstancesResponse
+	(*ResourceInstanceProto)(nil),                // 78: plugin.ResourceInstanceProto
+	(*GetResourceInstanceRequest)(nil),           // 79: plugin.GetResourceInstanceRequest
+	(*GetResourceInstanceResponse)(nil),          // 80: plugin.GetResourceInstanceResponse
+	(*ValidateResourceSelectionRequest)(nil),     // 81: plugin.ValidateResourceSelectionRequest
+	(*ValidateResourceSelectionResponse)(nil),    // 82: plugin.ValidateResourceSelectionResponse
+	(*CreateResourceInstanceRequest)(nil),        // 83: plugin.CreateResourceInstanceRequest
+	(*CreateResourceInstanceResponse)(nil),       // 84: plugin.CreateResourceInstanceResponse
+	nil,                                          // 85: plugin.InitRequest.ConfigEntry
+	nil,                                          // 86: plugin.PluginContext.MetadataEntry
+	nil,                                          // 87: plugin.PluginContext.TraceContextEntry
+	nil,                                          // 88: plugin.PluginRequest.HeadersEntry
+	nil,                                          // 89: plugin.PluginResponse.HeadersEntry
+	nil,                                          // 90: plugin.PluginResponse.ContextUpdatesEntry
+	nil,                                          // 91: plugin.AuthResponse.ClaimsEntry
+	nil,                                          // 92: plugin.EnrichedRequest.AuthClaimsEntry
+	nil,                                          // 93: plugin.HeadersRequest.HeadersEntry
+	nil,                                          // 94: plugin.HeadersResponse.HeadersEntry
+	nil,                                          // 95: plugin.ResponseWriteRequest.HeadersEntry
+	nil,                                          // 96: plugin.ResponseWriteResponse.HeadersEntry
+	nil,                                          // 97: plugin.StreamCompleteRequest.HeadersEntry
+	nil,                                          // 98: plugin.App.MetadataEntry
+	nil,                                          // 99: plugin.User.MetadataEntry
+	nil,                                          // 100: plugin.DataCollectionResponse.MetadataEntry
+	nil,                                          // 101: plugin.PortalUserContext.MetadataEntry
+	nil,                                          // 102: plugin.ObjectHookRequest.MetadataEntry
+	nil,                                          // 103: plugin.ObjectHookResponse.PluginMetadataEntry
+	nil,                                          // 104: plugin.EdgePayloadRequest.MetadataEntry
+	nil,                                          // 105: plugin.EdgePayloadResponse.MetadataEntry
+	nil,                                          // 106: plugin.OpenSessionRequest.MetadataEntry
+	nil,                                          // 107: plugin.EndpointRegistration.MetadataEntry
+	nil,                                          // 108: plugin.EndpointRequest.HeadersEntry
+	nil,                                          // 109: plugin.EndpointResponse.HeadersEntry
+	nil,                                          // 110: plugin.EndpointResponseChunk.HeadersEntry
 }
 var file_proto_plugin_proto_depIdxs = []int32{
-	84,  // 0: plugin.InitRequest.config:type_name -> plugin.InitRequest.ConfigEntry
-	85,  // 1: plugin.PluginContext.metadata:type_name -> plugin.PluginContext.MetadataEntry
-	86,  // 2: plugin.PluginContext.trace_context:type_name -> plugin.PluginContext.TraceContextEntry
-	87,  // 3: plugin.PluginRequest.headers:type_name -> plugin.PluginRequest.HeadersEntry
+	85,  // 0: plugin.InitRequest.config:type_name -> plugin.InitRequest.ConfigEntry
+	86,  // 1: plugin.PluginContext.metadata:type_name -> plugin.PluginContext.MetadataEntry
+	87,  // 2: plugin.PluginContext.trace_context:type_name -> plugin.PluginContext.TraceContextEntry
+	88,  // 3: plugin.PluginRequest.headers:type_name -> plugin.PluginRequest.HeadersEntry
 	9,   // 4: plugin.PluginRequest.context:type_name -> plugin.PluginContext
-	88,  // 5: plugin.PluginResponse.headers:type_name -> plugin.PluginResponse.HeadersEntry
-	89,  // 6: plugin.PluginResponse.context_updates:type_name -> plugin.PluginResponse.ContextUpdatesEntry
+	89,  // 5: plugin.PluginResponse.headers:type_name -> plugin.PluginResponse.HeadersEntry
+	90,  // 6: plugin.PluginResponse.context_updates:type_name -> plugin.PluginResponse.ContextUpdatesEntry
 	10,  // 7: plugin.AuthRequest.request:type_name -> plugin.PluginRequest
 	9,   // 8: plugin.AuthRequest.context:type_name -> plugin.PluginContext
-	90,  // 9: plugin.AuthResponse.claims:type_name -> plugin.AuthResponse.ClaimsEntry
+	91,  // 9: plugin.AuthResponse.claims:type_name -> plugin.AuthResponse.ClaimsEntry
 	10,  // 10: plugin.EnrichedRequest.request:type_name -> plugin.PluginRequest
-	91,  // 11: plugin.EnrichedRequest.auth_claims:type_name -> plugin.EnrichedRequest.AuthClaimsEntry
-	92,  // 12: plugin.HeadersRequest.headers:type_name -> plugin.HeadersRequest.HeadersEntry
+	92,  // 11: plugin.EnrichedRequest.auth_claims:type_name -> plugin.EnrichedRequest.AuthClaimsEntry
+	93,  // 12: plugin.HeadersRequest.headers:type_name -> plugin.HeadersRequest.HeadersEntry
 	9,   // 13: plugin.HeadersRequest.context:type_name -> plugin.PluginContext
-	93,  // 14: plugin.HeadersResponse.headers:type_name -> plugin.HeadersResponse.HeadersEntry
-	94,  // 15: plugin.ResponseWriteRequest.headers:type_name -> plugin.ResponseWriteRequest.HeadersEntry
+	94,  // 14: plugin.HeadersResponse.headers:type_name -> plugin.HeadersResponse.HeadersEntry
+	95,  // 15: plugin.ResponseWriteRequest.headers:type_name -> plugin.ResponseWriteRequest.HeadersEntry
 	9,   // 16: plugin.ResponseWriteRequest.context:type_name -> plugin.PluginContext
-	95,  // 17: plugin.ResponseWriteResponse.headers:type_name -> plugin.ResponseWriteResponse.HeadersEntry
-	96,  // 18: plugin.StreamCompleteRequest.headers:type_name -> plugin.StreamCompleteRequest.HeadersEntry
+	96,  // 17: plugin.ResponseWriteResponse.headers:type_name -> plugin.ResponseWriteResponse.HeadersEntry
+	97,  // 18: plugin.StreamCompleteRequest.headers:type_name -> plugin.StreamCompleteRequest.HeadersEntry
 	9,   // 19: plugin.StreamCompleteRequest.context:type_name -> plugin.PluginContext
 	9,   // 20: plugin.GetAppRequest.context:type_name -> plugin.PluginContext
 	25,  // 21: plugin.GetAppResponse.app:type_name -> plugin.App
 	9,   // 22: plugin.GetUserRequest.context:type_name -> plugin.PluginContext
-	26,  // 23: plugin.GetUserResponse.user:type_name -> plugin.User
-	97,  // 24: plugin.App.metadata:type_name -> plugin.App.MetadataEntry
-	98,  // 25: plugin.User.metadata:type_name -> plugin.User.MetadataEntry
-	9,   // 26: plugin.ProxyLogRequest.context:type_name -> plugin.PluginContext
-	9,   // 27: plugin.AnalyticsRequest.context:type_name -> plugin.PluginContext
-	9,   // 28: plugin.BudgetUsageRequest.context:type_name -> plugin.PluginContext
-	99,  // 29: plugin.DataCollectionResponse.metadata:type_name -> plugin.DataCollectionResponse.MetadataEntry
-	35,  // 30: plugin.ListAssetsResponse.assets:type_name -> plugin.AssetInfo
-	42,  // 31: plugin.PortalCallRequest.user_context:type_name -> plugin.PortalUserContext
-	100, // 32: plugin.PortalUserContext.metadata:type_name -> plugin.PortalUserContext.MetadataEntry
-	47,  // 33: plugin.AgentMessageRequest.available_tools:type_name -> plugin.AgentToolInfo
-	48,  // 34: plugin.AgentMessageRequest.available_datasources:type_name -> plugin.AgentDatasourceInfo
-	49,  // 35: plugin.AgentMessageRequest.available_llms:type_name -> plugin.AgentLLMInfo
-	50,  // 36: plugin.AgentMessageRequest.history:type_name -> plugin.AgentConversationMessage
-	9,   // 37: plugin.AgentMessageRequest.context:type_name -> plugin.PluginContext
-	0,   // 38: plugin.AgentMessageChunk.type:type_name -> plugin.AgentMessageChunk.ChunkType
-	53,  // 39: plugin.GetObjectHookRegistrationsResponse.registrations:type_name -> plugin.ObjectHookRegistration
-	9,   // 40: plugin.ObjectHookRequest.context:type_name -> plugin.PluginContext
-	101, // 41: plugin.ObjectHookRequest.metadata:type_name -> plugin.ObjectHookRequest.MetadataEntry
-	102, // 42: plugin.ObjectHookResponse.plugin_metadata:type_name -> plugin.ObjectHookResponse.PluginMetadataEntry
-	9,   // 43: plugin.ExecuteScheduledTaskRequest.context:type_name -> plugin.PluginContext
-	58,  // 44: plugin.ExecuteScheduledTaskRequest.schedule:type_name -> plugin.ScheduleDefinition
-	103, // 45: plugin.EdgePayloadRequest.metadata:type_name -> plugin.EdgePayloadRequest.MetadataEntry
-	9,   // 46: plugin.EdgePayloadRequest.context:type_name -> plugin.PluginContext
-	104, // 47: plugin.EdgePayloadResponse.metadata:type_name -> plugin.EdgePayloadResponse.MetadataEntry
-	105, // 48: plugin.OpenSessionRequest.metadata:type_name -> plugin.OpenSessionRequest.MetadataEntry
-	1,   // 49: plugin.OpenSessionResponse.close_reason:type_name -> plugin.OpenSessionResponse.CloseReason
-	67,  // 50: plugin.GetEndpointRegistrationsResponse.registrations:type_name -> plugin.EndpointRegistration
-	106, // 51: plugin.EndpointRegistration.metadata:type_name -> plugin.EndpointRegistration.MetadataEntry
-	107, // 52: plugin.EndpointRequest.headers:type_name -> plugin.EndpointRequest.HeadersEntry
-	9,   // 53: plugin.EndpointRequest.context:type_name -> plugin.PluginContext
-	25,  // 54: plugin.EndpointRequest.app:type_name -> plugin.App
-	108, // 55: plugin.EndpointResponse.headers:type_name -> plugin.EndpointResponse.HeadersEntry
-	2,   // 56: plugin.EndpointResponseChunk.type:type_name -> plugin.EndpointResponseChunk.ChunkType
-	109, // 57: plugin.EndpointResponseChunk.headers:type_name -> plugin.EndpointResponseChunk.HeadersEntry
-	73,  // 58: plugin.GetResourceTypeRegistrationsResponse.registrations:type_name -> plugin.ResourceTypeRegistrationProto
-	74,  // 59: plugin.ResourceTypeRegistrationProto.form_component:type_name -> plugin.ResourceFormComponentProto
-	9,   // 60: plugin.ListResourceInstancesRequest.context:type_name -> plugin.PluginContext
-	77,  // 61: plugin.ListResourceInstancesResponse.instances:type_name -> plugin.ResourceInstanceProto
-	9,   // 62: plugin.GetResourceInstanceRequest.context:type_name -> plugin.PluginContext
-	77,  // 63: plugin.GetResourceInstanceResponse.instance:type_name -> plugin.ResourceInstanceProto
-	9,   // 64: plugin.ValidateResourceSelectionRequest.context:type_name -> plugin.PluginContext
-	9,   // 65: plugin.CreateResourceInstanceRequest.context:type_name -> plugin.PluginContext
-	77,  // 66: plugin.CreateResourceInstanceResponse.instance:type_name -> plugin.ResourceInstanceProto
-	3,   // 67: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
-	5,   // 68: plugin.PluginService.Ping:input_type -> plugin.PingRequest
-	7,   // 69: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
-	10,  // 70: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
-	12,  // 71: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
-	21,  // 72: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
-	23,  // 73: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
-	14,  // 74: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
-	15,  // 75: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
-	17,  // 76: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
-	19,  // 77: plugin.PluginService.OnStreamComplete:input_type -> plugin.StreamCompleteRequest
-	27,  // 78: plugin.PluginService.HandleProxyLog:input_type -> plugin.ProxyLogRequest
-	28,  // 79: plugin.PluginService.HandleAnalytics:input_type -> plugin.AnalyticsRequest
-	29,  // 80: plugin.PluginService.HandleBudgetUsage:input_type -> plugin.BudgetUsageRequest
-	31,  // 81: plugin.PluginService.GetAsset:input_type -> plugin.GetAssetRequest
-	33,  // 82: plugin.PluginService.ListAssets:input_type -> plugin.ListAssetsRequest
-	36,  // 83: plugin.PluginService.GetManifest:input_type -> plugin.GetManifestRequest
-	38,  // 84: plugin.PluginService.Call:input_type -> plugin.CallRequest
-	40,  // 85: plugin.PluginService.PortalCall:input_type -> plugin.PortalCallRequest
-	43,  // 86: plugin.PluginService.GetConfigSchema:input_type -> plugin.GetConfigSchemaRequest
-	45,  // 87: plugin.PluginService.HandleAgentMessage:input_type -> plugin.AgentMessageRequest
-	51,  // 88: plugin.PluginService.GetObjectHookRegistrations:input_type -> plugin.GetObjectHookRegistrationsRequest
-	54,  // 89: plugin.PluginService.HandleObjectHook:input_type -> plugin.ObjectHookRequest
-	56,  // 90: plugin.PluginService.ExecuteScheduledTask:input_type -> plugin.ExecuteScheduledTaskRequest
-	59,  // 91: plugin.PluginService.AcceptEdgePayload:input_type -> plugin.EdgePayloadRequest
-	65,  // 92: plugin.PluginService.GetEndpointRegistrations:input_type -> plugin.GetEndpointRegistrationsRequest
-	68,  // 93: plugin.PluginService.HandleEndpointRequest:input_type -> plugin.EndpointRequest
-	68,  // 94: plugin.PluginService.HandleEndpointRequestStream:input_type -> plugin.EndpointRequest
-	71,  // 95: plugin.PluginService.GetResourceTypeRegistrations:input_type -> plugin.GetResourceTypeRegistrationsRequest
-	75,  // 96: plugin.PluginService.ListResourceInstances:input_type -> plugin.ListResourceInstancesRequest
-	78,  // 97: plugin.PluginService.GetResourceInstance:input_type -> plugin.GetResourceInstanceRequest
-	80,  // 98: plugin.PluginService.ValidateResourceSelection:input_type -> plugin.ValidateResourceSelectionRequest
-	82,  // 99: plugin.PluginService.CreateResourceInstance:input_type -> plugin.CreateResourceInstanceRequest
-	61,  // 100: plugin.PluginService.OpenSession:input_type -> plugin.OpenSessionRequest
-	63,  // 101: plugin.PluginService.CloseSession:input_type -> plugin.CloseSessionRequest
-	4,   // 102: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
-	6,   // 103: plugin.PluginService.Ping:output_type -> plugin.PingResponse
-	8,   // 104: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
-	11,  // 105: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
-	13,  // 106: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
-	22,  // 107: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
-	24,  // 108: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
-	11,  // 109: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
-	16,  // 110: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
-	18,  // 111: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
-	20,  // 112: plugin.PluginService.OnStreamComplete:output_type -> plugin.StreamCompleteResponse
-	30,  // 113: plugin.PluginService.HandleProxyLog:output_type -> plugin.DataCollectionResponse
-	30,  // 114: plugin.PluginService.HandleAnalytics:output_type -> plugin.DataCollectionResponse
-	30,  // 115: plugin.PluginService.HandleBudgetUsage:output_type -> plugin.DataCollectionResponse
-	32,  // 116: plugin.PluginService.GetAsset:output_type -> plugin.GetAssetResponse
-	34,  // 117: plugin.PluginService.ListAssets:output_type -> plugin.ListAssetsResponse
-	37,  // 118: plugin.PluginService.GetManifest:output_type -> plugin.GetManifestResponse
-	39,  // 119: plugin.PluginService.Call:output_type -> plugin.CallResponse
-	41,  // 120: plugin.PluginService.PortalCall:output_type -> plugin.PortalCallResponse
-	44,  // 121: plugin.PluginService.GetConfigSchema:output_type -> plugin.GetConfigSchemaResponse
-	46,  // 122: plugin.PluginService.HandleAgentMessage:output_type -> plugin.AgentMessageChunk
-	52,  // 123: plugin.PluginService.GetObjectHookRegistrations:output_type -> plugin.GetObjectHookRegistrationsResponse
-	55,  // 124: plugin.PluginService.HandleObjectHook:output_type -> plugin.ObjectHookResponse
-	57,  // 125: plugin.PluginService.ExecuteScheduledTask:output_type -> plugin.ExecuteScheduledTaskResponse
-	60,  // 126: plugin.PluginService.AcceptEdgePayload:output_type -> plugin.EdgePayloadResponse
-	66,  // 127: plugin.PluginService.GetEndpointRegistrations:output_type -> plugin.GetEndpointRegistrationsResponse
-	69,  // 128: plugin.PluginService.HandleEndpointRequest:output_type -> plugin.EndpointResponse
-	70,  // 129: plugin.PluginService.HandleEndpointRequestStream:output_type -> plugin.EndpointResponseChunk
-	72,  // 130: plugin.PluginService.GetResourceTypeRegistrations:output_type -> plugin.GetResourceTypeRegistrationsResponse
-	76,  // 131: plugin.PluginService.ListResourceInstances:output_type -> plugin.ListResourceInstancesResponse
-	79,  // 132: plugin.PluginService.GetResourceInstance:output_type -> plugin.GetResourceInstanceResponse
-	81,  // 133: plugin.PluginService.ValidateResourceSelection:output_type -> plugin.ValidateResourceSelectionResponse
-	83,  // 134: plugin.PluginService.CreateResourceInstance:output_type -> plugin.CreateResourceInstanceResponse
-	62,  // 135: plugin.PluginService.OpenSession:output_type -> plugin.OpenSessionResponse
-	64,  // 136: plugin.PluginService.CloseSession:output_type -> plugin.CloseSessionResponse
-	102, // [102:137] is the sub-list for method output_type
-	67,  // [67:102] is the sub-list for method input_type
-	67,  // [67:67] is the sub-list for extension type_name
-	67,  // [67:67] is the sub-list for extension extendee
-	0,   // [0:67] is the sub-list for field type_name
+	27,  // 23: plugin.GetUserResponse.user:type_name -> plugin.User
+	98,  // 24: plugin.App.metadata:type_name -> plugin.App.MetadataEntry
+	26,  // 25: plugin.App.plugin_resources:type_name -> plugin.AppPluginResourceAssociation
+	99,  // 26: plugin.User.metadata:type_name -> plugin.User.MetadataEntry
+	9,   // 27: plugin.ProxyLogRequest.context:type_name -> plugin.PluginContext
+	9,   // 28: plugin.AnalyticsRequest.context:type_name -> plugin.PluginContext
+	9,   // 29: plugin.BudgetUsageRequest.context:type_name -> plugin.PluginContext
+	100, // 30: plugin.DataCollectionResponse.metadata:type_name -> plugin.DataCollectionResponse.MetadataEntry
+	36,  // 31: plugin.ListAssetsResponse.assets:type_name -> plugin.AssetInfo
+	43,  // 32: plugin.PortalCallRequest.user_context:type_name -> plugin.PortalUserContext
+	101, // 33: plugin.PortalUserContext.metadata:type_name -> plugin.PortalUserContext.MetadataEntry
+	48,  // 34: plugin.AgentMessageRequest.available_tools:type_name -> plugin.AgentToolInfo
+	49,  // 35: plugin.AgentMessageRequest.available_datasources:type_name -> plugin.AgentDatasourceInfo
+	50,  // 36: plugin.AgentMessageRequest.available_llms:type_name -> plugin.AgentLLMInfo
+	51,  // 37: plugin.AgentMessageRequest.history:type_name -> plugin.AgentConversationMessage
+	9,   // 38: plugin.AgentMessageRequest.context:type_name -> plugin.PluginContext
+	0,   // 39: plugin.AgentMessageChunk.type:type_name -> plugin.AgentMessageChunk.ChunkType
+	54,  // 40: plugin.GetObjectHookRegistrationsResponse.registrations:type_name -> plugin.ObjectHookRegistration
+	9,   // 41: plugin.ObjectHookRequest.context:type_name -> plugin.PluginContext
+	102, // 42: plugin.ObjectHookRequest.metadata:type_name -> plugin.ObjectHookRequest.MetadataEntry
+	103, // 43: plugin.ObjectHookResponse.plugin_metadata:type_name -> plugin.ObjectHookResponse.PluginMetadataEntry
+	9,   // 44: plugin.ExecuteScheduledTaskRequest.context:type_name -> plugin.PluginContext
+	59,  // 45: plugin.ExecuteScheduledTaskRequest.schedule:type_name -> plugin.ScheduleDefinition
+	104, // 46: plugin.EdgePayloadRequest.metadata:type_name -> plugin.EdgePayloadRequest.MetadataEntry
+	9,   // 47: plugin.EdgePayloadRequest.context:type_name -> plugin.PluginContext
+	105, // 48: plugin.EdgePayloadResponse.metadata:type_name -> plugin.EdgePayloadResponse.MetadataEntry
+	106, // 49: plugin.OpenSessionRequest.metadata:type_name -> plugin.OpenSessionRequest.MetadataEntry
+	1,   // 50: plugin.OpenSessionResponse.close_reason:type_name -> plugin.OpenSessionResponse.CloseReason
+	68,  // 51: plugin.GetEndpointRegistrationsResponse.registrations:type_name -> plugin.EndpointRegistration
+	107, // 52: plugin.EndpointRegistration.metadata:type_name -> plugin.EndpointRegistration.MetadataEntry
+	108, // 53: plugin.EndpointRequest.headers:type_name -> plugin.EndpointRequest.HeadersEntry
+	9,   // 54: plugin.EndpointRequest.context:type_name -> plugin.PluginContext
+	25,  // 55: plugin.EndpointRequest.app:type_name -> plugin.App
+	109, // 56: plugin.EndpointResponse.headers:type_name -> plugin.EndpointResponse.HeadersEntry
+	2,   // 57: plugin.EndpointResponseChunk.type:type_name -> plugin.EndpointResponseChunk.ChunkType
+	110, // 58: plugin.EndpointResponseChunk.headers:type_name -> plugin.EndpointResponseChunk.HeadersEntry
+	74,  // 59: plugin.GetResourceTypeRegistrationsResponse.registrations:type_name -> plugin.ResourceTypeRegistrationProto
+	75,  // 60: plugin.ResourceTypeRegistrationProto.form_component:type_name -> plugin.ResourceFormComponentProto
+	9,   // 61: plugin.ListResourceInstancesRequest.context:type_name -> plugin.PluginContext
+	78,  // 62: plugin.ListResourceInstancesResponse.instances:type_name -> plugin.ResourceInstanceProto
+	9,   // 63: plugin.GetResourceInstanceRequest.context:type_name -> plugin.PluginContext
+	78,  // 64: plugin.GetResourceInstanceResponse.instance:type_name -> plugin.ResourceInstanceProto
+	9,   // 65: plugin.ValidateResourceSelectionRequest.context:type_name -> plugin.PluginContext
+	9,   // 66: plugin.CreateResourceInstanceRequest.context:type_name -> plugin.PluginContext
+	78,  // 67: plugin.CreateResourceInstanceResponse.instance:type_name -> plugin.ResourceInstanceProto
+	3,   // 68: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
+	5,   // 69: plugin.PluginService.Ping:input_type -> plugin.PingRequest
+	7,   // 70: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
+	10,  // 71: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
+	12,  // 72: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
+	21,  // 73: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
+	23,  // 74: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
+	14,  // 75: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
+	15,  // 76: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
+	17,  // 77: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
+	19,  // 78: plugin.PluginService.OnStreamComplete:input_type -> plugin.StreamCompleteRequest
+	28,  // 79: plugin.PluginService.HandleProxyLog:input_type -> plugin.ProxyLogRequest
+	29,  // 80: plugin.PluginService.HandleAnalytics:input_type -> plugin.AnalyticsRequest
+	30,  // 81: plugin.PluginService.HandleBudgetUsage:input_type -> plugin.BudgetUsageRequest
+	32,  // 82: plugin.PluginService.GetAsset:input_type -> plugin.GetAssetRequest
+	34,  // 83: plugin.PluginService.ListAssets:input_type -> plugin.ListAssetsRequest
+	37,  // 84: plugin.PluginService.GetManifest:input_type -> plugin.GetManifestRequest
+	39,  // 85: plugin.PluginService.Call:input_type -> plugin.CallRequest
+	41,  // 86: plugin.PluginService.PortalCall:input_type -> plugin.PortalCallRequest
+	44,  // 87: plugin.PluginService.GetConfigSchema:input_type -> plugin.GetConfigSchemaRequest
+	46,  // 88: plugin.PluginService.HandleAgentMessage:input_type -> plugin.AgentMessageRequest
+	52,  // 89: plugin.PluginService.GetObjectHookRegistrations:input_type -> plugin.GetObjectHookRegistrationsRequest
+	55,  // 90: plugin.PluginService.HandleObjectHook:input_type -> plugin.ObjectHookRequest
+	57,  // 91: plugin.PluginService.ExecuteScheduledTask:input_type -> plugin.ExecuteScheduledTaskRequest
+	60,  // 92: plugin.PluginService.AcceptEdgePayload:input_type -> plugin.EdgePayloadRequest
+	66,  // 93: plugin.PluginService.GetEndpointRegistrations:input_type -> plugin.GetEndpointRegistrationsRequest
+	69,  // 94: plugin.PluginService.HandleEndpointRequest:input_type -> plugin.EndpointRequest
+	69,  // 95: plugin.PluginService.HandleEndpointRequestStream:input_type -> plugin.EndpointRequest
+	72,  // 96: plugin.PluginService.GetResourceTypeRegistrations:input_type -> plugin.GetResourceTypeRegistrationsRequest
+	76,  // 97: plugin.PluginService.ListResourceInstances:input_type -> plugin.ListResourceInstancesRequest
+	79,  // 98: plugin.PluginService.GetResourceInstance:input_type -> plugin.GetResourceInstanceRequest
+	81,  // 99: plugin.PluginService.ValidateResourceSelection:input_type -> plugin.ValidateResourceSelectionRequest
+	83,  // 100: plugin.PluginService.CreateResourceInstance:input_type -> plugin.CreateResourceInstanceRequest
+	62,  // 101: plugin.PluginService.OpenSession:input_type -> plugin.OpenSessionRequest
+	64,  // 102: plugin.PluginService.CloseSession:input_type -> plugin.CloseSessionRequest
+	4,   // 103: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
+	6,   // 104: plugin.PluginService.Ping:output_type -> plugin.PingResponse
+	8,   // 105: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
+	11,  // 106: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
+	13,  // 107: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
+	22,  // 108: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
+	24,  // 109: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
+	11,  // 110: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
+	16,  // 111: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
+	18,  // 112: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
+	20,  // 113: plugin.PluginService.OnStreamComplete:output_type -> plugin.StreamCompleteResponse
+	31,  // 114: plugin.PluginService.HandleProxyLog:output_type -> plugin.DataCollectionResponse
+	31,  // 115: plugin.PluginService.HandleAnalytics:output_type -> plugin.DataCollectionResponse
+	31,  // 116: plugin.PluginService.HandleBudgetUsage:output_type -> plugin.DataCollectionResponse
+	33,  // 117: plugin.PluginService.GetAsset:output_type -> plugin.GetAssetResponse
+	35,  // 118: plugin.PluginService.ListAssets:output_type -> plugin.ListAssetsResponse
+	38,  // 119: plugin.PluginService.GetManifest:output_type -> plugin.GetManifestResponse
+	40,  // 120: plugin.PluginService.Call:output_type -> plugin.CallResponse
+	42,  // 121: plugin.PluginService.PortalCall:output_type -> plugin.PortalCallResponse
+	45,  // 122: plugin.PluginService.GetConfigSchema:output_type -> plugin.GetConfigSchemaResponse
+	47,  // 123: plugin.PluginService.HandleAgentMessage:output_type -> plugin.AgentMessageChunk
+	53,  // 124: plugin.PluginService.GetObjectHookRegistrations:output_type -> plugin.GetObjectHookRegistrationsResponse
+	56,  // 125: plugin.PluginService.HandleObjectHook:output_type -> plugin.ObjectHookResponse
+	58,  // 126: plugin.PluginService.ExecuteScheduledTask:output_type -> plugin.ExecuteScheduledTaskResponse
+	61,  // 127: plugin.PluginService.AcceptEdgePayload:output_type -> plugin.EdgePayloadResponse
+	67,  // 128: plugin.PluginService.GetEndpointRegistrations:output_type -> plugin.GetEndpointRegistrationsResponse
+	70,  // 129: plugin.PluginService.HandleEndpointRequest:output_type -> plugin.EndpointResponse
+	71,  // 130: plugin.PluginService.HandleEndpointRequestStream:output_type -> plugin.EndpointResponseChunk
+	73,  // 131: plugin.PluginService.GetResourceTypeRegistrations:output_type -> plugin.GetResourceTypeRegistrationsResponse
+	77,  // 132: plugin.PluginService.ListResourceInstances:output_type -> plugin.ListResourceInstancesResponse
+	80,  // 133: plugin.PluginService.GetResourceInstance:output_type -> plugin.GetResourceInstanceResponse
+	82,  // 134: plugin.PluginService.ValidateResourceSelection:output_type -> plugin.ValidateResourceSelectionResponse
+	84,  // 135: plugin.PluginService.CreateResourceInstance:output_type -> plugin.CreateResourceInstanceResponse
+	63,  // 136: plugin.PluginService.OpenSession:output_type -> plugin.OpenSessionResponse
+	65,  // 137: plugin.PluginService.CloseSession:output_type -> plugin.CloseSessionResponse
+	103, // [103:138] is the sub-list for method output_type
+	68,  // [68:103] is the sub-list for method input_type
+	68,  // [68:68] is the sub-list for extension type_name
+	68,  // [68:68] is the sub-list for extension extendee
+	0,   // [0:68] is the sub-list for field type_name
 }
 
 func init() { file_proto_plugin_proto_init() }
@@ -6625,7 +6704,7 @@ func file_proto_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_plugin_proto_rawDesc), len(file_proto_plugin_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   107,
+			NumMessages:   108,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -84,18 +84,66 @@ func (s *Service) SetAppPluginResources(appID, resourceTypeID uint, instanceIDs 
 		return fmt.Errorf("failed to clear app plugin resources: %w", err)
 	}
 
-	// Insert new associations
+	// Look up the resource type to get plugin ID for instance detail lookup
+	prt, err := s.GetPluginResourceTypeByID(resourceTypeID)
+	if err != nil {
+		return fmt.Errorf("failed to get resource type %d: %w", resourceTypeID, err)
+	}
+
+	// Build a map of instance details from plugin RPC (best-effort)
+	instanceDetails := s.fetchInstanceDetails(prt.PluginID, prt.Slug, instanceIDs)
+
+	// Insert new associations with cached instance details
 	for _, instanceID := range instanceIDs {
 		apr := &models.AppPluginResource{
 			AppID:                appID,
 			PluginResourceTypeID: resourceTypeID,
 			InstanceID:           instanceID,
 		}
+		if detail, ok := instanceDetails[instanceID]; ok {
+			apr.InstanceName = detail.Name
+			apr.InstancePrivacyScore = detail.PrivacyScore
+			apr.InstanceMetadata = detail.Metadata
+		}
 		if err := s.DB.Create(apr).Error; err != nil {
 			return fmt.Errorf("failed to create app plugin resource association: %w", err)
 		}
 	}
 	return nil
+}
+
+// instanceDetail holds cached instance information from the plugin
+type instanceDetail struct {
+	Name         string
+	PrivacyScore int
+	Metadata     []byte
+}
+
+// fetchInstanceDetails calls the plugin's ListResourceInstances RPC to get
+// instance details for caching. Returns a map of instanceID -> details.
+// Best-effort: returns an empty map if the plugin manager is not available.
+func (s *Service) fetchInstanceDetails(pluginID uint, slug string, instanceIDs []string) map[string]instanceDetail {
+	details := make(map[string]instanceDetail)
+
+	if s.AIStudioPluginManager == nil {
+		return details
+	}
+
+	// Call ListResourceInstances via plugin RPC
+	instances, err := s.AIStudioPluginManager.ListResourceInstances(pluginID, slug)
+	if err != nil {
+		return details
+	}
+
+	// Build lookup map
+	for _, inst := range instances {
+		details[inst.Id] = instanceDetail{
+			Name:         inst.Name,
+			PrivacyScore: int(inst.PrivacyScore),
+			Metadata:     inst.Metadata,
+		}
+	}
+	return details
 }
 
 // GetAppPluginResources returns all plugin resource associations for an app.
@@ -154,4 +202,48 @@ func (s *Service) GetAccessiblePluginResourceInstances(userID, resourceTypeID ui
 // GetAllAccessiblePluginResources returns all plugin resource access entries for a user.
 func (s *Service) GetAllAccessiblePluginResources(userID uint) ([]models.GroupPluginResource, error) {
 	return models.GetAllAccessiblePluginResources(s.DB, userID)
+}
+
+// EnsureDefaultGroupAccess checks all instances reported by the plugin and ensures
+// any new instances are automatically assigned to the default group. This mirrors the
+// built-in resource pattern where new LLMs/Datasources/Tools are added to the default
+// catalogue so they're immediately visible to all users.
+//
+// Called when listing instances (lazy reconciliation) to avoid requiring plugins
+// to explicitly manage group assignments.
+func (s *Service) EnsureDefaultGroupAccess(resourceTypeID uint, instanceIDs []string) error {
+	// Find the default group
+	defaultGroup := &models.Group{}
+	if err := s.DB.Where("name = ?", models.DefaultGroupName).First(defaultGroup).Error; err != nil {
+		// No default group — nothing to do
+		return nil
+	}
+
+	// Get currently assigned instance IDs for this type in the default group
+	var existing models.GroupPluginResources
+	if err := existing.GetByGroupAndType(s.DB, defaultGroup.ID, resourceTypeID); err != nil {
+		return nil
+	}
+
+	existingSet := make(map[string]bool)
+	for _, gpr := range existing {
+		existingSet[gpr.InstanceID] = true
+	}
+
+	// Add any new instances that aren't already in the default group
+	for _, id := range instanceIDs {
+		if existingSet[id] {
+			continue
+		}
+		gpr := &models.GroupPluginResource{
+			GroupID:              defaultGroup.ID,
+			PluginResourceTypeID: resourceTypeID,
+			InstanceID:           id,
+		}
+		if err := s.DB.Create(gpr).Error; err != nil {
+			// Log but don't fail — this is best-effort
+			continue
+		}
+	}
+	return nil
 }

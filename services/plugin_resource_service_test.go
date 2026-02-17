@@ -505,3 +505,189 @@ func TestDeleteAppClearsPluginResources(t *testing.T) {
 	aprs, _ = service.GetAppPluginResources(app.ID)
 	assert.Len(t, aprs, 0)
 }
+
+// --- Fix 3: Denormalized instance details on AppPluginResource ---
+
+func TestSetAppPluginResources_CachesInstanceDetails(t *testing.T) {
+	// When AIStudioPluginManager is nil (no plugin RPC), instance details
+	// should be empty but the association should still work.
+	service, db := setupPluginResourceTest(t)
+	plugin := createTestPlugin(t, db, "test-plugin")
+
+	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
+		Slug: "mcp_servers",
+		Name: "MCP Servers",
+	}})
+	assert.NoError(t, err)
+	prt, _ := service.GetPluginResourceTypeByPluginAndSlug(plugin.ID, "mcp_servers")
+
+	user := createTestAppUser(t, service, "cache@test.com", "Cache User")
+	app, err := service.CreateApp("Cache App", "", user.ID, nil, nil, nil, nil, nil, nil)
+	assert.NoError(t, err)
+
+	t.Run("without loaded plugin, details are empty but association works", func(t *testing.T) {
+		// Plugin manager exists but no plugins are loaded — fetchInstanceDetails
+		// should gracefully return empty details
+		err := service.SetAppPluginResources(app.ID, prt.ID, []string{"srv-1"})
+		assert.NoError(t, err)
+
+		aprs, err := service.GetAppPluginResources(app.ID)
+		assert.NoError(t, err)
+		assert.Len(t, aprs, 1)
+		assert.Equal(t, "srv-1", aprs[0].InstanceID)
+		// Details are empty since no plugin is loaded to answer the RPC
+		assert.Equal(t, "", aprs[0].InstanceName)
+		assert.Equal(t, 0, aprs[0].InstancePrivacyScore)
+	})
+}
+
+// --- Fix 3: fetchInstanceDetails graceful degradation ---
+
+func TestFetchInstanceDetails_NoLoadedPlugin(t *testing.T) {
+	service, _ := setupPluginResourceTest(t)
+
+	// Plugin manager exists but plugin is not loaded — should return empty details
+	details := service.fetchInstanceDetails(999, "any_slug", []string{"id1", "id2"})
+	assert.NotNil(t, details)
+	assert.Len(t, details, 0) // Empty map, no panic
+}
+
+// --- Fix 5: collectPluginResourcePrivacyScores graceful degradation ---
+
+func TestCollectPluginResourcePrivacyScores_NoLoadedPlugin(t *testing.T) {
+	service, _ := setupPluginResourceTest(t)
+
+	// Plugin manager exists but plugin is not loaded — should return nil (skip validation)
+	scores, err := service.collectPluginResourcePrivacyScores(999, "any_slug", []string{"id1"})
+	assert.NoError(t, err)
+	assert.Nil(t, scores) // nil, not empty slice — means "skip validation"
+}
+
+// --- Fix 5: Privacy validation with RPC-collected scores ---
+
+func TestCreateAppWithResources_PrivacyValidationWithScores(t *testing.T) {
+	service, db := setupPluginResourceTest(t)
+	plugin := createTestPlugin(t, db, "test-plugin")
+
+	// Register a resource type with privacy scoring
+	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
+		Slug:            "private_servers",
+		Name:            "Private Servers",
+		HasPrivacyScore: true,
+	}})
+	assert.NoError(t, err)
+
+	user := createTestAppUser(t, service, "privacy-rpc@test.com", "Privacy User")
+	llm := createTestAppLLM(t, service, "privacy-llm", 50)
+
+	t.Run("privacy validation passes when plugin manager nil (skips score collection)", func(t *testing.T) {
+		// Without plugin manager, collectPluginResourcePrivacyScores returns nil
+		// which means scores are skipped → validation passes
+		app, err := service.CreateAppWithResources(
+			"Privacy App",
+			"",
+			user.ID,
+			nil,
+			[]uint{llm.ID},
+			nil, nil, nil, nil,
+			[]PluginResourceSelection{{
+				PluginID:         plugin.ID,
+				ResourceTypeSlug: "private_servers",
+				InstanceIDs:      []string{"srv-1"},
+			}},
+		)
+		assert.NoError(t, err)
+		assert.NotNil(t, app)
+	})
+}
+
+// --- Fix 2: Event emission topic constant exists ---
+
+func TestAppPluginResourcesChangedEventTopic(t *testing.T) {
+	// Verify the event topic constant is defined correctly
+	assert.Equal(t, "system.app.plugin_resources.changed", TopicAppPluginResourcesChanged)
+}
+
+// --- Fix 3: Denormalized fields accessible in model query ---
+
+func TestAppPluginResource_DenormalizedFields(t *testing.T) {
+	service, db := setupPluginResourceTest(t)
+	plugin := createTestPlugin(t, db, "test-plugin")
+
+	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
+		Slug: "servers",
+		Name: "Servers",
+	}})
+	assert.NoError(t, err)
+	prt, _ := service.GetPluginResourceTypeByPluginAndSlug(plugin.ID, "servers")
+
+	user := createTestAppUser(t, service, "denorm@test.com", "Denorm User")
+	app, err := service.CreateApp("Denorm App", "", user.ID, nil, nil, nil, nil, nil, nil)
+	assert.NoError(t, err)
+
+	t.Run("manually set denormalized fields are persisted and queryable", func(t *testing.T) {
+		// Simulate what happens when plugin manager provides instance details
+		apr := &models.AppPluginResource{
+			AppID:                app.ID,
+			PluginResourceTypeID: prt.ID,
+			InstanceID:           "srv-rich",
+			InstanceName:         "Production MCP Server",
+			InstancePrivacyScore: 75,
+			InstanceMetadata:     []byte(`{"url":"https://mcp.example.com"}`),
+		}
+		err := db.Create(apr).Error
+		assert.NoError(t, err)
+
+		// Query back
+		aprs, err := service.GetAppPluginResources(app.ID)
+		assert.NoError(t, err)
+		assert.Len(t, aprs, 1)
+		assert.Equal(t, "srv-rich", aprs[0].InstanceID)
+		assert.Equal(t, "Production MCP Server", aprs[0].InstanceName)
+		assert.Equal(t, 75, aprs[0].InstancePrivacyScore)
+		assert.JSONEq(t, `{"url":"https://mcp.example.com"}`, string(aprs[0].InstanceMetadata))
+	})
+}
+
+// --- EnsureDefaultGroupAccess ---
+
+func TestEnsureDefaultGroupAccess(t *testing.T) {
+	service, db := setupPluginResourceTest(t)
+	plugin := createTestPlugin(t, db, "test-plugin")
+
+	err := service.RegisterPluginResourceTypes(plugin.ID, []models.PluginResourceType{{
+		Slug: "servers",
+		Name: "Servers",
+	}})
+	assert.NoError(t, err)
+	prt, _ := service.GetPluginResourceTypeByPluginAndSlug(plugin.ID, "servers")
+
+	// Create default group
+	defaultGroup := &models.Group{Name: models.DefaultGroupName}
+	db.Create(defaultGroup)
+
+	t.Run("new instances are auto-assigned to default group", func(t *testing.T) {
+		err := service.EnsureDefaultGroupAccess(prt.ID, []string{"srv-1", "srv-2"})
+		assert.NoError(t, err)
+
+		gprs, _ := service.GetGroupPluginResources(defaultGroup.ID)
+		assert.Len(t, gprs, 2)
+	})
+
+	t.Run("existing instances are not duplicated", func(t *testing.T) {
+		// Call again with one new and one existing
+		err := service.EnsureDefaultGroupAccess(prt.ID, []string{"srv-1", "srv-2", "srv-3"})
+		assert.NoError(t, err)
+
+		gprs, _ := service.GetGroupPluginResources(defaultGroup.ID)
+		assert.Len(t, gprs, 3) // srv-1, srv-2 unchanged + srv-3 added
+	})
+
+	t.Run("no default group means no-op", func(t *testing.T) {
+		// Delete the default group
+		db.Where("name = ?", models.DefaultGroupName).Delete(&models.Group{})
+
+		err := service.EnsureDefaultGroupAccess(prt.ID, []string{"srv-4"})
+		assert.NoError(t, err) // No error, just a no-op
+	})
+}

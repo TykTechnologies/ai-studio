@@ -409,8 +409,52 @@ func (a *API) createUserApp(c *gin.Context) {
 		}
 	}
 
-	// Create the app
-	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil)
+	// Validate access to plugin resources and build selections
+	var pluginResources []services.PluginResourceSelection
+	for _, pr := range req.PluginResources {
+		prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Unknown plugin resource type: " + pr.ResourceTypeSlug}}})
+			return
+		}
+
+		// Validate user has access to selected instances via their groups
+		if !currentUser.IsAdmin {
+			accessibleIDs, err := a.service.GetAccessiblePluginResourceInstances(currentUser.ID, prt.ID)
+			if err == nil {
+				accessibleSet := make(map[string]bool)
+				for _, id := range accessibleIDs {
+					accessibleSet[id] = true
+				}
+				for _, instanceID := range pr.InstanceIDs {
+					if !accessibleSet[instanceID] {
+						c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+							Title  string `json:"title"`
+							Detail string `json:"detail"`
+						}{{Title: "Forbidden", Detail: "User does not have access to plugin resource instance: " + instanceID}}})
+						return
+					}
+				}
+			}
+		}
+
+		pluginResources = append(pluginResources, services.PluginResourceSelection{
+			PluginID:         pr.PluginID,
+			ResourceTypeSlug: pr.ResourceTypeSlug,
+			InstanceIDs:      pr.InstanceIDs,
+		})
+	}
+
+	// Create the app (with plugin resources if any)
+	var app *models.App
+	if len(pluginResources) > 0 {
+		app, err = a.service.CreateAppWithResources(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil, pluginResources)
+	} else {
+		app, err = a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil)
+	}
 	if err != nil {
 		// Check for specific error types and return appropriate responses
 		if errors.Is(err, services.ERRPrivacyScoreMismatch) {
@@ -470,6 +514,7 @@ type CreateAppRequest struct {
 	ToolIDs         []uint     `json:"tool_ids" binding:"required"`
 	MonthlyBudget   *float64   `json:"monthly_budget"`
 	BudgetStartDate *time.Time `json:"budget_start_date"`
+	PluginResources []PluginResourceInput `json:"plugin_resources,omitempty"`
 }
 
 // getUserAccessibleDataSources godoc

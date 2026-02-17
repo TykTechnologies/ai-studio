@@ -1347,6 +1347,38 @@ func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string
 	return responseData, nil
 }
 
+// ListResourceInstances calls a plugin's ListResourceInstances RPC to get all instances
+// of a given resource type. Used by the service layer to cache instance details.
+func (m *AIStudioPluginManager) ListResourceInstances(pluginID uint, resourceTypeSlug string) ([]*pb.ResourceInstanceProto, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if !loadedPlugin.IsHealthy {
+		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	resp, err := loadedPlugin.GRPCClient.ListResourceInstances(ctx, &pb.ListResourceInstancesRequest{
+		ResourceTypeSlug: resourceTypeSlug,
+		ServiceBrokerId:  loadedPlugin.SessionBrokerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ListResourceInstances RPC failed: %w", err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("ListResourceInstances failed: %s", resp.ErrorMessage)
+	}
+
+	return resp.Instances, nil
+}
+
 // createPluginClient creates a plugin client based on command scheme (adapted from microgateway)
 func (m *AIStudioPluginManager) createPluginClient(command string) (*goplugin.Client, error) {
 	if strings.HasPrefix(command, "oci://") {

@@ -461,6 +461,25 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 							RateLimit:     int32(dbApp.RateLimitRPM),
 							Metadata:      metadataMap,
 						}
+
+						// Populate plugin resource associations from synced data
+						if len(dbApp.PluginResourcesJSON) > 0 {
+							var prAssocs []struct {
+								PluginId         uint32   `json:"plugin_id"`
+								ResourceTypeSlug string   `json:"resource_type_slug"`
+								InstanceIds      []string `json:"instance_ids"`
+							}
+							if err := json.Unmarshal(dbApp.PluginResourcesJSON, &prAssocs); err == nil {
+								for _, pr := range prAssocs {
+									pbApp.PluginResources = append(pbApp.PluginResources, &pb.AppPluginResourceAssociation{
+										PluginId:         pr.PluginId,
+										ResourceTypeSlug: pr.ResourceTypeSlug,
+										InstanceIds:      pr.InstanceIds,
+									})
+								}
+							}
+						}
+
 						endpointAppCache.set(tokenResult.AppID, pbApp)
 						endpointReq.App = pbApp
 					}

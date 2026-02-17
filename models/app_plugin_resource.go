@@ -13,6 +13,11 @@ type AppPluginResource struct {
 	PluginResourceTypeID uint   `json:"plugin_resource_type_id" gorm:"uniqueIndex:idx_apr_unique"`
 	InstanceID           string `json:"instance_id" gorm:"size:255;uniqueIndex:idx_apr_unique"`
 
+	// Denormalized instance details (cached at bind time, refreshed on instance change)
+	InstanceName         string `json:"instance_name" gorm:"size:255"`
+	InstancePrivacyScore int    `json:"instance_privacy_score" gorm:"default:0"`
+	InstanceMetadata     []byte `json:"instance_metadata"`
+
 	// Relationships
 	App                *App                `json:"app,omitempty" gorm:"foreignKey:AppID"`
 	PluginResourceType *PluginResourceType `json:"plugin_resource_type,omitempty" gorm:"foreignKey:PluginResourceTypeID"`

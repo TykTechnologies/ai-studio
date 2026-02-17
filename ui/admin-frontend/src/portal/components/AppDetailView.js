@@ -82,6 +82,7 @@ const AppDetailView = () => {
   const [accessibleLLMs, setAccessibleLLMs] = useState([]);
   const [accessibleDatasources, setAccessibleDatasources] = useState([]);
   const [accessibleTools, setAccessibleTools] = useState([]);
+  const [pluginResources, setPluginResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -170,6 +171,19 @@ const AppDetailView = () => {
         const appToolIds = app.attributes.tool_ids || [];
         const filteredTools = accessibleTools.filter((tool) => appToolIds.includes(parseInt(tool.id)));
         setAccessibleTools(filteredTools);
+
+        // Load plugin resource associations
+        if (app.attributes.plugin_resources && app.attributes.plugin_resources.length > 0) {
+          setPluginResources(app.attributes.plugin_resources);
+        } else {
+          // Try dedicated endpoint
+          try {
+            const prResp = await pubClient.get(`/common/apps/${id}/plugin-resources`);
+            setPluginResources(prResp.data?.data || []);
+          } catch {
+            // Plugin resources not available
+          }
+        }
 
         // Fetch analytics data
         await fetchAnalyticsData(startDate, endDate);
@@ -541,6 +555,21 @@ const AppDetailView = () => {
               )) : <Typography variant="body2">No tools associated.</Typography>}
             </Box>
           </Grid>
+          {/* Plugin Resources */}
+          {pluginResources.length > 0 && pluginResources.map((pr) => (
+            <React.Fragment key={`pr-${pr.plugin_id || ''}-${pr.resource_type_slug || ''}`}>
+              <Grid item xs={3}>
+                <FieldLabel>{pr.resource_type_name || pr.resource_type_slug || 'Plugin Resources'}:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <Box display="flex" flexWrap="wrap" gap={1}>
+                  {(pr.instance_ids || []).map((instanceId) => (
+                    <Chip key={instanceId} label={instanceId} />
+                  ))}
+                </Box>
+              </Grid>
+            </React.Fragment>
+          ))}
           <Grid item xs={3}>
             <FieldLabel>Monthly Budget:</FieldLabel>
           </Grid>

@@ -28,6 +28,9 @@ const AppBuilder = () => {
   const [selectedDataSources, setSelectedDataSources] = useState([]);
   const [selectedLLMs, setSelectedLLMs] = useState([]);
   const [selectedTools, setSelectedTools] = useState([]);
+  const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
+  const [pluginResourceSelections, setPluginResourceSelections] = useState({});
+  const [currentPluginResource, setCurrentPluginResource] = useState({});
   const [currentDataSource, setCurrentDataSource] = useState("");
   const [currentLLM, setCurrentLLM] = useState("");
   const [currentTool, setCurrentTool] = useState("");
@@ -41,15 +44,17 @@ const AppBuilder = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [dataSourcesResponse, llmsResponse, toolsResponse] =
+        const [dataSourcesResponse, llmsResponse, toolsResponse, pluginResourcesResponse] =
           await Promise.all([
             pubClient.get("/common/accessible-datasources"),
             pubClient.get("/common/accessible-llms"),
             pubClient.get("/common/accessible-tools"),
+            pubClient.get("/common/accessible-plugin-resources").catch(() => ({ data: { data: [] } })),
           ]);
         setDataSources(dataSourcesResponse.data);
         setLLMs(llmsResponse.data);
         setTools(toolsResponse.data);
+        setPluginResourceTypes(pluginResourcesResponse.data?.data || []);
 
         // Parse query parameters
         const params = new URLSearchParams(location.search);
@@ -128,12 +133,29 @@ const AppBuilder = () => {
     e.preventDefault();
     setError(null);
     try {
+      // Build plugin resource selections
+      const pluginResourcesPayload = Object.entries(pluginResourceSelections)
+        .filter(([, items]) => items.length > 0)
+        .map(([key, items]) => {
+          const rt = pluginResourceTypes.find(
+            (t) => `${t.plugin_id}:${t.slug}` === key,
+          );
+          return {
+            plugin_id: rt ? rt.plugin_id : 0,
+            resource_type_slug: rt ? rt.slug : "",
+            instance_ids: items.map((item) => item.id),
+          };
+        });
+
       const response = await pubClient.post("/common/apps", {
         name: appName,
         description,
         data_source_ids: selectedDataSources.map((ds) => parseInt(ds.id, 10)),
         llm_ids: selectedLLMs.map((llm) => parseInt(llm.id, 10)),
         tool_ids: selectedTools.map((tool) => parseInt(tool.id, 10)),
+        ...(pluginResourcesPayload.length > 0 && {
+          plugin_resources: pluginResourcesPayload,
+        }),
       });
       setIsSubmitted(true);
     } catch (err) {
@@ -142,26 +164,22 @@ const AppBuilder = () => {
     }
   };
 
+  const hasPluginResourceSelections = useMemo(() => {
+    return Object.values(pluginResourceSelections).some(
+      (items) => items.length > 0,
+    );
+  }, [pluginResourceSelections]);
+
   const isFormValid = useMemo(() => {
-    const isValid =
+    return (
       appName.trim() !== "" &&
       description.trim() !== "" &&
       (selectedDataSources.length > 0 ||
         selectedLLMs.length > 0 ||
-        selectedTools.length > 0);
-
-    console.log("Form Validation:", {
-      appName: appName.trim() !== "",
-      description: description.trim() !== "",
-      dataSourcesOrLLMsOrTools:
-        selectedDataSources.length > 0 ||
-        selectedLLMs.length > 0 ||
-        selectedTools.length > 0,
-      isValid: isValid,
-    });
-
-    return isValid;
-  }, [appName, description, selectedDataSources, selectedLLMs, selectedTools]);
+        selectedTools.length > 0 ||
+        hasPluginResourceSelections)
+    );
+  }, [appName, description, selectedDataSources, selectedLLMs, selectedTools, hasPluginResourceSelections]);
 
   if (isLoading)
     return (
@@ -333,15 +351,90 @@ const AppBuilder = () => {
                 ))}
               </Box>
             </Box>
+            {/* Dynamic Plugin Resource Sections */}
+            {pluginResourceTypes.map((rt) => {
+              const key = `${rt.plugin_id}:${rt.slug}`;
+              const instances = rt.instances || [];
+              const selected = pluginResourceSelections[key] || [];
+              const currentVal = currentPluginResource[key] || "";
+
+              if (instances.length === 0) return null;
+
+              return (
+                <Box key={key} sx={{ mt: 3, mb: 2 }}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    {rt.name} (Optional)
+                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                    <FormControl fullWidth sx={{ mr: 1 }}>
+                      <InputLabel>Select {rt.name}</InputLabel>
+                      <Select
+                        value={currentVal}
+                        onChange={(e) =>
+                          setCurrentPluginResource((prev) => ({
+                            ...prev,
+                            [key]: e.target.value,
+                          }))
+                        }
+                        label={`Select ${rt.name}`}
+                      >
+                        {instances.map((inst) => (
+                          <MenuItem key={inst.id} value={inst.id}>
+                            {inst.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Button
+                      onClick={() => {
+                        if (
+                          currentVal &&
+                          !selected.some((s) => s.id === currentVal)
+                        ) {
+                          const inst = instances.find(
+                            (i) => i.id === currentVal,
+                          );
+                          if (inst) {
+                            setPluginResourceSelections((prev) => ({
+                              ...prev,
+                              [key]: [...selected, inst],
+                            }));
+                            setCurrentPluginResource((prev) => ({
+                              ...prev,
+                              [key]: "",
+                            }));
+                          }
+                        }
+                      }}
+                      variant="outlined"
+                    >
+                      Add
+                    </Button>
+                  </Box>
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                    {selected.map((inst) => (
+                      <Chip
+                        key={inst.id}
+                        label={inst.name}
+                        onDelete={() =>
+                          setPluginResourceSelections((prev) => ({
+                            ...prev,
+                            [key]: selected.filter((s) => s.id !== inst.id),
+                          }))
+                        }
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              );
+            })}
             <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-              You must select at least one Data Source, one LLM, or one Tool
-              for your app. You can add multiple of each if needed. You will
-              not be able to add more later without admin support. Not all LLMs,
-              Data sources, and Tools are allowed to be used together in an app
-              due to data security, please ensure the data sources, LLMs, and
-              Tools you select are compatible. Once your App has been approved,
-              you will be able to start building your app using the credentials
-              provided.
+              You must select at least one resource for your app. You can add
+              multiple of each if needed. Not all resources are allowed to be
+              used together in an app due to data security - please ensure the
+              resources you select are compatible. Once your App has been
+              approved, you will be able to start building your app using the
+              credentials provided.
             </Alert>
             <PrimaryButton
               type="submit"

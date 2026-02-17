@@ -1,5 +1,7 @@
 package plugin_sdk
 
+import "fmt"
+
 // ResourceTypeRegistration declares a resource type provided by a plugin.
 // Each plugin can register one or more resource types that appear in the
 // App creation/editing flow and participate in the governance model.
@@ -66,4 +68,33 @@ type ResourceInstance struct {
 
 	// IsActive indicates if this instance is currently usable.
 	IsActive bool
+}
+
+// ResourceInstanceChangedEvent is the topic for instance change notifications.
+const ResourceInstanceChangedEvent = "system.plugin_resource.instance_changed"
+
+// resourceInstanceChangedPayload is the event payload for instance change notifications.
+type resourceInstanceChangedPayload struct {
+	ResourceTypeSlug string `json:"resource_type_slug"`
+	InstanceID       string `json:"instance_id"`
+}
+
+// NotifyResourceInstanceChanged publishes an event telling the platform that a
+// resource instance's data (name, privacy score, metadata, active status) has changed.
+// The platform subscribes to this event and refreshes cached instance details in all
+// AppPluginResource rows that reference this instance.
+//
+// Call this from your plugin whenever you update an instance's properties.
+func NotifyResourceInstanceChanged(ctx Context, resourceTypeSlug, instanceID string) error {
+	eventSvc := ctx.Services.Events()
+	if eventSvc == nil {
+		return fmt.Errorf("event service not available")
+	}
+
+	payload := resourceInstanceChangedPayload{
+		ResourceTypeSlug: resourceTypeSlug,
+		InstanceID:       instanceID,
+	}
+
+	return eventSvc.Publish(ctx.Context, ResourceInstanceChangedEvent, payload, DirLocal)
 }

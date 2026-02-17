@@ -854,7 +854,7 @@ func (s *Service) CreateAppWithResources(
 	metadata map[string]interface{},
 	pluginResources []PluginResourceSelection,
 ) (*models.App, error) {
-	// Collect privacy scores from plugin resources for validation
+	// Collect privacy scores from plugin resources via plugin RPC
 	var pluginScores []int
 	for _, pr := range pluginResources {
 		prt, err := s.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
@@ -864,10 +864,11 @@ func (s *Service) CreateAppWithResources(
 		if !prt.HasPrivacyScore {
 			continue
 		}
-		// We don't have individual instance scores here — those come from the plugin RPC.
-		// The API layer is responsible for collecting scores before calling this method.
-		// For now, we validate at the type level; the API handler passes scores in.
-		_ = prt
+		scores, err := s.collectPluginResourcePrivacyScores(pr.PluginID, pr.ResourceTypeSlug, pr.InstanceIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collect privacy scores for %s: %w", pr.ResourceTypeSlug, err)
+		}
+		pluginScores = append(pluginScores, scores...)
 	}
 
 	// Validate privacy scores (built-in + plugin)
@@ -892,6 +893,11 @@ func (s *Service) CreateAppWithResources(
 		}
 	}
 
+	// Emit plugin resources changed event after all bindings succeed
+	if s.SystemEvents != nil && len(pluginResources) > 0 {
+		s.SystemEvents.EmitAppPluginResourcesChanged(app.ID, app.UserID)
+	}
+
 	return app, nil
 }
 
@@ -908,7 +914,7 @@ func (s *Service) UpdateAppWithResources(
 	metadata map[string]interface{},
 	pluginResources []PluginResourceSelection,
 ) (*models.App, error) {
-	// Collect privacy scores from plugin resources for validation
+	// Collect privacy scores from plugin resources via plugin RPC
 	var pluginScores []int
 	for _, pr := range pluginResources {
 		prt, err := s.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
@@ -918,7 +924,11 @@ func (s *Service) UpdateAppWithResources(
 		if !prt.HasPrivacyScore {
 			continue
 		}
-		_ = prt
+		scores, err := s.collectPluginResourcePrivacyScores(pr.PluginID, pr.ResourceTypeSlug, pr.InstanceIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collect privacy scores for %s: %w", pr.ResourceTypeSlug, err)
+		}
+		pluginScores = append(pluginScores, scores...)
 	}
 
 	// Validate privacy scores (built-in + plugin)
@@ -943,5 +953,41 @@ func (s *Service) UpdateAppWithResources(
 		}
 	}
 
+	// Emit plugin resources changed event after all bindings succeed
+	if s.SystemEvents != nil && len(pluginResources) > 0 {
+		s.SystemEvents.EmitAppPluginResourcesChanged(app.ID, app.UserID)
+	}
+
 	return app, nil
+}
+
+// collectPluginResourcePrivacyScores fetches privacy scores for specific instances
+// from the plugin via ListResourceInstances RPC. Returns a score for each requested
+// instance. If the plugin manager is unavailable, returns an empty slice (skips validation).
+func (s *Service) collectPluginResourcePrivacyScores(pluginID uint, slug string, instanceIDs []string) ([]int, error) {
+	if s.AIStudioPluginManager == nil {
+		// Plugin manager not available (e.g., in tests) — skip score collection
+		return nil, nil
+	}
+
+	instances, err := s.AIStudioPluginManager.ListResourceInstances(pluginID, slug)
+	if err != nil {
+		// Plugin may not be loaded (e.g., during startup or tests) — skip score collection
+		return nil, nil
+	}
+
+	// Build lookup
+	scoreMap := make(map[string]int32)
+	for _, inst := range instances {
+		scoreMap[inst.Id] = inst.PrivacyScore
+	}
+
+	// Collect scores for requested instances
+	var scores []int
+	for _, id := range instanceIDs {
+		if score, ok := scoreMap[id]; ok {
+			scores = append(scores, int(score))
+		}
+	}
+	return scores, nil
 }

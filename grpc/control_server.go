@@ -1310,8 +1310,10 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				}
 				grouped[k].InstanceIds = append(grouped[k].InstanceIds, apr.InstanceID)
 				grouped[k].Instances = append(grouped[k].Instances, &pb.ResourceInstanceSnapshot{
-					Id:   apr.InstanceID,
-					Name: "", // Instance details can be populated via plugin RPC if needed
+					Id:           apr.InstanceID,
+					Name:         apr.InstanceName,
+					PrivacyScore: int32(apr.InstancePrivacyScore),
+					Metadata:     apr.InstanceMetadata,
 				})
 			}
 			for _, pra := range grouped {

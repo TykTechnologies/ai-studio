@@ -4,6 +4,7 @@ import useSystemFeatures from '../../hooks/useSystemFeatures';
 import useUserEntitlements from '../../hooks/useUserEntitlements';
 import Icon from '../../../components/common/Icon';
 import portalPluginLoaderService from '../../../portal/services/portalPluginLoaderService';
+import pubClient from '../../utils/pubClient';
 
 const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
   const { features, loading: featuresLoading } = useSystemFeatures();
@@ -13,6 +14,7 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
     loading: entitlementsLoading
   } = useUserEntitlements();
   const [pluginMenuItems, setPluginMenuItems] = useState([]);
+  const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
 
   // Load portal plugin sidebar items
   useEffect(() => {
@@ -29,6 +31,20 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
     const handlePluginRefresh = () => loadPluginMenuItems();
     window.addEventListener('portal-plugin-loader-refreshed', handlePluginRefresh);
     return () => window.removeEventListener('portal-plugin-loader-refreshed', handlePluginRefresh);
+  }, []);
+
+  // Load plugin resource types for sidebar
+  useEffect(() => {
+    const loadPluginResourceTypes = async () => {
+      try {
+        const response = await pubClient.get('/common/accessible-plugin-resources');
+        const types = response.data?.data || [];
+        setPluginResourceTypes(types.filter(t => (t.instances || []).length > 0));
+      } catch {
+        // Plugin resources not available — that's fine
+      }
+    };
+    loadPluginResourceTypes();
   }, []);
 
   if (featuresLoading || entitlementsLoading) {
@@ -103,7 +119,13 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
               text: catalogue.attributes.name,
               path: `/portal/tools/${catalogue.id}`
             })) || []
-          }
+          },
+          // Dynamic plugin resource type entries
+          ...pluginResourceTypes.map(rt => ({
+            id: `plugin-resource-${rt.plugin_id}-${rt.slug}`,
+            text: rt.name,
+            path: `/portal/resources/${rt.plugin_id}/${rt.slug}`
+          }))
         ]
       },
       // Portal plugin sidebar items (dynamically loaded from plugins with portal_ui capability)

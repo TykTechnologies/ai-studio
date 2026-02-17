@@ -134,6 +134,7 @@ const AppDetails = () => {
   const [datasources, setDatasources] = useState([]);
   const [tools, setTools] = useState([]); // Added state for tools
   const [agents, setAgents] = useState([]); // Added state for agents
+  const [pluginResources, setPluginResources] = useState([]); // Plugin resource associations
   const [loading, setLoading] = useState(true);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
@@ -238,6 +239,18 @@ const AppDetails = () => {
         setDatasources(appData.attributes.datasources); // If full Datasource objects are now in AppResponse
       }
 
+      // Fetch plugin resource associations for this app
+      if (appData.attributes.plugin_resources && Array.isArray(appData.attributes.plugin_resources)) {
+        setPluginResources(appData.attributes.plugin_resources);
+      } else {
+        // Fetch from dedicated endpoint
+        try {
+          const prResp = await apiClient.get(`/apps/${id}/plugin-resources`);
+          setPluginResources(prResp.data?.data || []);
+        } catch {
+          // Plugin resources may not be available
+        }
+      }
 
     } catch (error) {
       console.error("Error fetching app details", error);
@@ -733,6 +746,21 @@ const AppDetails = () => {
               )}
             </Box>
           </Grid>
+          {/* Plugin Resources */}
+          {pluginResources.length > 0 && pluginResources.map((pr) => (
+            <React.Fragment key={`pr-${pr.plugin_id}-${pr.resource_type_slug}`}>
+              <Grid item xs={3}>
+                <FieldLabel>{pr.resource_type_name || pr.resource_type_slug}:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <Box display="flex" flexWrap="wrap" gap={1}>
+                  {(pr.instance_ids || []).map((instanceId) => (
+                    <Chip key={instanceId} label={instanceId} />
+                  ))}
+                </Box>
+              </Grid>
+            </React.Fragment>
+          ))}
           <Grid item xs={3}>
             <FieldLabel>Agents:</FieldLabel>
           </Grid>
