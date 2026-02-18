@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -51,7 +52,9 @@ func (a *API) listPluginResourceInstances(c *gin.Context) {
 			activeIDs = append(activeIDs, inst.Id)
 		}
 	}
-	_ = a.service.EnsureDefaultGroupAccess(prt.ID, activeIDs)
+	if err := a.service.EnsureDefaultGroupAccess(prt.ID, activeIDs); err != nil {
+		log.Printf("Warning: failed to ensure default group access for resource type %d: %v", prt.ID, err)
+	}
 
 	// Convert proto instances to JSON response
 	result := make([]gin.H, 0, len(instances))
@@ -102,7 +105,9 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 						activeIDs = append(activeIDs, inst.Id)
 					}
 				}
-				_ = a.service.EnsureDefaultGroupAccess(rt.ID, activeIDs)
+				if err := a.service.EnsureDefaultGroupAccess(rt.ID, activeIDs); err != nil {
+					log.Printf("Warning: failed to ensure default group access for resource type %d: %v", rt.ID, err)
+				}
 
 				// Filter by access for non-admins
 				var accessibleSet map[string]bool
@@ -183,11 +188,30 @@ func (a *API) listPluginResourceTypes(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// getAppPluginResources returns plugin resource associations for an app
+// getAppPluginResources returns plugin resource associations for an app.
+// Requires the caller to be an admin or the owner of the app.
 func (a *API) getAppPluginResources(c *gin.Context) {
 	appID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid app ID"})
+		return
+	}
+
+	// Authorization: verify caller is admin or app owner
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+	currentUser := user.(*models.User)
+
+	app, err := a.service.GetAppByID(uint(appID))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "App not found"})
+		return
+	}
+	if !currentUser.IsAdmin && app.UserID != currentUser.ID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You do not have permission to view this app's resources"})
 		return
 	}
 

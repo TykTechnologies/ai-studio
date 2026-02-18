@@ -64,6 +64,10 @@ type ResourceInstance struct {
 
 	// Metadata is arbitrary plugin-defined metadata as JSON bytes.
 	// This is opaque to the platform but included in config snapshots.
+	//
+	// SECURITY: Do NOT store secrets, credentials, or PII in this field.
+	// Metadata is propagated to all gateways, cached in the join table,
+	// and may appear in logs or be accessible to other plugins.
 	Metadata []byte
 
 	// IsActive indicates if this instance is currently usable.

@@ -1206,6 +1206,23 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		return nil, fmt.Errorf("failed to get Apps: %w", err)
 	}
 
+	// Batch-fetch all plugin resource associations for snapshot apps (avoids N+1)
+	var allAppPluginResources []models.AppPluginResource
+	if len(apps) > 0 {
+		appIDs := make([]uint, len(apps))
+		for i, a := range apps {
+			appIDs[i] = a.ID
+		}
+		s.db.Where("app_id IN ?", appIDs).
+			Preload("PluginResourceType").
+			Find(&allAppPluginResources)
+	}
+	// Group by app ID for O(1) lookup
+	pluginResourcesByApp := make(map[uint][]models.AppPluginResource)
+	for _, apr := range allAppPluginResources {
+		pluginResourcesByApp[apr.AppID] = append(pluginResourcesByApp[apr.AppID], apr)
+	}
+
 	// Convert Apps to protobuf with LLM associations
 	for _, app := range apps {
 		// Get associated LLM IDs
@@ -1285,12 +1302,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			UpdatedAt:          timestamppb.New(app.UpdatedAt),
 		}
 
-		// Add plugin resource associations
-		var appPluginResources []models.AppPluginResource
-		if err := s.db.Where("app_id = ?", app.ID).
-			Preload("PluginResourceType").
-			Find(&appPluginResources).Error; err == nil && len(appPluginResources) > 0 {
-
+		// Add plugin resource associations (from batch query above)
+		if appPluginResources, ok := pluginResourcesByApp[app.ID]; ok && len(appPluginResources) > 0 {
 			// Group by (plugin_id, resource_type_slug)
 			type prKey struct {
 				PluginID uint

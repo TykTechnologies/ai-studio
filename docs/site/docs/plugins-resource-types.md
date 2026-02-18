@@ -197,6 +197,8 @@ type ResourceInstance struct {
 }
 ```
 
+> **Security**: Do not store secrets, credentials, or PII in the `Metadata` field. Metadata is propagated to all gateways via config snapshots, cached in database join tables, and may appear in logs or be accessible to other plugins with access to the app configuration.
+
 ### ResourceFormComponent
 
 ```go

@@ -469,7 +469,9 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 								ResourceTypeSlug string   `json:"resource_type_slug"`
 								InstanceIds      []string `json:"instance_ids"`
 							}
-							if err := json.Unmarshal(dbApp.PluginResourcesJSON, &prAssocs); err == nil {
+							if err := json.Unmarshal(dbApp.PluginResourcesJSON, &prAssocs); err != nil {
+								log.Warn().Uint("app_id", uint(dbApp.ID)).Err(err).Msg("Failed to unmarshal plugin resources JSON from synced app data")
+							} else {
 								for _, pr := range prAssocs {
 									pbApp.PluginResources = append(pbApp.PluginResources, &pb.AppPluginResourceAssociation{
 										PluginId:         pr.PluginId,

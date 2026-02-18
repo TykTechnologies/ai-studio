@@ -158,7 +158,7 @@ func (a *API) getApp(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeApp(app)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppWithPluginResources(app)})
 }
 
 // @Summary Update an app
