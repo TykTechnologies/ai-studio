@@ -14,6 +14,7 @@ import AppDetailView from "./components/AppDetailView";
 import ChatView from "./components/ChatView";
 import AgentDashboard from "./pages/AgentDashboard";
 import AgentChat from "./pages/AgentChat";
+import PluginResourceListView from "./components/PluginResourceListView";
 
 const portalRoutes = [
   <Route key="auth" element={<AuthLayout />}>
@@ -33,6 +34,7 @@ const portalRoutes = [
     <Route path="chat/:chatId" element={<ChatView />} />
     <Route path="agents" element={<AgentDashboard />} />
     <Route path="agent/:agentId" element={<AgentChat />} />
+    <Route path="resources/:pluginId/:slug" element={<PluginResourceListView />} />
     {/* Add other portal routes that require the drawer here */}
   </Route>,
 ];

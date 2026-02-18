@@ -18,7 +18,8 @@ const (
 	TopicAppCreated  = "system.app.created"
 	TopicAppUpdated  = "system.app.updated"
 	TopicAppDeleted  = "system.app.deleted"
-	TopicAppApproved = "system.app.approved"
+	TopicAppApproved                = "system.app.approved"
+	TopicAppPluginResourcesChanged  = "system.app.plugin_resources.changed"
 
 	// Datasource events
 	TopicDatasourceCreated = "system.datasource.created"
@@ -145,6 +146,12 @@ func (e *SystemEventEmitter) EmitAppDeleted(objectID uint, userID uint) {
 // EmitAppApproved emits an event when an App is approved (credential activated)
 func (e *SystemEventEmitter) EmitAppApproved(app interface{}, objectID uint, userID uint) {
 	e.EmitObjectEvent(TopicAppApproved, "app", "approved", objectID, userID, app)
+}
+
+// EmitAppPluginResourcesChanged emits an event when plugin resources on an App change.
+// This fires after SetAppPluginResources() completes, so subscribers see the final state.
+func (e *SystemEventEmitter) EmitAppPluginResourcesChanged(appID uint, userID uint) {
+	e.EmitObjectEvent(TopicAppPluginResourcesChanged, "app", "plugin_resources_changed", appID, userID, nil)
 }
 
 // EmitDatasourceCreated emits an event when a Datasource is created

@@ -1206,6 +1206,23 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		return nil, fmt.Errorf("failed to get Apps: %w", err)
 	}
 
+	// Batch-fetch all plugin resource associations for snapshot apps (avoids N+1)
+	var allAppPluginResources []models.AppPluginResource
+	if len(apps) > 0 {
+		appIDs := make([]uint, len(apps))
+		for i, a := range apps {
+			appIDs[i] = a.ID
+		}
+		s.db.Where("app_id IN ?", appIDs).
+			Preload("PluginResourceType").
+			Find(&allAppPluginResources)
+	}
+	// Group by app ID for O(1) lookup
+	pluginResourcesByApp := make(map[uint][]models.AppPluginResource)
+	for _, apr := range allAppPluginResources {
+		pluginResourcesByApp[apr.AppID] = append(pluginResourcesByApp[apr.AppID], apr)
+	}
+
 	// Convert Apps to protobuf with LLM associations
 	for _, app := range apps {
 		// Get associated LLM IDs
@@ -1284,6 +1301,39 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			CreatedAt:          timestamppb.New(app.CreatedAt),
 			UpdatedAt:          timestamppb.New(app.UpdatedAt),
 		}
+
+		// Add plugin resource associations (from batch query above)
+		if appPluginResources, ok := pluginResourcesByApp[app.ID]; ok && len(appPluginResources) > 0 {
+			// Group by (plugin_id, resource_type_slug)
+			type prKey struct {
+				PluginID uint
+				Slug     string
+			}
+			grouped := make(map[prKey]*pb.PluginResourceAssociation)
+			for _, apr := range appPluginResources {
+				if apr.PluginResourceType == nil {
+					continue
+				}
+				k := prKey{apr.PluginResourceType.PluginID, apr.PluginResourceType.Slug}
+				if _, exists := grouped[k]; !exists {
+					grouped[k] = &pb.PluginResourceAssociation{
+						PluginId:         uint32(apr.PluginResourceType.PluginID),
+						ResourceTypeSlug: apr.PluginResourceType.Slug,
+					}
+				}
+				grouped[k].InstanceIds = append(grouped[k].InstanceIds, apr.InstanceID)
+				grouped[k].Instances = append(grouped[k].Instances, &pb.ResourceInstanceSnapshot{
+					Id:           apr.InstanceID,
+					Name:         apr.InstanceName,
+					PrivacyScore: int32(apr.InstancePrivacyScore),
+					Metadata:     apr.InstanceMetadata,
+				})
+			}
+			for _, pra := range grouped {
+				pbApp.PluginResources = append(pbApp.PluginResources, pra)
+			}
+		}
+
 		snapshot.Apps = append(snapshot.Apps, pbApp)
 	}
 
