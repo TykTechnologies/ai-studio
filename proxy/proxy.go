@@ -1079,6 +1079,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusInternalServerError, "failed to create upstream request for streaming", err, false)
 		return
 	}
+	// Clear the Auth header, some vendors don't use it for auth and return error if its present(e.g Google AI)
+	r.Header.Del("Authorization")
 	upstreamReq.Header = r.Header.Clone()
 	upstreamReq.Host = upstreamURL.Host
 	if err := p.setVendorAuthHeader(upstreamReq, llm); err != nil {
