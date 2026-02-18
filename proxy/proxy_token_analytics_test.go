@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"bytes"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
@@ -468,20 +467,4 @@ func sendProxyRequest(t *testing.T, proxyURL, llmSlug, secret, reqBody string, i
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	return resp
-}
-
-func writeGzippedResponse(t *testing.T, w http.ResponseWriter, body []byte) {
-	t.Helper()
-
-	var compressedBuffer bytes.Buffer
-	gzipWriter := gzip.NewWriter(&compressedBuffer)
-
-	_, err := gzipWriter.Write(body)
-	require.NoError(t, err)
-
-	err = gzipWriter.Close()
-	require.NoError(t, err)
-
-	_, err = w.Write(compressedBuffer.Bytes())
-	require.NoError(t, err)
 }
