@@ -203,6 +203,20 @@ const AppDetailView = () => {
     setShowSecret(!showSecret);
   };
 
+  const generateVendorEndpointURL = (path, llm) => {
+    const v1Suffix = "v1"
+
+    const { name, vendor } = llm.attributes
+    const baseUrl = generateEndpointUrl(path, name)
+
+    switch (vendor) {
+      case "google_ai":
+        return joinUrlParts(baseUrl, v1Suffix)
+      default:
+        return baseUrl
+    }
+  }
+
   const generateEndpointUrl = (path, name) => {
     const slug = generateSlug(name);
     // Use proxyUrl for LLM proxy endpoints
@@ -688,12 +702,12 @@ const AppDetailView = () => {
                       flexGrow: 1,
                     }}
                   >
-                    {generateEndpointUrl("/llm/call/", llm.attributes.name)}
+                    {generateVendorEndpointURL("/llm/call/", llm)}
                   </Typography>
                   <IconButton
                     onClick={() =>
                       copyToClipboard(
-                        generateEndpointUrl("/llm/call/", llm.attributes.name),
+                        generateVendorEndpointURL("/llm/call/", llm),
                       )
                     }
                     size="small"
@@ -806,15 +820,12 @@ const AppDetailView = () => {
                             flexGrow: 1,
                           }}
                         >
-                          {generateEndpointUrl("/llm/rest/", llm.attributes.name)}
+                          {generateVendorEndpointURL("/llm/rest/", llm)}
                         </Typography>
                         <IconButton
                           onClick={() =>
                             copyToClipboard(
-                              generateEndpointUrl(
-                                "/llm/rest/",
-                                llm.attributes.name,
-                              ),
+                              generateVendorEndpointURL("/llm/rest/", llm)
                             )
                           }
                           size="small"
@@ -849,14 +860,14 @@ const AppDetailView = () => {
                             flexGrow: 1,
                           }}
                         >
-                          {generateEndpointUrl("/llm/stream/", llm.attributes.name)}
+                          {generateVendorEndpointURL("/llm/stream/", llm)}
                         </Typography>
                         <IconButton
                           onClick={() =>
                             copyToClipboard(
-                              generateEndpointUrl(
+                              generateVendorEndpointURL(
                                 "/llm/stream/",
-                                llm.attributes.name,
+                                llm
                               ),
                             )
                           }

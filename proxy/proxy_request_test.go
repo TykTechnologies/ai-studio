@@ -357,7 +357,7 @@ func TestGoogleAIRequestHandling(t *testing.T) {
 			name: "Auth/REST/WithAuthorizationHeader/OK",
 			setupRequest: func(r *http.Request) {
 				r.URL = r.URL.JoinPath(fmt.Sprintf("%s:%s", model, "generateContent"))
-				r.Header.Set("Authorization", "Bearer valid-api-token")
+				r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cred.Secret))
 			},
 			statusCode: http.StatusOK,
 		},
@@ -365,7 +365,7 @@ func TestGoogleAIRequestHandling(t *testing.T) {
 			name: "Auth/Stream/WithAuthorizationHeader/OK",
 			setupRequest: func(r *http.Request) {
 				r.URL = r.URL.JoinPath(fmt.Sprintf("%s:%s", model, "streamGenerateContent"))
-				r.Header.Set("Authorization", "Bearer valid-api-token")
+				r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cred.Secret))
 			},
 			statusCode: http.StatusOK,
 		},
@@ -373,7 +373,7 @@ func TestGoogleAIRequestHandling(t *testing.T) {
 			name: "Auth/REST/WithGoogAPIKeyHeader/OK",
 			setupRequest: func(r *http.Request) {
 				r.URL = r.URL.JoinPath(fmt.Sprintf("%s:%s", model, "generateContent"))
-				r.Header.Set("x-goog-api-key", "valid-api-token")
+				r.Header.Set("x-goog-api-key", cred.Secret)
 			},
 			statusCode: http.StatusOK,
 		},
@@ -381,7 +381,7 @@ func TestGoogleAIRequestHandling(t *testing.T) {
 			name: "Auth/Stream/WithGoogAPIKeyHeader/OK",
 			setupRequest: func(r *http.Request) {
 				r.URL = r.URL.JoinPath(fmt.Sprintf("%s:%s", model, "streamGenerateContent"))
-				r.Header.Set("x-goog-api-key", "valid-api-token")
+				r.Header.Set("x-goog-api-key", cred.Secret)
 			},
 			statusCode: http.StatusOK,
 		},
@@ -391,7 +391,7 @@ func TestGoogleAIRequestHandling(t *testing.T) {
 				r.URL = r.URL.JoinPath(fmt.Sprintf("%s:%s", model, "generateContent"))
 
 				q := r.URL.Query()
-				q.Set("key", "valid-api-token")
+				q.Set("key", cred.Secret)
 				r.URL.RawQuery = q.Encode()
 			},
 			statusCode: http.StatusOK,
@@ -402,7 +402,7 @@ func TestGoogleAIRequestHandling(t *testing.T) {
 				r.URL = r.URL.JoinPath(fmt.Sprintf("%s:%s", model, "streamGenerateContent"))
 
 				q := r.URL.Query()
-				q.Set("key", "valid-api-token")
+				q.Set("key", cred.Secret)
 				r.URL.RawQuery = q.Encode()
 			},
 			statusCode: http.StatusOK,
@@ -411,10 +411,10 @@ func TestGoogleAIRequestHandling(t *testing.T) {
 			name: "Auth/Ambiguous/HeaderAndQueryKeyMatch/OK",
 			setupRequest: func(r *http.Request) {
 				r.URL = r.URL.JoinPath(fmt.Sprintf("%s:%s", model, "streamGenerateContent"))
-				r.Header.Set("x-goog-api-key", "valid-api-token")
+				r.Header.Set("x-goog-api-key", cred.Secret)
 
 				q := r.URL.Query()
-				q.Set("key", "valid-api-token")
+				q.Set("key", cred.Secret)
 				r.URL.RawQuery = q.Encode()
 			},
 			shouldFail: false,
@@ -424,7 +424,7 @@ func TestGoogleAIRequestHandling(t *testing.T) {
 			name: "Auth/Ambiguous/HeaderAndQueryKeyMismatch/Unauthorized",
 			setupRequest: func(r *http.Request) {
 				r.URL = r.URL.JoinPath(fmt.Sprintf("%s:%s", model, "streamGenerateContent"))
-				r.Header.Set("x-goog-api-key", "valid-api-token")
+				r.Header.Set("x-goog-api-key", cred.Secret)
 
 				q := r.URL.Query()
 				q.Set("key", "somevalue")
