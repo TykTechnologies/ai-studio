@@ -26,8 +26,11 @@ func New() models.LLMVendorProvider {
 func (v *GoogleAI) GetTokenCounts(choice *llms.ContentChoice) (int, int, int) {
 	promptTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "input_tokens")
 	responseTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "output_tokens")
-	cacheTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "cached_content_tokens")
-	totalTokens := promptTokens + responseTokens + cacheTokens
+
+	totalTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "total_tokens")
+	if totalTokens <= 0 {
+		totalTokens = promptTokens + responseTokens
+	}
 
 	return totalTokens, promptTokens, responseTokens
 }
