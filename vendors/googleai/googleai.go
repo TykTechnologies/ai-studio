@@ -26,7 +26,13 @@ func New() models.LLMVendorProvider {
 
 func (v *GoogleAI) GetTokenCounts(choice *llms.ContentChoice) (int, int, int) {
 	promptTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "input_tokens")
-	responseTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "output_tokens")
+	thinkingTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "ThinkingTokens")
+	outputTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "output_tokens")
+
+	// INFO: We have to include thoughts tokens as they're priced like response tokens
+	// More details: https://ai.google.dev/gemini-api/docs/thinking#go_5
+	responseTokens := outputTokens + thinkingTokens
+
 	cacheTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "cached_content_tokens")
 	totalTokens := promptTokens + responseTokens + cacheTokens
 
