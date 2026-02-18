@@ -1034,12 +1034,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
-		go p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now())
+		go p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded for streaming", err, false)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
-		go p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now())
+		go p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
@@ -1156,7 +1156,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					// Log with 400 status and include both the block reason and partial LLM response for audit trail
 					blockedResponseBody := []byte(fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"chunk_index":%d,"partial_response":%s}`,
 						blockMsg, chunkIndex, fullResponse.String()))
-					go p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now())
+					go p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 					return
 				}
 			}
@@ -1180,8 +1180,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if !isErr {
-		decompressedResp := decompressBuffer(&fullResponse, resp.Header.Get("Content-Encoding"))
-		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, decompressedResp, reqBody, responses, time.Now())
+		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
 
 		// Execute OnStreamComplete hook for plugins (e.g., caching)
 		if p.responseHookManager != nil && p.hasResponseHooks() {
@@ -1388,8 +1387,8 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	}
 	return v().ProxyScreenRequest(llm, r, isStreamingChannel)
 }
-func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time) {
-	AnalyzeStreamingResponse(p.gatewayService, llm, app, code, fullResponse, reqBody, req, chunks, timestamp)
+func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time, contentEncoding string) {
+	AnalyzeStreamingResponse(p.gatewayService, llm, app, code, fullResponse, reqBody, req, chunks, timestamp, contentEncoding)
 }
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
 	body, err := io.ReadAll(r.Body)

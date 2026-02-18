@@ -136,7 +136,7 @@ func TestStreamingFilterBlockAnalytics(t *testing.T) {
 
 	// Call analyzeStreamingResponse with a 400 status
 	now := time.Now()
-	proxy.analyzeStreamingResponse(llm, app, req, http.StatusBadRequest, respBody, reqBody, chunks, now)
+	proxy.analyzeStreamingResponse(llm, app, req, http.StatusBadRequest, respBody, reqBody, chunks, now, "")
 
 	// Wait for analytics to process
 	time.Sleep(100 * time.Millisecond)
