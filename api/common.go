@@ -411,26 +411,43 @@ func (a *API) createUserApp(c *gin.Context) {
 
 	// Validate access to plugin resources and build selections
 	var pluginResources []services.PluginResourceSelection
-	for _, pr := range req.PluginResources {
-		prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Unknown plugin resource type: " + pr.ResourceTypeSlug}}})
-			return
+	if len(req.PluginResources) > 0 {
+		// For non-admins, batch-fetch all accessible plugin resources in one query
+		var accessibleByType map[uint]map[string]bool
+		if !currentUser.IsAdmin {
+			allAccessible, err := a.service.GetAllAccessiblePluginResources(currentUser.ID)
+			if err != nil {
+				// Fail-closed: deny if we can't check access
+				c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: "Failed to verify plugin resource access"}}})
+				return
+			}
+			accessibleByType = make(map[uint]map[string]bool)
+			for _, gpr := range allAccessible {
+				if accessibleByType[gpr.PluginResourceTypeID] == nil {
+					accessibleByType[gpr.PluginResourceTypeID] = make(map[string]bool)
+				}
+				accessibleByType[gpr.PluginResourceTypeID][gpr.InstanceID] = true
+			}
 		}
 
-		// Validate user has access to selected instances via their groups
-		if !currentUser.IsAdmin {
-			accessibleIDs, err := a.service.GetAccessiblePluginResourceInstances(currentUser.ID, prt.ID)
-			if err == nil {
-				accessibleSet := make(map[string]bool)
-				for _, id := range accessibleIDs {
-					accessibleSet[id] = true
-				}
+		for _, pr := range req.PluginResources {
+			prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Unknown plugin resource type: " + pr.ResourceTypeSlug}}})
+				return
+			}
+
+			// Validate user has access to selected instances (fail-closed)
+			if accessibleByType != nil {
+				accessibleSet := accessibleByType[prt.ID]
 				for _, instanceID := range pr.InstanceIDs {
-					if !accessibleSet[instanceID] {
+					if accessibleSet == nil || !accessibleSet[instanceID] {
 						c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
 							Title  string `json:"title"`
 							Detail string `json:"detail"`
@@ -439,13 +456,13 @@ func (a *API) createUserApp(c *gin.Context) {
 					}
 				}
 			}
-		}
 
-		pluginResources = append(pluginResources, services.PluginResourceSelection{
-			PluginID:         pr.PluginID,
-			ResourceTypeSlug: pr.ResourceTypeSlug,
-			InstanceIDs:      pr.InstanceIDs,
-		})
+			pluginResources = append(pluginResources, services.PluginResourceSelection{
+				PluginID:         pr.PluginID,
+				ResourceTypeSlug: pr.ResourceTypeSlug,
+				InstanceIDs:      pr.InstanceIDs,
+			})
+		}
 	}
 
 	// Create the app (with plugin resources if any)

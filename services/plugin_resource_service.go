@@ -1,9 +1,13 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 )
 
 // --- Plugin Resource Type Registration ---
@@ -246,4 +250,81 @@ func (s *Service) EnsureDefaultGroupAccess(resourceTypeID uint, instanceIDs []st
 		}
 	}
 	return nil
+}
+
+// SubscribeResourceInstanceChanges registers an event handler that refreshes
+// denormalized instance data in app_plugin_resources when a plugin notifies
+// that an instance has changed. This keeps cached names, privacy scores, and
+// metadata consistent with the plugin's source of truth.
+//
+// Call this after SetEventBus to activate the subscription.
+func (s *Service) SubscribeResourceInstanceChanges(bus eventbridge.Bus) {
+	if bus == nil {
+		return
+	}
+
+	bus.Subscribe(plugin_sdk.ResourceInstanceChangedEvent, func(evt eventbridge.Event) {
+		var payload struct {
+			ResourceTypeSlug string `json:"resource_type_slug"`
+			InstanceID       string `json:"instance_id"`
+		}
+		if err := json.Unmarshal(evt.Payload, &payload); err != nil {
+			log.Printf("Warning: failed to parse instance_changed event payload: %v", err)
+			return
+		}
+
+		if payload.ResourceTypeSlug == "" || payload.InstanceID == "" {
+			return
+		}
+
+		s.refreshInstanceDetails(payload.ResourceTypeSlug, payload.InstanceID)
+	})
+
+	log.Printf("Subscribed to %s events for denormalized data refresh", plugin_sdk.ResourceInstanceChangedEvent)
+}
+
+// refreshInstanceDetails fetches updated instance details from the plugin and
+// updates all AppPluginResource rows that reference the given instance.
+func (s *Service) refreshInstanceDetails(resourceTypeSlug, instanceID string) {
+	// Find the resource type to get the plugin ID
+	var prt models.PluginResourceType
+	if err := s.DB.Where("slug = ? AND is_active = ?", resourceTypeSlug, true).First(&prt).Error; err != nil {
+		return // Unknown type, nothing to refresh
+	}
+
+	if s.AIStudioPluginManager == nil {
+		return
+	}
+
+	// Fetch updated instance data from the plugin
+	instances, err := s.AIStudioPluginManager.ListResourceInstances(prt.PluginID, resourceTypeSlug)
+	if err != nil {
+		log.Printf("Warning: failed to fetch instances for refresh (plugin %d, type %s): %v", prt.PluginID, resourceTypeSlug, err)
+		return
+	}
+
+	// Find the specific instance
+	for _, inst := range instances {
+		if inst.Id != instanceID {
+			continue
+		}
+
+		// Update all AppPluginResource rows that reference this instance
+		result := s.DB.Model(&models.AppPluginResource{}).
+			Where("plugin_resource_type_id = ? AND instance_id = ?", prt.ID, instanceID).
+			Updates(map[string]interface{}{
+				"instance_name":          inst.Name,
+				"instance_privacy_score": int(inst.PrivacyScore),
+				"instance_metadata":      inst.Metadata,
+			})
+
+		if result.Error != nil {
+			log.Printf("Warning: failed to refresh instance %s details: %v", instanceID, result.Error)
+		} else if result.RowsAffected > 0 {
+			log.Printf("Refreshed denormalized data for instance %s (%d rows updated)", instanceID, result.RowsAffected)
+		}
+		return
+	}
+
+	log.Printf("Warning: instance %s not found in plugin response during refresh", instanceID)
 }

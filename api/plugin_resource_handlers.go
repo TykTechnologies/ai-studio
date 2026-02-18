@@ -1,6 +1,7 @@
 package api
 
 import (
+	"html"
 	"log"
 	"net/http"
 	"strconv"
@@ -8,6 +9,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
+
+// sanitizeString escapes HTML entities in plugin-provided strings to prevent
+// stored XSS if the frontend renders them without escaping.
+func sanitizeString(s string) string {
+	return html.EscapeString(s)
+}
 
 // listPluginResourceInstances returns all instances of a resource type by proxying
 // to the plugin's ListResourceInstances RPC. Admins see all instances.
@@ -44,8 +51,6 @@ func (a *API) listPluginResourceInstances(c *gin.Context) {
 	}
 
 	// Auto-assign new instances to the default group (lazy reconciliation).
-	// This mirrors the built-in resource pattern where new LLMs/Datasources/Tools
-	// are added to the default catalogue so they're visible to all users by default.
 	var activeIDs []string
 	for _, inst := range instances {
 		if inst.IsActive {
@@ -56,7 +61,7 @@ func (a *API) listPluginResourceInstances(c *gin.Context) {
 		log.Printf("Warning: failed to ensure default group access for resource type %d: %v", prt.ID, err)
 	}
 
-	// Convert proto instances to JSON response
+	// Convert proto instances to JSON response with sanitization
 	result := make([]gin.H, 0, len(instances))
 	for _, inst := range instances {
 		if !inst.IsActive {
@@ -64,8 +69,8 @@ func (a *API) listPluginResourceInstances(c *gin.Context) {
 		}
 		result = append(result, gin.H{
 			"id":            inst.Id,
-			"name":          inst.Name,
-			"description":   inst.Description,
+			"name":          sanitizeString(inst.Name),
+			"description":   sanitizeString(inst.Description),
 			"privacy_score": inst.PrivacyScore,
 			"is_active":     inst.IsActive,
 		})
@@ -91,9 +96,28 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 		return
 	}
 
+	// For non-admins, batch-fetch all accessible plugin resources in one query
+	// to avoid N+1 per resource type.
+	var accessibleByType map[uint]map[string]bool
+	if !currentUser.IsAdmin {
+		allAccessible, err := a.service.GetAllAccessiblePluginResources(currentUser.ID)
+		if err != nil {
+			// Fail-closed: if we can't determine access, return empty
+			log.Printf("Warning: failed to fetch accessible plugin resources for user %d: %v", currentUser.ID, err)
+			c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
+			return
+		}
+		accessibleByType = make(map[uint]map[string]bool)
+		for _, gpr := range allAccessible {
+			if accessibleByType[gpr.PluginResourceTypeID] == nil {
+				accessibleByType[gpr.PluginResourceTypeID] = make(map[string]bool)
+			}
+			accessibleByType[gpr.PluginResourceTypeID][gpr.InstanceID] = true
+		}
+	}
+
 	var result []gin.H
 	for _, rt := range types {
-		// Get instances from plugin RPC
 		var instances []gin.H
 		if a.service.AIStudioPluginManager != nil {
 			protoInstances, err := a.service.AIStudioPluginManager.ListResourceInstances(rt.PluginID, rt.Slug)
@@ -109,30 +133,21 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 					log.Printf("Warning: failed to ensure default group access for resource type %d: %v", rt.ID, err)
 				}
 
-				// Filter by access for non-admins
-				var accessibleSet map[string]bool
-				if !currentUser.IsAdmin {
-					accessibleIDs, err := a.service.GetAccessiblePluginResourceInstances(currentUser.ID, rt.ID)
-					if err == nil {
-						accessibleSet = make(map[string]bool)
-						for _, id := range accessibleIDs {
-							accessibleSet[id] = true
-						}
-					}
-				}
+				// Filter by pre-fetched access set for non-admins
+				accessibleSet := accessibleByType[rt.ID] // nil for admins
 
 				for _, inst := range protoInstances {
 					if !inst.IsActive {
 						continue
 					}
-					// Non-admins: filter by group access
+					// Non-admins: fail-closed — if accessibleByType was built, check it
 					if accessibleSet != nil && !accessibleSet[inst.Id] {
 						continue
 					}
 					instances = append(instances, gin.H{
 						"id":            inst.Id,
-						"name":          inst.Name,
-						"description":   inst.Description,
+						"name":          sanitizeString(inst.Name),
+						"description":   sanitizeString(inst.Description),
 						"privacy_score": inst.PrivacyScore,
 					})
 				}
@@ -297,7 +312,9 @@ func (a *API) getGroupPluginResources(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
-// setGroupPluginResources replaces plugin resource access for a group
+// setGroupPluginResources replaces plugin resource access for a group.
+// All resource type updates are performed within a single database transaction
+// to prevent partial updates if one fails.
 func (a *API) setGroupPluginResources(c *gin.Context) {
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -317,16 +334,54 @@ func (a *API) setGroupPluginResources(c *gin.Context) {
 		return
 	}
 
+	// Resolve all resource types before starting the transaction
+	type resolvedResource struct {
+		ResourceTypeID uint
+		InstanceIDs    []string
+	}
+	var resolved []resolvedResource
 	for _, r := range input.Resources {
 		prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(r.PluginID, r.ResourceTypeSlug)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown resource type: " + r.ResourceTypeSlug})
 			return
 		}
-		if err := a.service.SetGroupPluginResources(uint(groupID), prt.ID, r.InstanceIDs); err != nil {
+		resolved = append(resolved, resolvedResource{
+			ResourceTypeID: prt.ID,
+			InstanceIDs:    r.InstanceIDs,
+		})
+	}
+
+	// Execute all updates in a single transaction
+	tx := a.service.DB.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
+		return
+	}
+
+	for _, r := range resolved {
+		if err := models.DeleteGroupPluginResourcesByType(tx, uint(groupID), r.ResourceTypeID); err != nil {
+			tx.Rollback()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		for _, instanceID := range r.InstanceIDs {
+			gpr := &models.GroupPluginResource{
+				GroupID:              uint(groupID),
+				PluginResourceTypeID: r.ResourceTypeID,
+				InstanceID:           instanceID,
+			}
+			if err := tx.Create(gpr).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
