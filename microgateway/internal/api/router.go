@@ -464,20 +464,36 @@ func handlePluginEndpoint(config *RouterConfig) gin.HandlerFunc {
 
 						// Populate plugin resource associations from synced data
 						if len(dbApp.PluginResourcesJSON) > 0 {
+							type instanceSnapshot struct {
+								Id           string `json:"id"`
+								Name         string `json:"name"`
+								PrivacyScore int32  `json:"privacy_score"`
+								Metadata     []byte `json:"metadata"`
+							}
 							var prAssocs []struct {
-								PluginId         uint32   `json:"plugin_id"`
-								ResourceTypeSlug string   `json:"resource_type_slug"`
-								InstanceIds      []string `json:"instance_ids"`
+								PluginId         uint32             `json:"plugin_id"`
+								ResourceTypeSlug string             `json:"resource_type_slug"`
+								InstanceIds      []string           `json:"instance_ids"`
+								Instances        []instanceSnapshot `json:"instances"`
 							}
 							if err := json.Unmarshal(dbApp.PluginResourcesJSON, &prAssocs); err != nil {
 								log.Warn().Uint("app_id", uint(dbApp.ID)).Err(err).Msg("Failed to unmarshal plugin resources JSON from synced app data")
 							} else {
 								for _, pr := range prAssocs {
-									pbApp.PluginResources = append(pbApp.PluginResources, &pb.AppPluginResourceAssociation{
+									assoc := &pb.AppPluginResourceAssociation{
 										PluginId:         pr.PluginId,
 										ResourceTypeSlug: pr.ResourceTypeSlug,
 										InstanceIds:      pr.InstanceIds,
-									})
+									}
+									for _, inst := range pr.Instances {
+										assoc.Instances = append(assoc.Instances, &pb.AppPluginResourceInstance{
+											Id:           inst.Id,
+											Name:         inst.Name,
+											PrivacyScore: inst.PrivacyScore,
+											Metadata:     inst.Metadata,
+										})
+									}
+									pbApp.PluginResources = append(pbApp.PluginResources, assoc)
 								}
 							}
 						}

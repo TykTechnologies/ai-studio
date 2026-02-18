@@ -248,6 +248,16 @@ message AppPluginResourceAssociation {
     uint32 plugin_id = 1;
     string resource_type_slug = 2;
     repeated string instance_ids = 3;
+    repeated AppPluginResourceInstance instances = 4;
+}
+
+// AppPluginResourceInstance carries instance details on the App proto
+// so gateway plugins can access resource metadata without calling back to Studio.
+message AppPluginResourceInstance {
+    string id = 1;
+    string name = 2;
+    int32 privacy_score = 3;
+    bytes metadata = 4;
 }
 
 message User {

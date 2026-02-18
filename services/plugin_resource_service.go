@@ -14,6 +14,8 @@ import (
 
 // RegisterPluginResourceTypes upserts resource type records for a plugin.
 // Called when a plugin is loaded and its manifest/capabilities are parsed.
+// After registration, reconciles default group access by fetching instances
+// from the plugin and ensuring new ones are assigned to the default group.
 func (s *Service) RegisterPluginResourceTypes(pluginID uint, registrations []models.PluginResourceType) error {
 	for _, reg := range registrations {
 		existing := &models.PluginResourceType{}
@@ -40,6 +42,31 @@ func (s *Service) RegisterPluginResourceTypes(pluginID uint, registrations []mod
 			}
 		}
 	}
+
+	// Reconcile default group access for all registered types.
+	// This runs at plugin load time so new instances are immediately visible.
+	if s.AIStudioPluginManager != nil {
+		for _, reg := range registrations {
+			prt := &models.PluginResourceType{}
+			if err := prt.GetByPluginAndSlug(s.DB, pluginID, reg.Slug); err != nil {
+				continue
+			}
+			instances, err := s.AIStudioPluginManager.ListResourceInstances(pluginID, reg.Slug)
+			if err != nil {
+				continue
+			}
+			var activeIDs []string
+			for _, inst := range instances {
+				if inst.IsActive {
+					activeIDs = append(activeIDs, inst.Id)
+				}
+			}
+			if err := s.EnsureDefaultGroupAccess(prt.ID, activeIDs); err != nil {
+				log.Printf("Warning: failed to ensure default group access for %s: %v", reg.Slug, err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -76,6 +103,42 @@ func (s *Service) GetPluginResourceTypeByPluginAndSlug(pluginID uint, slug strin
 		return nil, err
 	}
 	return prt, nil
+}
+
+// PluginResourceTypeKey identifies a resource type by plugin ID and slug.
+type PluginResourceTypeKey struct {
+	PluginID uint
+	Slug     string
+}
+
+// GetPluginResourceTypesBatch fetches multiple resource types in a single query.
+// Returns a map keyed by (PluginID, Slug) for O(1) lookup.
+func (s *Service) GetPluginResourceTypesBatch(keys []PluginResourceTypeKey) (map[PluginResourceTypeKey]*models.PluginResourceType, error) {
+	if len(keys) == 0 {
+		return make(map[PluginResourceTypeKey]*models.PluginResourceType), nil
+	}
+
+	// Build OR conditions: (plugin_id = ? AND slug = ?) OR ...
+	var types []models.PluginResourceType
+	query := s.DB
+	for i, k := range keys {
+		cond := s.DB.Where("plugin_id = ? AND slug = ?", k.PluginID, k.Slug)
+		if i == 0 {
+			query = query.Where(cond)
+		} else {
+			query = query.Or(cond)
+		}
+	}
+	if err := query.Find(&types).Error; err != nil {
+		return nil, fmt.Errorf("failed to batch-fetch plugin resource types: %w", err)
+	}
+
+	result := make(map[PluginResourceTypeKey]*models.PluginResourceType, len(types))
+	for i := range types {
+		key := PluginResourceTypeKey{PluginID: types[i].PluginID, Slug: types[i].Slug}
+		result[key] = &types[i]
+	}
+	return result, nil
 }
 
 // --- App ↔ Plugin Resource Associations ---

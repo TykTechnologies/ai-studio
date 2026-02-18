@@ -34,7 +34,7 @@ func (a *API) listPluginResourceInstances(c *gin.Context) {
 	}
 
 	// Verify the resource type exists
-	prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(uint(pluginID), slug)
+	_, err = a.service.GetPluginResourceTypeByPluginAndSlug(uint(pluginID), slug)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Resource type not found"})
 		return
@@ -50,17 +50,6 @@ func (a *API) listPluginResourceInstances(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-
-	// Auto-assign new instances to the default group (lazy reconciliation).
-	var activeIDs []string
-	for _, inst := range instances {
-		if inst.IsActive {
-			activeIDs = append(activeIDs, inst.Id)
-		}
-	}
-	if err := a.service.EnsureDefaultGroupAccess(prt.ID, activeIDs); err != nil {
-		log.Printf("Warning: failed to ensure default group access for resource type %d: %v", prt.ID, err)
 	}
 
 	// Convert proto instances to JSON response with sanitization
@@ -140,17 +129,6 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 			if err != nil {
 				resultCh <- typeResult{Index: idx, Instances: nil}
 				return
-			}
-
-			// Auto-assign new instances to default group
-			var activeIDs []string
-			for _, inst := range protoInstances {
-				if inst.IsActive {
-					activeIDs = append(activeIDs, inst.Id)
-				}
-			}
-			if err := a.service.EnsureDefaultGroupAccess(rt.ID, activeIDs); err != nil {
-				log.Printf("Warning: failed to ensure default group access for resource type %d: %v", rt.ID, err)
 			}
 
 			// Filter by pre-fetched access set for non-admins
@@ -367,11 +345,22 @@ func (a *API) setGroupPluginResources(c *gin.Context) {
 		return
 	}
 
-	// Resolve resource type slugs to IDs, then delegate to service
+	// Batch-resolve all resource type slugs to IDs in a single query
+	keys := make([]services.PluginResourceTypeKey, len(input.Resources))
+	for i, r := range input.Resources {
+		keys[i] = services.PluginResourceTypeKey{PluginID: r.PluginID, Slug: r.ResourceTypeSlug}
+	}
+	typeMap, err := a.service.GetPluginResourceTypesBatch(keys)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	var updates []services.GroupPluginResourceUpdate
 	for _, r := range input.Resources {
-		prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(r.PluginID, r.ResourceTypeSlug)
-		if err != nil {
+		key := services.PluginResourceTypeKey{PluginID: r.PluginID, Slug: r.ResourceTypeSlug}
+		prt, ok := typeMap[key]
+		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown resource type: " + r.ResourceTypeSlug})
 			return
 		}

@@ -433,9 +433,24 @@ func (a *API) createUserApp(c *gin.Context) {
 			}
 		}
 
+		// Batch-resolve all resource type slugs in a single query
+		keys := make([]services.PluginResourceTypeKey, len(req.PluginResources))
+		for i, pr := range req.PluginResources {
+			keys[i] = services.PluginResourceTypeKey{PluginID: pr.PluginID, Slug: pr.ResourceTypeSlug}
+		}
+		typeMap, err := a.service.GetPluginResourceTypesBatch(keys)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to resolve plugin resource types"}}})
+			return
+		}
+
 		for _, pr := range req.PluginResources {
-			prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
-			if err != nil {
+			key := services.PluginResourceTypeKey{PluginID: pr.PluginID, Slug: pr.ResourceTypeSlug}
+			prt, ok := typeMap[key]
+			if !ok {
 				c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
