@@ -1180,7 +1180,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if !isErr {
-		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now())
+		decompressedResp := decompressBuffer(&fullResponse, resp.Header.Get("Content-Encoding"))
+		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, decompressedResp, reqBody, responses, time.Now())
 
 		// Execute OnStreamComplete hook for plugins (e.g., caching)
 		if p.responseHookManager != nil && p.hasResponseHooks() {
