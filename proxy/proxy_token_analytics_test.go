@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
@@ -199,7 +200,7 @@ func TestTokenAnalytics_MalformedJSON_NoRecord(t *testing.T) {
 	db, cancel := setupTest(t)
 	defer tearDownTest(db, cancel)
 
-	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"id": "chatcmpl-bad", "usage": invalid}`))
@@ -357,10 +358,7 @@ func TestTokenAnalytics_StreamingRequest(t *testing.T) {
 	defer tearDownTest(db, cancel)
 
 	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`
-	[
+		jsonResponse := `[
     {
         "candidates": [
             {
@@ -420,8 +418,23 @@ func TestTokenAnalytics_StreamingRequest(t *testing.T) {
         "modelVersion": "gemini-2.5-flash",
         "responseId": "q3iUaaafIPjwxN8P54mE4QM"
     }
-	]
-	`))
+]`
+
+		var compressedBuffer bytes.Buffer
+		gzipWriter := gzip.NewWriter(&compressedBuffer)
+
+		_, err := gzipWriter.Write([]byte(jsonResponse))
+		require.NoError(t, err)
+
+		err = gzipWriter.Close()
+		require.NoError(t, err)
+
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		_, err = w.Write(compressedBuffer.Bytes())
+		require.NoError(t, err)
 	}))
 	defer mockUpstream.Close()
 
@@ -457,70 +470,3 @@ func TestTokenAnalytics_StreamingRequest(t *testing.T) {
 	assert.Equal(t, 219, record.ResponseTokens)
 	assert.InDelta(t, 5.49, record.Cost, 0.01)
 }
-
-//
-// // TestTokenAnalytics_ToolCallsCounted verifies that tool calls in the response
-// // are correctly counted in the analytics record.
-// func TestTokenAnalytics_ToolCallsCounted(t *testing.T) {
-// 	db, cancel := setupTest(t)
-// 	defer tearDownTest(db, cancel)
-//
-// 	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		w.Header().Set("Content-Type", "application/json")
-// 		w.WriteHeader(http.StatusOK)
-// 		w.Write([]byte(`{
-// 			"id": "chatcmpl-tools",
-// 			"object": "chat.completion",
-// 			"model": "gpt-4",
-// 			"choices": [{
-// 				"index": 0,
-// 				"message": {
-// 					"role": "assistant",
-// 					"content": null,
-// 					"tool_calls": [
-// 						{"id": "call_1", "type": "function", "function": {"name": "get_weather", "arguments": "{\"city\":\"London\"}"}},
-// 						{"id": "call_2", "type": "function", "function": {"name": "get_time", "arguments": "{\"tz\":\"UTC\"}"}}
-// 					]
-// 				},
-// 				"finish_reason": "tool_calls"
-// 			}],
-// 			"usage": {"prompt_tokens": 25, "completion_tokens": 30, "total_tokens": 55}
-// 		}`))
-// 	}))
-// 	defer mockUpstream.Close()
-//
-// 	proxy, _, _, secret := setupIntegrationProxy(t, db, mockUpstream.URL)
-//
-// 	price := &models.ModelPrice{
-// 		Model:     gorm.Model{ID: 1},
-// 		ModelName: "gpt-4",
-// 		Vendor:    string(models.OPENAI),
-// 		CPT:       0.002,
-// 		CPIT:      0.001,
-// 		Currency:  "USD",
-// 	}
-// 	require.NoError(t, db.Create(price).Error)
-//
-// 	srv := startProxyServer(t, proxy)
-// 	defer srv.Close()
-//
-// 	reqBody := `{"model": "gpt-4", "messages": [{"role": "user", "content": "What is the weather in London?"}]}`
-// 	resp := sendProxyRequest(t, srv.URL, "openai-test", secret, reqBody)
-// 	defer resp.Body.Close()
-//
-// 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-//
-// 	waitForAnalytics(t, db, 1)
-// 	waitUntilIdle(t, db)
-//
-// 	var record models.LLMChatRecord
-// 	require.NoError(t, db.First(&record).Error)
-//
-// 	assert.Equal(t, 2, record.ToolCalls, "should count both tool calls")
-// 	assert.Equal(t, 25, record.PromptTokens)
-// 	assert.Equal(t, 30, record.ResponseTokens)
-// 	assert.Equal(t, 55, record.TotalTokens)
-//
-// 	// Cost = ((0.002 * 30) + (0.001 * 25)) * 10000 = (0.06 + 0.025) * 10000 = 850.0
-// 	assert.InDelta(t, 850.0, record.Cost, 0.01)
-// }
