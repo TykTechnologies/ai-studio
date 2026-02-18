@@ -5,8 +5,10 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -116,51 +118,83 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 		}
 	}
 
-	var result []gin.H
-	for _, rt := range types {
-		var instances []gin.H
-		if a.service.AIStudioPluginManager != nil {
+	// Fetch instances from all plugins concurrently
+	type typeResult struct {
+		Index     int
+		Instances []gin.H
+	}
+	resultCh := make(chan typeResult, len(types))
+	var wg sync.WaitGroup
+
+	for i, rt := range types {
+		if a.service.AIStudioPluginManager == nil {
+			resultCh <- typeResult{Index: i, Instances: nil}
+			continue
+		}
+		wg.Add(1)
+		go func(idx int, rt models.PluginResourceType) {
+			defer wg.Done()
+			var instances []gin.H
+
 			protoInstances, err := a.service.AIStudioPluginManager.ListResourceInstances(rt.PluginID, rt.Slug)
-			if err == nil {
-				// Auto-assign new instances to default group
-				var activeIDs []string
-				for _, inst := range protoInstances {
-					if inst.IsActive {
-						activeIDs = append(activeIDs, inst.Id)
-					}
-				}
-				if err := a.service.EnsureDefaultGroupAccess(rt.ID, activeIDs); err != nil {
-					log.Printf("Warning: failed to ensure default group access for resource type %d: %v", rt.ID, err)
-				}
+			if err != nil {
+				resultCh <- typeResult{Index: idx, Instances: nil}
+				return
+			}
 
-				// Filter by pre-fetched access set for non-admins
-				accessibleSet := accessibleByType[rt.ID] // nil for admins
-
-				for _, inst := range protoInstances {
-					if !inst.IsActive {
-						continue
-					}
-					// Non-admins: fail-closed — if accessibleByType was built, check it
-					if accessibleSet != nil && !accessibleSet[inst.Id] {
-						continue
-					}
-					instances = append(instances, gin.H{
-						"id":            inst.Id,
-						"name":          sanitizeString(inst.Name),
-						"description":   sanitizeString(inst.Description),
-						"privacy_score": inst.PrivacyScore,
-					})
+			// Auto-assign new instances to default group
+			var activeIDs []string
+			for _, inst := range protoInstances {
+				if inst.IsActive {
+					activeIDs = append(activeIDs, inst.Id)
 				}
 			}
-		}
+			if err := a.service.EnsureDefaultGroupAccess(rt.ID, activeIDs); err != nil {
+				log.Printf("Warning: failed to ensure default group access for resource type %d: %v", rt.ID, err)
+			}
 
+			// Filter by pre-fetched access set for non-admins
+			accessibleSet := accessibleByType[rt.ID] // nil for admins
+
+			for _, inst := range protoInstances {
+				if !inst.IsActive {
+					continue
+				}
+				if accessibleSet != nil && !accessibleSet[inst.Id] {
+					continue
+				}
+				instances = append(instances, gin.H{
+					"id":            inst.Id,
+					"name":          sanitizeString(inst.Name),
+					"description":   sanitizeString(inst.Description),
+					"privacy_score": inst.PrivacyScore,
+				})
+			}
+			resultCh <- typeResult{Index: idx, Instances: instances}
+		}(i, rt)
+	}
+
+	// Close channel after all goroutines complete
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	// Collect results into ordered slice
+	instancesByIndex := make(map[int][]gin.H)
+	for tr := range resultCh {
+		instancesByIndex[tr.Index] = tr.Instances
+	}
+
+	result := make([]gin.H, 0, len(types))
+	for i, rt := range types {
 		result = append(result, gin.H{
 			"plugin_id":   rt.PluginID,
 			"slug":        rt.Slug,
-			"name":        rt.Name,
-			"description": rt.Description,
-			"icon":        rt.Icon,
-			"instances":   instances,
+			"name":        sanitizeString(rt.Name),
+			"description": sanitizeString(rt.Description),
+			"icon":        sanitizeString(rt.Icon),
+			"instances":   instancesByIndex[i],
 		})
 	}
 
@@ -181,9 +215,9 @@ func (a *API) listPluginResourceTypes(c *gin.Context) {
 			"id":                   t.ID,
 			"plugin_id":            t.PluginID,
 			"slug":                 t.Slug,
-			"name":                 t.Name,
-			"description":          t.Description,
-			"icon":                 t.Icon,
+			"name":                 sanitizeString(t.Name),
+			"description":          sanitizeString(t.Description),
+			"icon":                 sanitizeString(t.Icon),
 			"has_privacy_score":    t.HasPrivacyScore,
 			"supports_submissions": t.SupportsSubmissions,
 			"is_active":            t.IsActive,
@@ -195,7 +229,7 @@ func (a *API) listPluginResourceTypes(c *gin.Context) {
 			}
 		}
 		if t.Plugin != nil {
-			entry["plugin_name"] = t.Plugin.Name
+			entry["plugin_name"] = sanitizeString(t.Plugin.Name)
 		}
 		result = append(result, entry)
 	}
@@ -245,7 +279,7 @@ func (a *API) getAppPluginResources(c *gin.Context) {
 			pluginID := uint(0)
 			slug := ""
 			if apr.PluginResourceType != nil {
-				typeName = apr.PluginResourceType.Name
+				typeName = sanitizeString(apr.PluginResourceType.Name)
 				pluginID = apr.PluginResourceType.PluginID
 				slug = apr.PluginResourceType.Slug
 			}
@@ -290,7 +324,7 @@ func (a *API) getGroupPluginResources(c *gin.Context) {
 			pluginID := uint(0)
 			slug := ""
 			if gpr.PluginResourceType != nil {
-				typeName = gpr.PluginResourceType.Name
+				typeName = sanitizeString(gpr.PluginResourceType.Name)
 				pluginID = gpr.PluginResourceType.PluginID
 				slug = gpr.PluginResourceType.Slug
 			}
@@ -313,8 +347,7 @@ func (a *API) getGroupPluginResources(c *gin.Context) {
 }
 
 // setGroupPluginResources replaces plugin resource access for a group.
-// All resource type updates are performed within a single database transaction
-// to prevent partial updates if one fails.
+// Delegates to the service layer which performs all updates atomically in a transaction.
 func (a *API) setGroupPluginResources(c *gin.Context) {
 	groupID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -334,53 +367,22 @@ func (a *API) setGroupPluginResources(c *gin.Context) {
 		return
 	}
 
-	// Resolve all resource types before starting the transaction
-	type resolvedResource struct {
-		ResourceTypeID uint
-		InstanceIDs    []string
-	}
-	var resolved []resolvedResource
+	// Resolve resource type slugs to IDs, then delegate to service
+	var updates []services.GroupPluginResourceUpdate
 	for _, r := range input.Resources {
 		prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(r.PluginID, r.ResourceTypeSlug)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown resource type: " + r.ResourceTypeSlug})
 			return
 		}
-		resolved = append(resolved, resolvedResource{
+		updates = append(updates, services.GroupPluginResourceUpdate{
 			ResourceTypeID: prt.ID,
 			InstanceIDs:    r.InstanceIDs,
 		})
 	}
 
-	// Execute all updates in a single transaction
-	tx := a.service.DB.Begin()
-	if tx.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
-		return
-	}
-
-	for _, r := range resolved {
-		if err := models.DeleteGroupPluginResourcesByType(tx, uint(groupID), r.ResourceTypeID); err != nil {
-			tx.Rollback()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		for _, instanceID := range r.InstanceIDs {
-			gpr := &models.GroupPluginResource{
-				GroupID:              uint(groupID),
-				PluginResourceTypeID: r.ResourceTypeID,
-				InstanceID:           instanceID,
-			}
-			if err := tx.Create(gpr).Error; err != nil {
-				tx.Rollback()
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-		}
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+	if err := a.service.SetGroupPluginResourcesBatch(uint(groupID), updates); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

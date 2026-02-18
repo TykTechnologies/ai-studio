@@ -432,7 +432,7 @@ func (a *API) serializeAppWithPluginResources(app *models.App) AppResponse {
 			pluginID := uint(0)
 			slug := ""
 			if apr.PluginResourceType != nil {
-				typeName = apr.PluginResourceType.Name
+				typeName = sanitizeString(apr.PluginResourceType.Name)
 				pluginID = apr.PluginResourceType.PluginID
 				slug = apr.PluginResourceType.Slug
 			}

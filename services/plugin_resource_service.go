@@ -188,6 +188,44 @@ func (s *Service) SetGroupPluginResources(groupID, resourceTypeID uint, instance
 	return nil
 }
 
+// GroupPluginResourceUpdate represents a single resource type update for a group.
+type GroupPluginResourceUpdate struct {
+	ResourceTypeID uint
+	InstanceIDs    []string
+}
+
+// SetGroupPluginResourcesBatch atomically replaces plugin resource access entries
+// for a group across multiple resource types in a single transaction.
+func (s *Service) SetGroupPluginResourcesBatch(groupID uint, updates []GroupPluginResourceUpdate) error {
+	tx := s.DB.Begin()
+	if tx.Error != nil {
+		return fmt.Errorf("failed to start transaction: %w", tx.Error)
+	}
+
+	for _, u := range updates {
+		if err := models.DeleteGroupPluginResourcesByType(tx, groupID, u.ResourceTypeID); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to clear group plugin resources for type %d: %w", u.ResourceTypeID, err)
+		}
+		for _, instanceID := range u.InstanceIDs {
+			gpr := &models.GroupPluginResource{
+				GroupID:              groupID,
+				PluginResourceTypeID: u.ResourceTypeID,
+				InstanceID:           instanceID,
+			}
+			if err := tx.Create(gpr).Error; err != nil {
+				tx.Rollback()
+				return fmt.Errorf("failed to create group plugin resource entry: %w", err)
+			}
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
+}
+
 // GetGroupPluginResources returns all plugin resource access entries for a group.
 func (s *Service) GetGroupPluginResources(groupID uint) ([]models.GroupPluginResource, error) {
 	var gprs models.GroupPluginResources
