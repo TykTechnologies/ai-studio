@@ -364,6 +364,28 @@ func (c *AIStudioPluginClient) HandleEndpointRequestStream(ctx context.Context, 
 	return c.pluginStub.HandleEndpointRequestStream(ctx, req, opts...)
 }
 
+// --- Resource Provider Methods ---
+
+func (c *AIStudioPluginClient) GetResourceTypeRegistrations(ctx context.Context, req *pb.GetResourceTypeRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetResourceTypeRegistrationsResponse, error) {
+	return c.pluginStub.GetResourceTypeRegistrations(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) ListResourceInstances(ctx context.Context, req *pb.ListResourceInstancesRequest, opts ...grpc.CallOption) (*pb.ListResourceInstancesResponse, error) {
+	return c.pluginStub.ListResourceInstances(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) GetResourceInstance(ctx context.Context, req *pb.GetResourceInstanceRequest, opts ...grpc.CallOption) (*pb.GetResourceInstanceResponse, error) {
+	return c.pluginStub.GetResourceInstance(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) ValidateResourceSelection(ctx context.Context, req *pb.ValidateResourceSelectionRequest, opts ...grpc.CallOption) (*pb.ValidateResourceSelectionResponse, error) {
+	return c.pluginStub.ValidateResourceSelection(ctx, req, opts...)
+}
+
+func (c *AIStudioPluginClient) CreateResourceInstance(ctx context.Context, req *pb.CreateResourceInstanceRequest, opts ...grpc.CallOption) (*pb.CreateResourceInstanceResponse, error) {
+	return c.pluginStub.CreateResourceInstance(ctx, req, opts...)
+}
+
 // ConfigOnlyGRPC implements goplugin.Plugin interface for config-only extraction
 // Uses a universal handshake that works with any plugin type
 type ConfigOnlyGRPC struct {
@@ -810,6 +832,40 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 						Str("cron", scheduleDef.Cron).
 						Msg("Registered schedule")
 				}
+			}
+		}
+
+		// Register resource types from manifest
+		if len(manifest.ResourceTypes) > 0 {
+			log.Debug().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Int("resource_type_count", len(manifest.ResourceTypes)).
+				Msg("Registering resource types from manifest")
+
+			var resourceTypes []models.PluginResourceType
+			for _, rt := range manifest.ResourceTypes {
+				prt := models.PluginResourceType{
+					PluginID:            pluginID,
+					Slug:                rt.Slug,
+					Name:                rt.Name,
+					Description:         rt.Description,
+					Icon:                rt.Icon,
+					HasPrivacyScore:     rt.HasPrivacyScore,
+					SupportsSubmissions: rt.SupportsSubmissions,
+				}
+				if rt.FormComponent != nil {
+					prt.FormComponentTag = rt.FormComponent.Tag
+					prt.FormComponentEntry = rt.FormComponent.EntryPoint
+				}
+				resourceTypes = append(resourceTypes, prt)
+			}
+
+			if err := m.service.RegisterPluginResourceTypes(pluginID, resourceTypes); err != nil {
+				log.Warn().
+					Uint("plugin_id", pluginID).
+					Err(err).
+					Msg("Failed to register resource types from manifest")
 			}
 		}
 	}()
@@ -1289,6 +1345,38 @@ func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string
 	}
 
 	return responseData, nil
+}
+
+// ListResourceInstances calls a plugin's ListResourceInstances RPC to get all instances
+// of a given resource type. Used by the service layer to cache instance details.
+func (m *AIStudioPluginManager) ListResourceInstances(pluginID uint, resourceTypeSlug string) ([]*pb.ResourceInstanceProto, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if !loadedPlugin.IsHealthy {
+		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	resp, err := loadedPlugin.GRPCClient.ListResourceInstances(ctx, &pb.ListResourceInstancesRequest{
+		ResourceTypeSlug: resourceTypeSlug,
+		ServiceBrokerId:  loadedPlugin.SessionBrokerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ListResourceInstances RPC failed: %w", err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("ListResourceInstances failed: %s", resp.ErrorMessage)
+	}
+
+	return resp.Instances, nil
 }
 
 // createPluginClient creates a plugin client based on command scheme (adapted from microgateway)

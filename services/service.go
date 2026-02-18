@@ -296,6 +296,7 @@ func (s *Service) SetEventBus(bus eventbridge.Bus) {
 	s.EventBus = bus
 	if bus != nil {
 		s.SystemEvents = NewSystemEventEmitter(bus, "control")
+		s.SubscribeResourceInstanceChanges(bus)
 		logger.Debug("Initialized system event emitter")
 	}
 }

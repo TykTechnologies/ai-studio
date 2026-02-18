@@ -81,8 +81,9 @@ type App struct {
 	BudgetStartDate *time.Time     `json:"budget_start_date"`
 	BudgetResetDay  int            `gorm:"default:1" json:"budget_reset_day"`
 	RateLimitRPM    int            `json:"rate_limit_rpm"`
-	AllowedIPs      datatypes.JSON `gorm:"type:json" json:"allowed_ips"`
-	Metadata        datatypes.JSON `gorm:"type:json" json:"metadata"`
+	AllowedIPs           datatypes.JSON `gorm:"type:json" json:"allowed_ips"`
+	Metadata             datatypes.JSON `gorm:"type:json" json:"metadata"`
+	PluginResourcesJSON  datatypes.JSON `gorm:"type:json" json:"plugin_resources_json"` // Synced from config snapshot PluginResources
 
 	// Hub-and-Spoke Configuration
 	Namespace       string         `gorm:"default:'';index:idx_app_namespace" json:"namespace"` // Empty = global, specific = filtered to edge

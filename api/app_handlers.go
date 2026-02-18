@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -50,10 +49,34 @@ func (a *API) createApp(c *gin.Context) {
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 	metadata := input.Data.Attributes.Metadata
 
+	// Convert plugin resource inputs to service selections
+	var pluginResources []services.PluginResourceSelection
+	for _, pr := range input.Data.Attributes.PluginResources {
+		pluginResources = append(pluginResources, services.PluginResourceSelection{
+			PluginID:         pr.PluginID,
+			ResourceTypeSlug: pr.ResourceTypeSlug,
+			InstanceIDs:      pr.InstanceIDs,
+		})
+	}
+
 	// Use namespace-aware service method if namespace is provided
 	var app *models.App
 	var err error
-	if input.Data.Attributes.Namespace != "" {
+	if len(pluginResources) > 0 {
+		// Use the extended method that handles plugin resources
+		app, err = a.service.CreateAppWithResources(
+			input.Data.Attributes.Name,
+			input.Data.Attributes.Description,
+			input.Data.Attributes.UserID,
+			datasourceIDs,
+			llmIDs,
+			toolIDs,
+			input.Data.Attributes.MonthlyBudget,
+			input.Data.Attributes.BudgetStartDate,
+			metadata,
+			pluginResources,
+		)
+	} else if input.Data.Attributes.Namespace != "" {
 		app, err = a.service.CreateAppWithNamespace(
 			input.Data.Attributes.Name,
 			input.Data.Attributes.Description,
@@ -98,7 +121,7 @@ func (a *API) createApp(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeApp(app)})
+	c.JSON(http.StatusCreated, gin.H{"data": a.serializeAppWithPluginResources(app)})
 }
 
 // @Summary Get an app by ID
@@ -135,7 +158,7 @@ func (a *API) getApp(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeApp(app)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppWithPluginResources(app)})
 }
 
 // @Summary Update an app
@@ -178,18 +201,45 @@ func (a *API) updateApp(c *gin.Context) {
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 	metadata := input.Data.Attributes.Metadata
 
-	app, err := a.service.UpdateApp(
-		uint(id),
-		input.Data.Attributes.Name,
-		input.Data.Attributes.Description,
-		input.Data.Attributes.UserID,
-		datasourceIDs,
-		llmIDs,
-		toolIDs, // Pass toolIDs to service method
-		input.Data.Attributes.MonthlyBudget,
-		input.Data.Attributes.BudgetStartDate,
-		metadata, // Pass metadata to service method
-	)
+	// Convert plugin resource inputs to service selections
+	var pluginResources []services.PluginResourceSelection
+	for _, pr := range input.Data.Attributes.PluginResources {
+		pluginResources = append(pluginResources, services.PluginResourceSelection{
+			PluginID:         pr.PluginID,
+			ResourceTypeSlug: pr.ResourceTypeSlug,
+			InstanceIDs:      pr.InstanceIDs,
+		})
+	}
+
+	var app *models.App
+	if len(pluginResources) > 0 {
+		app, err = a.service.UpdateAppWithResources(
+			uint(id),
+			input.Data.Attributes.Name,
+			input.Data.Attributes.Description,
+			input.Data.Attributes.UserID,
+			datasourceIDs,
+			llmIDs,
+			toolIDs,
+			input.Data.Attributes.MonthlyBudget,
+			input.Data.Attributes.BudgetStartDate,
+			metadata,
+			pluginResources,
+		)
+	} else {
+		app, err = a.service.UpdateApp(
+			uint(id),
+			input.Data.Attributes.Name,
+			input.Data.Attributes.Description,
+			input.Data.Attributes.UserID,
+			datasourceIDs,
+			llmIDs,
+			toolIDs,
+			input.Data.Attributes.MonthlyBudget,
+			input.Data.Attributes.BudgetStartDate,
+			metadata,
+		)
+	}
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{
@@ -218,7 +268,7 @@ func (a *API) updateApp(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeApp(app)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppWithPluginResources(app)})
 }
 
 // @Summary Delete an app
@@ -343,37 +393,64 @@ func (a *API) countAppsByUserID(c *gin.Context) {
 }
 
 func serializeApp(app *models.App) AppResponse {
-	return AppResponse{
+	resp := AppResponse{
 		Type: "app",
 		ID:   strconv.FormatUint(uint64(app.ID), 10),
-		Attributes: struct {
-			Name            string                 `json:"name"`
-			Description     string                 `json:"description"`
-			UserID          uint                   `json:"user_id"`
-			CredentialID    uint                   `json:"credential_id"`
-			DatasourceIDs   []uint                 `json:"datasource_ids"`
-			LLMIDs          []uint                 `json:"llm_ids"`
-			ToolIDs         []uint                 `json:"tool_ids"`
-			MonthlyBudget   *float64               `json:"monthly_budget"`
-			BudgetStartDate *time.Time             `json:"budget_start_date"`
-			IsOrphaned      bool                   `json:"is_orphaned"`
-			Metadata        map[string]interface{} `json:"metadata,omitempty"`
-			Namespace       string                 `json:"namespace,omitempty"`
-		}{
-			Name:            app.Name,
-			Description:     app.Description,
-			UserID:          app.UserID,
-			CredentialID:    app.CredentialID,
-			DatasourceIDs:   getDatasourceIDs(app.Datasources),
-			LLMIDs:          getLLMIDs(app.LLMs),
-			ToolIDs:         getToolIDs(app.Tools),
-			MonthlyBudget:   app.MonthlyBudget,
-			BudgetStartDate: app.BudgetStartDate,
-			IsOrphaned:      app.IsOrphaned,
-			Metadata:        app.Metadata,
-			Namespace:       app.Namespace,
-		},
 	}
+	resp.Attributes.Name = app.Name
+	resp.Attributes.Description = app.Description
+	resp.Attributes.UserID = app.UserID
+	resp.Attributes.CredentialID = app.CredentialID
+	resp.Attributes.DatasourceIDs = getDatasourceIDs(app.Datasources)
+	resp.Attributes.LLMIDs = getLLMIDs(app.LLMs)
+	resp.Attributes.ToolIDs = getToolIDs(app.Tools)
+	resp.Attributes.MonthlyBudget = app.MonthlyBudget
+	resp.Attributes.BudgetStartDate = app.BudgetStartDate
+	resp.Attributes.IsOrphaned = app.IsOrphaned
+	resp.Attributes.Metadata = app.Metadata
+	resp.Attributes.Namespace = app.Namespace
+	return resp
+}
+
+// serializeAppWithPluginResources adds plugin resource associations to the response.
+// This is called by handlers that have access to the service layer.
+func (a *API) serializeAppWithPluginResources(app *models.App) AppResponse {
+	resp := serializeApp(app)
+
+	// Fetch plugin resource associations
+	aprs, err := a.service.GetAppPluginResources(app.ID)
+	if err != nil || len(aprs) == 0 {
+		return resp
+	}
+
+	// Group by resource type
+	grouped := make(map[uint]*PluginResourceOutput)
+	for _, apr := range aprs {
+		key := apr.PluginResourceTypeID
+		if _, exists := grouped[key]; !exists {
+			typeName := ""
+			pluginID := uint(0)
+			slug := ""
+			if apr.PluginResourceType != nil {
+				typeName = sanitizeString(apr.PluginResourceType.Name)
+				pluginID = apr.PluginResourceType.PluginID
+				slug = apr.PluginResourceType.Slug
+			}
+			grouped[key] = &PluginResourceOutput{
+				PluginID:         pluginID,
+				ResourceTypeSlug: slug,
+				ResourceTypeName: typeName,
+				InstanceIDs:      []string{},
+			}
+		}
+		grouped[key].InstanceIDs = append(grouped[key].InstanceIDs, apr.InstanceID)
+	}
+
+	for _, pr := range grouped {
+		resp.Attributes.PluginResources = append(resp.Attributes.PluginResources, *pr)
+	}
+
+	return resp
 }
 
 func getDatasourceIDs(datasources []models.Datasource) []uint {
@@ -403,37 +480,7 @@ func getToolIDs(tools []models.Tool) []uint {
 func serializeApps(apps []models.App) []AppResponse {
 	responses := make([]AppResponse, len(apps))
 	for i, app := range apps {
-		responses[i] = AppResponse{
-			Type: "app",
-			ID:   strconv.FormatUint(uint64(app.ID), 10),
-			Attributes: struct {
-				Name            string                 `json:"name"`
-				Description     string                 `json:"description"`
-				UserID          uint                   `json:"user_id"`
-				CredentialID    uint                   `json:"credential_id"`
-				DatasourceIDs   []uint                 `json:"datasource_ids"`
-				LLMIDs          []uint                 `json:"llm_ids"`
-				ToolIDs         []uint                 `json:"tool_ids"`
-				MonthlyBudget   *float64               `json:"monthly_budget"`
-				BudgetStartDate *time.Time             `json:"budget_start_date"`
-				IsOrphaned      bool                   `json:"is_orphaned"`
-				Metadata        map[string]interface{} `json:"metadata,omitempty"`
-				Namespace       string                 `json:"namespace,omitempty"`
-			}{
-				Name:            app.Name,
-				Description:     app.Description,
-				UserID:          app.UserID,
-				CredentialID:    app.CredentialID,
-				DatasourceIDs:   getDatasourceIDs(app.Datasources),
-				LLMIDs:          getLLMIDs(app.LLMs),
-				ToolIDs:         getToolIDs(app.Tools),
-				MonthlyBudget:   app.MonthlyBudget,
-				BudgetStartDate: app.BudgetStartDate,
-				IsOrphaned:      app.IsOrphaned,
-				Metadata:        app.Metadata,
-				Namespace:       app.Namespace,
-			},
-		}
+		responses[i] = serializeApp(&app)
 	}
 	return responses
 }

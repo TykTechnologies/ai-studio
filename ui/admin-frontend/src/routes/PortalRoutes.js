@@ -11,6 +11,7 @@ import ToolDocumentationPage from "../portal/pages/ToolDocumentationPage";
 import MyContributions from "../portal/pages/MyContributions";
 import SubmissionForm from "../portal/pages/SubmissionForm";
 import SubmissionDetail from "../portal/pages/SubmissionDetail";
+import PluginResourceListView from "../portal/components/PluginResourceListView";
 import { usePortalPluginRoutes, PortalPluginRouteHandler } from "../portal/components/plugins/DynamicPortalPluginRoute";
 
 const PortalRoutes = () => {
@@ -36,6 +37,7 @@ const PortalRoutes = () => {
       <Route path="/submissions/new" element={<SubmissionForm />} />
       <Route path="/submissions/edit/:id" element={<SubmissionForm />} />
       <Route path="/submissions/:id" element={<SubmissionDetail />} />
+      <Route path="/resources/:pluginId/:slug" element={<PluginResourceListView />} />
 
       {/* Dynamically registered portal plugin routes */}
       {pluginRoutes.map((route) => {

@@ -69,6 +69,7 @@ export default defineConfig({
           { text: 'AI Studio Agent Plugins', link: '/docs/plugins-studio-agent' },
           { text: 'Manifests & Permissions', link: '/docs/plugins-manifests' },
           { text: 'Deployment Options', link: '/docs/plugins-deployment' },
+          { text: 'Resource Provider Plugins', link: '/docs/plugins-resource-types' },
           { text: 'SDK Reference', link: '/docs/plugins-sdk' },
           { text: 'Service API Reference', link: '/docs/plugins-service-api' }
         ]
