@@ -409,8 +409,84 @@ func (a *API) createUserApp(c *gin.Context) {
 		}
 	}
 
-	// Create the app
-	app, err := a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil)
+	// Validate access to plugin resources and build selections
+	var pluginResources []services.PluginResourceSelection
+	if len(req.PluginResources) > 0 {
+		// For non-admins, batch-fetch all accessible plugin resources in one query
+		var accessibleByType map[uint]map[string]bool
+		if !currentUser.IsAdmin {
+			allAccessible, err := a.service.GetAllAccessiblePluginResources(currentUser.ID)
+			if err != nil {
+				// Fail-closed: deny if we can't check access
+				c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: "Failed to verify plugin resource access"}}})
+				return
+			}
+			accessibleByType = make(map[uint]map[string]bool)
+			for _, gpr := range allAccessible {
+				if accessibleByType[gpr.PluginResourceTypeID] == nil {
+					accessibleByType[gpr.PluginResourceTypeID] = make(map[string]bool)
+				}
+				accessibleByType[gpr.PluginResourceTypeID][gpr.InstanceID] = true
+			}
+		}
+
+		// Batch-resolve all resource type slugs in a single query
+		keys := make([]services.PluginResourceTypeKey, len(req.PluginResources))
+		for i, pr := range req.PluginResources {
+			keys[i] = services.PluginResourceTypeKey{PluginID: pr.PluginID, Slug: pr.ResourceTypeSlug}
+		}
+		typeMap, err := a.service.GetPluginResourceTypesBatch(keys)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to resolve plugin resource types"}}})
+			return
+		}
+
+		for _, pr := range req.PluginResources {
+			key := services.PluginResourceTypeKey{PluginID: pr.PluginID, Slug: pr.ResourceTypeSlug}
+			prt, ok := typeMap[key]
+			if !ok {
+				c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "Unknown plugin resource type: " + pr.ResourceTypeSlug}}})
+				return
+			}
+
+			// Validate user has access to selected instances (fail-closed)
+			if accessibleByType != nil {
+				accessibleSet := accessibleByType[prt.ID]
+				for _, instanceID := range pr.InstanceIDs {
+					if accessibleSet == nil || !accessibleSet[instanceID] {
+						c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
+							Title  string `json:"title"`
+							Detail string `json:"detail"`
+						}{{Title: "Forbidden", Detail: "User does not have access to plugin resource instance: " + instanceID}}})
+						return
+					}
+				}
+			}
+
+			pluginResources = append(pluginResources, services.PluginResourceSelection{
+				PluginID:         pr.PluginID,
+				ResourceTypeSlug: pr.ResourceTypeSlug,
+				InstanceIDs:      pr.InstanceIDs,
+			})
+		}
+	}
+
+	// Create the app (with plugin resources if any)
+	var app *models.App
+	if len(pluginResources) > 0 {
+		app, err = a.service.CreateAppWithResources(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil, pluginResources)
+	} else {
+		app, err = a.service.CreateApp(req.Name, req.Description, currentUser.ID, req.DataSourceIDs, req.LLMIDs, req.ToolIDs, req.MonthlyBudget, req.BudgetStartDate, nil)
+	}
 	if err != nil {
 		// Check for specific error types and return appropriate responses
 		if errors.Is(err, services.ERRPrivacyScoreMismatch) {
@@ -435,44 +511,9 @@ func (a *API) createUserApp(c *gin.Context) {
 
 	currentAppTools := app.Tools // Explicitly copy/reference before response construction
 
-	// Prepare the response
-	response := AppResponse{
-		Type: "app",
-		ID:   strconv.FormatUint(uint64(app.ID), 10),
-		Attributes: struct {
-			Name            string                 `json:"name"`
-			Description     string                 `json:"description"`
-			UserID          uint                   `json:"user_id"`
-			CredentialID    uint                   `json:"credential_id"`
-			DatasourceIDs   []uint                 `json:"datasource_ids"`
-			LLMIDs          []uint                 `json:"llm_ids"`
-			ToolIDs         []uint                 `json:"tool_ids"`
-			MonthlyBudget   *float64               `json:"monthly_budget"`
-			BudgetStartDate *time.Time             `json:"budget_start_date"`
-			IsOrphaned      bool                   `json:"is_orphaned"`
-			Metadata        map[string]interface{} `json:"metadata,omitempty"`
-			Namespace       string                 `json:"namespace,omitempty"`
-		}{
-			Name:          app.Name,
-			Description:   app.Description,
-			UserID:        app.UserID,
-			CredentialID:  app.CredentialID,
-			DatasourceIDs: getDatasourceIDs(app.Datasources),
-			LLMIDs:        getLLMIDs(app.LLMs),
-			ToolIDs: func() []uint { // This was missing from the previous diff's Attributes block
-				ids := make([]uint, len(currentAppTools)) // Use the local variable
-				for i, tool := range currentAppTools {    // Use the local variable
-					ids[i] = tool.ID
-				}
-				return ids
-			}(),
-			MonthlyBudget:   app.MonthlyBudget,
-			BudgetStartDate: app.BudgetStartDate,
-			IsOrphaned:      app.IsOrphaned,
-			Metadata:        app.Metadata,
-			Namespace:       app.Namespace,
-		},
-	}
+	// Prepare the response (use shared serializer)
+	_ = currentAppTools // verified above for logging
+	response := serializeApp(app)
 
 	c.JSON(http.StatusCreated, response)
 }
@@ -505,6 +546,7 @@ type CreateAppRequest struct {
 	ToolIDs         []uint     `json:"tool_ids" binding:"required"`
 	MonthlyBudget   *float64   `json:"monthly_budget"`
 	BudgetStartDate *time.Time `json:"budget_start_date"`
+	PluginResources []PluginResourceInput `json:"plugin_resources,omitempty"`
 }
 
 // getUserAccessibleDataSources godoc
@@ -618,55 +660,7 @@ func (a *API) getUserApps(c *gin.Context) {
 
 	response := make([]AppResponse, len(apps))
 	for i, app := range apps {
-		response[i] = AppResponse{
-			Type: "app",
-			ID:   strconv.FormatUint(uint64(app.ID), 10),
-			Attributes: struct {
-				Name            string                 `json:"name"`
-				Description     string                 `json:"description"`
-				UserID          uint                   `json:"user_id"`
-				CredentialID    uint                   `json:"credential_id"`
-				DatasourceIDs   []uint                 `json:"datasource_ids"`
-				LLMIDs          []uint                 `json:"llm_ids"`
-				ToolIDs         []uint                 `json:"tool_ids"`
-				MonthlyBudget   *float64               `json:"monthly_budget"`
-				BudgetStartDate *time.Time             `json:"budget_start_date"`
-				IsOrphaned      bool                   `json:"is_orphaned"`
-				Metadata        map[string]interface{} `json:"metadata,omitempty"`
-				Namespace       string                 `json:"namespace,omitempty"`
-			}{
-				Name:            app.Name,
-				Description:     app.Description,
-				UserID:          app.UserID,
-				CredentialID:    app.CredentialID,
-				MonthlyBudget:   app.MonthlyBudget,
-				BudgetStartDate: app.BudgetStartDate,
-				DatasourceIDs: func() []uint {
-					ids := make([]uint, len(app.Datasources))
-					for i, ds := range app.Datasources {
-						ids[i] = ds.ID
-					}
-					return ids
-				}(),
-				LLMIDs: func() []uint {
-					ids := make([]uint, len(app.LLMs))
-					for i, llm := range app.LLMs {
-						ids[i] = llm.ID
-					}
-					return ids
-				}(),
-				ToolIDs: func() []uint {
-					ids := make([]uint, len(app.Tools))
-					for i, tool := range app.Tools {
-						ids[i] = tool.ID
-					}
-					return ids
-				}(),
-				IsOrphaned: app.IsOrphaned,
-				Metadata:   app.Metadata,
-				Namespace:  app.Namespace,
-			},
-		}
+		response[i] = serializeApp(&app)
 	}
 
 	c.JSON(http.StatusOK, AppListResponse{

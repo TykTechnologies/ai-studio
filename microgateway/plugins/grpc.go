@@ -261,3 +261,25 @@ func (c *MicrogatewayPluginClient) HandleEndpointRequest(ctx context.Context, re
 func (c *MicrogatewayPluginClient) HandleEndpointRequestStream(ctx context.Context, req *pb.EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.EndpointResponseChunk], error) {
 	return c.pluginStub.HandleEndpointRequestStream(ctx, req, opts...)
 }
+
+// --- Resource Provider Methods (pass-through, gateway doesn't use these directly) ---
+
+func (c *MicrogatewayPluginClient) GetResourceTypeRegistrations(ctx context.Context, req *pb.GetResourceTypeRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetResourceTypeRegistrationsResponse, error) {
+	return c.pluginStub.GetResourceTypeRegistrations(ctx, req, opts...)
+}
+
+func (c *MicrogatewayPluginClient) ListResourceInstances(ctx context.Context, req *pb.ListResourceInstancesRequest, opts ...grpc.CallOption) (*pb.ListResourceInstancesResponse, error) {
+	return c.pluginStub.ListResourceInstances(ctx, req, opts...)
+}
+
+func (c *MicrogatewayPluginClient) GetResourceInstance(ctx context.Context, req *pb.GetResourceInstanceRequest, opts ...grpc.CallOption) (*pb.GetResourceInstanceResponse, error) {
+	return c.pluginStub.GetResourceInstance(ctx, req, opts...)
+}
+
+func (c *MicrogatewayPluginClient) ValidateResourceSelection(ctx context.Context, req *pb.ValidateResourceSelectionRequest, opts ...grpc.CallOption) (*pb.ValidateResourceSelectionResponse, error) {
+	return c.pluginStub.ValidateResourceSelection(ctx, req, opts...)
+}
+
+func (c *MicrogatewayPluginClient) CreateResourceInstance(ctx context.Context, req *pb.CreateResourceInstanceRequest, opts ...grpc.CallOption) (*pb.CreateResourceInstanceResponse, error) {
+	return c.pluginStub.CreateResourceInstance(ctx, req, opts...)
+}

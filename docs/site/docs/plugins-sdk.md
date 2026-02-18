@@ -51,7 +51,7 @@ func main() {
 
 ## Plugin Capabilities
 
-Plugins implement one or more capability interfaces. The SDK supports 14 distinct capabilities:
+Plugins implement one or more capability interfaces. The SDK supports 15 distinct capabilities:
 
 | Capability | Interface | Where It Works | Purpose |
 |------------|-----------|----------------|---------|
@@ -69,6 +69,7 @@ Plugins implement one or more capability interfaces. The SDK supports 14 distinc
 | **Object Hooks** | `ObjectHookHandler` | Studio only | Intercept CRUD operations on objects |
 | **Scheduler** | `SchedulerPlugin` | Studio only | Execute tasks on cron-based schedules |
 | **Edge Payload** | `EdgePayloadReceiver` | Studio only | Receive data from edge (gateway) plugins |
+| **[Resource Provider](plugins-resource-types.md)** | `ResourceProvider` | Studio only | Register custom resource types for Apps with privacy scoring |
 
 ### Multi-Capability Plugins
 

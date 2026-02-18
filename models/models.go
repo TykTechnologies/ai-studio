@@ -89,6 +89,10 @@ func InitModels(db *gorm.DB) error {
 		&AttestationTemplate{}, // Admin-configurable attestation templates
 		&SubmissionVersion{},   // Resource version snapshots for rollback
 		&SubmissionActivity{},  // Submission review action audit trail
+		// Pluggable Resource Types
+		&PluginResourceType{},  // Plugin-registered resource types
+		&AppPluginResource{},   // App ↔ plugin resource instance associations
+		&GroupPluginResource{}, // Group ↔ plugin resource instance access control
 	); err != nil {
 		return err
 	}

@@ -8,8 +8,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gosimple/slug"
 	"github.com/stretchr/testify/assert"
@@ -73,6 +75,8 @@ func registerTestTool(t *testing.T, service *services.Service, mockServerURL str
 }
 
 // unregisterTestTool removes the test tool from the service.
+// Uses retry logic to handle SQLite "database table is locked" errors
+// that can occur when the analytics goroutine holds a write lock.
 func unregisterTestTool(t *testing.T, service *services.Service, slug string) {
 	t.Helper()
 	// Find the tool by slug first
@@ -81,8 +85,19 @@ func unregisterTestTool(t *testing.T, service *services.Service, slug string) {
 		// If not found, just return
 		return
 	}
-	// Delete the tool by ID
-	err = service.DeleteTool(tool.ID)
+	// Delete the tool by ID with retry for SQLite lock contention
+	for attempt := 0; attempt < 3; attempt++ {
+		err = service.DeleteTool(tool.ID)
+		if err == nil {
+			return
+		}
+		if strings.Contains(err.Error(), "database table is locked") {
+			t.Logf("Database locked during tool cleanup, retrying... (attempt %d/3)", attempt+1)
+			time.Sleep(time.Duration(200*(attempt+1)) * time.Millisecond)
+			continue
+		}
+		break
+	}
 	assert.NoError(t, err, "Failed to unregister test tool")
 }
 

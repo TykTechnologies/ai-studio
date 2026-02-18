@@ -458,6 +458,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/accessible-llms", a.getUserAccessibleLLMs)
 	authed.GET("/apps/:id", a.getUserAppDetails)
 	authed.DELETE("/apps/:id", a.deleteUserApp)
+	authed.GET("/apps/:id/plugin-resources", a.getAppPluginResources)
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
@@ -474,6 +475,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-tools", a.getUserAccessibleTools)
+	authed.GET("/accessible-plugin-resources", a.getUserAccessiblePluginResources)
 	authed.GET("/history", a.listChatHistoryRecordsForMe)
 	authed.GET("/chat-sessions/:id/defaults", a.getChatDefaults)
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
@@ -647,6 +649,13 @@ func (a *API) setupRoutes() {
 	v1.POST("/apps/:id/tools/:tool_id", a.addToolToApp)
 	v1.DELETE("/apps/:id/tools/:tool_id", a.removeToolFromApp)
 	v1.GET("/apps/:id/tools", a.getAppTools)
+
+	// Plugin Resource Type routes
+	v1.GET("/plugin-resource-types", a.listPluginResourceTypes)
+	v1.GET("/plugin-resource-types/:plugin_id/:slug/instances", a.listPluginResourceInstances)
+	v1.GET("/apps/:id/plugin-resources", a.getAppPluginResources)
+	v1.GET("/groups/:id/plugin-resources", a.getGroupPluginResources)
+	v1.PUT("/groups/:id/plugin-resources", a.setGroupPluginResources)
 
 	// LLMSettings routes
 	v1.POST("/llm-settings", a.createLLMSettings)

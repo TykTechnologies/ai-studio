@@ -681,6 +681,180 @@ func (w *pluginServerWrapper) HandleEndpointRequestStream(req *pb.EndpointReques
 	return handler.HandleEndpointRequestStream(pluginCtx, req, stream)
 }
 
+// --- Resource Provider RPC Handlers ---
+
+// GetResourceTypeRegistrations implements pb.PluginServiceServer
+func (w *pluginServerWrapper) GetResourceTypeRegistrations(ctx context.Context, req *pb.GetResourceTypeRegistrationsRequest) (*pb.GetResourceTypeRegistrationsResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.GetResourceTypeRegistrationsResponse{}, nil
+	}
+
+	regs, err := provider.GetResourceTypeRegistrations()
+	if err != nil {
+		return nil, fmt.Errorf("get resource type registrations: %w", err)
+	}
+
+	// Convert SDK types to proto
+	var protoRegs []*pb.ResourceTypeRegistrationProto
+	for _, r := range regs {
+		pr := &pb.ResourceTypeRegistrationProto{
+			Slug:                r.Slug,
+			Name:                r.Name,
+			Description:         r.Description,
+			Icon:                r.Icon,
+			HasPrivacyScore:     r.HasPrivacyScore,
+			SupportsSubmissions: r.SupportsSubmissions,
+		}
+		if r.FormComponent != nil {
+			pr.FormComponent = &pb.ResourceFormComponentProto{
+				Tag:        r.FormComponent.Tag,
+				EntryPoint: r.FormComponent.EntryPoint,
+			}
+		}
+		protoRegs = append(protoRegs, pr)
+	}
+
+	return &pb.GetResourceTypeRegistrationsResponse{Registrations: protoRegs}, nil
+}
+
+// ListResourceInstances implements pb.PluginServiceServer
+func (w *pluginServerWrapper) ListResourceInstances(ctx context.Context, req *pb.ListResourceInstancesRequest) (*pb.ListResourceInstancesResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.ListResourceInstancesResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not implement ResourceProvider",
+		}, nil
+	}
+
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	instances, err := provider.ListResourceInstances(pluginCtx, req.ResourceTypeSlug)
+	if err != nil {
+		return &pb.ListResourceInstancesResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.ListResourceInstancesResponse{
+		Success:   true,
+		Instances: resourceInstancesToProto(instances),
+	}, nil
+}
+
+// GetResourceInstance implements pb.PluginServiceServer
+func (w *pluginServerWrapper) GetResourceInstance(ctx context.Context, req *pb.GetResourceInstanceRequest) (*pb.GetResourceInstanceResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.GetResourceInstanceResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not implement ResourceProvider",
+		}, nil
+	}
+
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	instance, err := provider.GetResourceInstance(pluginCtx, req.ResourceTypeSlug, req.InstanceId)
+	if err != nil {
+		return &pb.GetResourceInstanceResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.GetResourceInstanceResponse{
+		Success:  true,
+		Instance: resourceInstanceToProto(instance),
+	}, nil
+}
+
+// ValidateResourceSelection implements pb.PluginServiceServer
+func (w *pluginServerWrapper) ValidateResourceSelection(ctx context.Context, req *pb.ValidateResourceSelectionRequest) (*pb.ValidateResourceSelectionResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.ValidateResourceSelectionResponse{
+			Valid:        true, // If plugin doesn't implement, allow by default
+			ErrorMessage: "",
+		}, nil
+	}
+
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	err := provider.ValidateResourceSelection(pluginCtx, req.ResourceTypeSlug, req.InstanceIds, req.AppId)
+	if err != nil {
+		return &pb.ValidateResourceSelectionResponse{
+			Valid:        false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.ValidateResourceSelectionResponse{Valid: true}, nil
+}
+
+// CreateResourceInstance implements pb.PluginServiceServer
+func (w *pluginServerWrapper) CreateResourceInstance(ctx context.Context, req *pb.CreateResourceInstanceRequest) (*pb.CreateResourceInstanceResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.CreateResourceInstanceResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not implement ResourceProvider",
+		}, nil
+	}
+
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	instance, err := provider.CreateResourceInstance(pluginCtx, req.ResourceTypeSlug, req.Payload)
+	if err != nil {
+		return &pb.CreateResourceInstanceResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.CreateResourceInstanceResponse{
+		Success:  true,
+		Instance: resourceInstanceToProto(instance),
+	}, nil
+}
+
+// resourceInstanceToProto converts a single SDK ResourceInstance to proto
+func resourceInstanceToProto(ri *ResourceInstance) *pb.ResourceInstanceProto {
+	if ri == nil {
+		return nil
+	}
+	return &pb.ResourceInstanceProto{
+		Id:           ri.ID,
+		Name:         ri.Name,
+		Description:  ri.Description,
+		PrivacyScore: int32(ri.PrivacyScore),
+		Metadata:     ri.Metadata,
+		IsActive:     ri.IsActive,
+	}
+}
+
+// resourceInstancesToProto converts a slice of SDK ResourceInstances to proto
+func resourceInstancesToProto(instances []*ResourceInstance) []*pb.ResourceInstanceProto {
+	result := make([]*pb.ResourceInstanceProto, 0, len(instances))
+	for _, ri := range instances {
+		result = append(result, resourceInstanceToProto(ri))
+	}
+	return result
+}
+
 // OpenSession implements pb.PluginServiceServer
 // This is the key method for session-based broker management.
 // It blocks until timeout or CloseSession is called, keeping the broker alive.

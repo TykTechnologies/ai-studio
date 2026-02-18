@@ -275,6 +275,51 @@ type EdgePayload struct {
 	ReceivedTimestamp int64             // Unix timestamp when received at control
 }
 
+// ResourceProvider allows plugins to register custom resource types that can be
+// associated with Apps. Resource instances are managed by the plugin via RPC calls,
+// while the platform handles association, privacy validation, group-based access
+// control, and submission workflow integration.
+//
+// This capability is Studio-only. Gateway plugins receive resource associations
+// in the config snapshot but do not provide resources.
+//
+// Example:
+//
+//	func (p *MyPlugin) GetResourceTypeRegistrations() ([]*plugin_sdk.ResourceTypeRegistration, error) {
+//	    return []*plugin_sdk.ResourceTypeRegistration{{
+//	        Slug:            "mcp_servers",
+//	        Name:            "MCP Servers",
+//	        HasPrivacyScore: true,
+//	    }}, nil
+//	}
+//
+//	func (p *MyPlugin) ListResourceInstances(ctx plugin_sdk.Context, slug string) ([]*plugin_sdk.ResourceInstance, error) {
+//	    // Return instances from your plugin's storage
+//	}
+type ResourceProvider interface {
+	Plugin
+
+	// GetResourceTypeRegistrations declares the resource types this plugin provides.
+	// Called once after Initialize() and again on plugin reload.
+	GetResourceTypeRegistrations() ([]*ResourceTypeRegistration, error)
+
+	// ListResourceInstances returns all instances of a given resource type.
+	// The platform calls this to populate selection UI in the App form.
+	ListResourceInstances(ctx Context, resourceTypeSlug string) ([]*ResourceInstance, error)
+
+	// GetResourceInstance retrieves a single resource instance by its ID.
+	GetResourceInstance(ctx Context, resourceTypeSlug string, instanceID string) (*ResourceInstance, error)
+
+	// ValidateResourceSelection is called during app create/update to let the plugin
+	// validate the selected resource instances. Returns nil if valid, or an error
+	// describing why the selection is invalid.
+	ValidateResourceSelection(ctx Context, resourceTypeSlug string, instanceIDs []string, appID uint32) error
+
+	// CreateResourceInstance creates a new instance from a submission approval.
+	// payload is a JSON-encoded creation payload defined by the plugin.
+	CreateResourceInstance(ctx Context, resourceTypeSlug string, payload []byte) (*ResourceInstance, error)
+}
+
 // SessionAware is an optional interface for plugins that need session lifecycle callbacks.
 // Implement this when your plugin needs to set up or tear down resources tied to the
 // session-based broker connection (e.g., event subscriptions, background tasks).

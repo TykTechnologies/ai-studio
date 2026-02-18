@@ -18,13 +18,18 @@ const (
 
 	SubmissionResourceTypeDatasource = "datasource"
 	SubmissionResourceTypeTool       = "tool"
+	SubmissionResourceTypePlugin     = "plugin"
 )
 
 type Submission struct {
 	gorm.Model
 	ID           uint   `json:"id" gorm:"primaryKey"`
-	ResourceType string `json:"resource_type" gorm:"index"` // datasource | tool
+	ResourceType string `json:"resource_type" gorm:"index"` // datasource | tool | plugin
 	ResourceID   *uint  `json:"resource_id"`                 // set after approval creates the resource
+
+	// Plugin resource type reference (only set when ResourceType == "plugin")
+	PluginResourceTypeID *uint               `json:"plugin_resource_type_id"`
+	PluginResourceType   *PluginResourceType `json:"plugin_resource_type,omitempty" gorm:"foreignKey:PluginResourceTypeID"`
 	Status       string `json:"status" gorm:"index"`         // draft | submitted | in_review | approved | rejected | changes_requested
 	LockVersion  int    `json:"lock_version"`                // optimistic concurrency control
 

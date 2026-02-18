@@ -61,7 +61,8 @@ const (
 	HookTypePortalUI       = "portal_ui"        // AI Portal UI extension plugins (end-user facing)
 	HookTypeAgent          = "agent"             // AI Studio agent plugins
 	HookTypeObjectHooks    = "object_hooks"      // AI Studio object interaction hooks (CRUD operations)
-	HookTypeCustomEndpoint = "custom_endpoint"   // Custom HTTP endpoints served by plugin
+	HookTypeCustomEndpoint  = "custom_endpoint"   // Custom HTTP endpoints served by plugin
+	HookTypeResourceProvider = "resource_provider" // Plugin provides custom resource types for Apps
 )
 
 // validHookTypes contains all valid hook type constants
@@ -76,6 +77,7 @@ var validHookTypes = []string{
 	HookTypeAgent,
 	HookTypeObjectHooks,
 	HookTypeCustomEndpoint,
+	HookTypeResourceProvider,
 }
 
 // IsValidHookType validates if a hook type string is valid

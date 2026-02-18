@@ -66,6 +66,9 @@ message AppConfig {
   // Tool and Datasource access relationships
   repeated uint32 tool_ids = 20;       // From app_tools join table
   repeated uint32 datasource_ids = 21; // From app_datasources join table
+
+  // Plugin resource associations (generic extensible resource types)
+  repeated PluginResourceAssociation plugin_resources = 22;
 }
 
 // TokenConfig represents an API token configuration
@@ -309,9 +312,27 @@ message HealthStatus {
     DEGRADED = 1;
     UNHEALTHY = 2;
   }
-  
+
   Status status = 1;
   string message = 2;
   google.protobuf.Timestamp timestamp = 3;
   map<string, string> metrics = 4; // Additional health metrics
+}
+
+// PluginResourceAssociation represents plugin resource instances associated with an app.
+// Used in ConfigurationSnapshot to propagate plugin resource bindings to gateways.
+message PluginResourceAssociation {
+  uint32 plugin_id = 1;                            // Plugin that owns this resource type
+  string resource_type_slug = 2;                   // Resource type identifier
+  repeated string instance_ids = 3;                // Associated instance IDs
+  repeated ResourceInstanceSnapshot instances = 4; // Instance details for gateway-side access
+}
+
+// ResourceInstanceSnapshot contains instance details included in config snapshots
+// so gateways can access resource metadata without calling back to Studio.
+message ResourceInstanceSnapshot {
+  string id = 1;
+  string name = 2;
+  int32 privacy_score = 3;
+  bytes metadata = 4;                              // Opaque plugin-defined JSON
 }
