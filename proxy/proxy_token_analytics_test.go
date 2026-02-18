@@ -19,94 +19,14 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
 
-func setupIntegrationProxy(t *testing.T, db *gorm.DB, mockURL string) (*Proxy, *models.LLM, *models.App, string) {
-	t.Helper()
-
-	service := services.NewService(db)
-	notificationSvc := services.NewTestNotificationService(db)
-	budgetService := budget.NewService(db, notificationSvc)
-	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
-	require.NotNil(t, proxy)
-
-	user := &models.User{ID: 1, Email: "random@example.com"}
-	require.NoError(t, db.Create(user).Error)
-
-	llm := &models.LLM{
-		Model:        gorm.Model{ID: 1},
-		Name:         "gemini-api",
-		Vendor:       models.GOOGLEAI,
-		DefaultModel: "gemini-1.5-flash",
-		Active:       true,
-		APIEndpoint:  mockURL,
-		APIKey:       "api-key",
-	}
-	require.NoError(t, db.Create(llm).Error)
-
-	app := &models.App{
-		Model:  gorm.Model{ID: 1},
-		Name:   "Test App",
-		UserID: user.ID,
-	}
-	require.NoError(t, db.Create(app).Error)
-
-	cred := &models.Credential{
-		Model:  gorm.Model{ID: 1},
-		Secret: "secret",
-		Active: true,
-	}
-	require.NoError(t, db.Create(cred).Error)
-
-	app.CredentialID = cred.ID
-	app.LLMs = []models.LLM{*llm}
-	require.NoError(t, db.Save(app).Error)
-
-	require.NoError(t, proxy.loadResources())
-
-	return proxy, llm, app, cred.Secret
-}
-
-func startProxyServer(t *testing.T, proxy *Proxy) *httptest.Server {
-	t.Helper()
-
-	r := mux.NewRouter()
-	finalHandler := proxy.credValidator.Middleware(
-		proxy.streamDetectionMiddleware(
-			http.HandlerFunc(proxy.handleUnifiedLLMRequest),
-		),
-	)
-	r.Handle("/llm/call/{llmSlug}/{rest:.*}", finalHandler)
-
-	return httptest.NewServer(r)
-}
-
-func sendProxyRequest(t *testing.T, proxyURL, llmSlug, secret, reqBody string, isStreaming bool) *http.Response {
-	t.Helper()
-
-	url := fmt.Sprintf("%s/llm/call/%s/v1/models/gemini-2.5-flash:generateContent", proxyURL, llmSlug)
-	if isStreaming {
-		url = fmt.Sprintf("%s/llm/call/%s/v1/models/gemini-2.5-flash:streamGenerateContent", proxyURL, llmSlug)
-	}
-	req, err := http.NewRequest("POST", url, bytes.NewBufferString(reqBody))
-	require.NoError(t, err)
-
-	req.Header.Set("Authorization", "Bearer "+secret)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	return resp
-}
-
-func TestTokenAnalytics_GoogleAI(t *testing.T) {
+func TestTokenAnalytics_NotStreamResponse(t *testing.T) {
 	db, cancel := setupTest(t)
 	defer tearDownTest(db, cancel)
 
 	var upstreamCalled bool
 	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		upstreamCalled = true
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		jsonResponse := `{
 			"candidates": [
 					{
 							"content": {
@@ -135,7 +55,12 @@ func TestTokenAnalytics_GoogleAI(t *testing.T) {
 			},
 			"modelVersion": "gemini-2.5-flash",
 			"responseId": "GSOUadPREf-Z28oPlc62cA"
-	}`))
+	}`
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusOK)
+
+		writeGzippedResponse(t, w, []byte(jsonResponse))
 	}))
 	defer mockUpstream.Close()
 
@@ -201,9 +126,11 @@ func TestTokenAnalytics_MalformedJSON_NoRecord(t *testing.T) {
 	defer tearDownTest(db, cancel)
 
 	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		jsonResponse := []byte(`{"id": "chatcmpl-bad", "usage": invalid}`)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"id": "chatcmpl-bad", "usage": invalid}`))
+
+		writeGzippedResponse(t, w, jsonResponse)
 	}))
 	defer mockUpstream.Close()
 
@@ -292,9 +219,7 @@ func TestTokenAnalytics_NoPriceRecord(t *testing.T) {
 	defer tearDownTest(db, cancel)
 
 	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{
+		jsonResponse := []byte(`{
 			"candidates": [
 					{
 							"content": {
@@ -323,7 +248,13 @@ func TestTokenAnalytics_NoPriceRecord(t *testing.T) {
 			},
 			"modelVersion": "gemini-2.5-flash",
 			"responseId": "GSOUadPREf-Z28oPlc62cA"
-	}`))
+	}`)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusOK)
+
+		writeGzippedResponse(t, w, jsonResponse)
 	}))
 	defer mockUpstream.Close()
 
@@ -420,21 +351,11 @@ func TestTokenAnalytics_StreamingRequest(t *testing.T) {
     }
 ]`
 
-		var compressedBuffer bytes.Buffer
-		gzipWriter := gzip.NewWriter(&compressedBuffer)
-
-		_, err := gzipWriter.Write([]byte(jsonResponse))
-		require.NoError(t, err)
-
-		err = gzipWriter.Close()
-		require.NoError(t, err)
-
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		_, err = w.Write(compressedBuffer.Bytes())
-		require.NoError(t, err)
+		writeGzippedResponse(t, w, []byte(jsonResponse))
 	}))
 	defer mockUpstream.Close()
 
@@ -469,4 +390,98 @@ func TestTokenAnalytics_StreamingRequest(t *testing.T) {
 	assert.Equal(t, 8, record.PromptTokens)
 	assert.Equal(t, 219, record.ResponseTokens)
 	assert.InDelta(t, 5.49, record.Cost, 0.01)
+}
+
+func setupIntegrationProxy(t *testing.T, db *gorm.DB, mockURL string) (*Proxy, *models.LLM, *models.App, string) {
+	t.Helper()
+
+	service := services.NewService(db)
+	notificationSvc := services.NewTestNotificationService(db)
+	budgetService := budget.NewService(db, notificationSvc)
+	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
+	require.NotNil(t, proxy)
+
+	user := &models.User{ID: 1, Email: "random@example.com"}
+	require.NoError(t, db.Create(user).Error)
+
+	llm := &models.LLM{
+		Model:        gorm.Model{ID: 1},
+		Name:         "gemini-api",
+		Vendor:       models.GOOGLEAI,
+		DefaultModel: "gemini-1.5-flash",
+		Active:       true,
+		APIEndpoint:  mockURL,
+		APIKey:       "api-key",
+	}
+	require.NoError(t, db.Create(llm).Error)
+
+	app := &models.App{
+		Model:  gorm.Model{ID: 1},
+		Name:   "Test App",
+		UserID: user.ID,
+	}
+	require.NoError(t, db.Create(app).Error)
+
+	cred := &models.Credential{
+		Model:  gorm.Model{ID: 1},
+		Secret: "secret",
+		Active: true,
+	}
+	require.NoError(t, db.Create(cred).Error)
+
+	app.CredentialID = cred.ID
+	app.LLMs = []models.LLM{*llm}
+	require.NoError(t, db.Save(app).Error)
+
+	require.NoError(t, proxy.loadResources())
+
+	return proxy, llm, app, cred.Secret
+}
+
+func startProxyServer(t *testing.T, proxy *Proxy) *httptest.Server {
+	t.Helper()
+
+	r := mux.NewRouter()
+	finalHandler := proxy.credValidator.Middleware(
+		proxy.streamDetectionMiddleware(
+			http.HandlerFunc(proxy.handleUnifiedLLMRequest),
+		),
+	)
+	r.Handle("/llm/call/{llmSlug}/{rest:.*}", finalHandler)
+
+	return httptest.NewServer(r)
+}
+
+func sendProxyRequest(t *testing.T, proxyURL, llmSlug, secret, reqBody string, isStreaming bool) *http.Response {
+	t.Helper()
+
+	url := fmt.Sprintf("%s/llm/call/%s/v1/models/gemini-2.5-flash:generateContent", proxyURL, llmSlug)
+	if isStreaming {
+		url = fmt.Sprintf("%s/llm/call/%s/v1/models/gemini-2.5-flash:streamGenerateContent", proxyURL, llmSlug)
+	}
+	req, err := http.NewRequest("POST", url, bytes.NewBufferString(reqBody))
+	require.NoError(t, err)
+
+	req.Header.Set("Authorization", "Bearer "+secret)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	return resp
+}
+
+func writeGzippedResponse(t *testing.T, w http.ResponseWriter, body []byte) {
+	t.Helper()
+
+	var compressedBuffer bytes.Buffer
+	gzipWriter := gzip.NewWriter(&compressedBuffer)
+
+	_, err := gzipWriter.Write(body)
+	require.NoError(t, err)
+
+	err = gzipWriter.Close()
+	require.NoError(t, err)
+
+	_, err = w.Write(compressedBuffer.Bytes())
+	require.NoError(t, err)
 }
