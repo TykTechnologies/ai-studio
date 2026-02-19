@@ -2,9 +2,7 @@ package proxy
 
 import (
 	"bytes"
-	"compress/gzip"
 	"fmt"
-	"io"
 	"net/http"
 )
 
@@ -15,8 +13,8 @@ type bufferedResponseCapture struct {
 	statusCode      int
 	buffer          *bytes.Buffer
 	header          http.Header
-	written         bool
-	gzipDecompressed bool // Track if we've already decompressed gzip
+	written      bool
+	decompressed bool // Track if we've already decompressed the response body
 }
 
 func newBufferedResponseCapture(w http.ResponseWriter) *bufferedResponseCapture {
@@ -24,8 +22,8 @@ func newBufferedResponseCapture(w http.ResponseWriter) *bufferedResponseCapture 
 		ResponseWriter:   w,
 		buffer:           &bytes.Buffer{},
 		header:           make(http.Header),
-		written:          false,
-		gzipDecompressed: false,
+		written:      false,
+		decompressed: false,
 	}
 }
 
@@ -46,15 +44,11 @@ func (rc *bufferedResponseCapture) Write(b []byte) (int, error) {
 }
 
 func (rc *bufferedResponseCapture) CapturedBody() []byte {
-	// Decompress gzip content if present for analytics
-	if !rc.gzipDecompressed && rc.header.Get("Content-Encoding") == "gzip" && rc.buffer.Len() > 0 {
-		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
+	encoding := rc.header.Get("Content-Encoding")
+	if !rc.decompressed && encoding != "" && encoding != "identity" && rc.buffer.Len() > 0 {
+		decompressed, err := decompressBody(encoding, rc.buffer.Bytes())
 		if err == nil {
-			decompressed, err := io.ReadAll(reader)
-			reader.Close()
-			if err == nil {
-				return decompressed
-			}
+			return decompressed
 		}
 	}
 	return rc.buffer.Bytes()
@@ -106,18 +100,15 @@ func (rc *bufferedResponseCapture) WriteToClient() {
 		return // Already written
 	}
 
-	// Decompress gzip content if present and not already decompressed
-	if !rc.gzipDecompressed && rc.header.Get("Content-Encoding") == "gzip" && rc.buffer.Len() > 0 {
-		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
+	// Decompress content if present and not already decompressed
+	encoding := rc.header.Get("Content-Encoding")
+	if !rc.decompressed && encoding != "" && encoding != "identity" && rc.buffer.Len() > 0 {
+		decompressed, err := decompressBody(encoding, rc.buffer.Bytes())
 		if err == nil {
-			decompressed, err := io.ReadAll(reader)
-			reader.Close()
-			if err == nil {
-				rc.buffer = bytes.NewBuffer(decompressed)
-				// Remove Content-Encoding header since we've decompressed the data
-				rc.header.Del("Content-Encoding")
-				rc.gzipDecompressed = true
-			}
+			rc.buffer = bytes.NewBuffer(decompressed)
+			// Remove Content-Encoding header since we've decompressed the data
+			rc.header.Del("Content-Encoding")
+			rc.decompressed = true
 		}
 	}
 

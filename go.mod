@@ -86,6 +86,7 @@ require (
 	github.com/TykTechnologies/opentelemetry v0.0.21 // indirect
 	github.com/TykTechnologies/storage v1.2.2 // indirect
 	github.com/TykTechnologies/tyk v1.9.2-0.20240815043856-ec7db94fbe3d // indirect
+	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beevik/etree v1.2.0 // indirect

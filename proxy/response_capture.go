@@ -2,8 +2,6 @@ package proxy
 
 import (
 	"bytes"
-	"compress/gzip"
-	"io"
 	"net/http"
 )
 
@@ -36,13 +34,9 @@ func (rc *responseCapture) WriteHeader(statusCode int) {
 
 func (rc *responseCapture) Write(b []byte) (int, error) {
 	rc.buffer.Write(b)
-	if rc.Header().Get("Content-Encoding") == "gzip" {
-		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
-		if err != nil {
-			return 0, err
-		}
-		defer reader.Close()
-		decompressed, err := io.ReadAll(reader)
+	encoding := rc.Header().Get("Content-Encoding")
+	if encoding != "" && encoding != "identity" {
+		decompressed, err := decompressBody(encoding, rc.buffer.Bytes())
 		if err != nil {
 			return 0, err
 		}
