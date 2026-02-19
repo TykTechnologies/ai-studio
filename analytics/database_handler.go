@@ -283,6 +283,9 @@ func (h *DatabaseHandler) RecordChatRecord(record *models.LLMChatRecord) {
 	h.recMutex.RUnlock()
 
 	select {
+	case <-h.ctx.Done():
+		logger.Warnf("Dropping chat record due to cancellation: err=%s model=%s, app_id=%d, llm_id=%d", h.ctx.Err(), record.Name, record.AppID, record.LLMID)
+		return
 	case h.chatRecordChan <- record:
 		logger.Debugf("Sent chat record to channel: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
 	default:
@@ -299,6 +302,9 @@ func (h *DatabaseHandler) RecordProxyLog(log *models.ProxyLog) {
 	h.recMutex.RUnlock()
 
 	select {
+	case <-h.ctx.Done():
+		logger.Warnf("dropping proxy log record due to cancellation: %s", h.ctx.Err())
+		return
 	case h.proxyLogChan <- log:
 	default:
 		logger.Warn("proxy log buffer full, dropping log")
@@ -321,6 +327,9 @@ func (h *DatabaseHandler) RecordToolCall(name string, timestamp time.Time, execT
 	}
 
 	select {
+	case <-h.ctx.Done():
+		logger.Warnf("dropping tool call record due to cancellation: %s", h.ctx.Err())
+		return
 	case h.toolCallChan <- tcEntry:
 	default:
 		logger.Warn("tool call buffer full, dropping tool call")
@@ -337,6 +346,9 @@ func (h *DatabaseHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
 	h.recMutex.RUnlock()
 
 	select {
+	case <-h.ctx.Done():
+		logger.Warnf("dropping chat log record due to cancellation: %s", h.ctx.Err())
+		return
 	case h.logEntryChan <- logEntry:
 	default:
 		logger.Warn("chat log buffer full, dropping log")
@@ -360,6 +372,9 @@ func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord
 
 	// Send batch to async worker - non-blocking to avoid request latency
 	select {
+	case <-h.ctx.Done():
+		logger.Warnf("Dropping chat record batch due to cancellation: %s", h.ctx.Err())
+		return
 	case h.chatRecordBatchChan <- records:
 		logger.Debugf("Sent chat record batch to async worker, count: %d", len(records))
 	default:
@@ -384,6 +399,9 @@ func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
 
 	// Send batch to async worker - non-blocking to avoid request latency
 	select {
+	case <-h.ctx.Done():
+		logger.Warnf("Dropping proxy log batch due to cancellation: %s", h.ctx.Err())
+		return
 	case h.proxyLogBatchChan <- logs:
 		logger.Debugf("Sent proxy log batch to async worker, count: %d", len(logs))
 	default:
