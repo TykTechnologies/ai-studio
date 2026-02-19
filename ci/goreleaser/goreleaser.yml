@@ -8,10 +8,9 @@ version: 2
 builds:
   - id: std-amd64
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.BuildHash={{.FullCommit}}
+      - -X main.BuildTime={{.Date}}
     goos:
       - linux
     goarch:
@@ -21,10 +20,9 @@ builds:
     env:
       - CC=aarch64-linux-gnu-gcc
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.BuildHash={{.FullCommit}}
+      - -X main.BuildTime={{.Date}}
     goos:
       - linux
     goarch:
@@ -34,10 +32,9 @@ builds:
     env:
       - CC=s390x-linux-gnu-gcc
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.BuildHash={{.FullCommit}}
+      - -X main.BuildTime={{.Date}}
     goos:
       - linux
     goarch:
@@ -45,10 +42,9 @@ builds:
     binary: tyk-ai-studio
   - id: fips
     ldflags:
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Version={{.Version}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.Commit={{.FullCommit}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuildDate={{.Date}}
-      - -X github.com/TykTechnologies/tyk-ai-studio/main.BuiltBy=goreleaser
+      - -X main.Version={{.Version}}
+      - -X main.BuildHash={{.FullCommit}}
+      - -X main.BuildTime={{.Date}}
     goos:
       - linux
     goarch:

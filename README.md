@@ -423,6 +423,37 @@ make clean
 
 **Build Order Important**: The frontend must be built before the Go binary because the application embeds frontend assets. Running `go build` without building the frontend first will fail with empty directory errors.
 
+### Version and Build Tagging
+
+Version information is injected at build time via Go linker flags (`-ldflags -X`). The variables are defined in `version.go`:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `main.Version` | Release version (from git tag) | `dev` |
+| `main.BuildHash` | Git commit hash | `unknown` |
+| `main.BuildTime` | Build timestamp (UTC) | `unknown` |
+
+**How version is set across build methods:**
+
+| Build Method | Version Source |
+|---|---|
+| `make build-native` / `make build-prod` | `git describe --tags --always --dirty` |
+| `Dockerfile` | `--build-arg VERSION=...` |
+| `build-commands.sh` (pre-release) | `git describe --tags --always` |
+| GoReleaser (CI release) | Git tag via `{{.Version}}` |
+| `make dev` (Air hot reload) | Default `dev` |
+
+To verify the version embedded in a binary, check the startup output:
+```
+Starting Tyk AI Studio v2.1.0
+```
+
+When tagging a release, create a git tag and the version will propagate automatically:
+```bash
+git tag v2.1.0
+git push origin v2.1.0
+```
+
 ### Additional Commands
 ```bash
 make start-frontend    # Frontend development server only
