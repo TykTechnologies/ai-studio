@@ -65,9 +65,9 @@ func (p *TokenAuthProvider) ValidateToken(token string) (*AuthResult, error) {
 	}
 
 	// Update last used timestamp asynchronously
-	go func() {
-		p.db.Model(&apiToken).Update("last_used_at", time.Now())
-	}()
+	go func(tokenValue string) {
+		p.db.Model(&database.APIToken{}).Where("token = ?", tokenValue).Update("last_used_at", time.Now())
+	}(token)
 
 	// Parse scopes
 	var scopes []string
