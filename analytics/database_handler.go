@@ -284,7 +284,7 @@ func (h *DatabaseHandler) RecordChatRecord(record *models.LLMChatRecord) {
 
 	select {
 	case <-h.ctx.Done():
-		logger.Warnf("Dropping chat record due to cancellation: err=%s model=%s, app_id=%d, llm_id=%d", h.ctx.Err(), record.Name, record.AppID, record.LLMID)
+		logger.Warnf("Dropping chat record due to cancellation: %s", h.ctx.Err())
 		return
 	case h.chatRecordChan <- record:
 		logger.Debugf("Sent chat record to channel: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
