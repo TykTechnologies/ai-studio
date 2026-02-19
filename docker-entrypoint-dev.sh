@@ -1,44 +1,65 @@
 #!/bin/bash
 
+# =============================================================================
+# DEPRECATED: This entrypoint script is deprecated.
+#
+# Please use the new Docker Compose-based development environment instead:
+#   make dev          - Start minimal development environment
+#   make dev-full     - Start full stack with Gateway and Plugins
+#
+# See dev/README.md for full documentation.
+# =============================================================================
+
 # Create .env from example if it doesn't exist
 if [ ! -f /app/.env ]; then
     cp /app/.env.example /app/.env
     echo ".env file created from .env.example"
 fi
 
-# Start frontend in background
-echo "Starting frontend..."
-cd /app/ui/admin-frontend
-npm start &
+# Start frontend dev server in background (skip if SKIP_FRONTEND_DEV is set)
+# When using pre-built frontend, the Go binary serves it via embed
+if [ "${SKIP_FRONTEND_DEV}" != "true" ]; then
+    echo "Starting frontend dev server..."
+    cd /app/ui/admin-frontend
+    npm start &
+else
+    echo "Skipping frontend dev server (using embedded build)"
+fi
 
 # Build and start backend
 echo "Building and starting backend..."
 cd /app
 
-# Initial build and run
-echo "Performing initial Go build..."
-go build -o ./tmp/main .
+# Build edition based on BUILD_EDITION env var (default: enterprise)
+BUILD_EDITION="${BUILD_EDITION:-enterprise}"
+echo "Performing Go build (${BUILD_EDITION})..."
+mkdir -p bin
+
+if [ "$BUILD_EDITION" = "community" ] || [ "$BUILD_EDITION" = "ce" ]; then
+    CGO_ENABLED=1 go build -o bin/midsommar .
+else
+    CGO_ENABLED=1 go build -tags enterprise -o bin/midsommar-ent .
+fi
+
 if [ $? -ne 0 ]; then
-    echo "Initial Go build failed!"
+    echo "Go build failed!"
     exit 1
 fi
 
-# Start the initial binary in the background
-echo "Starting initial server..."
-./tmp/main &
-FIRST_RUN_PID=$!
-
-# Start Air for hot reloading
-echo "Starting Air for hot reloading..."
-air -c .air.toml &
-AIR_PID=$!
+# Start the server
+echo "Starting server..."
+if [ "$BUILD_EDITION" = "community" ] || [ "$BUILD_EDITION" = "ce" ]; then
+    ./bin/midsommar &
+else
+    ./bin/midsommar-ent &
+fi
+SERVER_PID=$!
 
 # Wait for any process to exit
 wait -n
 
 # Kill remaining processes
-kill $FIRST_RUN_PID 2>/dev/null
-kill $AIR_PID 2>/dev/null
+kill $SERVER_PID 2>/dev/null
 
 # Exit with the same code as the failed process
 exit $?

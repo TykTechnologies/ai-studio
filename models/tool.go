@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gosimple/slug"
 	"gorm.io/gorm"
 )
 
 type Tool struct {
 	gorm.Model
 	ID          uint   `json:"id" gorm:"primary_key"`
-	Name        string `json:"name"`
+	Name        string `json:"name" gorm:"index"`
+	Slug        string `json:"slug" gorm:"index"`
 	Description string `json:"description"`
 
 	ToolType            string `json:"tool_type"`
@@ -19,11 +21,20 @@ type Tool struct {
 	PrivacyScore        int    `json:"privacy_score"`
 	AuthKey             string `json:"auth_key"`
 	AuthSchemaName      string `json:"auth_schema_name"`
+	Active              bool   `json:"active" gorm:"default:true"`
+	Namespace           string `json:"namespace" gorm:"default:'';index:idx_tool_namespace"`
 
 	FileStores   []FileStore `gorm:"many2many:tool_filestores;" json:"file_stores"`
 	Filters      []Filter    `gorm:"many2many:tool_filters;" json:"filters"`
 	Dependencies []*Tool     `gorm:"many2many:tool_dependencies" json:"dependencies"`
 	Apps         []*App      `gorm:"many2many:app_tools;" json:"apps"`
+
+	// Ownership
+	UserID uint `json:"user_id" gorm:"index:idx_tool_user_community"`
+
+	// UGC (User-Generated Content) fields
+	CommunitySubmitted bool  `json:"community_submitted" gorm:"index:idx_tool_user_community"`
+	SubmissionID       *uint `json:"submission_id"`
 
 	// Plugin-stored metadata
 	Metadata JSONMap `json:"metadata" gorm:"type:json"`
@@ -37,6 +48,12 @@ const (
 
 func NewTool() *Tool {
 	return &Tool{}
+}
+
+// BeforeSave computes the slug from the tool name before saving
+func (t *Tool) BeforeSave(tx *gorm.DB) error {
+	t.Slug = slug.Make(t.Name)
+	return nil
 }
 
 // Create a new tool

@@ -34,7 +34,8 @@ type PluginServiceInterface interface {
 	GetPluginsByLLMID(llmID uint) ([]PluginData, error)
 	GetPluginsForLLM(llmID uint) ([]PluginData, error)
 	GetAllPlugins() ([]PluginData, error)
-	GetAllLLMIDs() ([]uint, error) // Get all LLM IDs for pre-warming plugins
+	GetAllLLMIDs() ([]uint, error)                  // Get all LLM IDs for pre-warming plugins
+	GetAllActiveGatewayPlugins() ([]PluginData, error) // Get all plugins that should run on a gateway (LLM-associated + standalone endpoint)
 }
 
 // PluginData represents plugin data from database (minimal interface)
@@ -58,6 +59,21 @@ func (pd *PluginData) SupportsHookType(hookType string) bool {
 	// Check additional hooks
 	for _, ht := range pd.HookTypes {
 		if ht == hookType {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAnySupportedGatewayHook returns true if this plugin declares at least one
+// hook type that the microgateway supports. Plugins that only declare Studio-only
+// hooks (studio_ui, agent, object_hooks) return false.
+func (pd *PluginData) HasAnySupportedGatewayHook() bool {
+	if interfaces.IsSupportedGatewayHookType(pd.HookType) {
+		return true
+	}
+	for _, ht := range pd.HookTypes {
+		if interfaces.IsSupportedGatewayHookType(ht) {
 			return true
 		}
 	}
@@ -111,6 +127,19 @@ type PluginHealthStatus struct {
 	LoadTime     time.Duration `json:"load_time,omitempty"` // Time to load/pre-warm
 }
 
+// EndpointRoute stores the mapping from an HTTP route to a specific plugin endpoint
+type EndpointRoute struct {
+	PluginID       uint
+	PluginName     string
+	PluginSlug     string   // URL slug used in /plugins/{slug}/ (from config["slug"])
+	Path           string   // Registration path pattern (e.g., "/*", "/.well-known/openid-configuration")
+	Methods        []string // Allowed HTTP methods
+	RequireAuth    bool
+	StreamResponse bool
+	Description    string
+	Metadata       map[string]string
+}
+
 // PluginManager manages the lifecycle of plugins
 type PluginManager struct {
 	mu              sync.RWMutex
@@ -142,6 +171,13 @@ type PluginManager struct {
 
 	// Session management for long-lived broker connections
 	pluginSessions map[uint]context.CancelFunc // Plugin ID -> session cancel function
+
+	// Custom endpoint routing
+	endpointRoutes  map[string]*EndpointRoute // "METHOD:pluginName/subpath" -> route
+	pluginEndpoints map[uint][]*EndpointRoute // Plugin ID -> registered routes (for cleanup)
+
+	// Serializes concurrent ReconcilePlugins calls
+	reconcileMu sync.Mutex
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -181,6 +217,8 @@ func NewPluginManager(pluginService PluginServiceInterface) *PluginManager {
 		pluginHealth:            make(map[uint]*PluginHealthStatus),
 		preWarmingInProgress:    make(map[uint]bool),
 		pluginSessions:          make(map[uint]context.CancelFunc),
+		endpointRoutes:          make(map[string]*EndpointRoute),
+		pluginEndpoints:         make(map[uint][]*EndpointRoute),
 	}
 }
 
@@ -423,11 +461,17 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 			Msg("⚠️ Plugin does NOT support session loop (not a MicrogatewayPluginClient)")
 	}
 
-	// Mark as ready (success) - call safe version after releasing lock
-	loadTime := time.Since(startTime)
+	// Fetch custom endpoint registrations outside the write lock (blocking gRPC call).
+	// Store the plugin reference before releasing the lock so we can use it.
 	pm.mu.Unlock()
-	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusReady, nil, loadTime)
+	endpointRoutes := pm.fetchPluginEndpoints(pluginID, loadedPlugin)
+	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusReady, nil, time.Since(startTime))
 	pm.mu.Lock()
+
+	// Store routes under write lock (fast, no I/O)
+	if len(endpointRoutes) > 0 {
+		pm.storePluginEndpoints(pluginID, endpointRoutes)
+	}
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -495,6 +539,9 @@ func (pm *PluginManager) UnloadPlugin(pluginID uint) error {
 		}
 		pm.llmPluginMap[llmID] = newPluginIDs
 	}
+
+	// Unregister custom endpoints for this plugin
+	pm.unregisterPluginEndpoints(pluginID)
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -813,6 +860,8 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 	pm.llmPluginMap = make(map[uint][]uint)
 	pm.pluginHealth = make(map[uint]*PluginHealthStatus)
 	pm.preWarmingInProgress = make(map[uint]bool)
+	pm.endpointRoutes = make(map[string]*EndpointRoute)
+	pm.pluginEndpoints = make(map[uint][]*EndpointRoute)
 
 	// Shutdown OCI client if available
 	if pm.ociClient != nil {
@@ -2022,32 +2071,15 @@ func (pm *PluginManager) PreFetchOCIPlugin(command string) error {
 func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
 	log.Debug().Msg("Starting plugin pre-warming for event subscriptions")
 
-	// Get all LLM IDs on this edge
-	llmIDs, err := pm.service.GetAllLLMIDs()
+	desiredState, err := pm.getDesiredPluginState()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get LLM IDs for pre-warming")
-		return fmt.Errorf("failed to get LLM IDs for pre-warming: %w", err)
+		log.Error().Err(err).Msg("Failed to get desired plugin state for pre-warming")
+		return fmt.Errorf("failed to get desired plugin state for pre-warming: %w", err)
 	}
 
-	log.Debug().Int("llm_count", len(llmIDs)).Msg("Found LLMs for plugin pre-warming")
-
-	// Collect unique plugins from all LLMs
-	pluginsSeen := make(map[uint]bool)
-	var pluginsToLoad []PluginData
-
-	for _, llmID := range llmIDs {
-		plugins, err := pm.service.GetPluginsForLLM(llmID)
-		if err != nil {
-			log.Warn().Uint("llm_id", llmID).Err(err).Msg("Failed to get plugins for LLM")
-			continue
-		}
-
-		for _, plugin := range plugins {
-			if !pluginsSeen[plugin.ID] {
-				pluginsSeen[plugin.ID] = true
-				pluginsToLoad = append(pluginsToLoad, plugin)
-			}
-		}
+	pluginsToLoad := make([]PluginData, 0, len(desiredState))
+	for _, p := range desiredState {
+		pluginsToLoad = append(pluginsToLoad, p)
 	}
 
 	log.Debug().Int("unique_plugins", len(pluginsToLoad)).Msg("Found unique plugins to pre-warm")
@@ -2104,7 +2136,7 @@ func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
 	} else {
 		log.Info().
 			Int("plugins_prewarmed", loadedCount).
-			Int("llms_checked", len(llmIDs)).
+			Int("desired_plugins", len(pluginsToLoad)).
 			Msg("Plugin pre-warming completed successfully - event subscriptions should be active")
 	}
 
@@ -2130,9 +2162,19 @@ func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
 	var ociPluginCount int
 	var preWarmErrors []error
 
-	// Pre-warm all OCI plugins
+	// Pre-warm OCI plugins that have gateway-supported hook types
 	for _, plugin := range allPlugins {
 		if !strings.HasPrefix(plugin.Command, "oci://") {
+			continue
+		}
+
+		// Skip plugins that only declare Studio-only hooks (studio_ui, agent, object_hooks)
+		if !plugin.HasAnySupportedGatewayHook() {
+			log.Debug().
+				Uint("plugin_id", plugin.ID).
+				Str("plugin_name", plugin.Name).
+				Str("hook_type", plugin.HookType).
+				Msg("Skipping OCI pre-warm for non-gateway plugin")
 			continue
 		}
 
@@ -2451,4 +2493,402 @@ func (pm *PluginManager) closePluginSession(pluginID uint, client *MicrogatewayP
 			Uint("plugin_id", pluginID).
 			Msg("Plugin session closed")
 	}
+}
+
+// --- Custom Endpoint Registration & Dispatch ---
+
+// validHTTPMethods is the set of HTTP methods that plugin endpoints may declare.
+var validHTTPMethods = map[string]bool{
+	"GET": true, "POST": true, "PUT": true, "DELETE": true,
+	"PATCH": true, "OPTIONS": true, "HEAD": true,
+}
+
+// fetchPluginEndpoints queries a plugin for its custom endpoint registrations via gRPC.
+// This performs a blocking network call and must NOT be called while holding pm.mu.
+// Returns nil if the plugin does not implement custom endpoints or has no registrations.
+func (pm *PluginManager) fetchPluginEndpoints(pluginID uint, lp *LoadedPlugin) []*EndpointRoute {
+	if lp.GRPCClient == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp, err := lp.GRPCClient.GetEndpointRegistrations(ctx, &pb.GetEndpointRegistrationsRequest{})
+	if err != nil {
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", lp.Name).
+			Err(err).
+			Msg("Plugin does not provide custom endpoint registrations (OK)")
+		return nil
+	}
+
+	if len(resp.Registrations) == 0 {
+		return nil
+	}
+
+	// Resolve slug from plugin config
+	slug := ""
+	if lp.Config != nil {
+		if s, ok := lp.Config["slug"].(string); ok && s != "" {
+			slug = s
+		}
+	}
+	if slug == "" {
+		log.Warn().
+			Uint("plugin_id", pluginID).
+			Str("plugin_name", lp.Name).
+			Msg("Plugin has endpoint registrations but no 'slug' in config — endpoints will not be reachable. Set config.slug to the desired URL path component.")
+		return nil
+	}
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", lp.Name).
+		Str("slug", slug).
+		Int("registrations", len(resp.Registrations)).
+		Msg("Fetched custom plugin endpoint registrations")
+
+	var routes []*EndpointRoute
+	for _, reg := range resp.Registrations {
+		if !isValidEndpointPath(reg.Path) {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("path", reg.Path).
+				Msg("Skipping invalid endpoint path from plugin")
+			continue
+		}
+
+		methods := validateHTTPMethods(reg.Methods)
+		if len(methods) == 0 {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("path", reg.Path).
+				Msg("Skipping endpoint registration with no valid HTTP methods — plugin must explicitly declare methods")
+			continue
+		}
+
+		routes = append(routes, &EndpointRoute{
+			PluginID:       pluginID,
+			PluginName:     lp.Name,
+			PluginSlug:     slug,
+			Path:           reg.Path,
+			Methods:        methods,
+			RequireAuth:    reg.RequireAuth,
+			StreamResponse: reg.StreamResponse,
+			Description:    reg.Description,
+			Metadata:       reg.Metadata,
+		})
+	}
+	return routes
+}
+
+// storePluginEndpoints writes pre-fetched routes into the routing tables.
+// Assumes pm.mu write lock is held by the caller.
+func (pm *PluginManager) storePluginEndpoints(pluginID uint, routes []*EndpointRoute) {
+	for _, route := range routes {
+		for _, method := range route.Methods {
+			key := endpointRouteKey(method, route.PluginSlug, route.Path)
+			pm.endpointRoutes[key] = route
+		}
+		pm.pluginEndpoints[pluginID] = append(pm.pluginEndpoints[pluginID], route)
+
+		log.Debug().
+			Uint("plugin_id", pluginID).
+			Str("slug", route.PluginSlug).
+			Str("path", route.Path).
+			Strs("methods", route.Methods).
+			Msg("Registered custom plugin endpoint")
+	}
+}
+
+// unregisterPluginEndpoints removes all endpoint routes for a given plugin.
+// Assumes pm.mu is held by the caller.
+func (pm *PluginManager) unregisterPluginEndpoints(pluginID uint) {
+	routes, exists := pm.pluginEndpoints[pluginID]
+	if !exists {
+		return
+	}
+
+	pluginName := ""
+	if lp, ok := pm.loadedPlugins[pluginID]; ok {
+		pluginName = lp.Name
+	}
+
+	for _, route := range routes {
+		for _, method := range route.Methods {
+			key := endpointRouteKey(method, route.PluginSlug, route.Path)
+			delete(pm.endpointRoutes, key)
+		}
+	}
+	delete(pm.pluginEndpoints, pluginID)
+
+	log.Debug().
+		Uint("plugin_id", pluginID).
+		Str("plugin_name", pluginName).
+		Int("routes_removed", len(routes)).
+		Msg("Unregistered custom plugin endpoints")
+}
+
+// RefreshAllEndpoints re-queries every loaded plugin for endpoint registrations.
+// This is useful after a bulk config reload.
+// gRPC calls are performed outside the lock to avoid blocking request routing.
+func (pm *PluginManager) RefreshAllEndpoints() {
+	// Phase 1: snapshot loaded plugins under read lock (no I/O)
+	pm.mu.RLock()
+	type pluginSnapshot struct {
+		id     uint
+		plugin *LoadedPlugin
+	}
+	snapshots := make([]pluginSnapshot, 0, len(pm.loadedPlugins))
+	for id, lp := range pm.loadedPlugins {
+		snapshots = append(snapshots, pluginSnapshot{id: id, plugin: lp})
+	}
+	pm.mu.RUnlock()
+
+	// Phase 2: fetch registrations outside lock (blocking gRPC, potentially slow)
+	type fetchResult struct {
+		pluginID uint
+		routes   []*EndpointRoute
+	}
+	var results []fetchResult
+	for _, snap := range snapshots {
+		routes := pm.fetchPluginEndpoints(snap.id, snap.plugin)
+		if len(routes) > 0 {
+			results = append(results, fetchResult{pluginID: snap.id, routes: routes})
+		}
+	}
+
+	// Phase 3: swap route tables under write lock (fast, no I/O)
+	pm.mu.Lock()
+	pm.endpointRoutes = make(map[string]*EndpointRoute)
+	pm.pluginEndpoints = make(map[uint][]*EndpointRoute)
+	for _, res := range results {
+		pm.storePluginEndpoints(res.pluginID, res.routes)
+	}
+	pm.mu.Unlock()
+
+	log.Debug().
+		Int("total_routes", len(pm.endpointRoutes)).
+		Int("plugins_with_endpoints", len(pm.pluginEndpoints)).
+		Msg("Refreshed all plugin endpoint registrations")
+}
+
+// getDesiredPluginState queries the database for all plugins that should be active
+// on this gateway (LLM-associated + standalone endpoint plugins) and returns a map
+// of pluginID -> PluginData. Returns an error if any database query fails, to avoid
+// operating on partial state.
+func (pm *PluginManager) getDesiredPluginState() (map[uint]PluginData, error) {
+	plugins, err := pm.service.GetAllActiveGatewayPlugins()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get desired plugin state: %w", err)
+	}
+
+	result := make(map[uint]PluginData, len(plugins))
+	for _, p := range plugins {
+		result[p.ID] = p
+	}
+	return result, nil
+}
+
+// ReconcilePlugins compares currently loaded plugins with the database state and
+// reconciles differences: unloads removed plugins, reloads changed plugins, loads
+// new plugins, and refreshes endpoint registrations. Call this after a configuration
+// sync to ensure running plugin processes match the latest snapshot.
+func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
+	pm.reconcileMu.Lock()
+	defer pm.reconcileMu.Unlock()
+
+	log.Info().Msg("Starting plugin reconciliation after configuration sync")
+
+	// Phase 1: Snapshot currently loaded (non-global, non-builtin) plugins
+	pm.mu.RLock()
+	loadedChecksums := make(map[uint]string, len(pm.loadedPlugins))
+	for id, lp := range pm.loadedPlugins {
+		if lp.IsGlobal || lp.BuiltinPlugin != nil {
+			continue
+		}
+		loadedChecksums[id] = lp.Checksum
+	}
+	pm.mu.RUnlock()
+
+	// Phase 2: Build desired state from database (abort on any DB error)
+	desiredPlugins, err := pm.getDesiredPluginState()
+	if err != nil {
+		return fmt.Errorf("reconcile aborted: %w", err)
+	}
+
+	// Phase 3: Compute diff
+	var toUnload []uint
+	var toReload []uint
+
+	for id, loadedChecksum := range loadedChecksums {
+		desired, exists := desiredPlugins[id]
+		if !exists {
+			toUnload = append(toUnload, id)
+		} else if loadedChecksum != desired.Checksum {
+			toReload = append(toReload, id)
+		}
+	}
+
+	log.Info().
+		Int("to_unload", len(toUnload)).
+		Int("to_reload", len(toReload)).
+		Int("loaded_count", len(loadedChecksums)).
+		Int("desired_count", len(desiredPlugins)).
+		Msg("Plugin reconciliation diff computed")
+
+	// Phase 4: Apply changes
+
+	for _, id := range toUnload {
+		log.Info().Uint("plugin_id", id).Msg("Unloading removed plugin")
+		if err := pm.UnloadPlugin(id); err != nil {
+			log.Error().Uint("plugin_id", id).Err(err).Msg("Failed to unload removed plugin")
+		}
+	}
+
+	for _, id := range toReload {
+		log.Info().Uint("plugin_id", id).Msg("Reloading changed plugin")
+		if err := pm.ReloadPlugin(id); err != nil {
+			log.Error().Uint("plugin_id", id).Err(err).Msg("Failed to reload changed plugin")
+		}
+	}
+
+	// Load new plugins (PrewarmAllPlugins skips already-loaded)
+	if err := pm.PrewarmAllPlugins(ctx); err != nil {
+		log.Warn().Err(err).Msg("Some new plugins failed to load during reconciliation")
+	}
+
+	// Refresh endpoint routing table
+	pm.RefreshAllEndpoints()
+
+	log.Info().Msg("Plugin reconciliation completed")
+	return nil
+}
+
+// GetEndpointRoute looks up a route for the given HTTP method, plugin name, and sub-path.
+// Returns nil when no matching route is found.
+func (pm *PluginManager) GetEndpointRoute(method, pluginName, subPath string) *EndpointRoute {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	// Try exact match first
+	key := endpointRouteKey(method, pluginName, subPath)
+	if route, ok := pm.endpointRoutes[key]; ok {
+		return route
+	}
+
+	// Try wildcard match: the plugin registered "/*"
+	wildcardKey := endpointRouteKey(method, pluginName, "/*")
+	if route, ok := pm.endpointRoutes[wildcardKey]; ok {
+		return route
+	}
+
+	return nil
+}
+
+// HandleEndpointRequest dispatches a unary endpoint request to the appropriate plugin.
+func (pm *PluginManager) HandleEndpointRequest(ctx context.Context, pluginID uint, req *pb.EndpointRequest) (*pb.EndpointResponse, error) {
+	pm.mu.RLock()
+	lp, exists := pm.loadedPlugins[pluginID]
+	pm.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if lp.GRPCClient == nil {
+		return nil, fmt.Errorf("plugin %d has no gRPC client", pluginID)
+	}
+
+	return lp.GRPCClient.HandleEndpointRequest(ctx, req)
+}
+
+// HandleEndpointRequestStream dispatches a streaming endpoint request to the appropriate plugin.
+func (pm *PluginManager) HandleEndpointRequestStream(ctx context.Context, pluginID uint, req *pb.EndpointRequest) (interface{ Recv() (*pb.EndpointResponseChunk, error) }, error) {
+	pm.mu.RLock()
+	lp, exists := pm.loadedPlugins[pluginID]
+	pm.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if lp.GRPCClient == nil {
+		return nil, fmt.Errorf("plugin %d has no gRPC client", pluginID)
+	}
+
+	return lp.GRPCClient.HandleEndpointRequestStream(ctx, req)
+}
+
+// --- Endpoint helper functions ---
+
+// endpointRouteKey builds the map key used for endpoint route lookups.
+func endpointRouteKey(method, pluginName, path string) string {
+	return strings.ToUpper(method) + ":" + pluginName + path
+}
+
+// ParsePluginEndpointPath splits a request path of the form /plugins/{pluginName}/...
+// into the plugin name (slug) and the remaining sub-path.
+// Returns ("", "", false) when the path does not match the expected prefix.
+func ParsePluginEndpointPath(fullPath string) (pluginName string, subPath string, ok bool) {
+	trimmed := strings.TrimPrefix(fullPath, "/plugins/")
+	if trimmed == fullPath {
+		return "", "", false
+	}
+
+	slashIdx := strings.Index(trimmed, "/")
+	if slashIdx < 0 {
+		if trimmed == "" {
+			return "", "", false
+		}
+		return trimmed, "/", true
+	}
+
+	pluginName = trimmed[:slashIdx]
+	subPath = trimmed[slashIdx:]
+
+	if pluginName == "" {
+		return "", "", false
+	}
+
+	return pluginName, subPath, true
+}
+
+// isValidEndpointPath checks that a registration path is safe and well-formed.
+func isValidEndpointPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	// Must start with /
+	if path[0] != '/' {
+		return false
+	}
+	// Reject directory traversal
+	if strings.Contains(path, "..") {
+		return false
+	}
+	return true
+}
+
+// validateHTTPMethods filters a list of methods to only those that are valid HTTP methods.
+func validateHTTPMethods(methods []string) []string {
+	var valid []string
+	for _, m := range methods {
+		upper := strings.ToUpper(m)
+		if validHTTPMethods[upper] {
+			valid = append(valid, upper)
+		}
+	}
+	return valid
+}
+
+// SplitPathSegments splits a path like "/users/123/profile" into ["users", "123", "profile"].
+func SplitPathSegments(path string) []string {
+	trimmed := strings.Trim(path, "/")
+	if trimmed == "" {
+		return nil
+	}
+	return strings.Split(trimmed, "/")
 }

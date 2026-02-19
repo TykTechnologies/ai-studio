@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import { createTheme } from '@mui/material';
 import UserDetails from './UserDetails';
+import { EditionProvider } from '../../context/EditionContext';
 
 // Mock apiClient
 jest.mock('../../utils/apiClient', () => {
@@ -21,6 +22,13 @@ jest.mock('../../utils/apiClient', () => {
     default: mockClient
   };
 });
+
+// Mock axios for EditionContext
+jest.mock('axios', () => ({
+  get: jest.fn().mockResolvedValue({
+    data: { edition: 'community', version: '1.0.0' }
+  })
+}));
 
 // Mock useNavigate
 const mockNavigate = jest.fn();
@@ -67,14 +75,16 @@ describe('UserDetails Component', () => {
     },
   });
 
-  // Wrapper component with theme provider and router
+  // Wrapper component with theme provider, edition provider, and router
   const Wrapper = ({ children }) => (
     <ThemeProvider theme={theme}>
-      <MemoryRouter initialEntries={['/admin/users/123']}>
-        <Routes>
-          <Route path="/admin/users/:id" element={children} />
-        </Routes>
-      </MemoryRouter>
+      <EditionProvider>
+        <MemoryRouter initialEntries={['/admin/users/123']}>
+          <Routes>
+            <Route path="/admin/users/:id" element={children} />
+          </Routes>
+        </MemoryRouter>
+      </EditionProvider>
     </ThemeProvider>
   );
 

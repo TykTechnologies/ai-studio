@@ -81,8 +81,9 @@ type App struct {
 	BudgetStartDate *time.Time     `json:"budget_start_date"`
 	BudgetResetDay  int            `gorm:"default:1" json:"budget_reset_day"`
 	RateLimitRPM    int            `json:"rate_limit_rpm"`
-	AllowedIPs      datatypes.JSON `gorm:"type:json" json:"allowed_ips"`
-	Metadata        datatypes.JSON `gorm:"type:json" json:"metadata"`
+	AllowedIPs           datatypes.JSON `gorm:"type:json" json:"allowed_ips"`
+	Metadata             datatypes.JSON `gorm:"type:json" json:"metadata"`
+	PluginResourcesJSON  datatypes.JSON `gorm:"type:json" json:"plugin_resources_json"` // Synced from config snapshot PluginResources
 
 	// Hub-and-Spoke Configuration
 	Namespace       string         `gorm:"default:'';index:idx_app_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
@@ -91,6 +92,8 @@ type App struct {
 	Credentials []Credential     `gorm:"foreignKey:AppID"`
 	Tokens      []APIToken       `gorm:"foreignKey:AppID"`
 	LLMs        []LLM            `gorm:"many2many:app_llms;"`
+	Tools       []Tool           `gorm:"many2many:app_tools;"`
+	Datasources []Datasource     `gorm:"many2many:app_datasources;"`
 	BudgetUsage []BudgetUsage    `gorm:"foreignKey:AppID"`
 	Events      []AnalyticsEvent `gorm:"foreignKey:AppID"`
 }
@@ -453,12 +456,106 @@ type ModelMapping struct {
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
+// Tool represents a tool configuration (synced from control plane)
+type Tool struct {
+	gorm.Model
+	Name                string `gorm:"not null" json:"name"`
+	Slug                string `gorm:"uniqueIndex;not null" json:"slug"`
+	Description         string `json:"description"`
+	ToolType            string `json:"tool_type"`
+	OASSpec             string `gorm:"type:text" json:"oas_spec"`
+	AvailableOperations string `json:"available_operations"`
+	PrivacyScore        int    `json:"privacy_score"`
+	AuthKeyEncrypted    string `json:"auth_key_encrypted"`
+	AuthSchemaName      string `json:"auth_schema_name"`
+	Active              bool   `gorm:"default:true" json:"active"`
+	Namespace           string `gorm:"default:'';index:idx_tool_namespace" json:"namespace"`
+
+	// Relationships
+	Filters []Filter `gorm:"many2many:tool_filters;" json:"filters,omitempty"`
+	Apps    []App    `gorm:"many2many:app_tools;" json:"apps,omitempty"`
+}
+
+// Datasource represents a datasource configuration (synced from control plane)
+type Datasource struct {
+	gorm.Model
+	Name                  string `gorm:"not null" json:"name"`
+	ShortDescription      string `json:"short_description"`
+	LongDescription       string `json:"long_description"`
+	Icon                  string `json:"icon"`
+	Url                   string `json:"url"`
+	PrivacyScore          int    `json:"privacy_score"`
+	DBSourceType          string `json:"db_source_type"`
+	DBConnStringEncrypted string `json:"db_conn_string_encrypted"`
+	DBConnAPIKeyEncrypted string `json:"db_conn_api_key_encrypted"`
+	DBName                string `json:"db_name"`
+	EmbedVendor           string `json:"embed_vendor"`
+	EmbedUrl              string `json:"embed_url"`
+	EmbedAPIKeyEncrypted  string `json:"embed_api_key_encrypted"`
+	EmbedModel            string `json:"embed_model"`
+	Active                bool   `gorm:"default:true" json:"active"`
+	Namespace             string `gorm:"default:'';index:idx_ds_namespace" json:"namespace"`
+
+	// Relationships
+	Apps []App `gorm:"many2many:app_datasources;" json:"apps,omitempty"`
+}
+
+// OAuthClientEdge represents an OAuth 2.0 client (synced from control plane for MCP auth)
+type OAuthClientEdge struct {
+	gorm.Model
+	ClientID     string `gorm:"type:varchar(255);uniqueIndex;not null" json:"client_id"`
+	ClientSecret string `gorm:"type:varchar(255);not null" json:"client_secret"` // bcrypt hash
+	ClientName   string `gorm:"type:varchar(255);not null" json:"client_name"`
+	RedirectURIs string `gorm:"type:text" json:"redirect_uris"`
+	UserID       uint   `gorm:"index" json:"user_id"`
+	Scope        string `gorm:"type:varchar(255)" json:"scope"`
+}
+
+// AccessTokenEdge represents an OAuth 2.0 access token (synced from control plane for MCP auth)
+type AccessTokenEdge struct {
+	gorm.Model
+	TokenHash      string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"token_hash"` // SHA-256 hash for O(1) lookup
+	TokenEncrypted string    `gorm:"type:varchar(255);not null" json:"token_encrypted"`       // Encrypted token (for returning to caller)
+	ClientID       string    `gorm:"type:varchar(255);not null" json:"client_id"`
+	UserID         uint      `gorm:"not null" json:"user_id"`
+	Scope          string    `gorm:"type:varchar(255)" json:"scope"`
+	ExpiresAt      time.Time `gorm:"not null" json:"expires_at"`
+}
+
+// AppTool represents the many-to-many relationship between apps and tools
+type AppTool struct {
+	AppID     uint      `gorm:"primaryKey"`
+	ToolID    uint      `gorm:"primaryKey"`
+	CreatedAt time.Time
+}
+
+// AppDatasource represents the many-to-many relationship between apps and datasources
+type AppDatasource struct {
+	AppID        uint      `gorm:"primaryKey"`
+	DatasourceID uint      `gorm:"primaryKey"`
+	CreatedAt    time.Time
+}
+
+// ToolFilter represents the many-to-many relationship between tools and filters
+type ToolFilter struct {
+	ToolID    uint      `gorm:"primaryKey"`
+	FilterID  uint      `gorm:"primaryKey"`
+	CreatedAt time.Time
+}
+
 // TableName methods for new models
-func (EdgeInstance) TableName() string    { return "edge_instances" }
-func (PluginKV) TableName() string        { return "plugin_kv" }
-func (ControlPayload) TableName() string  { return "control_payloads" }
-func (SyncState) TableName() string       { return "sync_states" }
-func (ModelRouter) TableName() string     { return "model_routers" }
-func (ModelPool) TableName() string       { return "model_pools" }
-func (PoolVendor) TableName() string      { return "pool_vendors" }
-func (ModelMapping) TableName() string    { return "model_mappings" }
+func (EdgeInstance) TableName() string      { return "edge_instances" }
+func (PluginKV) TableName() string          { return "plugin_kv" }
+func (ControlPayload) TableName() string    { return "control_payloads" }
+func (SyncState) TableName() string         { return "sync_states" }
+func (ModelRouter) TableName() string       { return "model_routers" }
+func (ModelPool) TableName() string         { return "model_pools" }
+func (PoolVendor) TableName() string        { return "pool_vendors" }
+func (ModelMapping) TableName() string      { return "model_mappings" }
+func (Tool) TableName() string              { return "tools" }
+func (Datasource) TableName() string        { return "datasources" }
+func (OAuthClientEdge) TableName() string   { return "oauth_clients" }
+func (AccessTokenEdge) TableName() string   { return "access_tokens" }
+func (AppTool) TableName() string           { return "app_tools" }
+func (AppDatasource) TableName() string     { return "app_datasources" }
+func (ToolFilter) TableName() string        { return "tool_filters" }

@@ -191,21 +191,30 @@ func AnthropicModelExtractor(r *http.Request, body []byte) (string, error) {
 }
 
 func GoogleAIModelExtractor(r *http.Request, body []byte) (string, error) {
-	var req map[string]interface{}
+	// Google AI can have model in different places depending on the API version
+	// Extract from URL path
+	parts := strings.Split(r.URL.Path, "/")
+	for i, part := range parts {
+		if part == "models" && i+1 < len(parts) {
+			model, _, _ := strings.Cut(parts[i+1], ":")
+			return model, nil
+		}
+	}
+
+	var req map[string]any
 	if err := json.Unmarshal(body, &req); err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
 
-	// Google AI can have model in different places depending on the API version
-	// First try the standard location
+	// Extract from request body
 	if modelInterface, ok := req["model"]; ok {
 		if model, ok := modelInterface.(string); ok {
 			return model, nil
 		}
 	}
 
-	// Try the configuration block used in some APIs
-	if config, ok := req["configuration"].(map[string]interface{}); ok {
+	// Extract from configuration block used in some APIs
+	if config, ok := req["configuration"].(map[string]any); ok {
 		if modelInterface, ok := config["model"]; ok {
 			if model, ok := modelInterface.(string); ok {
 				return model, nil

@@ -41,8 +41,6 @@ Users access the Chat Interface through the Tyk AI Studio web UI.
 2.  **Interact:** Users type their prompts or questions.
 3.  **Receive Responses:** The LLM processes the request, potentially using tools or data sources behind the scenes, and streams the response back.
 
-    ![Placeholder: Chat UI](https://placehold.co/600x400?text=Chat+Interface+UI)
-
 ## Configuration (Admin)
 
 Administrators configure the available "Chat Experiences" (formerly known as Chat Rooms) via the UI or API. Configuration involves:
@@ -55,8 +53,6 @@ Administrators configure the available "Chat Experiences" (formerly known as Cha
 *   **Applying Filters:** Associating specific [Filters](./filters.md) for governance.
 *   **Assigning Groups:** Determining which [User Groups](./user-management.md) can access this Chat Experience.
 *   **Enabling/Disabling Features:** Toggling features like file uploads or direct tool usage.
-
-    ![Placeholder: Chat Config](https://placehold.co/600x400?text=Chat+Experience+Config)
 
 ## API Access
 

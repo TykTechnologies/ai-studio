@@ -1,11 +1,16 @@
 package proxy
 
 import (
+	"bytes"
+	"compress/gzip"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -41,10 +46,16 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 	AnalyzeCompletionResponse(service, llm, app, response, r, time.Now())
 }
 
-func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time) {
-	llm, app, response, err := switches.AnalyzeStreamingResponse(llm, app, statusCode, responses, r, chunks)
+func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time, contentEncoding string) {
+	decompressedResponses, err := decompressResponseData(responses, contentEncoding)
 	if err != nil {
-		log.Printf("failed to analyze response: %v", err)
+		logger.Errorf("Failed to analyze streaming response: %v", err)
+		return
+	}
+
+	llm, app, response, err := switches.AnalyzeStreamingResponse(llm, app, statusCode, decompressedResponses, r, chunks)
+	if err != nil {
+		logger.Errorf("Failed to analyze streaming response: %v", err)
 		return
 	}
 
@@ -54,7 +65,7 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		TimeStamp:    timestamp,
 		Vendor:       string(llm.Vendor),
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
-		ResponseBody: truncateString(string(responses), maxBodySize),
+		ResponseBody: truncateString(string(decompressedResponses), maxBodySize),
 		ResponseCode: statusCode,
 	}
 
@@ -140,4 +151,23 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 			bs.AnalyzeBudgetUsage(app, llm)
 		}
 	}
+}
+
+func decompressResponseData(data []byte, contentEncoding string) ([]byte, error) {
+	if contentEncoding != "gzip" || len(data) == 0 {
+		return data, nil
+	}
+
+	reader, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader for analytics: %v", err)
+	}
+	defer reader.Close()
+
+	decompressed, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decompress gzip data for analytics, using original data: %v", err)
+	}
+
+	return decompressed, nil
 }

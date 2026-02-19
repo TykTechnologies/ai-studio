@@ -343,6 +343,14 @@ func (h *E2EPluginHarness) CallOnBeforeWrite(req *pb.ResponseWriteRequest) (*pb.
 	return h.pluginClient.OnBeforeWrite(ctx, req)
 }
 
+// CallOnStreamComplete invokes OnStreamComplete on the plugin.
+func (h *E2EPluginHarness) CallOnStreamComplete(req *pb.StreamCompleteRequest) (*pb.StreamCompleteResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	return h.pluginClient.OnStreamComplete(ctx, req)
+}
+
 // LicenseWasChecked returns true if the plugin called GetLicenseInfo.
 func (h *E2EPluginHarness) LicenseWasChecked() bool {
 	h.mu.RLock()

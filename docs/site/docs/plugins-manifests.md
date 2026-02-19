@@ -243,6 +243,51 @@ This plugin would:
 
 See `examples/plugins/studio/llm-validator/` and `examples/plugins/studio/hook-test-plugin/` for complete examples.
 
+### Resource Provider Plugins
+
+Resource Provider plugins register custom resource types that integrate into the App creation flow. Declare resource types in the manifest's `resource_types` section:
+
+```json
+{
+  "id": "com.example.mcp-registry",
+  "name": "MCP Registry",
+  "version": "1.0.0",
+  "description": "Manages MCP server resources",
+  "capabilities": {
+    "hooks": ["resource_provider", "studio_ui"]
+  },
+  "resource_types": [
+    {
+      "slug": "mcp_servers",
+      "name": "MCP Servers",
+      "description": "Model Context Protocol servers",
+      "icon": "Hub",
+      "has_privacy_score": true,
+      "supports_submissions": true,
+      "form_component": {
+        "tag": "mcp-server-selector",
+        "entry_point": "ui/webc/mcp-selector.js"
+      }
+    }
+  ],
+  "permissions": {
+    "services": ["apps.read", "kv.readwrite"]
+  }
+}
+```
+
+Resource types declared in the manifest are automatically registered when the plugin loads. The plugin also implements `ResourceProvider` methods programmatically for runtime behavior.
+
+| Field | Required | Description |
+|-------|:---:|-------------|
+| `slug` | Yes | Machine-readable identifier, unique per plugin |
+| `name` | Yes | Display name shown in the App form |
+| `has_privacy_score` | No | Whether instances carry privacy scores (default: `false`) |
+| `supports_submissions` | No | Whether community users can submit instances (default: `false`) |
+| `form_component` | No | Custom Web Component for the App form selector |
+
+See [Resource Provider Plugins](plugins-resource-types.md) for the full guide.
+
 ## Service Scopes Reference
 
 ### LLM Scopes

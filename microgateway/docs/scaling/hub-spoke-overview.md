@@ -94,7 +94,7 @@ mgw llm create --name="Tenant A LLM" --namespace="tenant-a" --vendor=openai
 # Edge with specific namespace
 GATEWAY_MODE=edge \
 EDGE_NAMESPACE=tenant-a \
-CONTROL_ENDPOINT=control:9090 \
+CONTROL_ENDPOINT=control:50051 \
 ./microgateway
 ```
 
@@ -124,14 +124,14 @@ CONTROL_ENDPOINT=control:9090 \
 ```bash
 # Control instance
 GATEWAY_MODE=control \
-GRPC_PORT=9090 \
+GRPC_PORT=50051 \
 DATABASE_TYPE=postgres \
 DATABASE_DSN="postgres://user:pass@localhost/control_db" \
 ./microgateway
 
 # Edge instance
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control.example.com:9090 \
+CONTROL_ENDPOINT=control.example.com:50051 \
 EDGE_ID=edge-region-1 \
 EDGE_NAMESPACE=production \
 ./microgateway
@@ -144,14 +144,14 @@ GATEWAY_MODE=control ./microgateway
 
 # Tenant A edge
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control.internal:9090 \
+CONTROL_ENDPOINT=control.internal:50051 \
 EDGE_NAMESPACE=tenant-a \
 EDGE_ID=tenant-a-edge-1 \
 ./microgateway
 
 # Tenant B edge
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control.internal:9090 \
+CONTROL_ENDPOINT=control.internal:50051 \
 EDGE_NAMESPACE=tenant-b \
 EDGE_ID=tenant-b-edge-1 \
 ./microgateway
@@ -166,14 +166,14 @@ REGION=us-east-1 \
 
 # Edge in US West
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control-us-east.company.com:9090 \
+CONTROL_ENDPOINT=control-us-east.company.com:50051 \
 EDGE_ID=edge-us-west-1 \
 REGION=us-west-1 \
 ./microgateway
 
 # Edge in Europe
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control-us-east.company.com:9090 \
+CONTROL_ENDPOINT=control-us-east.company.com:50051 \
 EDGE_ID=edge-eu-west-1 \
 REGION=eu-west-1 \
 ./microgateway
@@ -187,7 +187,7 @@ REGION=eu-west-1 \
 GATEWAY_MODE=control
 
 # gRPC server settings
-GRPC_PORT=9090
+GRPC_PORT=50051
 GRPC_HOST=0.0.0.0
 GRPC_TLS_ENABLED=false
 GRPC_AUTH_TOKEN=secure-control-token
@@ -203,7 +203,7 @@ DATABASE_DSN="postgres://user:pass@postgres:5432/microgateway"
 GATEWAY_MODE=edge
 
 # Control connection settings
-CONTROL_ENDPOINT=control.example.com:9090
+CONTROL_ENDPOINT=control.example.com:50051
 EDGE_ID=edge-1
 EDGE_NAMESPACE=production
 
@@ -298,7 +298,7 @@ GATEWAY_MODE=control ./microgateway
 
 # 4. Deploy edge instances
 GATEWAY_MODE=edge \
-CONTROL_ENDPOINT=control:9090 \
+CONTROL_ENDPOINT=control:50051 \
 ./microgateway
 
 # 5. Verify deployment

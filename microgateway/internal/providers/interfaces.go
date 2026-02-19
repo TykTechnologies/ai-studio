@@ -34,6 +34,7 @@ type ConfigurationProvider interface {
 	// Plugin operations
 	GetPlugin(id uint) (*database.Plugin, error)
 	GetPluginsForLLM(llmID uint) ([]database.Plugin, error)
+	GetAllLLMAssociatedPlugins() ([]database.Plugin, error)
 	ListPlugins(namespace string, hookType string, active bool) ([]database.Plugin, error)
 	
 	// Provider metadata

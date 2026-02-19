@@ -26,6 +26,7 @@ import (
 	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/llms/openai"
 	"github.com/tmc/langchaingo/schema"
+	"google.golang.org/api/option"
 )
 
 var AVAILABLE_LLM_DRIVERS = []models.Vendor{
@@ -151,8 +152,16 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 		return ollama.New(opts...)
 
 	case models.GOOGLEAI:
+		withEndpoint := func(endpoint string) googleai.Option {
+			return func(opts *googleai.Options) {
+				opts.ClientOptions = append(opts.ClientOptions, option.WithEndpoint(endpoint))
+			}
+		}
 		opts := []googleai.Option{
 			googleai.WithHTTPClient(httpClient),
+		}
+		if LLMConfig.APIEndpoint != "" {
+			opts = append(opts, withEndpoint(LLMConfig.APIEndpoint))
 		}
 		if LLMConfig.APIKey != "" {
 			opts = append(opts, googleai.WithAPIKey(LLMConfig.APIKey))
@@ -160,6 +169,7 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 		if settings != nil && settings.ModelName != "" {
 			opts = append(opts, googleai.WithDefaultModel(settings.ModelName))
 		}
+
 		return googleai.New(context.Background(), opts...)
 
 	case models.VERTEX:

@@ -163,6 +163,24 @@ func (s *TestManagementServer) DeletePluginKV(ctx context.Context, req *mgmtpb.D
 	}, nil
 }
 
+// UpdatePluginConfig implements the UpdatePluginConfig RPC.
+// Returns success: true to allow config updates in e2e tests.
+func (s *TestManagementServer) UpdatePluginConfig(ctx context.Context, req *mgmtpb.UpdatePluginConfigRequest) (*mgmtpb.UpdatePluginConfigResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.calls = append(s.calls, ServiceCall{
+		Method:    "UpdatePluginConfig",
+		Request:   req,
+		Timestamp: time.Now(),
+	})
+
+	return &mgmtpb.UpdatePluginConfigResponse{
+		Success: true,
+		Message: "Configuration saved (test)",
+	}, nil
+}
+
 // GetCalls returns all tracked service calls.
 func (s *TestManagementServer) GetCalls() []ServiceCall {
 	s.mu.RLock()

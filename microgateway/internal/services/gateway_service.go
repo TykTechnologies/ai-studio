@@ -72,6 +72,8 @@ func (s *DatabaseGatewayService) GetAppByID(id uint) (interface{}, error) {
 	var app database.App
 	err := s.db.Where("id = ?", id).
 		Preload("LLMs").
+		Preload("Tools.Filters").
+		Preload("Datasources").
 		First(&app).Error
 
 	if err != nil {
@@ -234,6 +236,8 @@ func (s *DatabaseGatewayService) GetAppByTokenID(tokenID uint) (*database.App, e
 	var token database.APIToken
 	err := s.db.Where("id = ? AND is_active = ?", tokenID, true).
 		Preload("App.LLMs").
+		Preload("App.Tools.Filters").
+		Preload("App.Datasources").
 		First(&token).Error
 
 	if err != nil {

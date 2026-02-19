@@ -1,0 +1,108 @@
+# Air configuration for AI Studio development
+# https://github.com/air-verse/air
+#
+# This config enables hot reloading for the AI Studio (control plane).
+# When any Go file changes, Air will:
+#   1. Rebuild the binary with appropriate edition tags
+#   2. Restart the server automatically
+#
+# Rebuild time is typically 2-5 seconds depending on system.
+
+root = "/app"
+tmp_dir = "tmp"
+
+[build]
+# Build command with edition support
+# The EDITION env var determines whether to use enterprise build tags
+cmd = """
+if [ "$EDITION" = "ent" ] && [ -d "/app/enterprise" ]; then
+  echo "Building Enterprise Edition..."
+  CGO_ENABLED=1 go build -tags enterprise -o ./tmp/studio .
+else
+  echo "Building Community Edition..."
+  CGO_ENABLED=1 go build -o ./tmp/studio .
+fi
+"""
+
+# Binary to run (without args - use full_bin for args)
+bin = "./tmp/studio"
+
+# Full command with arguments - pass the env file location
+full_bin = "./tmp/studio -env=/app/dev/.env"
+
+# File extensions to watch
+include_ext = ["go", "tpl", "tmpl", "html"]
+
+# Directories to exclude from watching
+# IMPORTANT: Excludes frontend, microgateway, tests to avoid unnecessary rebuilds
+exclude_dir = [
+    "tmp",
+    "vendor",
+    "bin",
+    "data",
+    # Frontend - has its own HMR via React dev server
+    "ui",
+    # Microgateway - separate service with its own Air config
+    "microgateway",
+    # Enterprise - mounted read-only, no changes expected
+    "enterprise",
+    # Tests - don't rebuild on test file changes
+    "tests",
+    # Development configs
+    "dev",
+    # Environment files
+    "envs",
+    # Documentation
+    "docs",
+    # CI/CD
+    "ci",
+    ".github",
+    # Examples and plugins - have their own watcher
+    "examples",
+]
+
+# Files to exclude
+exclude_file = []
+
+# Regex patterns to exclude (test files)
+exclude_regex = ["_test\\.go$", ".*_test\\.go$"]
+
+# Don't rebuild if only file metadata changed
+exclude_unchanged = true
+
+# Don't follow symlinks
+follow_symlink = false
+
+# Delay before rebuilding (ms) - allows for multiple file saves
+delay = 1000
+
+# Stop on build error (shows error, waits for fix)
+stop_on_error = true
+
+# Send interrupt signal before killing (graceful shutdown)
+send_interrupt = true
+
+# Time to wait after interrupt before kill
+kill_delay = "2s"
+
+# Don't rerun on startup if binary exists
+rerun = false
+rerun_delay = 500
+
+[log]
+# Show timestamps in logs
+time = true
+
+# Show only main process output (not Air internals)
+main_only = false
+
+[color]
+# Color coding for different log types
+main = "yellow"
+watcher = "cyan"
+build = "green"
+runner = "magenta"
+
+[misc]
+# Clean tmp directory on exit
+clean_on_exit = true

@@ -22,10 +22,22 @@ The primary point of data collection is the **[Proxy & API Gateway](./proxy.md)*
 4.  **Tool Usage:** If the interaction involved [Tools](./tools.md), relevant details might be logged (e.g., which tool was called, success/failure).
 5.  **Chat Context:** For interactions originating from the [Chat Interface](./chat-interface.md), metadata about the chat session might be included.
 
+## Microgateway Analytics Configuration
+
+> **Important:** Analytics must be **explicitly enabled** in the Microgateway configuration for data to appear in AI Studio dashboards. This is a common stumbling block when first deploying edge gateways.
+
+When enabled, the Microgateway batches analytics records and sends them back to AI Studio every few seconds (this interval is configurable). Without this configuration, AI Studio will have no visibility into gateway traffic.
+
+Ensure your Microgateway environment includes the appropriate analytics configuration. The default quickstart and packaged deployments enable this, but custom deployments may not.
+
+The analytics subsystem in the Microgateway also supports plugins, offering multiple ways to handle data:
+- Each data class (Analytics, Logs, Budgets) can have its own processor
+- Processors can either override or work in parallel with the default batch system
+
 ## Architecture
 
 *   **Asynchronous Ingestion:** To minimize impact on request latency, analytics data is typically collected by the Proxy and sent asynchronously to a dedicated analytics database or processing pipeline.
-*   **Data Storage:** A suitable database (e.g., time-series database like InfluxDB, relational database like PostgreSQL, or a data warehouse) stores the aggregated analytics records.
+*   **Data Storage:** Analytics records are stored in the application's relational database (PostgreSQL or SQLite, configured via environment variables). The same database used for other application data stores analytics records.
 *   **API Endpoints:** Tyk AI Studio exposes internal API endpoints that allow the Admin UI (and potentially other authorized services) to query the aggregated analytics data.
 
 ## Key Metrics Tracked (Examples)
@@ -60,8 +72,6 @@ Administrators typically access analytics data via dashboards within the Tyk AI 
 *   **Filtering & Grouping:** Ability to filter data by time range, user, application, LLM configuration, etc.
 *   **Visualizations:** Charts and graphs showing trends in cost, token usage, request volume, and latency.
 *   **Detailed Logs:** Access to raw or near-raw event logs for specific interactions (useful for debugging).
-
-    ![Placeholder: Analytics Dashboard](https://placehold.co/600x400?text=Analytics+Dashboard)
 
 ## Integration with Other Systems
 

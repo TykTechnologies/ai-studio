@@ -120,9 +120,16 @@ func TestGoogleAIValidator(t *testing.T) {
 
 		token, err := GoogleAIValidator(req)
 		assert.NoError(t, err)
-		// Note: The function returns empty string when query param is not present
-		// but header is present (bug in implementation - returns h instead of h2)
-		assert.Equal(t, "", token)
+		assert.Equal(t, "google-header-key", token)
+	})
+
+	t.Run("Valid key and header with the same value", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/v1/generate?key=valid-key", nil)
+		req.Header.Set("x-goog-api-key", "valid-key")
+
+		token, err := GoogleAIValidator(req)
+		assert.NoError(t, err)
+		assert.Equal(t, "valid-key", token)
 	})
 
 	t.Run("Missing both query param and header", func(t *testing.T) {
@@ -133,13 +140,13 @@ func TestGoogleAIValidator(t *testing.T) {
 		assert.Empty(t, token)
 	})
 
-	t.Run("Query param takes precedence over header", func(t *testing.T) {
+	t.Run("Returns error when header and key values are different", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/v1/generate?key=query-key", nil)
 		req.Header.Set("x-goog-api-key", "header-key")
 
 		token, err := GoogleAIValidator(req)
-		assert.NoError(t, err)
-		assert.Equal(t, "query-key", token)
+		assert.Error(t, err)
+		assert.Empty(t, token)
 	})
 }
 

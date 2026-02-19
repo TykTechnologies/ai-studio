@@ -2,12 +2,16 @@ package switches
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/stretchr/testify/assert"
+	"github.com/tmc/langchaingo/llms"
 )
 
 func TestDetectStreamingIntent_OpenAI(t *testing.T) {
@@ -259,5 +263,200 @@ func TestDetectStreamingIntent_UnsupportedVendor(t *testing.T) {
 
 	if err == nil {
 		t.Error("Expected error for unsupported vendor but got none")
+	}
+}
+
+// mockRoundTripper is a custom HTTP transport that captures requests
+type mockRoundTripper struct {
+	capturedRequests []*http.Request
+	response         *http.Response
+}
+
+func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	m.capturedRequests = append(m.capturedRequests, req)
+	if m.response != nil {
+		return m.response, nil
+	}
+	// Return a default response
+	return &http.Response{
+		StatusCode: 200,
+		Header:     make(http.Header),
+	}, nil
+}
+
+func TestFetchDriver_WithHTTPClient_GoogleAI(t *testing.T) {
+	tests := []struct {
+		name            string
+		llmConfig       *models.LLM
+		settings        *models.LLMSettings
+		wantErr         bool
+		expectedBaseURL string
+	}{
+		{
+			name: "GoogleAI with custom HTTP client and API endpoint",
+			llmConfig: &models.LLM{
+				Vendor:      models.GOOGLEAI,
+				APIKey:      "test-api-key",
+				APIEndpoint: "https://custom-endpoint.example.com",
+			},
+			settings: &models.LLMSettings{
+				ModelName: "gemini-pro",
+			},
+			wantErr:         false,
+			expectedBaseURL: "https://custom-endpoint.example.com",
+		},
+		{
+			name: "GoogleAI with custom HTTP client without API endpoint(the baseURL will be added by SDK with value: https://generativelanguage.googleapis.com)",
+			llmConfig: &models.LLM{
+				Vendor: models.GOOGLEAI,
+				APIKey: "test-api-key",
+			},
+			settings: &models.LLMSettings{
+				ModelName: "gemini-pro",
+			},
+			wantErr:         false,
+			expectedBaseURL: "https://generativelanguage.googleapis.com",
+		},
+		{
+			name: "GoogleAI with custom HTTP client and empty settings",
+			llmConfig: &models.LLM{
+				Vendor:      models.GOOGLEAI,
+				APIKey:      "test-api-key",
+				APIEndpoint: "https://another-endpoint.example.com",
+			},
+			settings:        nil,
+			wantErr:         false,
+			expectedBaseURL: "https://another-endpoint.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockTransport := &mockRoundTripper{}
+			httpClient := &http.Client{
+				Transport: mockTransport,
+			}
+
+			driver, err := FetchDriver(
+				tt.llmConfig,
+				tt.settings,
+				nil,
+				nil,
+				WithHTTPClient(httpClient),
+			)
+			if tt.wantErr {
+				assert.NotNil(t, err, "FetchDriver() succeeded unexpectedly")
+				return
+			}
+			assert.NotNil(t, driver, "FetchDriver() returned nil driver")
+
+			_, err = driver.GenerateContent(context.Background(), []llms.MessageContent{
+				{
+					Role: llms.ChatMessageTypeHuman,
+					Parts: []llms.ContentPart{
+						llms.TextContent{Text: "test message"},
+					},
+				},
+			})
+			assert.Error(t, err, "GenerateContent() succeeded unexpectedly with mocked transport")
+			assert.Len(t, mockTransport.capturedRequests, 1)
+
+			capturedReq := mockTransport.capturedRequests[0]
+			capturedReqURL := capturedReq.URL.Scheme + "://" + capturedReq.URL.Host
+			assert.Equal(t, tt.expectedBaseURL, capturedReqURL, fmt.Sprintf(
+				"Expected base URL %s, but got %s",
+				tt.expectedBaseURL,
+				capturedReqURL,
+			))
+		})
+	}
+}
+
+func TestFetchDriver_WithHTTPClient_AllVendors(t *testing.T) {
+	tests := []struct {
+		name      string
+		vendor    models.Vendor
+		llmConfig *models.LLM
+		settings  *models.LLMSettings
+		wantErr   bool
+	}{
+		{
+			name:   "OpenAI with custom HTTP client",
+			vendor: models.OPENAI,
+			llmConfig: &models.LLM{
+				Vendor:      models.OPENAI,
+				APIKey:      "test-key",
+				APIEndpoint: "https://api.openai.com/v1",
+			},
+			settings: &models.LLMSettings{
+				ModelName: "gpt-4",
+			},
+		},
+		{
+			name:   "Anthropic with custom HTTP client",
+			vendor: models.ANTHROPIC,
+			llmConfig: &models.LLM{
+				Vendor:      models.ANTHROPIC,
+				APIKey:      "test-key",
+				APIEndpoint: "https://api.anthropic.com",
+			},
+			settings: &models.LLMSettings{
+				ModelName: "claude-3-5-sonnet-20241022",
+			},
+		},
+		{
+			name:   "Ollama with custom HTTP client",
+			vendor: models.OLLAMA,
+			llmConfig: &models.LLM{
+				Vendor:      models.OLLAMA,
+				APIEndpoint: "http://localhost:11434",
+			},
+			settings: &models.LLMSettings{
+				ModelName: "llama2",
+			},
+		},
+		{
+			name:   "Vertex with custom HTTP client",
+			vendor: models.VERTEX,
+			llmConfig: &models.LLM{
+				Vendor: models.VERTEX,
+				APIKey: "test-key",
+			},
+			settings: &models.LLMSettings{
+				ModelName: "gemini-pro",
+			},
+		},
+		{
+			name:   "Unsupported LLM",
+			vendor: models.MOCK_VENDOR,
+			llmConfig: &models.LLM{
+				Vendor: models.MOCK_VENDOR,
+				APIKey: "test-key",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockTransport := &mockRoundTripper{}
+			httpClient := &http.Client{
+				Transport: mockTransport,
+			}
+
+			driver, err := FetchDriver(
+				tt.llmConfig,
+				tt.settings,
+				nil,
+				nil,
+				WithHTTPClient(httpClient),
+			)
+			if tt.wantErr {
+				assert.Error(t, err, "FetchDriver() succeeded unexpectedly")
+				return
+			}
+
+			assert.NotNil(t, driver, "FetchDriver() returned nil driver")
+		})
 	}
 }

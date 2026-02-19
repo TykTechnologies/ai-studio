@@ -38,6 +38,7 @@ import { useNavigate } from 'react-router-dom';
 import edgeGatewayService from '../../services/edgeGatewayService';
 import useNamespaces from '../../hooks/useNamespaces';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
+import { useSyncStatus } from '../../context/SyncStatusContext';
 import PushConfigurationModal from './PushConfigurationModal';
 import RemoveEdgeModal from './RemoveEdgeModal';
 import {
@@ -55,7 +56,8 @@ const EdgeGatewayList = () => {
   const navigate = useNavigate();
   const { getAvailableNamespaces } = useNamespaces();
   const { features } = useSystemFeatures();
-  
+  const { syncStatus: globalSyncStatus } = useSyncStatus();
+
   const [edgeGateways, setEdgeGateways] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -155,6 +157,41 @@ const EdgeGatewayList = () => {
     return edgeGatewayService.formatLastHeartbeat(lastHeartbeat);
   };
 
+  // Get expected checksum for a namespace from the global sync status
+  const getExpectedChecksum = (namespace) => {
+    const nsStatus = globalSyncStatus?.data?.find(ns => ns.namespace === (namespace || 'default'));
+    return nsStatus?.expected_checksum || null;
+  };
+
+  // Get sync status chip with checksum info tooltip
+  const getSyncStatusChip = (edge) => {
+    const syncStatusDisplay = edgeGatewayService.getSyncStatusDisplay(edge.syncStatus);
+    const expectedChecksum = getExpectedChecksum(edge.namespace);
+    const loadedChecksum = edge.loadedChecksum;
+
+    // Build tooltip content
+    let tooltipContent = '';
+    if (loadedChecksum) {
+      tooltipContent = `Loaded: ${loadedChecksum.substring(0, 12)}...`;
+      if (edge.syncStatus !== 'in_sync' && expectedChecksum) {
+        tooltipContent += `\nExpected: ${expectedChecksum.substring(0, 12)}...`;
+      }
+    } else {
+      tooltipContent = 'No config checksum reported';
+    }
+
+    return (
+      <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{tooltipContent}</span>} arrow>
+        <Chip
+          label={syncStatusDisplay.label}
+          color={syncStatusDisplay.color}
+          size="small"
+          variant="outlined"
+        />
+      </Tooltip>
+    );
+  };
+
   const availableNamespaces = getAvailableNamespaces();
 
   return (
@@ -234,10 +271,10 @@ const EdgeGatewayList = () => {
                   {features.hub_spoke_multi_tenant && (
                     <StyledTableHeaderCell>Namespace</StyledTableHeaderCell>
                   )}
-                  <StyledTableHeaderCell>Status</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Connection</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Config Sync</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Version</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Last Heartbeat</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Session ID</StyledTableHeaderCell>
                   <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                 </TableRow>
               </TableHead>
@@ -279,6 +316,9 @@ const EdgeGatewayList = () => {
                         {getStatusChip(edge)}
                       </StyledTableCell>
                       <StyledTableCell>
+                        {getSyncStatusChip(edge)}
+                      </StyledTableCell>
+                      <StyledTableCell>
                         <Typography variant="body2">
                           {edge.version || 'Unknown'}
                         </Typography>
@@ -291,11 +331,6 @@ const EdgeGatewayList = () => {
                       <StyledTableCell>
                         <Typography variant="body2">
                           {formatHeartbeat(edge.lastHeartbeat)}
-                        </Typography>
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Typography variant="body2" sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {edge.sessionId || 'N/A'}
                         </Typography>
                       </StyledTableCell>
                       <StyledTableCell align="right">

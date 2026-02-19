@@ -1,7 +1,7 @@
 # deployments/Dockerfile
 
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make ca-certificates tzdata gcc musl-dev sqlite-dev
@@ -72,7 +72,12 @@ RUN apk add --no-cache \
     tzdata \
     sqlite \
     wget \
-    curl
+    curl && \
+    # Install cosign for OCI plugin signature verification (Enterprise)
+    COSIGN_VERSION=2.4.1 && \
+    ARCH=$(uname -m | sed 's/aarch64/arm64/' | sed 's/x86_64/amd64/') && \
+    wget -q "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-${ARCH}" -O /usr/local/bin/cosign && \
+    chmod +x /usr/local/bin/cosign
 
 # Create non-root user
 RUN addgroup -g 1000 gateway && \
@@ -92,8 +97,8 @@ RUN mkdir -p /app/data /app/logs /app/plugins && \
 # Switch to non-root user
 USER gateway
 
-# Expose ports - 8080 for HTTP, 9090 for gRPC control server
-EXPOSE 8080 9090
+# Expose ports - 8080 for HTTP, 50051 for gRPC control server
+EXPOSE 8080 50051
 
 # Health check using the built-in health endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

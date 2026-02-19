@@ -36,26 +36,28 @@ func TestLoadPublicKeysFromEnv(t *testing.T) {
 	// Clear any existing OCI plugin environment variables
 	clearOCIPluginEnvVars()
 
-	// Test 1: Numbered keys
+	// Test 1: Numbered keys (embedded default always included)
 	os.Setenv("OCI_PLUGINS_PUBKEY_1", testPublicKeyPEM)
 	os.Setenv("OCI_PLUGINS_PUBKEY_2", testPublicKeyPEM2)
 
 	keys := LoadPublicKeysFromEnv()
-	assert.Len(t, keys, 2)
+	assert.Len(t, keys, 3)
+	assert.Equal(t, "embedded:default", keys[0], "embedded Tyk key should always be first")
 	assert.Contains(t, keys, "env:OCI_PLUGINS_PUBKEY_1")
 	assert.Contains(t, keys, "env:OCI_PLUGINS_PUBKEY_2")
 
-	// Test 2: Named keys
+	// Test 2: Named keys (embedded default always included)
 	clearOCIPluginEnvVars()
 	os.Setenv("OCI_PLUGINS_PUBKEY_CI", testPublicKeyPEM)
 	os.Setenv("OCI_PLUGINS_PUBKEY_PROD", testPublicKeyPEM2)
 
 	keys = LoadPublicKeysFromEnv()
-	assert.Len(t, keys, 2)
+	assert.Len(t, keys, 3)
+	assert.Equal(t, "embedded:default", keys[0], "embedded Tyk key should always be first")
 	assert.Contains(t, keys, "env:OCI_PLUGINS_PUBKEY_CI")
 	assert.Contains(t, keys, "env:OCI_PLUGINS_PUBKEY_PROD")
 
-	// Test 3: File-based keys
+	// Test 3: File-based keys (embedded default always included)
 	clearOCIPluginEnvVars()
 	tempFile1 := createTempKeyFile(t, testPublicKeyPEM)
 	tempFile2 := createTempKeyFile(t, testPublicKeyPEM2)
@@ -66,21 +68,29 @@ func TestLoadPublicKeysFromEnv(t *testing.T) {
 	os.Setenv("OCI_PLUGINS_PUBKEY_FILE_PROD", tempFile2)
 
 	keys = LoadPublicKeysFromEnv()
-	assert.Len(t, keys, 2)
+	assert.Len(t, keys, 3)
+	assert.Equal(t, "embedded:default", keys[0], "embedded Tyk key should always be first")
 	assert.Contains(t, keys, "file:"+tempFile1)
 	assert.Contains(t, keys, "file:"+tempFile2)
 
-	// Test 4: Mixed keys
+	// Test 4: Mixed keys (embedded default always included)
 	clearOCIPluginEnvVars()
 	os.Setenv("OCI_PLUGINS_PUBKEY_1", testPublicKeyPEM)
 	os.Setenv("OCI_PLUGINS_PUBKEY_CI", testPublicKeyPEM2)
 	os.Setenv("OCI_PLUGINS_PUBKEY_FILE_DEV", tempFile1)
 
 	keys = LoadPublicKeysFromEnv()
-	assert.Len(t, keys, 3)
+	assert.Len(t, keys, 4)
+	assert.Equal(t, "embedded:default", keys[0], "embedded Tyk key should always be first")
 	assert.Contains(t, keys, "env:OCI_PLUGINS_PUBKEY_1")
 	assert.Contains(t, keys, "env:OCI_PLUGINS_PUBKEY_CI")
 	assert.Contains(t, keys, "file:"+tempFile1)
+
+	// Test 5: No env keys — embedded default is still present
+	clearOCIPluginEnvVars()
+	keys = LoadPublicKeysFromEnv()
+	assert.Len(t, keys, 1)
+	assert.Equal(t, "embedded:default", keys[0], "embedded Tyk key should be present even with no env vars")
 }
 
 func TestSignatureVerifier_resolveKeyReference(t *testing.T) {
@@ -260,10 +270,73 @@ func TestDefaultOCIConfigWithEmbeddedKeys(t *testing.T) {
 
 	config := DefaultOCIConfig()
 
-	// Should have loaded keys from environment
-	assert.Len(t, config.DefaultPublicKeys, 2)
+	// Should have embedded default key plus keys from environment
+	assert.Len(t, config.DefaultPublicKeys, 3)
+	assert.Equal(t, "embedded:default", config.DefaultPublicKeys[0], "embedded Tyk key should always be first")
 	assert.Contains(t, config.DefaultPublicKeys, "env:OCI_PLUGINS_PUBKEY_1")
 	assert.Contains(t, config.DefaultPublicKeys, "env:OCI_PLUGINS_PUBKEY_CI")
+}
+
+// TestEmbeddedDefaultKeyAlwaysPresent verifies that the embedded Tyk official
+// signing key is always loaded and resolvable, regardless of environment config.
+func TestEmbeddedDefaultKeyAlwaysPresent(t *testing.T) {
+	originalEnv := saveEnvironment()
+	defer restoreEnvironment(originalEnv)
+
+	t.Run("present with no env keys", func(t *testing.T) {
+		clearOCIPluginEnvVars()
+
+		keys := LoadPublicKeysFromEnv()
+		require.NotEmpty(t, keys)
+		assert.Equal(t, "embedded:default", keys[0])
+	})
+
+	t.Run("present alongside env keys", func(t *testing.T) {
+		clearOCIPluginEnvVars()
+		os.Setenv("OCI_PLUGINS_PUBKEY_1", testPublicKeyPEM)
+
+		keys := LoadPublicKeysFromEnv()
+		assert.Equal(t, "embedded:default", keys[0], "embedded key must be first even when env keys are set")
+		assert.Contains(t, keys, "env:OCI_PLUGINS_PUBKEY_1")
+	})
+
+	t.Run("resolves to valid PEM file", func(t *testing.T) {
+		clearOCIPluginEnvVars()
+
+		config := &OCIConfig{
+			DefaultPublicKeys: LoadPublicKeysFromEnv(),
+		}
+		verifier, err := NewSignatureVerifier(config)
+		require.NoError(t, err)
+
+		keyPath, err := verifier.resolveKeyReference("embedded:default")
+		require.NoError(t, err)
+		defer os.Remove(keyPath)
+
+		// File must exist and contain the expected PEM content
+		content, err := os.ReadFile(keyPath)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultTykPublicKey, string(content))
+	})
+
+	t.Run("getPublicKeyPath uses embedded key when no specific key requested", func(t *testing.T) {
+		clearOCIPluginEnvVars()
+
+		config := &OCIConfig{
+			DefaultPublicKeys: LoadPublicKeysFromEnv(),
+		}
+		verifier, err := NewSignatureVerifier(config)
+		require.NoError(t, err)
+
+		// Empty pubKeyID should fall back to first key, which is the embedded default
+		keyPath, err := verifier.getPublicKeyPath("")
+		require.NoError(t, err)
+		defer os.Remove(keyPath)
+
+		content, err := os.ReadFile(keyPath)
+		require.NoError(t, err)
+		assert.Equal(t, DefaultTykPublicKey, string(content))
+	})
 }
 
 // Helper functions

@@ -681,14 +681,16 @@ func (x *EventFrame) GetPayload() []byte {
 
 // HeartbeatRequest contains health and status information from edge
 type HeartbeatRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EdgeId        string                 `protobuf:"bytes,1,opt,name=edge_id,json=edgeId,proto3" json:"edge_id,omitempty"`
-	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Health        *HealthStatus          `protobuf:"bytes,3,opt,name=health,proto3" json:"health,omitempty"`
-	Metrics       *EdgeMetrics           `protobuf:"bytes,4,opt,name=metrics,proto3" json:"metrics,omitempty"`
-	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	EdgeId               string                 `protobuf:"bytes,1,opt,name=edge_id,json=edgeId,proto3" json:"edge_id,omitempty"`
+	SessionId            string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Health               *HealthStatus          `protobuf:"bytes,3,opt,name=health,proto3" json:"health,omitempty"`
+	Metrics              *EdgeMetrics           `protobuf:"bytes,4,opt,name=metrics,proto3" json:"metrics,omitempty"`
+	Timestamp            *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	LoadedConfigChecksum string                 `protobuf:"bytes,6,opt,name=loaded_config_checksum,json=loadedConfigChecksum,proto3" json:"loaded_config_checksum,omitempty"` // Checksum of currently loaded configuration
+	LoadedConfigVersion  string                 `protobuf:"bytes,7,opt,name=loaded_config_version,json=loadedConfigVersion,proto3" json:"loaded_config_version,omitempty"`    // Version string of loaded configuration
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *HeartbeatRequest) Reset() {
@@ -756,14 +758,30 @@ func (x *HeartbeatRequest) GetTimestamp() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *HeartbeatRequest) GetLoadedConfigChecksum() string {
+	if x != nil {
+		return x.LoadedConfigChecksum
+	}
+	return ""
+}
+
+func (x *HeartbeatRequest) GetLoadedConfigVersion() string {
+	if x != nil {
+		return x.LoadedConfigVersion
+	}
+	return ""
+}
+
 // HeartbeatResponse acknowledges heartbeat and may contain control directives
 type HeartbeatResponse struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Acknowledged bool                   `protobuf:"varint,1,opt,name=acknowledged,proto3" json:"acknowledged,omitempty"`
 	Message      string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	// Control directives (if any)
-	RequestFullSync   bool `protobuf:"varint,3,opt,name=request_full_sync,json=requestFullSync,proto3" json:"request_full_sync,omitempty"`     // Request edge to perform full configuration sync
-	ShutdownRequested bool `protobuf:"varint,4,opt,name=shutdown_requested,json=shutdownRequested,proto3" json:"shutdown_requested,omitempty"` // Request graceful shutdown
+	RequestFullSync   bool   `protobuf:"varint,3,opt,name=request_full_sync,json=requestFullSync,proto3" json:"request_full_sync,omitempty"`     // Request edge to perform full configuration sync
+	ShutdownRequested bool   `protobuf:"varint,4,opt,name=shutdown_requested,json=shutdownRequested,proto3" json:"shutdown_requested,omitempty"` // Request graceful shutdown
+	ExpectedChecksum  string `protobuf:"bytes,5,opt,name=expected_checksum,json=expectedChecksum,proto3" json:"expected_checksum,omitempty"`     // Expected configuration checksum for edge's namespace
+	IsInSync          bool   `protobuf:"varint,6,opt,name=is_in_sync,json=isInSync,proto3" json:"is_in_sync,omitempty"`                          // Whether edge's loaded checksum matches expected
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -822,6 +840,20 @@ func (x *HeartbeatResponse) GetRequestFullSync() bool {
 func (x *HeartbeatResponse) GetShutdownRequested() bool {
 	if x != nil {
 		return x.ShutdownRequested
+	}
+	return false
+}
+
+func (x *HeartbeatResponse) GetExpectedChecksum() string {
+	if x != nil {
+		return x.ExpectedChecksum
+	}
+	return ""
+}
+
+func (x *HeartbeatResponse) GetIsInSync() bool {
+	if x != nil {
+		return x.IsInSync
 	}
 	return false
 }
@@ -1224,14 +1256,17 @@ func (x *TokenValidationRequest) GetEdgeNamespace() string {
 }
 
 type TokenValidationResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Valid         bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`                                  // Whether token is valid
-	AppId         uint32                 `protobuf:"varint,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`                     // App ID if valid (0 if invalid)
-	AppName       string                 `protobuf:"bytes,3,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`                // App name for logging
-	Scopes        []string               `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`                                 // Token scopes if valid
-	ErrorMessage  string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Error message if invalid
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`          // Token expiration
-	UserId        uint32                 `protobuf:"varint,7,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                  // Owner user ID for analytics tracking
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Valid        bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`                                  // Whether token is valid
+	AppId        uint32                 `protobuf:"varint,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`                     // App ID if valid (0 if invalid)
+	AppName      string                 `protobuf:"bytes,3,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`                // App name for logging
+	Scopes       []string               `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`                                 // Token scopes if valid
+	ErrorMessage string                 `protobuf:"bytes,5,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"` // Error message if invalid
+	ExpiresAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`          // Token expiration
+	UserId       uint32                 `protobuf:"varint,7,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                  // Owner user ID for analytics tracking
+	// Full App configuration for pull-on-miss sync
+	// Only populated when App's namespace matches edge namespace (or App is global)
+	App           *AppConfig `protobuf:"bytes,8,opt,name=app,proto3" json:"app,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1313,6 +1348,13 @@ func (x *TokenValidationResponse) GetUserId() uint32 {
 		return x.UserId
 	}
 	return 0
+}
+
+func (x *TokenValidationResponse) GetApp() *AppConfig {
+	if x != nil {
+		return x.App
+	}
+	return nil
 }
 
 // Distributed configuration reload messages (NEW)
@@ -2721,19 +2763,24 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12\x16\n" +
 	"\x06origin\x18\x03 \x01(\tR\x06origin\x12\x10\n" +
 	"\x03dir\x18\x04 \x01(\x05R\x03dir\x12\x18\n" +
-	"\apayload\x18\x05 \x01(\fR\apayload\"\xed\x01\n" +
+	"\apayload\x18\x05 \x01(\fR\apayload\"\xd7\x02\n" +
 	"\x10HeartbeatRequest\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x122\n" +
 	"\x06health\x18\x03 \x01(\v2\x1a.microgateway.HealthStatusR\x06health\x123\n" +
 	"\ametrics\x18\x04 \x01(\v2\x19.microgateway.EdgeMetricsR\ametrics\x128\n" +
-	"\ttimestamp\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xac\x01\n" +
+	"\ttimestamp\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x124\n" +
+	"\x16loaded_config_checksum\x18\x06 \x01(\tR\x14loadedConfigChecksum\x122\n" +
+	"\x15loaded_config_version\x18\a \x01(\tR\x13loadedConfigVersion\"\xf7\x01\n" +
 	"\x11HeartbeatResponse\x12\"\n" +
 	"\facknowledged\x18\x01 \x01(\bR\facknowledged\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12*\n" +
 	"\x11request_full_sync\x18\x03 \x01(\bR\x0frequestFullSync\x12-\n" +
-	"\x12shutdown_requested\x18\x04 \x01(\bR\x11shutdownRequested\"k\n" +
+	"\x12shutdown_requested\x18\x04 \x01(\bR\x11shutdownRequested\x12+\n" +
+	"\x11expected_checksum\x18\x05 \x01(\tR\x10expectedChecksum\x12\x1c\n" +
+	"\n" +
+	"is_in_sync\x18\x06 \x01(\bR\bisInSync\"k\n" +
 	"\x19EdgeUnregistrationRequest\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12\x1d\n" +
 	"\n" +
@@ -2766,7 +2813,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x16TokenValidationRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
 	"\aedge_id\x18\x02 \x01(\tR\x06edgeId\x12%\n" +
-	"\x0eedge_namespace\x18\x03 \x01(\tR\redgeNamespace\"\xf2\x01\n" +
+	"\x0eedge_namespace\x18\x03 \x01(\tR\redgeNamespace\"\x9d\x02\n" +
 	"\x17TokenValidationResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\rR\x05appId\x12\x19\n" +
@@ -2775,7 +2822,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\rerror_message\x18\x05 \x01(\tR\ferrorMessage\x129\n" +
 	"\n" +
 	"expires_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x17\n" +
-	"\auser_id\x18\a \x01(\rR\x06userId\"\x98\x02\n" +
+	"\auser_id\x18\a \x01(\rR\x06userId\x12)\n" +
+	"\x03app\x18\b \x01(\v2\x17.microgateway.AppConfigR\x03app\"\x98\x02\n" +
 	"\x1aConfigurationReloadRequest\x12!\n" +
 	"\foperation_id\x18\x01 \x01(\tR\voperationId\x12)\n" +
 	"\x10target_namespace\x18\x02 \x01(\tR\x0ftargetNamespace\x12!\n" +
@@ -2985,7 +3033,8 @@ var file_proto_config_sync_proto_goTypes = []any{
 	(*ConfigurationSnapshot)(nil),       // 32: microgateway.ConfigurationSnapshot
 	(*timestamppb.Timestamp)(nil),       // 33: google.protobuf.Timestamp
 	(*ConfigurationChange)(nil),         // 34: microgateway.ConfigurationChange
-	(*emptypb.Empty)(nil),               // 35: google.protobuf.Empty
+	(*AppConfig)(nil),                   // 35: microgateway.AppConfig
+	(*emptypb.Empty)(nil),               // 36: google.protobuf.Empty
 }
 var file_proto_config_sync_proto_depIdxs = []int32{
 	28, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
@@ -3010,50 +3059,51 @@ var file_proto_config_sync_proto_depIdxs = []int32{
 	33, // 19: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
 	29, // 20: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
 	33, // 21: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
-	33, // 22: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
-	0,  // 23: microgateway.ConfigurationReloadResponse.phase:type_name -> microgateway.ReloadPhase
-	33, // 24: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
-	33, // 25: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
-	33, // 26: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
-	33, // 27: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
-	21, // 28: microgateway.AnalyticsPulse.analytics_events:type_name -> microgateway.AnalyticsEvent
-	22, // 29: microgateway.AnalyticsPulse.budget_events:type_name -> microgateway.BudgetUsageEvent
-	23, // 30: microgateway.AnalyticsPulse.proxy_summaries:type_name -> microgateway.ProxyLogSummary
-	33, // 31: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
-	20, // 32: microgateway.AnalyticsPulseResponse.updated_config:type_name -> microgateway.AnalyticsPulseConfig
-	33, // 33: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
-	33, // 34: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
-	33, // 35: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
-	33, // 36: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
-	33, // 37: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
-	33, // 38: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
-	33, // 39: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
-	30, // 40: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
-	24, // 41: microgateway.PluginControlBatch.payloads:type_name -> microgateway.PluginControlPayload
-	33, // 42: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
-	33, // 43: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
-	27, // 44: microgateway.PluginControlBatchResponse.errors:type_name -> microgateway.PluginPayloadError
-	1,  // 45: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
-	3,  // 46: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
-	4,  // 47: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
-	7,  // 48: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
-	9,  // 49: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
-	14, // 50: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
-	18, // 51: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
-	25, // 52: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
-	2,  // 53: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
-	32, // 54: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
-	5,  // 55: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
-	8,  // 56: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
-	35, // 57: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
-	15, // 58: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
-	19, // 59: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
-	26, // 60: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
-	53, // [53:61] is the sub-list for method output_type
-	45, // [45:53] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	35, // 22: microgateway.TokenValidationResponse.app:type_name -> microgateway.AppConfig
+	33, // 23: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
+	0,  // 24: microgateway.ConfigurationReloadResponse.phase:type_name -> microgateway.ReloadPhase
+	33, // 25: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
+	33, // 26: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
+	33, // 27: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
+	33, // 28: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
+	21, // 29: microgateway.AnalyticsPulse.analytics_events:type_name -> microgateway.AnalyticsEvent
+	22, // 30: microgateway.AnalyticsPulse.budget_events:type_name -> microgateway.BudgetUsageEvent
+	23, // 31: microgateway.AnalyticsPulse.proxy_summaries:type_name -> microgateway.ProxyLogSummary
+	33, // 32: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
+	20, // 33: microgateway.AnalyticsPulseResponse.updated_config:type_name -> microgateway.AnalyticsPulseConfig
+	33, // 34: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
+	33, // 35: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
+	33, // 36: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
+	33, // 37: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
+	33, // 38: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
+	33, // 39: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
+	33, // 40: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
+	30, // 41: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
+	24, // 42: microgateway.PluginControlBatch.payloads:type_name -> microgateway.PluginControlPayload
+	33, // 43: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
+	33, // 44: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
+	27, // 45: microgateway.PluginControlBatchResponse.errors:type_name -> microgateway.PluginPayloadError
+	1,  // 46: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
+	3,  // 47: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
+	4,  // 48: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
+	7,  // 49: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
+	9,  // 50: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
+	14, // 51: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
+	18, // 52: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
+	25, // 53: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
+	2,  // 54: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
+	32, // 55: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
+	5,  // 56: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
+	8,  // 57: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
+	36, // 58: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
+	15, // 59: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
+	19, // 60: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
+	26, // 61: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
+	54, // [54:62] is the sub-list for method output_type
+	46, // [46:54] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_proto_config_sync_proto_init() }

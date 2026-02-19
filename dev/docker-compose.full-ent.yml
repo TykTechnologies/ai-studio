@@ -1,0 +1,22 @@
+# Tyk AI Studio - Full Stack Enterprise Overlay
+#
+# This compose file adds enterprise configuration for Gateway and Plugins.
+# Use this when running the full stack in enterprise mode.
+#
+# Usage:
+#   cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml -f docker-compose.ent.yml -f docker-compose.full-ent.yml up --build
+#   Or use: make dev-full-ent (from project root)
+
+services:
+  # Gateway - Enterprise Edition
+  gateway:
+    build:
+      args:
+        EDITION: ent
+    environment:
+      EDITION: ent
+
+  # Plugins - Enterprise Edition
+  plugins:
+    environment:
+      EDITION: ent

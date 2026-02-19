@@ -34,6 +34,9 @@ func NewDatabaseBudgetService(db *gorm.DB, repo *database.Repository, pluginMana
 
 // calculateBudgetPeriod determines the budget period for an app based on its budget_start_date.
 // If no budget_start_date is set, uses calendar month (1st to last day).
+// When a budget is reset on the same day, this preserves the exact reset time to ensure
+// usage from before the reset is not counted.
+// Note: Timestamps are truncated to second precision to ensure consistency across all components.
 func (s *DatabaseBudgetService) calculateBudgetPeriod(budgetStartDate *time.Time, now time.Time) (time.Time, time.Time) {
 	if budgetStartDate == nil {
 		// Default to calendar month
@@ -57,10 +60,20 @@ func (s *DatabaseBudgetService) calculateBudgetPeriod(budgetStartDate *time.Time
 		}
 	}
 
-	periodStart := time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
-	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
+	// Calculate the normalized period start (midnight of the budget day)
+	normalizedPeriodStart := time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
+	periodEnd := normalizedPeriodStart.AddDate(0, 1, 0).Add(-time.Second)
 
-	return periodStart, periodEnd
+	// Check if the actual budget_start_date falls within this period.
+	// If it does (e.g., budget was reset mid-period), use the exact timestamp
+	// to ensure usage from before the reset is not counted.
+	// Truncate to second precision to ensure consistency across control server and edges.
+	if budgetStartDate.After(normalizedPeriodStart) && budgetStartDate.Before(periodEnd) {
+		truncated := budgetStartDate.Truncate(time.Second)
+		return truncated, periodEnd
+	}
+
+	return normalizedPeriodStart, periodEnd
 }
 
 

@@ -57,7 +57,7 @@ GATEWAY_MODE=edge
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GRPC_PORT` | No | `9090` | gRPC server port |
+| `GRPC_PORT` | No | `50051` | gRPC server port |
 | `GRPC_HOST` | No | `0.0.0.0` | gRPC server bind address |
 | `GRPC_TLS_ENABLED` | No | `false` | Enable TLS for gRPC |
 | `GRPC_TLS_CERT_PATH` | If TLS | - | Path to TLS certificate |
@@ -105,7 +105,7 @@ DATABASE_TYPE=postgres
 DATABASE_DSN=postgres://mgw_user:secure_password@localhost:5432/microgateway_control
 
 # gRPC configuration
-GRPC_PORT=9090
+GRPC_PORT=50051
 GRPC_HOST=0.0.0.0
 GRPC_AUTH_TOKEN=your-secure-authentication-token-here
 
@@ -172,7 +172,7 @@ Create a configuration file `.env` for each edge instance:
 GATEWAY_MODE=edge
 
 # Connection to control instance
-CONTROL_ENDPOINT=control.internal.company.com:9090
+CONTROL_ENDPOINT=control.internal.company.com:50051
 EDGE_ID=edge-production-us-west-1
 EDGE_NAMESPACE=production
 
@@ -307,7 +307,7 @@ GRPC_AUTH_TOKEN=f9e8d7c6b5a49382716051948372615038472950173846281739504827394857
 ufw allow 8080/tcp
 
 # Allow gRPC (edge connections)
-ufw allow 9090/tcp
+ufw allow 50051/tcp
 
 # Allow SSH (management)
 ufw allow 22/tcp
@@ -336,7 +336,7 @@ ufw deny 5432/tcp
 │  │  Instance       │                    │
 │  └─────────────────┘                    │
 └────────────┬────────────────────────────┘
-             │ gRPC (9090)
+             │ gRPC (50051)
              │
 ┌────────────▼────────────────────────────┐
 │              Edge VPC(s)                │
@@ -357,19 +357,19 @@ ufw deny 5432/tcp
 
 **Static Configuration:**
 ```bash
-CONTROL_ENDPOINT=mgw-control.internal.company.com:9090
+CONTROL_ENDPOINT=mgw-control.internal.company.com:50051
 ```
 
 **Service Discovery Integration:**
 ```bash
 # Consul
-CONTROL_ENDPOINT=mgw-control.service.consul:9090
+CONTROL_ENDPOINT=mgw-control.service.consul:50051
 
 # Kubernetes
-CONTROL_ENDPOINT=microgateway-control.microgateway.svc.cluster.local:9090
+CONTROL_ENDPOINT=microgateway-control.microgateway.svc.cluster.local:50051
 
 # AWS ELB
-CONTROL_ENDPOINT=mgw-control-elb-123456789.us-west-2.elb.amazonaws.com:9090
+CONTROL_ENDPOINT=mgw-control-elb-123456789.us-west-2.elb.amazonaws.com:50051
 ```
 
 ### Load Balancing
@@ -381,18 +381,18 @@ For high availability, deploy multiple control instances behind a load balancer:
 # HAProxy example
 backend mgw-control
     balance roundrobin
-    server control1 10.0.1.10:9090 check
-    server control2 10.0.1.11:9090 check
-    server control3 10.0.1.12:9090 check
+    server control1 10.0.1.10:50051 check
+    server control2 10.0.1.11:50051 check
+    server control3 10.0.1.12:50051 check
 
 frontend mgw-control-lb
-    bind *:9090
+    bind *:50051
     default_backend mgw-control
 ```
 
 **Edge Configuration:**
 ```bash
-CONTROL_ENDPOINT=mgw-control-lb.internal.company.com:9090
+CONTROL_ENDPOINT=mgw-control-lb.internal.company.com:50051
 ```
 
 ## Database Configuration
@@ -518,7 +518,7 @@ Test gRPC connectivity:
 
 ```bash
 # Test from edge to control
-grpc_cli call control.company.com:9090 \
+grpc_cli call control.company.com:50051 \
   microgateway.ConfigurationSyncService.RegisterEdge \
   'edge_id: "test-edge", edge_namespace: "test"'
 ```
@@ -554,7 +554,7 @@ LOG_LEVEL=debug
 **Edge Instance:**
 ```bash
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=localhost:9090
+CONTROL_ENDPOINT=localhost:50051
 EDGE_NAMESPACE=dev
 EDGE_AUTH_TOKEN=dev-token-123
 LOG_LEVEL=debug
@@ -578,7 +578,7 @@ LOG_FORMAT=json
 **Edge Instance:**
 ```bash
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=mgw-control.internal.company.com:9090
+CONTROL_ENDPOINT=mgw-control.internal.company.com:50051
 EDGE_NAMESPACE=production
 EDGE_TLS_ENABLED=true
 EDGE_AUTH_TOKEN=$EDGE_AUTH_TOKEN

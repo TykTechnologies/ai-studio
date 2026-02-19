@@ -30,11 +30,22 @@ The Secrets Management system aims to:
     *   The encryption and decryption process relies on a key derived from the **`TYK_AI_SECRET_KEY` environment variable** set when running the Tyk AI Studio instance.
     *   **CRITICAL:** The `TYK_AI_SECRET_KEY` must be kept confidential and managed securely. Loss of this key will render existing secrets unusable. Changing the key will require re-entering all secrets.
 
-*   **Reference Syntax:** Secrets are referenced within configuration fields (like API key fields in LLM or Tool setups) using a specific syntax:
+*   **Reference Syntax:** Sensitive values can be referenced within configuration fields using two syntaxes:
+
+    **Database-stored secrets:**
     ```
     $SECRET/VariableName
     ```
-    Replace `VariableName` with the exact name given to the secret when it was created (e.g., `$SECRET/OPENAI_API_KEY`, `$SECRET/JIRA_AUTH_TOKEN`).
+    Replace `VariableName` with the exact name given to the secret when it was created (e.g., `$SECRET/OPENAI_API_KEY`, `$SECRET/JIRA_AUTH_TOKEN`). These values are stored encrypted in the database.
+
+    **Environment variables:**
+    ```
+    $ENV/VARIABLE_NAME
+    ```
+    Replace `VARIABLE_NAME` with an environment variable name (e.g., `$ENV/MY_API_KEY`). This retrieves the value directly from the server's environment variables at runtime. This is useful for:
+    - Kubernetes secrets mounted as environment variables
+    - Docker Compose environment configurations
+    - CI/CD pipelines where secrets are injected via environment
 
 *   **Runtime Resolution:** When a configuration uses a field containing a secret reference (e.g., `$SECRET/MY_KEY`):
     1.  The configuration itself stores the `$SECRET/MY_KEY` string, *not* the actual secret value.
@@ -50,8 +61,6 @@ Administrators manage secrets via the Tyk AI Studio UI or API:
     *   **Variable Name:** A unique identifier (letters, numbers, underscores) used in the `$SECRET/VariableName` reference.
     *   **Secret Value:** The actual sensitive string (e.g., `sk-abc123xyz...`).
 3.  Save the secret. It is immediately encrypted and stored.
-
-    ![Placeholder: Secrets UI](https://placehold.co/600x400?text=Secrets+Management+UI)
 
 Secrets can be updated or deleted as needed. Updating a secret value will automatically apply the new value wherever the `$SECRET/VariableName` reference is used, without needing to modify the configurations themselves.
 

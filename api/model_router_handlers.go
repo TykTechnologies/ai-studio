@@ -88,6 +88,11 @@ func (a *API) createModelRouter(c *gin.Context) {
 		return
 	}
 
+	// Emit system event for model router creation
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitModelRouterCreated(router, router.ID, 0)
+	}
+
 	c.JSON(http.StatusCreated, gin.H{"data": a.serializeModelRouter(router)})
 }
 
@@ -186,6 +191,11 @@ func (a *API) updateModelRouter(c *gin.Context) {
 		return
 	}
 
+	// Emit system event for model router update
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitModelRouterUpdated(router, router.ID, 0)
+	}
+
 	// Fetch the updated router to return with all relationships
 	updatedRouter, err := a.service.ModelRouterService.GetRouter(uint(id))
 	if err != nil {
@@ -232,6 +242,11 @@ func (a *API) deleteModelRouter(c *gin.Context) {
 			}{{Title: "Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Emit system event for model router deletion
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitModelRouterDeleted(uint(id), 0)
 	}
 
 	c.Status(http.StatusNoContent)

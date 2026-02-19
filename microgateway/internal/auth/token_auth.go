@@ -12,12 +12,18 @@ import (
 	"gorm.io/gorm"
 )
 
-// TokenAuthProvider implements AuthProvider using database-backed token authentication
+// Deprecated: TokenAuthProvider performs direct api_tokens table lookups which bypasses
+// the GatewayService.ValidateAPIToken() chain used by the LLM/Tool/Datasource proxy.
+// Custom endpoints now use GatewayService.ValidateAPIToken() directly for consistent auth.
+// This type is retained for token generation and management operations only.
 type TokenAuthProvider struct {
 	db *gorm.DB
 }
 
-// NewTokenAuthProvider creates a new token authentication provider
+// NewTokenAuthProvider creates a new token authentication provider.
+//
+// Deprecated: For token validation, use GatewayService.ValidateAPIToken() instead.
+// This provider is still used for token generation and management operations.
 func NewTokenAuthProvider(db *gorm.DB) *TokenAuthProvider {
 	return &TokenAuthProvider{
 		db: db,
@@ -59,9 +65,9 @@ func (p *TokenAuthProvider) ValidateToken(token string) (*AuthResult, error) {
 	}
 
 	// Update last used timestamp asynchronously
-	go func() {
-		p.db.Model(&apiToken).Update("last_used_at", time.Now())
-	}()
+	go func(id uint) {
+		p.db.Model(&database.APIToken{}).Where("id = ?", id).Update("last_used_at", time.Now())
+	}(apiToken.ID)
 
 	// Parse scopes
 	var scopes []string

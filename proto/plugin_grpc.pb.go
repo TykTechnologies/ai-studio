@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v4.25.3
-// source: plugin.proto
+// source: proto/plugin.proto
 
 package proto
 
@@ -19,32 +19,41 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PluginService_Initialize_FullMethodName                 = "/plugin.PluginService/Initialize"
-	PluginService_Ping_FullMethodName                       = "/plugin.PluginService/Ping"
-	PluginService_Shutdown_FullMethodName                   = "/plugin.PluginService/Shutdown"
-	PluginService_ProcessPreAuth_FullMethodName             = "/plugin.PluginService/ProcessPreAuth"
-	PluginService_Authenticate_FullMethodName               = "/plugin.PluginService/Authenticate"
-	PluginService_GetAppByCredential_FullMethodName         = "/plugin.PluginService/GetAppByCredential"
-	PluginService_GetUserByCredential_FullMethodName        = "/plugin.PluginService/GetUserByCredential"
-	PluginService_ProcessPostAuth_FullMethodName            = "/plugin.PluginService/ProcessPostAuth"
-	PluginService_OnBeforeWriteHeaders_FullMethodName       = "/plugin.PluginService/OnBeforeWriteHeaders"
-	PluginService_OnBeforeWrite_FullMethodName              = "/plugin.PluginService/OnBeforeWrite"
-	PluginService_OnStreamComplete_FullMethodName           = "/plugin.PluginService/OnStreamComplete"
-	PluginService_HandleProxyLog_FullMethodName             = "/plugin.PluginService/HandleProxyLog"
-	PluginService_HandleAnalytics_FullMethodName            = "/plugin.PluginService/HandleAnalytics"
-	PluginService_HandleBudgetUsage_FullMethodName          = "/plugin.PluginService/HandleBudgetUsage"
-	PluginService_GetAsset_FullMethodName                   = "/plugin.PluginService/GetAsset"
-	PluginService_ListAssets_FullMethodName                 = "/plugin.PluginService/ListAssets"
-	PluginService_GetManifest_FullMethodName                = "/plugin.PluginService/GetManifest"
-	PluginService_Call_FullMethodName                       = "/plugin.PluginService/Call"
-	PluginService_GetConfigSchema_FullMethodName            = "/plugin.PluginService/GetConfigSchema"
-	PluginService_HandleAgentMessage_FullMethodName         = "/plugin.PluginService/HandleAgentMessage"
-	PluginService_GetObjectHookRegistrations_FullMethodName = "/plugin.PluginService/GetObjectHookRegistrations"
-	PluginService_HandleObjectHook_FullMethodName           = "/plugin.PluginService/HandleObjectHook"
-	PluginService_ExecuteScheduledTask_FullMethodName       = "/plugin.PluginService/ExecuteScheduledTask"
-	PluginService_AcceptEdgePayload_FullMethodName          = "/plugin.PluginService/AcceptEdgePayload"
-	PluginService_OpenSession_FullMethodName                = "/plugin.PluginService/OpenSession"
-	PluginService_CloseSession_FullMethodName               = "/plugin.PluginService/CloseSession"
+	PluginService_Initialize_FullMethodName                   = "/plugin.PluginService/Initialize"
+	PluginService_Ping_FullMethodName                         = "/plugin.PluginService/Ping"
+	PluginService_Shutdown_FullMethodName                     = "/plugin.PluginService/Shutdown"
+	PluginService_ProcessPreAuth_FullMethodName               = "/plugin.PluginService/ProcessPreAuth"
+	PluginService_Authenticate_FullMethodName                 = "/plugin.PluginService/Authenticate"
+	PluginService_GetAppByCredential_FullMethodName           = "/plugin.PluginService/GetAppByCredential"
+	PluginService_GetUserByCredential_FullMethodName          = "/plugin.PluginService/GetUserByCredential"
+	PluginService_ProcessPostAuth_FullMethodName              = "/plugin.PluginService/ProcessPostAuth"
+	PluginService_OnBeforeWriteHeaders_FullMethodName         = "/plugin.PluginService/OnBeforeWriteHeaders"
+	PluginService_OnBeforeWrite_FullMethodName                = "/plugin.PluginService/OnBeforeWrite"
+	PluginService_OnStreamComplete_FullMethodName             = "/plugin.PluginService/OnStreamComplete"
+	PluginService_HandleProxyLog_FullMethodName               = "/plugin.PluginService/HandleProxyLog"
+	PluginService_HandleAnalytics_FullMethodName              = "/plugin.PluginService/HandleAnalytics"
+	PluginService_HandleBudgetUsage_FullMethodName            = "/plugin.PluginService/HandleBudgetUsage"
+	PluginService_GetAsset_FullMethodName                     = "/plugin.PluginService/GetAsset"
+	PluginService_ListAssets_FullMethodName                   = "/plugin.PluginService/ListAssets"
+	PluginService_GetManifest_FullMethodName                  = "/plugin.PluginService/GetManifest"
+	PluginService_Call_FullMethodName                         = "/plugin.PluginService/Call"
+	PluginService_PortalCall_FullMethodName                   = "/plugin.PluginService/PortalCall"
+	PluginService_GetConfigSchema_FullMethodName              = "/plugin.PluginService/GetConfigSchema"
+	PluginService_HandleAgentMessage_FullMethodName           = "/plugin.PluginService/HandleAgentMessage"
+	PluginService_GetObjectHookRegistrations_FullMethodName   = "/plugin.PluginService/GetObjectHookRegistrations"
+	PluginService_HandleObjectHook_FullMethodName             = "/plugin.PluginService/HandleObjectHook"
+	PluginService_ExecuteScheduledTask_FullMethodName         = "/plugin.PluginService/ExecuteScheduledTask"
+	PluginService_AcceptEdgePayload_FullMethodName            = "/plugin.PluginService/AcceptEdgePayload"
+	PluginService_GetEndpointRegistrations_FullMethodName     = "/plugin.PluginService/GetEndpointRegistrations"
+	PluginService_HandleEndpointRequest_FullMethodName        = "/plugin.PluginService/HandleEndpointRequest"
+	PluginService_HandleEndpointRequestStream_FullMethodName  = "/plugin.PluginService/HandleEndpointRequestStream"
+	PluginService_GetResourceTypeRegistrations_FullMethodName = "/plugin.PluginService/GetResourceTypeRegistrations"
+	PluginService_ListResourceInstances_FullMethodName        = "/plugin.PluginService/ListResourceInstances"
+	PluginService_GetResourceInstance_FullMethodName          = "/plugin.PluginService/GetResourceInstance"
+	PluginService_ValidateResourceSelection_FullMethodName    = "/plugin.PluginService/ValidateResourceSelection"
+	PluginService_CreateResourceInstance_FullMethodName       = "/plugin.PluginService/CreateResourceInstance"
+	PluginService_OpenSession_FullMethodName                  = "/plugin.PluginService/OpenSession"
+	PluginService_CloseSession_FullMethodName                 = "/plugin.PluginService/CloseSession"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -81,6 +90,9 @@ type PluginServiceClient interface {
 	GetManifest(ctx context.Context, in *GetManifestRequest, opts ...grpc.CallOption) (*GetManifestResponse, error)
 	// Generic RPC call method (for AI Studio plugins)
 	Call(ctx context.Context, in *CallRequest, opts ...grpc.CallOption) (*CallResponse, error)
+	// Portal RPC call method (for portal-facing plugin endpoints)
+	// Separate from Call to enforce security boundary between admin and portal contexts
+	PortalCall(ctx context.Context, in *PortalCallRequest, opts ...grpc.CallOption) (*PortalCallResponse, error)
 	// Configuration schema method (for both systems)
 	GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error)
 	// Agent Plugin Methods
@@ -93,6 +105,16 @@ type PluginServiceClient interface {
 	// Edge Payload Methods (for plugins that receive data from edge instances)
 	// Called when an edge plugin sends data via SendToControl
 	AcceptEdgePayload(ctx context.Context, in *EdgePayloadRequest, opts ...grpc.CallOption) (*EdgePayloadResponse, error)
+	// Custom Endpoint Methods — plugins serve custom HTTP endpoints under /plugins/{slug}/
+	GetEndpointRegistrations(ctx context.Context, in *GetEndpointRegistrationsRequest, opts ...grpc.CallOption) (*GetEndpointRegistrationsResponse, error)
+	HandleEndpointRequest(ctx context.Context, in *EndpointRequest, opts ...grpc.CallOption) (*EndpointResponse, error)
+	HandleEndpointRequestStream(ctx context.Context, in *EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EndpointResponseChunk], error)
+	// Resource Provider Methods — plugins register custom resource types for Apps
+	GetResourceTypeRegistrations(ctx context.Context, in *GetResourceTypeRegistrationsRequest, opts ...grpc.CallOption) (*GetResourceTypeRegistrationsResponse, error)
+	ListResourceInstances(ctx context.Context, in *ListResourceInstancesRequest, opts ...grpc.CallOption) (*ListResourceInstancesResponse, error)
+	GetResourceInstance(ctx context.Context, in *GetResourceInstanceRequest, opts ...grpc.CallOption) (*GetResourceInstanceResponse, error)
+	ValidateResourceSelection(ctx context.Context, in *ValidateResourceSelectionRequest, opts ...grpc.CallOption) (*ValidateResourceSelectionResponse, error)
+	CreateResourceInstance(ctx context.Context, in *CreateResourceInstanceRequest, opts ...grpc.CallOption) (*CreateResourceInstanceResponse, error)
 	// Session management for long-lived broker access
 	// OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
 	// Host should call this in a loop after Initialize() to maintain broker connectivity
@@ -288,6 +310,16 @@ func (c *pluginServiceClient) Call(ctx context.Context, in *CallRequest, opts ..
 	return out, nil
 }
 
+func (c *pluginServiceClient) PortalCall(ctx context.Context, in *PortalCallRequest, opts ...grpc.CallOption) (*PortalCallResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PortalCallResponse)
+	err := c.cc.Invoke(ctx, PluginService_PortalCall_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginServiceClient) GetConfigSchema(ctx context.Context, in *GetConfigSchemaRequest, opts ...grpc.CallOption) (*GetConfigSchemaResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetConfigSchemaResponse)
@@ -357,6 +389,95 @@ func (c *pluginServiceClient) AcceptEdgePayload(ctx context.Context, in *EdgePay
 	return out, nil
 }
 
+func (c *pluginServiceClient) GetEndpointRegistrations(ctx context.Context, in *GetEndpointRegistrationsRequest, opts ...grpc.CallOption) (*GetEndpointRegistrationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEndpointRegistrationsResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetEndpointRegistrations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) HandleEndpointRequest(ctx context.Context, in *EndpointRequest, opts ...grpc.CallOption) (*EndpointResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EndpointResponse)
+	err := c.cc.Invoke(ctx, PluginService_HandleEndpointRequest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) HandleEndpointRequestStream(ctx context.Context, in *EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EndpointResponseChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PluginService_ServiceDesc.Streams[1], PluginService_HandleEndpointRequestStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[EndpointRequest, EndpointResponseChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PluginService_HandleEndpointRequestStreamClient = grpc.ServerStreamingClient[EndpointResponseChunk]
+
+func (c *pluginServiceClient) GetResourceTypeRegistrations(ctx context.Context, in *GetResourceTypeRegistrationsRequest, opts ...grpc.CallOption) (*GetResourceTypeRegistrationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetResourceTypeRegistrationsResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetResourceTypeRegistrations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) ListResourceInstances(ctx context.Context, in *ListResourceInstancesRequest, opts ...grpc.CallOption) (*ListResourceInstancesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListResourceInstancesResponse)
+	err := c.cc.Invoke(ctx, PluginService_ListResourceInstances_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) GetResourceInstance(ctx context.Context, in *GetResourceInstanceRequest, opts ...grpc.CallOption) (*GetResourceInstanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetResourceInstanceResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetResourceInstance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) ValidateResourceSelection(ctx context.Context, in *ValidateResourceSelectionRequest, opts ...grpc.CallOption) (*ValidateResourceSelectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidateResourceSelectionResponse)
+	err := c.cc.Invoke(ctx, PluginService_ValidateResourceSelection_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginServiceClient) CreateResourceInstance(ctx context.Context, in *CreateResourceInstanceRequest, opts ...grpc.CallOption) (*CreateResourceInstanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateResourceInstanceResponse)
+	err := c.cc.Invoke(ctx, PluginService_CreateResourceInstance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginServiceClient) OpenSession(ctx context.Context, in *OpenSessionRequest, opts ...grpc.CallOption) (*OpenSessionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(OpenSessionResponse)
@@ -411,6 +532,9 @@ type PluginServiceServer interface {
 	GetManifest(context.Context, *GetManifestRequest) (*GetManifestResponse, error)
 	// Generic RPC call method (for AI Studio plugins)
 	Call(context.Context, *CallRequest) (*CallResponse, error)
+	// Portal RPC call method (for portal-facing plugin endpoints)
+	// Separate from Call to enforce security boundary between admin and portal contexts
+	PortalCall(context.Context, *PortalCallRequest) (*PortalCallResponse, error)
 	// Configuration schema method (for both systems)
 	GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error)
 	// Agent Plugin Methods
@@ -423,6 +547,16 @@ type PluginServiceServer interface {
 	// Edge Payload Methods (for plugins that receive data from edge instances)
 	// Called when an edge plugin sends data via SendToControl
 	AcceptEdgePayload(context.Context, *EdgePayloadRequest) (*EdgePayloadResponse, error)
+	// Custom Endpoint Methods — plugins serve custom HTTP endpoints under /plugins/{slug}/
+	GetEndpointRegistrations(context.Context, *GetEndpointRegistrationsRequest) (*GetEndpointRegistrationsResponse, error)
+	HandleEndpointRequest(context.Context, *EndpointRequest) (*EndpointResponse, error)
+	HandleEndpointRequestStream(*EndpointRequest, grpc.ServerStreamingServer[EndpointResponseChunk]) error
+	// Resource Provider Methods — plugins register custom resource types for Apps
+	GetResourceTypeRegistrations(context.Context, *GetResourceTypeRegistrationsRequest) (*GetResourceTypeRegistrationsResponse, error)
+	ListResourceInstances(context.Context, *ListResourceInstancesRequest) (*ListResourceInstancesResponse, error)
+	GetResourceInstance(context.Context, *GetResourceInstanceRequest) (*GetResourceInstanceResponse, error)
+	ValidateResourceSelection(context.Context, *ValidateResourceSelectionRequest) (*ValidateResourceSelectionResponse, error)
+	CreateResourceInstance(context.Context, *CreateResourceInstanceRequest) (*CreateResourceInstanceResponse, error)
 	// Session management for long-lived broker access
 	// OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
 	// Host should call this in a loop after Initialize() to maintain broker connectivity
@@ -492,6 +626,9 @@ func (UnimplementedPluginServiceServer) GetManifest(context.Context, *GetManifes
 func (UnimplementedPluginServiceServer) Call(context.Context, *CallRequest) (*CallResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Call not implemented")
 }
+func (UnimplementedPluginServiceServer) PortalCall(context.Context, *PortalCallRequest) (*PortalCallResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PortalCall not implemented")
+}
 func (UnimplementedPluginServiceServer) GetConfigSchema(context.Context, *GetConfigSchemaRequest) (*GetConfigSchemaResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetConfigSchema not implemented")
 }
@@ -509,6 +646,30 @@ func (UnimplementedPluginServiceServer) ExecuteScheduledTask(context.Context, *E
 }
 func (UnimplementedPluginServiceServer) AcceptEdgePayload(context.Context, *EdgePayloadRequest) (*EdgePayloadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AcceptEdgePayload not implemented")
+}
+func (UnimplementedPluginServiceServer) GetEndpointRegistrations(context.Context, *GetEndpointRegistrationsRequest) (*GetEndpointRegistrationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetEndpointRegistrations not implemented")
+}
+func (UnimplementedPluginServiceServer) HandleEndpointRequest(context.Context, *EndpointRequest) (*EndpointResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HandleEndpointRequest not implemented")
+}
+func (UnimplementedPluginServiceServer) HandleEndpointRequestStream(*EndpointRequest, grpc.ServerStreamingServer[EndpointResponseChunk]) error {
+	return status.Errorf(codes.Unimplemented, "method HandleEndpointRequestStream not implemented")
+}
+func (UnimplementedPluginServiceServer) GetResourceTypeRegistrations(context.Context, *GetResourceTypeRegistrationsRequest) (*GetResourceTypeRegistrationsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetResourceTypeRegistrations not implemented")
+}
+func (UnimplementedPluginServiceServer) ListResourceInstances(context.Context, *ListResourceInstancesRequest) (*ListResourceInstancesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListResourceInstances not implemented")
+}
+func (UnimplementedPluginServiceServer) GetResourceInstance(context.Context, *GetResourceInstanceRequest) (*GetResourceInstanceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetResourceInstance not implemented")
+}
+func (UnimplementedPluginServiceServer) ValidateResourceSelection(context.Context, *ValidateResourceSelectionRequest) (*ValidateResourceSelectionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateResourceSelection not implemented")
+}
+func (UnimplementedPluginServiceServer) CreateResourceInstance(context.Context, *CreateResourceInstanceRequest) (*CreateResourceInstanceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateResourceInstance not implemented")
 }
 func (UnimplementedPluginServiceServer) OpenSession(context.Context, *OpenSessionRequest) (*OpenSessionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OpenSession not implemented")
@@ -861,6 +1022,24 @@ func _PluginService_Call_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_PortalCall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PortalCallRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).PortalCall(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_PortalCall_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).PortalCall(ctx, req.(*PortalCallRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginService_GetConfigSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetConfigSchemaRequest)
 	if err := dec(in); err != nil {
@@ -958,6 +1137,143 @@ func _PluginService_AcceptEdgePayload_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(PluginServiceServer).AcceptEdgePayload(ctx, req.(*EdgePayloadRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_GetEndpointRegistrations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEndpointRegistrationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetEndpointRegistrations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetEndpointRegistrations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetEndpointRegistrations(ctx, req.(*GetEndpointRegistrationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_HandleEndpointRequest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EndpointRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).HandleEndpointRequest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_HandleEndpointRequest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).HandleEndpointRequest(ctx, req.(*EndpointRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_HandleEndpointRequestStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(EndpointRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PluginServiceServer).HandleEndpointRequestStream(m, &grpc.GenericServerStream[EndpointRequest, EndpointResponseChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PluginService_HandleEndpointRequestStreamServer = grpc.ServerStreamingServer[EndpointResponseChunk]
+
+func _PluginService_GetResourceTypeRegistrations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetResourceTypeRegistrationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetResourceTypeRegistrations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetResourceTypeRegistrations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetResourceTypeRegistrations(ctx, req.(*GetResourceTypeRegistrationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_ListResourceInstances_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListResourceInstancesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).ListResourceInstances(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_ListResourceInstances_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).ListResourceInstances(ctx, req.(*ListResourceInstancesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_GetResourceInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetResourceInstanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetResourceInstance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetResourceInstance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetResourceInstance(ctx, req.(*GetResourceInstanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_ValidateResourceSelection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateResourceSelectionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).ValidateResourceSelection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_ValidateResourceSelection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).ValidateResourceSelection(ctx, req.(*ValidateResourceSelectionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginService_CreateResourceInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateResourceInstanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).CreateResourceInstance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_CreateResourceInstance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).CreateResourceInstance(ctx, req.(*CreateResourceInstanceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1078,6 +1394,10 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _PluginService_Call_Handler,
 		},
 		{
+			MethodName: "PortalCall",
+			Handler:    _PluginService_PortalCall_Handler,
+		},
+		{
 			MethodName: "GetConfigSchema",
 			Handler:    _PluginService_GetConfigSchema_Handler,
 		},
@@ -1098,6 +1418,34 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _PluginService_AcceptEdgePayload_Handler,
 		},
 		{
+			MethodName: "GetEndpointRegistrations",
+			Handler:    _PluginService_GetEndpointRegistrations_Handler,
+		},
+		{
+			MethodName: "HandleEndpointRequest",
+			Handler:    _PluginService_HandleEndpointRequest_Handler,
+		},
+		{
+			MethodName: "GetResourceTypeRegistrations",
+			Handler:    _PluginService_GetResourceTypeRegistrations_Handler,
+		},
+		{
+			MethodName: "ListResourceInstances",
+			Handler:    _PluginService_ListResourceInstances_Handler,
+		},
+		{
+			MethodName: "GetResourceInstance",
+			Handler:    _PluginService_GetResourceInstance_Handler,
+		},
+		{
+			MethodName: "ValidateResourceSelection",
+			Handler:    _PluginService_ValidateResourceSelection_Handler,
+		},
+		{
+			MethodName: "CreateResourceInstance",
+			Handler:    _PluginService_CreateResourceInstance_Handler,
+		},
+		{
 			MethodName: "OpenSession",
 			Handler:    _PluginService_OpenSession_Handler,
 		},
@@ -1112,6 +1460,11 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _PluginService_HandleAgentMessage_Handler,
 			ServerStreams: true,
 		},
+		{
+			StreamName:    "HandleEndpointRequestStream",
+			Handler:       _PluginService_HandleEndpointRequestStream_Handler,
+			ServerStreams: true,
+		},
 	},
-	Metadata: "plugin.proto",
+	Metadata: "proto/plugin.proto",
 }

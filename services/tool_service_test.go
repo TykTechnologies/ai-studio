@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/gosimple/slug"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -209,4 +210,127 @@ func TestToolService_MultipleTool(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{"GET", "POST"}, ops1)
 	assert.Equal(t, "GET", ops2[0])
+}
+
+// TestToolService_GetToolBySlug tests the GetToolBySlug function
+func TestToolService_GetToolBySlug(t *testing.T) {
+	db := setupTestDBForTools(t)
+	service := NewService(db)
+
+	// Create a tool
+	tool, err := service.CreateTool("Test Tool", "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret")
+	assert.NoError(t, err)
+
+	// Look up by slug
+	fetchedTool, err := service.GetToolBySlug("test-tool")
+	assert.NoError(t, err)
+	assert.Equal(t, tool.ID, fetchedTool.ID)
+	assert.Equal(t, tool.Name, fetchedTool.Name)
+}
+
+// TestToolService_GetToolBySlug_WithVersionNumber is the key test that verifies the bug fix.
+// Previously, tools with version numbers (dots) in their names couldn't be found because:
+// - The proxy used slug.Make() which replaces dots with hyphens: "fdx-v6-2-0-customer-api"
+// - The DB query used LOWER(REPLACE(name, ' ', '-')) which preserved dots: "fdx-v6.2.0-customer-api"
+// Now both use slug.Make() for consistency.
+func TestToolService_GetToolBySlug_WithVersionNumber(t *testing.T) {
+	db := setupTestDBForTools(t)
+	service := NewService(db)
+
+	testCases := []struct {
+		toolName     string
+		lookupSlug   string
+		description  string
+	}{
+		{
+			toolName:    "FDX V6.2.0 Customer API",
+			lookupSlug:  "fdx-v6-2-0-customer-api",
+			description: "Tool with version number containing dots",
+		},
+		{
+			toolName:    "API v1.0.0",
+			lookupSlug:  "api-v1-0-0",
+			description: "API with semantic version",
+		},
+		{
+			toolName:    "Tool.With.Dots",
+			lookupSlug:  "tool-with-dots",
+			description: "Tool name with dots instead of spaces",
+		},
+		{
+			toolName:    "OpenAPI Spec v2.1",
+			lookupSlug:  "openapi-spec-v2-1",
+			description: "Tool with spaces and version",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			// Create the tool
+			tool, err := service.CreateTool(tc.toolName, "Test description", models.ToolTypeREST, "OAS Spec", 5, "apiKey", "secret")
+			assert.NoError(t, err)
+
+			// Verify the stored slug matches what we expect
+			assert.Equal(t, tc.lookupSlug, tool.Slug, "Stored slug should match expected slug")
+
+			// Verify the stored slug matches what slug.Make() produces
+			// This is critical because the proxy uses slug.Make() to generate lookup slugs
+			assert.Equal(t, slug.Make(tc.toolName), tool.Slug, "Stored slug should match slug.Make() output")
+
+			// Look up by the same slug that the proxy would use
+			proxySlug := slug.Make(tc.toolName)
+			fetchedTool, err := service.GetToolBySlug(proxySlug)
+			assert.NoError(t, err, "Should be able to find tool by slug generated with slug.Make()")
+			assert.Equal(t, tool.ID, fetchedTool.ID)
+			assert.Equal(t, tool.Name, fetchedTool.Name)
+
+			// Also verify direct lookup works
+			fetchedTool2, err := service.GetToolBySlug(tc.lookupSlug)
+			assert.NoError(t, err)
+			assert.Equal(t, tool.ID, fetchedTool2.ID)
+		})
+	}
+}
+
+// TestToolService_GetToolBySlug_NotFound tests that GetToolBySlug returns an error
+// when the tool doesn't exist
+func TestToolService_GetToolBySlug_NotFound(t *testing.T) {
+	db := setupTestDBForTools(t)
+	service := NewService(db)
+
+	// Try to find a non-existent tool
+	_, err := service.GetToolBySlug("non-existent-tool")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "tool not found")
+}
+
+// TestToolService_GetToolBySlug_AfterNameUpdate verifies that GetToolBySlug
+// works correctly after a tool's name is updated
+func TestToolService_GetToolBySlug_AfterNameUpdate(t *testing.T) {
+	db := setupTestDBForTools(t)
+	service := NewService(db)
+
+	// Create a tool
+	tool, err := service.CreateTool("Original Name", "Description", models.ToolTypeREST, "OAS Spec", 8, "apiKey", "secret")
+	assert.NoError(t, err)
+	assert.Equal(t, "original-name", tool.Slug)
+
+	// Verify original slug lookup works
+	fetchedTool, err := service.GetToolBySlug("original-name")
+	assert.NoError(t, err)
+	assert.Equal(t, tool.ID, fetchedTool.ID)
+
+	// Update the tool name
+	updatedTool, err := service.UpdateTool(tool.ID, "New Name v2.0", "Updated Description", models.ToolTypeREST, "Updated OAS Spec", 9, "apiKey", "secret")
+	assert.NoError(t, err)
+	assert.Equal(t, "new-name-v2-0", updatedTool.Slug)
+
+	// Verify new slug lookup works
+	fetchedTool2, err := service.GetToolBySlug("new-name-v2-0")
+	assert.NoError(t, err)
+	assert.Equal(t, tool.ID, fetchedTool2.ID)
+
+	// Verify old slug no longer works
+	_, err = service.GetToolBySlug("original-name")
+	assert.Error(t, err)
 }

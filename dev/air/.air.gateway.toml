@@ -1,0 +1,72 @@
+# Air configuration for Microgateway development
+# https://github.com/air-verse/air
+#
+# This config enables hot reloading for the Microgateway (data plane).
+# When any Go file in microgateway/ changes, Air will:
+#   1. Rebuild the microgateway binary
+#   2. Restart the gateway automatically
+#
+# Note: The gateway watches the microgateway/ directory specifically.
+
+root = "/app/microgateway"
+tmp_dir = "/app/tmp/gateway"
+
+[build]
+# Build command for microgateway
+# Builds from the microgateway directory
+cmd = """
+mkdir -p /app/tmp/gateway
+if [ "$EDITION" = "ent" ] && [ -d "/app/enterprise" ]; then
+  echo "Building Microgateway (Enterprise)..."
+  cd /app/microgateway && CGO_ENABLED=1 go build -tags enterprise -o /app/tmp/gateway/microgateway ./cmd/microgateway
+else
+  echo "Building Microgateway (Community)..."
+  cd /app/microgateway && CGO_ENABLED=1 go build -o /app/tmp/gateway/microgateway ./cmd/microgateway
+fi
+"""
+
+# Binary to run
+bin = "/app/tmp/gateway/microgateway"
+
+# Arguments to pass to the binary
+args_bin = ["-env=/app/dev/.env.gateway"]
+
+# File extensions to watch
+include_ext = ["go"]
+
+# Directories to exclude
+exclude_dir = [
+    "vendor",
+    "tests",
+    "deployments",
+    "dist",
+    "tmp",
+]
+
+# Regex to exclude test files
+exclude_regex = ["_test\\.go$"]
+
+# Don't rebuild on unchanged files
+exclude_unchanged = true
+
+# Delay before rebuild (ms)
+delay = 1000
+
+# Stop on build error
+stop_on_error = true
+
+# Graceful shutdown
+send_interrupt = true
+kill_delay = "2s"
+
+[log]
+time = true
+
+[color]
+main = "yellow"
+watcher = "cyan"
+build = "green"
+runner = "magenta"
+
+[misc]
+clean_on_exit = true

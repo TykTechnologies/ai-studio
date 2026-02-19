@@ -32,6 +32,7 @@ import MainLayout from "./layouts/MainLayout";
 // Context providers
 import { NotificationProvider } from "./admin/context/NotificationContext";
 import { EditionProvider } from "./admin/context/EditionContext";
+import { SyncStatusProvider } from "./admin/context/SyncStatusContext";
 
 // Lazy loaded routes for code splitting
 const AdminRoutes = React.lazy(() => import("./routes/AdminRoutes"));
@@ -123,7 +124,8 @@ function App() {
 
         // Skip auth check for password reset and forgot password routes
         const currentPath = window.location.pathname;
-        if (currentPath === '/reset-password' ||
+        if (currentPath === '/register' ||
+          currentPath === '/reset-password' ||
           currentPath === '/auth/reset-password' ||
           currentPath === '/forgot-password' ||
           currentPath === '/auth/forgot-password') {
@@ -205,6 +207,7 @@ function App() {
   return (
     <Router>
       <EditionProvider>
+        <SyncStatusProvider>
         <NotificationProvider>
           <ThemeProvider theme={theme}>
             <CssBaseline />
@@ -307,11 +310,15 @@ function App() {
                 </Suspense>
               } />
 
-              {/* Admin Routes */}
+              {/* Admin Routes — guarded: non-admin users are redirected */}
               <Route path="/admin/*" element={
-                <Suspense fallback={<RouteLoadingFallback />}>
-                  <AdminRoutes uiOptions={entitlements?.ui_options} />
-                </Suspense>
+                entitlements?.is_admin ? (
+                  <Suspense fallback={<RouteLoadingFallback />}>
+                    <AdminRoutes uiOptions={entitlements?.ui_options} />
+                  </Suspense>
+                ) : (
+                  <Navigate to="/" replace />
+                )
               } />
 
               {/* Common Routes */}
@@ -375,6 +382,7 @@ function App() {
           </Routes>
         </ThemeProvider>
       </NotificationProvider>
+      </SyncStatusProvider>
       </EditionProvider>
     </Router>
   );

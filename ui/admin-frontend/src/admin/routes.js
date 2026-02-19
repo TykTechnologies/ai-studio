@@ -79,6 +79,12 @@ import ModelRouterList from "./pages/ModelRouterList";
 import ModelRouterDetails from "./components/model-routers/ModelRouterDetails";
 import ModelRouterForm from "./components/model-routers/ModelRouterForm";
 
+import ComplianceOverview from "./pages/ComplianceOverview";
+
+import SubmissionReviewQueue from "./pages/SubmissionReviewQueue";
+import SubmissionReview from "./pages/SubmissionReview";
+import AttestationTemplates from "./pages/AttestationTemplates";
+
 const mainAdminRoutes = (
   <>
     <Route index element={<Overview />} />
@@ -147,6 +153,12 @@ const mainAdminRoutes = (
     <Route path="filters/:id" element={<FilterDetails />} />
     <Route path="filters/edit/:id" element={<FilterForm />} />
     <Route path="filters/new" element={<FilterForm />} />
+
+    <Route path="compliance" element={<ComplianceOverview />} />
+
+    <Route path="submissions" element={<SubmissionReviewQueue />} />
+    <Route path="submissions/:id" element={<SubmissionReview />} />
+    <Route path="attestation-templates" element={<AttestationTemplates />} />
   </>
 );
 

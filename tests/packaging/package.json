@@ -1,0 +1,12 @@
+{
+  "name": "tyk-ai-studio-package-smoke-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smoke tests for RPM/DEB package installation",
+  "scripts": {
+    "test": "npx playwright test --project='chromium' --reporter=list"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

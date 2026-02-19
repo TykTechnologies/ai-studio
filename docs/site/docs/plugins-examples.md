@@ -2,6 +2,117 @@
 
 Comprehensive reference of working plugin examples in the Tyk AI Studio repository. All examples use the **Unified Plugin SDK** (`pkg/plugin_sdk`) and demonstrate real-world patterns for different plugin capabilities.
 
+## Production-Ready Plugins
+
+The following plugins in `community/plugins/` and `enterprise/plugins/` are **production-tested** and serve as the best reference implementations:
+
+### Community Plugins
+
+#### LLM Cache
+
+**Path**: [`community/plugins/llm-cache/`](../../../community/plugins/llm-cache/)
+
+**Capabilities**: PostAuth, Response, StreamComplete, UI, RPC, EdgePayloadReceiver, SessionAware, Config
+
+**Description**: Semantic caching for LLM responses using request hash matching. Reduces costs and latency by returning cached responses for similar prompts.
+
+**Key Features**:
+- Request hashing for cache key generation
+- Streaming response caching
+- Edge-to-control cache synchronization
+- WebComponent UI for cache management
+- KV storage for cache state
+- Session-aware broker connection warmup
+
+**Why Use This Example**:
+- **Best example of multi-capability plugin** - Shows how to combine 8 different capabilities
+- **Edge-to-control pattern** - Demonstrates hub-and-spoke communication
+- **SessionAware warmup** - Critical pattern for Service API access
+
+**Complexity**: Advanced
+
+---
+
+#### LLM Firewall
+
+**Path**: [`community/plugins/llm-firewall/`](../../../community/plugins/llm-firewall/)
+
+**Capabilities**: PreAuth, PostAuth, Config
+
+**Description**: Content filtering for LLM prompts using configurable phrase/pattern matching. Blocks requests containing disallowed content.
+
+**Key Features**:
+- Regex and literal phrase matching
+- Per-model rule configuration
+- Multi-vendor content extraction (OpenAI, Anthropic, Google AI, Vertex)
+- Configurable block messages
+- Case-sensitive/insensitive matching
+
+**Why Use This Example**:
+- **Best example of content filtering** - Clean implementation of request inspection
+- **Multi-vendor support** - Shows how to handle different LLM formats
+- **Configuration-driven rules** - JSON schema for rule management
+
+**Complexity**: Intermediate
+
+---
+
+#### GitHub RAG Ingest
+
+**Path**: [`community/plugins/github-rag-ingest/`](../../../community/plugins/github-rag-ingest/)
+
+**Capabilities**: UI, RPC, Scheduler, SessionAware
+
+**Description**: Scheduled ingestion of GitHub repository content for RAG (Retrieval-Augmented Generation). Indexes code, docs, and issues.
+
+**Key Features**:
+- Cron-based scheduled execution
+- GitHub API integration
+- Custom UI for ingest configuration
+- RPC methods for manual triggers
+- Session-aware initialization
+
+**Why Use This Example**:
+- **Best example of scheduled data ingestion** - Complete Scheduler implementation
+- **UI + backend integration** - Shows RPC pattern for UI communication
+- **External API integration** - GitHub API usage patterns
+
+**Complexity**: Advanced
+
+---
+
+### Enterprise Plugins
+
+> **Note**: Enterprise plugins require a valid license.
+
+#### LLM Load Balancer
+
+**Path**: [`enterprise/plugins/llm-load-balancer/`](../../../enterprise/plugins/llm-load-balancer/)
+
+**Capabilities**: PostAuth, Response, UI
+
+**Description**: Intelligent request distribution across multiple LLM backends with health checking and failover.
+
+**Complexity**: Advanced
+
+---
+
+#### Advanced LLM Cache
+
+**Path**: [`enterprise/plugins/advanced-llm-cache/`](../../../enterprise/plugins/advanced-llm-cache/)
+
+**Capabilities**: PostAuth, Response, UI
+
+**Description**: Extended caching with semantic similarity matching, cache invalidation policies, and advanced analytics. Extends the community LLM Cache.
+
+**Complexity**: Advanced
+
+---
+
+## Example Plugins
+
+The following examples in `examples/plugins/` demonstrate specific patterns and are useful for learning:
+
 ## AI Studio Plugins
 
 ### Echo Agent
@@ -10,19 +121,28 @@ Comprehensive reference of working plugin examples in the Tyk AI Studio reposito
 
 **Capabilities**: Agent
 
+> **Experimental**: Agent plugins are currently experimental. See [Agent Plugins Guide](plugins-studio-agent.md) for full documentation.
+
 **Description**: Simple conversational agent that wraps LLM responses with custom prefix/suffix formatting. Demonstrates basic agent implementation with streaming responses and LLM integration.
 
+**Architecture**: Agent plugins follow the **Plugin → Agent Object → App Object** pattern:
+- **Plugin**: Implements `HandleAgentMessage` for conversations (long-running gRPC)
+- **Agent Object**: Binds the plugin to an App with configuration and group access
+- **App Object**: Provides LLM access, tools, datasources, and budget control
+
 **Key Features**:
-- Streaming server-side responses
+- Streaming server-side responses via gRPC
 - LLM integration via `ai_studio_sdk.CallLLM()`
 - Per-agent configuration (prefix, suffix, metadata)
 - Fallback echo mode when no LLM available
 - JSON schema configuration
+- SessionAware warmup for Service API connection
 
 **Use Cases**:
 - Learning agent plugin basics
 - Response formatting and wrapping
 - Custom agent configuration
+- Reference implementation for agent architecture
 
 **Complexity**: Beginner
 
@@ -157,7 +277,59 @@ Comprehensive reference of working plugin examples in the Tyk AI Studio reposito
 
 ---
 
+### Portal Feedback
+
+**Path**: [`examples/plugins/studio/portal-feedback/`](../../../examples/plugins/studio/portal-feedback/)
+
+**Capabilities**: UI Provider, Portal UI Provider
+
+**Description**: Example plugin demonstrating portal UI with user feedback form. Shows how to build pages visible to end-users in the AI Portal alongside an admin dashboard for managing submissions.
+
+**Key Features**:
+- Portal sidebar integration with group-based visibility
+- Portal RPC with authenticated user context (`HandlePortalRPC`)
+- Admin RPC for management operations (`HandleRPC`)
+- Separate WebComponents for portal and admin UIs
+- `waitForAPIAndLoad()` pattern for API injection timing
+- Shared asset serving between admin and portal contexts
+
+**Use Cases**:
+- Learning portal UI plugin development
+- User-facing forms and data collection
+- Dual admin/portal plugin architecture
+- Portal RPC with user context
+
+**Complexity**: Beginner
+
+---
+
 ## Gateway Plugins
+
+### Custom Echo Endpoint
+
+**Path**: [`examples/plugins/gateway/custom-echo-endpoint/`](../../../examples/plugins/gateway/custom-echo-endpoint/)
+
+**Capabilities**: CustomEndpointHandler, UIProvider, ConfigProvider
+
+**Description**: Demonstrates custom HTTP endpoints on the gateway combined with a Studio admin UI. Registers a catch-all endpoint at `/plugins/custom-echo-endpoint/` that echoes request metadata and user-configured content.
+
+**Key Features**:
+- CustomEndpointHandler with `/*` catch-all registration
+- Full request metadata echo (method, path, headers, query, body, path_segments)
+- Studio UI (WebComponent) for editing custom content
+- Config persistence via `ai_studio_sdk.UpdatePluginConfig()`
+- Config sync from Studio → Gateway via gRPC ConfigurationSnapshot
+- Manifest with `custom_endpoint` + `studio_ui` hooks
+
+**Use Cases**:
+- Learning custom endpoint basics
+- Understanding the config sync flow (Studio UI → DB → Gateway)
+- Combining CustomEndpointHandler with UIProvider
+- Reference implementation for custom endpoints
+
+**Complexity**: Beginner
+
+---
 
 ### Request Enricher
 
@@ -284,6 +456,32 @@ Comprehensive reference of working plugin examples in the Tyk AI Studio reposito
 
 ---
 
+### Custom Echo Endpoint
+
+**Path**: [`examples/plugins/gateway/custom-echo-endpoint/`](../../../examples/plugins/gateway/custom-echo-endpoint/)
+
+**Capabilities**: CustomEndpoint, UI, Config
+
+**Description**: Serves a custom HTTP endpoint on the gateway that echoes back request metadata alongside user-configured custom content. Includes a Studio admin UI for editing the content.
+
+**Key Features**:
+- Custom endpoint registration (catch-all `/*`)
+- Request metadata echo (method, path, headers, query, body)
+- Configurable custom content via Studio UI
+- Config persistence via `UpdatePluginConfig` Service API
+- Config sync from Studio to gateway via gRPC
+- WebComponent-based admin UI
+
+**Use Cases**:
+- Learning custom endpoint development
+- Understanding Studio-to-gateway config flow
+- Multi-capability plugin patterns (CustomEndpoint + UI + Config)
+- MCP/webhook plugin starting point
+
+**Complexity**: Beginner
+
+---
+
 ### File Data Collectors (Unified SDK)
 
 **Path**: [`examples/plugins/unified/data-collectors/`](../../../examples/plugins/unified/data-collectors/)
@@ -343,25 +541,32 @@ data_collection_plugins:
 |------------|----------|
 | **Agent** | echo-agent |
 | **Object Hooks** | llm-validator, hook-test-plugin |
-| **PostAuth** | request_enricher, message_modifier, service-api-test, gateway-service-test |
-| **Response** | response_modifier, llm-rate-limiter-multiphase |
+| **PreAuth** | **llm-firewall** ★ |
+| **PostAuth** | **llm-cache** ★, **llm-firewall** ★, request_enricher, message_modifier, service-api-test, gateway-service-test |
+| **Response** | **llm-cache** ★, response_modifier, llm-rate-limiter-multiphase |
 | **DataCollector** | elasticsearch_collector, file-analytics-collector, file-budget-collector, file-proxy-collector |
-| **UI Provider** | llm-rate-limiter-multiphase, custom-auth-ui |
-| **Multi-Capability** | llm-rate-limiter-multiphase (PostAuth + Response + UI) |
+| **UI Provider** | **llm-cache** ★, **llm-firewall** ★, llm-rate-limiter-multiphase, custom-auth-ui, portal-feedback |
+| **Portal UI** | portal-feedback |
+| **Scheduler** | **github-rag-ingest** ★ |
+| **EdgePayloadReceiver** | **llm-cache** ★ |
+| **Custom Endpoints** | custom-echo-endpoint |
+| **Multi-Capability** | **llm-cache** ★ (8 capabilities), llm-rate-limiter-multiphase (PostAuth + Response + UI), custom-echo-endpoint (CustomEndpoint + UI + Config) |
+
+★ = Production-ready community/enterprise plugins (recommended as reference)
 
 ### By Runtime
 
 | Runtime | Examples |
 |---------|----------|
-| **Studio Only** | echo-agent, llm-validator, hook-test-plugin, llm-rate-limiter-multiphase, custom-auth-ui, service-api-test |
+| **Studio Only** | echo-agent, llm-validator, hook-test-plugin, llm-rate-limiter-multiphase, custom-auth-ui, portal-feedback, service-api-test |
 | **Gateway Only** | request_enricher, response_modifier, message_modifier, elasticsearch_collector, gateway-service-test, file-analytics-collector, file-budget-collector, file-proxy-collector |
-| **Both** | (Any plugin can work in both if designed correctly) |
+| **Both** | custom-echo-endpoint (UI in Studio + CustomEndpoint on Gateway) |
 
 ### By Complexity
 
 | Level | Examples |
 |-------|----------|
-| **Beginner** | echo-agent, request_enricher, message_modifier, file-analytics-collector, file-budget-collector, file-proxy-collector |
+| **Beginner** | echo-agent, portal-feedback, request_enricher, message_modifier, custom-echo-endpoint, file-analytics-collector, file-budget-collector, file-proxy-collector |
 | **Intermediate** | llm-validator, hook-test-plugin, response_modifier, gateway-service-test |
 | **Advanced** | llm-rate-limiter-multiphase, service-api-test, elasticsearch_collector, custom-auth-ui |
 
@@ -474,6 +679,7 @@ if ctx.Runtime == plugin_sdk.RuntimeStudio {
 
 ### 1. Start with Basics
 - **request_enricher**: Learn PostAuth hooks
+- **custom-echo-endpoint**: Learn custom endpoints + Studio UI config flow
 - **echo-agent**: Learn agent basics and streaming
 
 ### 2. Explore Services
@@ -485,14 +691,22 @@ if ctx.Runtime == plugin_sdk.RuntimeStudio {
 - **response_modifier**: Two-phase response handling
 - **elasticsearch_collector**: Data collection and export
 
-### 4. Multi-Capability
+### 4. Production-Ready References (Recommended)
+- **llm-firewall** (`community/plugins/`): Content filtering and multi-vendor support
+- **llm-cache** (`community/plugins/`): Multi-capability plugin with edge-to-control communication
+- **github-rag-ingest** (`community/plugins/`): Scheduler and UI patterns
+
+### 5. Multi-Capability
 - **llm-rate-limiter-multiphase**: Combining capabilities with UI
+- **llm-cache**: 8 capabilities working together (production reference)
 
 ## Next Steps
 
 - **[Plugin SDK Reference](plugins-sdk.md)** - Core SDK documentation
 - **[Service API Reference](plugins-service-api.md)** - All Service API operations
 - **[Microgateway Plugins Guide](plugins-microgateway.md)** - Gateway-specific patterns
+- **[AI Portal UI Plugins Guide](plugins-portal-ui.md)** - Build portal-facing pages and forms
 - **[AI Studio Agent Plugins Guide](plugins-studio-agent.md)** - Build conversational agents
 - **[Object Hooks Guide](plugins-object-hooks.md)** - Intercept CRUD operations
+- **[Custom Endpoints Guide](plugins-custom-endpoints.md)** - Serve custom HTTP endpoints
 - **[Plugin Best Practices](plugins-best-practices.md)** - Production-ready patterns

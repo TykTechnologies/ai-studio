@@ -1,0 +1,230 @@
+# Tyk AI Microgateway - GoReleaser Configuration
+# This file is NOT managed by gromit policy.
+#
+# This project needs CGO_ENABLED=1 and the cross-compiler toolchains for
+# - arm64
+# - amd64
+version: 2
+builds:
+  # ---------------------------------------------------------------------------
+  # Server builds
+  # ---------------------------------------------------------------------------
+  - id: mgw-std-amd64
+    dir: microgateway
+    main: ./cmd/microgateway
+    ldflags:
+      - -X main.Version={{.Version}}
+      - -X main.BuildHash={{.FullCommit}}
+      - -X main.BuildTime={{.Date}}
+      - -X main.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
+      - amd64
+    binary: tyk-microgateway
+  - id: mgw-std-arm64
+    dir: microgateway
+    main: ./cmd/microgateway
+    env:
+      - CC=aarch64-linux-gnu-gcc
+    ldflags:
+      - -X main.Version={{.Version}}
+      - -X main.BuildHash={{.FullCommit}}
+      - -X main.BuildTime={{.Date}}
+      - -X main.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
+      - arm64
+    binary: tyk-microgateway
+  - id: mgw-std-s390x
+    dir: microgateway
+    main: ./cmd/microgateway
+    env:
+      - CC=s390x-linux-gnu-gcc
+    ldflags:
+      - -X main.Version={{.Version}}
+      - -X main.BuildHash={{.FullCommit}}
+      - -X main.BuildTime={{.Date}}
+      - -X main.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
+      - s390x
+    binary: tyk-microgateway
+  - id: mgw-fips
+    dir: microgateway
+    main: ./cmd/microgateway
+    ldflags:
+      - -X main.Version={{.Version}}
+      - -X main.BuildHash={{.FullCommit}}
+      - -X main.BuildTime={{.Date}}
+      - -X main.BuiltBy=goreleaser
+    goos:
+      - linux
+    goarch:
+      - amd64
+    binary: tyk-microgateway
+  # ---------------------------------------------------------------------------
+  # CLI builds (mgw command-line tool, bundled in the same package)
+  # ---------------------------------------------------------------------------
+  - id: mgw-cli-amd64
+    dir: microgateway
+    main: ./cmd/mgw
+    ldflags:
+      - -X main.Version={{.Version}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+    binary: mgw
+  - id: mgw-cli-arm64
+    dir: microgateway
+    main: ./cmd/mgw
+    env:
+      - CC=aarch64-linux-gnu-gcc
+    ldflags:
+      - -X main.Version={{.Version}}
+    goos:
+      - linux
+    goarch:
+      - arm64
+    binary: mgw
+  - id: mgw-cli-s390x
+    dir: microgateway
+    main: ./cmd/mgw
+    env:
+      - CC=s390x-linux-gnu-gcc
+    ldflags:
+      - -X main.Version={{.Version}}
+    goos:
+      - linux
+    goarch:
+      - s390x
+    binary: mgw
+  - id: mgw-cli-fips
+    dir: microgateway
+    main: ./cmd/mgw
+    ldflags:
+      - -X main.Version={{.Version}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+    binary: mgw
+nfpms:
+  # ---------------------------------------------------------------------------
+  # Standard package: tyk-microgateway
+  # ---------------------------------------------------------------------------
+  - id: mgw-std
+    vendor: "Tyk Technologies Ltd"
+    homepage: "https://tyk.io"
+    maintainer: "Tyk <info@tyk.io>"
+    description: Tyk AI Microgateway
+    package_name: tyk-microgateway
+    file_name_template: "{{ .ConventionalFileName }}"
+    builds:
+      - mgw-std-amd64
+      - mgw-std-arm64
+      - mgw-std-s390x
+      - mgw-cli-amd64
+      - mgw-cli-arm64
+      - mgw-cli-s390x
+    formats:
+      - deb
+      - rpm
+    contents:
+      - src: "README.md"
+        dst: "/opt/share/docs/tyk-microgateway/README.md"
+      - src: "ci/install/microgateway/*"
+        dst: "/opt/tyk-microgateway/install"
+      - src: ci/install/microgateway/inits/systemd/system/tyk-microgateway.service
+        dst: /lib/systemd/system/tyk-microgateway.service
+      - src: ci/install/microgateway/inits/sysv/init.d/tyk-microgateway
+        dst: /etc/init.d/tyk-microgateway
+      - src: ci/install/microgateway/inits/systemd/default/tyk-microgateway
+        dst: /etc/default/tyk-microgateway
+        type: config|noreplace
+      - src: ci/install/microgateway/data/analytics-pulse-config.yaml
+        dst: /opt/tyk-microgateway/examples/analytics-pulse-config.yaml
+      - src: ci/install/microgateway/data/PORTS.md
+        dst: /opt/tyk-microgateway/PORTS.md
+    scripts:
+      preinstall: "ci/install/microgateway/before_install.sh"
+      postinstall: "ci/install/microgateway/post_install.sh"
+      postremove: "ci/install/microgateway/post_remove.sh"
+    bindir: "/opt/tyk-microgateway"
+    rpm:
+      scripts:
+        posttrans: ci/install/microgateway/post_trans.sh
+      signature:
+        key_file: tyk.io.signing.key
+    deb:
+      signature:
+        key_file: tyk.io.signing.key
+        type: origin
+  # ---------------------------------------------------------------------------
+  # FIPS package: tyk-microgateway-fips
+  # ---------------------------------------------------------------------------
+  - id: mgw-fips
+    vendor: "Tyk Technologies Ltd"
+    homepage: "https://tyk.io"
+    maintainer: "Tyk <info@tyk.io>"
+    description: Tyk AI Microgateway (FIPS)
+    package_name: tyk-microgateway-fips
+    file_name_template: "{{ .ConventionalFileName }}"
+    builds:
+      - mgw-fips
+      - mgw-cli-fips
+    formats:
+      - deb
+      - rpm
+    contents:
+      - src: "README.md"
+        dst: "/opt/share/docs/tyk-microgateway/README.md"
+      - src: "ci/install/microgateway/*"
+        dst: "/opt/tyk-microgateway/install"
+      - src: ci/install/microgateway/inits/systemd/system/tyk-microgateway.service
+        dst: /lib/systemd/system/tyk-microgateway.service
+      - src: ci/install/microgateway/inits/sysv/init.d/tyk-microgateway
+        dst: /etc/init.d/tyk-microgateway
+      - src: ci/install/microgateway/inits/systemd/default/tyk-microgateway
+        dst: /etc/default/tyk-microgateway
+        type: config|noreplace
+      - src: ci/install/microgateway/data/analytics-pulse-config.yaml
+        dst: /opt/tyk-microgateway/examples/analytics-pulse-config.yaml
+      - src: ci/install/microgateway/data/PORTS.md
+        dst: /opt/tyk-microgateway/PORTS.md
+    scripts:
+      preinstall: "ci/install/microgateway/before_install.sh"
+      postinstall: "ci/install/microgateway/post_install.sh"
+      postremove: "ci/install/microgateway/post_remove.sh"
+    bindir: "/opt/tyk-microgateway"
+    rpm:
+      scripts:
+        posttrans: ci/install/microgateway/post_trans.sh
+      signature:
+        key_file: tyk.io.signing.key
+    deb:
+      signature:
+        key_file: tyk.io.signing.key
+        type: origin
+publishers:
+  - name: packagecloud
+    env:
+      - PACKAGECLOUD_TOKEN={{ .Env.PACKAGECLOUD_TOKEN }}
+    cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" {{ .Env.PACKAGECLOUD_REPO }} {{ .ArtifactPath }}
+# This disables archives
+archives:
+  - format: binary
+    allow_different_binary_count: true
+checksum:
+  disable: true
+release:
+  disable: true
+  github:
+    owner: TykTechnologies
+    name: tyk-ai-studio
+  prerelease: auto
+  draft: true
+  name_template: "{{.ProjectName}}-v{{.Version}}"

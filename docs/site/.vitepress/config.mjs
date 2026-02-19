@@ -4,12 +4,14 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   // Set base path conditionally
   base: process.env.NODE_ENV === 'production' ? '/ai-studio/' : '/',
+  // Output to dist folder for Go embed (avoids .vitepress dot-prefix issue)
+  outDir: 'dist',
   title: "Tyk AI Studio",
   description: "Tyk AI Studio - Accelerate AI innovation without sacrificing control",
   ignoreDeadLinks: true,
+  appearance: 'force-dark', // Force dark mode
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
-    appearance: false, // Disable dark/light mode switch
     logo: '/logo.png',
     nav: [
       { text: 'Quickstart', link: '/docs/quickstart' }
@@ -21,6 +23,7 @@ export default defineConfig({
         items: [
           { text: 'Overview', link: '/' }, // Assuming index.md is the overview
           { text: 'Quickstart', link: '/docs/quickstart' },
+          { text: 'Architecture Overview', link: '/docs/architecture' },
           { text: 'Core Concepts', link: '/docs/core-concepts' } // New
         ]
       },
@@ -52,7 +55,8 @@ export default defineConfig({
           { text: 'Secrets Management', link: '/docs/secrets' }, // Keep secrets
           { text: 'Budget Control', link: '/docs/budgeting' }, // New
           { text: 'Analytics & Monitoring', link: '/docs/analytics' }, // New (replace dashboard)
-          { text: 'Notifications', link: '/docs/notifications' } // New
+          { text: 'Notifications', link: '/docs/notifications' }, // New
+          { text: 'Edge Gateways (Enterprise)', link: '/docs/edge-gateways' } // Enterprise hub-spoke management
           // Removed: apps, model-prices, call-settings (to be merged)
         ]
       },
@@ -65,6 +69,7 @@ export default defineConfig({
           { text: 'AI Studio Agent Plugins', link: '/docs/plugins-studio-agent' },
           { text: 'Manifests & Permissions', link: '/docs/plugins-manifests' },
           { text: 'Deployment Options', link: '/docs/plugins-deployment' },
+          { text: 'Resource Provider Plugins', link: '/docs/plugins-resource-types' },
           { text: 'SDK Reference', link: '/docs/plugins-sdk' },
           { text: 'Service API Reference', link: '/docs/plugins-service-api' }
         ]

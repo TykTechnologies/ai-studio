@@ -6,6 +6,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -152,6 +153,9 @@ func NewControlServer(cfg *Config, db *gorm.DB) *ControlServer {
 	log.Debug().Msg("AI Studio analytics system initialized for control server")
 
 	log.Debug().Msg("Event bridge bus initialized for control server")
+
+	// Subscribe to config change events to trigger checksum recomputation
+	server.subscribeToConfigChanges()
 
 	// Initialize budget sync service for multi-edge budget synchronization
 	server.budgetSyncService = NewBudgetSyncService(db, server.eventBus)
@@ -322,6 +326,25 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		}
 	}
 
+	// Update edge sync status - since the edge is receiving the latest config at registration,
+	// it should be marked as in_sync to avoid false "pending" status before first heartbeat
+	if initialConfig.Checksum != "" {
+		now := time.Now()
+		edgeInstance.SyncStatus = models.EdgeSyncStatusInSync
+		edgeInstance.LoadedChecksum = initialConfig.Checksum
+		edgeInstance.LoadedVersion = initialConfig.Version
+		edgeInstance.LastSyncAck = &now
+		if err := edgeInstance.Update(s.db); err != nil {
+			log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to update edge sync status on registration")
+		} else {
+			log.Debug().
+				Str("edge_id", req.EdgeId).
+				Str("checksum", initialConfig.Checksum).
+				Str("version", initialConfig.Version).
+				Msg("Set edge sync status to in_sync on registration")
+		}
+	}
+
 	return &pb.EdgeRegistrationResponse{
 		Success:       true,
 		Message:       "Edge registered successfully with AI Studio",
@@ -465,18 +488,63 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					edgeConnection.LastHeartbeat = time.Now()
 					edgeConnection.mu.Unlock()
 
-					// Update database
+					// Get loaded config info from heartbeat
+					loadedChecksum := m.Heartbeat.LoadedConfigChecksum
+					loadedVersion := m.Heartbeat.LoadedConfigVersion
+
+					// Update database with heartbeat and sync tracking
 					var edgeInstance models.EdgeInstance
+					var expectedChecksum string
+					var isInSync bool
+					var requestFullSync bool
+
 					if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
 						edgeInstance.UpdateHeartbeat(s.db)
+
+						// Check sync status against namespace expected checksum
+						// The checksum is updated via config change events, so we use the cached value
+						var syncStatus models.NamespaceSyncStatus
+						if err := syncStatus.GetByNamespace(s.db, edgeInstance.Namespace); err == nil {
+							expectedChecksum = syncStatus.ExpectedChecksum
+							isInSync = loadedChecksum != "" && loadedChecksum == expectedChecksum
+
+							// Update edge sync status
+							syncStatusValue := models.EdgeSyncStatusPending
+							if isInSync {
+								syncStatusValue = models.EdgeSyncStatusInSync
+							} else if loadedChecksum == "" {
+								syncStatusValue = models.EdgeSyncStatusUnknown
+							}
+							edgeInstance.UpdateSyncStatus(s.db, loadedChecksum, loadedVersion, syncStatusValue)
+
+							// Log sync status change for audit if out of sync
+							if !isInSync && loadedChecksum != "" {
+								auditLog := &models.SyncAuditLog{
+									EventType:     models.SyncEventEdgeOutOfSync,
+									Namespace:     edgeInstance.Namespace,
+									EdgeID:        &edgeID,
+									Checksum:      loadedChecksum,
+									ConfigVersion: loadedVersion,
+									Details:       fmt.Sprintf("Edge out of sync. Expected: %s, Got: %s", expectedChecksum, loadedChecksum),
+								}
+								auditLog.Create(s.db)
+
+								// NOTE: We intentionally do NOT set requestFullSync = true here.
+								// Config pushes are manual-only per design requirement.
+								// Users must explicitly push config changes via the UI or API.
+							}
+						}
 					}
 
-					// Send heartbeat response
+					// Send heartbeat response with sync info
 					response := &pb.ControlMessage{
 						Message: &pb.ControlMessage_HeartbeatResponse{
 							HeartbeatResponse: &pb.HeartbeatResponse{
-								Acknowledged: true,
-								Message:      "Heartbeat received by AI Studio",
+								Acknowledged:     true,
+								Message:          "Heartbeat received by AI Studio",
+								ExpectedChecksum: expectedChecksum,
+								IsInSync:         isInSync,
+								RequestFullSync:  requestFullSync,
 							},
 						},
 					}
@@ -496,6 +564,21 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 							},
 						}
 						stream.Send(response)
+
+						// Update edge sync status immediately since it's receiving the latest config
+						if snapshot.Checksum != "" {
+							var edgeInstance models.EdgeInstance
+							if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
+								now := time.Now()
+								edgeInstance.UpdateSyncStatus(s.db, snapshot.Checksum, snapshot.Version, models.EdgeSyncStatusInSync)
+								edgeInstance.LastSyncAck = &now
+								edgeInstance.Update(s.db)
+								log.Debug().
+									Str("edge_id", edgeID).
+									Str("checksum", snapshot.Checksum).
+									Msg("Updated edge sync status to in_sync after config request")
+							}
+						}
 					}
 				}
 
@@ -656,9 +739,10 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		return nil, status.Error(codes.Internal, "token validation failed")
 	}
 
-	// Get the associated app
+	// Get the associated app with LLM/Tool/Datasource relationships (preload for pull-on-miss sync)
 	var app models.App
-	if err := s.db.Where("credential_id = ? AND is_active = ?", credential.ID, true).First(&app).Error; err != nil {
+	if err := s.db.Where("credential_id = ? AND is_active = ?", credential.ID, true).
+		Preload("LLMs").Preload("Tools").Preload("Datasources").First(&app).Error; err != nil {
 		log.Debug().Str("token_prefix", tokenPrefix).Uint("credential_id", credential.ID).Msg("AI Studio control server: app not found or inactive")
 		return &pb.TokenValidationResponse{
 			Valid:        false,
@@ -672,14 +756,28 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		Str("app_name", app.Name).
 		Msg("AI Studio control server: token validation successful")
 
-	return &pb.TokenValidationResponse{
+	response := &pb.TokenValidationResponse{
 		Valid:     true,
 		AppId:     uint32(app.ID),
 		AppName:   app.Name,
 		UserId:    uint32(app.UserID), // Owner user ID for analytics tracking
 		Scopes:    []string{},         // AI Studio doesn't use scopes like microgateway
 		ExpiresAt: nil,                // AI Studio credentials don't expire
-	}, nil
+	}
+
+	// Check if App should be included for pull-on-miss sync (namespace match)
+	if s.shouldIncludeAppInResponse(app.Namespace, req.EdgeNamespace) {
+		response.App = s.convertAppToProto(&app)
+
+		log.Debug().
+			Uint("app_id", app.ID).
+			Str("app_namespace", app.Namespace).
+			Str("edge_namespace", req.EdgeNamespace).
+			Int("llm_count", len(app.LLMs)).
+			Msg("Including App in token validation response for pull-on-miss sync")
+	}
+
+	return response, nil
 }
 
 // SendAnalyticsPulse handles analytics pulse data from edge instances
@@ -1095,7 +1193,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	// Get Apps for namespace with relationships
 	var apps []models.App
-	appQuery := s.db.Preload("LLMs").Where("is_active = ?", true)
+	appQuery := s.db.Preload("LLMs").Preload("Tools").Preload("Datasources").Where("is_active = ?", true)
 	if namespace == "" {
 		// Global namespace - only global apps
 		appQuery = appQuery.Where("namespace = ''")
@@ -1106,6 +1204,23 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 	if err := appQuery.Find(&apps).Error; err != nil {
 		return nil, fmt.Errorf("failed to get Apps: %w", err)
+	}
+
+	// Batch-fetch all plugin resource associations for snapshot apps (avoids N+1)
+	var allAppPluginResources []models.AppPluginResource
+	if len(apps) > 0 {
+		appIDs := make([]uint, len(apps))
+		for i, a := range apps {
+			appIDs[i] = a.ID
+		}
+		s.db.Where("app_id IN ?", appIDs).
+			Preload("PluginResourceType").
+			Find(&allAppPluginResources)
+	}
+	// Group by app ID for O(1) lookup
+	pluginResourcesByApp := make(map[uint][]models.AppPluginResource)
+	for _, apr := range allAppPluginResources {
+		pluginResourcesByApp[apr.AppID] = append(pluginResourcesByApp[apr.AppID], apr)
 	}
 
 	// Convert Apps to protobuf with LLM associations
@@ -1139,9 +1254,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// Calculate current period usage from llm_chat_records for budget sync to edge
 		var currentPeriodUsage float64
 		if monthlyBudget > 0 {
-			// Calculate budget period start (1st of current month - matches edge budget service logic)
+			// Calculate budget period using app's BudgetStartDate (handles mid-period resets)
 			now := time.Now()
-			periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+			periodStart, _ := calculateBudgetPeriod(app.BudgetStartDate, now)
 
 			// Query total cost from llm_chat_records for this app in the current period
 			var totalCostCents float64
@@ -1156,6 +1271,18 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 		}
 
+		// Get associated Tool IDs
+		toolIDs := make([]uint32, len(app.Tools))
+		for i, tool := range app.Tools {
+			toolIDs[i] = uint32(tool.ID)
+		}
+
+		// Get associated Datasource IDs
+		datasourceIDs := make([]uint32, len(app.Datasources))
+		for i, ds := range app.Datasources {
+			datasourceIDs[i] = uint32(ds.ID)
+		}
+
 		pbApp := &pb.AppConfig{
 			Id:                 uint32(app.ID),
 			Name:               app.Name,
@@ -1168,10 +1295,45 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Namespace:          app.Namespace,
 			UserId:             uint32(app.UserID), // Owner user ID for analytics tracking
 			LlmIds:             llmIDs,
+			ToolIds:            toolIDs,
+			DatasourceIds:      datasourceIDs,
 			CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
 			CreatedAt:          timestamppb.New(app.CreatedAt),
 			UpdatedAt:          timestamppb.New(app.UpdatedAt),
 		}
+
+		// Add plugin resource associations (from batch query above)
+		if appPluginResources, ok := pluginResourcesByApp[app.ID]; ok && len(appPluginResources) > 0 {
+			// Group by (plugin_id, resource_type_slug)
+			type prKey struct {
+				PluginID uint
+				Slug     string
+			}
+			grouped := make(map[prKey]*pb.PluginResourceAssociation)
+			for _, apr := range appPluginResources {
+				if apr.PluginResourceType == nil {
+					continue
+				}
+				k := prKey{apr.PluginResourceType.PluginID, apr.PluginResourceType.Slug}
+				if _, exists := grouped[k]; !exists {
+					grouped[k] = &pb.PluginResourceAssociation{
+						PluginId:         uint32(apr.PluginResourceType.PluginID),
+						ResourceTypeSlug: apr.PluginResourceType.Slug,
+					}
+				}
+				grouped[k].InstanceIds = append(grouped[k].InstanceIds, apr.InstanceID)
+				grouped[k].Instances = append(grouped[k].Instances, &pb.ResourceInstanceSnapshot{
+					Id:           apr.InstanceID,
+					Name:         apr.InstanceName,
+					PrivacyScore: int32(apr.InstancePrivacyScore),
+					Metadata:     apr.InstanceMetadata,
+				})
+			}
+			for _, pra := range grouped {
+				pbApp.PluginResources = append(pbApp.PluginResources, pra)
+			}
+		}
+
 		snapshot.Apps = append(snapshot.Apps, pbApp)
 	}
 
@@ -1489,6 +1651,281 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Msg("Model Router synced to snapshot")
 	}
 
+	// Get Tools for namespace with relationships
+	var tools []models.Tool
+	toolQuery := s.db.Preload("Filters").Where("active = ?", true)
+	if namespace == "" {
+		toolQuery = toolQuery.Where("namespace = ''")
+	} else {
+		toolQuery = toolQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+
+	if err := toolQuery.Find(&tools).Error; err != nil {
+		return nil, fmt.Errorf("failed to get Tools: %w", err)
+	}
+
+	// Query tool_filters join table for filter IDs
+	var toolFilterAssociations []struct {
+		ToolID   uint
+		FilterID uint
+	}
+	if len(tools) > 0 {
+		var toolIDs []uint
+		for _, tool := range tools {
+			toolIDs = append(toolIDs, tool.ID)
+		}
+		if err := s.db.Table("tool_filters").
+			Select("tool_id, filter_id").
+			Where("tool_id IN ?", toolIDs).
+			Find(&toolFilterAssociations).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to query tool_filters associations")
+		}
+	}
+
+	// Build map of tool_id -> []filter_id
+	toolFilterMap := make(map[uint][]uint32)
+	for _, assoc := range toolFilterAssociations {
+		toolFilterMap[assoc.ToolID] = append(toolFilterMap[assoc.ToolID], uint32(assoc.FilterID))
+	}
+
+	// Query app_tools join table for app IDs
+	var appToolAssociations []struct {
+		ToolID uint
+		AppID  uint
+	}
+	if len(tools) > 0 {
+		var toolIDs []uint
+		for _, tool := range tools {
+			toolIDs = append(toolIDs, tool.ID)
+		}
+		if err := s.db.Table("app_tools").
+			Select("tool_id, app_id").
+			Where("tool_id IN ?", toolIDs).
+			Find(&appToolAssociations).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to query app_tools associations")
+		}
+	}
+
+	// Build map of tool_id -> []app_id
+	toolAppMap := make(map[uint][]uint32)
+	for _, assoc := range appToolAssociations {
+		toolAppMap[assoc.ToolID] = append(toolAppMap[assoc.ToolID], uint32(assoc.AppID))
+	}
+
+	// Convert Tools to protobuf
+	for _, tool := range tools {
+		// Resolve and encrypt auth key for edge transit (fail-closed: skip tool if encryption fails)
+		resolvedAuthKey := secrets.GetValue(tool.AuthKey, false)
+		encryptedAuthKey := ""
+		if resolvedAuthKey != "" {
+			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
+			if err != nil {
+				log.Error().Err(err).Uint("tool_id", tool.ID).Msg("Failed to encrypt tool auth key - excluding tool from snapshot")
+				continue
+			}
+			encryptedAuthKey = encrypted
+		}
+
+		// Serialize metadata to JSON string
+		var metadataJSON string
+		if tool.Metadata != nil {
+			if metadataBytes, err := json.Marshal(tool.Metadata); err == nil {
+				metadataJSON = string(metadataBytes)
+			}
+		}
+
+		pbTool := &pb.ToolConfig{
+			Id:                  uint32(tool.ID),
+			Name:                tool.Name,
+			Slug:                tool.Slug,
+			Description:         tool.Description,
+			ToolType:            tool.ToolType,
+			OasSpec:             tool.OASSpec,
+			AvailableOperations: tool.AvailableOperations,
+			PrivacyScore:        int32(tool.PrivacyScore),
+			AuthKeyEncrypted:    encryptedAuthKey,
+			AuthSchemaName:      tool.AuthSchemaName,
+			IsActive:            tool.Active,
+			Namespace:           tool.Namespace,
+			Metadata:            metadataJSON,
+			FilterIds:           toolFilterMap[tool.ID],
+			AppIds:              toolAppMap[tool.ID],
+			CreatedAt:           timestamppb.New(tool.CreatedAt),
+			UpdatedAt:           timestamppb.New(tool.UpdatedAt),
+		}
+		snapshot.Tools = append(snapshot.Tools, pbTool)
+	}
+
+	// Get Datasources for namespace
+	var datasources []models.Datasource
+	dsQuery := s.db.Where("active = ?", true)
+	if namespace == "" {
+		dsQuery = dsQuery.Where("namespace = ''")
+	} else {
+		dsQuery = dsQuery.Where("(namespace = '' OR namespace = ?)", namespace)
+	}
+
+	if err := dsQuery.Find(&datasources).Error; err != nil {
+		return nil, fmt.Errorf("failed to get Datasources: %w", err)
+	}
+
+	// Query app_datasources join table for app IDs
+	var appDsAssociations []struct {
+		DatasourceID uint
+		AppID        uint
+	}
+	if len(datasources) > 0 {
+		var dsIDs []uint
+		for _, ds := range datasources {
+			dsIDs = append(dsIDs, ds.ID)
+		}
+		if err := s.db.Table("app_datasources").
+			Select("datasource_id, app_id").
+			Where("datasource_id IN ?", dsIDs).
+			Find(&appDsAssociations).Error; err != nil {
+			log.Warn().Err(err).Msg("Failed to query app_datasources associations")
+		}
+	}
+
+	// Build map of datasource_id -> []app_id
+	dsAppMap := make(map[uint][]uint32)
+	for _, assoc := range appDsAssociations {
+		dsAppMap[assoc.DatasourceID] = append(dsAppMap[assoc.DatasourceID], uint32(assoc.AppID))
+	}
+
+	// Convert Datasources to protobuf (fail-closed: skip datasource if any secret encryption fails)
+	for _, ds := range datasources {
+		// Resolve and encrypt secrets for edge transit
+		resolvedConnString := secrets.GetValue(ds.DBConnString, false)
+		encryptedConnString := ""
+		if resolvedConnString != "" {
+			encrypted, err := s.encryptForMicrogateway(resolvedConnString)
+			if err != nil {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource connection string - excluding from snapshot")
+				continue
+			}
+			encryptedConnString = encrypted
+		}
+
+		resolvedConnAPIKey := secrets.GetValue(ds.DBConnAPIKey, false)
+		encryptedConnAPIKey := ""
+		if resolvedConnAPIKey != "" {
+			encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey)
+			if err != nil {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt datasource API key - excluding from snapshot")
+				continue
+			}
+			encryptedConnAPIKey = encrypted
+		}
+
+		resolvedEmbedAPIKey := secrets.GetValue(ds.EmbedAPIKey, false)
+		encryptedEmbedAPIKey := ""
+		if resolvedEmbedAPIKey != "" {
+			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)
+			if err != nil {
+				log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Failed to encrypt embedder API key - excluding from snapshot")
+				continue
+			}
+			encryptedEmbedAPIKey = encrypted
+		}
+
+		// Serialize metadata to JSON string
+		var metadataJSON string
+		if ds.Metadata != nil {
+			if metadataBytes, err := json.Marshal(ds.Metadata); err == nil {
+				metadataJSON = string(metadataBytes)
+			}
+		}
+
+		pbDS := &pb.DatasourceConfig{
+			Id:                     uint32(ds.ID),
+			Name:                   ds.Name,
+			ShortDescription:       ds.ShortDescription,
+			LongDescription:        ds.LongDescription,
+			Icon:                   ds.Icon,
+			Url:                    ds.Url,
+			PrivacyScore:           int32(ds.PrivacyScore),
+			DbSourceType:           ds.DBSourceType,
+			DbConnStringEncrypted:  encryptedConnString,
+			DbConnApiKeyEncrypted:  encryptedConnAPIKey,
+			DbName:                 ds.DBName,
+			EmbedVendor:            string(ds.EmbedVendor),
+			EmbedUrl:               ds.EmbedUrl,
+			EmbedApiKeyEncrypted:   encryptedEmbedAPIKey,
+			EmbedModel:             ds.EmbedModel,
+			IsActive:               ds.Active,
+			Namespace:              ds.Namespace,
+			Metadata:               metadataJSON,
+			AppIds:                 dsAppMap[ds.ID],
+			CreatedAt:              timestamppb.New(ds.CreatedAt),
+			UpdatedAt:              timestamppb.New(ds.UpdatedAt),
+		}
+		snapshot.Datasources = append(snapshot.Datasources, pbDS)
+	}
+
+	// Get OAuth Clients for MCP authentication on edges
+	var oauthClients []models.OAuthClient
+	if err := s.db.Find(&oauthClients).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to get OAuth clients for edge sync")
+		// Don't fail - OAuth is optional
+	}
+
+	for _, client := range oauthClients {
+		var userID uint32
+		if client.UserID != nil {
+			userID = uint32(*client.UserID)
+		}
+		pbClient := &pb.OAuthClientConfig{
+			Id:               uint32(client.ID),
+			ClientId:         client.ClientID,
+			ClientSecretHash: client.ClientSecret, // Already bcrypt hashed, safe to transmit
+			ClientName:       client.ClientName,
+			RedirectUris:     client.RedirectURIs,
+			UserId:           userID,
+			Scope:            client.Scope,
+			CreatedAt:        timestamppb.New(client.CreatedAt),
+			UpdatedAt:        timestamppb.New(client.UpdatedAt),
+		}
+		snapshot.OauthClients = append(snapshot.OauthClients, pbClient)
+	}
+
+	// Get non-expired Access Tokens for MCP authentication on edges
+	var accessTokens []models.AccessToken
+	if err := s.db.Where("expires_at > ?", time.Now()).Find(&accessTokens).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to get access tokens for edge sync")
+		// Don't fail - OAuth is optional
+	}
+
+	for _, token := range accessTokens {
+		// Encrypt token string for secure transit (fail-closed: skip token if encryption fails)
+		encryptedToken := ""
+		tokenHash := ""
+		if token.Token != "" {
+			encrypted, err := s.encryptForMicrogateway(token.Token)
+			if err != nil {
+				log.Error().Err(err).Uint("token_id", token.ID).Msg("Failed to encrypt access token - excluding from snapshot")
+				continue
+			}
+			encryptedToken = encrypted
+			// Compute SHA-256 hash for O(1) lookup on edge (avoids iterating all tokens)
+			h := sha256.Sum256([]byte(token.Token))
+			tokenHash = fmt.Sprintf("%x", h[:])
+		}
+
+		pbToken := &pb.AccessTokenConfig{
+			Id:             uint32(token.ID),
+			TokenEncrypted: encryptedToken,
+			TokenHash:      tokenHash,
+			ClientId:       token.ClientID,
+			UserId:         uint32(token.UserID),
+			Scope:          token.Scope,
+			ExpiresAt:      timestamppb.New(token.ExpiresAt),
+			CreatedAt:      timestamppb.New(token.CreatedAt),
+			UpdatedAt:      timestamppb.New(token.UpdatedAt),
+		}
+		snapshot.AccessTokens = append(snapshot.AccessTokens, pbToken)
+	}
+
 	log.Debug().
 		Str("namespace", namespace).
 		Int("llm_count", len(snapshot.Llms)).
@@ -1497,9 +1934,73 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		Int("price_count", len(snapshot.ModelPrices)).
 		Int("plugin_count", len(snapshot.Plugins)).
 		Int("model_router_count", len(snapshot.ModelRouters)).
+		Int("tool_count", len(snapshot.Tools)).
+		Int("datasource_count", len(snapshot.Datasources)).
+		Int("oauth_client_count", len(snapshot.OauthClients)).
+		Int("access_token_count", len(snapshot.AccessTokens)).
 		Msg("Generated configuration snapshot for edge")
 
+	// Compute checksum for the snapshot
+	checksum, err := ComputeSnapshotChecksum(snapshot)
+	if err != nil {
+		log.Error().Err(err).Str("namespace", namespace).Msg("Failed to compute snapshot checksum")
+		// Don't fail the snapshot, just log the error - edge can still sync
+	} else {
+		snapshot.Checksum = checksum
+
+		log.Info().
+			Str("namespace", namespace).
+			Str("checksum", checksum).
+			Str("version", snapshot.Version).
+			Msg("Computed snapshot checksum")
+
+		// Update namespace sync status in database
+		if err := s.updateNamespaceSyncStatus(namespace, checksum, snapshot.Version); err != nil {
+			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to update namespace sync status")
+		}
+	}
+
 	return snapshot, nil
+}
+
+// updateNamespaceSyncStatus updates the sync status for a namespace in the database
+func (s *ControlServer) updateNamespaceSyncStatus(namespace, checksum, version string) error {
+	status := &models.NamespaceSyncStatus{
+		Namespace:        namespace,
+		ExpectedChecksum: checksum,
+		ConfigVersion:    version,
+		LastConfigChange: time.Now(),
+	}
+
+	if err := status.Upsert(s.db); err != nil {
+		return fmt.Errorf("failed to upsert namespace sync status: %w", err)
+	}
+
+	// Log audit event for config change
+	auditLog := &models.SyncAuditLog{
+		EventType:     models.SyncEventConfigChanged,
+		Namespace:     namespace,
+		Checksum:      checksum,
+		ConfigVersion: version,
+		Details:       fmt.Sprintf("Configuration snapshot generated with checksum %s", checksum),
+	}
+	if err := auditLog.Create(s.db); err != nil {
+		log.Warn().Err(err).Str("namespace", namespace).Msg("Failed to create sync audit log")
+	}
+
+	// Mark all active edges in this namespace as pending sync
+	edgeInstance := &models.EdgeInstance{}
+	if err := edgeInstance.MarkEdgesAsPendingInNamespace(s.db, namespace); err != nil {
+		log.Warn().Err(err).Str("namespace", namespace).Msg("Failed to mark edges as pending sync")
+	}
+
+	log.Debug().
+		Str("namespace", namespace).
+		Str("checksum", checksum).
+		Str("version", version).
+		Msg("Updated namespace sync status")
+
+	return nil
 }
 
 // encryptForMicrogateway encrypts a plaintext string using microgateway's expected AES-GCM format
@@ -1698,5 +2199,192 @@ func (s *ControlServer) cleanupStaleConnections() {
 
 	if len(toRemove) > 0 {
 		log.Info().Int("removed_count", len(toRemove)).Msg("Cleaned up stale edge connections")
+	}
+}
+
+// Config change event topics (defined locally to avoid import cycle with services package)
+// Note: Only objects included in the microgateway ConfigurationSnapshot trigger sync.
+// Tools, Datasources, Users, and Groups are AI Studio-only and don't affect edge sync.
+const (
+	topicLLMCreated         = "system.llm.created"
+	topicLLMUpdated         = "system.llm.updated"
+	topicLLMDeleted         = "system.llm.deleted"
+	topicAppCreated         = "system.app.created"
+	topicAppUpdated         = "system.app.updated"
+	topicAppDeleted         = "system.app.deleted"
+	topicFilterCreated      = "system.filter.created"
+	topicFilterUpdated      = "system.filter.updated"
+	topicFilterDeleted      = "system.filter.deleted"
+	topicPluginCreated      = "system.plugin.created"
+	topicPluginUpdated      = "system.plugin.updated"
+	topicPluginDeleted      = "system.plugin.deleted"
+	topicModelPriceCreated  = "system.model_price.created"
+	topicModelPriceUpdated  = "system.model_price.updated"
+	topicModelPriceDeleted  = "system.model_price.deleted"
+	topicModelRouterCreated = "system.model_router.created"
+	topicModelRouterUpdated = "system.model_router.updated"
+	topicModelRouterDeleted = "system.model_router.deleted"
+)
+
+// subscribeToConfigChanges sets up event subscriptions for configuration changes.
+// When any relevant config change occurs, checksums are recomputed for all namespaces.
+func (s *ControlServer) subscribeToConfigChanges() {
+	if s.eventBus == nil {
+		log.Warn().Msg("Event bus not available, config change subscriptions not set up")
+		return
+	}
+
+	configTopics := []string{
+		topicLLMCreated, topicLLMUpdated, topicLLMDeleted,
+		topicAppCreated, topicAppUpdated, topicAppDeleted,
+		topicFilterCreated, topicFilterUpdated, topicFilterDeleted,
+		topicPluginCreated, topicPluginUpdated, topicPluginDeleted,
+		topicModelPriceCreated, topicModelPriceUpdated, topicModelPriceDeleted,
+		topicModelRouterCreated, topicModelRouterUpdated, topicModelRouterDeleted,
+	}
+
+	for _, topic := range configTopics {
+		topic := topic // Capture for closure
+		s.eventBus.Subscribe(topic, func(event eventbridge.Event) {
+			s.onConfigurationChanged(topic, event)
+		})
+	}
+
+	log.Info().Int("topic_count", len(configTopics)).Msg("Subscribed to configuration change events for sync status tracking")
+}
+
+// onConfigurationChanged handles configuration change events by recomputing
+// checksums for all namespaces and marking affected edges as pending.
+func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.Event) {
+	log.Info().
+		Str("topic", topic).
+		Str("event_id", event.ID).
+		Msg("Configuration changed, recomputing namespace checksums")
+
+	// Get all namespaces that have connected edges
+	namespaces := s.getActiveNamespaces()
+	if len(namespaces) == 0 {
+		// No connected edges, just update default namespace
+		namespaces = []string{"default"}
+	}
+
+	for _, namespace := range namespaces {
+		// Recompute snapshot and checksum for this namespace
+		// This will also update NamespaceSyncStatus
+		snapshot, err := s.getConfigurationSnapshot(namespace)
+		if err != nil {
+			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to recompute snapshot on config change")
+			continue
+		}
+
+		log.Info().
+			Str("namespace", namespace).
+			Str("checksum", snapshot.Checksum).
+			Str("version", snapshot.Version).
+			Msg("Recomputed namespace checksum after config change")
+
+		// Mark all edges in this namespace as pending sync
+		var edgeInstance models.EdgeInstance
+		if err := edgeInstance.MarkEdgesAsPendingInNamespace(s.db, namespace); err != nil {
+			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to mark edges as pending")
+		}
+	}
+}
+
+// getActiveNamespaces returns a list of unique namespaces that have connected edges.
+func (s *ControlServer) getActiveNamespaces() []string {
+	s.edgeMutex.RLock()
+	defer s.edgeMutex.RUnlock()
+
+	namespaceSet := make(map[string]bool)
+	for _, conn := range s.edgeConnections {
+		if conn.Namespace != "" {
+			namespaceSet[conn.Namespace] = true
+		}
+	}
+
+	namespaces := make([]string, 0, len(namespaceSet))
+	for ns := range namespaceSet {
+		namespaces = append(namespaces, ns)
+	}
+	return namespaces
+}
+
+// shouldIncludeAppInResponse checks if an App should be included in the token validation
+// response for pull-on-miss sync. Returns true if:
+// - App has global namespace (empty string) - syncs to all edges
+// - App's namespace matches the requesting edge's namespace
+func (s *ControlServer) shouldIncludeAppInResponse(appNamespace, edgeNamespace string) bool {
+	// Global apps (empty namespace) sync to all edges
+	if appNamespace == "" {
+		return true
+	}
+	// Namespaced apps sync only to matching edges
+	return appNamespace == edgeNamespace
+}
+
+// convertAppToProto converts a models.App to a pb.AppConfig for pull-on-miss sync.
+// Note: CurrentPeriodUsage is set to 0 - the edge tracks budget locally via analytics.
+func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
+	// Get associated LLM IDs
+	llmIDs := make([]uint32, len(app.LLMs))
+	for i, llm := range app.LLMs {
+		llmIDs[i] = uint32(llm.ID)
+	}
+
+	// Get associated Tool IDs
+	toolIDs := make([]uint32, len(app.Tools))
+	for i, tool := range app.Tools {
+		toolIDs[i] = uint32(tool.ID)
+	}
+
+	// Get associated Datasource IDs
+	datasourceIDs := make([]uint32, len(app.Datasources))
+	for i, ds := range app.Datasources {
+		datasourceIDs[i] = uint32(ds.ID)
+	}
+
+	// Handle optional monthly budget
+	var monthlyBudget float64
+	if app.MonthlyBudget != nil {
+		monthlyBudget = *app.MonthlyBudget
+	}
+
+	// Serialize metadata to JSON string
+	var metadataJSON string
+	if app.Metadata != nil {
+		if metadataBytes, err := json.Marshal(app.Metadata); err == nil {
+			metadataJSON = string(metadataBytes)
+		}
+	}
+
+	// Format budget start date if available
+	budgetStartDate := ""
+	if app.BudgetStartDate != nil {
+		budgetStartDate = app.BudgetStartDate.Format(time.RFC3339)
+	}
+
+	// Note: CurrentPeriodUsage is intentionally set to 0 for pull-on-miss sync.
+	// The edge gateway maintains its own budget tracking via local analytics.
+	// Setting it to 0 here avoids an expensive SUM(cost) query on llm_chat_records
+	// for every token validation, and prevents overwriting the edge's local budget data.
+
+	return &pb.AppConfig{
+		Id:                 uint32(app.ID),
+		Name:               app.Name,
+		Description:        app.Description,
+		OwnerEmail:         "", // AI Studio doesn't have owner email field yet
+		IsActive:           app.IsActive,
+		MonthlyBudget:      monthlyBudget,
+		BudgetStartDate:    budgetStartDate,
+		Metadata:           metadataJSON,
+		Namespace:          app.Namespace,
+		UserId:             uint32(app.UserID), // Owner user ID for analytics tracking
+		LlmIds:             llmIDs,
+		ToolIds:            toolIDs,
+		DatasourceIds:      datasourceIDs,
+		CurrentPeriodUsage: 0, // Intentionally 0 - edge tracks budget locally
+		CreatedAt:          timestamppb.New(app.CreatedAt),
+		UpdatedAt:          timestamppb.New(app.UpdatedAt),
 	}
 }

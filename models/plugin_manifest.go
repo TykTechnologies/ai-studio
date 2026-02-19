@@ -24,6 +24,7 @@ type PluginManifest struct {
 		RPC         []string `json:"rpc"`          // RPC permissions: call
 		Routes      []string `json:"routes"`       // Route patterns this plugin can register
 		UI          []string `json:"ui"`           // UI permissions: sidebar.register, route.register
+		PortalUI    []string `json:"portal_ui"`    // Portal UI permissions: sidebar.register, route.register
 		Services    []string `json:"services"`     // AI Studio service access scopes: analytics.read, plugins.config, etc.
 		ObjectHooks []string `json:"object_hooks"` // Object hook permissions: llm.before_create, datasource.after_update, etc.
 	} `json:"permissions"`
@@ -38,10 +39,15 @@ type PluginManifest struct {
 		Entrypoint string `json:"entrypoint"` // gRPC service method name
 	} `json:"rpc,omitempty"`
 
-	// UI configuration
+	// UI configuration (admin interface)
 	UI *struct {
-		Slots []UISlot `json:"slots"` // UI slots this plugin registers
+		Slots []UISlot `json:"slots"` // UI slots this plugin registers in admin
 	} `json:"ui,omitempty"`
+
+	// Portal UI configuration (end-user portal)
+	Portal *struct {
+		Slots []PortalUISlot `json:"slots"` // UI slots this plugin registers in portal
+	} `json:"portal,omitempty"`
 
 	// Compatibility requirements
 	Compat struct {
@@ -59,6 +65,23 @@ type PluginManifest struct {
 
 	// Scheduled tasks
 	Schedules []ScheduleDefinition `json:"schedules,omitempty"`
+
+	// Resource types provided by this plugin (for ResourceProvider capability)
+	ResourceTypes []ManifestResourceType `json:"resource_types,omitempty"`
+}
+
+// ManifestResourceType declares a resource type in the plugin manifest
+type ManifestResourceType struct {
+	Slug                string `json:"slug" binding:"required"`
+	Name                string `json:"name" binding:"required"`
+	Description         string `json:"description"`
+	Icon                string `json:"icon"`
+	HasPrivacyScore     bool   `json:"has_privacy_score"`
+	SupportsSubmissions bool   `json:"supports_submissions"`
+	FormComponent       *struct {
+		Tag        string `json:"tag"`
+		EntryPoint string `json:"entry_point"`
+	} `json:"form_component,omitempty"`
 }
 
 // ScheduleDefinition represents a cron-based task schedule in the manifest
@@ -70,6 +93,17 @@ type ScheduleDefinition struct {
 	Enabled        bool                   `json:"enabled"`                         // Whether enabled (default: true)
 	TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`       // Max execution time (default: 60)
 	Config         map[string]interface{} `json:"config,omitempty"`                // Schedule-specific config
+}
+
+// PortalUISlot represents a portal UI extension point with group-based visibility filtering.
+// If Groups is empty, the slot is visible to all portal users.
+// If Groups has values, only users belonging to at least one of those groups can see it.
+type PortalUISlot struct {
+	Slot   string       `json:"slot"`             // Slot identifier (e.g., "portal_sidebar.section")
+	Label  string       `json:"label"`            // Display label
+	Icon   string       `json:"icon"`             // Icon path/URL
+	Groups []string     `json:"groups,omitempty"` // Allowed groups (empty = all portal users)
+	Items  []UISlotItem `json:"items"`            // Items to mount in this slot
 }
 
 // UISlot represents a UI extension point where plugins can mount components
@@ -137,6 +171,8 @@ type UIRegistry struct {
 	MountConfig    map[string]interface{} `json:"mount_config" gorm:"serializer:json"`
 	IsActive       bool                   `json:"is_active" gorm:"default:true"`
 	LoadPriority   int                    `json:"load_priority" gorm:"default:0"`
+	Scope          string                 `json:"scope" gorm:"size:20;default:admin"`          // "admin" or "portal"
+	AllowedGroups  []string               `json:"allowed_groups" gorm:"serializer:json"`        // Empty = all users (portal scope only)
 	CreatedAt      time.Time              `json:"created_at"`
 	UpdatedAt      time.Time              `json:"updated_at"`
 
@@ -214,6 +250,23 @@ func (pm *PluginManifest) ValidateManifest() error {
 		}
 	}
 
+	// Validate Portal UI slots if present
+	if pm.Portal != nil {
+		for i, slot := range pm.Portal.Slots {
+			if slot.Slot == "" {
+				return fmt.Errorf("portal slot %d missing slot identifier", i)
+			}
+			for j, item := range slot.Items {
+				if item.Type == "" {
+					return fmt.Errorf("portal slot %d item %d missing type", i, j)
+				}
+				if item.Mount.Kind == "" {
+					return fmt.Errorf("portal slot %d item %d missing mount kind", i, j)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -249,6 +302,38 @@ func (pm *PluginManifest) GetSidebarItems() []UISlot {
 	return sidebarSlots
 }
 
+// GetPortalRoutes extracts all routes defined in the portal manifest section
+func (pm *PluginManifest) GetPortalRoutes() []UISlotItem {
+	var routes []UISlotItem
+	if pm.Portal == nil {
+		return routes
+	}
+
+	for _, slot := range pm.Portal.Slots {
+		for _, item := range slot.Items {
+			if item.Type == "route" {
+				routes = append(routes, item)
+			}
+		}
+	}
+	return routes
+}
+
+// GetPortalSidebarItems extracts portal sidebar menu items from the manifest
+func (pm *PluginManifest) GetPortalSidebarItems() []PortalUISlot {
+	var sidebarSlots []PortalUISlot
+	if pm.Portal == nil {
+		return sidebarSlots
+	}
+
+	for _, slot := range pm.Portal.Slots {
+		if slot.Slot == "portal_sidebar.section" {
+			sidebarSlots = append(sidebarSlots, slot)
+		}
+	}
+	return sidebarSlots
+}
+
 // HasPermission checks if the manifest declares a specific permission
 func (pm *PluginManifest) HasPermission(permType, permission string) bool {
 	switch permType {
@@ -266,6 +351,12 @@ func (pm *PluginManifest) HasPermission(permType, permission string) bool {
 		}
 	case "ui":
 		for _, perm := range pm.Permissions.UI {
+			if perm == permission {
+				return true
+			}
+		}
+	case "portal_ui":
+		for _, perm := range pm.Permissions.PortalUI {
 			if perm == permission {
 				return true
 			}

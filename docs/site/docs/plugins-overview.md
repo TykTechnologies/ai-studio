@@ -16,7 +16,7 @@ All plugins now use a single SDK (`pkg/plugin_sdk`) that works seamlessly in bot
 
 ## Plugin Capabilities
 
-Plugins implement one or more of these 10 capabilities:
+Plugins implement one or more of these 12 capabilities:
 
 | Capability | Where It Works | Purpose | Common Use Cases |
 |------------|----------------|---------|------------------|
@@ -25,9 +25,11 @@ Plugins implement one or more of these 10 capabilities:
 | **Post-Auth** | Studio + Gateway | Process after authentication | Request enrichment, policy enforcement |
 | **Response** | Studio + Gateway | Modify responses | Content filtering, header injection |
 | **Data Collection** | Studio + Gateway | Collect telemetry | Export to Elasticsearch, ClickHouse |
+| **Custom Endpoints** | Gateway | Serve custom HTTP endpoints | MCP proxy, OAuth provider, webhooks |
 | **Object Hooks** | Studio only | Intercept CRUD operations | Validation, approval workflows |
 | **Agent** | Studio only | Conversational AI | Chat-based agents, LLM wrapping |
 | **UI Provider** | Studio only | Dashboard extensions | Custom dashboards, admin tools |
+| **Portal UI** | Studio only | Portal extensions | User-facing forms, pages, dashboards |
 | **Config Provider** | Studio + Gateway | Provide JSON Schema config | Dynamic configuration |
 | **Manifest Provider** | Gateway only | Plugin manifest | Gateway-only plugins |
 
@@ -152,7 +154,19 @@ AI Studio UI plugins extend the dashboard with custom WebComponents, adding new 
 
 ## 3. AI Studio Agent Plugins
 
+> **Experimental Feature**: Agent plugins are currently experimental. The API and behavior may change in future releases.
+
 Agent plugins enable conversational AI experiences in the Chat Interface using the unified SDK. These plugins can wrap LLMs, add custom logic, integrate external services, and create sophisticated multi-turn conversations.
+
+### Architecture
+
+Agent plugins follow the **Plugin → Agent Object → App Object** pattern:
+
+- **Plugin**: Long-running gRPC plugin implementing `HandleAgentMessage`
+- **Agent Object**: Configuration binding the plugin to an App with access controls
+- **App Object**: Provides LLMs, tools, datasources, credentials, and budget control
+
+Agents appear in the **Chat** section of the AI Portal alongside managed chats. Users access agents based on group membership.
 
 ### Capabilities
 
@@ -315,14 +329,24 @@ func main() {
 
 ## Plugin Architecture
 
+### Monolithic Plugin Architecture
+
+A single plugin binary can run in **both** AI Studio and the Microgateway, so long as the requisite interfaces are implemented and the requirements are clear in the manifest file. This means one plugin can provide UI extensions in Studio, middleware hooks in the gateway, and even use the event bus to communicate between its Studio and gateway components in near-real-time.
+
+### Scheduled Tasks
+
+Studio plugins can register **scheduled tasks** — periodic calls from the host to the plugin on a configurable interval. This enables long-running background jobs such as analytics analysis, compliance checks, log scanning, or data synchronization.
+
 ### Process Isolation
 
 Plugins run as separate processes, communicating with the main platform via gRPC. This provides:
 
 - **Security**: Plugin crashes don't affect the main platform
-- **Language Flexibility**: Plugins can be written in any language with gRPC support
+- **Language Flexibility**: While the gRPC protocol theoretically supports any language, **only Go plugins have been tested** in production. If you plan to write plugins in another language, expect to do additional integration work.
 - **Resource Management**: Plugins can be restarted independently
 - **Version Independence**: Update plugins without platform restarts
+
+Plugins can also run as standalone gRPC services in a sidecar or elsewhere on the network, rather than as local sub-processes. See [Plugin Deployment](./plugins-deployment.md) for details.
 
 ### Communication Flow
 
@@ -431,10 +455,12 @@ Permissions are validated when plugins call the Service API. The platform enforc
 
 1. Choose your plugin type
 2. Read the specific plugin guide
-3. Review example plugins in `examples/plugins/` and `microgateway/plugins/examples/`
+3. Review example plugins in `examples/plugins/` and `community/plugins/`
 4. Use the SDK to implement required interfaces
-5. Build and test with `file://` deployment
+5. Build and test with `file://` deployment (see [Development Workflow Guide](plugins-development-workflow.md) for fast iteration)
 6. Deploy with `grpc://` or `oci://` for production
+
+**Pro tip**: Use the reload API (`POST /api/v1/plugins/{id}/reload`) to test changes instantly without reinstalling. See the [Development Workflow Guide](plugins-development-workflow.md) for the fastest iteration loop.
 
 ### SDK Installation
 
@@ -460,11 +486,15 @@ func main() {
 
 ## Next Steps
 
+- **[Development Workflow Guide](plugins-development-workflow.md)** - Fast iteration with file:// and reload API
 - **[Plugin SDK Reference](plugins-sdk.md)** - Complete SDK documentation
+- **[Plugin Examples](plugins-examples.md)** - Browse working examples (including production-ready community plugins)
 - **[Object Hooks Guide](plugins-object-hooks.md)** - Intercept CRUD operations
+- **[Custom Endpoints Guide](plugins-custom-endpoints.md)** - Serve custom HTTP endpoints (MCP, OAuth, webhooks)
 - **[Microgateway Plugins Guide](plugins-microgateway.md)** - Gateway-specific patterns
-- **[AI Studio UI Plugins Guide](plugins-studio-ui.md)** - Build plugin UIs
+- **[AI Studio UI Plugins Guide](plugins-studio-ui.md)** - Build admin plugin UIs
+- **[AI Portal UI Plugins Guide](plugins-portal-ui.md)** - Build portal-facing plugin pages and forms
 - **[AI Studio Agent Plugins Guide](plugins-studio-agent.md)** - Build conversational agents
 - **[Service API Reference](plugins-service-api.md)** - Complete API documentation
-- **[Plugin Examples](plugins-examples.md)** - Browse working examples
+- **[Plugin Deployment](plugins-deployment.md)** - Production deployment options
 - **[Migration Guide](plugins-migration-guide.md)** - Upgrade from old SDKs

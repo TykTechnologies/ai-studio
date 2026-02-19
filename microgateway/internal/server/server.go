@@ -48,6 +48,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		serviceContainer.FilterService,
 		serviceContainer.PluginService,
 		serviceContainer.PluginManager,
+		serviceContainer.DB,
 	)
 
 	budgetServiceAdapter := services.NewBudgetServiceAdapter(
@@ -107,17 +108,19 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{
-		AuthProvider:       serviceContainer.AuthProvider,
-		Services:           serviceContainer,
-		Gateway:            gateway, // Mount gateway back in router
-		PluginManager:      api.NewPluginManagerAdapter(pluginManager),
-		ReloadCoordinator:  nil, // Will be set for control instances
-		ModelRouterService: serviceContainer.ModelRouterService, // Enterprise: Model router
-		EnableSwagger:      cfg.IsDevelopment(),
-		EnableMetrics:      cfg.Observability.EnableMetrics,
-		Version:            version,
-		BuildHash:          buildHash,
-		BuildTime:          buildTime,
+		AuthProvider:                serviceContainer.AuthProvider,
+		Services:                    serviceContainer,
+		Gateway:                     gateway, // Mount gateway back in router
+		PluginManager:               api.NewPluginManagerAdapter(pluginManager),
+		ReloadCoordinator:           nil, // Will be set for control instances
+		ModelRouterService:          serviceContainer.ModelRouterService, // Enterprise: Model router
+		EnableSwagger:               cfg.IsDevelopment(),
+		EnableMetrics:               cfg.Observability.EnableMetrics,
+		PluginEndpointMaxBodySize:   cfg.Gateway.PluginEndpointMaxBodySize,
+		PluginEndpointStreamTimeout: cfg.Gateway.PluginEndpointStreamTimeout,
+		Version:                     version,
+		BuildHash:                   buildHash,
+		BuildTime:                   buildTime,
 	}
 
 	router := api.SetupRouter(routerConfig)
@@ -153,16 +156,18 @@ func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordina
 	
 	// Update router config with reload coordinator
 	routerConfig := &api.RouterConfig{
-		AuthProvider:     s.services.AuthProvider,
-		Services:         s.services,
-		Gateway:          s.gateway,
-		PluginManager:    api.NewPluginManagerAdapter(s.pluginManager),
-		ReloadCoordinator: reloadCoordinator, // Add reload coordinator
-		EnableSwagger:    s.config.IsDevelopment(),
-		EnableMetrics:    s.config.Observability.EnableMetrics,
-		Version:          s.version,
-		BuildHash:        s.buildHash,
-		BuildTime:        s.buildTime,
+		AuthProvider:                s.services.AuthProvider,
+		Services:                    s.services,
+		Gateway:                     s.gateway,
+		PluginManager:               api.NewPluginManagerAdapter(s.pluginManager),
+		ReloadCoordinator:           reloadCoordinator, // Add reload coordinator
+		EnableSwagger:               s.config.IsDevelopment(),
+		EnableMetrics:               s.config.Observability.EnableMetrics,
+		PluginEndpointMaxBodySize:   s.config.Gateway.PluginEndpointMaxBodySize,
+		PluginEndpointStreamTimeout: s.config.Gateway.PluginEndpointStreamTimeout,
+		Version:                     s.version,
+		BuildHash:                   s.buildHash,
+		BuildTime:                   s.buildTime,
 	}
 
 	// Recreate router with reload coordinator

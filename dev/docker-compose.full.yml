@@ -1,0 +1,155 @@
+# Tyk AI Studio - Full Development Environment
+#
+# This compose file extends the minimal setup with:
+#   - Microgateway (edge proxy with hot reloading)
+#   - Plugin watcher (auto-rebuilds plugins on change)
+#
+# Usage:
+#   cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+#   Or use: make dev-full (from project root)
+#
+# Additional Services:
+#   - gateway:  Microgateway in edge mode (port 8081)
+#   - plugins:  Plugin watcher and builder
+
+services:
+  # Studio - mount plugin builds volume
+  studio:
+    volumes:
+      - plugin_builds:/app/bin/plugins
+
+  # Microgateway - Edge Proxy (with Air hot reloading)
+  gateway:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.studio
+      args:
+        EDITION: ${EDITION:-ce}
+    container_name: midsommar-gateway
+    # Override command to use gateway Air config
+    command: ["air", "-c", "/app/dev/air/.air.gateway.toml"]
+    volumes:
+      # Mount source code
+      - ..:/app
+      # Separate tmp directory for gateway builds
+      - gateway_tmp:/app/tmp/gateway
+      # Share Go module cache
+      - go_cache:/root/go/pkg/mod
+      # Gateway data directory
+      - gateway_data:/app/data/gateway
+      # Built plugins from plugin watcher
+      - plugin_builds:/app/bin/plugins
+    ports:
+      - "8081:8080"   # Gateway HTTP API (mapped to 8081 to avoid conflict)
+    env_file:
+      - .env.gateway
+    environment:
+      # Override/supplement env file settings
+      EDITION: ${EDITION:-ce}
+      # Docker Compose specific - override control endpoint to use service name
+      CONTROL_ENDPOINT: studio:50051
+      # Use shared auth token from main .env
+      EDGE_AUTH_TOKEN: ${GRPC_AUTH_TOKEN:-dev-grpc-auth-token-change-in-production}
+      ENCRYPTION_KEY: ${MICROGATEWAY_ENCRYPTION_KEY:-dev-encryption-key-change-in-production}
+      # License from main .env (if enterprise)
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT: ${OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT:-}
+      OCI_PLUGINS_CACHE_DIR: /app/oci-cache
+    depends_on:
+      studio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - midsommar-dev
+
+  # Plugin Builder - watches and rebuilds plugins on change
+  plugins:
+    image: golang:1.25-alpine
+    container_name: midsommar-plugins
+    working_dir: /app
+    command: >
+      sh -c "
+        apk add --no-cache inotify-tools gcc musl-dev make git findutils;
+        echo '========================================';
+        echo 'Plugin Watcher Started';
+        echo '========================================';
+        echo 'Watching plugin directories:';
+        echo '  - examples/plugins/';
+        echo '  - community/plugins/ (if present)';
+        echo '  - enterprise/plugins/ (if present)';
+        echo '  - tyk-internal/plugins/ (if present)';
+        echo '';
+
+        build_plugins() {
+          echo 'Building all plugins...';
+
+          # Build from all plugin directories that exist
+          for plugin_root in examples/plugins community/plugins enterprise/plugins tyk-internal/plugins; do
+            if [ -d \"\$$plugin_root\" ]; then
+              echo \"Scanning \$$plugin_root...\";
+              find \"\$$plugin_root\" -name 'go.mod' 2>/dev/null | while read modfile; do
+                plugin_dir=\$$(dirname \"\$$modfile\");
+                plugin_name=\$$(basename \"\$$plugin_dir\");
+                # Enterprise plugins need -tags enterprise
+                if echo \"\$$plugin_dir\" | grep -q 'enterprise/'; then
+                  build_tags='-tags enterprise';
+                else
+                  build_tags='';
+                fi;
+                echo \"Building: \$$plugin_name\";
+                mkdir -p /app/bin/plugins;
+                (cd \"\$$plugin_dir\" && go mod tidy -e 2>/dev/null; CGO_ENABLED=0 go build \$$build_tags -o /app/bin/plugins/\$$plugin_name .) && echo \"  ✓ \$$plugin_name\" || echo \"  ✗ \$$plugin_name\";
+              done;
+            fi;
+          done;
+
+          echo '✅ Plugin build complete';
+        };
+
+        # Initial build
+        echo 'Performing initial plugin build...';
+        build_plugins;
+        echo '';
+
+        # Build watch paths - only include directories that exist
+        watch_paths='';
+        [ -d /app/examples/plugins ] && watch_paths=\"\$$watch_paths /app/examples/plugins\";
+        [ -d /app/community/plugins ] && watch_paths=\"\$$watch_paths /app/community/plugins\";
+        [ -d /app/enterprise/plugins ] && watch_paths=\"\$$watch_paths /app/enterprise/plugins\";
+        [ -d /app/tyk-internal/plugins ] && watch_paths=\"\$$watch_paths /app/tyk-internal/plugins\";
+
+        # Watch for changes and rebuild
+        while true; do
+          echo \"Waiting for changes in:\$$watch_paths\";
+          inotifywait -r -e modify,create,delete,move \$$watch_paths 2>/dev/null;
+          echo '';
+          echo '>>> Change detected, rebuilding plugins...';
+          build_plugins;
+          echo '';
+        done
+      "
+    volumes:
+      # Mount source code
+      - ..:/app
+      # Share Go module cache
+      - go_cache:/root/go/pkg/mod
+      # Plugin output directory
+      - plugin_builds:/app/bin/plugins
+    environment:
+      CGO_ENABLED: "1"
+      EDITION: ${EDITION:-ce}
+    networks:
+      - midsommar-dev
+
+volumes:
+  gateway_tmp:
+    name: midsommar-gateway-tmp
+  gateway_data:
+    name: midsommar-gateway-data
+  plugin_builds:
+    name: midsommar-plugin-builds

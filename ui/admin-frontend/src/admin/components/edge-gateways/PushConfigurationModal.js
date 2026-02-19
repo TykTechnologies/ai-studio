@@ -22,10 +22,12 @@ import { CloudSync as PushIcon } from '@mui/icons-material';
 import edgeGatewayService from '../../services/edgeGatewayService';
 import useNamespaces from '../../hooks/useNamespaces';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
+import { useSyncStatus } from '../../context/SyncStatusContext';
 
 const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
   const { getAvailableNamespaces } = useNamespaces();
   const { features } = useSystemFeatures();
+  const { refreshSyncStatus } = useSyncStatus();
 
   // CE: Default to 'all' since namespace selection is enterprise-only
   const [targetType, setTargetType] = useState(features.hub_spoke_multi_tenant ? 'namespace' : 'all');
@@ -81,6 +83,12 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
       if (onSuccess) {
         onSuccess();
       }
+
+      // Refresh sync status after a successful push
+      // Use a series of refreshes to catch the status update as edges sync
+      refreshSyncStatus();
+      setTimeout(() => refreshSyncStatus(), 2000);  // Refresh again after 2s
+      setTimeout(() => refreshSyncStatus(), 5000);  // And again after 5s
     } catch (err) {
       console.error('Error pushing configuration:', err);
       setError(err.message);

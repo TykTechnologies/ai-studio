@@ -14,31 +14,36 @@ import (
 )
 
 func TestModelValidationMiddleware(t *testing.T) {
-	t.Run("stores model from request body in context", func(t *testing.T) {
-		// Create a test proxy with a mock LLM
+	createProxy := func(vendor models.Vendor, extractor ModelNameExtractor) *Proxy {
 		p := &Proxy{
 			llms: map[string]*models.LLM{
 				"test-llm": {
 					Name:   "Test LLM",
-					Vendor: models.ANTHROPIC,
+					Vendor: vendor,
 				},
 			},
 		}
 
-		// Register the Anthropic model extractor
 		p.modelValidator = NewModelValidator(nil)
-		p.modelValidator.RegisterExtractor(string(models.ANTHROPIC), AnthropicModelExtractor)
+		p.modelValidator.RegisterExtractor(string(vendor), extractor)
 
-		// Create a test handler that checks the context
-		var capturedModel string
-		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		return p
+	}
+
+	createTestHandler := func(capturedModel *string) http.HandlerFunc {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if model := r.Context().Value("model_name"); model != nil {
-				capturedModel = model.(string)
+				*capturedModel = model.(string)
 			}
 			w.WriteHeader(http.StatusOK)
 		})
+	}
 
-		// Create the middleware handler
+	t.Run("stores model from request body in context", func(t *testing.T) {
+		p := createProxy(models.ANTHROPIC, AnthropicModelExtractor)
+
+		var capturedModel string
+		nextHandler := createTestHandler(&capturedModel)
 		handler := p.modelValidationMiddleware(nextHandler)
 
 		// Create a test request with a model in the body
@@ -60,6 +65,38 @@ func TestModelValidationMiddleware(t *testing.T) {
 		// Verify the model was stored in context
 		assert.Equal(t, http.StatusOK, rr.Code)
 		assert.Equal(t, "claude-3-opus-20240229", capturedModel)
+	})
+
+	t.Run("successfully extracts model from path for google_ai LLM", func(t *testing.T) {
+		p := createProxy(models.GOOGLEAI, GoogleAIModelExtractor)
+
+		var capturedModel string
+		nextHandler := createTestHandler(&capturedModel)
+		handler := p.modelValidationMiddleware(nextHandler)
+
+		reqBody := map[string]any{
+			"messages": []map[string]string{
+				{"role": "user", "content": "Hello"},
+			},
+		}
+		reqBodyBytes, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		urls := []string{
+			"/llm/rest/test-llm/v1/models/gemini-2.5-flash",
+			"/llm/rest/test-llm/v1/models/gemini-2.5-flash:generateContent",
+		}
+
+		for _, url := range urls {
+			req := httptest.NewRequest("POST", url, strings.NewReader(string(reqBodyBytes)))
+			req = mux.SetURLVars(req, map[string]string{"llmSlug": "test-llm"})
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			assert.Equal(t, http.StatusOK, rr.Code)
+			assert.Equal(t, "gemini-2.5-flash", capturedModel)
+		}
 	})
 }
 

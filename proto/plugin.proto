@@ -44,6 +44,10 @@ service PluginService {
     // Generic RPC call method (for AI Studio plugins)
     rpc Call(CallRequest) returns (CallResponse);
 
+    // Portal RPC call method (for portal-facing plugin endpoints)
+    // Separate from Call to enforce security boundary between admin and portal contexts
+    rpc PortalCall(PortalCallRequest) returns (PortalCallResponse);
+
     // Configuration schema method (for both systems)
     rpc GetConfigSchema(GetConfigSchemaRequest) returns (GetConfigSchemaResponse);
 
@@ -60,6 +64,18 @@ service PluginService {
     // Edge Payload Methods (for plugins that receive data from edge instances)
     // Called when an edge plugin sends data via SendToControl
     rpc AcceptEdgePayload(EdgePayloadRequest) returns (EdgePayloadResponse);
+
+    // Custom Endpoint Methods — plugins serve custom HTTP endpoints under /plugins/{slug}/
+    rpc GetEndpointRegistrations(GetEndpointRegistrationsRequest) returns (GetEndpointRegistrationsResponse);
+    rpc HandleEndpointRequest(EndpointRequest) returns (EndpointResponse);
+    rpc HandleEndpointRequestStream(EndpointRequest) returns (stream EndpointResponseChunk);
+
+    // Resource Provider Methods — plugins register custom resource types for Apps
+    rpc GetResourceTypeRegistrations(GetResourceTypeRegistrationsRequest) returns (GetResourceTypeRegistrationsResponse);
+    rpc ListResourceInstances(ListResourceInstancesRequest) returns (ListResourceInstancesResponse);
+    rpc GetResourceInstance(GetResourceInstanceRequest) returns (GetResourceInstanceResponse);
+    rpc ValidateResourceSelection(ValidateResourceSelectionRequest) returns (ValidateResourceSelectionResponse);
+    rpc CreateResourceInstance(CreateResourceInstanceRequest) returns (CreateResourceInstanceResponse);
 
     // Session management for long-lived broker access
     // OpenSession blocks until timeout or CloseSession is called, keeping the broker alive
@@ -221,6 +237,27 @@ message App {
     double monthly_budget = 6;
     int32 rate_limit = 7;
     map<string, string> metadata = 8;
+    repeated AppPluginResourceAssociation plugin_resources = 9;
+}
+
+// AppPluginResourceAssociation carries plugin resource bindings on the App proto.
+// This is populated by the gateway router so CustomEndpointHandler plugins can
+// access resource associations directly from EndpointRequest.App without
+// parsing metadata workarounds.
+message AppPluginResourceAssociation {
+    uint32 plugin_id = 1;
+    string resource_type_slug = 2;
+    repeated string instance_ids = 3;
+    repeated AppPluginResourceInstance instances = 4;
+}
+
+// AppPluginResourceInstance carries instance details on the App proto
+// so gateway plugins can access resource metadata without calling back to Studio.
+message AppPluginResourceInstance {
+    string id = 1;
+    string name = 2;
+    int32 privacy_score = 3;
+    bytes metadata = 4;
 }
 
 message User {
@@ -338,6 +375,33 @@ message CallResponse {
     bool success = 1;
     string data = 2;          // JSON response data as string
     string error_message = 3;
+}
+
+// Portal RPC call messages (for portal-facing plugin endpoints)
+// These are separate from Call/CallResponse to enforce security boundaries
+// between admin UI and portal UI plugin interactions.
+message PortalCallRequest {
+    string method = 1;                       // RPC method name (e.g., "submit_feedback", "get_user_data")
+    string payload = 2;                      // JSON payload as string
+    uint32 service_broker_id = 3;            // Broker ID for service API access during RPC
+    PortalUserContext user_context = 4;      // Authenticated portal user info
+}
+
+message PortalCallResponse {
+    bool success = 1;
+    string data = 2;                         // JSON response data as string
+    string error_message = 3;
+}
+
+// PortalUserContext provides information about the authenticated portal user
+// This is passed to plugins on portal RPC calls so they can make authorization decisions
+message PortalUserContext {
+    uint32 user_id = 1;
+    string email = 2;
+    string name = 3;
+    bool is_admin = 4;
+    repeated string groups = 5;              // Group names the user belongs to
+    map<string, string> metadata = 6;        // Additional user metadata
 }
 
 // Configuration schema messages
@@ -545,4 +609,155 @@ message CloseSessionRequest {
 message CloseSessionResponse {
     bool success = 1;
     string error_message = 2;
+}
+
+// --- Custom Endpoint Messages ---
+// These enable plugins to register and serve custom HTTP endpoints on the gateway
+
+message GetEndpointRegistrationsRequest {
+    // Empty - plugin returns its endpoint registrations
+}
+
+message GetEndpointRegistrationsResponse {
+    repeated EndpointRegistration registrations = 1;
+}
+
+message EndpointRegistration {
+    string path = 1;                     // Relative path (e.g., "/*", "/.well-known/openid-configuration")
+    repeated string methods = 2;         // HTTP methods: GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD
+    string description = 3;              // Human-readable description
+    bool require_auth = 4;               // Whether the gateway should enforce auth before forwarding
+    bool stream_response = 5;            // If true, gateway uses HandleEndpointRequestStream (SSE)
+    map<string, string> metadata = 6;    // Plugin-defined metadata
+}
+
+// EndpointRequest carries a full HTTP request to the plugin
+message EndpointRequest {
+    string method = 1;                   // HTTP method
+    string path = 2;                     // Full request path (/plugins/{slug}/users/123/profile)
+    string relative_path = 3;            // Path relative to plugin mount (/users/123/profile)
+    repeated string path_segments = 4;   // Pre-split relative path segments: ["users", "123", "profile"]
+    map<string, string> headers = 5;     // Request headers
+    bytes body = 6;                      // Request body
+    string query_string = 7;             // Raw query string
+    string remote_addr = 8;              // Client IP
+    string host = 9;                     // Request Host header
+    string protocol = 10;                // "http" (future: "websocket", "sse")
+    PluginContext context = 11;          // Request ID, metadata
+
+    // Auth context (populated when require_auth=true and token is valid)
+    bool authenticated = 12;             // Whether request was authenticated
+    App app = 13;                        // Full App object (ID, name, metadata, etc.)
+    repeated string scopes = 14;         // Token scopes
+}
+
+// EndpointResponse — unary response for non-streaming endpoints
+message EndpointResponse {
+    int32 status_code = 1;               // HTTP status code
+    map<string, string> headers = 2;     // Response headers
+    bytes body = 3;                      // Response body
+    string error_message = 4;            // Error (empty on success)
+}
+
+// EndpointResponseChunk — streaming response for SSE/streaming endpoints
+// Protocol: HEADERS (first) → BODY* (zero or more) → DONE (final)
+message EndpointResponseChunk {
+    enum ChunkType {
+        HEADERS = 0;    // First chunk: status code + headers (no body)
+        BODY = 1;       // Body data chunk (may be sent multiple times)
+        DONE = 2;       // Stream complete signal
+        ERROR = 3;      // Error during streaming
+    }
+    ChunkType type = 1;
+    int32 status_code = 2;               // Set on HEADERS chunk
+    map<string, string> headers = 3;     // Set on HEADERS chunk
+    bytes data = 4;                      // Set on BODY chunks (raw bytes to flush)
+    string error_message = 5;            // Set on ERROR chunk
+}
+
+// --- Resource Provider Messages ---
+// These enable plugins to register custom resource types that can be
+// associated with Apps and participate in privacy validation.
+
+message GetResourceTypeRegistrationsRequest {
+    // Empty - plugin returns its resource type registrations
+}
+
+message GetResourceTypeRegistrationsResponse {
+    repeated ResourceTypeRegistrationProto registrations = 1;
+}
+
+message ResourceTypeRegistrationProto {
+    string slug = 1;                     // Machine-readable identifier (unique per plugin)
+    string name = 2;                     // Human-readable display name
+    string description = 3;              // Description of this resource type
+    string icon = 4;                     // Material icon name or asset path
+    bool has_privacy_score = 5;          // Whether instances carry privacy scores
+    bool supports_submissions = 6;       // Whether community submissions are supported
+    ResourceFormComponentProto form_component = 7;  // Optional custom form component
+}
+
+message ResourceFormComponentProto {
+    string tag = 1;                      // Web Component custom element tag
+    string entry_point = 2;              // JS asset path relative to plugin root
+}
+
+message ListResourceInstancesRequest {
+    string resource_type_slug = 1;       // Which resource type to list instances for
+    PluginContext context = 2;
+    uint32 service_broker_id = 3;
+}
+
+message ListResourceInstancesResponse {
+    bool success = 1;
+    repeated ResourceInstanceProto instances = 2;
+    string error_message = 3;
+}
+
+message ResourceInstanceProto {
+    string id = 1;                       // Plugin-assigned unique identifier
+    string name = 2;                     // Human-readable display name
+    string description = 3;              // Optional description
+    int32 privacy_score = 4;             // 0-100 (only meaningful if type has privacy)
+    bytes metadata = 5;                  // Opaque JSON metadata
+    bool is_active = 6;                  // Whether instance is currently usable
+}
+
+message GetResourceInstanceRequest {
+    string resource_type_slug = 1;
+    string instance_id = 2;
+    PluginContext context = 3;
+    uint32 service_broker_id = 4;
+}
+
+message GetResourceInstanceResponse {
+    bool success = 1;
+    ResourceInstanceProto instance = 2;
+    string error_message = 3;
+}
+
+message ValidateResourceSelectionRequest {
+    string resource_type_slug = 1;
+    repeated string instance_ids = 2;
+    uint32 app_id = 3;
+    PluginContext context = 4;
+    uint32 service_broker_id = 5;
+}
+
+message ValidateResourceSelectionResponse {
+    bool valid = 1;
+    string error_message = 2;
+}
+
+message CreateResourceInstanceRequest {
+    string resource_type_slug = 1;
+    bytes payload = 2;                   // JSON-encoded creation payload (plugin-defined schema)
+    PluginContext context = 3;
+    uint32 service_broker_id = 4;
+}
+
+message CreateResourceInstanceResponse {
+    bool success = 1;
+    ResourceInstanceProto instance = 2;
+    string error_message = 3;
 }

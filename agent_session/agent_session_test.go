@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,10 +18,12 @@ import (
 
 // MockMessageQueue implements MessageQueue interface for testing
 type MockMessageQueue struct {
-	streamData [][]byte
-	errors     []error
-	closed     bool
-	publishErr error // Error to return on PublishStream
+	streamData     [][]byte
+	errors         []error
+	closed         bool
+	publishErr     error // Error to return on PublishStream
+	wg             sync.WaitGroup
+	expectingCount int // Track if we're expecting chunks
 }
 
 func NewMockMessageQueue() *MockMessageQueue {
@@ -31,6 +34,9 @@ func NewMockMessageQueue() *MockMessageQueue {
 }
 
 func (m *MockMessageQueue) PublishStream(ctx context.Context, data []byte) error {
+	if m.expectingCount > 0 {
+		defer m.wg.Done()
+	}
 	if m.publishErr != nil {
 		return m.publishErr
 	}
@@ -64,6 +70,17 @@ func (m *MockMessageQueue) ConsumeErrors(ctx context.Context) <-chan error {
 func (m *MockMessageQueue) Close() error {
 	m.closed = true
 	return nil
+}
+
+// ExpectChunks sets up the WaitGroup to wait for n chunks
+func (m *MockMessageQueue) ExpectChunks(n int) {
+	m.expectingCount = n
+	m.wg.Add(n)
+}
+
+// Wait blocks until all expected chunks are received
+func (m *MockMessageQueue) Wait() {
+	m.wg.Wait()
 }
 
 // MockPluginServiceClient implements pb.PluginServiceClient for testing
@@ -148,6 +165,10 @@ func (m *MockPluginServiceClient) Call(ctx context.Context, in *pb.CallRequest, 
 	return nil, nil
 }
 
+func (m *MockPluginServiceClient) PortalCall(ctx context.Context, in *pb.PortalCallRequest, opts ...grpc.CallOption) (*pb.PortalCallResponse, error) {
+	return nil, nil
+}
+
 func (m *MockPluginServiceClient) GetConfigSchema(ctx context.Context, in *pb.GetConfigSchemaRequest, opts ...grpc.CallOption) (*pb.GetConfigSchemaResponse, error) {
 	return nil, nil
 }
@@ -178,6 +199,34 @@ func (m *MockPluginServiceClient) OpenSession(ctx context.Context, in *pb.OpenSe
 
 func (m *MockPluginServiceClient) CloseSession(ctx context.Context, in *pb.CloseSessionRequest, opts ...grpc.CallOption) (*pb.CloseSessionResponse, error) {
 	return nil, nil
+}
+
+func (m *MockPluginServiceClient) GetEndpointRegistrations(ctx context.Context, in *pb.GetEndpointRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetEndpointRegistrationsResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) HandleEndpointRequest(ctx context.Context, in *pb.EndpointRequest, opts ...grpc.CallOption) (*pb.EndpointResponse, error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) HandleEndpointRequestStream(ctx context.Context, in *pb.EndpointRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[pb.EndpointResponseChunk], error) {
+	return nil, nil
+}
+
+func (m *MockPluginServiceClient) GetResourceTypeRegistrations(ctx context.Context, in *pb.GetResourceTypeRegistrationsRequest, opts ...grpc.CallOption) (*pb.GetResourceTypeRegistrationsResponse, error) {
+	return &pb.GetResourceTypeRegistrationsResponse{}, nil
+}
+func (m *MockPluginServiceClient) ListResourceInstances(ctx context.Context, in *pb.ListResourceInstancesRequest, opts ...grpc.CallOption) (*pb.ListResourceInstancesResponse, error) {
+	return &pb.ListResourceInstancesResponse{}, nil
+}
+func (m *MockPluginServiceClient) GetResourceInstance(ctx context.Context, in *pb.GetResourceInstanceRequest, opts ...grpc.CallOption) (*pb.GetResourceInstanceResponse, error) {
+	return &pb.GetResourceInstanceResponse{}, nil
+}
+func (m *MockPluginServiceClient) ValidateResourceSelection(ctx context.Context, in *pb.ValidateResourceSelectionRequest, opts ...grpc.CallOption) (*pb.ValidateResourceSelectionResponse, error) {
+	return &pb.ValidateResourceSelectionResponse{Valid: true}, nil
+}
+func (m *MockPluginServiceClient) CreateResourceInstance(ctx context.Context, in *pb.CreateResourceInstanceRequest, opts ...grpc.CallOption) (*pb.CreateResourceInstanceResponse, error) {
+	return &pb.CreateResourceInstanceResponse{}, nil
 }
 
 // MockAgentMessageStream implements the gRPC stream interface
@@ -325,9 +374,9 @@ func TestNewAgentSession(t *testing.T) {
 func TestAgentSession_SendMessage(t *testing.T) {
 	db := setupAgentSessionTest(t)
 	agentConfig := createTestAgentConfig(t, db)
-	mockQueue := NewMockMessageQueue()
 
 	t.Run("Send message successfully", func(t *testing.T) {
+		mockQueue := NewMockMessageQueue()
 		mockClient := &MockPluginServiceClient{
 			chunks: []*pb.AgentMessageChunk{
 				{
@@ -346,17 +395,19 @@ func TestAgentSession_SendMessage(t *testing.T) {
 			{"role": "assistant", "content": "Previous response"},
 		}
 
+		mockQueue.ExpectChunks(1)
 		err = session.SendMessage("Hello agent", history)
 		assert.NoError(t, err)
 
-		// Give goroutine time to process
-		time.Sleep(100 * time.Millisecond)
+		// Wait for goroutine to complete
+		mockQueue.Wait()
 
 		// Verify chunks were published to queue
 		assert.GreaterOrEqual(t, len(mockQueue.streamData), 1)
 	})
 
 	t.Run("Handle plugin error gracefully", func(t *testing.T) {
+		mockQueue := NewMockMessageQueue()
 		mockClient := &MockPluginServiceClient{
 			streamErr: errors.New("plugin connection failed"),
 		}
@@ -370,6 +421,7 @@ func TestAgentSession_SendMessage(t *testing.T) {
 	})
 
 	t.Run("Handle empty history", func(t *testing.T) {
+		mockQueue := NewMockMessageQueue()
 		mockClient := &MockPluginServiceClient{
 			chunks: []*pb.AgentMessageChunk{
 				{Type: pb.AgentMessageChunk_CONTENT, Content: "Response", IsFinal: true},
@@ -379,8 +431,10 @@ func TestAgentSession_SendMessage(t *testing.T) {
 		session, err := NewAgentSession(agentConfig, mockClient, 12345, mockQueue, db)
 		assert.NoError(t, err)
 
+		mockQueue.ExpectChunks(1)
 		err = session.SendMessage("Hello", nil)
 		assert.NoError(t, err)
+		mockQueue.Wait()
 	})
 }
 
@@ -401,11 +455,12 @@ func TestAgentSession_ReceiveChunks(t *testing.T) {
 		session, err := NewAgentSession(agentConfig, mockClient, 12345, mockQueue, db)
 		assert.NoError(t, err)
 
+		mockQueue.ExpectChunks(3)
 		err = session.SendMessage("Test", nil)
 		assert.NoError(t, err)
 
 		// Wait for goroutine to complete
-		time.Sleep(100 * time.Millisecond)
+		mockQueue.Wait()
 
 		// Verify all chunks were published
 		assert.Equal(t, 3, len(mockQueue.streamData))
@@ -435,10 +490,11 @@ func TestAgentSession_ReceiveChunks(t *testing.T) {
 		session, err := NewAgentSession(agentConfig, mockClient, 12345, mockQueue, db)
 		assert.NoError(t, err)
 
+		mockQueue.ExpectChunks(1)
 		err = session.SendMessage("Test", nil)
 		assert.NoError(t, err)
 
-		time.Sleep(100 * time.Millisecond)
+		mockQueue.Wait()
 
 		assert.Equal(t, 1, len(mockQueue.streamData))
 
@@ -460,10 +516,11 @@ func TestAgentSession_ReceiveChunks(t *testing.T) {
 		session, err := NewAgentSession(agentConfig, mockClient, 12345, mockQueue, db)
 		assert.NoError(t, err)
 
+		mockQueue.ExpectChunks(2)
 		err = session.SendMessage("Test", nil)
 		assert.NoError(t, err)
 
-		time.Sleep(100 * time.Millisecond)
+		mockQueue.Wait()
 
 		// Should only have 2 chunks (stops after IsFinal)
 		assert.Equal(t, 2, len(mockQueue.streamData))
@@ -482,10 +539,11 @@ func TestAgentSession_ReceiveChunks(t *testing.T) {
 		session, err := NewAgentSession(agentConfig, mockClient, 12345, mockQueue, db)
 		assert.NoError(t, err)
 
+		mockQueue.ExpectChunks(1)
 		err = session.SendMessage("Test", nil)
 		assert.NoError(t, err)
 
-		time.Sleep(100 * time.Millisecond)
+		mockQueue.Wait()
 
 		// Should not have published due to error
 		assert.Equal(t, 0, len(mockQueue.streamData))
@@ -697,11 +755,12 @@ func TestAgentSession_Integration(t *testing.T) {
 		history := []map[string]interface{}{
 			{"role": "user", "content": "What's the weather?"},
 		}
+		mockQueue.ExpectChunks(5)
 		err = session.SendMessage("Is it raining?", history)
 		assert.NoError(t, err)
 
 		// Wait for processing
-		time.Sleep(150 * time.Millisecond)
+		mockQueue.Wait()
 
 		// Verify all chunks published
 		assert.Equal(t, 5, len(mockQueue.streamData))

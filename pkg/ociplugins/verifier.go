@@ -68,6 +68,11 @@ func (v *SignatureVerifier) getPublicKeyPath(pubKeyID string) (string, error) {
 
 // resolveKeyReference resolves a key reference to a usable file path
 func (v *SignatureVerifier) resolveKeyReference(keyRef string) (string, error) {
+	// Case 0: Embedded key reference (the built-in Tyk official signing key)
+	if strings.HasPrefix(keyRef, "embedded:") {
+		return v.writeKeyToTempFile(DefaultTykPublicKey, "tyk-default")
+	}
+
 	// Case 1: Numeric reference (1, 2, 3...)
 	if _, err := strconv.Atoi(keyRef); err == nil {
 		envKey := fmt.Sprintf("OCI_PLUGINS_PUBKEY_%s", keyRef)
@@ -77,11 +82,18 @@ func (v *SignatureVerifier) resolveKeyReference(keyRef string) (string, error) {
 		return "", fmt.Errorf("public key %s not found in environment variable %s", keyRef, envKey)
 	}
 
-	// Case 2: Named reference (CI, PROD, DEV...)
+	// Case 2: Named reference (CI, PROD, DEV, LIVE...)
 	if isAlphaNumeric(keyRef) && len(keyRef) > 1 {
 		envKey := fmt.Sprintf("OCI_PLUGINS_PUBKEY_%s", strings.ToUpper(keyRef))
 		if keyContent := os.Getenv(envKey); keyContent != "" {
 			return v.writeKeyToTempFile(keyContent, fmt.Sprintf("pubkey-%s", strings.ToLower(keyRef)))
+		}
+		// Also check file-based key variant (OCI_PLUGINS_PUBKEY_FILE_<NAME>)
+		fileEnvKey := fmt.Sprintf("OCI_PLUGINS_PUBKEY_FILE_%s", strings.ToUpper(keyRef))
+		if filePath := os.Getenv(fileEnvKey); filePath != "" {
+			if _, err := os.Stat(filePath); err == nil {
+				return filePath, nil
+			}
 		}
 		// Don't treat this as an error - continue to other cases
 	}

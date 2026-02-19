@@ -187,24 +187,32 @@ func (p *MyPlugin) HandlePostAuth(ctx plugin_sdk.Context, req *pb.EnrichedReques
 
 ### Use Connection Pooling
 
-Reuse HTTP clients and database connections:
+Reuse HTTP clients and database connections. The SDK provides a `DefaultHTTPClient()` with sensible defaults (30s timeout, connection pooling, TLS handshake timeout):
 
 ```go
 func NewMyPlugin() *MyPlugin {
     return &MyPlugin{
         BasePlugin: plugin_sdk.NewBasePlugin("my-plugin", "1.0.0", "desc"),
-        // Reuse client across requests
-        httpClient: &http.Client{
-            Timeout: 10 * time.Second,
-            Transport: &http.Transport{
-                MaxIdleConns:        100,
-                MaxIdleConnsPerHost: 10,
-                IdleConnTimeout:     90 * time.Second,
-            },
-        },
+        // Use the SDK default client with connection pooling
+        httpClient: plugin_sdk.DefaultHTTPClient(),
     }
 }
 ```
+
+You can also configure your own client if you need different settings:
+
+```go
+httpClient: &http.Client{
+    Timeout: 10 * time.Second,
+    Transport: &http.Transport{
+        MaxIdleConns:        100,
+        MaxIdleConnsPerHost: 10,
+        IdleConnTimeout:     90 * time.Second,
+    },
+}
+```
+
+**Important**: Always use `http.NewRequestWithContext(ctx, ...)` to respect context cancellation and timeouts. Never use the default `http.Client{}` with zero timeout in production plugins.
 
 ### Cache Frequently Accessed Data
 
@@ -725,6 +733,68 @@ func (p *MyPlugin) HandleCall(method string, payload []byte) ([]byte, error) {
 
 ## Common Pitfalls
 
+### AUTH Plugins: App Linking Requirement
+
+The most common AUTH plugin pitfall is **not linking credentials to App objects**. A valid credential alone is insufficient—the system needs the App context for access control.
+
+**Why This Matters:**
+
+Apps provide the access control context that governs what authenticated requests can do:
+- Policy enforcement (rate limits, quotas)
+- Tool and datasource permissions
+- LLM access restrictions
+- Budget controls
+
+**Required Interface Methods:**
+
+AUTH plugins must implement all three methods of the `AuthHandler` interface:
+
+```go
+type AuthHandler interface {
+    HandleAuth(ctx Context, req *pb.AuthRequest) (*pb.AuthResponse, error)
+    GetAppByCredential(ctx Context, credential string) (*pb.App, error)      // Often forgotten!
+    GetUserByCredential(ctx Context, credential string) (*pb.User, error)
+}
+```
+
+**Common Mistakes:**
+
+```go
+// BAD: Only validates token, doesn't return App ID
+func (p *MyPlugin) HandleAuth(ctx plugin_sdk.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
+    if isValidToken(req.Credential) {
+        return &pb.AuthResponse{
+            Authenticated: true,
+            // Missing AppId and UserId! Request will fail.
+        }, nil
+    }
+    return &pb.AuthResponse{Authenticated: false}, nil
+}
+
+// GOOD: Returns both App ID and User ID
+func (p *MyPlugin) HandleAuth(ctx plugin_sdk.Context, req *pb.AuthRequest) (*pb.AuthResponse, error) {
+    tokenConfig, valid := p.lookupToken(req.Credential)
+    if !valid {
+        return &pb.AuthResponse{Authenticated: false, ErrorMessage: "Invalid token"}, nil
+    }
+    return &pb.AuthResponse{
+        Authenticated: true,
+        AppId:         tokenConfig.AppID,   // Links to access control
+        UserId:        tokenConfig.UserID,  // Links to identity
+    }, nil
+}
+```
+
+**Validation Checklist:**
+
+- [ ] `HandleAuth` returns a valid `AppId` that exists in the database
+- [ ] `HandleAuth` returns a valid `UserId` that exists in the database
+- [ ] `GetAppByCredential` fetches the complete App object via Service API
+- [ ] `GetUserByCredential` fetches the complete User object via Service API
+- [ ] The App has the required permissions for the tools/LLMs the user needs
+
+See [Plugin SDK Reference - AuthHandler](plugins-sdk.md#2-authhandler) for complete documentation.
+
 ### 1. Modifying Shared Data Without Locking
 
 ```go
@@ -797,5 +867,6 @@ ctx.Services.Logger().Info("Processing items",
 
 - **[Plugin SDK Reference](plugins-sdk.md)** - Core SDK documentation
 - **[Plugin Examples](plugins-examples.md)** - Browse working examples
+- **[AI Portal UI Plugins Guide](plugins-portal-ui.md)** - Build portal-facing pages and forms
 - **[Service API Reference](plugins-service-api.md)** - Complete API documentation
 - **[Plugin Deployment](plugins-deployment.md)** - Production deployment

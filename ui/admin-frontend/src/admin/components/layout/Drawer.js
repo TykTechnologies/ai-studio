@@ -89,6 +89,19 @@ const Drawer = () => {
           : []),
       ],
     },
+    ...(features.feature_portal
+      ? [
+          {
+            id: 'community',
+            text: 'Community',
+            icon: <Icon name="puzzle-piece" />,
+            subItems: [
+              { id: 'submission-queue', text: 'Submission Queue', path: '/admin/submissions' },
+              { id: 'attestation-templates', text: 'Attestation Templates', path: '/admin/attestation-templates' },
+            ],
+          },
+        ]
+      : []),
     {
       id: 'Governance',
       text: 'Governance',
@@ -105,6 +118,9 @@ const Drawer = () => {
           : []),
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets' },
         { id: 'branding', text: 'Branding', path: '/admin/branding' },
+        ...(config?.is_enterprise
+          ? [{ id: 'compliance', text: 'Compliance', path: '/admin/compliance' }]
+          : []),
       ],
     },
     ...(features.feature_gateway &&

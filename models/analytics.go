@@ -20,17 +20,17 @@ type LLMChatRecord struct {
 	Name   string
 	Vendor string
 	// Add LLMID so we can track usage for that specific LLM object:
-	LLMID                  uint `gorm:"index"`
+	LLMID                  uint      `gorm:"index:idx_llm_chat_records_llm_time,priority:1"`
 	TotalTimeMS            int
 	PromptTokens           int
 	ResponseTokens         int
 	TotalTokens            int
-	TimeStamp              time.Time
-	UserID                 uint
+	TimeStamp              time.Time `gorm:"index:idx_llm_chat_records_time;index:idx_llm_chat_records_app_time,priority:2;index:idx_llm_chat_records_llm_time,priority:2"`
+	UserID                 uint      `gorm:"index"`
 	Choices                int
 	ToolCalls              int
 	ChatID                 string
-	AppID                  uint
+	AppID                  uint    `gorm:"index:idx_llm_chat_records_app_time,priority:1"`
 	Cost                   float64
 	Currency               string
 	InteractionType        InteractionType `gorm:"type:string;default:'chat'"`
@@ -126,12 +126,12 @@ type ErrorResponse struct {
 
 type ProxyLog struct {
 	gorm.Model
-	ID           uint `gorm:"primaryKey"`
-	AppID        uint
-	UserID       uint
-	TimeStamp    time.Time
+	ID           uint      `gorm:"primaryKey"`
+	AppID        uint      `gorm:"index:idx_proxy_logs_app_time,priority:1;index:idx_proxy_logs_app_code_time,priority:1"`
+	UserID       uint      `gorm:"index"`
+	TimeStamp    time.Time `gorm:"index:idx_proxy_logs_time;index:idx_proxy_logs_app_time,priority:2;index:idx_proxy_logs_app_code_time,priority:3"`
 	Vendor       string
 	RequestBody  string
 	ResponseBody string
-	ResponseCode int
+	ResponseCode int `gorm:"index:idx_proxy_logs_code;index:idx_proxy_logs_app_code_time,priority:2"`
 }

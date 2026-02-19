@@ -53,6 +53,9 @@ const AppForm = () => {
   const [llms, setLLMs] = useState([]);
   const [datasources, setDatasources] = useState([]);
   const [availableTools, setAvailableTools] = useState([]);
+  const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
+  const [pluginResourceInstances, setPluginResourceInstances] = useState({}); // { "pluginId:slug": [...instances] }
+  const [pluginResourceSelections, setPluginResourceSelections] = useState({}); // { "pluginId:slug": [...selectedIds] }
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -92,6 +95,17 @@ const AppForm = () => {
         metadata: metadata,
       });
       setMetadataJSON(JSON.stringify(metadata, null, 2));
+
+      // Load plugin resource selections from app response
+      if (Array.isArray(appData.plugin_resources)) {
+        const selections = {};
+        for (const pr of appData.plugin_resources) {
+          selections[`${pr.plugin_id}:${pr.resource_type_slug}`] =
+            pr.instance_ids || [];
+        }
+        setPluginResourceSelections(selections);
+      }
+
       if (appData.credential_id) {
         fetchCredential(appData.credential_id);
       }
@@ -105,11 +119,42 @@ const AppForm = () => {
     }
   }, [id, fetchCredential]);
 
+  const fetchPluginResourceTypes = async () => {
+    try {
+      const response = await apiClient.get("/plugin-resource-types");
+      const types = response.data.data || [];
+      setPluginResourceTypes(types);
+
+      // Fetch instances for each type
+      for (const rt of types) {
+        try {
+          const instancesResp = await apiClient.get(
+            `/plugin-resource-types/${rt.plugin_id}/${rt.slug}/instances`,
+          );
+          // TODO: this endpoint needs to be created — for now plugin RPC via the
+          // existing Call mechanism will be used by the platform later.
+          // Placeholder: store empty until endpoint is wired
+          if (instancesResp.data && instancesResp.data.data) {
+            setPluginResourceInstances((prev) => ({
+              ...prev,
+              [`${rt.plugin_id}:${rt.slug}`]: instancesResp.data.data,
+            }));
+          }
+        } catch {
+          // Instance fetch may not be available yet
+        }
+      }
+    } catch {
+      // Plugin resource types not available — that's fine
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchLLMs();
     fetchDatasources();
     fetchTools();
+    fetchPluginResourceTypes();
     if (id) {
       fetchApp();
     }
@@ -248,6 +293,18 @@ const AppForm = () => {
       }
     }
 
+    // Build plugin resource selections for API
+    const pluginResourcesPayload = Object.entries(pluginResourceSelections)
+      .filter(([, ids]) => ids.length > 0)
+      .map(([key, ids]) => {
+        const [pluginId, slug] = key.split(":");
+        return {
+          plugin_id: parseInt(pluginId, 10),
+          resource_type_slug: slug,
+          instance_ids: ids,
+        };
+      });
+
     const appPayload = {
       ...app,
       user_id: parseInt(app.user_id, 10),
@@ -255,6 +312,9 @@ const AppForm = () => {
       datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
       tool_ids: app.tool_ids.map((id) => parseInt(id, 10)),
       metadata: parsedMetadata,
+      ...(pluginResourcesPayload.length > 0 && {
+        plugin_resources: pluginResourcesPayload,
+      }),
     };
 
     const appData = {
@@ -523,6 +583,61 @@ const AppForm = () => {
                 </Select>
               </FormControl>
             </Grid>
+
+            {/* Dynamic Plugin Resource Type Sections */}
+            {pluginResourceTypes.map((rt) => {
+              const key = `${rt.plugin_id}:${rt.slug}`;
+              const instances = pluginResourceInstances[key] || [];
+              const selected = pluginResourceSelections[key] || [];
+
+              return (
+                <Grid item xs={12} key={key}>
+                  <FormControl fullWidth>
+                    <InputLabel>{rt.name}</InputLabel>
+                    <Select
+                      multiple
+                      value={selected}
+                      onChange={(e) => {
+                        setPluginResourceSelections((prev) => ({
+                          ...prev,
+                          [key]: e.target.value,
+                        }));
+                      }}
+                      renderValue={(sel) => (
+                        <Box
+                          sx={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 0.5,
+                          }}
+                        >
+                          {sel.map((val) => {
+                            const inst = instances.find(
+                              (i) => i.id === val,
+                            );
+                            return (
+                              <Chip
+                                key={val}
+                                label={inst ? inst.name : val}
+                              />
+                            );
+                          })}
+                        </Box>
+                      )}
+                    >
+                      {instances.map((inst) => (
+                        <MenuItem key={inst.id} value={inst.id}>
+                          {inst.name}
+                          {rt.has_privacy_score &&
+                            inst.privacy_score > 0 &&
+                            ` (Privacy: ${inst.privacy_score})`}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              );
+            })}
           </Grid>
 
           {/* Edge Availability Section */}

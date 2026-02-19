@@ -401,6 +401,12 @@ func (a *API) setupRoutes() {
 			return
 		}
 
+		// Reject WebSocket/dev-server paths that shouldn't be handled by the SPA
+		if c.Request.URL.Path == "/ws" {
+			c.Status(http.StatusNotFound)
+			return
+		}
+
 		// For all other routes, serve the frontend application
 		indexFile, err := a.staticFiles.ReadFile("ui/admin-frontend/build/index.html")
 		if err != nil {
@@ -452,6 +458,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/accessible-llms", a.getUserAccessibleLLMs)
 	authed.GET("/apps/:id", a.getUserAppDetails)
 	authed.DELETE("/apps/:id", a.deleteUserApp)
+	authed.GET("/apps/:id/plugin-resources", a.getAppPluginResources)
 
 	// CHAT FEATURES
 	authed.GET("/data-catalogues/:id/datasources", a.getDataCatalogueDatasources)
@@ -468,6 +475,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/users/:user_id/chat-history-records", a.getUserChatHistoryRecords)
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-tools", a.getUserAccessibleTools)
+	authed.GET("/accessible-plugin-resources", a.getUserAccessiblePluginResources)
 	authed.GET("/history", a.listChatHistoryRecordsForMe)
 	authed.GET("/chat-sessions/:id/defaults", a.getChatDefaults)
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)
@@ -483,6 +491,24 @@ func (a *API) setupRoutes() {
 	authed.GET("/api/v1/notifications/unread/count", notificationHandlers.UnreadCount)
 	authed.PUT("/api/v1/notifications/:id/read", notificationHandlers.MarkAsRead)
 	authed.PUT("/api/v1/notifications/read-all", notificationHandlers.MarkAllAsRead)
+
+	// Portal plugin routes (any authenticated user, no admin required)
+	authed.GET("/plugins/portal-ui-registry", a.getPortalUIRegistry)
+	authed.GET("/plugins/portal-sidebar-menu", a.getPortalSidebarMenuItems)
+	authed.POST("/plugins/:id/portal-rpc/:method", a.callPortalPluginRPC)
+	authed.GET("/plugins/assets/:id/*filepath", a.servePluginAsset)
+
+	// UGC Submission routes (portal users)
+	authed.POST("/submissions", a.createSubmission)
+	authed.GET("/submissions", a.listMySubmissions)
+	authed.GET("/submissions/:id", a.getMySubmission)
+	authed.PATCH("/submissions/:id", a.updateMySubmission)
+	authed.DELETE("/submissions/:id", a.deleteMySubmission)
+	authed.POST("/submissions/:id/submit", a.submitSubmission)
+	authed.GET("/submissions/attestation-templates", a.getAttestationTemplatesForSubmission)
+	authed.POST("/submissions/update", a.createUpdateSubmission)
+	authed.POST("/submissions/validate-spec", a.validateOASSpec)
+	authed.GET("/submissions/:id/activities", a.getMySubmissionActivities)
 
 	v1 := public.Group("/api/v1")
 	v1.Use(a.auth.AuthMiddleware())
@@ -623,6 +649,13 @@ func (a *API) setupRoutes() {
 	v1.POST("/apps/:id/tools/:tool_id", a.addToolToApp)
 	v1.DELETE("/apps/:id/tools/:tool_id", a.removeToolFromApp)
 	v1.GET("/apps/:id/tools", a.getAppTools)
+
+	// Plugin Resource Type routes
+	v1.GET("/plugin-resource-types", a.listPluginResourceTypes)
+	v1.GET("/plugin-resource-types/:plugin_id/:slug/instances", a.listPluginResourceInstances)
+	v1.GET("/apps/:id/plugin-resources", a.getAppPluginResources)
+	v1.GET("/groups/:id/plugin-resources", a.getGroupPluginResources)
+	v1.PUT("/groups/:id/plugin-resources", a.setGroupPluginResources)
 
 	// LLMSettings routes
 	v1.POST("/llm-settings", a.createLLMSettings)
@@ -815,6 +848,27 @@ func (a *API) setupRoutes() {
 		marketplaceAdmin.POST("/:id/sync", adminHandlers.SyncMarketplace)
 	}
 
+	// UGC Submission routes (admin review)
+	v1.GET("/submissions", a.adminListSubmissions)
+	v1.GET("/submissions/:id", a.adminGetSubmission)
+	v1.POST("/submissions/:id/review", a.adminStartReview)
+	v1.POST("/submissions/:id/approve", a.adminApproveSubmission)
+	v1.POST("/submissions/:id/reject", a.adminRejectSubmission)
+	v1.POST("/submissions/:id/request-changes", a.adminRequestChanges)
+	v1.POST("/submissions/:id/test", a.adminTestSubmission)
+	v1.GET("/submissions/:id/versions", a.adminListVersions)
+	v1.POST("/submissions/:id/rollback/:version_id", a.adminRollbackVersion)
+	v1.GET("/submissions/orphaned", a.adminGetOrphanedResources)
+	v1.GET("/submissions/:id/activities", a.adminGetSubmissionActivities)
+	v1.POST("/submissions/test-datasource", a.testDatasourceConnectivity)
+
+	// Attestation Template routes (admin)
+	v1.GET("/attestation-templates", a.adminListAttestationTemplates)
+	v1.GET("/attestation-templates/:id", a.adminGetAttestationTemplate)
+	v1.POST("/attestation-templates", a.adminCreateAttestationTemplate)
+	v1.PATCH("/attestation-templates/:id", a.adminUpdateAttestationTemplate)
+	v1.DELETE("/attestation-templates/:id", a.adminDeleteAttestationTemplate)
+
 	// Chat History Record routes
 	v1.POST("/chat-history-records", a.createChatHistoryRecord)
 	v1.GET("/chat-history-records/messages/:session_id", a.getCMessagesForSession)
@@ -846,6 +900,19 @@ func (a *API) setupRoutes() {
 
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", a.getProxyLogsForLLM)
+
+	// Compliance routes (Enterprise feature)
+	a.InitComplianceService()
+	v1.GET("/compliance/available", a.isComplianceAvailable)
+	v1.GET("/compliance/summary", a.getComplianceSummary)
+	v1.GET("/compliance/high-risk-apps", a.getHighRiskApps)
+	v1.GET("/compliance/access-issues", a.getAccessIssues)
+	v1.GET("/compliance/policy-violations", a.getPolicyViolations)
+	v1.GET("/compliance/violations", a.getViolationRecords)
+	v1.GET("/compliance/budget-alerts", a.getBudgetAlerts)
+	v1.GET("/compliance/errors", a.getComplianceErrors)
+	v1.GET("/compliance/app/:id/risk-profile", a.getAppRiskProfile)
+	v1.GET("/compliance/export", a.exportComplianceData)
 
 	// Export routes (Enterprise feature)
 	v1.POST("/exports", a.startExport)
@@ -890,6 +957,12 @@ func (a *API) setupRoutes() {
 	v1.GET("/namespaces", a.listNamespaces)
 	v1.POST("/namespaces/:namespace/reload", a.triggerNamespaceReload)
 	v1.GET("/namespaces/:namespace/edges", a.getNamespaceEdges)
+
+	// Sync status routes (admin only - for edge gateway sync monitoring)
+	syncStatusHandlers := NewSyncStatusHandlers(a.service.SyncStatusService)
+	v1.GET("/sync/status", syncStatusHandlers.GetSyncStatus)
+	v1.GET("/sync/status/:namespace", syncStatusHandlers.GetNamespaceSyncStatus)
+	v1.GET("/sync/audit", syncStatusHandlers.GetSyncAuditLog)
 
 	// SSO routes (ENT: full functionality, CE: returns 402 Payment Required)
 	public.GET("/auth/:id/:provider", a.handleTIBAuth)
@@ -1002,6 +1075,8 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		IsEnterprise:         config.IsEnterprise(), // Detect enterprise edition via build tags
 		DocsLinks:            config.Get("").DocsLinks,
 		Branding:             brandingConfig,
+		DocsEnabled:          !config.Get("").DocsDisabled,
+		DocsURL:              config.Get("").DocsURL,
 	}
 
 	c.JSON(http.StatusOK, cfg)

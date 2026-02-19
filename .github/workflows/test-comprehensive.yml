@@ -1,0 +1,291 @@
+name: Comprehensive Test Suite
+
+# Manual trigger only for heavy E2E and integration tests
+on:
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: 'Edition to test'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - ce
+          - ent
+          - both
+      include_plugin_e2e:
+        description: 'Include plugin E2E tests'
+        required: true
+        default: true
+        type: boolean
+      include_ui_e2e:
+        description: 'Include UI E2E tests'
+        required: true
+        default: true
+        type: boolean
+      include_full_integration:
+        description: 'Include full plugin integration (Redis cluster + syslog)'
+        required: true
+        default: false
+        type: boolean
+
+env:
+  GOPRIVATE: github.com/TykTechnologies
+
+jobs:
+  # ==========================================================================
+  # Determine Test Matrix
+  # ==========================================================================
+  setup:
+    name: Setup Test Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      editions: ${{ steps.set-matrix.outputs.editions }}
+    steps:
+      - id: set-matrix
+        run: |
+          if [ "${{ github.event.inputs.edition }}" == "both" ]; then
+            echo 'editions=["ce", "ent"]' >> $GITHUB_OUTPUT
+          else
+            echo 'editions=["${{ github.event.inputs.edition }}"]' >> $GITHUB_OUTPUT
+          fi
+
+  # ==========================================================================
+  # Full Unit + Integration Tests
+  # ==========================================================================
+  full-tests:
+    name: Full Tests (${{ matrix.edition }})
+    needs: setup
+    runs-on: ubuntu-latest-m-2
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: ${{ fromJson(needs.setup.outputs.editions) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          submodules: ${{ matrix.edition == 'ent' }}
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
+
+      - name: Checkout langchaingo
+        uses: actions/checkout@v4
+        with:
+          repository: lonelycode/langchaingo
+          path: langchaingo
+          fetch-depth: 2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Go Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-comprehensive-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-comprehensive-
+            ${{ runner.os }}-go-
+
+      - name: Build Frontend
+        run: |
+          cd ui/admin-frontend
+          npm ci
+          CI=false npm run build
+
+      - name: Run All Tests via Makefile
+        run: |
+          make test-all \
+            TEST_EDITION=${{ matrix.edition }} \
+            TEST_VERBOSE=true \
+            TEST_COVERAGE=true \
+            TEST_TIMEOUT=45m
+
+      - name: Upload Coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-comprehensive-${{ matrix.edition }}
+          path: coverage.out
+          retention-days: 30
+
+  # ==========================================================================
+  # Plugin E2E Tests (llm-load-balancer)
+  # ==========================================================================
+  plugin-e2e:
+    name: Plugin E2E Tests
+    needs: full-tests
+    if: github.event.inputs.include_plugin_e2e == 'true'
+    runs-on: ubuntu-latest-m-2
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
+
+      - name: Checkout langchaingo
+        uses: actions/checkout@v4
+        with:
+          repository: lonelycode/langchaingo
+          path: langchaingo
+          fetch-depth: 2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run Plugin E2E Tests
+        run: make test-plugins-e2e EDITION=ent TEST_TIMEOUT=30m
+
+  # ==========================================================================
+  # Full Plugin Integration (Redis Cluster + Syslog)
+  # ==========================================================================
+  plugin-full-integration:
+    name: Full Plugin Integration
+    needs: full-tests
+    if: github.event.inputs.include_full_integration == 'true'
+    runs-on: ubuntu-latest-m-2
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.CI_SUBMODULE_PAT }}
+
+      - name: Checkout langchaingo
+        uses: actions/checkout@v4
+        with:
+          repository: lonelycode/langchaingo
+          path: langchaingo
+          fetch-depth: 2
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run Full Plugin Integration Tests
+        run: |
+          cd enterprise/plugins/advanced-llm-cache
+          INTEGRATION_REDIS_CLUSTER=1 INTEGRATION_SYSLOG=1 \
+            go test -v -count=1 -tags="integration,enterprise" \
+            -timeout 45m ./tests/integration/...
+
+  # ==========================================================================
+  # UI E2E Tests
+  # ==========================================================================
+  ui-e2e:
+    name: UI E2E Tests
+    needs: full-tests
+    if: github.event.inputs.include_ui_e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Build Frontend
+        run: |
+          cd ui/admin-frontend
+          npm ci
+          CI=false npm run build
+
+      - name: Start Test Environment
+        env:
+          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+          TYK_AI_SECRET_KEY: ${{ secrets.TYK_AI_SECRET_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
+          ANTHROPIC_AI_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          GO_BUILD_FLAGS: "-buildvcs=false"
+        run: docker compose -f tests/compose.yml up -d
+
+      - name: Install Playwright
+        working-directory: tests/ui
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Wait for AI Studio
+        run: |
+          attempts=0
+          max_attempts=60
+          while [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/common/api/v1/notifications/unread/count)" != "401" ]; do
+            attempts=$((attempts+1))
+            echo "Waiting for AI Studio... ($attempts/$max_attempts)"
+            if [ $attempts -ge $max_attempts ]; then
+              echo "Timed out waiting for AI Studio"
+              docker compose -f tests/compose.yml logs
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "AI Studio is ready!"
+
+      - name: Run Playwright Tests
+        working-directory: tests/ui
+        run: npm run test
+
+      - name: Upload Playwright Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-comprehensive
+          path: tests/ui/playwright-report/
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: docker compose -f tests/compose.yml down -v --remove-orphans
+
+  # ==========================================================================
+  # Test Summary
+  # ==========================================================================
+  summary:
+    name: Test Summary
+    needs: [full-tests, plugin-e2e, plugin-full-integration, ui-e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "# Comprehensive Test Suite Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- Edition: ${{ github.event.inputs.edition }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Plugin E2E: ${{ github.event.inputs.include_plugin_e2e }}" >> $GITHUB_STEP_SUMMARY
+          echo "- UI E2E: ${{ github.event.inputs.include_ui_e2e }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Full Integration: ${{ github.event.inputs.include_full_integration }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Full Tests | ${{ needs.full-tests.result == 'success' && ':white_check_mark: Passed' || (needs.full-tests.result == 'skipped' && ':fast_forward: Skipped' || ':x: Failed') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Plugin E2E | ${{ needs.plugin-e2e.result == 'success' && ':white_check_mark: Passed' || (needs.plugin-e2e.result == 'skipped' && ':fast_forward: Skipped' || ':x: Failed') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Full Integration | ${{ needs.plugin-full-integration.result == 'success' && ':white_check_mark: Passed' || (needs.plugin-full-integration.result == 'skipped' && ':fast_forward: Skipped' || ':x: Failed') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| UI E2E | ${{ needs.ui-e2e.result == 'success' && ':white_check_mark: Passed' || (needs.ui-e2e.result == 'skipped' && ':fast_forward: Skipped' || ':x: Failed') }} |" >> $GITHUB_STEP_SUMMARY

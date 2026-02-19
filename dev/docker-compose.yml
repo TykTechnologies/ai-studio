@@ -1,0 +1,145 @@
+# Tyk AI Studio - Minimal Development Environment
+#
+# This compose file provides a minimal development setup with:
+#   - PostgreSQL database
+#   - AI Studio backend (with hot reloading via Air)
+#   - React frontend (with HMR)
+#
+# Usage:
+#   cd dev && docker compose up --build
+#   Or use: make dev (from project root)
+#
+# Services:
+#   - postgres:  PostgreSQL 17 database (port 5432)
+#   - studio:    AI Studio backend with Air hot reload (ports 8080, 9090, 50051)
+#   - frontend:  React development server (port 3000)
+#
+# For full stack with Gateway, use:
+#   docker compose -f docker-compose.yml -f docker-compose.full.yml up
+
+services:
+  # PostgreSQL - shared database for development
+  postgres:
+    image: postgres:17-alpine
+    container_name: midsommar-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: midsommar
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - midsommar-dev
+
+  # AI Studio - Control Plane (with Air hot reloading)
+  studio:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.studio
+      args:
+        EDITION: ${EDITION:-ce}
+    container_name: midsommar-studio
+    volumes:
+      # Mount source code for hot reloading
+      - ..:/app
+      # Preserve node_modules to avoid conflicts with host
+      - /app/ui/admin-frontend/node_modules
+      # Separate tmp directory for Air builds
+      - studio_tmp:/app/tmp
+      # Share Go module cache between containers
+      - go_cache:/root/go/pkg/mod
+      # Persistent data directory
+      - studio_data:/app/data
+    ports:
+      - "8080:8080"   # REST API
+      - "50051:50051" # gRPC Control Server
+      - "9090:9090"   # embedded gateway
+      - "9898:9898"   # API Documentation Server
+    environment:
+      # Edition (ce or ent)
+      EDITION: ${EDITION:-ce}
+      # Database configuration
+      DATABASE_TYPE: postgres
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/midsommar?sslmode=disable
+      # Server configuration
+      DEVMODE: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      LOG_FORMAT: text
+      # URLs for frontend communication
+      SITE_URL: http://localhost:3000
+      PROXY_URL: http://localhost:9090
+      # Gateway mode - Studio acts as control plane
+      GATEWAY_MODE: control
+      GRPC_PORT: "50051"
+      GRPC_AUTH_TOKEN: ${GRPC_AUTH_TOKEN:-dev-grpc-token}
+      # Security
+      TYK_AI_SECRET_KEY: ${TYK_AI_SECRET_KEY:-dev-secret-key-change-in-production}
+      MICROGATEWAY_ENCRYPTION_KEY: ${MICROGATEWAY_ENCRYPTION_KEY:-dev-encryption-key-32chars!}
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      # LLM API Keys (optional, from host .env)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_AI_KEY: ${ANTHROPIC_AI_KEY:-}
+      GOOGLE_AI_KEY: ${GOOGLE_AI_KEY:-}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
+      OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT: ${OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT:-}
+      AI_STUDIO_OCI_CACHE_DIR: /app/oci-cache
+      # Allow internal network access for local plugin development
+      ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - midsommar-dev
+
+  # Frontend - React development server with HMR
+  frontend:
+    image: node:20-alpine
+    container_name: midsommar-frontend
+    working_dir: /app/ui/admin-frontend
+    command: sh -c "npm install && npm start"
+    volumes:
+      - ../ui/admin-frontend:/app/ui/admin-frontend
+      # Preserve node_modules
+      - /app/ui/admin-frontend/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      # Enable polling for file watching (required for Docker on Mac/Windows)
+      CHOKIDAR_USEPOLLING: "true"
+      # Backend API URL for proxy - uses Docker service name
+      PROXY_TARGET: http://studio:8080
+      REACT_APP_API_URL: http://localhost:8080
+      # WebSocket port for HMR
+      WDS_SOCKET_PORT: 3000
+    depends_on:
+      - studio
+    networks:
+      - midsommar-dev
+
+volumes:
+  postgres_data:
+    name: midsommar-postgres-data
+  studio_tmp:
+    name: midsommar-studio-tmp
+  studio_data:
+    name: midsommar-studio-data
+  go_cache:
+    name: midsommar-go-cache
+
+networks:
+  midsommar-dev:
+    name: midsommar-dev-network
+    driver: bridge

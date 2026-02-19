@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
@@ -368,8 +367,8 @@ func convertToolToPB(tool *models.Tool) *pb.ToolInfo {
 		truncatedSpec = tool.OASSpec
 	}
 
-	// Generate slug from name if not present in model
-	slug := strings.ToLower(strings.ReplaceAll(tool.Name, " ", "-"))
+	// Use the pre-computed slug from the model (computed via BeforeSave hook)
+	toolSlug := tool.Slug
 
 	// Convert metadata (JSONMap is already map[string]interface{})
 	metadata := make(map[string]string)
@@ -390,7 +389,7 @@ func convertToolToPB(tool *models.Tool) *pb.ToolInfo {
 	return &pb.ToolInfo{
 		Id:           uint32(tool.ID),
 		Name:         tool.Name,
-		Slug:         slug, // Generated from name
+		Slug:         toolSlug, // Pre-computed from model
 		Description:  tool.Description,
 		ToolType:     tool.ToolType,
 		OasSpec:      truncatedSpec,

@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+// DefaultTykPublicKey is the official Tyk plugin signing public key (ECDSA P-256).
+// This key is always included in the trusted keys list and cannot be disabled via
+// environment variables. Additional keys can be added via OCI_PLUGINS_PUBKEY_* env vars.
+const DefaultTykPublicKey = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEKZg118qSzmf6kRCy2jftW0A8q00s
+09B89WHDBBg8p8XUj7jQf62ZnNTTbq8Oh3Xq6kIgDYFUbxc5587e3k76RA==
+-----END PUBLIC KEY-----`
+
 // OCIConfig holds the configuration for OCI plugin operations
 type OCIConfig struct {
 	// Cache settings
@@ -39,10 +47,13 @@ type OCIConfig struct {
 
 // RegistryAuth holds authentication configuration for a specific registry
 type RegistryAuth struct {
-	Username    string `yaml:"username" json:"username"`
-	PasswordEnv string `yaml:"password_env" json:"password_env"` // Environment variable name
-	Token       string `yaml:"token" json:"token"`               // Direct token (less secure)
-	TokenEnv    string `yaml:"token_env" json:"token_env"`       // Token from environment
+	Username       string `yaml:"username" json:"username"`
+	PasswordEnv    string `yaml:"password_env" json:"password_env"`       // Environment variable name
+	Token          string `yaml:"token" json:"token"`                     // Direct token (less secure)
+	TokenEnv       string `yaml:"token_env" json:"token_env"`             // Token from environment
+	Entitlement         string `yaml:"entitlement" json:"entitlement"`                   // Direct entitlement/bearer token
+	EntitlementEnv      string `yaml:"entitlement_env" json:"entitlement_env"`           // Entitlement token from environment
+	EntitlementUsername string `yaml:"entitlement_username" json:"entitlement_username"` // Username for entitlement auth (default: "token")
 }
 
 // OCIReference represents a parsed OCI reference
@@ -208,6 +219,15 @@ func LoadRegistryAuthFromEnv() map[string]RegistryAuth {
 		case "tokenenv":
 			// Environment variable containing token
 			auth.TokenEnv = value
+		case "entitlement":
+			// Direct entitlement/bearer token
+			auth.Entitlement = value
+		case "entitlementenv":
+			// Environment variable containing entitlement/bearer token
+			auth.EntitlementEnv = value
+		case "entitlementusername":
+			// Username for entitlement auth (default: "token")
+			auth.EntitlementUsername = value
 		default:
 			// Skip unknown fields
 			continue
@@ -251,6 +271,23 @@ func LoadRegistryAuthForRegistry(registryName string) *RegistryAuth {
 		hasAuth = true
 	}
 
+	// Check for entitlement token environment variable
+	if entitlementEnv := os.Getenv("OCI_PLUGINS_REGISTRY_" + normalizedName + "_ENTITLEMENTENV"); entitlementEnv != "" {
+		auth.EntitlementEnv = entitlementEnv
+		hasAuth = true
+	}
+
+	// Check for direct entitlement token
+	if entitlement := os.Getenv("OCI_PLUGINS_REGISTRY_" + normalizedName + "_ENTITLEMENT"); entitlement != "" {
+		auth.Entitlement = entitlement
+		hasAuth = true
+	}
+
+	// Check for entitlement username override
+	if entitlementUsername := os.Getenv("OCI_PLUGINS_REGISTRY_" + normalizedName + "_ENTITLEMENTUSERNAME"); entitlementUsername != "" {
+		auth.EntitlementUsername = entitlementUsername
+	}
+
 	if !hasAuth {
 		return nil
 	}
@@ -264,7 +301,8 @@ func LoadRegistryAuthForRegistry(registryName string) *RegistryAuth {
 // - OCI_PLUGINS_PUBKEY_<NAME> - Named keys with PEM content
 // - OCI_PLUGINS_PUBKEY_FILE_<NAME> - File path references
 func LoadPublicKeysFromEnv() []string {
-	var keys []string
+	// Always include the embedded Tyk official signing key (cannot be disabled)
+	keys := []string{"embedded:default"}
 
 	// Scan for numbered keys: OCI_PLUGINS_PUBKEY_1, OCI_PLUGINS_PUBKEY_2, etc.
 	for i := 1; i <= 20; i++ {

@@ -1,8 +1,7 @@
 module standalone-grpc-plugin
 
-go 1.24
+go 1.25.6
 
-toolchain go1.24.7
 
 replace github.com/TykTechnologies/midsommar/microgateway => ../../microgateway
 

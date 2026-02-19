@@ -1,0 +1,66 @@
+# Development Dockerfile for AI Studio
+# Supports both CE and ENT editions via build args
+#
+# Usage:
+#   docker build -f dev/Dockerfile.studio -t midsommar-studio-dev .
+#   docker build -f dev/Dockerfile.studio --build-arg EDITION=ent -t midsommar-studio-dev-ent .
+
+FROM golang:1.25-bookworm AS base
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    screen \
+    wget \
+    curl \
+    gcc \
+    g++ \
+    build-essential \
+    sqlite3 \
+    libsqlite3-dev \
+    inotify-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20 LTS
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Air for Go hot reloading
+RUN go install github.com/air-verse/air@latest
+
+# Install cosign for OCI plugin signature verification
+RUN curl -fsSL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-$(dpkg --print-architecture) -o /usr/local/bin/cosign \
+    && chmod +x /usr/local/bin/cosign
+
+# Set working directory
+WORKDIR /app
+
+# Clone langchaingo fork (required dependency)
+RUN git clone --depth 1 https://github.com/lonelycode/langchaingo /langchaingo
+
+# Create required directories
+RUN mkdir -p /app/bin /app/data /app/tmp
+
+# Environment configuration
+ENV GOPATH=/root/go
+ENV PATH="${GOPATH}/bin:/usr/local/go/bin:${PATH}"
+ENV CGO_ENABLED=1
+
+# Build arguments for edition
+ARG EDITION=ce
+ENV EDITION=${EDITION}
+
+# Set build tags based on edition
+ENV BUILD_TAGS=""
+
+# Expose ports
+# 3000 - Frontend dev server (when running npm start)
+# 8080 - Backend REST API
+# 9090 - embedded gateway
+# 50051 - gRPC Control Server
+EXPOSE 3000 8080 9090 50051
+
+# Default command uses Air for hot reloading
+# Can be overridden in docker-compose
+CMD ["air", "-c", "/app/dev/air/.air.studio.toml"]

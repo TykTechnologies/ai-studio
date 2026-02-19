@@ -36,7 +36,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/pb33f/libopenapi"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/schema"
 )
 
 const (
@@ -63,7 +62,46 @@ type SearchQuery struct {
 }
 
 type SearchResults struct {
-	Documents []schema.Document `json:"documents"`
+	Documents []DatasourceDocument `json:"documents"`
+}
+
+// DatasourceDocument is the REST response format for datasource search results.
+// Field names match the original schema.Document marshaling for backward compatibility.
+type DatasourceDocument struct {
+	PageContent string         `json:"PageContent"`
+	Metadata    map[string]any `json:"Metadata"`
+	Score       float32        `json:"Score"`
+}
+
+// VectorSearchQuery is the request body for vector-based similarity search.
+type VectorSearchQuery struct {
+	Embedding           []float32 `json:"embedding"`
+	N                   int       `json:"n"`
+	SimilarityThreshold float64   `json:"similarity_threshold"`
+}
+
+// MetadataQuery is the request body for metadata-only document queries.
+type MetadataQuery struct {
+	Filter     map[string]string `json:"filter"`
+	FilterMode string            `json:"filter_mode"`
+	Limit      int               `json:"limit"`
+	Offset     int               `json:"offset"`
+}
+
+// MetadataResults is the response for metadata queries with pagination.
+type MetadataResults struct {
+	Documents  []DatasourceDocument `json:"documents"`
+	TotalCount int                  `json:"total_count"`
+}
+
+// EmbeddingRequest is the request body for embedding generation.
+type EmbeddingRequest struct {
+	Texts []string `json:"texts"`
+}
+
+// EmbeddingResponse is the response containing generated embedding vectors.
+type EmbeddingResponse struct {
+	Vectors [][]float32 `json:"vectors"`
 }
 
 type OpenAPICache struct {
@@ -104,6 +142,11 @@ type Proxy struct {
 
 type Config struct {
 	Port int
+
+	// Datasource endpoint limits (zero values use defaults)
+	DatasourceMaxBodyBytes   int64 // Max request body size in bytes (default: 1MB)
+	DatasourceMaxResults     int   // Max documents returned per query (default: 100)
+	DatasourceMaxEmbedTexts  int   // Max texts per embedding request (default: 100)
 }
 
 // New creates a new Proxy instance using the unified services interface.
@@ -222,8 +265,6 @@ func (w *loggingResponseWriter) WriteHeader(code int) {
 func (p *Proxy) Stop(ctx context.Context) error { return p.server.Shutdown(ctx) }
 
 func (p *Proxy) Reload() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	logger.Debug("proxy reloading resources")
 	return p.loadResources()
 }
@@ -253,8 +294,10 @@ func (p *Proxy) loadResources() error {
 		ds := datasources[i]
 		newDatasources[slug.Make(ds.Name)] = &ds
 	}
+	p.mu.Lock()
 	p.llms = newLLMs
 	p.datasources = newDatasources
+	p.mu.Unlock()
 	return nil
 }
 
@@ -283,6 +326,9 @@ func (p *Proxy) createHandler() http.Handler {
 				http.HandlerFunc(p.handleUnifiedLLMRequest))))
 
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
+	r.HandleFunc("/datasource/{dsSlug}/vector", p.handleDatasourceVectorSearch).Methods("POST")
+	r.HandleFunc("/datasource/{dsSlug}/metadata", p.handleDatasourceMetadataQuery).Methods("POST")
+	r.HandleFunc("/datasource/{dsSlug}/embeddings", p.handleDatasourceGenerateEmbedding).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}", p.handleToolRequest).Methods("GET", "POST", "PUT", "DELETE")
 	r.HandleFunc("/tools/{toolSlug}/mcp", p.handleMCPToolStreamable).Methods("POST")
 	r.HandleFunc("/tools/{toolSlug}/mcp/sse", p.handleMCPToolSSE).Methods("GET")
@@ -455,6 +501,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
+		go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
@@ -490,6 +537,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			logger.Debugf("REST proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
 		}
 		req.Host = upstreamURL.Host
+		// Clear the Auth header, some vendors don't use it for auth and return error if its present(e.g Google AI)
+		req.Header.Del("Authorization")
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
 			logger.Errorf("ERROR setting vendor auth header in director: %v", err)
 			// Cannot write http error from director. This needs robust handling or pre-flight check.
@@ -531,8 +580,10 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			} else if blocked {
 				// Response was blocked by filter - return error instead
 				respondWithError(w, http.StatusBadRequest, blockMsg, nil, false)
-				// Still analyze for logging purposes
-				go p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
+				// Log with 400 status and include both the block reason and original LLM response for audit trail
+				blockedResponseBody := fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"original_response":%s}`,
+					blockMsg, string(bufferedCapture.buffer.Bytes()))
+				go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(blockedResponseBody), reqBody, r)
 				return
 			}
 		}
@@ -717,18 +768,11 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) {
-	dsSlug := mux.Vars(r)["dsSlug"]
-	ds, ok := p.GetDatasource(dsSlug)
-	if !ok {
-		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
-		return
+	ds, body := p.prepareDatasourceRequest(w, r)
+	if ds == nil {
+		return // Error already written by prepareDatasourceRequest
 	}
 	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to read request body", err, false)
-		return
-	}
 	var query SearchQuery
 	if err := json.Unmarshal(body, &query); err != nil {
 		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
@@ -739,7 +783,222 @@ func (p *Proxy) handleDatasourceRequest(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusInternalServerError, "failed to search", err, false)
 		return
 	}
-	resJSON, err := json.Marshal(SearchResults{Documents: results})
+	docs := make([]DatasourceDocument, len(results))
+	for i, r := range results {
+		docs[i] = DatasourceDocument{
+			PageContent: r.PageContent,
+			Metadata:        r.Metadata,
+			Score: r.Score,
+		}
+	}
+	resJSON, err := json.Marshal(SearchResults{Documents: docs})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resJSON)
+}
+
+func (p *Proxy) datasourceMaxBodyBytes() int64 {
+	if p.config != nil && p.config.DatasourceMaxBodyBytes > 0 {
+		return p.config.DatasourceMaxBodyBytes
+	}
+	return 1 << 20 // 1MB default
+}
+
+func (p *Proxy) datasourceMaxResults() int {
+	if p.config != nil && p.config.DatasourceMaxResults > 0 {
+		return p.config.DatasourceMaxResults
+	}
+	return 100
+}
+
+func (p *Proxy) datasourceMaxEmbedTexts() int {
+	if p.config != nil && p.config.DatasourceMaxEmbedTexts > 0 {
+		return p.config.DatasourceMaxEmbedTexts
+	}
+	return 100
+}
+
+// prepareDatasourceRequest resolves the datasource from the URL slug, checks app access,
+// and reads the request body with size limits. Returns the datasource and body on success,
+// or nil if an error response was already written.
+func (p *Proxy) prepareDatasourceRequest(w http.ResponseWriter, r *http.Request) (*models.Datasource, []byte) {
+	dsSlug := mux.Vars(r)["dsSlug"]
+	ds, ok := p.GetDatasource(dsSlug)
+	if !ok {
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("datasource not found: %s", dsSlug), nil, false)
+		return nil, nil
+	}
+
+	app, ok := r.Context().Value("app").(*models.App)
+	if !ok {
+		respondWithError(w, http.StatusUnauthorized, "app authentication required for datasource access", nil, false)
+		return nil, nil
+	}
+	hasAccess := false
+	for _, d := range app.Datasources {
+		if d.ID == ds.ID {
+			hasAccess = true
+			break
+		}
+	}
+	if !hasAccess {
+		respondWithError(w, http.StatusForbidden, "app does not have access to this datasource", nil, false)
+		return nil, nil
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, p.datasourceMaxBodyBytes())
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "request body too large", err, false)
+		return nil, nil
+	}
+
+	return ds, body
+}
+
+func (p *Proxy) handleDatasourceVectorSearch(w http.ResponseWriter, r *http.Request) {
+	ds, body := p.prepareDatasourceRequest(w, r)
+	if ds == nil {
+		return
+	}
+	var query VectorSearchQuery
+	if err := json.Unmarshal(body, &query); err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
+		return
+	}
+	if len(query.Embedding) == 0 {
+		respondWithError(w, http.StatusBadRequest, "embedding vector is required", nil, false)
+		return
+	}
+	n := query.N
+	if n <= 0 {
+		n = 10
+	}
+	if maxN := p.datasourceMaxResults(); n > maxN {
+		n = maxN
+	}
+
+	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
+	results, err := session.SearchByVector(ds.ID, query.Embedding, n)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to search by vector", err, false)
+		return
+	}
+
+	docs := make([]DatasourceDocument, 0, len(results))
+	for _, r := range results {
+		if query.SimilarityThreshold > 0 && float64(r.Score) < query.SimilarityThreshold {
+			continue
+		}
+		docs = append(docs, DatasourceDocument{
+			PageContent: r.PageContent,
+			Metadata:        r.Metadata,
+			Score: r.Score,
+		})
+	}
+
+	resJSON, err := json.Marshal(SearchResults{Documents: docs})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resJSON)
+}
+
+func (p *Proxy) handleDatasourceMetadataQuery(w http.ResponseWriter, r *http.Request) {
+	ds, body := p.prepareDatasourceRequest(w, r)
+	if ds == nil {
+		return
+	}
+	var query MetadataQuery
+	if err := json.Unmarshal(body, &query); err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
+		return
+	}
+	if len(query.Filter) == 0 {
+		respondWithError(w, http.StatusBadRequest, "filter is required", nil, false)
+		return
+	}
+	if query.FilterMode != "" && query.FilterMode != "AND" && query.FilterMode != "OR" {
+		respondWithError(w, http.StatusBadRequest, "filter_mode must be 'AND' or 'OR'", nil, false)
+		return
+	}
+	if maxResults := p.datasourceMaxResults(); query.Limit > maxResults {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("limit must not exceed %d", maxResults), nil, false)
+		return
+	}
+	for k, v := range query.Filter {
+		if len(k) > 256 || len(v) > 1024 {
+			respondWithError(w, http.StatusBadRequest, "filter keys must not exceed 256 characters and values must not exceed 1024 characters", nil, false)
+			return
+		}
+	}
+
+	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
+	results, totalCount, err := session.QueryByMetadataOnly(ds.ID, query.Filter, query.FilterMode, query.Limit, query.Offset)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to query by metadata", err, false)
+		return
+	}
+
+	docs := make([]DatasourceDocument, len(results))
+	for i, r := range results {
+		docs[i] = DatasourceDocument{
+			PageContent: r.PageContent,
+			Metadata:        r.Metadata,
+			Score: r.Score,
+		}
+	}
+
+	resJSON, err := json.Marshal(MetadataResults{Documents: docs, TotalCount: totalCount})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resJSON)
+}
+
+func (p *Proxy) handleDatasourceGenerateEmbedding(w http.ResponseWriter, r *http.Request) {
+	ds, body := p.prepareDatasourceRequest(w, r)
+	if ds == nil {
+		return
+	}
+
+	if ds.EmbedVendor == "" || ds.EmbedModel == "" {
+		respondWithError(w, http.StatusBadRequest, "datasource does not have an embedder configured", nil, false)
+		return
+	}
+
+	var req EmbeddingRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "failed to unmarshal request body", err, false)
+		return
+	}
+	if len(req.Texts) == 0 {
+		respondWithError(w, http.StatusBadRequest, "texts array is required and must not be empty", nil, false)
+		return
+	}
+	if maxTexts := p.datasourceMaxEmbedTexts(); len(req.Texts) > maxTexts {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("texts array must not exceed %d items", maxTexts), nil, false)
+		return
+	}
+
+	session := dataSession.NewDataSession(map[uint]*models.Datasource{ds.ID: ds})
+	vectors, err := session.CreateEmbedding(ds.ID, req.Texts)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "failed to generate embeddings", err, false)
+		return
+	}
+
+	resJSON, err := json.Marshal(EmbeddingResponse{Vectors: vectors})
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
@@ -775,11 +1034,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
-		go p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now())
+		go p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded for streaming", err, false)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
+		go p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
@@ -819,6 +1079,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusInternalServerError, "failed to create upstream request for streaming", err, false)
 		return
 	}
+	// Clear the Auth header, some vendors don't use it for auth and return error if its present(e.g Google AI)
+	r.Header.Del("Authorization")
 	upstreamReq.Header = r.Header.Clone()
 	upstreamReq.Host = upstreamURL.Host
 	if err := p.setVendorAuthHeader(upstreamReq, llm); err != nil {
@@ -891,8 +1153,10 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 						f.Flush()
 					}
 					isErr = true
-					// Analyze partial response
-					go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now())
+					// Log with 400 status and include both the block reason and partial LLM response for audit trail
+					blockedResponseBody := []byte(fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"chunk_index":%d,"partial_response":%s}`,
+						blockMsg, chunkIndex, fullResponse.String()))
+					go p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 					return
 				}
 			}
@@ -916,7 +1180,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if !isErr {
-		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now())
+		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
 
 		// Execute OnStreamComplete hook for plugins (e.g., caching)
 		if p.responseHookManager != nil && p.hasResponseHooks() {
@@ -1123,8 +1387,8 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	}
 	return v().ProxyScreenRequest(llm, r, isStreamingChannel)
 }
-func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time) {
-	AnalyzeStreamingResponse(p.gatewayService, llm, app, code, fullResponse, reqBody, req, chunks, timestamp)
+func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time, contentEncoding string) {
+	AnalyzeStreamingResponse(p.gatewayService, llm, app, code, fullResponse, reqBody, req, chunks, timestamp, contentEncoding)
 }
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
 	body, err := io.ReadAll(r.Body)

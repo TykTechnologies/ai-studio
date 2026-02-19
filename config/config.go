@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -38,6 +39,7 @@ type AppConf struct {
 	ToolDisplayURL       string
 	DataSourceDisplayURL string
 	ServerPort           string
+	ProxyPort            int
 	CertFile              string
 	KeyFile               string
 	DisableCors           bool
@@ -90,6 +92,13 @@ type AppConf struct {
 
 	// Budget Configuration
 	DefaultAppBudget *float64
+
+	// Docs Server Configuration
+	DocsPort     int
+	DocsDisabled bool
+
+	// Submission Configuration
+	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
 }
 
 // QueueConfig holds configuration for message queues
@@ -241,6 +250,18 @@ func getConfigFromEnv(envFile string) *AppConf {
 		conf.ServerPort = "8080"
 	}
 
+	proxyPortStr := os.Getenv("PROXY_PORT")
+	if proxyPortStr != "" {
+		if port, err := strconv.Atoi(proxyPortStr); err == nil {
+			conf.ProxyPort = port
+		} else {
+			cfgLog.Info().Msgf("Warning: Invalid PROXY_PORT value: %s. Using default: 9090", proxyPortStr)
+			conf.ProxyPort = 9090
+		}
+	} else {
+		conf.ProxyPort = 9090 // Default embedded gateway port
+	}
+
 	conf.CertFile = os.Getenv("CERT_FILE")
 	conf.KeyFile = os.Getenv("KEY_FILE")
 	if conf.KeyFile == "" || conf.CertFile == "" {
@@ -286,9 +307,28 @@ func getConfigFromEnv(envFile string) *AppConf {
 		conf.ProxyOnly = true
 	}
 
-	conf.DocsURL = os.Getenv("DOCS_URL")
-	if conf.DocsURL == "" {
-		conf.DocsURL = "http://localhost:8989"
+	// Docs server configuration - read port first so we can use it in default URL
+	docsPortStr := os.Getenv("DOCS_PORT")
+	if docsPortStr != "" {
+		if port, err := strconv.Atoi(docsPortStr); err == nil {
+			conf.DocsPort = port
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid DOCS_PORT value: %s. Using default: 8989", docsPortStr)
+			conf.DocsPort = 8989
+		}
+	} else {
+		conf.DocsPort = 8989
+	}
+
+	// Default DocsURL constructed from port, can be overridden for production/proxy setups
+	conf.DocsURL = fmt.Sprintf("http://localhost:%d", conf.DocsPort)
+	if override := os.Getenv("DOCS_URL_OVERRIDE"); override != "" {
+		conf.DocsURL = override
+	}
+
+	docsDisabledStr := os.Getenv("DOCS_DISABLED")
+	if docsDisabledStr == "true" || docsDisabledStr == "1" {
+		conf.DocsDisabled = true
 	}
 
 	conf.DocsLinks = make(DocsLinks)
@@ -388,11 +428,11 @@ func getConfigFromEnv(envFile string) *AppConf {
 		if port, err := strconv.Atoi(grpcPortStr); err == nil {
 			conf.GRPCPort = port
 		} else {
-			cfgLog.Info().Msgf("Warning: Invalid GRPC_PORT value: %s. Using default: 9090", grpcPortStr)
-			conf.GRPCPort = 9090
+			cfgLog.Info().Msgf("Warning: Invalid GRPC_PORT value: %s. Using default: 50051", grpcPortStr)
+			conf.GRPCPort = 50051
 		}
 	} else {
-		conf.GRPCPort = 9090 // Default gRPC port
+		conf.GRPCPort = 50051 // Default gRPC port
 	}
 
 	conf.GRPCHost = os.Getenv("GRPC_HOST")
@@ -454,6 +494,17 @@ func getConfigFromEnv(envFile string) *AppConf {
 
 	// Session duration configuration
 	conf.SessionDuration = parseDurationWithDefault("SESSION_DURATION", 6*time.Hour)
+
+	// Max resource payload size for submissions (default: 5MB)
+	conf.MaxResourcePayloadSize = 5 * 1024 * 1024
+	if maxPayloadStr := os.Getenv("MAX_RESOURCE_PAYLOAD_SIZE"); maxPayloadStr != "" {
+		if maxPayload, err := strconv.Atoi(maxPayloadStr); err == nil && maxPayload > 0 {
+			conf.MaxResourcePayloadSize = maxPayload
+			cfgLog.Info().Msgf("Max resource payload size set to: %d bytes", maxPayload)
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid MAX_RESOURCE_PAYLOAD_SIZE value: %s, using default 5MB", maxPayloadStr)
+		}
+	}
 
 	// Default app budget configuration
 	if defaultBudgetStr := os.Getenv("DEFAULT_APP_BUDGET"); defaultBudgetStr != "" {

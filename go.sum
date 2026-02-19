@@ -479,6 +479,8 @@ github.com/liushuangls/go-anthropic/v2 v2.8.0 h1:0zH2jDNycbrlszxnLrG+Gx8vVT0yJAP
 github.com/liushuangls/go-anthropic/v2 v2.8.0/go.mod h1:8BKv/fkeTaL5R9R9bGkaknYBueyw2WxY20o7bImbOek=
 github.com/lonelycode/go-uuid v0.0.0-20141202165402-ed3ca8a15a93 h1:WcaWCUFwpiRpIjcM7u27kuy2p5zPLC1KRxB3/bJ7XsI=
 github.com/lonelycode/go-uuid v0.0.0-20141202165402-ed3ca8a15a93/go.mod h1:ZjpSGzPgHSthaPv5L+rBEMIwrr5Uto0pKPwHmCHRkUM=
+github.com/lonelycode/langchaingo v0.0.0-20251125225155-18c4ce82812d h1:kt0PO+dwrjCCKQtrG8JAPlgurhBhbnVTDKHBmDcrcpQ=
+github.com/lonelycode/langchaingo v0.0.0-20251125225155-18c4ce82812d/go.mod h1:u8HxY9w7iaVa1j7gwEQDaSqQf6clhb2sXwx6nfaBtdA=
 github.com/lonelycode/osin v0.0.0-20160423095202-da239c9dacb6 h1:G2UYdR7/shMh7NMp2ETozj6zlqU5M8b0VqRbdxTXciU=
 github.com/lonelycode/osin v0.0.0-20160423095202-da239c9dacb6/go.mod h1:x4kc0i0iLfRkNWchVMcLjy+Txcz3XqNbr8iRUGFduLQ=
 github.com/lu4p/cat v0.1.5 h1:s51Bp/ns3u6n+hjjL2F77ySY6j/GD5SJG/t6Ok4Y1S0=

@@ -82,12 +82,14 @@ type CacheConfig struct {
 
 // GatewayConfig holds gateway-specific configuration
 type GatewayConfig struct {
-	Timeout         time.Duration `env:"GATEWAY_TIMEOUT" envDefault:"30s"`
-	MaxRequestSize  int64         `env:"GATEWAY_MAX_REQUEST_SIZE" envDefault:"10485760"`   // 10MB
-	MaxResponseSize int64         `env:"GATEWAY_MAX_RESPONSE_SIZE" envDefault:"52428800"` // 50MB
-	RateLimitRPM    int           `env:"GATEWAY_DEFAULT_RATE_LIMIT" envDefault:"100"`
-	EnableFilters   bool          `env:"GATEWAY_ENABLE_FILTERS" envDefault:"true"`
-	EnableAnalytics bool          `env:"GATEWAY_ENABLE_ANALYTICS" envDefault:"true"`
+	Timeout                   time.Duration `env:"GATEWAY_TIMEOUT" envDefault:"30s"`
+	MaxRequestSize            int64         `env:"GATEWAY_MAX_REQUEST_SIZE" envDefault:"10485760"`   // 10MB
+	MaxResponseSize           int64         `env:"GATEWAY_MAX_RESPONSE_SIZE" envDefault:"52428800"`  // 50MB
+	RateLimitRPM              int           `env:"GATEWAY_DEFAULT_RATE_LIMIT" envDefault:"100"`
+	EnableFilters             bool          `env:"GATEWAY_ENABLE_FILTERS" envDefault:"true"`
+	EnableAnalytics           bool          `env:"GATEWAY_ENABLE_ANALYTICS" envDefault:"true"`
+	PluginEndpointMaxBodySize    int64         `env:"PLUGIN_ENDPOINT_MAX_BODY_SIZE" envDefault:"1048576"`    // 1MB max request body for custom plugin endpoints
+	PluginEndpointStreamTimeout time.Duration `env:"PLUGIN_ENDPOINT_STREAM_TIMEOUT" envDefault:"5m"`       // Timeout for streaming plugin endpoints
 }
 
 // HubSpokeConfig holds hub-and-spoke architecture configuration
@@ -96,7 +98,7 @@ type HubSpokeConfig struct {
 	Mode string `env:"GATEWAY_MODE" envDefault:"standalone"`
 	
 	// Control Instance Configuration (for control mode)
-	GRPCPort             int           `env:"GRPC_PORT" envDefault:"9090"`
+	GRPCPort             int           `env:"GRPC_PORT" envDefault:"50051"`
 	GRPCHost             string        `env:"GRPC_HOST" envDefault:"0.0.0.0"`
 	TLSEnabled           bool          `env:"GRPC_TLS_ENABLED" envDefault:"false"`
 	TLSCertPath          string        `env:"GRPC_TLS_CERT_PATH"`
@@ -127,6 +129,10 @@ type HubSpokeConfig struct {
 	TokenCacheTTL        time.Duration `env:"EDGE_TOKEN_CACHE_TTL" envDefault:"5m"`
 	TokenCacheMaxSize    int           `env:"EDGE_TOKEN_CACHE_MAX_SIZE" envDefault:"1000"`
 	TokenCacheCleanupInt time.Duration `env:"EDGE_TOKEN_CACHE_CLEANUP_INTERVAL" envDefault:"1m"`
+
+	// gRPC message size limits (bytes). Default 16MB.
+	// Increase if config snapshots exceed the limit (many plugins, LLMs, tools, apps).
+	MaxMessageSize int `env:"GRPC_MAX_MESSAGE_SIZE" envDefault:"16777216"` // 16MB
 }
 
 // ControlPayloadConfig holds configuration for edge-to-control plugin data transmission

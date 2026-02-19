@@ -1,5 +1,8 @@
 .zed
 .env
+dev/.env
+dev/.env.gateway
+dev/.env.secrets
 .aider*
 *.db
 midsommar
@@ -23,6 +26,7 @@ __debug_bin*
 coverage.out
 coverage.html
 node_modules
+docs/dist
 docs/site/package-lock.json
 *.key
 
@@ -46,10 +50,10 @@ examples/file-based-demo/demo
 examples/file-based-demo/analytics/*.json
 utils/uc/*.json
 utils/uc/uc
-CLAUDE.md
 staging/*
 staging
 envs/*
+dist/
 
 # Vow - AI accountability files
 .vow-challenge
@@ -115,9 +119,23 @@ examples/plugins/gateway/legacy-collectors/file_analytics_collector/file_analyti
 examples/plugins/gateway/legacy-collectors/file_budget_collector/file_budget_collector
 examples/plugins/gateway/legacy-collectors/file_proxy_collector/file_proxy_collector
 examples/plugins/studio/scheduler-demo/scheduler-demo
-build-commands.txt
+examples/plugins/gateway/custom-echo-endpoint/custom-echo-endpoint
+build-commands.sh
 data/exports
 data/exports/*
 keys/*
 *.test
 *.out
+tests/postgres_data/
+examples/plugins/studio/service-api-test/server/server
+examples/plugins/studio/scheduler-demo/server/server
+examples/plugins/studio/llm-rate-limiter-multiphase/llm-rate-limiter-multiphase
+examples/plugins/data-collectors/file-analytics-collector/file-analytics-collector
+examples/plugins/data-collectors/file-budget-collector/file-budget-collector
+examples/plugins/data-collectors/file-proxy-collector/file-proxy-collector
+examples/plugins/studio/custom-auth-ui/server/server
+examples/plugins/studio/echo-agent/server/server
+tyk-internal-marketplace
+tests/postgres_data_ci/
+.playwright-mcp
+oci-cache

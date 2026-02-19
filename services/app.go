@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var ERRPrivacyScoreMismatch = errors.New("Datasources have higher privacy requirements than the selected LLMs")
@@ -265,6 +267,53 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	return app, nil
 }
 
+// PatchAppMetadata atomically updates a single metadata key on an app.
+// If deleteKey is true, the key is removed. Otherwise, the value (JSON string) is set.
+// Uses a database transaction for safe concurrent access. PostgreSQL uses FOR UPDATE
+// row locking; SQLite serializes transactions implicitly.
+func (s *Service) PatchAppMetadata(appID uint, key, value string, deleteKey bool) (map[string]interface{}, error) {
+	var resultMetadata map[string]interface{}
+
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		var app models.App
+		query := tx
+		// Use FOR UPDATE row locking on PostgreSQL; skip on SQLite (not supported)
+		if s.DB.Dialector.Name() == "postgres" {
+			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+		}
+		if err := query.First(&app, appID).Error; err != nil {
+			return err
+		}
+
+		if app.Metadata == nil {
+			app.Metadata = make(map[string]interface{})
+		}
+
+		if deleteKey {
+			delete(app.Metadata, key)
+		} else {
+			// Parse the JSON value to store typed data
+			var parsed interface{}
+			if err := json.Unmarshal([]byte(value), &parsed); err != nil {
+				// If not valid JSON, store as plain string
+				app.Metadata[key] = value
+			} else {
+				app.Metadata[key] = parsed
+			}
+		}
+
+		// Use Save to properly trigger GORM's JSON serializer for the metadata field
+		if err := tx.Save(&app).Error; err != nil {
+			return err
+		}
+
+		resultMetadata = app.Metadata
+		return nil
+	})
+
+	return resultMetadata, err
+}
+
 // Helper function to convert string IDs to uint IDs
 func (s *Service) convertIDs(idStrings []string) ([]uint, error) {
 	if idStrings == nil {
@@ -283,6 +332,13 @@ func (s *Service) convertIDs(idStrings []string) ([]uint, error) {
 
 // validatePrivacyScores checks if any datasource has a higher privacy score than any LLM
 func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
+	return s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, nil)
+}
+
+// validatePrivacyScoresWithPluginResources extends privacy validation to include
+// plugin resource scores. The generalized rule: no resource score (datasource or
+// plugin resource) may exceed the max LLM privacy score in the app.
+func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs []uint, pluginResourceScores []int) error {
 	var maxLLMScore int = -1        // Default to -1 if no LLMs
 	var maxDatasourceScore int = -1 // Default to -1 if no datasources
 
@@ -309,6 +365,13 @@ func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
 	// Check if datasources have higher privacy score than LLMs
 	if maxDatasourceScore > maxLLMScore {
 		return ERRPrivacyScoreMismatch
+	}
+
+	// Check plugin resource scores against max LLM score
+	for _, score := range pluginResourceScores {
+		if score > maxLLMScore {
+			return fmt.Errorf("plugin resource has higher privacy requirements (%d) than the selected LLMs (max %d)", score, maxLLMScore)
+		}
 	}
 
 	return nil
@@ -432,6 +495,11 @@ func (s *Service) DeleteApp(id uint) error {
 	}
 	if err := s.DB.Model(app).Association("Tools").Clear(); err != nil {
 		return fmt.Errorf("failed to clear app tools association: %w", err)
+	}
+
+	// Clear plugin resource associations
+	if err := s.ClearAppPluginResources(id); err != nil {
+		return fmt.Errorf("failed to clear app plugin resources: %w", err)
 	}
 
 	if err := app.Delete(s.DB); err != nil {
@@ -702,9 +770,13 @@ func (s *Service) SearchApps(searchTerm string, pageSize, pageNumber int, all bo
 }
 
 // ListAppsWithFilters returns a paginated list of apps with namespace and active status filtering
-func (s *Service) ListAppsWithFilters(pageSize, pageNumber int, all bool, sort, namespace string, isActive *bool) (models.Apps, int64, int, error) {
+func (s *Service) ListAppsWithFilters(pageSize, pageNumber int, all bool, sort, namespace string, isActive *bool, userID ...uint) (models.Apps, int64, int, error) {
 	var apps models.Apps
-	totalCount, totalPages, err := apps.ListWithFilters(s.DB, pageSize, pageNumber, all, sort, namespace, isActive)
+	var userIDPtr *uint
+	if len(userID) > 0 && userID[0] > 0 {
+		userIDPtr = &userID[0]
+	}
+	totalCount, totalPages, err := apps.ListWithFilters(s.DB, pageSize, pageNumber, all, sort, namespace, isActive, userIDPtr)
 	return apps, totalCount, totalPages, err
 }
 
@@ -743,7 +815,7 @@ func (s *Service) GetAppsInNamespace(namespace string) ([]models.App, error) {
 // GetActiveAppsInNamespace returns active apps in a specific namespace (including global)
 func (s *Service) GetActiveAppsInNamespace(namespace string) ([]models.App, error) {
 	var apps []models.App
-	
+
 	query := s.DB.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Where("is_active = ?", true)
 	if namespace == "" {
 		// Global namespace - only global apps
@@ -752,10 +824,170 @@ func (s *Service) GetActiveAppsInNamespace(namespace string) ([]models.App, erro
 		// Specific namespace - global + matching namespace
 		query = query.Where("(namespace = '' OR namespace = ?)", namespace)
 	}
-	
+
 	if err := query.Find(&apps).Error; err != nil {
 		return nil, err
 	}
 
 	return apps, nil
+}
+
+// --- Pluggable Resource Types ---
+
+// PluginResourceSelection represents plugin resources to associate with an app.
+type PluginResourceSelection struct {
+	PluginID         uint     `json:"plugin_id"`
+	ResourceTypeSlug string   `json:"resource_type_slug"`
+	InstanceIDs      []string `json:"instance_ids"`
+}
+
+// CreateAppWithResources creates an app with both built-in and plugin resource associations.
+// It extends CreateApp with plugin resource binding and generalized privacy validation.
+func (s *Service) CreateAppWithResources(
+	name, description string,
+	userID uint,
+	datasourceIDs []uint,
+	llmIDs []uint,
+	toolIDs []uint,
+	monthlyBudget *float64,
+	budgetStartDate *time.Time,
+	metadata map[string]interface{},
+	pluginResources []PluginResourceSelection,
+) (*models.App, error) {
+	// Collect privacy scores from plugin resources via plugin RPC
+	var pluginScores []int
+	for _, pr := range pluginResources {
+		prt, err := s.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
+		if err != nil {
+			return nil, fmt.Errorf("unknown resource type %s for plugin %d: %w", pr.ResourceTypeSlug, pr.PluginID, err)
+		}
+		if !prt.HasPrivacyScore {
+			continue
+		}
+		scores, err := s.collectPluginResourcePrivacyScores(pr.PluginID, pr.ResourceTypeSlug, pr.InstanceIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collect privacy scores for %s: %w", pr.ResourceTypeSlug, err)
+		}
+		pluginScores = append(pluginScores, scores...)
+	}
+
+	// Validate privacy scores (built-in + plugin)
+	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, pluginScores); err != nil {
+		return nil, err
+	}
+
+	// Create the app with built-in resources (reuse existing logic)
+	app, err := s.CreateApp(name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	// Bind plugin resources
+	for _, pr := range pluginResources {
+		prt, err := s.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
+		if err != nil {
+			return nil, fmt.Errorf("unknown resource type %s: %w", pr.ResourceTypeSlug, err)
+		}
+		if err := s.SetAppPluginResources(app.ID, prt.ID, pr.InstanceIDs); err != nil {
+			return nil, fmt.Errorf("failed to set plugin resources for type %s: %w", pr.ResourceTypeSlug, err)
+		}
+	}
+
+	// Emit plugin resources changed event after all bindings succeed
+	if s.SystemEvents != nil && len(pluginResources) > 0 {
+		s.SystemEvents.EmitAppPluginResourcesChanged(app.ID, app.UserID)
+	}
+
+	return app, nil
+}
+
+// UpdateAppWithResources updates an app with both built-in and plugin resource associations.
+func (s *Service) UpdateAppWithResources(
+	id uint,
+	name, description string,
+	userID uint,
+	datasourceIDs []uint,
+	llmIDs []uint,
+	toolIDs []uint,
+	monthlyBudget *float64,
+	budgetStartDate *time.Time,
+	metadata map[string]interface{},
+	pluginResources []PluginResourceSelection,
+) (*models.App, error) {
+	// Collect privacy scores from plugin resources via plugin RPC
+	var pluginScores []int
+	for _, pr := range pluginResources {
+		prt, err := s.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
+		if err != nil {
+			return nil, fmt.Errorf("unknown resource type %s for plugin %d: %w", pr.ResourceTypeSlug, pr.PluginID, err)
+		}
+		if !prt.HasPrivacyScore {
+			continue
+		}
+		scores, err := s.collectPluginResourcePrivacyScores(pr.PluginID, pr.ResourceTypeSlug, pr.InstanceIDs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collect privacy scores for %s: %w", pr.ResourceTypeSlug, err)
+		}
+		pluginScores = append(pluginScores, scores...)
+	}
+
+	// Validate privacy scores (built-in + plugin)
+	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, pluginScores); err != nil {
+		return nil, err
+	}
+
+	// Update the app with built-in resources (reuse existing logic)
+	app, err := s.UpdateApp(id, name, description, userID, datasourceIDs, llmIDs, toolIDs, monthlyBudget, budgetStartDate, metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update plugin resources
+	for _, pr := range pluginResources {
+		prt, err := s.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
+		if err != nil {
+			return nil, fmt.Errorf("unknown resource type %s: %w", pr.ResourceTypeSlug, err)
+		}
+		if err := s.SetAppPluginResources(app.ID, prt.ID, pr.InstanceIDs); err != nil {
+			return nil, fmt.Errorf("failed to set plugin resources for type %s: %w", pr.ResourceTypeSlug, err)
+		}
+	}
+
+	// Emit plugin resources changed event after all bindings succeed
+	if s.SystemEvents != nil && len(pluginResources) > 0 {
+		s.SystemEvents.EmitAppPluginResourcesChanged(app.ID, app.UserID)
+	}
+
+	return app, nil
+}
+
+// collectPluginResourcePrivacyScores fetches privacy scores for specific instances
+// from the plugin via ListResourceInstances RPC. Returns a score for each requested
+// instance. If the plugin manager is unavailable, returns an empty slice (skips validation).
+func (s *Service) collectPluginResourcePrivacyScores(pluginID uint, slug string, instanceIDs []string) ([]int, error) {
+	if s.AIStudioPluginManager == nil {
+		// Plugin manager not available (e.g., in tests) — skip score collection
+		return nil, nil
+	}
+
+	instances, err := s.AIStudioPluginManager.ListResourceInstances(pluginID, slug)
+	if err != nil {
+		// Plugin may not be loaded (e.g., during startup or tests) — skip score collection
+		return nil, nil
+	}
+
+	// Build lookup
+	scoreMap := make(map[string]int32)
+	for _, inst := range instances {
+		scoreMap[inst.Id] = inst.PrivacyScore
+	}
+
+	// Collect scores for requested instances
+	var scores []int
+	for _, id := range instanceIDs {
+		if score, ok := scoreMap[id]; ok {
+			scores = append(scores, int(score))
+		}
+	}
+	return scores, nil
 }

@@ -353,6 +353,12 @@ func (s *Service) DeleteUser(user *models.User) error {
 		return err
 	}
 
+	// Handle orphaned community resources (UGC) inside the transaction
+	if err := s.HandleUserDeletionForUGCTx(tx, user.ID); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to handle UGC orphan management: %w", err)
+	}
+
 	if err := tx.Commit().Error; err != nil {
 		return err
 	}

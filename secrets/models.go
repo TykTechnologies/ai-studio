@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -99,6 +100,37 @@ func decrypt(keyString string, stringToDecrypt string) string {
 	stream.XORKeyStream(ciphertext, ciphertext)
 
 	return fmt.Sprintf("%s", ciphertext)
+}
+
+// EncryptValue encrypts a plaintext string using the application's AES key.
+// Returns the encrypted value or the original if encryption fails or is not configured.
+func EncryptValue(plaintext string) string {
+	if plaintext == "" || plaintext == "[redacted]" {
+		return plaintext
+	}
+	key := os.Getenv(midsommarSecret)
+	if key == "" {
+		return plaintext // No encryption key configured
+	}
+	encrypted, err := encrypt(key, plaintext)
+	if err != nil {
+		return plaintext // Graceful fallback
+	}
+	return "$ENC/" + encrypted
+}
+
+// DecryptValue decrypts a value that was encrypted with EncryptValue.
+// Returns the decrypted plaintext, or the original value if not encrypted.
+func DecryptValue(value string) string {
+	if !strings.HasPrefix(value, "$ENC/") {
+		return value // Not encrypted
+	}
+	key := os.Getenv(midsommarSecret)
+	if key == "" {
+		return value // No key to decrypt with
+	}
+	encrypted := strings.TrimPrefix(value, "$ENC/")
+	return decrypt(key, encrypted)
 }
 
 // GetSecretByID retrieves a Secret record from the database by ID.

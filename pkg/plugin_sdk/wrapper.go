@@ -415,6 +415,59 @@ func (w *pluginServerWrapper) Call(ctx context.Context, req *pb.CallRequest) (*p
 	}, nil
 }
 
+// PortalCall implements pb.PluginServiceServer
+// This handles portal-scoped RPC calls (separate from admin Call) with user context.
+func (w *pluginServerWrapper) PortalCall(ctx context.Context, req *pb.PortalCallRequest) (*pb.PortalCallResponse, error) {
+	// Check if plugin provides portal RPC support
+	provider, ok := w.plugin.(PortalUIProvider)
+	if !ok {
+		return &pb.PortalCallResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not support portal RPC calls",
+		}, nil
+	}
+
+	// Set service broker ID if provided (for service API access)
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		stdlog.Printf("[PortalCall] Setting ai_studio_sdk broker ID to %d for portal RPC method %s", req.ServiceBrokerId, req.Method)
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	// Build portal user context from proto
+	var userCtx *PortalUserContext
+	if req.UserContext != nil {
+		userCtx = &PortalUserContext{
+			UserID:   req.UserContext.UserId,
+			Email:    req.UserContext.Email,
+			Name:     req.UserContext.Name,
+			IsAdmin:  req.UserContext.IsAdmin,
+			Groups:   req.UserContext.Groups,
+			Metadata: req.UserContext.Metadata,
+		}
+	} else {
+		// Provide empty context if none passed (should not happen in practice)
+		userCtx = &PortalUserContext{
+			Metadata: make(map[string]string),
+		}
+	}
+
+	payload := []byte(req.Payload)
+
+	// Call the plugin's portal RPC handler
+	response, err := provider.HandlePortalRPC(req.Method, payload, userCtx)
+	if err != nil {
+		return &pb.PortalCallResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.PortalCallResponse{
+		Success: true,
+		Data:    string(response),
+	}, nil
+}
+
 // GetConfigSchema implements pb.PluginServiceServer
 func (w *pluginServerWrapper) GetConfigSchema(ctx context.Context, req *pb.GetConfigSchemaRequest) (*pb.GetConfigSchemaResponse, error) {
 	// Check if plugin provides config schema
@@ -593,6 +646,213 @@ func (w *pluginServerWrapper) AcceptEdgePayload(ctx context.Context, req *pb.Edg
 		Success: true,
 		Handled: handled,
 	}, nil
+}
+
+// GetEndpointRegistrations implements pb.PluginServiceServer
+func (w *pluginServerWrapper) GetEndpointRegistrations(ctx context.Context, req *pb.GetEndpointRegistrationsRequest) (*pb.GetEndpointRegistrationsResponse, error) {
+	handler, ok := w.plugin.(CustomEndpointHandler)
+	if !ok {
+		return &pb.GetEndpointRegistrationsResponse{}, nil
+	}
+	regs, err := handler.GetEndpointRegistrations()
+	if err != nil {
+		return nil, fmt.Errorf("get endpoint registrations: %w", err)
+	}
+	return &pb.GetEndpointRegistrationsResponse{Registrations: regs}, nil
+}
+
+// HandleEndpointRequest implements pb.PluginServiceServer
+func (w *pluginServerWrapper) HandleEndpointRequest(ctx context.Context, req *pb.EndpointRequest) (*pb.EndpointResponse, error) {
+	handler, ok := w.plugin.(CustomEndpointHandler)
+	if !ok {
+		return &pb.EndpointResponse{StatusCode: 501, ErrorMessage: "plugin does not implement custom endpoints"}, nil
+	}
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	return handler.HandleEndpointRequest(pluginCtx, req)
+}
+
+// HandleEndpointRequestStream implements pb.PluginServiceServer
+func (w *pluginServerWrapper) HandleEndpointRequestStream(req *pb.EndpointRequest, stream pb.PluginService_HandleEndpointRequestStreamServer) error {
+	handler, ok := w.plugin.(CustomEndpointHandler)
+	if !ok {
+		return fmt.Errorf("plugin does not implement streaming custom endpoints")
+	}
+	pluginCtx := w.createPluginContext(stream.Context(), req.Context)
+	return handler.HandleEndpointRequestStream(pluginCtx, req, stream)
+}
+
+// --- Resource Provider RPC Handlers ---
+
+// GetResourceTypeRegistrations implements pb.PluginServiceServer
+func (w *pluginServerWrapper) GetResourceTypeRegistrations(ctx context.Context, req *pb.GetResourceTypeRegistrationsRequest) (*pb.GetResourceTypeRegistrationsResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.GetResourceTypeRegistrationsResponse{}, nil
+	}
+
+	regs, err := provider.GetResourceTypeRegistrations()
+	if err != nil {
+		return nil, fmt.Errorf("get resource type registrations: %w", err)
+	}
+
+	// Convert SDK types to proto
+	var protoRegs []*pb.ResourceTypeRegistrationProto
+	for _, r := range regs {
+		pr := &pb.ResourceTypeRegistrationProto{
+			Slug:                r.Slug,
+			Name:                r.Name,
+			Description:         r.Description,
+			Icon:                r.Icon,
+			HasPrivacyScore:     r.HasPrivacyScore,
+			SupportsSubmissions: r.SupportsSubmissions,
+		}
+		if r.FormComponent != nil {
+			pr.FormComponent = &pb.ResourceFormComponentProto{
+				Tag:        r.FormComponent.Tag,
+				EntryPoint: r.FormComponent.EntryPoint,
+			}
+		}
+		protoRegs = append(protoRegs, pr)
+	}
+
+	return &pb.GetResourceTypeRegistrationsResponse{Registrations: protoRegs}, nil
+}
+
+// ListResourceInstances implements pb.PluginServiceServer
+func (w *pluginServerWrapper) ListResourceInstances(ctx context.Context, req *pb.ListResourceInstancesRequest) (*pb.ListResourceInstancesResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.ListResourceInstancesResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not implement ResourceProvider",
+		}, nil
+	}
+
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	instances, err := provider.ListResourceInstances(pluginCtx, req.ResourceTypeSlug)
+	if err != nil {
+		return &pb.ListResourceInstancesResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.ListResourceInstancesResponse{
+		Success:   true,
+		Instances: resourceInstancesToProto(instances),
+	}, nil
+}
+
+// GetResourceInstance implements pb.PluginServiceServer
+func (w *pluginServerWrapper) GetResourceInstance(ctx context.Context, req *pb.GetResourceInstanceRequest) (*pb.GetResourceInstanceResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.GetResourceInstanceResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not implement ResourceProvider",
+		}, nil
+	}
+
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	instance, err := provider.GetResourceInstance(pluginCtx, req.ResourceTypeSlug, req.InstanceId)
+	if err != nil {
+		return &pb.GetResourceInstanceResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.GetResourceInstanceResponse{
+		Success:  true,
+		Instance: resourceInstanceToProto(instance),
+	}, nil
+}
+
+// ValidateResourceSelection implements pb.PluginServiceServer
+func (w *pluginServerWrapper) ValidateResourceSelection(ctx context.Context, req *pb.ValidateResourceSelectionRequest) (*pb.ValidateResourceSelectionResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.ValidateResourceSelectionResponse{
+			Valid:        true, // If plugin doesn't implement, allow by default
+			ErrorMessage: "",
+		}, nil
+	}
+
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	err := provider.ValidateResourceSelection(pluginCtx, req.ResourceTypeSlug, req.InstanceIds, req.AppId)
+	if err != nil {
+		return &pb.ValidateResourceSelectionResponse{
+			Valid:        false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.ValidateResourceSelectionResponse{Valid: true}, nil
+}
+
+// CreateResourceInstance implements pb.PluginServiceServer
+func (w *pluginServerWrapper) CreateResourceInstance(ctx context.Context, req *pb.CreateResourceInstanceRequest) (*pb.CreateResourceInstanceResponse, error) {
+	provider, ok := w.plugin.(ResourceProvider)
+	if !ok {
+		return &pb.CreateResourceInstanceResponse{
+			Success:      false,
+			ErrorMessage: "plugin does not implement ResourceProvider",
+		}, nil
+	}
+
+	if req.ServiceBrokerId != 0 && w.runtime == RuntimeStudio {
+		ai_studio_sdk.SetServiceBrokerID(req.ServiceBrokerId)
+	}
+
+	pluginCtx := w.createPluginContext(ctx, req.Context)
+	instance, err := provider.CreateResourceInstance(pluginCtx, req.ResourceTypeSlug, req.Payload)
+	if err != nil {
+		return &pb.CreateResourceInstanceResponse{
+			Success:      false,
+			ErrorMessage: err.Error(),
+		}, nil
+	}
+
+	return &pb.CreateResourceInstanceResponse{
+		Success:  true,
+		Instance: resourceInstanceToProto(instance),
+	}, nil
+}
+
+// resourceInstanceToProto converts a single SDK ResourceInstance to proto
+func resourceInstanceToProto(ri *ResourceInstance) *pb.ResourceInstanceProto {
+	if ri == nil {
+		return nil
+	}
+	return &pb.ResourceInstanceProto{
+		Id:           ri.ID,
+		Name:         ri.Name,
+		Description:  ri.Description,
+		PrivacyScore: int32(ri.PrivacyScore),
+		Metadata:     ri.Metadata,
+		IsActive:     ri.IsActive,
+	}
+}
+
+// resourceInstancesToProto converts a slice of SDK ResourceInstances to proto
+func resourceInstancesToProto(instances []*ResourceInstance) []*pb.ResourceInstanceProto {
+	result := make([]*pb.ResourceInstanceProto, 0, len(instances))
+	for _, ri := range instances {
+		result = append(result, resourceInstanceToProto(ri))
+	}
+	return result
 }
 
 // OpenSession implements pb.PluginServiceServer

@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/gosimple/slug"
 	"gorm.io/gorm"
 )
 
@@ -16,6 +17,15 @@ func InitModels(db *gorm.DB) error {
 		if err := db.Migrator().DropColumn(&ModelMapping{}, "pool_id"); err != nil {
 			// Log but don't fail - column might already be dropped
 			// or this might be a fresh install
+		}
+	}
+
+	// Migration: Drop orphaned slug column from plugins table
+	// The slug field was removed from the Plugin model but the column remained
+	// in the database with a NOT NULL constraint, causing INSERT failures.
+	if db.Migrator().HasColumn(&Plugin{}, "slug") {
+		if err := db.Migrator().DropColumn(&Plugin{}, "slug"); err != nil {
+			// Log but don't fail - column might already be dropped
 		}
 	}
 
@@ -60,6 +70,9 @@ func InitModels(db *gorm.DB) error {
 		&InstalledPluginVersion{}, // Installed plugin version tracking
 		&MarketplaceConfig{},      // Marketplace configuration
 		&BrandingSettings{},       // UI branding customization
+		// Sync Status Models
+		&NamespaceSyncStatus{}, // Namespace configuration sync status tracking
+		&SyncAuditLog{},        // Sync audit log for control-edge synchronization
 		// Model Router Models (Enterprise)
 		&ModelRouter{},  // Model router configurations
 		&ModelPool{},    // Model pools with patterns
@@ -71,8 +84,32 @@ func InitModels(db *gorm.DB) error {
 		&SchedulerLease{},          // Scheduler leader election
 		// Export Models
 		&ProxyLogExport{}, // Proxy log export jobs (Enterprise)
+		// UGC (User-Generated Content) Models
+		&Submission{},          // Community resource submissions
+		&AttestationTemplate{}, // Admin-configurable attestation templates
+		&SubmissionVersion{},   // Resource version snapshots for rollback
+		&SubmissionActivity{},  // Submission review action audit trail
+		// Pluggable Resource Types
+		&PluginResourceType{},  // Plugin-registered resource types
+		&AppPluginResource{},   // App ↔ plugin resource instance associations
+		&GroupPluginResource{}, // Group ↔ plugin resource instance access control
 	); err != nil {
 		return err
+	}
+
+	// Migration: Populate Tool.Slug for existing records
+	// This ensures tools created before the Slug field was added get their slugs computed
+	var toolCount int64
+	db.Model(&Tool{}).Where("slug = '' OR slug IS NULL").Count(&toolCount)
+	if toolCount > 0 {
+		var tools []Tool
+		db.Find(&tools)
+		for i := range tools {
+			if tools[i].Slug == "" {
+				tools[i].Slug = slug.Make(tools[i].Name)
+				db.Model(&tools[i]).Update("slug", tools[i].Slug)
+			}
+		}
 	}
 
 	if err := db.Table("group_catalogues").AutoMigrate(&struct {

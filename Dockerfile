@@ -1,7 +1,7 @@
 # Dockerfile
 
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make ca-certificates tzdata gcc musl-dev sqlite-dev npm nodejs
@@ -25,6 +25,9 @@ RUN sed -i 's|replace github.com/tmc/langchaingo => /Users/martinbuhr/apps/lonel
 
 # Build frontend
 RUN cd ui/admin-frontend && npm ci && PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
+
+# Build documentation site
+RUN cd docs/site && npm ci && npm run docs:build
 
 # Download dependencies
 RUN go mod download
@@ -56,7 +59,12 @@ RUN apk add --no-cache \
     ca-certificates \
     sqlite-libs \
     poppler-utils \
-    wget
+    wget && \
+    # Install cosign for OCI plugin signature verification (Enterprise)
+    COSIGN_VERSION=2.4.1 && \
+    ARCH=$(uname -m | sed 's/aarch64/arm64/' | sed 's/x86_64/amd64/') && \
+    wget -q "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-${ARCH}" -O /usr/local/bin/cosign && \
+    chmod +x /usr/local/bin/cosign
 
 WORKDIR /app
 
@@ -70,7 +78,7 @@ COPY templates ./templates
 COPY config/docs_links.json ./config/docs_links.json
 
 # Expose the required ports
-EXPOSE 8080 9090
+EXPOSE 8080 9090 50051
 
 # Run the binary directly
 ENTRYPOINT ["./tyk-ai-studio"]

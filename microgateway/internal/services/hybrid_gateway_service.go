@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -106,18 +107,31 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 			Str("app_name", resp.AppName).
 			Msg("On-demand token validation successful")
 
-		// Get the app from local SQLite database (now has full relationships!)
+		// Store App if provided in response (pull-on-miss sync)
+		if resp.App != nil {
+			if err := h.storeAppFromPullOnMiss(resp.App); err != nil {
+				log.Warn().Err(err).Uint32("app_id", resp.AppId).
+					Msg("Failed to store App from pull-on-miss, will try local lookup")
+			} else {
+				log.Debug().
+					Uint32("app_id", resp.AppId).
+					Str("app_name", resp.App.Name).
+					Int("llm_count", len(resp.App.LlmIds)).
+					Msg("Stored App from pull-on-miss token validation")
+			}
+		}
+
+		// Get the app from local SQLite database (should now exist after pull-on-miss sync)
 		app, err := h.DatabaseGatewayService.GetAppByTokenID(uint(resp.AppId))
 		if err != nil {
-			// App not found in SQLite, create a minimal app object with the validated app_id
-			log.Debug().Uint32("app_id", resp.AppId).Msg("App not found in local SQLite, using minimal app object")
-			
-			// Create minimal app - the app_llm relationships should exist from sync
+			// App not found in SQLite - try direct lookup with LLM preload
+			log.Debug().Uint32("app_id", resp.AppId).Msg("App not found via GetAppByTokenID, trying direct lookup")
+
 			var dbApp database.App
 			if err := h.db.Where("id = ?", resp.AppId).Preload("LLMs").First(&dbApp).Error; err != nil {
 				return nil, fmt.Errorf("app %d not found in synced SQLite: %w", resp.AppId, err)
 			}
-			
+
 			app = &dbApp
 		}
 
@@ -147,7 +161,7 @@ func (h *HybridGatewayService) GetAppByTokenID(tokenID uint) (*database.App, err
 	// For on-demand validation, token_id equals app_id
 	// Get the app directly from local SQLite (now has full relationships!)
 	var app database.App
-	if err := h.db.Where("id = ?", tokenID).Preload("LLMs").First(&app).Error; err != nil {
+	if err := h.db.Where("id = ?", tokenID).Preload("LLMs").Preload("Tools.Filters").Preload("Datasources").First(&app).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			log.Debug().Uint("app_id", tokenID).Msg("App not found in local SQLite")
 			return nil, fmt.Errorf("app not found: %d", tokenID)
@@ -271,4 +285,126 @@ func (h *HybridGatewayService) Stop() {
 		close(h.stopCleanup)
 		log.Debug().Int("cache_size", len(h.tokenCache)).Msg("Stopped token validation cache cleanup worker")
 	}
+}
+
+// storeAppFromPullOnMiss stores an App received during token validation (pull-on-miss sync).
+// This ensures the App exists in local SQLite for subsequent LLM access checks.
+// Uses upsert semantics - creates if not exists, updates if exists.
+func (h *HybridGatewayService) storeAppFromPullOnMiss(pbApp *pb.AppConfig) error {
+	return h.db.Transaction(func(tx *gorm.DB) error {
+		// Build App record from proto
+		app := &database.App{
+			Model: gorm.Model{
+				ID:        uint(pbApp.Id),
+				CreatedAt: pbApp.CreatedAt.AsTime(),
+				UpdatedAt: pbApp.UpdatedAt.AsTime(),
+			},
+			Name:          pbApp.Name,
+			Description:   pbApp.Description,
+			OwnerEmail:    pbApp.OwnerEmail,
+			UserID:        uint(pbApp.UserId),
+			IsActive:      pbApp.IsActive,
+			MonthlyBudget: pbApp.MonthlyBudget,
+			RateLimitRPM:  int(pbApp.RateLimitRpm),
+			Namespace:     pbApp.Namespace,
+		}
+
+		// Handle budget start date if available
+		if pbApp.BudgetStartDate != "" {
+			if startDate, err := time.Parse(time.RFC3339, pbApp.BudgetStartDate); err == nil {
+				app.BudgetStartDate = &startDate
+			}
+		}
+
+		// Handle metadata JSON
+		if pbApp.Metadata != "" {
+			app.Metadata = datatypes.JSON(pbApp.Metadata)
+		}
+
+		// Upsert: Create if not exists, Update if exists
+		// Use Clauses for proper upsert with all fields
+		if err := tx.Where("id = ?", pbApp.Id).
+			Assign(map[string]interface{}{
+				"name":              app.Name,
+				"description":       app.Description,
+				"owner_email":       app.OwnerEmail,
+				"user_id":           app.UserID,
+				"is_active":         app.IsActive,
+				"monthly_budget":    app.MonthlyBudget,
+				"budget_start_date": app.BudgetStartDate,
+				"rate_limit_rpm":    app.RateLimitRPM,
+				"namespace":         app.Namespace,
+				"metadata":          app.Metadata,
+				"updated_at":        time.Now(),
+			}).
+			FirstOrCreate(app).Error; err != nil {
+			return fmt.Errorf("failed to upsert app: %w", err)
+		}
+
+		// Clear existing app_llms for this app and recreate
+		if err := tx.Exec("DELETE FROM app_llms WHERE app_id = ?", pbApp.Id).Error; err != nil {
+			return fmt.Errorf("failed to clear app_llms: %w", err)
+		}
+
+		// Recreate app_llms join table entries
+		for _, llmID := range pbApp.LlmIds {
+			appLLM := &database.AppLLM{
+				AppID:     uint(pbApp.Id),
+				LLMID:     uint(llmID),
+				IsActive:  true,
+				CreatedAt: time.Now(),
+			}
+			if err := tx.Create(appLLM).Error; err != nil {
+				return fmt.Errorf("failed to create app_llm (app=%d, llm=%d): %w", pbApp.Id, llmID, err)
+			}
+		}
+
+		// Clear existing app_tools for this app and recreate
+		if err := tx.Exec("DELETE FROM app_tools WHERE app_id = ?", pbApp.Id).Error; err != nil {
+			log.Warn().Err(err).Uint32("app_id", pbApp.Id).Msg("Failed to clear app_tools (table may not exist)")
+		}
+
+		// Recreate app_tools join table entries
+		for _, toolID := range pbApp.ToolIds {
+			appTool := &database.AppTool{
+				AppID:     uint(pbApp.Id),
+				ToolID:    uint(toolID),
+				CreatedAt: time.Now(),
+			}
+			if err := tx.Create(appTool).Error; err != nil {
+				return fmt.Errorf("failed to create app_tool (app=%d, tool=%d): %w", pbApp.Id, toolID, err)
+			}
+		}
+
+		// Clear existing app_datasources for this app and recreate
+		if err := tx.Exec("DELETE FROM app_datasources WHERE app_id = ?", pbApp.Id).Error; err != nil {
+			log.Warn().Err(err).Uint32("app_id", pbApp.Id).Msg("Failed to clear app_datasources (table may not exist)")
+		}
+
+		// Recreate app_datasources join table entries
+		for _, dsID := range pbApp.DatasourceIds {
+			appDS := &database.AppDatasource{
+				AppID:        uint(pbApp.Id),
+				DatasourceID: uint(dsID),
+				CreatedAt:    time.Now(),
+			}
+			if err := tx.Create(appDS).Error; err != nil {
+				return fmt.Errorf("failed to create app_datasource (app=%d, ds=%d): %w", pbApp.Id, dsID, err)
+			}
+		}
+
+		// Note: Budget usage is NOT initialized here for pull-on-miss sync.
+		// The edge gateway tracks budget locally via its own analytics.
+		// Initializing it here with 0 would overwrite existing local budget data.
+
+		log.Debug().
+			Uint32("app_id", pbApp.Id).
+			Str("app_name", pbApp.Name).
+			Int("llm_count", len(pbApp.LlmIds)).
+			Int("tool_count", len(pbApp.ToolIds)).
+			Int("ds_count", len(pbApp.DatasourceIds)).
+			Msg("Stored App from pull-on-miss token validation")
+
+		return nil
+	})
 }

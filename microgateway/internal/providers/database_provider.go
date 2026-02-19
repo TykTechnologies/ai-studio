@@ -392,6 +392,25 @@ func (p *DatabaseProvider) GetPluginsForLLM(llmID uint) ([]database.Plugin, erro
 	return result, nil
 }
 
+// GetAllLLMAssociatedPlugins returns all active plugins linked to at least one
+// active LLM association, using a single JOIN query.
+func (p *DatabaseProvider) GetAllLLMAssociatedPlugins() ([]database.Plugin, error) {
+	var plugins []database.Plugin
+	query := p.db.
+		Distinct("plugins.*").
+		Joins("JOIN llm_plugins ON llm_plugins.plugin_id = plugins.id AND llm_plugins.is_active = ?", true).
+		Where("plugins.is_active = ? AND plugins.deleted_at IS NULL", true)
+
+	if p.namespace != "" {
+		query = query.Where("(plugins.namespace = '' OR plugins.namespace = ?)", p.namespace)
+	}
+
+	if err := query.Find(&plugins).Error; err != nil {
+		return nil, fmt.Errorf("failed to get all LLM-associated plugins: %w", err)
+	}
+	return plugins, nil
+}
+
 // ListPlugins retrieves plugins with namespace and type filtering
 func (p *DatabaseProvider) ListPlugins(namespace string, hookType string, active bool) ([]database.Plugin, error) {
 	var plugins []database.Plugin

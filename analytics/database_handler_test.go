@@ -1,8 +1,16 @@
 package analytics
 
 import (
+	"context"
 	"errors"
 	"testing"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func TestSanitizeError(t *testing.T) {
@@ -81,4 +89,37 @@ func TestSanitizeError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDatabaseHandler_Cancellation(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	require.NoError(t, err)
+
+	err = db.AutoMigrate(&models.LLMChatRecord{})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	h := &DatabaseHandler{
+		ctx: ctx,
+		db:  db,
+		// A send to a nil channel blocks forever,
+		// forcing the select to choose the context case.
+		chatRecordChan: nil,
+		recStarted:     true,
+	}
+
+	cancel()
+
+	// This should not panic and should return immediately
+	assert.NotPanics(t, func() {
+		h.RecordChatRecord(&models.LLMChatRecord{Name: "test-record"})
+	})
+
+	var count int64
+	err = db.Model(&models.LLMChatRecord{}).Count(&count).Error
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(0), count, "Record should not have been created because context was cancelled")
 }

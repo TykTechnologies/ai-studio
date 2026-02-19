@@ -1,4 +1,4 @@
-version: "3.8"
+
 services:
   ai_studio:
     platform: linux/${TARGETARCH:-amd64}
@@ -7,25 +7,28 @@ services:
       dockerfile: Dockerfile.dev
     volumes:
       - ../.:/app
-      - /app/ui/admin-frontend/node_modules
-      - ../.env:/app/.env # Mount .env file
+      # Note: Uses host's node_modules (installed by workflow before docker compose up)
+      # .env is created by entrypoint from .env.example if not present
     ports:
-      - "3000:3000" # Frontend
-      - "8081:8080"
-      - "9090:9090" # Backend
+      - "8081:8080" # Backend API + embedded frontend
+      - "9090:9090" # Proxy
     environment:
+      - CI=false
+      - SKIP_FRONTEND_DEV=true
       - ALLOW_REGISTRATIONS=true
       - CHOKIDAR_USEPOLLING=true
       - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
       - DATABASE_TYPE=postgres
-      - TYK_AI_LICENSE=${TYK_AI_LICENSE}
-      - TYK_AI_SECRET_KEY=${TYK_AI_SECRET_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY}
+      - TYK_AI_LICENSE=${TYK_AI_LICENSE:-}
+      - TYK_AI_SECRET_KEY=${TYK_AI_SECRET_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY:-}
       - GOFLAGS=-buildvcs=false
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DEVMODE=true
       - PROXY_URL=http://localhost:9090
+      # Build edition: enterprise (default) or community
+      - BUILD_EDITION=${BUILD_EDITION:-enterprise}
 
     stdin_open: true
     tty: true
@@ -39,7 +42,7 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=postgres
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      - ./postgres_data_ci:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s

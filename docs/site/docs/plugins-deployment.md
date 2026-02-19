@@ -14,6 +14,8 @@ Tyk AI Studio supports three plugin deployment methods: local filesystem (`file:
 
 Deploy plugins from the local filesystem.
 
+> **Safety settings:** By default, local filesystem plugin loading has safety restrictions that prevent loading from arbitrary paths. For development, you may need to adjust these settings in your configuration to allow local path loading and absolute paths. See the Security Considerations section below for details on `ALLOW_INTERNAL_NETWORK_ACCESS` and `PLUGIN_COMMAND_ALLOWLIST`.
+
 ### Building Your Plugin
 
 ```bash
@@ -271,26 +273,66 @@ curl -X POST http://localhost:3000/api/v1/plugins \
 
 ### Registry Authentication
 
-Configure registry credentials via environment variables:
+OCI registry authentication is configured via environment variables using the pattern:
 
-```bash
-# Docker Hub
-export OCI_REGISTRY_USERNAME=myusername
-export OCI_REGISTRY_PASSWORD=mypassword
-
-# GitHub Container Registry
-export OCI_REGISTRY_URL=ghcr.io
-export OCI_REGISTRY_USERNAME=github_username
-export OCI_REGISTRY_TOKEN=ghp_xxxxxxxxxxxxx
-
-# AWS ECR
-export OCI_REGISTRY_URL=123456789.dkr.ecr.us-east-1.amazonaws.com
-export AWS_ACCESS_KEY_ID=xxxxx
-export AWS_SECRET_ACCESS_KEY=xxxxx
-export AWS_REGION=us-east-1
+```
+OCI_PLUGINS_REGISTRY_<REGISTRY_NAME>_<FIELD>=<value>
 ```
 
-Or configure via Kubernetes secret:
+Where `<REGISTRY_NAME>` is the registry hostname with dots replaced by underscores (e.g., `docker.tyk.io` → `DOCKER_TYK_IO`).
+
+#### Authentication Methods
+
+**Entitlement Token** (Cloudsmith and similar registries):
+
+```bash
+# Entitlement token — sent as Basic auth (username: "token", password: entitlement)
+OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT=your-entitlement-token
+
+# Custom username for entitlement (default: "token")
+OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENTUSERNAME=custom-user
+```
+
+**Username + Password**:
+
+```bash
+OCI_PLUGINS_REGISTRY_GHCR_IO_USERNAME=github-user
+OCI_PLUGINS_REGISTRY_GHCR_IO_PASSWORDENV=GITHUB_TOKEN  # reads from this env var
+```
+
+**OAuth2/Bearer Token**:
+
+```bash
+OCI_PLUGINS_REGISTRY_REGISTRY_EXAMPLE_COM_TOKEN=your-access-token
+# Or read from env var:
+OCI_PLUGINS_REGISTRY_REGISTRY_EXAMPLE_COM_TOKENENV=MY_REGISTRY_TOKEN
+```
+
+#### AI Studio vs Microgateway
+
+Both runtimes use the same `OCI_PLUGINS_REGISTRY_*` environment variables for auth. The difference is in how OCI support is enabled:
+
+| Setting | AI Studio | Microgateway |
+|---------|-----------|-------------|
+| **Enable OCI** | `AI_STUDIO_OCI_CACHE_DIR=/path` | `OCI_PLUGINS_CACHE_DIR=/path` (default: `/var/lib/microgateway/plugins`) |
+| **Require signatures** | `AI_STUDIO_OCI_REQUIRE_SIGNATURE=true` | `OCI_PLUGINS_REQUIRE_SIGNATURE=true` |
+| **Registry auth** | `OCI_PLUGINS_REGISTRY_*` (shared) | `OCI_PLUGINS_REGISTRY_*` (shared) |
+
+**Important**: `AI_STUDIO_OCI_CACHE_DIR` must be set for OCI plugin support to be enabled in AI Studio. Without it, OCI plugins cannot be installed or loaded, and registry auth configuration is ignored.
+
+#### Signature Verification
+
+When signature verification is enabled (Enterprise Edition), the `cosign` tool verifies plugin signatures against the registry. Cosign uses the standard Docker credential store (`~/.docker/config.json`) for registry authentication — it does **not** use the `OCI_PLUGINS_REGISTRY_*` environment variables.
+
+To configure cosign auth in containerized environments:
+
+```bash
+# Create Docker config with registry credentials
+mkdir -p ~/.docker
+echo '{"auths":{"docker.tyk.io":{"auth":"'$(echo -n 'token:YOUR_ENTITLEMENT' | base64)'"}}}' > ~/.docker/config.json
+```
+
+For Kubernetes, mount a Docker config secret:
 
 ```yaml
 apiVersion: v1
@@ -301,6 +343,22 @@ type: kubernetes.io/dockerconfigjson
 data:
   .dockerconfigjson: <base64-encoded-docker-config>
 ```
+
+Configure public keys for signature verification:
+
+```bash
+# Public key for verifying plugin signatures
+OCI_PLUGINS_PUBLIC_KEY_1=/path/to/cosign.pub
+```
+
+#### Cloudsmith-Specific Notes
+
+When using Cloudsmith with a custom Docker domain (e.g., `docker.tyk.io`):
+
+- **Entitlement auth** is the recommended method for programmatic access
+- Entitlements bypass the Docker token exchange, which avoids scope issues with Cloudsmith's namespace-level scope requirements
+- Each Cloudsmith repository has its own entitlement tokens — use repository-level entitlements
+- The `ENTITLEMENT` auth type sends Basic auth directly on every request, which Cloudsmith supports natively
 
 ### Version Management
 
@@ -322,11 +380,14 @@ oci://registry.example.com/plugins/my-plugin@sha256:abc123...
 
 ### Caching
 
-OCI plugins are pulled and cached locally. Configure cache settings:
+OCI plugins are pulled and cached locally:
 
 ```bash
-export OCI_PLUGIN_CACHE_DIR=/var/cache/ai-studio/plugins
-export OCI_PLUGIN_CACHE_TTL=3600  # Cache for 1 hour
+# AI Studio
+AI_STUDIO_OCI_CACHE_DIR=/var/cache/ai-studio/plugins
+
+# Microgateway (defaults to /var/lib/microgateway/plugins)
+OCI_PLUGINS_CACHE_DIR=/var/cache/microgateway/plugins
 ```
 
 ## Security Considerations
@@ -438,8 +499,11 @@ chcon -t container_file_t /path/to/plugin
 ### Development Workflow
 
 1. **Local Development**: Use `file://` for fast iteration
-2. **Testing**: Deploy to staging with `grpc://` or `oci://`
-3. **Production**: Use `oci://` with versioned tags
+2. **Reload Loop**: Use `POST /api/v1/plugins/{id}/reload` to test changes instantly
+3. **Testing**: Deploy to staging with `grpc://` or `oci://`
+4. **Production**: Use `oci://` with versioned tags
+
+**See [Plugin Development Workflow](plugins-development-workflow.md)** for detailed setup, helper scripts, and the fastest development loop.
 
 ### Version Management
 
@@ -482,6 +546,8 @@ curl -X POST .../plugins -d '{"command": "oci://registry.../my-plugin:v1.2.3", .
 
 ## Next Steps
 
-- [Plugin Overview]([plugins-overview](https://docs.claude.com/en/docs/plugins-overview))
-- [SDK Reference]([plugins-sdk](https://docs.claude.com/en/docs/plugins-sdk))
-- [Plugin Manifests]([plugins-manifests](https://docs.claude.com/en/docs/plugins-manifests))
+- **[Plugin Development Workflow](plugins-development-workflow.md)** - Fast iteration with file:// and reload API
+- **[Plugin Overview](plugins-overview.md)** - All plugin types and capabilities
+- **[SDK Reference](plugins-sdk.md)** - Complete SDK documentation
+- **[Plugin Manifests](plugins-manifests.md)** - Manifest configuration
+- **[Plugin Examples](plugins-examples.md)** - Working examples including community plugins

@@ -4,7 +4,7 @@ export async function sendRequestToAnthropicLLMWithSDK(
     secret: string, 
     customUrl: string, 
     prompt: string,
-    model: string = 'claude-3-opus-20240229',
+    model: string = 'claude-sonnet-4-20250514',
     maxTokens: number = 1000
 ) {
     try {

@@ -62,6 +62,13 @@ message AppConfig {
 
   // Budget usage tracking - synced from control server to edge
   double current_period_usage = 19;    // Current spending in the active budget period (dollars)
+
+  // Tool and Datasource access relationships
+  repeated uint32 tool_ids = 20;       // From app_tools join table
+  repeated uint32 datasource_ids = 21; // From app_datasources join table
+
+  // Plugin resource associations (generic extensible resource types)
+  repeated PluginResourceAssociation plugin_resources = 22;
 }
 
 // TokenConfig represents an API token configuration
@@ -169,6 +176,82 @@ message ModelMappingConfig {
   string target_model = 3; // Model name to send to this vendor
 }
 
+// ToolConfig represents a tool configuration with embedded relationships
+message ToolConfig {
+  uint32 id = 1;
+  string name = 2;
+  string slug = 3;
+  string description = 4;
+  string tool_type = 5;
+  string oas_spec = 6;                  // Base64-encoded OpenAPI spec
+  string available_operations = 7;      // Comma-separated operation IDs
+  int32 privacy_score = 8;
+  string auth_key_encrypted = 9;        // Encrypted for edge transit (resolved from secrets)
+  string auth_schema_name = 10;
+  bool is_active = 11;
+  string namespace = 12;
+  string metadata = 13;                 // JSON string
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+
+  // Embedded relationship data (from join tables)
+  repeated uint32 filter_ids = 16;      // From tool_filters join table
+  repeated uint32 app_ids = 17;         // From app_tools join table
+}
+
+// DatasourceConfig represents a datasource configuration
+message DatasourceConfig {
+  uint32 id = 1;
+  string name = 2;
+  string short_description = 3;
+  string long_description = 4;
+  string icon = 5;
+  string url = 6;
+  int32 privacy_score = 7;
+  string db_source_type = 8;
+  string db_conn_string_encrypted = 9;  // Encrypted connection string
+  string db_conn_api_key_encrypted = 10;// Encrypted API key for vector store
+  string db_name = 11;
+  string embed_vendor = 12;
+  string embed_url = 13;
+  string embed_api_key_encrypted = 14;  // Encrypted embedder API key
+  string embed_model = 15;
+  bool is_active = 16;
+  string namespace = 17;
+  string metadata = 18;                 // JSON string
+  google.protobuf.Timestamp created_at = 19;
+  google.protobuf.Timestamp updated_at = 20;
+
+  // Embedded relationship data (from join tables)
+  repeated uint32 app_ids = 21;         // From app_datasources join table
+}
+
+// OAuthClientConfig represents an OAuth 2.0 client (synced to edges for MCP auth)
+message OAuthClientConfig {
+  uint32 id = 1;
+  string client_id = 2;
+  string client_secret_hash = 3;        // bcrypt hash - safe to transmit
+  string client_name = 4;
+  string redirect_uris = 5;             // Comma-separated redirect URIs
+  uint32 user_id = 6;
+  string scope = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+// AccessTokenConfig represents an OAuth 2.0 access token (synced to edges for MCP auth)
+message AccessTokenConfig {
+  uint32 id = 1;
+  string token_encrypted = 2;           // Encrypted token string for secure transit
+  string client_id = 3;
+  uint32 user_id = 4;
+  string scope = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  string token_hash = 9;                // SHA-256 hash for O(1) lookup on edge (no decryption needed)
+}
+
 // ConfigurationSnapshot represents a complete configuration state
 message ConfigurationSnapshot {
   string version = 1; // NEW: Configuration version for tracking
@@ -181,6 +264,15 @@ message ConfigurationSnapshot {
   string edge_namespace = 7; // Namespace this snapshot is filtered for
   google.protobuf.Timestamp snapshot_time = 8;
   repeated ModelRouterConfig model_routers = 9; // Enterprise: Model router configurations
+  string checksum = 10; // SHA-256 checksum of serialized snapshot (excluding volatile fields)
+
+  // Tool and Datasource configurations
+  repeated ToolConfig tools = 11;
+  repeated DatasourceConfig datasources = 12;
+
+  // OAuth state for MCP authentication on edges
+  repeated OAuthClientConfig oauth_clients = 13;
+  repeated AccessTokenConfig access_tokens = 14;
 }
 
 // ConfigurationChange represents a single configuration change
@@ -199,6 +291,10 @@ message ConfigurationChange {
     FILTER = 4;
     PLUGIN = 5;
     MODEL_ROUTER = 6;
+    TOOL = 7;
+    DATASOURCE = 8;
+    OAUTH_CLIENT = 9;
+    ACCESS_TOKEN = 10;
   }
   
   ChangeType change_type = 1;
@@ -216,9 +312,27 @@ message HealthStatus {
     DEGRADED = 1;
     UNHEALTHY = 2;
   }
-  
+
   Status status = 1;
   string message = 2;
   google.protobuf.Timestamp timestamp = 3;
   map<string, string> metrics = 4; // Additional health metrics
+}
+
+// PluginResourceAssociation represents plugin resource instances associated with an app.
+// Used in ConfigurationSnapshot to propagate plugin resource bindings to gateways.
+message PluginResourceAssociation {
+  uint32 plugin_id = 1;                            // Plugin that owns this resource type
+  string resource_type_slug = 2;                   // Resource type identifier
+  repeated string instance_ids = 3;                // Associated instance IDs
+  repeated ResourceInstanceSnapshot instances = 4; // Instance details for gateway-side access
+}
+
+// ResourceInstanceSnapshot contains instance details included in config snapshots
+// so gateways can access resource metadata without calling back to Studio.
+message ResourceInstanceSnapshot {
+  string id = 1;
+  string name = 2;
+  int32 privacy_score = 3;
+  bytes metadata = 4;                              // Opaque plugin-defined JSON
 }

@@ -15,21 +15,26 @@ import (
 )
 
 // EdgeResponse represents an edge instance in API responses
-// CE: Namespace field is omitted
+// CE: Namespace field is always "default"
 type EdgeResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
 		EdgeID        string                 `json:"edge_id"`
-		// Namespace field REMOVED in CE
+		Namespace     string                 `json:"namespace"` // Always "default" in CE
 		Version       string                 `json:"version"`
 		BuildHash     string                 `json:"build_hash"`
 		Metadata      map[string]interface{} `json:"metadata"`
 		LastHeartbeat *time.Time             `json:"last_heartbeat"`
 		Status        string                 `json:"status"`
 		SessionID     string                 `json:"session_id"`
-		CreatedAt     time.Time              `json:"created_at"`
-		UpdatedAt     time.Time              `json:"updated_at"`
+		// Sync status fields for configuration sync tracking
+		SyncStatus     string     `json:"sync_status"`
+		LoadedChecksum string     `json:"loaded_checksum"`
+		LoadedVersion  string     `json:"loaded_version"`
+		LastSyncAck    *time.Time `json:"last_sync_ack"`
+		CreatedAt      time.Time  `json:"created_at"`
+		UpdatedAt      time.Time  `json:"updated_at"`
 	} `json:"attributes"`
 }
 
@@ -325,60 +330,88 @@ func (a *API) reloadAllEdges(c *gin.Context) {
 
 // Helper functions
 
-// serializeEdge converts an EdgeInstance model to API response format (CE: without namespace)
+// serializeEdge converts an EdgeInstance model to API response format (CE: namespace always "default")
 func serializeEdge(edge *models.EdgeInstance) EdgeResponse {
+	namespace := edge.Namespace
+	if namespace == "" {
+		namespace = "default"
+	}
 	return EdgeResponse{
 		Type: "edges",
 		ID:   strconv.FormatUint(uint64(edge.ID), 10),
 		Attributes: struct {
-			EdgeID        string                 `json:"edge_id"`
-			Version       string                 `json:"version"`
-			BuildHash     string                 `json:"build_hash"`
-			Metadata      map[string]interface{} `json:"metadata"`
-			LastHeartbeat *time.Time             `json:"last_heartbeat"`
-			Status        string                 `json:"status"`
-			SessionID     string                 `json:"session_id"`
-			CreatedAt     time.Time              `json:"created_at"`
-			UpdatedAt     time.Time              `json:"updated_at"`
+			EdgeID         string                 `json:"edge_id"`
+			Namespace      string                 `json:"namespace"`
+			Version        string                 `json:"version"`
+			BuildHash      string                 `json:"build_hash"`
+			Metadata       map[string]interface{} `json:"metadata"`
+			LastHeartbeat  *time.Time             `json:"last_heartbeat"`
+			Status         string                 `json:"status"`
+			SessionID      string                 `json:"session_id"`
+			SyncStatus     string                 `json:"sync_status"`
+			LoadedChecksum string                 `json:"loaded_checksum"`
+			LoadedVersion  string                 `json:"loaded_version"`
+			LastSyncAck    *time.Time             `json:"last_sync_ack"`
+			CreatedAt      time.Time              `json:"created_at"`
+			UpdatedAt      time.Time              `json:"updated_at"`
 		}{
-			EdgeID:        edge.EdgeID,
-			Version:       edge.Version,
-			BuildHash:     edge.BuildHash,
-			Metadata:      edge.Metadata,
-			LastHeartbeat: edge.LastHeartbeat,
-			Status:        edge.Status,
-			SessionID:     edge.SessionID,
-			CreatedAt:     edge.CreatedAt,
-			UpdatedAt:     edge.UpdatedAt,
+			EdgeID:         edge.EdgeID,
+			Namespace:      namespace,
+			Version:        edge.Version,
+			BuildHash:      edge.BuildHash,
+			Metadata:       edge.Metadata,
+			LastHeartbeat:  edge.LastHeartbeat,
+			Status:         edge.Status,
+			SessionID:      edge.SessionID,
+			SyncStatus:     edge.SyncStatus,
+			LoadedChecksum: edge.LoadedChecksum,
+			LoadedVersion:  edge.LoadedVersion,
+			LastSyncAck:    edge.LastSyncAck,
+			CreatedAt:      edge.CreatedAt,
+			UpdatedAt:      edge.UpdatedAt,
 		},
 	}
 }
 
-// serializeEdgeWithHealth converts an EdgeInstanceWithHealth to API response format (CE: without namespace)
+// serializeEdgeWithHealth converts an EdgeInstanceWithHealth to API response format (CE: namespace always "default")
 func serializeEdgeWithHealth(edge *services.EdgeInstanceWithHealth) EdgeResponse {
+	namespace := edge.EdgeInstance.Namespace
+	if namespace == "" {
+		namespace = "default"
+	}
 	return EdgeResponse{
 		Type: "edges",
 		ID:   strconv.FormatUint(uint64(edge.EdgeInstance.ID), 10),
 		Attributes: struct {
-			EdgeID        string                 `json:"edge_id"`
-			Version       string                 `json:"version"`
-			BuildHash     string                 `json:"build_hash"`
-			Metadata      map[string]interface{} `json:"metadata"`
-			LastHeartbeat *time.Time             `json:"last_heartbeat"`
-			Status        string                 `json:"status"`
-			SessionID     string                 `json:"session_id"`
-			CreatedAt     time.Time              `json:"created_at"`
-			UpdatedAt     time.Time              `json:"updated_at"`
+			EdgeID         string                 `json:"edge_id"`
+			Namespace      string                 `json:"namespace"`
+			Version        string                 `json:"version"`
+			BuildHash      string                 `json:"build_hash"`
+			Metadata       map[string]interface{} `json:"metadata"`
+			LastHeartbeat  *time.Time             `json:"last_heartbeat"`
+			Status         string                 `json:"status"`
+			SessionID      string                 `json:"session_id"`
+			SyncStatus     string                 `json:"sync_status"`
+			LoadedChecksum string                 `json:"loaded_checksum"`
+			LoadedVersion  string                 `json:"loaded_version"`
+			LastSyncAck    *time.Time             `json:"last_sync_ack"`
+			CreatedAt      time.Time              `json:"created_at"`
+			UpdatedAt      time.Time              `json:"updated_at"`
 		}{
-			EdgeID:        edge.EdgeInstance.EdgeID,
-			Version:       edge.EdgeInstance.Version,
-			BuildHash:     edge.EdgeInstance.BuildHash,
-			Metadata:      edge.EdgeInstance.Metadata,
-			LastHeartbeat: edge.EdgeInstance.LastHeartbeat,
-			Status:        edge.EdgeInstance.Status,
-			SessionID:     edge.EdgeInstance.SessionID,
-			CreatedAt:     edge.EdgeInstance.CreatedAt,
-			UpdatedAt:     edge.EdgeInstance.UpdatedAt,
+			EdgeID:         edge.EdgeInstance.EdgeID,
+			Namespace:      namespace,
+			Version:        edge.EdgeInstance.Version,
+			BuildHash:      edge.EdgeInstance.BuildHash,
+			Metadata:       edge.EdgeInstance.Metadata,
+			LastHeartbeat:  edge.EdgeInstance.LastHeartbeat,
+			Status:         edge.EdgeInstance.Status,
+			SessionID:      edge.EdgeInstance.SessionID,
+			SyncStatus:     edge.EdgeInstance.SyncStatus,
+			LoadedChecksum: edge.EdgeInstance.LoadedChecksum,
+			LoadedVersion:  edge.EdgeInstance.LoadedVersion,
+			LastSyncAck:    edge.EdgeInstance.LastSyncAck,
+			CreatedAt:      edge.EdgeInstance.CreatedAt,
+			UpdatedAt:      edge.EdgeInstance.UpdatedAt,
 		},
 	}
 }

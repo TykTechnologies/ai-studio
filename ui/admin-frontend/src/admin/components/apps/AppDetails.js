@@ -134,6 +134,7 @@ const AppDetails = () => {
   const [datasources, setDatasources] = useState([]);
   const [tools, setTools] = useState([]); // Added state for tools
   const [agents, setAgents] = useState([]); // Added state for agents
+  const [pluginResources, setPluginResources] = useState([]); // Plugin resource associations
   const [loading, setLoading] = useState(true);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
@@ -160,6 +161,7 @@ const AppDetails = () => {
     severity: "success",
   });
   const [resetBudgetDialogOpen, setResetBudgetDialogOpen] = useState(false);
+  const [resetBudgetSuccessDialogOpen, setResetBudgetSuccessDialogOpen] = useState(false);
 
   const {
     page,
@@ -237,6 +239,18 @@ const AppDetails = () => {
         setDatasources(appData.attributes.datasources); // If full Datasource objects are now in AppResponse
       }
 
+      // Fetch plugin resource associations for this app
+      if (appData.attributes.plugin_resources && Array.isArray(appData.attributes.plugin_resources)) {
+        setPluginResources(appData.attributes.plugin_resources);
+      } else {
+        // Fetch from dedicated endpoint
+        try {
+          const prResp = await apiClient.get(`/apps/${id}/plugin-resources`);
+          setPluginResources(prResp.data?.data || []);
+        } catch {
+          // Plugin resources may not be available
+        }
+      }
 
     } catch (error) {
       console.error("Error fetching app details", error);
@@ -395,11 +409,8 @@ const AppDetails = () => {
       fetchTokenUsageAndCost();
       fetchAppDetails();
 
-      setSnackbar({
-        open: true,
-        message: "Budget period reset successfully. New period starts from today.",
-        severity: "success",
-      });
+      // Show success dialog prompting user to update edge configurations
+      setResetBudgetSuccessDialogOpen(true);
     } catch (error) {
       console.error("Error resetting budget", error);
       setSnackbar({
@@ -735,6 +746,21 @@ const AppDetails = () => {
               )}
             </Box>
           </Grid>
+          {/* Plugin Resources */}
+          {pluginResources.length > 0 && pluginResources.map((pr) => (
+            <React.Fragment key={`pr-${pr.plugin_id}-${pr.resource_type_slug}`}>
+              <Grid item xs={3}>
+                <FieldLabel>{pr.resource_type_name || pr.resource_type_slug}:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <Box display="flex" flexWrap="wrap" gap={1}>
+                  {(pr.instance_ids || []).map((instanceId) => (
+                    <Chip key={instanceId} label={instanceId} />
+                  ))}
+                </Box>
+              </Grid>
+            </React.Fragment>
+          ))}
           <Grid item xs={3}>
             <FieldLabel>Agents:</FieldLabel>
           </Grid>
@@ -1013,6 +1039,25 @@ const AppDetails = () => {
         titleColor="text.warningDefault"
         backgroundColor="background.surfaceWarningDefault"
         borderColor="border.warningDefault"
+        primaryButtonComponent="primary"
+      />
+
+      <ConfirmationDialog
+        open={resetBudgetSuccessDialogOpen}
+        title="Budget Reset Successfully"
+        message="The budget period has been reset. To apply this change to edge gateways, you need to push a configuration update from the Edge Gateways page."
+        confirmText="Would you like to go to the Edge Gateways page now?"
+        buttonLabel="Go to Edge Gateways"
+        onConfirm={() => {
+          setResetBudgetSuccessDialogOpen(false);
+          navigate("/admin/edge-gateways");
+        }}
+        onCancel={() => setResetBudgetSuccessDialogOpen(false)}
+        iconName="hexagon-check"
+        iconColor="text.successDefault"
+        titleColor="text.successDefault"
+        backgroundColor="background.surfaceSuccessDefault"
+        borderColor="border.successDefault"
         primaryButtonComponent="primary"
       />
     </>

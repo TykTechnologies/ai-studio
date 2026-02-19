@@ -265,6 +265,7 @@ type DatasourceInput struct {
 			EmbedAPIKey      string   `json:"embed_api_key"`
 			EmbedModel       string   `json:"embed_model"`
 			Active           bool     `json:"active"`
+			Namespace        string   `json:"namespace"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -294,6 +295,7 @@ type DatasourceResponse struct {
 		HasEmbedAPIKey   bool                `json:"has_embed_api_key"`
 		EmbedModel       string              `json:"embed_model"`
 		Active           bool                `json:"active"`
+		Namespace        string              `json:"namespace"`
 		Files            []FileStoreResponse `json:"files"`
 	} `json:"attributes"`
 }
@@ -370,6 +372,21 @@ type CredentialResponse struct {
 	} `json:"attributes"`
 }
 
+// PluginResourceInput represents plugin resources to associate with an app
+type PluginResourceInput struct {
+	PluginID         uint     `json:"plugin_id"`
+	ResourceTypeSlug string   `json:"resource_type_slug"`
+	InstanceIDs      []string `json:"instance_ids"`
+}
+
+// PluginResourceOutput represents plugin resources in an app response
+type PluginResourceOutput struct {
+	PluginID         uint     `json:"plugin_id"`
+	ResourceTypeSlug string   `json:"resource_type_slug"`
+	ResourceTypeName string   `json:"resource_type_name"`
+	InstanceIDs      []string `json:"instance_ids"`
+}
+
 // AppInput represents the input for app-related operations
 // @Description App input model
 type AppInput struct {
@@ -386,6 +403,7 @@ type AppInput struct {
 			BudgetStartDate *time.Time             `json:"budget_start_date"`
 			Namespace       string                 `json:"namespace,omitempty"`
 			Metadata        map[string]interface{} `json:"metadata,omitempty"`
+			PluginResources []PluginResourceInput  `json:"plugin_resources,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -408,6 +426,7 @@ type AppResponse struct {
 		IsOrphaned      bool                   `json:"is_orphaned"`
 		Metadata        map[string]interface{} `json:"metadata,omitempty"`
 		Namespace       string                 `json:"namespace,omitempty"`
+		PluginResources []PluginResourceOutput `json:"plugin_resources,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -512,6 +531,7 @@ type ToolInput struct {
 			AuthKey        string   `json:"auth_key"`
 			AuthSchemaName string   `json:"auth_schema_name"`
 			Operations     []string `json:"operations"`
+			Namespace      string   `json:"namespace"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -530,6 +550,8 @@ type ToolResponse struct {
 		Operations     []string            `json:"operations"`
 		AuthKey        string              `json:"auth_key"`
 		AuthSchemaName string              `json:"auth_schema_name"`
+		Active         bool                `json:"active"`
+		Namespace      string              `json:"namespace"`
 		FileStores     []FileStoreResponse `json:"file_stores"`
 		Filters        []FilterResponse    `json:"filters"`
 		Dependencies   []ToolResponse      `json:"dependencies"`
@@ -1007,6 +1029,8 @@ type FrontendConfig struct {
 	IsEnterprise         bool              `json:"is_enterprise"`
 	DocsLinks            map[string]string `json:"docsLinks"`
 	Branding             *BrandingConfig   `json:"branding,omitempty"`
+	DocsEnabled          bool              `json:"docsEnabled"`
+	DocsURL              string            `json:"docsURL,omitempty"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend

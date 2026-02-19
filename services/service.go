@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"gorm.io/gorm"
 )
 
@@ -44,6 +45,8 @@ type Service struct {
 	LicensingService licensing.Service
 	// Model Router (Enterprise)
 	ModelRouterService model_router.Service
+	// Sync Status (Hub-and-Spoke)
+	SyncStatusService *SyncStatusService
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -69,6 +72,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	edgeService := NewEdgeService(db)
 	namespaceService := NewNamespaceService(db, edgeService)
 	edgeManagementService := edge_management.NewService(db)
+	syncStatusService := NewSyncStatusService(db)
 
 	// Initialize plugin services with OCI support
 	var pluginService *PluginService
@@ -111,6 +115,22 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	} else {
 		logger.Debugf("Failed to wire plugin manager to plugin service (plugin_service_nil: %v, ai_studio_plugin_manager_nil: %v)",
 			pluginService == nil, aiStudioPluginManager == nil)
+	}
+
+	// Wire enterprise security service to OCI clients for signature verification
+	if ociConfig != nil {
+		secConfig := &plugin_security.Config{
+			OCIConfig:                  ociConfig,
+			AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+		}
+		secService := plugin_security.NewService(secConfig)
+		if pluginService != nil {
+			pluginService.SetSecurityService(secService)
+		}
+		if aiStudioPluginManager != nil {
+			aiStudioPluginManager.SetSecurityService(secService)
+		}
+		logger.Debug("Wired plugin security service to OCI clients")
 	}
 
 	// Initialize plugin metadata loader with enhanced config provider support
@@ -159,6 +179,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		HookRegistry:          hookRegistry,
 		HookManager:           hookManager,
 		ModelRouterService:    modelRouterSvc,
+		SyncStatusService:     syncStatusService,
 	}
 
 	// Wire service reference to AI Studio plugin manager for proper service provider injection
@@ -275,6 +296,7 @@ func (s *Service) SetEventBus(bus eventbridge.Bus) {
 	s.EventBus = bus
 	if bus != nil {
 		s.SystemEvents = NewSystemEventEmitter(bus, "control")
+		s.SubscribeResourceInstanceChanges(bus)
 		logger.Debug("Initialized system event emitter")
 	}
 }

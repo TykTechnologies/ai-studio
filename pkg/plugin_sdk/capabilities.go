@@ -105,6 +105,36 @@ type UIProvider interface {
 	HandleRPC(method string, payload []byte) ([]byte, error)
 }
 
+// PortalUserContext provides information about the authenticated portal user.
+// This is passed to plugins on portal RPC calls so they can make authorization decisions.
+type PortalUserContext struct {
+	UserID   uint32
+	Email    string
+	Name     string
+	IsAdmin  bool
+	Groups   []string
+	Metadata map[string]string
+}
+
+// PortalUIProvider serves portal-facing UI pages and handles portal RPC calls.
+// This is SEPARATE from UIProvider to enforce security boundaries between admin and portal contexts.
+// Plugins can implement both UIProvider (for admin UI) and PortalUIProvider (for portal UI).
+//
+// Note: PortalUIProvider does not include GetAsset/GetManifest - those come from UIProvider.
+// A plugin that wants portal UI must implement both UIProvider (for assets/manifest) and
+// PortalUIProvider (for portal RPC).
+type PortalUIProvider interface {
+	Plugin
+
+	// HandlePortalRPC processes RPC calls from the portal (end-user) UI.
+	// This is SEPARATE from HandleRPC which only handles admin UI calls.
+	// method: The RPC method name (e.g., "submit_feedback", "get_user_data")
+	// payload: JSON payload as bytes from the portal frontend
+	// userCtx: Authenticated portal user context (never nil)
+	// Returns: JSON response as bytes
+	HandlePortalRPC(method string, payload []byte, userCtx *PortalUserContext) ([]byte, error)
+}
+
 // ConfigProvider provides configuration schema for the plugin.
 // This is used by the admin UI to generate configuration forms.
 type ConfigProvider interface {
@@ -182,6 +212,37 @@ type Schedule struct {
 	Config         map[string]interface{} // Schedule-specific configuration from manifest
 }
 
+// CustomEndpointHandler allows plugins to register and serve custom HTTP endpoints.
+// Endpoints are mounted under /plugins/{slug}/ on the microgateway.
+// Each endpoint registration must explicitly declare whether authentication is required.
+//
+// Plugins can serve both unary responses (HandleEndpointRequest) and streaming
+// responses (HandleEndpointRequestStream) — the latter enables SSE and MCP
+// Streamable HTTP support. Set stream_response=true on an EndpointRegistration
+// to indicate the gateway should use the streaming path.
+//
+// Most plugins should register a single "/*" catch-all and handle routing internally
+// using the pre-split path_segments field on EndpointRequest.
+//
+// This capability is supported in Gateway runtime. AI Studio support may be added later.
+type CustomEndpointHandler interface {
+	Plugin
+
+	// GetEndpointRegistrations declares which HTTP endpoints this plugin serves.
+	// Called after Initialize() and again on plugin reload.
+	GetEndpointRegistrations() ([]*pb.EndpointRegistration, error)
+
+	// HandleEndpointRequest handles a non-streaming HTTP request.
+	// Returns a complete HTTP response (status, headers, body).
+	HandleEndpointRequest(ctx Context, req *pb.EndpointRequest) (*pb.EndpointResponse, error)
+
+	// HandleEndpointRequestStream handles a streaming HTTP request (SSE, MCP Streamable HTTP).
+	// Plugin sends EndpointResponseChunks: first HEADERS, then BODY chunks, finally DONE.
+	// The gateway flushes each BODY chunk to the HTTP client immediately.
+	// Plugins that only serve non-streaming endpoints can return an Unimplemented error.
+	HandleEndpointRequestStream(ctx Context, req *pb.EndpointRequest, stream grpc.ServerStreamingServer[pb.EndpointResponseChunk]) error
+}
+
 // EdgePayloadReceiver handles payloads sent from edge (microgateway) instances.
 // Use this when you need to receive data from plugins running on edge instances
 // that are connected to AI Studio via the hub-and-spoke architecture.
@@ -212,6 +273,51 @@ type EdgePayload struct {
 	Metadata          map[string]string // Optional key-value metadata
 	EdgeTimestamp     int64             // Unix timestamp when generated at edge
 	ReceivedTimestamp int64             // Unix timestamp when received at control
+}
+
+// ResourceProvider allows plugins to register custom resource types that can be
+// associated with Apps. Resource instances are managed by the plugin via RPC calls,
+// while the platform handles association, privacy validation, group-based access
+// control, and submission workflow integration.
+//
+// This capability is Studio-only. Gateway plugins receive resource associations
+// in the config snapshot but do not provide resources.
+//
+// Example:
+//
+//	func (p *MyPlugin) GetResourceTypeRegistrations() ([]*plugin_sdk.ResourceTypeRegistration, error) {
+//	    return []*plugin_sdk.ResourceTypeRegistration{{
+//	        Slug:            "mcp_servers",
+//	        Name:            "MCP Servers",
+//	        HasPrivacyScore: true,
+//	    }}, nil
+//	}
+//
+//	func (p *MyPlugin) ListResourceInstances(ctx plugin_sdk.Context, slug string) ([]*plugin_sdk.ResourceInstance, error) {
+//	    // Return instances from your plugin's storage
+//	}
+type ResourceProvider interface {
+	Plugin
+
+	// GetResourceTypeRegistrations declares the resource types this plugin provides.
+	// Called once after Initialize() and again on plugin reload.
+	GetResourceTypeRegistrations() ([]*ResourceTypeRegistration, error)
+
+	// ListResourceInstances returns all instances of a given resource type.
+	// The platform calls this to populate selection UI in the App form.
+	ListResourceInstances(ctx Context, resourceTypeSlug string) ([]*ResourceInstance, error)
+
+	// GetResourceInstance retrieves a single resource instance by its ID.
+	GetResourceInstance(ctx Context, resourceTypeSlug string, instanceID string) (*ResourceInstance, error)
+
+	// ValidateResourceSelection is called during app create/update to let the plugin
+	// validate the selected resource instances. Returns nil if valid, or an error
+	// describing why the selection is invalid.
+	ValidateResourceSelection(ctx Context, resourceTypeSlug string, instanceIDs []string, appID uint32) error
+
+	// CreateResourceInstance creates a new instance from a submission approval.
+	// payload is a JSON-encoded creation payload defined by the plugin.
+	CreateResourceInstance(ctx Context, resourceTypeSlug string, payload []byte) (*ResourceInstance, error)
 }
 
 // SessionAware is an optional interface for plugins that need session lifecycle callbacks.

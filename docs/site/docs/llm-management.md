@@ -6,7 +6,7 @@ Tyk AI Studio provides a centralized system for managing Large Language Model (L
 
 The LLM Management system allows you to:
 
-*   **Configure LLM Providers:** Connect to various LLM vendors (OpenAI, Anthropic, Azure OpenAI, Google Vertex AI, etc.).
+*   **Configure LLM Providers:** Connect to various LLM vendors (OpenAI, Anthropic, Google Vertex AI, Google AI, Hugging Face, Ollama).
 *   **Manage Models:** Specify which models from a provider are available for use within Tyk AI Studio.
 *   **Define Pricing:** Set input and output token costs for each model to enable accurate cost tracking.
 *   **Set Budgets:** Establish monthly spending limits for LLM usage, either globally for a model or per Application.
@@ -20,25 +20,28 @@ Administrators can configure connections to different LLM providers through the 
 2.  **Add New LLM:** Click "Add LLM Configuration".
 3.  **Provider Details:**
     *   **Name:** A user-friendly name for this configuration (e.g., "OpenAI GPT-4 Turbo").
-    *   **Vendor:** Select the LLM vendor (e.g., `openai`, `anthropic`, `azure`, `vertex`).
+    *   **Vendor:** Select the LLM vendor. Supported vendors: `openai`, `anthropic`, `vertex` (Google Vertex AI), `google_ai`, `huggingface`, `ollama`.
     *   **API Key/Credentials:** Securely provide the necessary authentication credentials. Use the **Secrets Management** system (`$SECRET/YourSecretName`) for best practice.
-    *   **Base URL (Optional):** Override the default API endpoint if needed (e.g., for Azure OpenAI).
-    *   **API Version (Optional):** Specify the API version for certain providers like Azure.
-    ![Placeholder: LLM Provider Config](https://placehold.co/600x400?text=LLM+Provider+Config)
+    *   **Base URL (Optional):** Override the default API endpoint if needed (e.g., for self-hosted models or custom endpoints).
 
 4.  **Model Selection:**
     *   **Allowed Models:** Specify the exact model names from the vendor that can be used via this configuration (e.g., `gpt-4-turbo`, `claude-3-opus-20240229`).
     *   **Default Model:** The model used if a request doesn't specify one.
 
-5.  **Route ID:** A unique identifier used in API paths (e.g., `/proxy/{routeId}/...` or `/openai/{routeId}/...`) to target this specific LLM configuration.
+5.  **LLM Slug:** A unique identifier (auto-generated from the LLM name) used in API paths to target this specific LLM configuration. The proxy endpoints use this slug:
+    *   `/llm/call/{llmSlug}/...` - Unified endpoint (handles both streaming and non-streaming)
+    *   `/llm/rest/{llmSlug}/...` - REST-only requests
+    *   `/llm/stream/{llmSlug}/...` - Streaming-only requests
 
 6.  **Privacy Level:** Assign a privacy level to the LLM. This interacts with the Tool system, preventing tools with higher privacy levels from being used with LLMs having lower levels.
 
     Privacy levels define how data is protected by controlling LLM access based on its sensitivity:
-    - Public – Safe to share (e.g., blogs, press releases).
-    - Internal – Company-only info (e.g., reports, policies).
-    - Confidential – Sensitive business data (e.g., financials, strategies).
-    - Restricted (PII) – Personal data (e.g., names, emails, customer info).
+    - **Public (0)** – Safe to share (e.g., blogs, press releases).
+    - **Internal (25)** – Company-only info (e.g., reports, policies).
+    - **Confidential (50)** – Sensitive business data (e.g., financials, strategies).
+    - **Restricted/PII (100)** – Personal data (e.g., names, emails, customer info).
+
+    *Note: Privacy levels are stored as integer scores in the system. The values shown in parentheses are the typical score mappings.*
 
 7.  **Save:** Save the configuration.
 
@@ -52,7 +55,6 @@ To enable cost tracking in the Analytics system, you need to define the price pe
     *   **Model Name:** Enter the exact model name.
     *   **Input Token Price:** Cost per input token (usually stored as integer * 10000 for precision).
     *   **Output Token Price:** Cost per output token (usually stored as integer * 10000 for precision).
-    ![Placeholder: Model Price Config](https://placehold.co/600x400?text=Model+Price+Config)
 
 3.  **Save:** Save the pricing information.
 
@@ -76,7 +78,5 @@ Tyk AI Studio allows setting monthly spending limits to control AI costs.
 
 *   **LLM Budget:** Set the `MonthlyBudget` field when creating/editing an LLM configuration.
 *   **App Budget:** Set the `MonthlyBudget` field when creating/editing an App configuration.
-
-    ![Placeholder: Budget Config](https://placehold.co/600x400?text=Budget+Config)
 
 By combining LLM configuration, pricing, and budgeting, administrators gain granular control over AI model access and expenditure within Tyk AI Studio.

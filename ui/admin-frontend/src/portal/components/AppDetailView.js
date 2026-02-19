@@ -82,6 +82,7 @@ const AppDetailView = () => {
   const [accessibleLLMs, setAccessibleLLMs] = useState([]);
   const [accessibleDatasources, setAccessibleDatasources] = useState([]);
   const [accessibleTools, setAccessibleTools] = useState([]);
+  const [pluginResources, setPluginResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -171,6 +172,19 @@ const AppDetailView = () => {
         const filteredTools = accessibleTools.filter((tool) => appToolIds.includes(parseInt(tool.id)));
         setAccessibleTools(filteredTools);
 
+        // Load plugin resource associations
+        if (app.attributes.plugin_resources && app.attributes.plugin_resources.length > 0) {
+          setPluginResources(app.attributes.plugin_resources);
+        } else {
+          // Try dedicated endpoint
+          try {
+            const prResp = await pubClient.get(`/common/apps/${id}/plugin-resources`);
+            setPluginResources(prResp.data?.data || []);
+          } catch {
+            // Plugin resources not available
+          }
+        }
+
         // Fetch analytics data
         await fetchAnalyticsData(startDate, endDate);
 
@@ -189,6 +203,20 @@ const AppDetailView = () => {
     setShowSecret(!showSecret);
   };
 
+  const generateVendorEndpointURL = (path, llm) => {
+    const v1Suffix = "v1"
+
+    const { name, vendor } = llm.attributes
+    const baseUrl = generateEndpointUrl(path, name)
+
+    switch (vendor) {
+      case "google_ai":
+        return joinUrlParts(baseUrl, v1Suffix)
+      default:
+        return baseUrl
+    }
+  }
+
   const generateEndpointUrl = (path, name) => {
     const slug = generateSlug(name);
     // Use proxyUrl for LLM proxy endpoints
@@ -205,6 +233,23 @@ const AppDetailView = () => {
     const slug = generateSlug(name);
     // Use datasourceDisplayUrl for datasource endpoints
     return `${datasourceDisplayUrl}${path}${slug}`;
+  };
+
+  // Helper to join URL parts ensuring proper slash handling
+  const joinUrlParts = (...parts) => {
+    return parts
+      .map((part, index) => {
+        if (index === 0) {
+          // Remove trailing slash from first part
+          return part.replace(/\/+$/, '');
+        }
+        // Remove leading and trailing slashes from middle parts, only trailing from last
+        if (index === parts.length - 1) {
+          return part.replace(/^\/+/, '');
+        }
+        return part.replace(/^\/+/, '').replace(/\/+$/, '');
+      })
+      .join('/');
   };
 
   const copyToClipboard = (text) => {
@@ -524,6 +569,21 @@ const AppDetailView = () => {
               )) : <Typography variant="body2">No tools associated.</Typography>}
             </Box>
           </Grid>
+          {/* Plugin Resources */}
+          {pluginResources.length > 0 && pluginResources.map((pr) => (
+            <React.Fragment key={`pr-${pr.plugin_id || ''}-${pr.resource_type_slug || ''}`}>
+              <Grid item xs={3}>
+                <FieldLabel>{pr.resource_type_name || pr.resource_type_slug || 'Plugin Resources'}:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <Box display="flex" flexWrap="wrap" gap={1}>
+                  {(pr.instance_ids || []).map((instanceId) => (
+                    <Chip key={instanceId} label={instanceId} />
+                  ))}
+                </Box>
+              </Grid>
+            </React.Fragment>
+          ))}
           <Grid item xs={3}>
             <FieldLabel>Monthly Budget:</FieldLabel>
           </Grid>
@@ -642,12 +702,12 @@ const AppDetailView = () => {
                       flexGrow: 1,
                     }}
                   >
-                    {generateEndpointUrl("/llm/call/", llm.attributes.name)}
+                    {generateVendorEndpointURL("/llm/call/", llm)}
                   </Typography>
                   <IconButton
                     onClick={() =>
                       copyToClipboard(
-                        generateEndpointUrl("/llm/call/", llm.attributes.name),
+                        generateVendorEndpointURL("/llm/call/", llm),
                       )
                     }
                     size="small"
@@ -693,12 +753,12 @@ const AppDetailView = () => {
                       flexGrow: 1,
                     }}
                   >
-                    {`${generateEndpointUrl("/ai/", llm.attributes.name)}v1`}
+                    {joinUrlParts(generateEndpointUrl("/ai/", llm.attributes.name), "v1")}
                   </Typography>
                   <IconButton
                     onClick={() =>
                       copyToClipboard(
-                        `${generateEndpointUrl("/ai/", llm.attributes.name)}v1`,
+                        joinUrlParts(generateEndpointUrl("/ai/", llm.attributes.name), "v1"),
                       )
                     }
                     size="small"
@@ -760,15 +820,12 @@ const AppDetailView = () => {
                             flexGrow: 1,
                           }}
                         >
-                          {generateEndpointUrl("/llm/rest/", llm.attributes.name)}
+                          {generateVendorEndpointURL("/llm/rest/", llm)}
                         </Typography>
                         <IconButton
                           onClick={() =>
                             copyToClipboard(
-                              generateEndpointUrl(
-                                "/llm/rest/",
-                                llm.attributes.name,
-                              ),
+                              generateVendorEndpointURL("/llm/rest/", llm)
                             )
                           }
                           size="small"
@@ -803,14 +860,14 @@ const AppDetailView = () => {
                             flexGrow: 1,
                           }}
                         >
-                          {generateEndpointUrl("/llm/stream/", llm.attributes.name)}
+                          {generateVendorEndpointURL("/llm/stream/", llm)}
                         </Typography>
                         <IconButton
                           onClick={() =>
                             copyToClipboard(
-                              generateEndpointUrl(
+                              generateVendorEndpointURL(
                                 "/llm/stream/",
-                                llm.attributes.name,
+                                llm
                               ),
                             )
                           }
@@ -886,6 +943,139 @@ const AppDetailView = () => {
                     </IconButton>
                   </Box>
                 </Box>
+
+                <Accordion
+                  sx={{
+                    mt: 3,
+                    boxShadow: 'none',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    '&:before': { display: 'none' }
+                  }}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    sx={{
+                      bgcolor: 'background.default',
+                      '& .MuiAccordionSummary-content': {
+                        alignItems: 'center'
+                      }
+                    }}
+                  >
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Additional Endpoints
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      These endpoints provide advanced datasource capabilities including vector search, metadata filtering, and embedding generation.
+                    </Typography>
+
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <FieldLabel sx={{ minWidth: "140px" }}>Vector Search:</FieldLabel>
+                        <Box>
+                          <Tooltip title="POST a JSON body with an 'embedding' vector array, optional 'n' (max results) and 'similarity_threshold' to perform similarity search using a pre-computed embedding">
+                            <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                          </Tooltip>
+                        </Box>
+                        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                          <Typography
+                            variant="body2"
+                            component="code"
+                            sx={{
+                              fontFamily: "monospace",
+                              bgcolor: "background.paper",
+                              p: 1,
+                              borderRadius: 1,
+                              flexGrow: 1,
+                            }}
+                          >
+                            {generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/vector"}
+                          </Typography>
+                          <IconButton
+                            onClick={() =>
+                              copyToClipboard(
+                                generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/vector"
+                              )
+                            }
+                            size="small"
+                          >
+                            <ContentCopyIcon />
+                          </IconButton>
+                        </Box>
+                      </Box>
+
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <FieldLabel sx={{ minWidth: "140px" }}>Metadata Query:</FieldLabel>
+                        <Box>
+                          <Tooltip title="POST a JSON body with a 'filter' object (key-value pairs), optional 'filter_mode' (AND/OR), 'limit' and 'offset' for paginated metadata-only queries">
+                            <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                          </Tooltip>
+                        </Box>
+                        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                          <Typography
+                            variant="body2"
+                            component="code"
+                            sx={{
+                              fontFamily: "monospace",
+                              bgcolor: "background.paper",
+                              p: 1,
+                              borderRadius: 1,
+                              flexGrow: 1,
+                            }}
+                          >
+                            {generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/metadata"}
+                          </Typography>
+                          <IconButton
+                            onClick={() =>
+                              copyToClipboard(
+                                generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/metadata"
+                              )
+                            }
+                            size="small"
+                          >
+                            <ContentCopyIcon />
+                          </IconButton>
+                        </Box>
+                      </Box>
+
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        <FieldLabel sx={{ minWidth: "140px" }}>Embeddings:</FieldLabel>
+                        <Box>
+                          <Tooltip title="POST a JSON body with a 'texts' array (max 100 items) to generate embedding vectors without storing them">
+                            <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                          </Tooltip>
+                        </Box>
+                        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                          <Typography
+                            variant="body2"
+                            component="code"
+                            sx={{
+                              fontFamily: "monospace",
+                              bgcolor: "background.paper",
+                              p: 1,
+                              borderRadius: 1,
+                              flexGrow: 1,
+                            }}
+                          >
+                            {generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/embeddings"}
+                          </Typography>
+                          <IconButton
+                            onClick={() =>
+                              copyToClipboard(
+                                generateDatasourceEndpointUrl("/datasource/", datasource.attributes.name) + "/embeddings"
+                              )
+                            }
+                            size="small"
+                          >
+                            <ContentCopyIcon />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </AccordionDetails>
+                </Accordion>
               </CardContent>
             </Card>
           ))

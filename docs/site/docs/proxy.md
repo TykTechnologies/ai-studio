@@ -2,6 +2,17 @@
 
 The Tyk AI Studio Proxy is the central gateway for all Large Language Model (LLM) interactions within the platform. It acts as a secure, observable, and policy-driven entry point, managing requests from client applications to the configured backend LLM services.
 
+## Gateway Variants
+
+The proxy core library is shared between two gateway variants:
+
+| Variant | Where it runs | Capabilities | Use case |
+|---------|---------------|-------------|----------|
+| **Embedded Gateway** | Inside AI Studio | LLM proxying, tool calling (REST + MCP), datasource querying. No filters, no middleware, no plugins. | Testing LLM configurations, powering the Chat interface |
+| **Microgateway** | Standalone binary, deployed at edge | Full middleware pipeline: authentication, filters, plugins, analytics, budget enforcement, tool calling (REST + MCP), datasource querying | Production data plane in hub-and-spoke deployments |
+
+Both variants use the same core proxy library and access control mechanisms. The key difference is that the embedded gateway is intentionally lightweight, while the Microgateway provides the complete feature set. Tools, datasources, and OAuth state are synced to edge gateways via the hub-spoke configuration system.
+
 ## Purpose
 
 The Proxy serves several critical functions:
@@ -14,7 +25,7 @@ The Proxy serves several critical functions:
 
 ## Core Functions
 
-1.  **Request Routing:** Incoming requests include a `routeId` in their path (e.g., `/proxy/{routeId}/...` or `/openai/{routeId}/...`). The Proxy uses this `routeId` to identify the target [LLM Configuration](./llm-management.md) and route the request accordingly.
+1.  **Request Routing:** Incoming requests include an `llmSlug` in their path (e.g., `/llm/call/{llmSlug}/...`). The Proxy uses this slug (auto-generated from the LLM configuration name) to identify the target [LLM Configuration](./llm-management.md) and route the request accordingly.
 
 2.  **Authentication & Authorization:**
     *   Validates the API key provided by the client application.
@@ -30,34 +41,66 @@ The Proxy serves several critical functions:
 
 ## Endpoints
 
-Tyk AI Studio typically exposes two primary types of proxy endpoints:
+Tyk AI Studio exposes proxy endpoints for LLM interactions via two modes, plus legacy endpoints:
 
-### 1. OpenAI-Compatible Endpoint (`/openai/{routeId}/v1/...`)
+### Choosing a Proxy Mode
 
-*   **Purpose:** This endpoint mimics the official OpenAI API structure. It allows developers to use standard OpenAI SDKs (Python, Node.js, etc.) to interact with *any* LLM configured in Tyk AI Studio, regardless of the actual backend vendor (Anthropic, Google Vertex AI, etc.).
-*   **Translation:** Tyk AI Studio includes a translation layer (using libraries like `langchaingo`) that converts standard OpenAI API requests into the format required by the target backend LLM (defined in the `{routeId}` configuration) and translates the backend LLM's response back into the standard OpenAI format.
-*   **Benefits:** Simplifies integration significantly, allowing developers to write code once and target multiple LLM backends managed by Tyk AI Studio.
+| Mode | Endpoint | How it works | Best for | Tradeoff |
+|------|----------|-------------|----------|----------|
+| **SDK-Compatible** | `/llm/call/{llmSlug}/...` | Pass-through to the vendor's native API. No request manipulation beyond tracking for analytics and budgets. | Users working directly with a vendor's SDK or API spec | Full vendor feature access, resilient to API changes |
+| **OpenAI-Compatible** | `/llm/call/{llmSlug}/v1/chat/completions` | Accepts OpenAI-format input objects and translates them to the upstream vendor's API format | Maximum client-side compatibility — one format for all vendors | Reduced access to vendor-specific features |
+
+Both modes support streaming and non-streaming responses.
+
+### 1. Unified Endpoint (`/llm/call/{llmSlug}/...`) - Recommended
+
+*   **Purpose:** The primary endpoint for all LLM interactions. It automatically handles both streaming and non-streaming requests based on the request parameters.
+*   **SDK-Compatible Mode:** When sending requests in the vendor's native format, the gateway acts as a pass-through with minimal manipulation (only tracking fields for analytics and budgets). This provides full feature access and resilience to API changes.
+*   **OpenAI-Compatible Mode:** When sending OpenAI-formatted requests (to `/v1/chat/completions`), Tyk AI Studio translates requests into the format required by the target backend LLM and translates responses back into OpenAI format. This provides maximum compatibility at the cost of vendor-specific features.
+*   **Benefits:** Simplifies integration by providing a single endpoint that works for all use cases.
 
     ```bash
+    # Example using curl
+    curl -X POST "https://your-ai-studio-host/llm/call/my-openai-config/v1/chat/completions" \
+      -H "Authorization: Bearer YOUR_APP_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "gpt-4-turbo",
+        "messages": [{"role": "user", "content": "Hello!"}]
+      }'
+    ```
+
+    ```python
     # Example using OpenAI Python SDK
     import openai
 
     client = openai.OpenAI(
-        base_url="https://your-midsommar-host/openai/my-anthropic-config/v1",
-        api_key="YOUR_MIDSOMMAR_APP_API_KEY"
+        base_url="https://your-ai-studio-host/llm/call/my-openai-config/v1",
+        api_key="YOUR_APP_API_KEY"
     )
 
     response = client.chat.completions.create(
-        model="claude-3-opus-20240229", # Model allowed in 'my-anthropic-config'
+        model="gpt-4-turbo",
         messages=[{"role": "user", "content": "Hello!"}]
     )
     print(response.choices[0].message.content)
     ```
 
-### 2. Direct Proxy Endpoint (`/proxy/{routeId}/...`)
+### 2. REST Endpoint (`/llm/rest/{llmSlug}/...`) — Legacy
 
-*   **Purpose:** Provides a more direct pass-through to the backend LLM, potentially with less translation than the OpenAI-compatible endpoint. The exact request/response format expected at this endpoint might depend more heavily on the specific backend LLM vendor configured for the `{routeId}`.
-*   **Usage:** Might be used for accessing vendor-specific features not covered by the OpenAI API standard or in scenarios where the OpenAI translation layer is not desired.
+*   **Purpose:** Dedicated endpoint for non-streaming (synchronous) LLM requests only.
+*   **Usage:** Use when you explicitly want to ensure the request is processed synchronously without streaming.
+*   **Note:** This is a legacy endpoint from before the unified endpoint existed. The underlying response handling code is still used internally by the unified endpoint.
+
+### 3. Stream Endpoint (`/llm/stream/{llmSlug}/...`) — Legacy
+
+*   **Purpose:** Dedicated endpoint for streaming LLM responses using Server-Sent Events (SSE).
+*   **Usage:** Use when you need real-time token-by-token streaming responses.
+*   **Note:** This is a legacy endpoint. The unified endpoint now auto-detects whether to stream based on request parameters. The underlying streaming code is still used internally.
+
+### LLM Slug
+
+The `{llmSlug}` in the endpoint path is automatically generated from the LLM configuration name when you create it. For example, an LLM named "My OpenAI Config" would have a slug like `my-openai-config`.
 
 ## Configuration & Security
 

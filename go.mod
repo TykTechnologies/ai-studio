@@ -1,8 +1,6 @@
 module github.com/TykTechnologies/midsommar/v2
 
-go 1.24.10
-
-toolchain go1.24.11
+go 1.25.6
 
 require (
 	dario.cat/mergo v1.0.2
@@ -283,7 +281,7 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace github.com/tmc/langchaingo => /Users/martinbuhr/apps/lonelycode/langchaingo
+replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20251125225155-18c4ce82812d
 
 replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.34.0
 

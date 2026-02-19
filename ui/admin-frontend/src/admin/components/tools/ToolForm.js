@@ -36,6 +36,7 @@ import {
   SecondaryLinkButton
 } from "../../styles/sharedStyles";
 import { styled } from "@mui/system";
+import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 
 const SectionTitle = ({ children, tooltip }) => (
   <Box sx={{ display: "flex", alignItems: "center", mt: 3, mb: 2 }}>
@@ -158,6 +159,7 @@ const ToolForm = () => {
     auth_key: "",
     oas_spec: "",
     operations: "",
+    namespace: "",
   });
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -367,6 +369,11 @@ const ToolForm = () => {
 
   const handleOperationsChange = (value) => {
     setTool({ ...tool, operations: Array.isArray(value) ? value : [] });
+  };
+
+  const handleNamespaceChange = (namespaces) => {
+    const namespaceString = Array.isArray(namespaces) ? namespaces.join(', ') : namespaces;
+    setTool({ ...tool, namespace: namespaceString });
   };
 
   const validateForm = () => {
@@ -866,6 +873,13 @@ const ToolForm = () => {
               </PrimaryOutlineButton>
             </AccordionDetails>
           </StyledAccordion>
+
+          {/* Edge Availability Section (Enterprise only) */}
+          <EdgeAvailabilitySection
+            value={tool.namespace}
+            onChange={handleNamespaceChange}
+            defaultExpanded={false}
+          />
 
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">
