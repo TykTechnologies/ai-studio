@@ -19,8 +19,16 @@ else
     $(info 🌍 Building Community Edition)
 endif
 
-# Build flags for production (optimized, stripped)
-PROD_LDFLAGS := -ldflags="-w -s" -trimpath
+# Version information (from git tags)
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+BUILD_HASH ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME ?= $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+# Build flags for production (optimized, stripped, with version info)
+PROD_LDFLAGS := -ldflags="-w -s -X main.Version=$(VERSION) -X main.BuildHash=$(BUILD_HASH) -X main.BuildTime=$(BUILD_TIME)" -trimpath
+
+# Build flags for development (with version info, no stripping)
+DEV_LDFLAGS := -ldflags="-X main.Version=$(VERSION) -X main.BuildHash=$(BUILD_HASH) -X main.BuildTime=$(BUILD_TIME)"
 
 # Default target
 .DEFAULT_GOAL := help
@@ -117,7 +125,7 @@ endif
 build-native: build-frontend build-docs
 	@echo "🔨 Building $(EDITION) for native platform with CGO..."
 	@mkdir -p bin
-	CGO_ENABLED=1 go build $(BUILD_TAGS) -o bin/midsommar-$(EDITION)
+	CGO_ENABLED=1 go build $(BUILD_TAGS) $(DEV_LDFLAGS) -o bin/midsommar-$(EDITION)
 	cd microgateway && $(MAKE) build
 	cp microgateway/dist/microgateway-$(EDITION) bin/mgw-$(EDITION)
 	chmod +x bin/*
@@ -127,7 +135,7 @@ build-native: build-frontend build-docs
 build-native-ce: build-frontend build-docs
 	@echo "🔨 Building CE for native platform with CGO..."
 	@mkdir -p bin
-	CGO_ENABLED=1 go build -o bin/midsommar-ce
+	CGO_ENABLED=1 go build $(DEV_LDFLAGS) -o bin/midsommar-ce
 	cd microgateway && $(MAKE) build-community
 	cp microgateway/dist/microgateway-ce bin/mgw-ce
 	chmod +x bin/*
@@ -142,7 +150,7 @@ build-native-ent: build-frontend build-docs
 	fi
 	@echo "🔨 Building ENT for native platform with CGO..."
 	@mkdir -p bin
-	CGO_ENABLED=1 go build -tags enterprise -o bin/midsommar-ent
+	CGO_ENABLED=1 go build -tags enterprise $(DEV_LDFLAGS) -o bin/midsommar-ent
 	cd microgateway && $(MAKE) build-enterprise
 	cp microgateway/dist/microgateway-ent bin/mgw-ent
 	chmod +x bin/*

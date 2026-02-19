@@ -45,7 +45,7 @@ import (
 var staticFiles embed.FS
 
 func printWelcome() {
-	fmt.Printf("Starting Tyk AI Studio %v\n", "v2.0-hub-spoke")
+	fmt.Printf("Starting Tyk AI Studio %v\n", Version)
 	fmt.Printf("Copyright Tyk Technologies, %s\n", time.Now().Format("2006"))
 }
 
@@ -267,7 +267,7 @@ func main() {
 	service.LogExportService = log_export.NewService(db, notificationService, exportStoragePath, appConf.SiteURL)
 
 	// Initialize and start telemetry
-	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, "v2.0-hub-spoke")
+	telemetryManager := services.NewTelemetryManager(db, appConf.TelemetryEnabled, Version)
 	telemetryManager.Start()
 	defer telemetryManager.Stop()
 
