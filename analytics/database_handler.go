@@ -210,8 +210,14 @@ func (h *DatabaseHandler) startWorker() {
 		case <-h.ctx.Done():
 			logger.Info("shutting down database analytics handler")
 			h.recMutex.Lock()
+			defer h.recMutex.Unlock()
+
+			if !h.recStarted {
+				return
+			}
+
 			h.recStarted = false
-			h.recMutex.Unlock()
+
 			close(h.chatRecordChan)
 			close(h.logEntryChan)
 			close(h.toolCallChan)
@@ -275,12 +281,12 @@ func (h *DatabaseHandler) Stop() {
 // Implement AnalyticsHandler interface methods
 func (h *DatabaseHandler) RecordChatRecord(record *models.LLMChatRecord) {
 	h.recMutex.RLock()
+	defer h.recMutex.RUnlock()
+
 	if !h.recStarted {
 		logger.Warnf("Analytics recording not started, dropping chat record: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
-		h.recMutex.RUnlock()
 		return
 	}
-	h.recMutex.RUnlock()
 
 	select {
 	case h.chatRecordChan <- record:
@@ -292,11 +298,11 @@ func (h *DatabaseHandler) RecordChatRecord(record *models.LLMChatRecord) {
 
 func (h *DatabaseHandler) RecordProxyLog(log *models.ProxyLog) {
 	h.recMutex.RLock()
+	defer h.recMutex.RUnlock()
+
 	if !h.recStarted {
-		h.recMutex.RUnlock()
 		return
 	}
-	h.recMutex.RUnlock()
 
 	select {
 	case h.proxyLogChan <- log:
@@ -307,11 +313,11 @@ func (h *DatabaseHandler) RecordProxyLog(log *models.ProxyLog) {
 
 func (h *DatabaseHandler) RecordToolCall(name string, timestamp time.Time, execTime int, toolID uint) {
 	h.recMutex.RLock()
+	defer h.recMutex.RUnlock()
+
 	if !h.recStarted {
-		h.recMutex.RUnlock()
 		return
 	}
-	h.recMutex.RUnlock()
 
 	tcEntry := &models.ToolCallRecord{
 		ToolID:    toolID,
@@ -330,11 +336,11 @@ func (h *DatabaseHandler) RecordToolCall(name string, timestamp time.Time, execT
 // RecordChatLogEntry implements analytics.AnalyticsHandler
 func (h *DatabaseHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
 	h.recMutex.RLock()
+	defer h.recMutex.RUnlock()
+
 	if !h.recStarted {
-		h.recMutex.RUnlock()
 		return
 	}
-	h.recMutex.RUnlock()
 
 	select {
 	case h.logEntryChan <- logEntry:
@@ -351,12 +357,12 @@ func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord
 	}
 
 	h.recMutex.RLock()
+	defer h.recMutex.RUnlock()
+
 	if !h.recStarted {
 		logger.Warnf("Analytics recording not started, dropping batch of chat records, count: %d", len(records))
-		h.recMutex.RUnlock()
 		return
 	}
-	h.recMutex.RUnlock()
 
 	// Send batch to async worker - non-blocking to avoid request latency
 	select {
@@ -375,12 +381,12 @@ func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
 	}
 
 	h.recMutex.RLock()
+	defer h.recMutex.RUnlock()
+
 	if !h.recStarted {
 		logger.Warnf("Analytics recording not started, dropping batch of proxy logs, count: %d", len(logs))
-		h.recMutex.RUnlock()
 		return
 	}
-	h.recMutex.RUnlock()
 
 	// Send batch to async worker - non-blocking to avoid request latency
 	select {
