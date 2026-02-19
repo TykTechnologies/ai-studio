@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -28,19 +29,34 @@ type AnalyticsHandler interface {
 	RecordProxyLogsBatch(logs []*models.ProxyLog)
 }
 
-var globalHandler AnalyticsHandler
+var (
+	globalHandler AnalyticsHandler
+	// Synchronizes access to the globalHandler variable.
+	// This prevents a data race that occurs when tests call ResetHandler
+	// while other goroutines are reading the variable.
+	handlerMu sync.RWMutex
+)
 
 // SetHandler sets the global analytics handler implementation
 func SetHandler(handler AnalyticsHandler) {
+	handlerMu.Lock()
+	defer handlerMu.Unlock()
+
 	globalHandler = handler
 }
 
 // GetHandler returns the current analytics handler (useful for testing)
 func GetHandler() AnalyticsHandler {
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
 	return globalHandler
 }
 
 // ResetHandler resets the global analytics handler (useful for testing)
 func ResetHandler() {
+	handlerMu.Lock()
+	defer handlerMu.Unlock()
+
 	globalHandler = nil
 }

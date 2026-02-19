@@ -3,6 +3,7 @@ package googleaiVendor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -25,7 +26,13 @@ func New() models.LLMVendorProvider {
 
 func (v *GoogleAI) GetTokenCounts(choice *llms.ContentChoice) (int, int, int) {
 	promptTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "input_tokens")
-	responseTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "output_tokens")
+	thinkingTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "ThinkingTokens")
+	outputTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "output_tokens")
+
+	// INFO: We have to include thoughts tokens as they're priced like response tokens
+	// More details: https://ai.google.dev/gemini-api/docs/thinking#go_5
+	responseTokens := outputTokens + thinkingTokens
+
 	cacheTokens := helpers.KeyValueInt32OrZero(choice.GenerationInfo, "cached_content_tokens")
 	totalTokens := promptTokens + responseTokens + cacheTokens
 
@@ -78,35 +85,37 @@ func (v *GoogleAI) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode 
 }
 
 func (v *GoogleAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*models.LLM, *models.App, models.ITokenResponse, error) {
-	aggregate := &responses.GenericResponse{
-		Choices: 1,
+	var streamChunks []responses.GoogleAIStreamChunk
+
+	err := json.Unmarshal(resps, &streamChunks)
+	if err != nil {
+		var singleChunk responses.GoogleAIStreamChunk
+
+		if singleErr := json.Unmarshal(resps, &singleChunk); singleErr == nil {
+			streamChunks = append(streamChunks, singleChunk)
+		} else {
+			return nil, nil, nil, fmt.Errorf("failed to unmarshal googleai streaming response: %w", err)
+		}
 	}
+
+	if len(streamChunks) == 0 {
+		return nil, nil, nil, errors.New("googleai streaming response contained no chunks")
+	}
+
+	finalChunk := streamChunks[len(streamChunks)-1]
 
 	modelName, _ := extractModelIDFromGoogleURL(r.URL.Path)
 	if modelName == "" {
 		modelName = "googleai-gemini-no-id"
 	}
 
-	aggregate.Model = modelName
-
-	asStr := string(resps)
-	parts := strings.Split(asStr, "\n")
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-
-		body := strings.TrimPrefix(part, "data:")
-
-		gResp := &responses.GoogleAIStreamChunk{}
-		err := json.Unmarshal([]byte(body), &gResp)
-		if err != nil {
-			continue
-		}
-
-		aggregate.PromptTokens = gResp.UsageMetadata.PromptTokenCount
-		aggregate.CompletionTokens = gResp.UsageMetadata.CandidatesTokenCount
+	aggregate := &responses.GenericResponse{
+		Choices: 1,
+		Model:   modelName,
 	}
+	aggregate.PromptTokens = finalChunk.UsageMetadata.PromptTokenCount
+	aggregate.CompletionTokens = finalChunk.UsageMetadata.CandidatesTokenCount +
+		finalChunk.UsageMetadata.ThoughtsTokenCount
 
 	return llm, app, aggregate, nil
 }

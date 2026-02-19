@@ -21,12 +21,18 @@ var (
 )
 
 func RecordProxyLog(log *models.ProxyLog) {
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
 	if globalHandler != nil {
 		globalHandler.RecordProxyLog(log)
 	}
 }
 
 func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
 	if globalHandler != nil {
 		globalHandler.RecordToolCall(name, t, execTime, toolID)
 	}
@@ -41,6 +47,8 @@ func RecordContentMessage(
 	t time.Time,
 	svc services.ServiceInterface,
 ) {
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
 	// Check if analytics handler is available
 	if globalHandler == nil {
 		return
@@ -172,12 +180,18 @@ func RecordContentMessage(
 }
 
 func RecordChatRecord(record *models.LLMChatRecord) {
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
 	if globalHandler != nil {
 		globalHandler.RecordChatRecord(record)
 	}
 }
 
 func RecordChatLogEntry(log *models.LLMChatLogEntry) {
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
 	if globalHandler != nil {
 		globalHandler.RecordChatLogEntry(log)
 	}
@@ -185,6 +199,9 @@ func RecordChatLogEntry(log *models.LLMChatLogEntry) {
 
 // RecordChatRecordsBatch records multiple chat records in a batch for improved performance
 func RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
 	if globalHandler != nil {
 		globalHandler.RecordChatRecordsBatch(records)
 	}
@@ -192,6 +209,9 @@ func RecordChatRecordsBatch(records []*models.LLMChatRecord) {
 
 // RecordProxyLogsBatch records multiple proxy logs in a batch for improved performance
 func RecordProxyLogsBatch(logs []*models.ProxyLog) {
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
 	if globalHandler != nil {
 		globalHandler.RecordProxyLogsBatch(logs)
 	}
@@ -199,9 +219,11 @@ func RecordProxyLogsBatch(logs []*models.ProxyLog) {
 
 // InitDefault initializes the default database analytics handler
 func InitDefault(ctx context.Context, db *gorm.DB) {
+	handlerMu.Lock()
+	defer handlerMu.Unlock()
+
 	if globalHandler == nil {
-		handler := NewDatabaseHandler(ctx, db)
-		SetHandler(handler)
+		globalHandler = NewDatabaseHandler(ctx, db)
 	}
 }
 

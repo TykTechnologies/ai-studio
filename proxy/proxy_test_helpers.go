@@ -1,8 +1,11 @@
 package proxy
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"math"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -389,4 +392,21 @@ func waitForSpendingUpdate(t *testing.T, budgetService services.BudgetService, a
 		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("Timeout waiting for spending to update to %.2f", expectedSpent)
+}
+
+// writeGzippedResponse compresses the given body using gzip and writes it to the HTTP response writer.
+func writeGzippedResponse(t *testing.T, w http.ResponseWriter, body []byte) {
+	t.Helper()
+
+	var compressedBuffer bytes.Buffer
+	gzipWriter := gzip.NewWriter(&compressedBuffer)
+
+	_, err := gzipWriter.Write(body)
+	require.NoError(t, err, "failed to write to gzip writer")
+
+	err = gzipWriter.Close()
+	require.NoError(t, err, "failed to close gzip writer")
+
+	_, err = w.Write(compressedBuffer.Bytes())
+	require.NoError(t, err, "failed to write compressed response")
 }

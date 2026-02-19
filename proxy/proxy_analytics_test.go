@@ -170,7 +170,7 @@ func TestAnalyzeStreamingResponse(t *testing.T) {
 
 	// Test streaming response analysis
 	now := time.Now()
-	proxy.analyzeStreamingResponse(llm, app, req, http.StatusOK, fullResponse, reqBody, chunks, now)
+	proxy.analyzeStreamingResponse(llm, app, req, http.StatusOK, fullResponse, reqBody, chunks, now, "")
 
 	// Wait for analytics to process the request
 	waitForAnalytics(t, db, 1)
