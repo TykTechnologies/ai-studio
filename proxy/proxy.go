@@ -595,7 +595,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	} else {
 		capture := newResponseCapture(w)
 		httpProxy.ServeHTTP(capture, r)
-		go p.analyzeResponse(llm, app, capture.statusCode, capture.buffer.Bytes(), reqBody, r)
+		go p.analyzeResponse(llm, app, capture.statusCode, capture.CapturedBody(), reqBody, r)
 	}
 }
 

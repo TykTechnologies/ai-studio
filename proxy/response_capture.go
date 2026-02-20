@@ -35,21 +35,20 @@ func (rc *responseCapture) WriteHeader(statusCode int) {
 }
 
 func (rc *responseCapture) Write(b []byte) (int, error) {
-	contentEncoding := rc.Header().Get("Content-Encoding")
-
-	decompressed, err := decompressResponseBody(b, contentEncoding)
-	if err != nil {
-		rc.buffer.Write(b)
-
-		logger.Errorf("Write: Failed to decompress body: %v", err)
-		return 0, err
-	}
-
-	rc.buffer = bytes.NewBuffer(decompressed)
-
+	rc.buffer.Write(b)
 	return rc.ResponseWriter.Write(b)
 }
 
 func (rc *responseCapture) CapturedBody() []byte {
+	contentEncoding := rc.Header().Get("Content-Encoding")
+
+	decompressed, err := decompressResponseBody(rc.buffer.Bytes(), contentEncoding)
+	if err != nil {
+		logger.Errorf("CapturedBody: Failed to decompress body: %v", err)
+		return rc.buffer.Bytes()
+	}
+
+	rc.buffer = bytes.NewBuffer(decompressed)
+
 	return rc.buffer.Bytes()
 }
