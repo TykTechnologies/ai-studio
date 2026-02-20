@@ -1,10 +1,6 @@
 package proxy
 
 import (
-	"bytes"
-	"compress/gzip"
-	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"time"
@@ -47,7 +43,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 }
 
 func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time, contentEncoding string) {
-	decompressedResponses, err := decompressResponseData(responses, contentEncoding)
+	decompressedResponses, err := decompressResponseBody(responses, contentEncoding)
 	if err != nil {
 		logger.Errorf("Failed to analyze streaming response: %v", err)
 		return
@@ -151,23 +147,4 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 			bs.AnalyzeBudgetUsage(app, llm)
 		}
 	}
-}
-
-func decompressResponseData(data []byte, contentEncoding string) ([]byte, error) {
-	if contentEncoding != "gzip" || len(data) == 0 {
-		return data, nil
-	}
-
-	reader, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create gzip reader for analytics: %v", err)
-	}
-	defer reader.Close()
-
-	decompressed, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decompress gzip data for analytics, using original data: %v", err)
-	}
-
-	return decompressed, nil
 }
