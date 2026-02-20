@@ -156,6 +156,8 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 }
 
 func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error) {
+	const bytesLimit = 10 * 1024 * 1024
+
 	if len(data) == 0 || contentEncoding == "" {
 		return data, nil
 	}
@@ -172,7 +174,9 @@ func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error)
 			}
 		}()
 
-		decompressed, err := io.ReadAll(reader)
+		limitedReader := io.LimitedReader{R: reader, N: bytesLimit}
+
+		decompressed, err := io.ReadAll(&limitedReader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress gzip data: %v", err)
 		}
@@ -180,7 +184,9 @@ func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error)
 		return decompressed, nil
 
 	case "br", "brotli":
-		decompressed, err := io.ReadAll(brotli.NewReader(bytes.NewReader(data)))
+		limitedReader := io.LimitedReader{R: brotli.NewReader(bytes.NewReader(data)), N: bytesLimit}
+
+		decompressed, err := io.ReadAll(&limitedReader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress brotli data: %v", err)
 		}
