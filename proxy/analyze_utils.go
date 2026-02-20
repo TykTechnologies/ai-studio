@@ -181,6 +181,10 @@ func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error)
 			return nil, fmt.Errorf("failed to decompress gzip data: %v", err)
 		}
 
+		if limitedReader.N == 0 && len(decompressed) == bytesLimit {
+			return nil, fmt.Errorf("decompressed data exceeds maximum allowed size of %d bytes", bytesLimit)
+		}
+
 		return decompressed, nil
 
 	case "br", "brotli":
@@ -189,6 +193,10 @@ func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error)
 		decompressed, err := io.ReadAll(&limitedReader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress brotli data: %v", err)
+		}
+
+		if limitedReader.N == 0 && len(decompressed) == bytesLimit {
+			return nil, fmt.Errorf("decompressed data exceeds maximum allowed size of %d bytes", bytesLimit)
 		}
 
 		return decompressed, nil
