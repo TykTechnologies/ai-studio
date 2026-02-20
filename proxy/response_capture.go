@@ -48,7 +48,5 @@ func (rc *responseCapture) CapturedBody() []byte {
 		return rc.buffer.Bytes()
 	}
 
-	rc.buffer = bytes.NewBuffer(decompressed)
-
-	return rc.buffer.Bytes()
+	return decompressed
 }
