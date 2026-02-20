@@ -63,6 +63,8 @@ github.com/TykTechnologies/tyk-pump v1.10.0 h1:mc2sRUlY6pPN8cdOUzswi8Ukjgtoxo5YM
 github.com/TykTechnologies/tyk-pump v1.10.0/go.mod h1:dN4jBt2NlveiWalfTBgmyhkdRFL5kbCA02BwBBvAl2g=
 github.com/amikos-tech/chroma-go v0.2.5 h1:CxM8A9FlwtgQmlL0ZgmpfO6Hm7obYvO7WIg2aoo1PK8=
 github.com/amikos-tech/chroma-go v0.2.5/go.mod h1:j6Lw1dAWnGwUeRNCuciyquNZrQm37yJiEQmGbQFKDqs=
+github.com/andybalholm/brotli v1.2.0 h1:ukwgCxwYrmACq68yiUqwIWnGY0cTPox/M94sVwToPjQ=
+github.com/andybalholm/brotli v1.2.0/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0 h1:axGnT1gRIfimI7gJifB699GoE/oq+F2MU7Dml6nw9rQ=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0/go.mod h1:lvDnEdqiQrp0O42VQGgmlKpxL1AP2+08jFMw88y4klk=
 github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=

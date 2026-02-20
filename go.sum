@@ -76,6 +76,8 @@ github.com/TykTechnologies/tyk-pump v1.10.0/go.mod h1:dN4jBt2NlveiWalfTBgmyhkdRF
 github.com/airbrake/gobrake v3.6.1+incompatible/go.mod h1:wM4gu3Cn0W0K7GUuVWnlXZU11AGBXMILnrdOU8Kn00o=
 github.com/amikos-tech/chroma-go v0.2.5 h1:CxM8A9FlwtgQmlL0ZgmpfO6Hm7obYvO7WIg2aoo1PK8=
 github.com/amikos-tech/chroma-go v0.2.5/go.mod h1:j6Lw1dAWnGwUeRNCuciyquNZrQm37yJiEQmGbQFKDqs=
+github.com/andybalholm/brotli v1.2.0 h1:ukwgCxwYrmACq68yiUqwIWnGY0cTPox/M94sVwToPjQ=
+github.com/andybalholm/brotli v1.2.0/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/andybalholm/cascadia v1.3.2 h1:3Xi6Dw5lHF15JtdcmAHD3i1+T8plmv7BQ/nsViSLyss=
 github.com/andybalholm/cascadia v1.3.2/go.mod h1:7gtRlve5FxPPgIgX36uWBX58OdBsSS6lUvCFb+h7KvU=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0 h1:axGnT1gRIfimI7gJifB699GoE/oq+F2MU7Dml6nw9rQ=
