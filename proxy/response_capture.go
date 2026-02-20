@@ -2,9 +2,9 @@ package proxy
 
 import (
 	"bytes"
-	"compress/gzip"
-	"io"
 	"net/http"
+
+	"github.com/TykTechnologies/midsommar/v2/logger"
 )
 
 type responseCapture struct {
@@ -35,23 +35,21 @@ func (rc *responseCapture) WriteHeader(statusCode int) {
 }
 
 func (rc *responseCapture) Write(b []byte) (int, error) {
-	rc.buffer.Write(b)
-	if rc.Header().Get("Content-Encoding") == "gzip" {
-		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
-		if err != nil {
-			return 0, err
-		}
-		defer reader.Close()
-		decompressed, err := io.ReadAll(reader)
-		if err != nil {
-			return 0, err
-		}
-		rc.buffer = bytes.NewBuffer(decompressed)
+	contentEncoding := rc.Header().Get("Content-Encoding")
+
+	decompressed, err := decompressResponseBody(b, contentEncoding)
+	if err != nil {
+		rc.buffer.Write(b)
+
+		logger.Errorf("Write: Failed to decompress body: %v", err)
+		return 0, err
 	}
+
+	rc.buffer = bytes.NewBuffer(decompressed)
+
 	return rc.ResponseWriter.Write(b)
 }
 
 func (rc *responseCapture) CapturedBody() []byte {
 	return rc.buffer.Bytes()
 }
-
