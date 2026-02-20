@@ -278,7 +278,7 @@ On the server side, implement as a dedicated `plugin_data` table: `(tenant_id, p
 
 ---
 
-# Dev Experience (make it delightful)
+# Dev Experience
 
 Ship a **Plugin SDK + CLI**:
 

@@ -1,3 +1,8 @@
 package main
 
-const VERSION = "v1.0"
+// Build-time variables (set via -ldflags "-X main.Version=...")
+var (
+	Version   = "dev"
+	BuildHash = "unknown"
+	BuildTime = "unknown"
+)
