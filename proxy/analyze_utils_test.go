@@ -233,13 +233,6 @@ func Test_decompressResponseBody(t *testing.T) {
 			wantErr:         false,
 		},
 		{
-			name:            "returns original data for unsupported encoding",
-			data:            originalData,
-			contentEncoding: "zstd",
-			want:            originalData,
-			wantErr:         false,
-		},
-		{
 			name:            "handles uppercase GZIP encoding",
 			data:            gzipData,
 			contentEncoding: "GZIP",
@@ -266,6 +259,13 @@ func Test_decompressResponseBody(t *testing.T) {
 			contentEncoding: "BR",
 			want:            originalData,
 			wantErr:         false,
+		},
+		{
+			name:            "returns error for unsupported encoding",
+			data:            originalData,
+			contentEncoding: "zstd",
+			want:            originalData,
+			wantErr:         true,
 		},
 		{
 			name:            "returns error for invalid gzip data",

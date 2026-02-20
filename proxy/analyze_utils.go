@@ -202,7 +202,6 @@ func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error)
 		return decompressed, nil
 
 	default:
-		logger.Errorf("Decompression is not supported for %s, returning original data", contentEncoding)
-		return data, nil
+		return nil, fmt.Errorf("decompression is not supported for %s", contentEncoding)
 	}
 }
