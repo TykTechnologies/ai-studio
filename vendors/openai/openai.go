@@ -30,17 +30,17 @@ func New() models.LLMVendorProvider {
 
 func (v *OpenAI) GetTokenCounts(choice *llms.ContentChoice) (int, int, int) {
 	promptTokens := 0
-	responseTokens := 0
+	completionTokens := 0
 	totalTokens := 0
 
 	usage := choice.GenerationInfo
 	promptTokens = helpers.KeyValueOrZero(usage, "PromptTokens")
-	responseTokens = helpers.KeyValueOrZero(usage, "ResponseTokens")
+	completionTokens = helpers.KeyValueOrZero(usage, "CompletionTokens")
 	cacheWriteTokens := helpers.KeyValueOrZero(usage, "CacheCreationInputTokens")
 	cacheReadTokens := helpers.KeyValueOrZero(usage, "CacheReadInputTokens")
-	totalTokens = promptTokens + responseTokens + cacheWriteTokens + cacheReadTokens
+	totalTokens = promptTokens + completionTokens + cacheWriteTokens + cacheReadTokens
 
-	return totalTokens, promptTokens, responseTokens
+	return totalTokens, promptTokens, completionTokens
 }
 
 func (v *OpenAI) GetDriver(
