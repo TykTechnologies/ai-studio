@@ -1,8 +1,6 @@
 package proxy
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -10,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andybalholm/brotli"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -333,36 +330,6 @@ func Test_decompressResponseBody(t *testing.T) {
 			assert.Equal(t, tt.want, got, "decompressed data should match expected")
 		})
 	}
-}
-
-func compressWithGzip(t *testing.T, data []byte) []byte {
-	t.Helper()
-
-	var buf bytes.Buffer
-	writer := gzip.NewWriter(&buf)
-
-	_, err := writer.Write(data)
-	require.NoError(t, err, "failed to write data to gzip writer")
-
-	err = writer.Close()
-	require.NoError(t, err, "failed to close gzip writer")
-
-	return buf.Bytes()
-}
-
-func compressWithBrotli(t *testing.T, data []byte) []byte {
-	t.Helper()
-
-	var buf bytes.Buffer
-	writer := brotli.NewWriter(&buf)
-
-	_, err := writer.Write(data)
-	require.NoError(t, err, "failed to write data to brotli writer")
-
-	err = writer.Close()
-	require.NoError(t, err, "failed to close brotli writer")
-
-	return buf.Bytes()
 }
 
 func generateLargeData(size int) []byte {
