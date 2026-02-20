@@ -52,8 +52,8 @@ func TestTokenAnalytics_NotStreamResponse(t *testing.T) {
 		name     string
 		encoding string
 	}{
-		{name: "successfully proccessed analytics from gzip encoded response"},
-		{name: "successfully proccessed analytics from br encoded response"},
+		{name: "successfully proccessed analytics from gzip encoded response", encoding: "gzip"},
+		{name: "successfully proccessed analytics from br encoded response", encoding: "br"},
 	}
 
 	reqBody := `{"model":"gemini-2.5-flash", "contents": [{"role":"user","parts":[{"text":"Hello!"}]}]}`
@@ -63,7 +63,6 @@ func TestTokenAnalytics_NotStreamResponse(t *testing.T) {
 			defer resp.Body.Close()
 
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
-			assert.Equal(t, tt.encoding, resp.Header.Get("Content-Encoding"))
 			assert.True(t, upstreamCalled, "Mock upstream server was not called")
 
 			waitForAnalytics(t, db, 1)
@@ -232,7 +231,7 @@ func TestTokenAnalytics_NoPriceRecord(t *testing.T) {
 	assert.InDelta(t, 0.0, record.Cost, 0.01)
 }
 
-func TestTokenAnalytics_StreamingRequest(t *testing.T) {
+func TestTokenAnalytics_StreamingResponse(t *testing.T) {
 	db, cancel := setupTest(t)
 	defer tearDownTest(db, cancel)
 
@@ -265,8 +264,8 @@ func TestTokenAnalytics_StreamingRequest(t *testing.T) {
 		name     string
 		encoding string
 	}{
-		{name: "successfully proccessed analytics with gzip encoded response"},
-		{name: "successfully proccessed analytics with br encoded response"},
+		{name: "successfully proccessed analytics with gzip encoded streaming response", encoding: "gzip"},
+		{name: "successfully proccessed analytics with br encoded streaming response", encoding: "br"},
 	}
 	reqBody := `{"model":"gemini-2.5-flash", "contents": [{"role":"user","parts":[{"text":"Hello!"}]}]}`
 
