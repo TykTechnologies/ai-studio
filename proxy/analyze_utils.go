@@ -156,8 +156,6 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 }
 
 func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error) {
-	const bytesLimit = 10 * 1024 * 1024
-
 	if len(data) == 0 || contentEncoding == "" {
 		return data, nil
 	}
@@ -174,29 +172,17 @@ func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error)
 			}
 		}()
 
-		limitedReader := io.LimitedReader{R: reader, N: bytesLimit}
-
-		decompressed, err := io.ReadAll(&limitedReader)
+		decompressed, err := io.ReadAll(reader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress gzip data: %v", err)
-		}
-
-		if limitedReader.N == 0 && len(decompressed) == bytesLimit {
-			return nil, fmt.Errorf("decompressed data exceeds maximum allowed size of %d bytes", bytesLimit)
 		}
 
 		return decompressed, nil
 
 	case "br", "brotli":
-		limitedReader := io.LimitedReader{R: brotli.NewReader(bytes.NewReader(data)), N: bytesLimit}
-
-		decompressed, err := io.ReadAll(&limitedReader)
+		decompressed, err := io.ReadAll(brotli.NewReader(bytes.NewReader(data)))
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress brotli data: %v", err)
-		}
-
-		if limitedReader.N == 0 && len(decompressed) == bytesLimit {
-			return nil, fmt.Errorf("decompressed data exceeds maximum allowed size of %d bytes", bytesLimit)
 		}
 
 		return decompressed, nil
