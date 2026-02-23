@@ -5,11 +5,11 @@ import (
 	"compress/gzip"
 	"context"
 	"math"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -394,19 +394,32 @@ func waitForSpendingUpdate(t *testing.T, budgetService services.BudgetService, a
 	t.Fatalf("Timeout waiting for spending to update to %.2f", expectedSpent)
 }
 
-// writeGzippedResponse compresses the given body using gzip and writes it to the HTTP response writer.
-func writeGzippedResponse(t *testing.T, w http.ResponseWriter, body []byte) {
+func compressWithGzip(t *testing.T, data []byte) []byte {
 	t.Helper()
 
-	var compressedBuffer bytes.Buffer
-	gzipWriter := gzip.NewWriter(&compressedBuffer)
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
 
-	_, err := gzipWriter.Write(body)
-	require.NoError(t, err, "failed to write to gzip writer")
+	_, err := writer.Write(data)
+	require.NoError(t, err, "failed to write data to gzip writer")
 
-	err = gzipWriter.Close()
+	err = writer.Close()
 	require.NoError(t, err, "failed to close gzip writer")
 
-	_, err = w.Write(compressedBuffer.Bytes())
-	require.NoError(t, err, "failed to write compressed response")
+	return buf.Bytes()
+}
+
+func compressWithBrotli(t *testing.T, data []byte) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	writer := brotli.NewWriter(&buf)
+
+	_, err := writer.Write(data)
+	require.NoError(t, err, "failed to write data to brotli writer")
+
+	err = writer.Close()
+	require.NoError(t, err, "failed to close brotli writer")
+
+	return buf.Bytes()
 }

@@ -178,3 +178,164 @@ func TestAnalyzeCompletionResponse_Currency(t *testing.T) {
 		})
 	}
 }
+
+func Test_decompressResponseBody(t *testing.T) {
+	originalData := []byte("test data for compression.")
+	emptyData := []byte{}
+
+	gzipData := compressWithGzip(t, originalData)
+	brotliData := compressWithBrotli(t, originalData)
+	invalidGzipData := []byte("invalid gzip data")
+	invalidBrotliData := []byte("invalid brotli data")
+
+	tests := []struct {
+		name            string
+		data            []byte
+		contentEncoding string
+		want            []byte
+		wantErr         bool
+		errorContains   string
+	}{
+		{
+			name:            "successful gzip decompression",
+			data:            gzipData,
+			contentEncoding: "gzip",
+			want:            originalData,
+			wantErr:         false,
+		},
+		{
+			name:            "successful brotli decompression with 'br' encoding",
+			data:            brotliData,
+			contentEncoding: "br",
+			want:            originalData,
+			wantErr:         false,
+		},
+		{
+			name:            "successful brotli decompression with 'brotli' encoding",
+			data:            brotliData,
+			contentEncoding: "brotli",
+			want:            originalData,
+			wantErr:         false,
+		},
+
+		{
+			name:            "returns original data when content encoding is empty",
+			data:            originalData,
+			contentEncoding: "",
+			want:            originalData,
+			wantErr:         false,
+		},
+		{
+			name:            "returns empty data when data is empty",
+			data:            emptyData,
+			contentEncoding: "gzip",
+			want:            emptyData,
+			wantErr:         false,
+		},
+		{
+			name:            "handles uppercase GZIP encoding",
+			data:            gzipData,
+			contentEncoding: "GZIP",
+			want:            originalData,
+			wantErr:         false,
+		},
+		{
+			name:            "handles mixed case GZip encoding",
+			data:            gzipData,
+			contentEncoding: "GZip",
+			want:            originalData,
+			wantErr:         false,
+		},
+		{
+			name:            "handles uppercase BROTLI encoding",
+			data:            brotliData,
+			contentEncoding: "BROTLI",
+			want:            originalData,
+			wantErr:         false,
+		},
+		{
+			name:            "handles uppercase BR encoding",
+			data:            brotliData,
+			contentEncoding: "BR",
+			want:            originalData,
+			wantErr:         false,
+		},
+		{
+			name:            "returns error for unsupported encoding",
+			data:            originalData,
+			contentEncoding: "zstd",
+			want:            originalData,
+			wantErr:         true,
+		},
+		{
+			name:            "returns error for invalid gzip data",
+			data:            invalidGzipData,
+			contentEncoding: "gzip",
+			want:            nil,
+			wantErr:         true,
+			errorContains:   "failed to create gzip reader",
+		},
+		{
+			name:            "returns error for invalid brotli data",
+			data:            invalidBrotliData,
+			contentEncoding: "br",
+			want:            nil,
+			wantErr:         true,
+			errorContains:   "failed to decompress brotli data",
+		},
+		{
+			name:            "returns error for invalid brotli data with 'brotli' encoding",
+			data:            invalidBrotliData,
+			contentEncoding: "brotli",
+			want:            nil,
+			wantErr:         true,
+			errorContains:   "failed to decompress brotli data",
+		},
+		{
+			name:            "handles nil data slice",
+			data:            nil,
+			contentEncoding: "gzip",
+			want:            nil,
+			wantErr:         false,
+		},
+		{
+			name:            "handles large gzip data",
+			data:            compressWithGzip(t, generateLargeData(10000)),
+			contentEncoding: "gzip",
+			want:            generateLargeData(10000),
+			wantErr:         false,
+		},
+		{
+			name:            "handles empty gzip compressed data",
+			data:            compressWithGzip(t, []byte{}),
+			contentEncoding: "gzip",
+			want:            []byte{},
+			wantErr:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := decompressResponseBody(tt.data, tt.contentEncoding)
+
+			if tt.wantErr {
+				require.Error(t, err, "expected error but got none")
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains, "error message should contain expected text")
+				}
+				return
+			}
+
+			require.NoError(t, err, "unexpected error")
+			assert.Equal(t, tt.want, got, "decompressed data should match expected")
+		})
+	}
+}
+
+func generateLargeData(size int) []byte {
+	data := make([]byte, size)
+	for i := range data {
+		data[i] = byte(i % 256)
+	}
+	return data
+}

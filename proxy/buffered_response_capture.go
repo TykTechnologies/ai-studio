@@ -2,30 +2,30 @@ package proxy
 
 import (
 	"bytes"
-	"compress/gzip"
 	"fmt"
-	"io"
 	"net/http"
+
+	"github.com/TykTechnologies/midsommar/v2/logger"
 )
 
 // bufferedResponseCapture is used when response hooks are configured and need to modify responses
 // This version buffers everything until Flush() is called
 type bufferedResponseCapture struct {
 	http.ResponseWriter
-	statusCode      int
-	buffer          *bytes.Buffer
-	header          http.Header
-	written         bool
-	gzipDecompressed bool // Track if we've already decompressed gzip
+	statusCode   int
+	buffer       *bytes.Buffer
+	header       http.Header
+	written      bool
+	decompressed bool // Track if we've already decompressed response body
 }
 
 func newBufferedResponseCapture(w http.ResponseWriter) *bufferedResponseCapture {
 	return &bufferedResponseCapture{
-		ResponseWriter:   w,
-		buffer:           &bytes.Buffer{},
-		header:           make(http.Header),
-		written:          false,
-		gzipDecompressed: false,
+		ResponseWriter: w,
+		buffer:         &bytes.Buffer{},
+		header:         make(http.Header),
+		written:        false,
+		decompressed:   false,
 	}
 }
 
@@ -47,17 +47,14 @@ func (rc *bufferedResponseCapture) Write(b []byte) (int, error) {
 
 func (rc *bufferedResponseCapture) CapturedBody() []byte {
 	// Decompress gzip content if present for analytics
-	if !rc.gzipDecompressed && rc.header.Get("Content-Encoding") == "gzip" && rc.buffer.Len() > 0 {
-		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
-		if err == nil {
-			decompressed, err := io.ReadAll(reader)
-			reader.Close()
-			if err == nil {
-				return decompressed
-			}
-		}
+	contentEncoding := rc.Header().Get("Content-Encoding")
+	decompressed, err := decompressResponseBody(rc.buffer.Bytes(), contentEncoding)
+	if err != nil {
+		logger.Errorf("CapturedBody: Failed to decompress body: %v", err)
+		return rc.buffer.Bytes()
 	}
-	return rc.buffer.Bytes()
+
+	return decompressed
 }
 
 // ModifyHeaders allows hooks to modify response headers before sending to client
@@ -65,7 +62,7 @@ func (rc *bufferedResponseCapture) ModifyHeaders(headers map[string]string) {
 	if rc.written {
 		return // Too late to modify
 	}
-	
+
 	// Clear existing headers and set new ones
 	rc.header = make(http.Header)
 	for key, value := range headers {
@@ -78,7 +75,7 @@ func (rc *bufferedResponseCapture) ModifyBody(body []byte) {
 	if rc.written {
 		return // Too late to modify
 	}
-	
+
 	rc.buffer = bytes.NewBuffer(body)
 }
 
@@ -87,7 +84,7 @@ func (rc *bufferedResponseCapture) ModifyStatusCode(statusCode int) {
 	if rc.written {
 		return // Too late to modify
 	}
-	
+
 	rc.statusCode = statusCode
 }
 
@@ -106,18 +103,9 @@ func (rc *bufferedResponseCapture) WriteToClient() {
 		return // Already written
 	}
 
-	// Decompress gzip content if present and not already decompressed
-	if !rc.gzipDecompressed && rc.header.Get("Content-Encoding") == "gzip" && rc.buffer.Len() > 0 {
-		reader, err := gzip.NewReader(bytes.NewReader(rc.buffer.Bytes()))
-		if err == nil {
-			decompressed, err := io.ReadAll(reader)
-			reader.Close()
-			if err == nil {
-				rc.buffer = bytes.NewBuffer(decompressed)
-				// Remove Content-Encoding header since we've decompressed the data
-				rc.header.Del("Content-Encoding")
-				rc.gzipDecompressed = true
-			}
+	if !rc.decompressed {
+		if err := rc.tryDecompression(); err != nil {
+			logger.Errorf("WriteToClient: Failed to decompress body: %v", err)
 		}
 	}
 
@@ -160,4 +148,24 @@ func (rc *bufferedResponseCapture) WriteToClient() {
 	}
 
 	rc.written = true
+}
+
+func (rc *bufferedResponseCapture) tryDecompression() error {
+	contentEncoding := rc.Header().Get("Content-Encoding")
+	if contentEncoding == "" {
+		rc.decompressed = true
+		return nil // Nothing to decompress
+	}
+
+	decompressed, err := decompressResponseBody(rc.buffer.Bytes(), contentEncoding)
+	if err != nil {
+		return fmt.Errorf("decompression failed for encoding \"%s\": %w", contentEncoding, err)
+	}
+
+	rc.buffer = bytes.NewBuffer(decompressed)
+	rc.Header().Del("Content-Encoding") // Data is decompressed
+
+	rc.decompressed = true
+
+	return nil
 }

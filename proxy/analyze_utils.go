@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
@@ -14,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
+	"github.com/andybalholm/brotli"
 )
 
 const maxBodySize = 65535 // Maximum size for TEXT column (64KB)
@@ -47,7 +49,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 }
 
 func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time, contentEncoding string) {
-	decompressedResponses, err := decompressResponseData(responses, contentEncoding)
+	decompressedResponses, err := decompressResponseBody(responses, contentEncoding)
 	if err != nil {
 		logger.Errorf("Failed to analyze streaming response: %v", err)
 		return
@@ -153,21 +155,39 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 	}
 }
 
-func decompressResponseData(data []byte, contentEncoding string) ([]byte, error) {
-	if contentEncoding != "gzip" || len(data) == 0 {
+func decompressResponseBody(data []byte, contentEncoding string) ([]byte, error) {
+	if len(data) == 0 || contentEncoding == "" {
 		return data, nil
 	}
 
-	reader, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create gzip reader for analytics: %v", err)
-	}
-	defer reader.Close()
+	switch strings.ToLower(contentEncoding) {
+	case "gzip":
+		reader, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create gzip reader: %v", err)
+		}
+		defer func() {
+			if err := reader.Close(); err != nil {
+				logger.Errorf("failed to close gzip reader: %v", err)
+			}
+		}()
 
-	decompressed, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decompress gzip data for analytics, using original data: %v", err)
-	}
+		decompressed, err := io.ReadAll(reader)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decompress gzip data: %v", err)
+		}
 
-	return decompressed, nil
+		return decompressed, nil
+
+	case "br", "brotli":
+		decompressed, err := io.ReadAll(brotli.NewReader(bytes.NewReader(data)))
+		if err != nil {
+			return nil, fmt.Errorf("failed to decompress brotli data: %v", err)
+		}
+
+		return decompressed, nil
+
+	default:
+		return nil, fmt.Errorf("decompression is not supported for %s", contentEncoding)
+	}
 }
