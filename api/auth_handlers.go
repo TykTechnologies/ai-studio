@@ -35,10 +35,23 @@ const appVersion = "v1.0" // Imported from version.go
 func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet := make(map[string]interface{})
 
-	// Enable all features by default (licensing removed)
+	// Default: all core features enabled (CE behavior)
 	featureSet["feature_portal"] = true
 	featureSet["feature_chat"] = true
 	featureSet["feature_gateway"] = true
+
+	// If enterprise licensing is active, derive from license entitlements
+	if a.licensingService != nil {
+		if info := a.licensingService.GetLicenseInfo(); info != nil {
+			for _, feat := range []string{"feature_portal", "feature_chat", "feature_gateway"} {
+				if ent, ok := a.licensingService.Entitlement(feat); ok {
+					featureSet[feat] = ent.Bool()
+				} else {
+					featureSet[feat] = false
+				}
+			}
+		}
+	}
 
 	// Enterprise-only features
 	featureSet["hub_spoke_multi_tenant"] = edge_management.IsEnterpriseAvailable()
@@ -61,7 +74,13 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 		"version":  appVersion,
 	}
 
-	// No license expiry to check anymore
+	// License expiry warning
+	if a.licensingService != nil {
+		daysLeft := a.licensingService.DaysLeft()
+		if daysLeft >= 0 && daysLeft < 30 {
+			response["license_days_left"] = daysLeft
+		}
+	}
 
 	c.JSON(http.StatusOK, response)
 }

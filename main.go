@@ -277,8 +277,12 @@ func main() {
 	}
 	p := proxy.NewProxy(service, pConfig, budgetService)
 
-	// Always enable gateway
-	go p.Start()
+	// Start gateway if licensed (CE: always enabled, ENT: requires feature_gateway entitlement)
+	if ent, ok := licensingService.Entitlement(licensing.FeatureGateway); ok && ent.Bool() {
+		go p.Start()
+	} else {
+		logger.Info("Gateway not started - feature_gateway not in license entitlements")
+	}
 
 	// Initialize gRPC control server and reload coordinator if in control mode
 	var controlServer *grpc.ControlServer
