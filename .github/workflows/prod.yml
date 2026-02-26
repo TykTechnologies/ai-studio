@@ -219,6 +219,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.ORG_GH_TOKEN }}
 
       - name: Download Frontend Build
         uses: actions/download-artifact@v4
