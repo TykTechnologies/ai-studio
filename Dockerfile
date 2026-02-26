@@ -29,14 +29,21 @@ RUN cd ui/admin-frontend && npm ci && PUBLIC_URL="/" REACT_APP_API_URL="" CI=fal
 # Build documentation site
 RUN cd docs/site && npm ci && npm run docs:build
 
+# Build arguments for version information and edition
+ARG EDITION=ce
+
+# Remove enterprise module references for CE builds
+RUN if [ "$EDITION" = "ce" ]; then \
+        sed -i '/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d' go.mod; \
+        sed -i '/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d' microgateway/go.mod; \
+    fi
+
 # Download dependencies
 RUN go mod download
 
-# Build arguments for version information and edition
 ARG VERSION=dev
 ARG BUILD_HASH=unknown
 ARG BUILD_TIME=unknown
-ARG EDITION=ce
 
 # Build the binary
 RUN if [ "$EDITION" = "ent" ]; then \
