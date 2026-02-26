@@ -88,6 +88,13 @@ jobs:
       commit_author: ${{ steps.set_outputs.outputs.commit_author}}
     steps:
       -
+        name: Free disk space
+        if: matrix.component == 'studio'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /opt/hostedtoolcache
+          sudo apt-get clean
+          df -h /
+      -
         name: Checkout of midsommar
         uses: actions/checkout@v4
         with:
