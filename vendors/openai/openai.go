@@ -150,7 +150,7 @@ func (v *OpenAI) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamin
 
 	if isStreamingChannel {
 		if !req.Stream {
-			return fmt.Errorf("streaming is required for this endpoint")
+			return fmt.Errorf("streaming is required for this endpoint: %s", r.URL.String())
 		}
 
 		if !req.StreamOptions.IncludeUsage {
