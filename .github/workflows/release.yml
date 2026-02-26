@@ -68,7 +68,7 @@ jobs:
             cgo: 1
             rpmvers: "el/7 el/8 el/9 amazon/2 amazon/2023"
             debvers: "ubuntu/xenial ubuntu/bionic ubuntu/focal ubuntu/jammy ubuntu/noble debian/jessie debian/buster debian/bullseye debian/bookworm"
-            pc_repo: "tyk/tyk-microgateway"
+            pc_repo: "tyk/tyk-ai-microgateway"
             docker_image: "tykio/tyk-microgateway"
             dockerfile: "ci/Dockerfile.microgateway.distroless"
           # Microgateway ENT
