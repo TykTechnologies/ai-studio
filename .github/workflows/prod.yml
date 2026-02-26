@@ -13,7 +13,7 @@ jobs:
   build-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -38,7 +38,7 @@ jobs:
           cd ../..
 
       - name: Upload Frontend Build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
@@ -49,7 +49,7 @@ jobs:
     needs: build-frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -60,7 +60,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Download Frontend Build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
@@ -69,6 +69,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc libsqlite3-dev
+
+      - name: Remove enterprise module references for CE
+        run: |
+          sed -i '/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d' go.mod
 
       - name: Build CE Binaries
         run: |
@@ -87,7 +91,7 @@ jobs:
           ls -lh tyk-ai-studio-ce-*
 
       - name: Upload CE Binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ce-binaries
           path: tyk-ai-studio-ce-*
@@ -98,16 +102,16 @@ jobs:
     needs: [build-frontend, build-ce-binaries]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download Frontend Build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
 
       - name: Download CE Binaries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ce-binaries
 
@@ -142,7 +146,7 @@ jobs:
     needs: build-frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: true
@@ -168,7 +172,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Download Frontend Build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
@@ -195,7 +199,7 @@ jobs:
           ls -lh tyk-ai-studio-ent-*
 
       - name: Upload ENT Binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ent-binaries
           path: tyk-ai-studio-ent-*
@@ -206,16 +210,16 @@ jobs:
     needs: [build-frontend, build-ent-binaries]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download Frontend Build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
 
       - name: Download ENT Binaries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ent-binaries
 
