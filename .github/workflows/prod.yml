@@ -70,6 +70,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc libsqlite3-dev
 
+      - name: Build docs site
+        run: |
+          cd docs/site && npm install && NODE_ENV=production npm run docs:build
+
       - name: Remove enterprise module references for CE
         run: |
           sed -i '/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d' go.mod
@@ -181,6 +185,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc libsqlite3-dev
+
+      - name: Build docs site
+        run: |
+          cd docs/site && npm install && NODE_ENV=production npm run docs:build
 
       - name: Build ENT Binaries
         run: |
