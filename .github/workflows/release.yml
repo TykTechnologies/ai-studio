@@ -194,6 +194,7 @@ jobs:
           git config --global --add safe.directory /go/src/github.com/TykTechnologies/midsommar
           if [ "$EDITION" = "ce" ]; then
             sed -i "/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d" go.mod
+            sed -i "/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d" microgateway/go.mod
           fi
           if [ "$IS_TAG" = "true" ]; then
             goreleaser release --clean -f "$GORELEASER_CONFIG" --skip=validate
