@@ -99,7 +99,7 @@ jobs:
         if: matrix.edition == 'ent'
         uses: actions/checkout@v4
         with:
-          repository: TykTechnologies/midsommar-enterprise
+          repository: TykTechnologies/ai-studio-enterprise
           path: midsommar/enterprise
           token: ${{ secrets.ORG_GH_TOKEN }}
 
@@ -169,6 +169,12 @@ jobs:
           echo "Verifying static files..."
           find build -type f
           cd ../..
+
+      -
+        name: Remove enterprise module references for CE builds
+        if: matrix.edition == 'ce'
+        run: |
+          sed -i '/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d' go.mod
 
       -
         name: Build
