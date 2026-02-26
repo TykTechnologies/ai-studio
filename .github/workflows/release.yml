@@ -88,6 +88,17 @@ jobs:
       commit_author: ${{ steps.set_outputs.outputs.commit_author}}
     steps:
       -
+        name: Free disk space
+        if: matrix.component == 'studio'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          swap-storage: false
+      -
         name: Checkout of midsommar
         uses: actions/checkout@v4
         with:
