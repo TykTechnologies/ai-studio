@@ -69,6 +69,8 @@ type WebhookEvent struct {
 	AttemptNumber  int       `json:"attempt_number" gorm:"default:1"`
 	Status         string    `json:"status" gorm:"index"`
 	NextRunAt      time.Time `json:"next_run_at" gorm:"index"`
+	// TriggeredBy is non-zero for manually-triggered retries; holds the actor's user ID.
+	TriggeredBy uint `json:"triggered_by" gorm:"default:0"`
 }
 
 // WebhookDeliveryLog records each HTTP delivery attempt for audit.

@@ -9,6 +9,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// actorID extracts the authenticated user's ID from the gin context.
+// Returns 0 if the user is not present (should not happen on admin-only routes).
+func actorID(c *gin.Context) uint {
+	u, ok := c.Get("user")
+	if !ok {
+		return 0
+	}
+	user, ok := u.(*models.User)
+	if !ok {
+		return 0
+	}
+	return user.ID
+}
+
 // WebhookHandlers provides HTTP handlers for outbound webhook subscription management.
 type WebhookHandlers struct {
 	svc *services.WebhookService
@@ -229,18 +243,17 @@ func (h *WebhookHandlers) ListDeliveries(c *gin.Context) {
 		return
 	}
 
-	limit := 50
-	if l, err := strconv.Atoi(c.DefaultQuery("limit", "50")); err == nil && l > 0 {
-		limit = l
-	}
+	pageSize, pageNumber, _ := getPaginationParams(c)
 
-	logs, err := h.svc.ListDeliveryLogs(uint(id), limit)
+	logs, totalCount, totalPages, err := h.svc.ListDeliveryLogs(uint(id), pageSize, pageNumber)
 	if err != nil {
 		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, logs)
+	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
+	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
+	c.JSON(http.StatusOK, gin.H{"data": logs})
 }
 
 // Test handles POST /api/v1/webhooks/:id/test
@@ -279,7 +292,7 @@ func (h *WebhookHandlers) RetryDelivery(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.RetryDelivery(uint(logID)); err != nil {
+	if err := h.svc.RetryDelivery(uint(logID), actorID(c)); err != nil {
 		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}

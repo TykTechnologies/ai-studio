@@ -413,8 +413,9 @@ func (s *WebhookService) findMatchingSubscriptions(topic string) ([]models.Webho
 }
 
 // RetryDelivery re-enqueues the original payload from a delivery log as a new
-// WebhookEvent with attempt=1 for immediate delivery.
-func (s *WebhookService) RetryDelivery(logID uint) error {
+// WebhookEvent with attempt=1 for immediate delivery. actorID is the user ID
+// of the person who triggered the retry (0 if system-initiated).
+func (s *WebhookService) RetryDelivery(logID, actorID uint) error {
 	var deliveryLog models.WebhookDeliveryLog
 	if err := s.db.First(&deliveryLog, logID).Error; err != nil {
 		return fmt.Errorf("delivery log not found: %w", err)
@@ -432,6 +433,7 @@ func (s *WebhookService) RetryDelivery(logID uint) error {
 		AttemptNumber:  1,
 		Status:         models.DeliveryStatusPending,
 		NextRunAt:      time.Now(),
+		TriggeredBy:    actorID,
 	}
 	if err := s.db.Create(&row).Error; err != nil {
 		return fmt.Errorf("failed to enqueue retry: %w", err)
@@ -628,18 +630,30 @@ func (s *WebhookService) DeleteWebhook(id uint) error {
 	return s.db.Delete(&models.WebhookSubscription{}, id).Error
 }
 
-func (s *WebhookService) ListDeliveryLogs(subscriptionID uint, limit int) ([]models.WebhookDeliveryLog, error) {
-	if limit <= 0 {
-		limit = 50
+func (s *WebhookService) ListDeliveryLogs(subscriptionID uint, pageSize, pageNumber int) ([]models.WebhookDeliveryLog, int64, int, error) {
+	var totalCount int64
+	query := s.db.Model(&models.WebhookDeliveryLog{}).Where("subscription_id = ?", subscriptionID)
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
 	}
+
+	totalPages := 1
+	if pageSize > 0 && totalCount > 0 {
+		totalPages = int(totalCount) / pageSize
+		if int(totalCount)%pageSize != 0 {
+			totalPages++
+		}
+	}
+
 	var logs []models.WebhookDeliveryLog
-	if err := s.db.Where("subscription_id = ?", subscriptionID).
-		Order("created_at DESC").
-		Limit(limit).
-		Find(&logs).Error; err != nil {
-		return nil, err
+	q := s.db.Where("subscription_id = ?", subscriptionID).Order("created_at DESC")
+	if pageSize > 0 {
+		q = q.Limit(pageSize).Offset((pageNumber - 1) * pageSize)
 	}
-	return logs, nil
+	if err := q.Find(&logs).Error; err != nil {
+		return nil, 0, 0, err
+	}
+	return logs, totalCount, totalPages, nil
 }
 
 func (s *WebhookService) GetWebhookConfig() (*models.WebhookConfig, error) {

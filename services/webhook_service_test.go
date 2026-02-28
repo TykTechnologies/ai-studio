@@ -521,7 +521,7 @@ func TestRetryDelivery(t *testing.T) {
 	svc.Start(ctx)
 	defer svc.Stop()
 
-	if err := svc.RetryDelivery(log.ID); err != nil {
+	if err := svc.RetryDelivery(log.ID, 0); err != nil {
 		t.Fatalf("RetryDelivery: %v", err)
 	}
 
@@ -538,7 +538,7 @@ func TestRetryDelivery(t *testing.T) {
 
 func TestRetryDelivery_NotFound(t *testing.T) {
 	svc := setupService(t)
-	if err := svc.RetryDelivery(99999); err == nil {
+	if err := svc.RetryDelivery(99999, 0); err == nil {
 		t.Fatal("expected error for unknown log ID")
 	}
 }
