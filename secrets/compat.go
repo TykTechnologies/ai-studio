@@ -1,3 +1,19 @@
+// Package-level backwards-compatible wrappers around a global SecretStore.
+//
+// Deprecated: This file exists to avoid a 17-file refactor in a single PR.
+// The long-term plan is to inject SecretStore directly into each consumer
+// (services.Service, API handlers, gRPC server, etc.) via constructor
+// parameters, eliminating the global defaultStore and this entire file.
+//
+// Migration path:
+//   1. Add a SecretStore field to services.Service and pass it through NewServiceWithOCI.
+//   2. Update service methods (llm_service, tool_service, datasource_service,
+//      chat_service) to use the injected store instead of secrets.GetValue().
+//   3. Update api/secrets_handlers.go to receive the store from the API struct.
+//   4. Update grpc/control_server.go to receive the store at construction.
+//   5. Update models/submission.go GORM hooks to use a store from context
+//      or a package-level setter that can be removed later.
+//   6. Once no callers remain, delete compat.go and the global defaultStore.
 package secrets
 
 import (
