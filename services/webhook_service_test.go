@@ -591,6 +591,54 @@ func TestListWebhooks(t *testing.T) {
 	}
 }
 
+func TestWebhookSubscription_SensitiveFieldEncryption(t *testing.T) {
+	// Enable encryption for this test.
+	t.Setenv("TYK_AI_SECRET_KEY", "test-encryption-key-for-webhooks")
+
+	svc := setupService(t)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer ts.Close()
+
+	sub := &models.WebhookSubscription{
+		Name:    "enc-test",
+		URL:     ts.URL,
+		Secret:  "hmac-signing-secret",
+		Enabled: true,
+		Topics:  []models.WebhookTopic{{Topic: "system.llm.created"}},
+		TransportConfig: models.WebhookTransportConfig{
+			ProxyURL: "http://user:pass@proxy.example.com:3128",
+		},
+	}
+	if err := svc.CreateWebhook(sub); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Verify the values are encrypted at rest by reading with hooks disabled.
+	var raw models.WebhookSubscription
+	if err := svc.db.Session(&gorm.Session{SkipHooks: true}).First(&raw, sub.ID).Error; err != nil {
+		t.Fatalf("raw read: %v", err)
+	}
+	if raw.Secret == "hmac-signing-secret" {
+		t.Error("Secret stored in plaintext — expected encrypted value")
+	}
+	if raw.Secret == "" {
+		t.Error("Secret was not stored at all")
+	}
+
+	// Verify GetWebhook returns plaintext values (AfterFind decrypts).
+	got, err := svc.GetWebhook(sub.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Secret != "hmac-signing-secret" {
+		t.Errorf("Secret after GetWebhook: want %q, got %q", "hmac-signing-secret", got.Secret)
+	}
+	if got.TransportConfig.ProxyURL != "http://user:pass@proxy.example.com:3128" {
+		t.Errorf("ProxyURL after GetWebhook: want %q, got %q",
+			"http://user:pass@proxy.example.com:3128", got.TransportConfig.ProxyURL)
+	}
+}
+
 func TestWebhookTransportConfig_Proxy(t *testing.T) {
 	svc := setupService(t)
 

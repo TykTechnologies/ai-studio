@@ -3,6 +3,7 @@ package models
 import (
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"gorm.io/gorm"
 )
 
@@ -57,6 +58,28 @@ type WebhookSubscription struct {
 	RetryPolicy     WebhookRetryPolicy     `json:"retry_policy" gorm:"serializer:json"`
 	TransportConfig WebhookTransportConfig `json:"transport_config" gorm:"serializer:json"`
 	Topics          []WebhookTopic         `json:"topics" gorm:"foreignKey:SubscriptionID;constraint:OnDelete:CASCADE"`
+}
+
+// BeforeSave encrypts sensitive fields before writing to the database.
+// Uses the same AES-256 key (TYK_AI_SECRET_KEY) and $ENC/ prefix convention
+// as the rest of the platform. A no-op if no key is configured.
+func (s *WebhookSubscription) BeforeSave(tx *gorm.DB) error {
+	s.Secret = secrets.EncryptValue(s.Secret)
+	s.TransportConfig.ProxyURL = secrets.EncryptValue(s.TransportConfig.ProxyURL)
+	s.TransportConfig.TLSCACert = secrets.EncryptValue(s.TransportConfig.TLSCACert)
+	s.TransportConfig.TLSClientCert = secrets.EncryptValue(s.TransportConfig.TLSClientCert)
+	s.TransportConfig.TLSClientKey = secrets.EncryptValue(s.TransportConfig.TLSClientKey)
+	return nil
+}
+
+// AfterFind decrypts sensitive fields after loading from the database.
+func (s *WebhookSubscription) AfterFind(tx *gorm.DB) error {
+	s.Secret = secrets.DecryptValue(s.Secret)
+	s.TransportConfig.ProxyURL = secrets.DecryptValue(s.TransportConfig.ProxyURL)
+	s.TransportConfig.TLSCACert = secrets.DecryptValue(s.TransportConfig.TLSCACert)
+	s.TransportConfig.TLSClientCert = secrets.DecryptValue(s.TransportConfig.TLSClientCert)
+	s.TransportConfig.TLSClientKey = secrets.DecryptValue(s.TransportConfig.TLSClientKey)
+	return nil
 }
 
 // WebhookEvent is the persistent delivery queue.
