@@ -964,6 +964,20 @@ func (a *API) setupRoutes() {
 	v1.GET("/sync/status/:namespace", syncStatusHandlers.GetNamespaceSyncStatus)
 	v1.GET("/sync/audit", syncStatusHandlers.GetSyncAuditLog)
 
+	// Outbound webhook routes
+	webhookHandlers := NewWebhookHandlers(a.service.WebhookService)
+	v1.POST("/webhooks", webhookHandlers.Create)
+	v1.GET("/webhooks", webhookHandlers.List)
+	v1.GET("/webhooks/topics", webhookHandlers.ListTopics)
+	v1.GET("/webhooks/config", webhookHandlers.GetConfig)
+	v1.PUT("/webhooks/config", webhookHandlers.UpdateConfig)
+	v1.GET("/webhooks/:id", webhookHandlers.Get)
+	v1.PUT("/webhooks/:id", webhookHandlers.Update)
+	v1.DELETE("/webhooks/:id", webhookHandlers.Delete)
+	v1.GET("/webhooks/:id/deliveries", webhookHandlers.ListDeliveries)
+	v1.POST("/webhooks/:id/test", webhookHandlers.Test)
+	v1.POST("/webhooks/:id/deliveries/:log_id/retry", webhookHandlers.RetryDelivery)
+
 	// SSO routes (ENT: full functionality, CE: returns 402 Payment Required)
 	public.GET("/auth/:id/:provider", a.handleTIBAuth)
 	public.POST("/auth/:id/:provider", a.handleTIBAuth)

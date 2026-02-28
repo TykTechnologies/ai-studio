@@ -72,6 +72,42 @@ type ObjectEventPayload struct {
 	Object     interface{} `json:"object"`      // The full object (for create/update, nil for delete)
 }
 
+// KnownWebhookTopics is the authoritative list of topics that can be subscribed to via webhooks.
+var KnownWebhookTopics = []string{
+	TopicLLMCreated,
+	TopicLLMUpdated,
+	TopicLLMDeleted,
+	TopicAppCreated,
+	TopicAppUpdated,
+	TopicAppDeleted,
+	TopicAppApproved,
+	TopicAppPluginResourcesChanged,
+	TopicDatasourceCreated,
+	TopicDatasourceUpdated,
+	TopicDatasourceDeleted,
+	TopicUserCreated,
+	TopicUserUpdated,
+	TopicUserDeleted,
+	TopicGroupCreated,
+	TopicGroupUpdated,
+	TopicGroupDeleted,
+	TopicToolCreated,
+	TopicToolUpdated,
+	TopicToolDeleted,
+	TopicFilterCreated,
+	TopicFilterUpdated,
+	TopicFilterDeleted,
+	TopicPluginCreated,
+	TopicPluginUpdated,
+	TopicPluginDeleted,
+	TopicModelPriceCreated,
+	TopicModelPriceUpdated,
+	TopicModelPriceDeleted,
+	TopicModelRouterCreated,
+	TopicModelRouterUpdated,
+	TopicModelRouterDeleted,
+}
+
 // SystemEventEmitter provides a clean interface for emitting system events
 type SystemEventEmitter struct {
 	bus    eventbridge.Bus
