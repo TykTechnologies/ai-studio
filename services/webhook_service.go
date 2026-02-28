@@ -15,6 +15,7 @@ import (
 	neturl "net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -31,13 +32,14 @@ type WebhookServiceConfig struct {
 	DefaultHTTPTimeout   time.Duration
 	MaxResponseBodyBytes int
 	PollInterval         time.Duration
-	AllowInternalNetwork bool // Disable SSRF protection (e.g. for testing or internal deployments)
+	LogPruneInterval     time.Duration // How often to prune old delivery logs; default 24h
+	AllowInternalNetwork bool          // Disable SSRF protection (e.g. for testing or internal deployments)
 }
 
 func DefaultWebhookServiceConfig() WebhookServiceConfig {
 	return WebhookServiceConfig{
-		Workers:    4,
-		QueueSize:  512,
+		Workers:            4,
+		QueueSize:          512,
 		DefaultMaxAttempts: 5,
 		DefaultBackoff: []time.Duration{
 			10 * time.Second,
@@ -49,6 +51,7 @@ func DefaultWebhookServiceConfig() WebhookServiceConfig {
 		DefaultHTTPTimeout:   15 * time.Second,
 		MaxResponseBodyBytes: 4 * 1024,
 		PollInterval:         5 * time.Second,
+		LogPruneInterval:     24 * time.Hour,
 	}
 }
 
@@ -85,11 +88,22 @@ type resolvedPolicy struct {
 	httpTimeout time.Duration
 }
 
+// cachedConfig holds a short-lived in-memory copy of WebhookConfig to avoid
+// a DB round-trip on every delivery attempt in the hot path.
+type cachedConfig struct {
+	mu        sync.RWMutex
+	cfg       *models.WebhookConfig
+	fetchedAt time.Time
+}
+
+const webhookConfigCacheTTL = 30 * time.Second
+
 type WebhookService struct {
-	db     *gorm.DB
-	cfg    WebhookServiceConfig
-	queue  chan uint // WebhookEvent IDs
-	stopCh chan struct{}
+	db         *gorm.DB
+	cfg        WebhookServiceConfig
+	queue      chan uint // WebhookEvent IDs
+	stopCh     chan struct{}
+	configCache cachedConfig
 }
 
 func NewWebhookService(db *gorm.DB, cfg WebhookServiceConfig) *WebhookService {
@@ -99,6 +113,39 @@ func NewWebhookService(db *gorm.DB, cfg WebhookServiceConfig) *WebhookService {
 		queue:  make(chan uint, cfg.QueueSize),
 		stopCh: make(chan struct{}),
 	}
+}
+
+// getCachedConfig returns the WebhookConfig, using a 30-second in-memory cache
+// to avoid a DB query on every delivery attempt.
+func (s *WebhookService) getCachedConfig() *models.WebhookConfig {
+	s.configCache.mu.RLock()
+	if s.configCache.cfg != nil && time.Since(s.configCache.fetchedAt) < webhookConfigCacheTTL {
+		cfg := s.configCache.cfg
+		s.configCache.mu.RUnlock()
+		return cfg
+	}
+	s.configCache.mu.RUnlock()
+
+	s.configCache.mu.Lock()
+	defer s.configCache.mu.Unlock()
+	// Re-check after acquiring write lock (another goroutine may have populated it).
+	if s.configCache.cfg != nil && time.Since(s.configCache.fetchedAt) < webhookConfigCacheTTL {
+		return s.configCache.cfg
+	}
+	if cfg, err := models.GetWebhookConfig(s.db); err == nil {
+		s.configCache.cfg = cfg
+		s.configCache.fetchedAt = time.Now()
+		return cfg
+	}
+	return s.configCache.cfg // Return stale value on error rather than nil
+}
+
+// invalidateConfigCache clears the cached config, forcing the next call to
+// getCachedConfig to re-read from the database.
+func (s *WebhookService) invalidateConfigCache() {
+	s.configCache.mu.Lock()
+	s.configCache.cfg = nil
+	s.configCache.mu.Unlock()
 }
 
 func (s *WebhookService) Start(ctx context.Context) {
@@ -124,16 +171,36 @@ func (s *WebhookService) Stop() {
 // possible delivery timeout).
 func (s *WebhookService) poller(ctx context.Context) {
 	ticker := time.NewTicker(s.cfg.PollInterval)
+	pruneTicker := time.NewTicker(s.cfg.LogPruneInterval)
 	defer ticker.Stop()
+	defer pruneTicker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			s.pollDueEvents()
+		case <-pruneTicker.C:
+			s.pruneOldDeliveryLogs()
 		case <-s.stopCh:
 			return
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+func (s *WebhookService) pruneOldDeliveryLogs() {
+	dbCfg := s.getCachedConfig()
+	if dbCfg == nil || dbCfg.LogRetentionDays <= 0 {
+		return
+	}
+	cutoff := time.Now().AddDate(0, 0, -dbCfg.LogRetentionDays)
+	result := s.db.Where("created_at < ?", cutoff).Delete(&models.WebhookDeliveryLog{})
+	if result.Error != nil {
+		logger.Warnf("webhook: delivery log pruning failed: %v", result.Error)
+		return
+	}
+	if result.RowsAffected > 0 {
+		logger.Infof("webhook: pruned %d delivery log(s) older than %d days", result.RowsAffected, dbCfg.LogRetentionDays)
 	}
 }
 
@@ -257,7 +324,7 @@ func (s *WebhookService) processEvent(ctx context.Context, eventID uint) {
 	req.Header.Set("X-Tyk-Delivery-Attempt", fmt.Sprintf("%d", ev.AttemptNumber))
 
 	maxRespBody := s.cfg.MaxResponseBodyBytes
-	if dbCfg, err := models.GetWebhookConfig(s.db); err == nil && dbCfg.MaxResponseBodyBytes > 0 {
+	if dbCfg := s.getCachedConfig(); dbCfg != nil && dbCfg.MaxResponseBodyBytes > 0 {
 		maxRespBody = dbCfg.MaxResponseBodyBytes
 	}
 
@@ -332,7 +399,7 @@ func (s *WebhookService) resolveRetryPolicy(sub models.WebhookSubscription) reso
 		httpTimeout: s.cfg.DefaultHTTPTimeout,
 	}
 
-	if dbCfg, err := models.GetWebhookConfig(s.db); err == nil {
+	if dbCfg := s.getCachedConfig(); dbCfg != nil {
 		if dbCfg.DefaultRetryPolicy.MaxAttempts > 0 {
 			policy.maxAttempts = dbCfg.DefaultRetryPolicy.MaxAttempts
 		}
@@ -380,20 +447,27 @@ func (s *WebhookService) HandleEvent(ev eventbridge.Event) {
 		return
 	}
 
-	for _, sub := range subs {
-		row := models.WebhookEvent{
+	now := time.Now()
+	rows := make([]models.WebhookEvent, len(subs))
+	for i, sub := range subs {
+		rows[i] = models.WebhookEvent{
 			SubscriptionID: sub.ID,
 			EventTopic:     ev.Topic,
 			EventID:        ev.ID,
 			Payload:        string(body),
 			AttemptNumber:  1,
 			Status:         models.DeliveryStatusPending,
-			NextRunAt:      time.Now(),
+			NextRunAt:      now,
 		}
-		if err := s.db.Create(&row).Error; err != nil {
-			logger.Errorf("webhook: failed to persist event for sub %d: %v", sub.ID, err)
-			continue
-		}
+	}
+	if len(rows) == 0 {
+		return
+	}
+	if err := s.db.Create(&rows).Error; err != nil {
+		logger.Errorf("webhook: failed to persist events for topic %s: %v", ev.Topic, err)
+		return
+	}
+	for _, row := range rows {
 		select {
 		case s.queue <- row.ID:
 		default:
@@ -413,12 +487,17 @@ func (s *WebhookService) findMatchingSubscriptions(topic string) ([]models.Webho
 }
 
 // RetryDelivery re-enqueues the original payload from a delivery log as a new
-// WebhookEvent with attempt=1 for immediate delivery. actorID is the user ID
-// of the person who triggered the retry (0 if system-initiated).
-func (s *WebhookService) RetryDelivery(logID, actorID uint) error {
+// WebhookEvent with attempt=1 for immediate delivery. subscriptionID is the
+// parent subscription from the URL path and must match the log's own
+// SubscriptionID. actorID is the user ID of the person who triggered the retry
+// (0 if system-initiated).
+func (s *WebhookService) RetryDelivery(subscriptionID, logID, actorID uint) error {
 	var deliveryLog models.WebhookDeliveryLog
 	if err := s.db.First(&deliveryLog, logID).Error; err != nil {
 		return fmt.Errorf("delivery log not found: %w", err)
+	}
+	if deliveryLog.SubscriptionID != subscriptionID {
+		return fmt.Errorf("delivery log %d does not belong to subscription %d", logID, subscriptionID)
 	}
 	sub, err := s.GetWebhook(deliveryLog.SubscriptionID)
 	if err != nil {
@@ -661,7 +740,11 @@ func (s *WebhookService) GetWebhookConfig() (*models.WebhookConfig, error) {
 }
 
 func (s *WebhookService) UpdateWebhookConfig(cfg *models.WebhookConfig) error {
-	return models.UpdateWebhookConfig(s.db, cfg)
+	if err := models.UpdateWebhookConfig(s.db, cfg); err != nil {
+		return err
+	}
+	s.invalidateConfigCache()
+	return nil
 }
 
 // TestWebhook fires a synchronous test delivery. No delivery log or queue row is persisted.

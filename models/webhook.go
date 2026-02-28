@@ -90,13 +90,14 @@ type WebhookEvent struct {
 	EventID        string    `json:"event_id"`
 	Payload        string    `json:"payload" gorm:"type:text"`
 	AttemptNumber  int       `json:"attempt_number" gorm:"default:1"`
-	Status         string    `json:"status" gorm:"index"`
-	NextRunAt      time.Time `json:"next_run_at" gorm:"index"`
+	Status         string    `json:"status" gorm:"index:idx_webhook_events_status_next_run"`
+	NextRunAt      time.Time `json:"next_run_at" gorm:"index:idx_webhook_events_status_next_run"`
 	// TriggeredBy is non-zero for manually-triggered retries; holds the actor's user ID.
 	TriggeredBy uint `json:"triggered_by" gorm:"default:0"`
 }
 
 // WebhookDeliveryLog records each HTTP delivery attempt for audit.
+// CreatedAt is indexed to support efficient retention-based pruning.
 type WebhookDeliveryLog struct {
 	gorm.Model
 	SubscriptionID uint       `json:"subscription_id" gorm:"not null;index"`
@@ -120,6 +121,8 @@ type WebhookConfig struct {
 	QueueSize            int                `json:"queue_size"`
 	DefaultRetryPolicy   WebhookRetryPolicy `json:"default_retry_policy" gorm:"serializer:json"`
 	MaxResponseBodyBytes int                `json:"max_response_body_bytes"`
+	// LogRetentionDays is how many days of delivery logs to keep. 0 = keep forever.
+	LogRetentionDays int `json:"log_retention_days"`
 }
 
 func NewDefaultWebhookConfig() *WebhookConfig {
@@ -127,19 +130,14 @@ func NewDefaultWebhookConfig() *WebhookConfig {
 }
 
 func GetWebhookConfig(db *gorm.DB) (*WebhookConfig, error) {
-	var cfg WebhookConfig
-	err := db.First(&cfg, WebhookConfigSingletonID).Error
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			cfg = *NewDefaultWebhookConfig()
-			if err2 := db.Create(&cfg).Error; err2 != nil {
-				return nil, err2
-			}
-			return &cfg, nil
-		}
+	cfg := NewDefaultWebhookConfig()
+	// FirstOrCreate is atomic: safe under concurrent calls at startup.
+	if err := db.Where(WebhookConfig{ID: WebhookConfigSingletonID}).
+		Attrs(cfg).
+		FirstOrCreate(cfg).Error; err != nil {
 		return nil, err
 	}
-	return &cfg, nil
+	return cfg, nil
 }
 
 func UpdateWebhookConfig(db *gorm.DB, cfg *WebhookConfig) error {

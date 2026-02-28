@@ -130,7 +130,7 @@ func (h *WebhookHandlers) Create(c *gin.Context) {
 	applyRequest(&sub, req)
 
 	if err := h.svc.CreateWebhook(&sub); err != nil {
-		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", "failed to create webhook")
 		return
 	}
 
@@ -141,7 +141,7 @@ func (h *WebhookHandlers) Create(c *gin.Context) {
 func (h *WebhookHandlers) List(c *gin.Context) {
 	subs, err := h.svc.ListWebhooks()
 	if err != nil {
-		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", "failed to list webhooks")
 		return
 	}
 
@@ -202,7 +202,7 @@ func (h *WebhookHandlers) Update(c *gin.Context) {
 	applyRequest(existing, req)
 
 	if err := h.svc.UpdateWebhook(existing); err != nil {
-		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", "failed to update webhook")
 		return
 	}
 
@@ -217,13 +217,8 @@ func (h *WebhookHandlers) Delete(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.svc.GetWebhook(uint(id)); err != nil {
-		h.webhookError(c, http.StatusNotFound, "Not Found", "webhook not found")
-		return
-	}
-
 	if err := h.svc.DeleteWebhook(uint(id)); err != nil {
-		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", "failed to delete webhook")
 		return
 	}
 
@@ -238,16 +233,11 @@ func (h *WebhookHandlers) ListDeliveries(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.svc.GetWebhook(uint(id)); err != nil {
-		h.webhookError(c, http.StatusNotFound, "Not Found", "webhook not found")
-		return
-	}
-
 	pageSize, pageNumber, _ := getPaginationParams(c)
 
 	logs, totalCount, totalPages, err := h.svc.ListDeliveryLogs(uint(id), pageSize, pageNumber)
 	if err != nil {
-		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", "failed to list deliveries")
 		return
 	}
 
@@ -280,7 +270,7 @@ func (h *WebhookHandlers) Test(c *gin.Context) {
 
 // RetryDelivery handles POST /api/v1/webhooks/:id/deliveries/:log_id/retry
 func (h *WebhookHandlers) RetryDelivery(c *gin.Context) {
-	_, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
 		h.webhookError(c, http.StatusBadRequest, "Bad Request", "invalid webhook id")
 		return
@@ -292,8 +282,8 @@ func (h *WebhookHandlers) RetryDelivery(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.RetryDelivery(uint(logID), actorID(c)); err != nil {
-		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+	if err := h.svc.RetryDelivery(uint(id), uint(logID), actorID(c)); err != nil {
+		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", "failed to enqueue retry")
 		return
 	}
 
@@ -309,7 +299,7 @@ func (h *WebhookHandlers) ListTopics(c *gin.Context) {
 func (h *WebhookHandlers) GetConfig(c *gin.Context) {
 	cfg, err := h.svc.GetWebhookConfig()
 	if err != nil {
-		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", "failed to get webhook config")
 		return
 	}
 
@@ -325,7 +315,7 @@ func (h *WebhookHandlers) UpdateConfig(c *gin.Context) {
 	}
 
 	if err := h.svc.UpdateWebhookConfig(&cfg); err != nil {
-		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		h.webhookError(c, http.StatusInternalServerError, "Internal Server Error", "failed to update webhook config")
 		return
 	}
 

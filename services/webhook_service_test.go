@@ -1,9 +1,9 @@
 package services
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -521,7 +521,7 @@ func TestRetryDelivery(t *testing.T) {
 	svc.Start(ctx)
 	defer svc.Stop()
 
-	if err := svc.RetryDelivery(log.ID, 0); err != nil {
+	if err := svc.RetryDelivery(sub.ID, log.ID, 0); err != nil {
 		t.Fatalf("RetryDelivery: %v", err)
 	}
 
@@ -538,7 +538,7 @@ func TestRetryDelivery(t *testing.T) {
 
 func TestRetryDelivery_NotFound(t *testing.T) {
 	svc := setupService(t)
-	if err := svc.RetryDelivery(99999, 0); err == nil {
+	if err := svc.RetryDelivery(1, 99999, 0); err == nil {
 		t.Fatal("expected error for unknown log ID")
 	}
 }
@@ -569,7 +569,7 @@ func TestWebhookConfig_DefaultsAndUpdate(t *testing.T) {
 	if got.DefaultRetryPolicy.MaxAttempts != 3 {
 		t.Errorf("max_attempts: want 3, got %d", got.DefaultRetryPolicy.MaxAttempts)
 	}
-	if fmt.Sprint(got.DefaultRetryPolicy.BackoffSeconds) != "[5 15 60]" {
+	if !reflect.DeepEqual(got.DefaultRetryPolicy.BackoffSeconds, []int{5, 15, 60}) {
 		t.Errorf("backoff: want [5 15 60], got %v", got.DefaultRetryPolicy.BackoffSeconds)
 	}
 }
