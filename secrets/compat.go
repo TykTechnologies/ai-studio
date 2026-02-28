@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -59,6 +60,7 @@ func EncryptValue(plaintext string) string {
 
 	encrypted, err := store.EncryptValue(context.Background(), plaintext)
 	if err != nil {
+		log.WithError(err).Warn("secrets: encryption failed, returning plaintext")
 		return plaintext
 	}
 	return encrypted
@@ -74,6 +76,7 @@ func DecryptValue(value string) string {
 
 	decrypted, err := store.DecryptValue(context.Background(), value)
 	if err != nil {
+		log.WithError(err).Warn("secrets: decryption failed, returning original value")
 		return value
 	}
 	return decrypted
