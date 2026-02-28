@@ -28,6 +28,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	secretsdb "github.com/TykTechnologies/midsommar/v2/secrets/database"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
@@ -99,6 +100,14 @@ func main() {
 	err = models.InitModels(db)
 	if err != nil {
 		logger.FatalErr("Failed to initialize models", err)
+	}
+
+	// Initialize secrets store with encryption key from config
+	if appConf.TIBAPISecret != "" {
+		secrets.SetStore(secretsdb.New(db, appConf.TIBAPISecret))
+		logger.Info("Secrets store initialized")
+	} else {
+		logger.Warn("TYK_AI_SECRET_KEY not set — secrets encryption is disabled")
 	}
 
 	// Ensure default group and catalogues exist and are linked
@@ -490,10 +499,12 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
 
 	// Seed default secrets and LLM configurations if not disabled
 	if !skipLLMDefaults {
-		if err := secrets.GetOrCreateDefaultSecrets(db); err != nil {
-			return fmt.Errorf("failed to create default secrets: %w", err)
+		if secrets.DefaultStore() != nil {
+			if err := secrets.GetOrCreateDefaultSecrets(db); err != nil {
+				return fmt.Errorf("failed to create default secrets: %w", err)
+			}
+			logger.Info("Default secrets checked/initialized")
 		}
-		logger.Info("Default secrets checked/initialized")
 
 		if err := models.GetOrCreateDefaultLLMs(db); err != nil {
 			return fmt.Errorf("failed to create default LLM configurations: %w", err)

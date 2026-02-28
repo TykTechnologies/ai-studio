@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"os"
 	"strconv"
 
 	log "github.com/sirupsen/logrus"
@@ -12,12 +11,12 @@ import (
 )
 
 func checkSecretKey(c *gin.Context) bool {
-	if os.Getenv("TYK_AI_SECRET_KEY") == "" {
+	if secrets.Store() == nil {
 		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Service Unavailable", Detail: "Secrets functionality is disabled. TYK_AI_SECRET_KEY environment variable is not set."}},
+			}{{Title: "Service Unavailable", Detail: "Secrets functionality is disabled. Encryption key is not configured."}},
 		})
 		return false
 	}

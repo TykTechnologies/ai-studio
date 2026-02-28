@@ -17,9 +17,6 @@ type ProviderAPI struct {
 }
 
 func NewProviderAPI(api *API) *ProviderAPI {
-	// Initialize secrets package with database reference
-	secrets.SetDBRef(api.service.DB)
-
 	// Register direct import provider
 	directProvider := direct.NewDirectProvider()
 	api.providers.RegisterProvider("direct", directProvider)

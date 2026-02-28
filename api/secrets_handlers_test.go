@@ -4,19 +4,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestSecretsHandlersWithoutKey(t *testing.T) {
-	// Save current env and restore after test
-	originalKey := os.Getenv("TYK_AI_SECRET_KEY")
-	defer os.Setenv("TYK_AI_SECRET_KEY", originalKey)
-
-	// Unset the key for testing
-	os.Unsetenv("TYK_AI_SECRET_KEY")
+	// Clear the global store to simulate no encryption key
+	prevStore := secrets.Store()
+	secrets.SetStore(nil)
+	defer secrets.SetStore(prevStore)
 
 	api, _ := setupTestAPI(t)
 
@@ -32,35 +30,35 @@ func TestSecretsHandlersWithoutKey(t *testing.T) {
 			method:         "POST",
 			path:           "/api/v1/secrets",
 			expectedStatus: http.StatusServiceUnavailable,
-			expectedError:  "Secrets functionality is disabled. TYK_AI_SECRET_KEY environment variable is not set.",
+			expectedError:  "Secrets functionality is disabled. Encryption key is not configured.",
 		},
 		{
 			name:           "get secret without key",
 			method:         "GET",
 			path:           "/api/v1/secrets/1",
 			expectedStatus: http.StatusServiceUnavailable,
-			expectedError:  "Secrets functionality is disabled. TYK_AI_SECRET_KEY environment variable is not set.",
+			expectedError:  "Secrets functionality is disabled. Encryption key is not configured.",
 		},
 		{
 			name:           "update secret without key",
 			method:         "PATCH",
 			path:           "/api/v1/secrets/1",
 			expectedStatus: http.StatusServiceUnavailable,
-			expectedError:  "Secrets functionality is disabled. TYK_AI_SECRET_KEY environment variable is not set.",
+			expectedError:  "Secrets functionality is disabled. Encryption key is not configured.",
 		},
 		{
 			name:           "delete secret without key",
 			method:         "DELETE",
 			path:           "/api/v1/secrets/1",
 			expectedStatus: http.StatusServiceUnavailable,
-			expectedError:  "Secrets functionality is disabled. TYK_AI_SECRET_KEY environment variable is not set.",
+			expectedError:  "Secrets functionality is disabled. Encryption key is not configured.",
 		},
 		{
 			name:           "list secrets without key",
 			method:         "GET",
 			path:           "/api/v1/secrets",
 			expectedStatus: http.StatusServiceUnavailable,
-			expectedError:  "Secrets functionality is disabled. TYK_AI_SECRET_KEY environment variable is not set.",
+			expectedError:  "Secrets functionality is disabled. Encryption key is not configured.",
 		},
 	}
 
