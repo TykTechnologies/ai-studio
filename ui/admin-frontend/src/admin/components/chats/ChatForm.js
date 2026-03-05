@@ -352,6 +352,7 @@ const ChatForm = () => {
         display="flex"
         justifyContent="center"
         alignItems="center"
+    if (!chat.groups || chat.groups.length === 0) newErrors.groups = "At least one group is required";
         height="100vh"
       >
         <CircularProgress />
@@ -461,7 +462,7 @@ const ChatForm = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth>
+              <FormControl fullWidth error={!!errors.groups} required>
                 <InputLabel>Groups</InputLabel>
                 <Select
                   multiple
@@ -487,6 +488,9 @@ const ChatForm = () => {
                     </MenuItem>
                   ))}
                 </Select>
+                {errors.groups && (
+                  <Typography color="error">{errors.groups}</Typography>
+                )}
               </FormControl>
             </Grid>
             <Grid item xs={12}>
