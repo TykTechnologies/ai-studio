@@ -126,6 +126,7 @@ func (v *GoogleAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, st
 	aggregate.PromptTokens = finalChunk.UsageMetadata.PromptTokenCount
 	aggregate.CompletionTokens = finalChunk.UsageMetadata.CandidatesTokenCount +
 		finalChunk.UsageMetadata.ThoughtsTokenCount
+	aggregate.CacheReadPromptTokens = finalChunk.UsageMetadata.CachedContentTokenCount
 
 	return llm, app, aggregate, nil
 }
