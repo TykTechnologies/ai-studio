@@ -61,20 +61,20 @@ func (v *Vertex) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, er
 }
 
 func (v *Vertex) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
-	modelName, err := extractModelIDFromVertexURL(r.URL.Path)
-	if err != nil {
+	response := &responses.GoogleAIChatResponse{}
+	if err := json.Unmarshal(body, response); err != nil {
 		return nil, nil, nil, err
 	}
 
+	// Prefer modelVersion from the response body (most accurate)
+	modelName := response.ModelVersion
+	if modelName == "" {
+		modelName, _ = extractModelIDFromVertexURL(r.URL.Path)
+	}
 	if modelName == "" {
 		modelName = "googleai-gemini-no-id"
 	}
 
-	response := &responses.GoogleAIChatResponse{}
-	err = json.Unmarshal(body, response)
-	if err != nil {
-		return nil, nil, nil, err
-	}
 	response.SetModel(modelName)
 	return llm, app, response, nil
 }

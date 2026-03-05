@@ -66,20 +66,20 @@ func (v *GoogleAI) GetEmbedder(d *models.Datasource) (*embeddings.EmbedderImpl, 
 }
 
 func (v *GoogleAI) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, r *http.Request) (*models.LLM, *models.App, models.ITokenResponse, error) {
-	modelName, err := extractModelIDFromGoogleURL(r.URL.Path)
-	if err != nil {
+	response := &responses.GoogleAIChatResponse{}
+	if err := json.Unmarshal(body, response); err != nil {
 		return nil, nil, nil, err
 	}
 
+	// Prefer modelVersion from the response body (most accurate)
+	modelName := response.ModelVersion
+	if modelName == "" {
+		modelName, _ = extractModelIDFromGoogleURL(r.URL.Path)
+	}
 	if modelName == "" {
 		modelName = "googleai-gemini-no-id"
 	}
 
-	response := &responses.GoogleAIChatResponse{}
-	err = json.Unmarshal(body, response)
-	if err != nil {
-		return nil, nil, nil, err
-	}
 	response.SetModel(modelName)
 	return llm, app, response, nil
 }
@@ -87,14 +87,20 @@ func (v *GoogleAI) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode 
 func (v *GoogleAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*models.LLM, *models.App, models.ITokenResponse, error) {
 	var streamChunks []responses.GoogleAIStreamChunk
 
-	err := json.Unmarshal(resps, &streamChunks)
-	if err != nil {
-		var singleChunk responses.GoogleAIStreamChunk
-
-		if singleErr := json.Unmarshal(resps, &singleChunk); singleErr == nil {
-			streamChunks = append(streamChunks, singleChunk)
-		} else {
-			return nil, nil, nil, fmt.Errorf("failed to unmarshal googleai streaming response: %w", err)
+	// Try SSE format first (when alt=sse is used, which is the standard for streaming)
+	if isSSEFormat(resps) {
+		streamChunks = parseSSEGoogleAIChunks(resps)
+	} else {
+		// Try JSON array format (non-SSE streaming)
+		err := json.Unmarshal(resps, &streamChunks)
+		if err != nil {
+			// Fallback: try single JSON object
+			var singleChunk responses.GoogleAIStreamChunk
+			if singleErr := json.Unmarshal(resps, &singleChunk); singleErr == nil {
+				streamChunks = append(streamChunks, singleChunk)
+			} else {
+				return nil, nil, nil, fmt.Errorf("failed to unmarshal googleai streaming response: %w", err)
+			}
 		}
 	}
 
@@ -104,7 +110,11 @@ func (v *GoogleAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, st
 
 	finalChunk := streamChunks[len(streamChunks)-1]
 
-	modelName, _ := extractModelIDFromGoogleURL(r.URL.Path)
+	// Prefer modelVersion from the response itself (most accurate)
+	modelName := finalChunk.ModelVersion
+	if modelName == "" {
+		modelName, _ = extractModelIDFromGoogleURL(r.URL.Path)
+	}
 	if modelName == "" {
 		modelName = "googleai-gemini-no-id"
 	}
@@ -118,6 +128,44 @@ func (v *GoogleAI) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, st
 		finalChunk.UsageMetadata.ThoughtsTokenCount
 
 	return llm, app, aggregate, nil
+}
+
+// isSSEFormat checks if the response data is in SSE (Server-Sent Events) format.
+func isSSEFormat(data []byte) bool {
+	// Check first non-empty line for "data:" prefix
+	for _, line := range strings.SplitN(string(data), "\n", 5) {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		return strings.HasPrefix(line, "data:")
+	}
+	return false
+}
+
+// parseSSEGoogleAIChunks parses SSE-formatted streaming response into GoogleAIStreamChunks.
+// Google's streamGenerateContent with alt=sse returns:
+//
+//	data: {"candidates":[...],"usageMetadata":{...},"modelVersion":"gemini-2.5-pro"}
+//	data: {"candidates":[...],"usageMetadata":{...},"modelVersion":"gemini-2.5-pro"}
+func parseSSEGoogleAIChunks(data []byte) []responses.GoogleAIStreamChunk {
+	var chunks []responses.GoogleAIStreamChunk
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		jsonData := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if jsonData == "" || jsonData == "[DONE]" {
+			continue
+		}
+		var chunk responses.GoogleAIStreamChunk
+		if err := json.Unmarshal([]byte(jsonData), &chunk); err != nil {
+			continue
+		}
+		chunks = append(chunks, chunk)
+	}
+	return chunks
 }
 
 // ProxySetAuthHeader injects the required Google AI authentication credentials into the
