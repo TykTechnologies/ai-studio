@@ -50,6 +50,7 @@ type GoogleAIStreamChunk struct {
 		CandidatesTokenCount int `json:"candidatesTokenCount"`
 		TotalTokenCount      int `json:"totalTokenCount"`
 		ThoughtsTokenCount   int `json:"thoughtsTokenCount"`
+		CachedContentTokenCount int `json:"cachedContentTokenCount"`
 	} `json:"usageMetadata"`
 	ModelVersion string `json:"modelVersion"`
 }
