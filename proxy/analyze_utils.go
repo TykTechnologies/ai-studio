@@ -116,6 +116,12 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 	cacheWriteTokens := response.GetCacheWritePromptTokens()
 	cacheReadTokens := response.GetCacheReadPromptTokens()
 
+	// Subtract cached tokens from prompt tokens to avoid double counting for Google models.
+	// Google's promptTokenCount includes cachedContentTokenCount.
+	if llm.Vendor == models.GOOGLEAI {
+		pt = pt - cacheReadTokens - cacheWriteTokens
+	}
+
 	// Use actual timestamp for the record, not budget start dates
 	rec := &models.LLMChatRecord{
 		LLMID:                  llm.ID,
