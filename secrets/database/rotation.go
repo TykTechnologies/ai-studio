@@ -12,23 +12,16 @@ import (
 
 const rotationBatchSize = 100
 
-// RotateKey decrypts all secrets with oldKey and re-encrypts them with the
-// store's current encryption method (v1 or v2 envelope). For migrating
-// v1 secrets to v2 envelope encryption, create the store with NewWithEnvelope
-// and call RotateKey with the same key.
-func (s *Database) RotateKey(ctx context.Context, oldKey, newKey string) (*secrets.RotationResult, error) {
-	// Build old ciphers for decryption (includes v2 if envelope is configured)
+// RotateKey decrypts all secrets with oldKey and re-encrypts them with
+// envelope encryption (v2). This migrates any legacy v1 secrets to v2.
+func (s *Database) RotateKey(ctx context.Context, oldKey, _ string) (*secrets.RotationResult, error) {
+	// Build old ciphers for decryption (v1 legacy + v2 envelope)
 	oldCiphers := secrets.LegacyCipherInstances()
-	if s.envelope != nil {
-		oldCiphers["v2"] = s.envelope
-	}
+	oldCiphers["v2"] = s.envelope
 
 	result := &secrets.RotationResult{
 		OldCipher: "all",
 		NewCipher: "v2",
-	}
-	if s.envelope == nil {
-		result.NewCipher = "v1"
 	}
 
 	var offset int
@@ -61,12 +54,7 @@ func (s *Database) RotateKey(ctx context.Context, oldKey, newKey string) (*secre
 				continue
 			}
 
-			var encrypted string
-			if s.envelope != nil {
-				encrypted, err = s.encryptValue(ctx, plaintext)
-			} else {
-				encrypted, err = secrets.EncryptWith(ctx, s.v1Cipher, newKey, plaintext)
-			}
+			encrypted, err := s.encryptValue(ctx, plaintext)
 			if err != nil {
 				log.Warnf("rotation: failed to re-encrypt secret %d (%s): %v", secret.ID, secret.VarName, err)
 				result.Errors = append(result.Errors, secrets.RotationError{

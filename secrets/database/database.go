@@ -31,27 +31,22 @@ func init() {
 type Database struct {
 	db       *gorm.DB
 	rawKey   string
-	v1Cipher secrets.Cipher
 	ciphers  map[string]secrets.Cipher
 	envelope *secrets.EnvelopeCipher
 	wrapper  secrets.KeyWrapper
 }
 
-// New creates a new DB-backed secret store using legacy v1 encryption only.
+// New creates a new DB-backed secret store with envelope encryption (v2).
+// The rawKey is used both as the KEK (via LocalKeyWrapper) and for decrypting
+// legacy v1 secrets. New secrets are always written with envelope encryption.
 func New(db *gorm.DB, rawKey string) *Database {
-	v1 := secrets.LegacyCipherInstances()["v1"]
-	return &Database{
-		db:       db,
-		rawKey:   rawKey,
-		v1Cipher: v1,
-		ciphers:  secrets.LegacyCipherInstances(),
-	}
+	wrapper := secrets.NewLocalKeyWrapper(rawKey)
+	return NewWithEnvelope(db, rawKey, wrapper)
 }
 
-// NewWithEnvelope creates a DB-backed secret store that uses envelope encryption (v2).
-// Each value is encrypted with a shared DEK from the encryption_keys table.
-// The DEK is wrapped by the provided KeyWrapper.
-// Falls back to reading v1 encrypted data transparently.
+// NewWithEnvelope creates a DB-backed secret store that uses envelope encryption (v2)
+// with a custom KeyWrapper (e.g., Vault, AWS KMS). New secrets are always written
+// with envelope encryption. Legacy v1 secrets are read transparently.
 func NewWithEnvelope(db *gorm.DB, rawKey string, wrapper secrets.KeyWrapper) *Database {
 	ks := &gormKeyStore{db: db, wrapper: wrapper}
 	envelope := secrets.NewEnvelopeCipher(wrapper, ks)
@@ -61,7 +56,6 @@ func NewWithEnvelope(db *gorm.DB, rawKey string, wrapper secrets.KeyWrapper) *Da
 	return &Database{
 		db:       db,
 		rawKey:   rawKey,
-		v1Cipher: ciphers["v1"],
 		ciphers:  ciphers,
 		envelope: envelope,
 		wrapper:  wrapper,
@@ -226,12 +220,9 @@ func (s *Database) ResolveReference(ctx context.Context, reference string, prese
 	}
 }
 
-// encryptValue encrypts using envelope (v2) if available, otherwise v1.
+// encryptValue encrypts using envelope encryption (v2).
 func (s *Database) encryptValue(ctx context.Context, plaintext string) (string, error) {
-	if s.envelope != nil {
-		return secrets.EncryptEnvelope(ctx, s.envelope, plaintext)
-	}
-	return secrets.EncryptWith(ctx, s.v1Cipher, s.rawKey, plaintext)
+	return secrets.EncryptEnvelope(ctx, s.envelope, plaintext)
 }
 
 // --- gormKeyStore implements secrets.KeyStore backed by GORM ---

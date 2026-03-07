@@ -34,8 +34,8 @@ func TestDatabase_CreateAndGetByID(t *testing.T) {
 	secret := &secrets.Secret{VarName: "MY_KEY", Value: "my-secret-value"}
 	require.NoError(t, store.Create(ctx, secret))
 
-	// Value should be encrypted in DB
-	assert.True(t, strings.HasPrefix(secret.Value, "$ENC/"))
+	// Value should be v2 envelope encrypted
+	assert.True(t, strings.HasPrefix(secret.Value, "$ENC/v2/"))
 
 	// GetByID with preserveRef=false decrypts
 	got, err := store.GetByID(ctx, secret.ID, false)
@@ -136,7 +136,7 @@ func TestDatabase_EncryptDecryptValue(t *testing.T) {
 
 	encrypted, err := store.EncryptValue(ctx, "hello")
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(encrypted, "$ENC/"))
+	assert.True(t, strings.HasPrefix(encrypted, "$ENC/v2/"))
 
 	decrypted, err := store.DecryptValue(ctx, encrypted)
 	require.NoError(t, err)
@@ -186,48 +186,115 @@ func TestRegistryUnknownStore(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown store type")
 }
 
-// --- Envelope encryption (v2) tests ---
+// --- Backward compatibility: v1 (legacy CFB) secrets ---
 
-func newEnvelopeTestStore(t *testing.T) *Database {
+// insertV1Secret encrypts a value with legacy v1 CFB cipher and inserts it
+// directly into the database, simulating data written by older versions.
+func insertV1Secret(t *testing.T, db *gorm.DB, rawKey, varName, plaintext string) *secrets.Secret {
 	t.Helper()
-	db := setupTestDB(t)
-	wrapper := secrets.NewLocalKeyWrapper("test-kek")
-	return NewWithEnvelope(db, "test-secret-key", wrapper)
+	ctx := context.Background()
+	v1 := secrets.LegacyCipherInstances()["v1"]
+	encrypted, err := secrets.EncryptWith(ctx, v1, rawKey, plaintext)
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(encrypted, "$ENC/"))
+	require.False(t, strings.HasPrefix(encrypted, "$ENC/v2/"))
+
+	secret := &secrets.Secret{VarName: varName, Value: encrypted}
+	require.NoError(t, db.Create(secret).Error)
+	return secret
 }
 
+func TestBackwardCompat_ReadV1Secret(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "compat-key"
+	ctx := context.Background()
+
+	// Insert a v1 encrypted secret directly
+	secret := insertV1Secret(t, db, rawKey, "LEGACY_V1", "v1-data")
+
+	// Current store should decrypt it transparently
+	store := New(db, rawKey)
+	got, err := store.GetByID(ctx, secret.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, "v1-data", got.Value)
+}
+
+func TestBackwardCompat_ReadV1ByVarName(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "compat-key"
+	ctx := context.Background()
+
+	insertV1Secret(t, db, rawKey, "LEGACY_TOKEN", "sk-legacy-123")
+
+	store := New(db, rawKey)
+	got, err := store.GetByVarName(ctx, "LEGACY_TOKEN", false)
+	require.NoError(t, err)
+	assert.Equal(t, "sk-legacy-123", got.Value)
+}
+
+func TestBackwardCompat_UpdateV1SecretRewritesAsV2(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "compat-key"
+	ctx := context.Background()
+
+	secret := insertV1Secret(t, db, rawKey, "UPGRADE_ME", "old-v1-value")
+
+	store := New(db, rawKey)
+
+	// Read, modify, and update
+	got, err := store.GetByID(ctx, secret.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, "old-v1-value", got.Value)
+
+	got.Value = "new-value"
+	require.NoError(t, store.Update(ctx, got))
+
+	// Verify DB now has v2 format
+	var raw secrets.Secret
+	require.NoError(t, db.First(&raw, secret.ID).Error)
+	assert.True(t, strings.HasPrefix(raw.Value, "$ENC/v2/"), "updated secret should use v2 envelope format")
+
+	// Value should decrypt correctly
+	got2, err := store.GetByID(ctx, secret.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, "new-value", got2.Value)
+}
+
+func TestBackwardCompat_DecryptValueV1(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "compat-key"
+	ctx := context.Background()
+
+	// Encrypt with v1 manually
+	v1 := secrets.LegacyCipherInstances()["v1"]
+	encrypted, err := secrets.EncryptWith(ctx, v1, rawKey, "direct-v1")
+	require.NoError(t, err)
+
+	// DecryptValue should handle it
+	store := New(db, rawKey)
+	decrypted, err := store.DecryptValue(ctx, encrypted)
+	require.NoError(t, err)
+	assert.Equal(t, "direct-v1", decrypted)
+}
+
+// --- Envelope encryption (v2) tests ---
+
 func TestEnvelope_CreateAndGetByID(t *testing.T) {
-	store := newEnvelopeTestStore(t)
+	store := newTestStore(t)
 	ctx := context.Background()
 
 	secret := &secrets.Secret{VarName: "ENV_KEY", Value: "envelope-secret"}
 	require.NoError(t, store.Create(ctx, secret))
 
-	// Value in struct should be v2 encrypted
 	assert.True(t, strings.HasPrefix(secret.Value, "$ENC/v2/"))
 
-	// GetByID decrypts
 	got, err := store.GetByID(ctx, secret.ID, false)
 	require.NoError(t, err)
 	assert.Equal(t, "envelope-secret", got.Value)
 }
 
-func TestEnvelope_Update(t *testing.T) {
-	store := newEnvelopeTestStore(t)
-	ctx := context.Background()
-
-	secret := &secrets.Secret{VarName: "UPD", Value: "old"}
-	require.NoError(t, store.Create(ctx, secret))
-
-	secret.Value = "new"
-	require.NoError(t, store.Update(ctx, secret))
-
-	got, err := store.GetByID(ctx, secret.ID, false)
-	require.NoError(t, err)
-	assert.Equal(t, "new", got.Value)
-}
-
 func TestEnvelope_EncryptDecryptValue(t *testing.T) {
-	store := newEnvelopeTestStore(t)
+	store := newTestStore(t)
 	ctx := context.Background()
 
 	encrypted, err := store.EncryptValue(ctx, "hello envelope")
@@ -239,27 +306,6 @@ func TestEnvelope_EncryptDecryptValue(t *testing.T) {
 	assert.Equal(t, "hello envelope", decrypted)
 }
 
-func TestEnvelope_ReadsLegacyV1(t *testing.T) {
-	db := setupTestDB(t)
-	rawKey := "compat-key"
-	ctx := context.Background()
-
-	// Write with v1 store
-	v1Store := New(db, rawKey)
-	secret := &secrets.Secret{VarName: "LEGACY_V1", Value: "v1-data"}
-	require.NoError(t, v1Store.Create(ctx, secret))
-	assert.True(t, strings.HasPrefix(secret.Value, "$ENC/"))
-	assert.False(t, strings.HasPrefix(secret.Value, "$ENC/v2/"))
-
-	// Read with v2 envelope store
-	wrapper := secrets.NewLocalKeyWrapper(rawKey)
-	v2Store := NewWithEnvelope(db, rawKey, wrapper)
-
-	got, err := v2Store.GetByID(ctx, secret.ID, false)
-	require.NoError(t, err)
-	assert.Equal(t, "v1-data", got.Value)
-}
-
 func TestEnvelope_RotateKEK(t *testing.T) {
 	db := setupTestDB(t)
 	rawKey := "kek-rotation-key"
@@ -268,7 +314,6 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	oldWrapper := secrets.NewLocalKeyWrapper("old-kek")
 	oldStore := NewWithEnvelope(db, rawKey, oldWrapper)
 
-	// Create secrets with old KEK
 	for _, name := range []string{"A", "B", "C"} {
 		s := &secrets.Secret{VarName: name, Value: "val-" + name}
 		require.NoError(t, oldStore.Create(ctx, s))
@@ -279,7 +324,7 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	result, err := oldStore.RotateKEK(ctx, oldWrapper, newWrapper)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Total)   // 1 encryption key
-	assert.Equal(t, 1, result.Rotated) // re-wrapped
+	assert.Equal(t, 1, result.Rotated)
 	assert.Empty(t, result.Errors)
 
 	// New store with new KEK should decrypt all secrets
@@ -290,54 +335,20 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 		assert.Equal(t, "val-"+name, got.Value)
 	}
 
-	// Old store should NOT decrypt (wrong KEK for the re-wrapped key)
+	// Old store should NOT decrypt (wrong KEK)
 	_, err = oldStore.GetByVarName(ctx, "A", false)
 	assert.Error(t, err)
 }
 
-func TestEnvelope_FullKeyRotation_MigratesV1ToV2(t *testing.T) {
-	db := setupTestDB(t)
-	rawKey := "migration-key"
-	ctx := context.Background()
-
-	// Create v1 secret
-	v1Store := New(db, rawKey)
-	s := &secrets.Secret{VarName: "MIGRATE_ME", Value: "migrate-data"}
-	require.NoError(t, v1Store.Create(ctx, s))
-
-	// Full RotateKey with envelope store migrates v1 → v2
-	wrapper := secrets.NewLocalKeyWrapper(rawKey)
-	v2Store := NewWithEnvelope(db, rawKey, wrapper)
-
-	result, err := v2Store.RotateKey(ctx, rawKey, rawKey)
-	require.NoError(t, err)
-	assert.Equal(t, 1, result.Total)
-	assert.Equal(t, 1, result.Rotated)
-	assert.Equal(t, "v2", result.NewCipher)
-
-	// Verify DB now has v2 format
-	var raw secrets.Secret
-	require.NoError(t, db.First(&raw, s.ID).Error)
-	assert.True(t, strings.HasPrefix(raw.Value, "$ENC/v2/"))
-
-	// Should still decrypt
-	got, err := v2Store.GetByVarName(ctx, "MIGRATE_ME", false)
-	require.NoError(t, err)
-	assert.Equal(t, "migrate-data", got.Value)
-}
-
 func TestEnvelope_EncryptionKeyAutoCreated(t *testing.T) {
 	db := setupTestDB(t)
-	wrapper := secrets.NewLocalKeyWrapper("auto-kek")
-	store := NewWithEnvelope(db, "key", wrapper)
+	store := New(db, "auto-key")
 	ctx := context.Background()
 
-	// No encryption keys yet
 	var count int64
 	db.Model(&secrets.EncryptionKey{}).Count(&count)
 	assert.Equal(t, int64(0), count)
 
-	// First encrypt auto-creates an active key
 	s := &secrets.Secret{VarName: "AUTO", Value: "auto-val"}
 	require.NoError(t, store.Create(ctx, s))
 
@@ -347,4 +358,17 @@ func TestEnvelope_EncryptionKeyAutoCreated(t *testing.T) {
 	var key secrets.EncryptionKey
 	db.First(&key)
 	assert.Equal(t, secrets.EncryptionKeyActive, key.Status)
+}
+
+func TestEnvelope_NewAlwaysWritesV2(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	// All new secrets should be v2
+	for _, name := range []string{"A", "B", "C"} {
+		s := &secrets.Secret{VarName: name, Value: "val-" + name}
+		require.NoError(t, store.Create(ctx, s))
+		assert.True(t, strings.HasPrefix(s.Value, "$ENC/v2/"),
+			"New() should always write v2 envelope format, got: %s", s.Value)
+	}
 }
