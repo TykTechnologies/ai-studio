@@ -18,9 +18,20 @@ This guide explains how to deploy Tyk AI Studio (Tyk AI Studio), a secure and ex
 - Kubernetes 1.16+
 - Helm 3.0+
 - kubectl configured with access to your cluster
-- A `tykAiLicense` string from Tyk Technologies
-- A securely generated `TYK_AI_SECRET_KEY` string for secrets encryption
+- A securely generated `TYK_AI_SECRET_KEY` string for secrets encryption (generate with `openssl rand -hex 16`)
+- A `tykAiLicense` string from Tyk Technologies (Enterprise Edition)
 - If using SSL/TLS: cert-manager installed in your cluster
+
+## Edition Selection
+
+Tyk AI Studio images are available in two editions:
+
+| Component | Community Edition | Enterprise Edition |
+|-----------|------------------|--------------------|
+| AI Studio | `tykio/tyk-ai-studio:latest` | `tykio/tyk-ai-studio:latest-ent` |
+| Microgateway | `tykio/microgateway:latest` | `tykio/microgateway:latest-ent` |
+
+Update the `image` values in your Helm values file according to your edition.
 
 *Note: The following examples use placeholder values (e.g., `your-domain.com`, `your-secret-key`). Remember to replace these with your actual configuration values.*
 
@@ -297,6 +308,216 @@ kubectl create secret generic nats-ca-secret --from-file=ca.crt
 ```bash
 helm install midsommar . -f values-prod-nats.yaml
 ```
+
+## Option 5: Adding Edge Gateways (Microgateway)
+
+> **Note:** Edge gateway deployments are an **Enterprise Edition** feature.
+
+To add a Microgateway as a data plane (spoke) to your AI Studio deployment (hub), you need to:
+
+1. Enable control plane mode on AI Studio
+2. Deploy the Microgateway with edge configuration
+3. Configure shared secrets between the two components
+
+### Step 1: Update AI Studio Values for Control Mode
+
+Add these settings to your existing AI Studio values file:
+
+```yaml
+config:
+  # ... your existing config ...
+  gatewayMode: "control"
+  grpcPort: "50051"
+  grpcHost: "0.0.0.0"
+  grpcTlsInsecure: "true"  # Set to "false" in production with TLS
+  grpcAuthToken: "your-grpc-auth-token"  # Generate with: openssl rand -hex 16
+
+midsommar:
+  service:
+    ports:
+      - name: http
+        port: 8080
+      - name: gateway
+        port: 9090
+      - name: grpc
+        port: 50051
+```
+
+### Step 2: Create Microgateway Resources
+
+Create a `microgateway-values.yaml`:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: analytics-pulse-config
+data:
+  analytics-pulse.yaml: |
+    version: "1.0"
+    data_collection_plugins:
+      - name: "analytics_pulse"
+        enabled: true
+        hook_types: ["analytics", "budget", "proxy_log"]
+        replace_database: false
+        priority: 100
+        config:
+          interval_seconds: 10
+          max_batch_size: 1000
+          max_buffer_size: 10000
+          compression_enabled: true
+          include_proxy_summaries: true
+          include_request_response_data: true
+          edge_retention_hours: 24
+          excluded_vendors: ["mock", "test"]
+          timeout_seconds: 30
+          max_retries: 3
+          retry_interval_secs: 5
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: microgateway-secrets
+type: Opaque
+stringData:
+  EDGE_AUTH_TOKEN: "your-grpc-auth-token"          # Must match AI Studio grpcAuthToken
+  ENCRYPTION_KEY: "your-microgateway-encryption-key" # Must match AI Studio microgatewayEncryptionKey
+  # TYK_AI_LICENSE: "your-license-key"             # Enterprise only
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: microgateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: microgateway
+  template:
+    metadata:
+      labels:
+        app: microgateway
+    spec:
+      containers:
+        - name: microgateway
+          image: tykio/microgateway:latest-ent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: microgateway-secrets
+          env:
+            - name: PORT
+              value: "8080"
+            - name: GATEWAY_MODE
+              value: "edge"
+            - name: CONTROL_ENDPOINT
+              value: "midsommar:50051"  # AI Studio service name and gRPC port
+            - name: EDGE_ID
+              value: "edge-1"
+            - name: EDGE_NAMESPACE
+              value: "default"
+            - name: EDGE_HEARTBEAT_INTERVAL
+              value: "30s"
+            - name: EDGE_ALLOW_INSECURE
+              value: "true"
+            - name: EDGE_TLS_ENABLED
+              value: "false"
+            - name: DATABASE_TYPE
+              value: "sqlite"
+            - name: DATABASE_DSN
+              value: "file:./data/edge.db?cache=shared&mode=rwc"
+            - name: DB_AUTO_MIGRATE
+              value: "true"
+            - name: GATEWAY_ENABLE_ANALYTICS
+              value: "true"
+            - name: ANALYTICS_ENABLED
+              value: "true"
+            - name: PLUGINS_CONFIG_PATH
+              value: "/app/config/analytics-pulse.yaml"
+            - name: LOG_LEVEL
+              value: "info"
+          volumeMounts:
+            - name: analytics-config
+              mountPath: /app/config
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: analytics-config
+          configMap:
+            name: analytics-pulse-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: microgateway
+spec:
+  selector:
+    app: microgateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+```
+
+### Step 3: Deploy
+
+```bash
+# Update AI Studio with control mode
+helm upgrade midsommar . -f your-values.yaml
+
+# Deploy Microgateway resources
+kubectl apply -f microgateway-values.yaml
+```
+
+### Step 4: Add Ingress for Microgateway (Optional)
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: microgateway-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: gateway.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: microgateway
+                port:
+                  number: 8080
+```
+
+### Shared Secrets Reference
+
+These values **must match** between AI Studio and Microgateway:
+
+| AI Studio Config | Microgateway Secret/Env | Purpose |
+|---|---|---|
+| `config.grpcAuthToken` | `EDGE_AUTH_TOKEN` | gRPC authentication |
+| `config.microgatewayEncryptionKey` | `ENCRYPTION_KEY` | Config encryption |
+| `config.tykAiLicense` | `TYK_AI_LICENSE` | Enterprise license |
+
+### Scaling Edge Gateways
+
+To deploy multiple edge gateways (e.g., for different regions), create separate Deployments with unique `EDGE_ID` and `EDGE_NAMESPACE` values:
+
+```yaml
+env:
+  - name: EDGE_ID
+    value: "edge-eu-west-1"
+  - name: EDGE_NAMESPACE
+    value: "eu-west"
+```
+
+Each edge instance registers independently with the AI Studio control plane and receives only the configuration assigned to its namespace.
 
 ## Message Queue Configuration
 
