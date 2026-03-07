@@ -4,7 +4,10 @@ package database
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -26,19 +29,42 @@ func init() {
 
 // Database implements secrets.SecretStore backed by a GORM database.
 type Database struct {
-	db      *gorm.DB
-	rawKey  string
-	cipher  secrets.Cipher
-	ciphers map[string]secrets.Cipher
+	db       *gorm.DB
+	rawKey   string
+	v1Cipher secrets.Cipher
+	ciphers  map[string]secrets.Cipher
+	envelope *secrets.EnvelopeCipher
+	wrapper  secrets.KeyWrapper
 }
 
-// New creates a new DB-backed secret store.
+// New creates a new DB-backed secret store using legacy v1 encryption only.
 func New(db *gorm.DB, rawKey string) *Database {
+	v1 := secrets.LegacyCipherInstances()["v1"]
 	return &Database{
-		db:      db,
-		rawKey:  rawKey,
-		cipher:  secrets.DefaultCipherInstance(),
-		ciphers: secrets.AllCipherInstances(),
+		db:       db,
+		rawKey:   rawKey,
+		v1Cipher: v1,
+		ciphers:  secrets.LegacyCipherInstances(),
+	}
+}
+
+// NewWithEnvelope creates a DB-backed secret store that uses envelope encryption (v2).
+// Each value is encrypted with a shared DEK from the encryption_keys table.
+// The DEK is wrapped by the provided KeyWrapper.
+// Falls back to reading v1 encrypted data transparently.
+func NewWithEnvelope(db *gorm.DB, rawKey string, wrapper secrets.KeyWrapper) *Database {
+	ks := &gormKeyStore{db: db, wrapper: wrapper}
+	envelope := secrets.NewEnvelopeCipher(wrapper, ks)
+	ciphers := secrets.LegacyCipherInstances()
+	ciphers["v2"] = envelope
+
+	return &Database{
+		db:       db,
+		rawKey:   rawKey,
+		v1Cipher: ciphers["v1"],
+		ciphers:  ciphers,
+		envelope: envelope,
+		wrapper:  wrapper,
 	}
 }
 
@@ -50,7 +76,7 @@ func (s *Database) DB() *gorm.DB {
 func (s *Database) Create(ctx context.Context, secret *secrets.Secret) error {
 	log.Debugf("[DEBUG] CreateSecret: Got key, length: %d", len(s.rawKey))
 
-	encrypted, err := secrets.EncryptWith(ctx, s.cipher, s.rawKey, secret.Value)
+	encrypted, err := s.encryptValue(ctx, secret.Value)
 	if err != nil {
 		log.Errorf("[DEBUG] CreateSecret: Failed to encrypt value: %v", err)
 		return err
@@ -103,7 +129,7 @@ func (s *Database) GetByVarName(ctx context.Context, name string, preserveRef bo
 }
 
 func (s *Database) Update(ctx context.Context, secret *secrets.Secret) error {
-	encrypted, err := secrets.EncryptWith(ctx, s.cipher, s.rawKey, secret.Value)
+	encrypted, err := s.encryptValue(ctx, secret.Value)
 	if err != nil {
 		return err
 	}
@@ -162,7 +188,7 @@ func (s *Database) EnsureDefaults(ctx context.Context, names []string) error {
 }
 
 func (s *Database) EncryptValue(ctx context.Context, plaintext string) (string, error) {
-	return secrets.EncryptWith(ctx, s.cipher, s.rawKey, plaintext)
+	return s.encryptValue(ctx, plaintext)
 }
 
 func (s *Database) DecryptValue(ctx context.Context, ciphertext string) (string, error) {
@@ -198,4 +224,80 @@ func (s *Database) ResolveReference(ctx context.Context, reference string, prese
 	default:
 		return reference
 	}
+}
+
+// encryptValue encrypts using envelope (v2) if available, otherwise v1.
+func (s *Database) encryptValue(ctx context.Context, plaintext string) (string, error) {
+	if s.envelope != nil {
+		return secrets.EncryptEnvelope(ctx, s.envelope, plaintext)
+	}
+	return secrets.EncryptWith(ctx, s.v1Cipher, s.rawKey, plaintext)
+}
+
+// --- gormKeyStore implements secrets.KeyStore backed by GORM ---
+
+type gormKeyStore struct {
+	db      *gorm.DB
+	wrapper secrets.KeyWrapper
+}
+
+func (ks *gormKeyStore) GetActiveKey(ctx context.Context) (*secrets.EncryptionKey, error) {
+	var key secrets.EncryptionKey
+	err := ks.db.Where("status = ?", secrets.EncryptionKeyActive).First(&key).Error
+	if err == nil {
+		return &key, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, fmt.Errorf("query active key: %w", err)
+	}
+
+	// No active key — generate one
+	return ks.generateKey(ctx)
+}
+
+func (ks *gormKeyStore) GetKeyByID(_ context.Context, id uint) (*secrets.EncryptionKey, error) {
+	var key secrets.EncryptionKey
+	if err := ks.db.First(&key, id).Error; err != nil {
+		return nil, err
+	}
+	return &key, nil
+}
+
+func (ks *gormKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*secrets.EncryptionKey, error) {
+	key := &secrets.EncryptionKey{
+		WrappedKey: wrappedKey,
+		Status:     status,
+	}
+	if err := ks.db.Create(key).Error; err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+func (ks *gormKeyStore) ListKeys(_ context.Context) ([]secrets.EncryptionKey, error) {
+	var keys []secrets.EncryptionKey
+	if err := ks.db.Order("id ASC").Find(&keys).Error; err != nil {
+		return nil, err
+	}
+	return keys, nil
+}
+
+func (ks *gormKeyStore) UpdateKey(_ context.Context, key *secrets.EncryptionKey) error {
+	return ks.db.Save(key).Error
+}
+
+func (ks *gormKeyStore) generateKey(ctx context.Context) (*secrets.EncryptionKey, error) {
+	// Generate random 256-bit DEK
+	dek := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, dek); err != nil {
+		return nil, fmt.Errorf("generate dek: %w", err)
+	}
+
+	// Wrap with KEK
+	wrapped, err := ks.wrapper.WrapKey(ctx, dek)
+	if err != nil {
+		return nil, fmt.Errorf("wrap new dek: %w", err)
+	}
+
+	return ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), secrets.EncryptionKeyActive)
 }

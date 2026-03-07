@@ -1,0 +1,317 @@
+package secrets
+
+import (
+	"context"
+	"encoding/base64"
+	"crypto/rand"
+	"fmt"
+	"io"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// memKeyStore is an in-memory KeyStore for testing.
+type memKeyStore struct {
+	mu     sync.Mutex
+	keys   map[uint]*EncryptionKey
+	nextID uint
+}
+
+func newMemKeyStore() *memKeyStore {
+	return &memKeyStore{keys: make(map[uint]*EncryptionKey), nextID: 1}
+}
+
+func (m *memKeyStore) GetActiveKey(_ context.Context) (*EncryptionKey, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, k := range m.keys {
+		if k.Status == EncryptionKeyActive {
+			return k, nil
+		}
+	}
+	return nil, fmt.Errorf("no active key")
+}
+
+func (m *memKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k, ok := m.keys[id]
+	if !ok {
+		return nil, fmt.Errorf("key %d not found", id)
+	}
+	return k, nil
+}
+
+func (m *memKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k := &EncryptionKey{ID: m.nextID, WrappedKey: wrappedKey, Status: status}
+	m.keys[k.ID] = k
+	m.nextID++
+	return k, nil
+}
+
+func (m *memKeyStore) ListKeys(_ context.Context) ([]EncryptionKey, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []EncryptionKey
+	for _, k := range m.keys {
+		out = append(out, *k)
+	}
+	return out, nil
+}
+
+func (m *memKeyStore) UpdateKey(_ context.Context, key *EncryptionKey) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.keys[key.ID] = key
+	return nil
+}
+
+// seedActiveKey generates a DEK, wraps it, and stores it as the active key.
+func seedActiveKey(t *testing.T, ks *memKeyStore, wrapper KeyWrapper) {
+	t.Helper()
+	ctx := context.Background()
+	dek := make([]byte, 32)
+	_, err := io.ReadFull(rand.Reader, dek)
+	require.NoError(t, err)
+	wrapped, err := wrapper.WrapKey(ctx, dek)
+	require.NoError(t, err)
+	_, err = ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
+	require.NoError(t, err)
+}
+
+func TestLocalKeyWrapper_RoundTrip(t *testing.T) {
+	w := NewLocalKeyWrapper("test-kek")
+	ctx := context.Background()
+
+	dek := make([]byte, 32)
+	for i := range dek {
+		dek[i] = byte(i)
+	}
+
+	wrapped, err := w.WrapKey(ctx, dek)
+	require.NoError(t, err)
+	assert.NotEqual(t, dek, wrapped)
+
+	unwrapped, err := w.UnwrapKey(ctx, wrapped)
+	require.NoError(t, err)
+	assert.Equal(t, dek, unwrapped)
+}
+
+func TestLocalKeyWrapper_WrongKEK(t *testing.T) {
+	w1 := NewLocalKeyWrapper("kek-1")
+	w2 := NewLocalKeyWrapper("kek-2")
+	ctx := context.Background()
+
+	dek := []byte("this-is-a-32-byte-data-enc-key!")
+
+	wrapped, err := w1.WrapKey(ctx, dek)
+	require.NoError(t, err)
+
+	_, err = w2.UnwrapKey(ctx, wrapped)
+	assert.Error(t, err, "wrong KEK should fail to unwrap")
+}
+
+func TestLocalKeyWrapper_TooShort(t *testing.T) {
+	w := NewLocalKeyWrapper("kek")
+	ctx := context.Background()
+
+	_, err := w.UnwrapKey(ctx, []byte("short"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "too short")
+}
+
+func TestEnvelopeCipher_RoundTrip(t *testing.T) {
+	w := NewLocalKeyWrapper("my-kek")
+	ks := newMemKeyStore()
+	seedActiveKey(t, ks, w)
+	c := NewEnvelopeCipher(w, ks)
+	ctx := context.Background()
+
+	assert.Equal(t, "v2", c.Version())
+
+	tests := []string{
+		"hello world",
+		"",
+		"special chars: !@#$%^&*()",
+		"unicode: 日本語テスト",
+	}
+
+	for _, plaintext := range tests {
+		t.Run(plaintext, func(t *testing.T) {
+			encrypted, err := c.Encrypt(ctx, nil, []byte(plaintext))
+			require.NoError(t, err)
+
+			decrypted, err := c.Decrypt(ctx, nil, encrypted)
+			require.NoError(t, err)
+			assert.Equal(t, plaintext, string(decrypted))
+		})
+	}
+}
+
+func TestEnvelopeCipher_FormatContainsKeyID(t *testing.T) {
+	w := NewLocalKeyWrapper("my-kek")
+	ks := newMemKeyStore()
+	seedActiveKey(t, ks, w)
+	c := NewEnvelopeCipher(w, ks)
+	ctx := context.Background()
+
+	encrypted, err := EncryptEnvelope(ctx, c, "test-data")
+	require.NoError(t, err)
+
+	// Should be $ENC/v2/<key_id>/<ciphertext>
+	assert.Contains(t, encrypted, "$ENC/v2/1/")
+}
+
+func TestEnvelopeCipher_TamperDetection(t *testing.T) {
+	w := NewLocalKeyWrapper("my-kek")
+	ks := newMemKeyStore()
+	seedActiveKey(t, ks, w)
+	c := NewEnvelopeCipher(w, ks)
+	ctx := context.Background()
+
+	encrypted, err := c.Encrypt(ctx, nil, []byte("sensitive"))
+	require.NoError(t, err)
+
+	// Tamper with ciphertext
+	payload := string(encrypted)
+	tampered := payload[:len(payload)-2] + "XX"
+
+	_, err = c.Decrypt(ctx, nil, []byte(tampered))
+	assert.Error(t, err, "tampered ciphertext should be rejected")
+}
+
+func TestEnvelopeCipher_InvalidFormat(t *testing.T) {
+	w := NewLocalKeyWrapper("my-kek")
+	ks := newMemKeyStore()
+	c := NewEnvelopeCipher(w, ks)
+	ctx := context.Background()
+
+	_, err := c.Decrypt(ctx, nil, []byte("no-slash"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid format")
+}
+
+func TestEnvelopeCipher_WrongKEK(t *testing.T) {
+	w1 := NewLocalKeyWrapper("kek-1")
+	w2 := NewLocalKeyWrapper("kek-2")
+	ks := newMemKeyStore()
+	seedActiveKey(t, ks, w1)
+	ctx := context.Background()
+
+	c1 := NewEnvelopeCipher(w1, ks)
+	c2 := NewEnvelopeCipher(w2, ks) // same key store, wrong wrapper
+
+	encrypted, err := c1.Encrypt(ctx, nil, []byte("secret"))
+	require.NoError(t, err)
+
+	_, err = c2.Decrypt(ctx, nil, encrypted)
+	assert.Error(t, err, "wrong KEK should fail to unwrap DEK")
+}
+
+func TestEncryptEnvelope_Passthrough(t *testing.T) {
+	w := NewLocalKeyWrapper("kek")
+	ks := newMemKeyStore()
+	seedActiveKey(t, ks, w)
+	c := NewEnvelopeCipher(w, ks)
+	ctx := context.Background()
+
+	result, err := EncryptEnvelope(ctx, c, "")
+	require.NoError(t, err)
+	assert.Equal(t, "", result)
+
+	result, err = EncryptEnvelope(ctx, c, "[redacted]")
+	require.NoError(t, err)
+	assert.Equal(t, "[redacted]", result)
+}
+
+func TestEncryptEnvelope_DecryptWithCipherMap(t *testing.T) {
+	w := NewLocalKeyWrapper("my-kek")
+	ks := newMemKeyStore()
+	seedActiveKey(t, ks, w)
+	envelope := NewEnvelopeCipher(w, ks)
+	ctx := context.Background()
+
+	encrypted, err := EncryptEnvelope(ctx, envelope, "hello envelope")
+	require.NoError(t, err)
+	assert.Contains(t, encrypted, "$ENC/v2/")
+
+	// DecryptWith should work when v2 cipher is in the map
+	ciphers := LegacyCipherInstances()
+	ciphers["v2"] = envelope
+
+	decrypted, err := DecryptWith(ctx, ciphers, "any-key", encrypted)
+	require.NoError(t, err)
+	assert.Equal(t, "hello envelope", decrypted)
+}
+
+func TestBackwardCompat_V2StoreReadsV1(t *testing.T) {
+	ctx := context.Background()
+	rawKey := "compat-key"
+
+	// Encrypt with v1
+	v1Enc, err := EncryptWith(ctx, LegacyCipherInstances()["v1"], rawKey, "v1-secret")
+	require.NoError(t, err)
+	assert.Contains(t, v1Enc, "$ENC/")
+
+	// Build cipher map with v2 available
+	w := NewLocalKeyWrapper(rawKey)
+	ks := newMemKeyStore()
+	seedActiveKey(t, ks, w)
+	envelope := NewEnvelopeCipher(w, ks)
+
+	ciphers := LegacyCipherInstances()
+	ciphers["v2"] = envelope
+
+	// v1 should decrypt through the combined cipher map
+	d1, err := DecryptWith(ctx, ciphers, rawKey, v1Enc)
+	require.NoError(t, err)
+	assert.Equal(t, "v1-secret", d1)
+
+	// v2 should also work
+	v2Enc, err := EncryptEnvelope(ctx, envelope, "v2-secret")
+	require.NoError(t, err)
+
+	d2, err := DecryptWith(ctx, ciphers, rawKey, v2Enc)
+	require.NoError(t, err)
+	assert.Equal(t, "v2-secret", d2)
+}
+
+func TestEnvelopeCipher_MultipleKeys(t *testing.T) {
+	w := NewLocalKeyWrapper("kek")
+	ks := newMemKeyStore()
+	ctx := context.Background()
+
+	// Create first active key
+	seedActiveKey(t, ks, w)
+	c := NewEnvelopeCipher(w, ks)
+
+	// Encrypt with key 1
+	enc1, err := c.Encrypt(ctx, nil, []byte("data-with-key-1"))
+	require.NoError(t, err)
+	assert.Contains(t, string(enc1), "1/")
+
+	// Retire key 1, create key 2
+	key1, _ := ks.GetKeyByID(ctx, 1)
+	key1.Status = EncryptionKeyRetired
+	ks.UpdateKey(ctx, key1)
+	seedActiveKey(t, ks, w)
+
+	// Encrypt with key 2
+	enc2, err := c.Encrypt(ctx, nil, []byte("data-with-key-2"))
+	require.NoError(t, err)
+	assert.Contains(t, string(enc2), "2/")
+
+	// Both should decrypt (retired keys still readable)
+	dec1, err := c.Decrypt(ctx, nil, enc1)
+	require.NoError(t, err)
+	assert.Equal(t, "data-with-key-1", string(dec1))
+
+	dec2, err := c.Decrypt(ctx, nil, enc2)
+	require.NoError(t, err)
+	assert.Equal(t, "data-with-key-2", string(dec2))
+}

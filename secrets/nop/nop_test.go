@@ -55,9 +55,9 @@ func TestNop_Passthrough(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello", encrypted)
 
-	decrypted, err := store.DecryptValue(ctx, "$ENC/v2/something")
+	decrypted, err := store.DecryptValue(ctx, "$ENC/something")
 	require.NoError(t, err)
-	assert.Equal(t, "$ENC/v2/something", decrypted)
+	assert.Equal(t, "$ENC/something", decrypted)
 
 	ref := store.ResolveReference(ctx, "$SECRET/KEY", false)
 	assert.Equal(t, "$SECRET/KEY", ref)

@@ -54,43 +54,6 @@ func TestRotateKey_NewKey(t *testing.T) {
 	got, err := newStore.GetByVarName(ctx, "ROTATE_ME", false)
 	require.NoError(t, err)
 	assert.Equal(t, "secret-data", got.Value)
-
-	// Old store should NOT be able to decrypt anymore (GCM will reject)
-	_, err = oldStore.GetByVarName(ctx, "ROTATE_ME", false)
-	assert.Error(t, err)
-}
-
-func TestRotateKey_V1ToV2(t *testing.T) {
-	db := setupTestDB(t)
-	key := "migration-key"
-	ctx := context.Background()
-
-	// Manually insert a v1 (CFB) encrypted secret
-	cfb := &secrets.Secret{VarName: "LEGACY", Value: "legacy-value"}
-	v1Cipher := secrets.AllCipherInstances()["v1"]
-	encrypted, err := secrets.EncryptWith(ctx, v1Cipher, key, cfb.Value)
-	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(encrypted, "$ENC/"))
-	assert.False(t, strings.HasPrefix(encrypted, "$ENC/v2/"))
-	cfb.Value = encrypted
-	require.NoError(t, db.Create(cfb).Error)
-
-	store := New(db, key)
-
-	result, err := store.RotateKey(ctx, key, key)
-	require.NoError(t, err)
-	assert.Equal(t, 1, result.Total)
-	assert.Equal(t, 1, result.Rotated)
-	assert.Equal(t, "v2", result.NewCipher)
-
-	// Verify the DB now has v2 format
-	var raw secrets.Secret
-	require.NoError(t, db.First(&raw, cfb.ID).Error)
-	assert.True(t, strings.HasPrefix(raw.Value, "$ENC/v2/"))
-
-	got, err := store.GetByVarName(ctx, "LEGACY", false)
-	require.NoError(t, err)
-	assert.Equal(t, "legacy-value", got.Value)
 }
 
 func TestRotateKey_EmptyDB(t *testing.T) {
@@ -115,4 +78,73 @@ func TestRotateKey_EmptyValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Total)
 	assert.Equal(t, 1, result.Rotated)
+}
+
+func TestRotateKey_V1ToV2Envelope(t *testing.T) {
+	db := setupTestDB(t)
+	key := "migration-key"
+	ctx := context.Background()
+
+	// Create a v1 encrypted secret
+	v1Store := New(db, key)
+	s := &secrets.Secret{VarName: "LEGACY", Value: "legacy-value"}
+	require.NoError(t, v1Store.Create(ctx, s))
+	assert.True(t, strings.HasPrefix(s.Value, "$ENC/"))
+	assert.False(t, strings.HasPrefix(s.Value, "$ENC/v2/"))
+
+	// Rotate with envelope store → migrates to v2
+	wrapper := secrets.NewLocalKeyWrapper(key)
+	v2Store := NewWithEnvelope(db, key, wrapper)
+
+	result, err := v2Store.RotateKey(ctx, key, key)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 1, result.Rotated)
+	assert.Equal(t, "v2", result.NewCipher)
+
+	// Verify DB has v2 format
+	var raw secrets.Secret
+	require.NoError(t, db.First(&raw, s.ID).Error)
+	assert.True(t, strings.HasPrefix(raw.Value, "$ENC/v2/"))
+
+	// Should decrypt
+	got, err := v2Store.GetByVarName(ctx, "LEGACY", false)
+	require.NoError(t, err)
+	assert.Equal(t, "legacy-value", got.Value)
+}
+
+func TestRotateKEK_ReWrapsKeys(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "kek-test"
+	ctx := context.Background()
+
+	oldWrapper := secrets.NewLocalKeyWrapper("old-kek")
+	store := NewWithEnvelope(db, rawKey, oldWrapper)
+
+	// Create some secrets
+	for _, name := range []string{"S1", "S2"} {
+		s := &secrets.Secret{VarName: name, Value: "val-" + name}
+		require.NoError(t, store.Create(ctx, s))
+	}
+
+	// Verify we have 1 encryption key
+	var keyCount int64
+	db.Model(&secrets.EncryptionKey{}).Count(&keyCount)
+	assert.Equal(t, int64(1), keyCount)
+
+	// Rotate KEK
+	newWrapper := secrets.NewLocalKeyWrapper("new-kek")
+	result, err := store.RotateKEK(ctx, oldWrapper, newWrapper)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 1, result.Rotated)
+	assert.Empty(t, result.Errors)
+
+	// New store can decrypt
+	newStore := NewWithEnvelope(db, rawKey, newWrapper)
+	for _, name := range []string{"S1", "S2"} {
+		got, err := newStore.GetByVarName(ctx, name, false)
+		require.NoError(t, err)
+		assert.Equal(t, "val-"+name, got.Value)
+	}
 }

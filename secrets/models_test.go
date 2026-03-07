@@ -9,15 +9,15 @@ import (
 )
 
 func TestLegacyEncryptDecryptRoundTrip(t *testing.T) {
-	cfb := AllCipherInstances()["v1"]
-	ciphers := AllCipherInstances()
+	cfb := LegacyCipherInstances()["v1"]
+	ciphers := LegacyCipherInstances()
 	ctx := context.Background()
 
 	tests := []struct {
-		name        string
-		key         string
-		value       string
-		expectNoOp  bool // true when empty key means no encryption
+		name       string
+		key        string
+		value      string
+		expectNoOp bool // true when empty key means no encryption
 	}{
 		{"simple string key", "my-secret-key", "test-value", false},
 		{"empty key", "", "test-value", true},
@@ -53,23 +53,6 @@ func TestLegacyEncryptDecryptRoundTrip(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestGCMRoundTrip(t *testing.T) {
-	gcm := AllCipherInstances()["v2"]
-	ciphers := AllCipherInstances()
-	ctx := context.Background()
-
-	encrypted, err := EncryptWith(ctx, gcm, "my-key", "secret-data")
-	require.NoError(t, err)
-	assert.Contains(t, encrypted, "$ENC/v2/")
-
-	decrypted, err := DecryptWith(ctx, ciphers, "my-key", encrypted)
-	require.NoError(t, err)
-	assert.Equal(t, "secret-data", decrypted)
-
-	_, err = DecryptWith(ctx, ciphers, "wrong-key", encrypted)
-	assert.Error(t, err)
 }
 
 func TestSecretPreserveReference(t *testing.T) {

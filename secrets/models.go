@@ -27,3 +27,21 @@ func (s *Secret) GetValue() string {
 	}
 	return s.Value
 }
+
+// EncryptionKey represents a wrapped data encryption key (DEK) in the database.
+// The actual DEK is wrapped (encrypted) by a Key Encryption Key (KEK) and stored
+// in WrappedKey. The plaintext DEK is never persisted.
+type EncryptionKey struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	WrappedKey string    `json:"-"`
+	Status     string    `gorm:"default:active;index" json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+const (
+	// EncryptionKeyActive is the status for the current key used for new encryptions.
+	EncryptionKeyActive = "active"
+	// EncryptionKeyRetired means the key is still usable for decryption but not for new encryptions.
+	EncryptionKeyRetired = "retired"
+)

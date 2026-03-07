@@ -29,7 +29,7 @@ func deriveKey(input string) []byte {
 // and returns the version string and the raw payload. Legacy data without a version
 // prefix is treated as "v1".
 func detectVersion(trimmed string) (version string, payload string) {
-	// Check for vN/ prefix pattern (e.g., "v2/", "v3/", "v99/")
+	// Check for vN/ prefix pattern (e.g., "v2/", "v99/")
 	if idx := strings.Index(trimmed, "/"); idx > 0 {
 		candidate := trimmed[:idx]
 		if len(candidate) >= 2 && candidate[0] == 'v' {
@@ -92,60 +92,12 @@ func (c *cfbCipher) Decrypt(_ context.Context, key []byte, ciphertext []byte) ([
 	return raw, nil
 }
 
-// gcmCipher implements AES-256-GCM encryption (v2).
-// GCM provides both confidentiality and authenticity.
-type gcmCipher struct{}
-
-func (c *gcmCipher) Version() string { return "v2" }
-
-func (c *gcmCipher) Encrypt(_ context.Context, key []byte, plaintext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("gcm encrypt: create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("gcm encrypt: create gcm: %w", err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, fmt.Errorf("gcm encrypt: generate nonce: %w", err)
-	}
-
-	// nonce is prepended to the ciphertext
-	return gcm.Seal(nonce, nonce, plaintext, nil), nil
-}
-
-func (c *gcmCipher) Decrypt(_ context.Context, key []byte, ciphertext []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("gcm decrypt: create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("gcm decrypt: create gcm: %w", err)
-	}
-
-	nonceSize := gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return nil, fmt.Errorf("gcm decrypt: ciphertext too short")
-	}
-
-	nonce, raw := ciphertext[:nonceSize], ciphertext[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, raw, nil)
-	if err != nil {
-		return nil, fmt.Errorf("gcm decrypt: %w", err)
-	}
-
-	return plaintext, nil
-}
-
 // EncryptWith encrypts plaintext using the given key and cipher, returning
 // the versioned "$ENC/..." string. Empty or "[redacted]" values pass through unchanged.
 // If rawKey is empty, plaintext is returned as-is (no encryption key configured).
+//
+// Note: v2 envelope encryption does not use this function — it goes through
+// the EnvelopeEncryptor interface instead. This is only used for v1 legacy.
 func EncryptWith(ctx context.Context, c Cipher, rawKey string, plaintext string) (string, error) {
 	if plaintext == "" || plaintext == "[redacted]" {
 		return plaintext, nil
@@ -171,6 +123,10 @@ func EncryptWith(ctx context.Context, c Cipher, rawKey string, plaintext string)
 // DecryptWith decrypts a "$ENC/..." string, auto-detecting the cipher version.
 // Non-encrypted values pass through unchanged.
 // If rawKey is empty, the original value is returned as-is (no key to decrypt with).
+//
+// For v2 envelope-encrypted values ($ENC/v2/<key_id>/<ciphertext>), an EnvelopeEncryptor
+// must be registered as the "v2" entry in the ciphers map. The key_id is parsed and
+// the cipher receives the full "<key_id>/<ciphertext>" payload.
 func DecryptWith(ctx context.Context, ciphers map[string]Cipher, rawKey string, value string) (string, error) {
 	if !strings.HasPrefix(value, "$ENC/") {
 		return value, nil
@@ -187,6 +143,16 @@ func DecryptWith(ctx context.Context, ciphers map[string]Cipher, rawKey string, 
 		return "", fmt.Errorf("unsupported cipher version: %s", version)
 	}
 
+	// v2 envelope uses a structured payload (<key_id>/<ciphertext>), not a single
+	// base64 blob. Pass it as-is to the envelope cipher's Decrypt.
+	if version == "v2" {
+		plaintext, err := c.Decrypt(ctx, nil, []byte(payload))
+		if err != nil {
+			return "", fmt.Errorf("decrypt (version %s): %w", version, err)
+		}
+		return string(plaintext), nil
+	}
+
 	raw, err := base64.URLEncoding.DecodeString(payload)
 	if err != nil {
 		return "", fmt.Errorf("decode base64: %w", err)
@@ -201,15 +167,10 @@ func DecryptWith(ctx context.Context, ciphers map[string]Cipher, rawKey string, 
 	return string(plaintext), nil
 }
 
-// AllCipherInstances returns a map of all known cipher versions.
-func AllCipherInstances() map[string]Cipher {
+// LegacyCipherInstances returns a map of legacy cipher versions (v1 only).
+// Used when no envelope encryption is configured.
+func LegacyCipherInstances() map[string]Cipher {
 	return map[string]Cipher{
 		"v1": &cfbCipher{},
-		"v2": &gcmCipher{},
 	}
-}
-
-// DefaultCipherInstance returns the current default cipher for new encryptions.
-func DefaultCipherInstance() Cipher {
-	return &gcmCipher{}
 }
