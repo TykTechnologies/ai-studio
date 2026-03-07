@@ -17,12 +17,14 @@ This guide covers installing Tyk AI Studio and the optional Microgateway on Linu
 
 ## Edition Selection
 
-Packages are available in Community and Enterprise editions from separate repositories:
+Packages are available in Community and Enterprise editions:
 
-| Component | Community | Enterprise |
-|-----------|-----------|------------|
-| AI Studio | `tyk-ai-studio` | `tyk-ai-studio` (from `-ee` repo) |
-| Microgateway | `tyk-microgateway` | `tyk-microgateway` (from `-ee` repo) |
+| Component | Community Package | Enterprise Package |
+|-----------|-------------------|--------------------|
+| AI Studio | `tyk-ai-studio` | `tyk-ai-studio-ee` |
+| Microgateway | `tyk-microgateway` | `tyk-microgateway-ee` |
+
+Community packages are published to component-specific repos. Enterprise packages for **both** components are published to a single shared repo: `tyk/tyk-ee-unstable`.
 
 ## Generate Secrets
 
@@ -54,7 +56,7 @@ Save these values — you will need them for both the AI Studio and Microgateway
 curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.deb.sh | sudo bash
 
 # Enterprise Edition
-curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-studio-ee/script.deb.sh | sudo bash
+curl -s https://packagecloud.io/install/repositories/tyk/tyk-ee-unstable/script.deb.sh | sudo bash
 ```
 
 **RHEL / CentOS / Amazon Linux (RPM):**
@@ -64,7 +66,7 @@ curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-studio-ee/script
 curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-studio/script.rpm.sh | sudo bash
 
 # Enterprise Edition
-curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-studio-ee/script.rpm.sh | sudo bash
+curl -s https://packagecloud.io/install/repositories/tyk/tyk-ee-unstable/script.rpm.sh | sudo bash
 ```
 
 ### Install the Package
@@ -72,13 +74,21 @@ curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-studio-ee/script
 **DEB:**
 
 ```bash
+# Community Edition
 sudo apt-get install tyk-ai-studio
+
+# Enterprise Edition
+sudo apt-get install tyk-ai-studio-ee
 ```
 
 **RPM:**
 
 ```bash
+# Community Edition
 sudo yum install tyk-ai-studio
+
+# Enterprise Edition
+sudo yum install tyk-ai-studio-ee
 ```
 
 The package installs:
@@ -168,8 +178,8 @@ Skip this section if you're using AI Studio in standalone mode with its embedded
 # Community Edition
 curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-microgateway/script.deb.sh | sudo bash
 
-# Enterprise Edition
-curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-microgateway-ee/script.deb.sh | sudo bash
+# Enterprise Edition (same repo as AI Studio EE — skip if already added above)
+curl -s https://packagecloud.io/install/repositories/tyk/tyk-ee-unstable/script.deb.sh | sudo bash
 ```
 
 **RHEL / CentOS / Amazon Linux (RPM):**
@@ -178,8 +188,8 @@ curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-microgateway-ee/
 # Community Edition
 curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-microgateway/script.rpm.sh | sudo bash
 
-# Enterprise Edition
-curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-microgateway-ee/script.rpm.sh | sudo bash
+# Enterprise Edition (same repo as AI Studio EE — skip if already added above)
+curl -s https://packagecloud.io/install/repositories/tyk/tyk-ee-unstable/script.rpm.sh | sudo bash
 ```
 
 ### Install the Package
@@ -187,13 +197,21 @@ curl -s https://packagecloud.io/install/repositories/tyk/tyk-ai-microgateway-ee/
 **DEB:**
 
 ```bash
+# Community Edition
 sudo apt-get install tyk-microgateway
+
+# Enterprise Edition
+sudo apt-get install tyk-microgateway-ee
 ```
 
 **RPM:**
 
 ```bash
+# Community Edition
 sudo yum install tyk-microgateway
+
+# Enterprise Edition
+sudo yum install tyk-microgateway-ee
 ```
 
 The package installs:
@@ -444,15 +462,26 @@ EDGE_ALLOW_INSECURE=false
 
 ```bash
 sudo apt-get update
+
+# Community Edition
 sudo apt-get upgrade tyk-ai-studio
 sudo apt-get upgrade tyk-microgateway  # if installed
+
+# Enterprise Edition
+sudo apt-get upgrade tyk-ai-studio-ee
+sudo apt-get upgrade tyk-microgateway-ee  # if installed
 ```
 
 **RPM:**
 
 ```bash
+# Community Edition
 sudo yum update tyk-ai-studio
 sudo yum update tyk-microgateway  # if installed
+
+# Enterprise Edition
+sudo yum update tyk-ai-studio-ee
+sudo yum update tyk-microgateway-ee  # if installed
 ```
 
 > **Note:** Package upgrades will **not** overwrite your configuration in `/etc/default/`. The services are automatically restarted after upgrade.
