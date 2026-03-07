@@ -95,6 +95,12 @@ func (s *Submission) BeforeSave(tx *gorm.DB) error {
 
 // AfterFind decrypts credential fields in ResourcePayload after reading from DB
 func (s *Submission) AfterFind(tx *gorm.DB) error {
+	s.decryptPayloadFields()
+	return nil
+}
+
+// decryptPayloadFields decrypts credential fields in ResourcePayload in-place.
+func (s *Submission) decryptPayloadFields() {
 	if s.ResourcePayload != nil {
 		for _, field := range payloadCredentialFields {
 			if val, ok := s.ResourcePayload[field]; ok {
@@ -104,11 +110,15 @@ func (s *Submission) AfterFind(tx *gorm.DB) error {
 			}
 		}
 	}
-	return nil
 }
 
 func (s *Submission) Create(db *gorm.DB) error {
-	return db.Create(s).Error
+	if err := db.Create(s).Error; err != nil {
+		return err
+	}
+	// BeforeSave encrypts fields in-place; decrypt so callers see plaintext.
+	s.decryptPayloadFields()
+	return nil
 }
 
 func (s *Submission) Get(db *gorm.DB, id uint) error {
@@ -116,7 +126,11 @@ func (s *Submission) Get(db *gorm.DB, id uint) error {
 }
 
 func (s *Submission) Update(db *gorm.DB) error {
-	return db.Save(s).Error
+	if err := db.Save(s).Error; err != nil {
+		return err
+	}
+	s.decryptPayloadFields()
+	return nil
 }
 
 // UpdateWithLock performs an optimistic concurrency update.
@@ -140,6 +154,7 @@ func (s *Submission) UpdateWithLock(db *gorm.DB) error {
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("concurrent modification detected: submission was modified by another request")
 	}
+	s.decryptPayloadFields()
 	return nil
 }
 
