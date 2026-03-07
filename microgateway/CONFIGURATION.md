@@ -53,7 +53,7 @@ The microgateway supports multiple configuration methods in order of precedence:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GATEWAY_TIMEOUT` | 30s | Request timeout for LLM calls |
+| `GATEWAY_TIMEOUT` | 5m | Request timeout for upstream LLM calls (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | 10MB | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | 50MB | Maximum response body size |
 | `GATEWAY_DEFAULT_RATE_LIMIT` | 100 | Default requests per minute |
@@ -120,7 +120,7 @@ ANALYTICS_BUFFER_SIZE=1000
 ANALYTICS_FLUSH_INTERVAL=10s
 
 # Gateway Configuration
-GATEWAY_TIMEOUT=30s
+GATEWAY_TIMEOUT=5m
 GATEWAY_ENABLE_ANALYTICS=true
 ```
 

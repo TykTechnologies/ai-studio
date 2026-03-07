@@ -63,7 +63,7 @@ services:
       
       # Gateway
       GATEWAY_ENABLE_ANALYTICS: "true"
-      GATEWAY_TIMEOUT: "30s"
+      GATEWAY_TIMEOUT: "5m"
       
     ports:
       - "8080:8080"

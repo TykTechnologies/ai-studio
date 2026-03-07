@@ -5,6 +5,7 @@ package aigateway
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
@@ -44,6 +45,10 @@ type gateway struct {
 // Config represents the configuration for the AI Gateway
 type Config struct {
 	Port int
+
+	// LLMTimeout is the timeout for upstream LLM HTTP requests.
+	// Defaults to 5 minutes if zero, suitable for long-running agentic workloads.
+	LLMTimeout time.Duration
 }
 
 // New creates a new Gateway instance using the unified services interface with default database analytics.
@@ -111,7 +116,10 @@ func NewWithAnalytics(
 		analyticsHandler.SetAsGlobalHandler()
 	}
 
-	proxyConfig := &proxy.Config{Port: config.Port}
+	proxyConfig := &proxy.Config{
+		Port:       config.Port,
+		LLMTimeout: config.LLMTimeout,
+	}
 	proxyInstance := proxy.New(gatewayService, budgetService, proxyConfig)
 	return &gateway{
 		proxy: proxyInstance,
