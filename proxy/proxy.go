@@ -143,10 +143,49 @@ type Proxy struct {
 type Config struct {
 	Port int
 
+	// LLMTimeout is the timeout for upstream LLM HTTP requests (both streaming and REST).
+	// Defaults to 5 minutes if zero, suitable for long-running agentic workloads.
+	LLMTimeout time.Duration
+
+	// Server timeouts for the standalone proxy HTTP server (used by proxy.Start()).
+	// These are not used when the proxy is mounted into another server.
+	// Zero values use defaults: ReadTimeout=5m, WriteTimeout=10m, IdleTimeout=5m.
+	ServerReadTimeout  time.Duration
+	ServerWriteTimeout time.Duration
+	ServerIdleTimeout  time.Duration
+
 	// Datasource endpoint limits (zero values use defaults)
 	DatasourceMaxBodyBytes   int64 // Max request body size in bytes (default: 1MB)
 	DatasourceMaxResults     int   // Max documents returned per query (default: 100)
 	DatasourceMaxEmbedTexts  int   // Max texts per embedding request (default: 100)
+}
+
+func (c *Config) llmTimeout() time.Duration {
+	if c != nil && c.LLMTimeout > 0 {
+		return c.LLMTimeout
+	}
+	return 5 * time.Minute
+}
+
+func (c *Config) serverReadTimeout() time.Duration {
+	if c != nil && c.ServerReadTimeout > 0 {
+		return c.ServerReadTimeout
+	}
+	return 300 * time.Second
+}
+
+func (c *Config) serverWriteTimeout() time.Duration {
+	if c != nil && c.ServerWriteTimeout > 0 {
+		return c.ServerWriteTimeout
+	}
+	return 600 * time.Second
+}
+
+func (c *Config) serverIdleTimeout() time.Duration {
+	if c != nil && c.ServerIdleTimeout > 0 {
+		return c.ServerIdleTimeout
+	}
+	return 300 * time.Second
 }
 
 // New creates a new Proxy instance using the unified services interface.
@@ -244,9 +283,9 @@ func (p *Proxy) Start() error {
 	p.server = &http.Server{
 		Addr:         fmt.Sprintf(":%d", p.config.Port),
 		Handler:      handler,
-		ReadTimeout:  300 * time.Second,
-		WriteTimeout: 600 * time.Second,
-		IdleTimeout:  300 * time.Second,
+		ReadTimeout:  p.config.serverReadTimeout(),
+		WriteTimeout: p.config.serverWriteTimeout(),
+		IdleTimeout:  p.config.serverIdleTimeout(),
 	}
 	logger.Infof("Starting proxy server on port %d", p.config.Port)
 	return p.server.ListenAndServe()
@@ -545,6 +584,11 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httpProxy := &httputil.ReverseProxy{Director: proxyDirector} // Renamed variable
+
+	// Apply LLM timeout to the request context for the reverse proxy
+	llmCtx, llmCancel := context.WithTimeout(r.Context(), p.config.llmTimeout())
+	defer llmCancel()
+	r = r.WithContext(llmCtx)
 
 	// Check if we need to buffer the response (for hooks or response filters)
 	hasResponseFilters := p.hasResponseFilters(llm)
@@ -1089,7 +1133,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	client := &http.Client{
-		Timeout: 240 * time.Second,
+		Timeout: p.config.llmTimeout(),
 	}
 	resp, err := client.Do(upstreamReq)
 	if err != nil {

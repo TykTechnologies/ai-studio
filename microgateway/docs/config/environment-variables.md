@@ -73,7 +73,7 @@ Complete reference for all microgateway environment variables organized by funct
 ### Request Processing
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GATEWAY_TIMEOUT` | 30s | Request timeout for LLM calls |
+| `GATEWAY_TIMEOUT` | 5m | Request timeout for upstream LLM calls (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | 10MB | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | 50MB | Maximum response body size |
 | `GATEWAY_DEFAULT_RATE_LIMIT` | 100 | Default requests per minute |
@@ -416,7 +416,7 @@ data:
   LOG_LEVEL: "info"
   CACHE_ENABLED: "true"
   ANALYTICS_ENABLED: "true"
-  GATEWAY_TIMEOUT: "30s"
+  GATEWAY_TIMEOUT: "5m"
 
 ---
 # Secret for sensitive configuration

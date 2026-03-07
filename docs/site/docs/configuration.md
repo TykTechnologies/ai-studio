@@ -11,7 +11,11 @@ weight: 2
 
 # Initial Configuration
 
-This guide covers the essential first steps to take within the Tyk AI Studio UI after successfully deploying the platform using the [Installation Guide](./deployment-helm-k8s.md).
+This guide covers the essential first steps to take within the Tyk AI Studio UI after successfully deploying the platform using one of the installation methods:
+
+- [Docker Compose](./deployment-docker.md)
+- [Kubernetes / Helm](./deployment-helm-k8s.md)
+- [Bare Metal / VM (DEB/RPM Packages)](./deployment-packages.md)
 
 ## 1. First Login
 

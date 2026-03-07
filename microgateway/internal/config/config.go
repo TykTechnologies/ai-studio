@@ -82,7 +82,7 @@ type CacheConfig struct {
 
 // GatewayConfig holds gateway-specific configuration
 type GatewayConfig struct {
-	Timeout                   time.Duration `env:"GATEWAY_TIMEOUT" envDefault:"30s"`
+	Timeout                   time.Duration `env:"GATEWAY_TIMEOUT" envDefault:"5m"`
 	MaxRequestSize            int64         `env:"GATEWAY_MAX_REQUEST_SIZE" envDefault:"10485760"`   // 10MB
 	MaxResponseSize           int64         `env:"GATEWAY_MAX_RESPONSE_SIZE" envDefault:"52428800"`  // 50MB
 	RateLimitRPM              int           `env:"GATEWAY_DEFAULT_RATE_LIMIT" envDefault:"100"`

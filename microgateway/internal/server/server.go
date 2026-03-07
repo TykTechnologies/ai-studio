@@ -84,7 +84,10 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		gatewayServiceAdapter,
 		budgetServiceAdapter,
 		analyticsHandler, // Use microgateway analytics handler
-		&aigateway.Config{Port: cfg.Server.Port}, // Same port as management API
+		&aigateway.Config{
+			Port:       cfg.Server.Port,
+			LLMTimeout: cfg.Gateway.Timeout,
+		},
 	)
 	
 	// Manually trigger resource loading since we're mounting, not calling Start()
