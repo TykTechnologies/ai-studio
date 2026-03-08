@@ -5,7 +5,7 @@ services:
   midsommar:
     networks:
       - tyk-network
-    image: tykio/tyk-ai-studio:local-ce
+    image: tykio/tyk-ai-studio:pre-release-latest-ce
     volumes:
       - ../confs/midsommar-ce.env:/app/.env
       - ./data/cache/plugins:/app/data/cache/plugins
