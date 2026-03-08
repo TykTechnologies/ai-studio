@@ -8,7 +8,7 @@ type Secret struct {
 	CreatedAt time.Time  `json:"-"`
 	UpdatedAt time.Time  `json:"-"`
 	DeletedAt *time.Time `gorm:"index" json:"-"`
-	VarName   string     `json:"name"`
+	VarName   string     `gorm:"uniqueIndex" json:"name"`
 	Value     string     `json:"value"`
 
 	// Transient field to control if we should return the reference format
