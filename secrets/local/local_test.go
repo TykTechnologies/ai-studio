@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,11 +27,11 @@ func TestProvider_RoundTrip(t *testing.T) {
 	assert.Equal(t, dek, unwrapped)
 }
 
-func TestProvider_GenerateDEK(t *testing.T) {
+func TestGenerateDEK(t *testing.T) {
 	p := New("test-kek")
 	ctx := context.Background()
 
-	wrapped, err := p.GenerateDEK(ctx)
+	wrapped, err := secrets.GenerateDEK(ctx, p)
 	require.NoError(t, err)
 	assert.NotEmpty(t, wrapped)
 

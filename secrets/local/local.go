@@ -50,18 +50,6 @@ func New(rawKey string) *Provider {
 	return &Provider{kek: kek}
 }
 
-func (p *Provider) GenerateDEK(ctx context.Context) ([]byte, error) {
-	dek := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, dek); err != nil {
-		return nil, fmt.Errorf("generate dek: %w", err)
-	}
-	wrapped, err := p.WrapKey(ctx, dek)
-	if err != nil {
-		return nil, fmt.Errorf("wrap new dek: %w", err)
-	}
-	return wrapped, nil
-}
-
 func (p *Provider) WrapKey(_ context.Context, dek []byte) ([]byte, error) {
 	return wrapWithKey(p.kek, dek)
 }

@@ -125,11 +125,11 @@ func TestLocalKEKProvider_TooShort(t *testing.T) {
 	assert.Contains(t, err.Error(), "too short")
 }
 
-func TestLocalKEKProvider_GenerateDEK(t *testing.T) {
+func TestGenerateDEK(t *testing.T) {
 	w := newTestLocalKEK("test-kek")
 	ctx := context.Background()
 
-	wrapped, err := w.GenerateDEK(ctx)
+	wrapped, err := GenerateDEK(ctx, w)
 	require.NoError(t, err)
 	assert.NotEmpty(t, wrapped)
 

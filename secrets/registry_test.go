@@ -16,7 +16,7 @@ func TestRegistry_Get_Local(t *testing.T) {
 
 	// Verify it works: generate, wrap, unwrap round-trip
 	ctx := t.Context()
-	wrapped, err := kek.GenerateDEK(ctx)
+	wrapped, err := GenerateDEK(ctx, kek)
 	if err != nil {
 		t.Fatalf("GenerateDEK failed: %v", err)
 	}

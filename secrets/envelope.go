@@ -18,12 +18,19 @@ import (
 // and unwraps them for use. Implementations live in subpackages (e.g., secrets/local)
 // and register via init() with the DefaultRegistry.
 type KEKProvider interface {
-	// GenerateDEK creates a new random DEK and returns it wrapped for storage.
-	GenerateDEK(ctx context.Context) (wrappedDEK []byte, err error)
 	// WrapKey wraps a plaintext DEK for storage.
 	WrapKey(ctx context.Context, dek []byte) ([]byte, error)
 	// UnwrapKey unwraps a stored DEK for use.
 	UnwrapKey(ctx context.Context, wrappedDEK []byte) ([]byte, error)
+}
+
+// GenerateDEK creates a new random 32-byte DEK and returns it wrapped by the given provider.
+func GenerateDEK(ctx context.Context, kek KEKProvider) ([]byte, error) {
+	dek := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, dek); err != nil {
+		return nil, fmt.Errorf("generate dek: %w", err)
+	}
+	return kek.WrapKey(ctx, dek)
 }
 
 // KeyStore provides access to encryption keys. The database implementation

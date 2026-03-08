@@ -306,7 +306,7 @@ func (ks *gormKeyStore) UpdateKey(_ context.Context, key *EncryptionKey) error {
 }
 
 func (ks *gormKeyStore) generateKey(ctx context.Context) (*EncryptionKey, error) {
-	wrapped, err := ks.kek.GenerateDEK(ctx)
+	wrapped, err := GenerateDEK(ctx, ks.kek)
 	if err != nil {
 		return nil, fmt.Errorf("generate dek: %w", err)
 	}
