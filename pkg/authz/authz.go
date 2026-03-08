@@ -3,6 +3,9 @@
 // It replaces the existing boolean/JOIN-based access control with a relationship-based
 // authorization model. The package runs OpenFGA in-process with an in-memory datastore
 // and keeps tuples synchronized with the GORM database.
+//
+// The feature is controlled by the OPENFGA_ENABLED environment variable. When disabled,
+// a NoopAuthorizer is used that always allows access, deferring to the legacy auth system.
 package authz
 
 import (
@@ -13,14 +16,22 @@ import (
 
 // Authorizer defines the interface for authorization checks.
 type Authorizer interface {
+	// Enabled returns true if the OpenFGA authorization system is active.
+	Enabled() bool
+
 	// Check returns true if user has the given relation on the object.
 	Check(ctx context.Context, userID uint, relation string, objectType string, objectID uint) (bool, error)
 
 	// CheckStr is like Check but accepts a string object ID (for composite keys like plugin resources).
 	CheckStr(ctx context.Context, userID uint, relation string, objectType string, objectID string) (bool, error)
 
-	// ListObjects returns object IDs of the given type where the user has the given relation.
+	// ListObjects returns numeric object IDs of the given type where the user has the given relation.
+	// Use ListObjectsStr for types with non-numeric IDs (e.g. plugin_resource).
 	ListObjects(ctx context.Context, userID uint, relation string, objectType string) ([]uint, error)
+
+	// ListObjectsStr returns raw object strings (e.g. "llm:5", "plugin_resource:3_srv-1")
+	// of the given type where the user has the given relation.
+	ListObjectsStr(ctx context.Context, userID uint, relation string, objectType string) ([]string, error)
 
 	// WriteTuples writes relationship tuples to the store.
 	WriteTuples(ctx context.Context, writes []Tuple) error
@@ -80,3 +91,14 @@ func ParseObjectID(object string) (uint, error) {
 
 // maxTuplesPerWrite is the OpenFGA limit for tuples in a single Write call.
 const maxTuplesPerWrite = 100
+
+// ParseObjectStr extracts the ID portion (after the colon) from an OpenFGA object string.
+// For "llm:42" returns "42". For "plugin_resource:3_srv-1" returns "3_srv-1".
+func ParseObjectStr(object string) (string, error) {
+	for i := len(object) - 1; i >= 0; i-- {
+		if object[i] == ':' {
+			return object[i+1:], nil
+		}
+	}
+	return "", fmt.Errorf("invalid object string: %q", object)
+}

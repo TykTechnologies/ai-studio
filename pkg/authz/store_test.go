@@ -353,3 +353,54 @@ func TestCheck_MultiGroupAccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []uint{5, 6}, ids)
 }
+
+func TestListObjectsStr_PluginResources(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+
+	// Plugin resource with composite ID
+	require.NoError(t, store.WriteTuples(ctx, []Tuple{
+		{User: "user:10", Relation: "member", Object: "group:1"},
+		{User: "group:1", Relation: "assigned_group", Object: "plugin_resource:5_srv-1"},
+		{User: "group:1", Relation: "assigned_group", Object: "plugin_resource:5_srv-2"},
+	}))
+
+	// ListObjectsStr works with composite IDs
+	objects, err := store.ListObjectsStr(ctx, 10, "can_use", "plugin_resource")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"plugin_resource:5_srv-1", "plugin_resource:5_srv-2"}, objects)
+
+	// ListObjects fails on composite IDs (returns error, not silent skip)
+	_, err = store.ListObjects(ctx, 10, "can_use", "plugin_resource")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "non-numeric object ID")
+}
+
+func TestStore_Enabled(t *testing.T) {
+	store := newTestStore(t)
+	assert.True(t, store.Enabled())
+}
+
+func TestParseObjectStr(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"llm:42", "42", false},
+		{"plugin_resource:5_srv-1", "5_srv-1", false},
+		{"system:1", "1", false},
+		{"invalid", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := ParseObjectStr(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}

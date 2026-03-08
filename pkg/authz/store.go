@@ -75,6 +75,9 @@ func New(ctx context.Context) (*Store, error) {
 	}, nil
 }
 
+// Enabled returns true — the Store is always an active authorizer.
+func (s *Store) Enabled() bool { return true }
+
 // Check returns true if the user has the given relation on the object.
 func (s *Store) Check(ctx context.Context, userID uint, relation string, objectType string, objectID uint) (bool, error) {
 	return s.CheckStr(ctx, userID, relation, objectType, strconv.FormatUint(uint64(objectID), 10))
@@ -97,8 +100,9 @@ func (s *Store) CheckStr(ctx context.Context, userID uint, relation string, obje
 	return resp.GetAllowed(), nil
 }
 
-// ListObjects returns object IDs where the user has the given relation.
-func (s *Store) ListObjects(ctx context.Context, userID uint, relation string, objectType string) ([]uint, error) {
+// ListObjectsStr returns raw object strings where the user has the given relation.
+// Use this for types with non-numeric IDs (e.g. plugin_resource with composite keys).
+func (s *Store) ListObjectsStr(ctx context.Context, userID uint, relation string, objectType string) ([]string, error) {
 	resp, err := s.server.ListObjects(ctx, &openfgav1.ListObjectsRequest{
 		StoreId:              s.storeID,
 		AuthorizationModelId: s.modelID,
@@ -109,13 +113,22 @@ func (s *Store) ListObjects(ctx context.Context, userID uint, relation string, o
 	if err != nil {
 		return nil, fmt.Errorf("authz: list objects failed: %w", err)
 	}
+	return resp.GetObjects(), nil
+}
 
-	ids := make([]uint, 0, len(resp.GetObjects()))
-	for _, obj := range resp.GetObjects() {
+// ListObjects returns numeric object IDs where the user has the given relation.
+// Returns an error if any object has a non-numeric ID — use ListObjectsStr for those types.
+func (s *Store) ListObjects(ctx context.Context, userID uint, relation string, objectType string) ([]uint, error) {
+	objects, err := s.ListObjectsStr(ctx, userID, relation, objectType)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uint, 0, len(objects))
+	for _, obj := range objects {
 		id, err := ParseObjectID(obj)
 		if err != nil {
-			log.Warn().Err(err).Str("object", obj).Msg("authz: skipping unparseable object in ListObjects")
-			continue
+			return nil, fmt.Errorf("authz: non-numeric object ID in ListObjects for type %q: %w (use ListObjectsStr instead)", objectType, err)
 		}
 		ids = append(ids, id)
 	}
