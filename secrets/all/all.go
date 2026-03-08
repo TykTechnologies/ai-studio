@@ -5,8 +5,6 @@
 package all
 
 import (
-	_ "github.com/TykTechnologies/midsommar/v2/secrets/aws"
 	_ "github.com/TykTechnologies/midsommar/v2/secrets/database"
 	_ "github.com/TykTechnologies/midsommar/v2/secrets/nop"
-	_ "github.com/TykTechnologies/midsommar/v2/secrets/vault"
 )
