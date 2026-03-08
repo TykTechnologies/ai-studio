@@ -20,6 +20,7 @@ This guide covers installing Tyk AI Studio and the optional Microgateway on Linu
 > ```
 - **PostgreSQL 14+** (for AI Studio production use; SQLite is the default for development)
 - **systemd** (for service management)
+- **cosign** (for plugin signature verification in the Marketplace — [install instructions](https://docs.sigstore.dev/cosign/system_config/installation/))
 - Root or sudo access
 
 ## Edition Selection
