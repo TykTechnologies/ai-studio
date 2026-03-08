@@ -1,0 +1,104 @@
+model
+  schema 1.1
+
+# System-level roles (replaces IsAdmin, AccessToSSOConfig booleans)
+type system
+  relations
+    define admin: [user, group#member]
+    define sso_admin: [user, group#member] or admin
+    define member: [user, group#member]
+
+# Users
+type user
+
+# Groups — users belong to groups, groups grant access to catalogues
+type group
+  relations
+    define member: [user]
+    define admin: [user]
+
+# LLM catalogue (maps to models.Catalogue)
+type catalogue
+  relations
+    define assigned_group: [group]
+    define viewer: member from assigned_group
+    define editor: [user] or admin from assigned_group
+
+# Data catalogue (maps to models.DataCatalogue)
+type data_catalogue
+  relations
+    define assigned_group: [group]
+    define viewer: member from assigned_group
+    define editor: [user] or admin from assigned_group
+
+# Tool catalogue (maps to models.ToolCatalogue)
+type tool_catalogue
+  relations
+    define assigned_group: [group]
+    define viewer: member from assigned_group
+    define editor: [user] or admin from assigned_group
+
+# LLM provider (maps to models.LLM)
+type llm
+  relations
+    define parent_catalogue: [catalogue]
+    define can_use: viewer from parent_catalogue
+    define can_admin: editor from parent_catalogue
+
+# Datasource (maps to models.Datasource)
+type datasource
+  relations
+    define owner: [user]
+    define parent_catalogue: [data_catalogue]
+    define can_use: owner or viewer from parent_catalogue
+    define can_admin: owner or editor from parent_catalogue
+
+# Tool (maps to models.Tool)
+type tool
+  relations
+    define parent_catalogue: [tool_catalogue]
+    define can_use: viewer from parent_catalogue
+    define can_admin: editor from parent_catalogue
+
+# App (maps to models.App)
+type app
+  relations
+    define owner: [user]
+    define viewer: [user, group#member]
+    define editor: [user, group#member] or owner
+    define can_use: viewer or editor
+
+# Chat interface (maps to models.Chat)
+type chat
+  relations
+    define assigned_group: [group]
+    define viewer: member from assigned_group
+    define editor: [user] or admin from assigned_group
+
+# Plugin (maps to models.Plugin)
+type plugin
+  relations
+    define installer: [user]
+    define can_admin: installer
+
+# Plugin resource (maps to models.GroupPluginResource)
+type plugin_resource
+  relations
+    define parent_plugin: [plugin]
+    define assigned_group: [group]
+    define can_use: member from assigned_group
+    define can_admin: can_admin from parent_plugin
+
+# Submission (maps to models.Submission)
+type submission
+  relations
+    define submitter: [user]
+    define reviewer: [user, group#member]
+    define can_view: submitter or reviewer
+    define can_review: reviewer
+
+# Filter (maps to models.Filter)
+type filter
+  relations
+    define creator: [user]
+    define can_admin: creator
