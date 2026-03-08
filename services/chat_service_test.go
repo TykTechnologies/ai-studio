@@ -6,8 +6,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
-	_ "github.com/TykTechnologies/midsommar/v2/secrets/all"
-	secretsdb "github.com/TykTechnologies/midsommar/v2/secrets/database"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -94,7 +92,7 @@ func TestGetChatByID_ResolvesSecrets(t *testing.T) {
 	service := NewService(db)
 
 	// Initialize secrets store on the service
-	service.SetSecretStore(secretsdb.New(db, "test-secret-key-for-encryption"))
+	service.SetSecretStore(secrets.New(db, "test-secret-key-for-encryption"))
 
 	// Migrate secrets table
 	db.AutoMigrate(&secrets.Secret{}, &secrets.EncryptionKey{})

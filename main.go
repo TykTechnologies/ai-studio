@@ -28,7 +28,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
-	secretsdb "github.com/TykTechnologies/midsommar/v2/secrets/database"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
@@ -103,10 +102,10 @@ func main() {
 	}
 
 	// Initialize secrets store with encryption key from config
-	var secretStore secrets.SecretStore
+	var secretStore *secrets.Store
 	if appConf.EncryptionKey != "" {
-		secretStore = secretsdb.New(db, appConf.EncryptionKey)
-		logger.Info("Secrets store initialized")
+		secretStore = secrets.NewFromProvider(db, appConf.EncryptionKey, appConf.EncryptionProvider)
+		logger.Infof("Secrets store initialized (KEK provider: %s)", appConf.EncryptionProvider)
 	} else {
 		logger.Warn("TYK_AI_ENCRYPTION_KEY (or TYK_AI_SECRET_KEY) not set — secrets encryption is disabled")
 	}
@@ -458,7 +457,7 @@ func main() {
 }
 
 // ensureDefaults ensures default group and catalogues exist and are linked
-func ensureDefaults(db *gorm.DB, skipLLMDefaults bool, secretStore secrets.SecretStore) error {
+func ensureDefaults(db *gorm.DB, skipLLMDefaults bool, secretStore *secrets.Store) error {
 	logger.Info("Ensuring default group and catalogues exist...")
 
 	// Get or create Default group

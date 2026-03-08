@@ -99,7 +99,7 @@ type ControlServer struct {
 	budgetSyncService *BudgetSyncService
 
 	// Secret store for resolving secret references
-	secretStore secrets.SecretStore
+	secretStore *secrets.Store
 }
 
 // Config holds the control server configuration
@@ -993,7 +993,7 @@ func (s *ControlServer) SetPluginManager(manager interface{}) {
 }
 
 // SetSecretStore sets the secret store for resolving secret references
-func (s *ControlServer) SetSecretStore(store secrets.SecretStore) {
+func (s *ControlServer) SetSecretStore(store *secrets.Store) {
 	s.secretStore = store
 }
 

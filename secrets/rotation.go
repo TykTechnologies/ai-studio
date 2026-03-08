@@ -1,4 +1,4 @@
-package database
+package secrets
 
 import (
 	"context"
@@ -6,28 +6,26 @@ import (
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
-
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 const rotationBatchSize = 100
 
 // RotateKey decrypts all secrets with oldKey and re-encrypts them with
 // envelope encryption (v2). This migrates any legacy v1 secrets to v2.
-func (s *Database) RotateKey(ctx context.Context, oldKey, _ string) (*secrets.RotationResult, error) {
+func (s *Store) RotateKey(ctx context.Context, oldKey, _ string) (*RotationResult, error) {
 	// Build old ciphers for decryption (v1 legacy + v2 envelope)
-	oldCiphers := LegacyCipherInstances()
+	oldCiphers := legacyCipherInstances()
 	oldCiphers["v2"] = s.envelope
 
-	result := &secrets.RotationResult{
+	result := &RotationResult{
 		OldCipher: "all",
 		NewCipher: "v2",
 	}
 
 	var offset int
 	for {
-		var batch []secrets.Secret
-		if err := s.db.Model(&secrets.Secret{}).
+		var batch []Secret
+		if err := s.db.Model(&Secret{}).
 			Order("id ASC").
 			Offset(offset).
 			Limit(rotationBatchSize).
@@ -43,10 +41,10 @@ func (s *Database) RotateKey(ctx context.Context, oldKey, _ string) (*secrets.Ro
 			result.Total++
 			secret := &batch[i]
 
-			plaintext, err := DecryptWith(ctx, oldCiphers, oldKey, secret.Value)
+			plaintext, err := decryptWith(ctx, oldCiphers, oldKey, secret.Value)
 			if err != nil {
 				log.Warnf("rotation: failed to decrypt secret %d (%s): %v", secret.ID, secret.VarName, err)
-				result.Errors = append(result.Errors, secrets.RotationError{
+				result.Errors = append(result.Errors, RotationError{
 					SecretID: secret.ID,
 					VarName:  secret.VarName,
 					Err:      err,
@@ -57,7 +55,7 @@ func (s *Database) RotateKey(ctx context.Context, oldKey, _ string) (*secrets.Ro
 			encrypted, err := s.encryptValue(ctx, plaintext)
 			if err != nil {
 				log.Warnf("rotation: failed to re-encrypt secret %d (%s): %v", secret.ID, secret.VarName, err)
-				result.Errors = append(result.Errors, secrets.RotationError{
+				result.Errors = append(result.Errors, RotationError{
 					SecretID: secret.ID,
 					VarName:  secret.VarName,
 					Err:      err,
@@ -67,7 +65,7 @@ func (s *Database) RotateKey(ctx context.Context, oldKey, _ string) (*secrets.Ro
 
 			if err := s.db.Model(secret).Update("value", encrypted).Error; err != nil {
 				log.Warnf("rotation: failed to update secret %d (%s): %v", secret.ID, secret.VarName, err)
-				result.Errors = append(result.Errors, secrets.RotationError{
+				result.Errors = append(result.Errors, RotationError{
 					SecretID: secret.ID,
 					VarName:  secret.VarName,
 					Err:      err,
@@ -86,15 +84,15 @@ func (s *Database) RotateKey(ctx context.Context, oldKey, _ string) (*secrets.Ro
 }
 
 // RotateKEK re-wraps all encryption keys in the encryption_keys table with a new
-// KeyWrapper. The encrypted values in the secrets table are NOT touched — only the
+// KEKProvider. The encrypted values in the secrets table are NOT touched — only the
 // wrapped DEKs change. This is the fast path for KEK rotation.
-func (s *Database) RotateKEK(ctx context.Context, oldWrapper, newWrapper secrets.KeyWrapper) (*secrets.RotationResult, error) {
-	result := &secrets.RotationResult{
+func (s *Store) RotateKEK(ctx context.Context, oldKEK, newKEK KEKProvider) (*RotationResult, error) {
+	result := &RotationResult{
 		OldCipher: "v2",
 		NewCipher: "v2",
 	}
 
-	ks := &gormKeyStore{db: s.db, wrapper: oldWrapper}
+	ks := &gormKeyStore{db: s.db, kek: oldKEK}
 	keys, err := ks.ListKeys(ctx)
 	if err != nil {
 		return result, fmt.Errorf("list encryption keys: %w", err)
@@ -107,7 +105,7 @@ func (s *Database) RotateKEK(ctx context.Context, oldWrapper, newWrapper secrets
 		// Decode the stored wrapped key
 		wrappedDEK, err := base64.URLEncoding.DecodeString(key.WrappedKey)
 		if err != nil {
-			result.Errors = append(result.Errors, secrets.RotationError{
+			result.Errors = append(result.Errors, RotationError{
 				SecretID: key.ID,
 				VarName:  fmt.Sprintf("encryption_key_%d", key.ID),
 				Err:      fmt.Errorf("decode wrapped key: %w", err),
@@ -116,9 +114,9 @@ func (s *Database) RotateKEK(ctx context.Context, oldWrapper, newWrapper secrets
 		}
 
 		// Unwrap with old KEK
-		dek, err := oldWrapper.UnwrapKey(ctx, wrappedDEK)
+		dek, err := oldKEK.UnwrapKey(ctx, wrappedDEK)
 		if err != nil {
-			result.Errors = append(result.Errors, secrets.RotationError{
+			result.Errors = append(result.Errors, RotationError{
 				SecretID: key.ID,
 				VarName:  fmt.Sprintf("encryption_key_%d", key.ID),
 				Err:      fmt.Errorf("unwrap with old kek: %w", err),
@@ -127,9 +125,9 @@ func (s *Database) RotateKEK(ctx context.Context, oldWrapper, newWrapper secrets
 		}
 
 		// Re-wrap with new KEK
-		newWrapped, err := newWrapper.WrapKey(ctx, dek)
+		newWrapped, err := newKEK.WrapKey(ctx, dek)
 		if err != nil {
-			result.Errors = append(result.Errors, secrets.RotationError{
+			result.Errors = append(result.Errors, RotationError{
 				SecretID: key.ID,
 				VarName:  fmt.Sprintf("encryption_key_%d", key.ID),
 				Err:      fmt.Errorf("wrap with new kek: %w", err),
@@ -139,7 +137,7 @@ func (s *Database) RotateKEK(ctx context.Context, oldWrapper, newWrapper secrets
 
 		key.WrappedKey = base64.URLEncoding.EncodeToString(newWrapped)
 		if err := s.db.Save(key).Error; err != nil {
-			result.Errors = append(result.Errors, secrets.RotationError{
+			result.Errors = append(result.Errors, RotationError{
 				SecretID: key.ID,
 				VarName:  fmt.Sprintf("encryption_key_%d", key.ID),
 				Err:      fmt.Errorf("update key: %w", err),

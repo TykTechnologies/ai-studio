@@ -9,8 +9,6 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
-	_ "github.com/TykTechnologies/midsommar/v2/secrets/all"
-	secretsdb "github.com/TykTechnologies/midsommar/v2/secrets/database"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,7 +32,7 @@ func TestLLMWithSecretReference(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Initialize secrets store on the service
-	service.SetSecretStore(secretsdb.New(db, "test-key"))
+	service.SetSecretStore(secrets.New(db, "test-key"))
 
 	// Create a secret directly in the database
 	secret := &secrets.Secret{
@@ -81,7 +79,7 @@ func TestSerializeLLMRedactsAPIKey(t *testing.T) {
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
 	// Initialize secrets store on the service
-	service.SetSecretStore(secretsdb.New(db, "test-key"))
+	service.SetSecretStore(secrets.New(db, "test-key"))
 
 	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 

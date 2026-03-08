@@ -2,27 +2,14 @@ package secrets
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
-	"sync"
+	"os"
+	"strings"
+
+	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
-
-// SecretStore defines the interface for secret storage and encryption operations.
-type SecretStore interface {
-	Create(ctx context.Context, secret *Secret) error
-	GetByID(ctx context.Context, id uint, preserveRef bool) (*Secret, error)
-	GetByVarName(ctx context.Context, name string, preserveRef bool) (*Secret, error)
-	Update(ctx context.Context, secret *Secret) error
-	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context, pageSize, pageNumber int, all bool) ([]Secret, int64, int, error)
-	EnsureDefaults(ctx context.Context, names []string) error
-
-	EncryptValue(ctx context.Context, plaintext string) (string, error)
-	DecryptValue(ctx context.Context, ciphertext string) (string, error)
-
-	ResolveReference(ctx context.Context, reference string, preserveRef bool) string
-
-	RotateKey(ctx context.Context, oldKey, newKey string) (*RotationResult, error)
-}
 
 // RotationResult reports the outcome of a key rotation operation.
 type RotationResult struct {
@@ -45,67 +32,277 @@ func (e RotationError) Error() string {
 	return fmt.Sprintf("secret %d (%s): %v", e.SecretID, e.VarName, e.Err)
 }
 
-// StoreFactory is a function that creates a SecretStore from a database handle and raw key.
-// The db parameter is intentionally interface{} — each backend type-asserts to what it needs
-// (e.g., *gorm.DB for the database backend, nil for nop).
-type StoreFactory func(db interface{}, rawKey string) (SecretStore, error)
-
-// Registry holds named StoreFactory registrations.
-type Registry struct {
-	mu      sync.RWMutex
-	entries map[string]StoreFactory
+// Store provides secret storage and encryption operations backed by a GORM database.
+type Store struct {
+	db       *gorm.DB
+	rawKey   string
+	ciphers  map[string]Cipher
+	envelope *EnvelopeCipher
+	kek      KEKProvider
 }
 
-// NewRegistry creates an empty store registry.
-func NewRegistry() *Registry {
-	return &Registry{
-		entries: make(map[string]StoreFactory),
+// New creates a new DB-backed secret store using the "local" KEK provider.
+// The rawKey is used both as the KEK passphrase and for decrypting
+// legacy v1 secrets. New secrets are always written with envelope encryption.
+func New(db *gorm.DB, rawKey string) *Store {
+	return NewFromProvider(db, rawKey, "local")
+}
+
+// NewFromProvider creates a DB-backed secret store using the named KEK provider
+// from the registry. Falls back to "local" if the provider is not found.
+func NewFromProvider(db *gorm.DB, rawKey string, providerName string) *Store {
+	kek, err := NewKEKProvider(providerName, rawKey)
+	if err != nil {
+		log.Warnf("KEK provider %q not available: %v — falling back to local", providerName, err)
+		kek = NewLocalKEKProvider(rawKey)
+	}
+	return NewWithKEKProvider(db, rawKey, kek)
+}
+
+// NewWithKEKProvider creates a DB-backed secret store that uses envelope encryption (v2)
+// with a custom KEKProvider (e.g., Vault, AWS KMS). New secrets are always written
+// with envelope encryption. Legacy v1 secrets are read transparently.
+func NewWithKEKProvider(db *gorm.DB, rawKey string, kek KEKProvider) *Store {
+	ks := &gormKeyStore{db: db, kek: kek}
+	envelope := NewEnvelopeCipher(kek, ks)
+	ciphers := legacyCipherInstances()
+	ciphers["v2"] = envelope
+
+	return &Store{
+		db:       db,
+		rawKey:   rawKey,
+		ciphers:  ciphers,
+		envelope: envelope,
+		kek:      kek,
 	}
 }
 
-// Register adds a named store factory. Panics if the name is already taken.
-func (r *Registry) Register(name string, factory StoreFactory) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (s *Store) Create(ctx context.Context, secret *Secret) error {
+	log.Debugf("[DEBUG] CreateSecret: Got key, length: %d", len(s.rawKey))
 
-	if _, exists := r.entries[name]; exists {
-		panic(fmt.Sprintf("secrets: store %q already registered", name))
+	encrypted, err := s.encryptValue(ctx, secret.Value)
+	if err != nil {
+		log.Errorf("[DEBUG] CreateSecret: Failed to encrypt value: %v", err)
+		return err
 	}
-	r.entries[name] = factory
+	secret.Value = encrypted
+
+	if err := s.db.Create(secret).Error; err != nil {
+		log.Errorf("[DEBUG] CreateSecret: Failed to create in DB: %v", err)
+		return err
+	}
+	return nil
 }
 
-// NewStore creates a SecretStore by name.
-func (r *Registry) NewStore(name string, db interface{}, rawKey string) (SecretStore, error) {
-	r.mu.RLock()
-	factory, ok := r.entries[name]
-	r.mu.RUnlock()
-
-	if !ok {
-		return nil, fmt.Errorf("secrets: unknown store type %q (registered: %v)", name, r.names())
+func (s *Store) GetByID(ctx context.Context, id uint, preserveRef bool) (*Secret, error) {
+	var secret Secret
+	if err := s.db.First(&secret, id).Error; err != nil {
+		return nil, err
 	}
 
-	return factory(db, rawKey)
-}
-
-func (r *Registry) names() []string {
-	names := make([]string, 0, len(r.entries))
-	for name := range r.entries {
-		names = append(names, name)
+	if preserveRef {
+		secret.PreserveReference()
+		return &secret, nil
 	}
-	return names
+
+	decrypted, err := decryptWith(ctx, s.ciphers, s.rawKey, secret.Value)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt secret %d: %w", id, err)
+	}
+	secret.Value = decrypted
+	return &secret, nil
 }
 
-// --- Global default registry (used by package-level helpers) ---
+func (s *Store) GetByVarName(ctx context.Context, name string, preserveRef bool) (*Secret, error) {
+	var secret Secret
+	if err := s.db.Where("var_name = (?)", name).First(&secret).Error; err != nil {
+		return nil, err
+	}
 
-var defaultRegistry = NewRegistry()
+	if preserveRef {
+		secret.PreserveReference()
+		return &secret, nil
+	}
 
-// RegisterStore registers a named StoreFactory in the global registry.
-// Typically called from init() in implementation sub-packages.
-func RegisterStore(name string, factory StoreFactory) {
-	defaultRegistry.Register(name, factory)
+	decrypted, err := decryptWith(ctx, s.ciphers, s.rawKey, secret.Value)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt secret %q: %w", name, err)
+	}
+	secret.Value = decrypted
+	return &secret, nil
 }
 
-// NewStore creates a SecretStore by name using the global registry.
-func NewStore(name string, db interface{}, rawKey string) (SecretStore, error) {
-	return defaultRegistry.NewStore(name, db, rawKey)
+func (s *Store) Update(ctx context.Context, secret *Secret) error {
+	encrypted, err := s.encryptValue(ctx, secret.Value)
+	if err != nil {
+		return err
+	}
+	secret.Value = encrypted
+
+	return s.db.Save(secret).Error
+}
+
+func (s *Store) Delete(_ context.Context, id uint) error {
+	return s.db.Delete(&Secret{}, id).Error
+}
+
+func (s *Store) List(_ context.Context, pageSize, pageNumber int, all bool) ([]Secret, int64, int, error) {
+	var items []Secret
+	var totalCount int64
+	query := s.db.Model(&Secret{})
+
+	if err := query.Count(&totalCount).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	totalPages := int(totalCount) / pageSize
+	if int(totalCount)%pageSize != 0 {
+		totalPages++
+	}
+
+	if !all {
+		offset := (pageNumber - 1) * pageSize
+		query = query.Offset(offset).Limit(pageSize)
+	}
+
+	if err := query.Find(&items).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	return items, totalCount, totalPages, nil
+}
+
+func (s *Store) EnsureDefaults(ctx context.Context, names []string) error {
+	for _, name := range names {
+		var count int64
+		if err := s.db.Model(&Secret{}).Where("var_name = ?", name).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			secret := &Secret{
+				VarName: name,
+				Value:   "",
+			}
+			if err := s.Create(ctx, secret); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Store) EncryptValue(ctx context.Context, plaintext string) (string, error) {
+	return s.encryptValue(ctx, plaintext)
+}
+
+func (s *Store) DecryptValue(ctx context.Context, ciphertext string) (string, error) {
+	return decryptWith(ctx, s.ciphers, s.rawKey, ciphertext)
+}
+
+func (s *Store) ResolveReference(ctx context.Context, reference string, preserveRef bool) string {
+	if !strings.HasPrefix(reference, "$") {
+		return reference
+	}
+
+	parts := strings.Split(reference, "/")
+	if len(parts) != 2 {
+		return reference
+	}
+
+	loc := parts[0]
+	name := parts[1]
+
+	switch loc {
+	case "$ENV":
+		return os.Getenv(name)
+	case "$SECRET":
+		if IsSecretReference(reference) && preserveRef {
+			return reference
+		}
+		val, err := s.GetByVarName(ctx, name, preserveRef)
+		if err != nil {
+			log.Println(err)
+			return reference
+		}
+		return val.Value
+	default:
+		return reference
+	}
+}
+
+// encryptValue encrypts using envelope encryption (v2).
+func (s *Store) encryptValue(ctx context.Context, plaintext string) (string, error) {
+	return EncryptEnvelope(ctx, s.envelope, plaintext)
+}
+
+// --- gormKeyStore implements KeyStore backed by GORM ---
+
+type gormKeyStore struct {
+	db  *gorm.DB
+	kek KEKProvider
+}
+
+func (ks *gormKeyStore) GetActiveKey(ctx context.Context) (*EncryptionKey, error) {
+	var key EncryptionKey
+	err := ks.db.Where("status = ?", EncryptionKeyActive).First(&key).Error
+	if err == nil {
+		return &key, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, fmt.Errorf("query active key: %w", err)
+	}
+
+	// No active key — generate one. If a concurrent request already created
+	// one, the insert may fail; retry the lookup in that case.
+	created, err := ks.generateKey(ctx)
+	if err == nil {
+		return created, nil
+	}
+
+	// Retry lookup — another goroutine may have won the race
+	err = ks.db.Where("status = ?", EncryptionKeyActive).First(&key).Error
+	if err == nil {
+		return &key, nil
+	}
+	return nil, fmt.Errorf("generate active key: %w", err)
+}
+
+func (ks *gormKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, error) {
+	var key EncryptionKey
+	if err := ks.db.First(&key, id).Error; err != nil {
+		return nil, err
+	}
+	return &key, nil
+}
+
+func (ks *gormKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
+	key := &EncryptionKey{
+		WrappedKey: wrappedKey,
+		Status:     status,
+	}
+	if err := ks.db.Create(key).Error; err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+func (ks *gormKeyStore) ListKeys(_ context.Context) ([]EncryptionKey, error) {
+	var keys []EncryptionKey
+	if err := ks.db.Order("id ASC").Find(&keys).Error; err != nil {
+		return nil, err
+	}
+	return keys, nil
+}
+
+func (ks *gormKeyStore) UpdateKey(_ context.Context, key *EncryptionKey) error {
+	return ks.db.Save(key).Error
+}
+
+func (ks *gormKeyStore) generateKey(ctx context.Context) (*EncryptionKey, error) {
+	wrapped, err := ks.kek.GenerateDEK(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("generate dek: %w", err)
+	}
+
+	return ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
 }

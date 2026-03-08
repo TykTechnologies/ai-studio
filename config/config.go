@@ -53,6 +53,7 @@ type AppConf struct {
 	TIBEnabled            bool
 	TIBAPISecret          string
 	EncryptionKey         string
+	EncryptionProvider    string
 	DocsLinks             DocsLinks
 	DevMode               bool
 	AuthServerURL         string
@@ -364,6 +365,13 @@ func getConfigFromEnv(envFile string) *AppConf {
 	conf.EncryptionKey = os.Getenv("TYK_AI_ENCRYPTION_KEY")
 	if conf.EncryptionKey == "" {
 		conf.EncryptionKey = conf.TIBAPISecret
+	}
+
+	// KEK provider for envelope encryption. Defaults to "local" (passphrase-derived).
+	// External providers (e.g., "vault", "aws-kms") can be registered and selected here.
+	conf.EncryptionProvider = os.Getenv("TYK_AI_ENCRYPTION_PROVIDER")
+	if conf.EncryptionProvider == "" {
+		conf.EncryptionProvider = "local"
 	}
 
 	// Licensing configuration (Enterprise Edition)

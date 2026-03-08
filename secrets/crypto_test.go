@@ -1,4 +1,4 @@
-package database
+package secrets
 
 import (
 	"context"
@@ -20,16 +20,16 @@ func TestDeriveKeyLength(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			key := DeriveKey(tt.input)
+			key := deriveKey(tt.input)
 			assert.Equal(t, 32, len(key))
 
-			key2 := DeriveKey(tt.input)
+			key2 := deriveKey(tt.input)
 			assert.Equal(t, key, key2)
 		})
 	}
 
-	k1 := DeriveKey("key-a")
-	k2 := DeriveKey("key-b")
+	k1 := deriveKey("key-a")
+	k2 := deriveKey("key-b")
 	assert.NotEqual(t, k1, k2)
 }
 
@@ -46,7 +46,7 @@ func TestDetectVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			version, payload := DetectVersion(tt.input)
+			version, payload := detectVersion(tt.input)
 			assert.Equal(t, tt.wantVersion, version)
 			assert.Equal(t, tt.wantPayload, payload)
 		})
@@ -54,9 +54,9 @@ func TestDetectVersion(t *testing.T) {
 }
 
 func TestCFBCipherRoundTrip(t *testing.T) {
-	c := &CFBCipher{}
+	c := &cfbCipher{}
 	ctx := context.Background()
-	key := DeriveKey("test-key")
+	key := deriveKey("test-key")
 
 	assert.Equal(t, "v1", c.Version())
 
@@ -79,9 +79,9 @@ func TestCFBCipherRoundTrip(t *testing.T) {
 }
 
 func TestCFBCipherDecryptErrors(t *testing.T) {
-	c := &CFBCipher{}
+	c := &cfbCipher{}
 	ctx := context.Background()
-	key := DeriveKey("test-key")
+	key := deriveKey("test-key")
 
 	_, err := c.Decrypt(ctx, key, []byte("short"))
 	assert.Error(t, err)
@@ -89,52 +89,52 @@ func TestCFBCipherDecryptErrors(t *testing.T) {
 }
 
 func TestEncryptValuePassthrough(t *testing.T) {
-	c := &CFBCipher{}
+	c := &cfbCipher{}
 	ctx := context.Background()
 
-	result, err := EncryptWith(ctx, c, "key", "")
+	result, err := encryptWith(ctx, c, "key", "")
 	require.NoError(t, err)
 	assert.Equal(t, "", result)
 
-	result, err = EncryptWith(ctx, c, "key", "[redacted]")
+	result, err = encryptWith(ctx, c, "key", "[redacted]")
 	require.NoError(t, err)
 	assert.Equal(t, "[redacted]", result)
 }
 
 func TestEncryptDecryptValueRoundTrip_V1(t *testing.T) {
-	ciphers := LegacyCipherInstances()
+	ciphers := legacyCipherInstances()
 	ctx := context.Background()
 
-	encrypted, err := EncryptWith(ctx, &CFBCipher{}, "my-key", "hello")
+	encrypted, err := encryptWith(ctx, &cfbCipher{}, "my-key", "hello")
 	require.NoError(t, err)
 	assert.True(t, len(encrypted) > 0)
 	assert.Contains(t, encrypted, "$ENC/")
 
-	decrypted, err := DecryptWith(ctx, ciphers, "my-key", encrypted)
+	decrypted, err := decryptWith(ctx, ciphers, "my-key", encrypted)
 	require.NoError(t, err)
 	assert.Equal(t, "hello", decrypted)
 }
 
 func TestDecryptValueNonEncrypted(t *testing.T) {
-	ciphers := LegacyCipherInstances()
+	ciphers := legacyCipherInstances()
 	ctx := context.Background()
 
-	result, err := DecryptWith(ctx, ciphers, "key", "plain-text")
+	result, err := decryptWith(ctx, ciphers, "key", "plain-text")
 	require.NoError(t, err)
 	assert.Equal(t, "plain-text", result)
 }
 
 func TestDecryptValueUnsupportedVersion(t *testing.T) {
-	ciphers := LegacyCipherInstances()
+	ciphers := legacyCipherInstances()
 	ctx := context.Background()
 
-	_, err := DecryptWith(ctx, ciphers, "key", "$ENC/v99/somedata")
+	_, err := decryptWith(ctx, ciphers, "key", "$ENC/v99/somedata")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported cipher version")
 }
 
 func TestLegacyCipherInstances(t *testing.T) {
-	ciphers := LegacyCipherInstances()
+	ciphers := legacyCipherInstances()
 	assert.Contains(t, ciphers, "v1")
 	assert.NotContains(t, ciphers, "v2")
 	assert.Equal(t, "v1", ciphers["v1"].Version())

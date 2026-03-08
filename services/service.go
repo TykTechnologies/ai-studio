@@ -48,7 +48,7 @@ type Service struct {
 	// Sync Status (Hub-and-Spoke)
 	SyncStatusService *SyncStatusService
 	// Secrets (set after creation via SetSecretStore)
-	Secrets secrets.SecretStore
+	Secrets *secrets.Store
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -309,6 +309,6 @@ func (s *Service) SetLicensingService(svc licensing.Service) {
 }
 
 // SetSecretStore sets the secret store for encryption/decryption operations
-func (s *Service) SetSecretStore(store secrets.SecretStore) {
+func (s *Service) SetSecretStore(store *secrets.Store) {
 	s.Secrets = store
 }
