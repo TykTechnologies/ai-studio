@@ -106,6 +106,7 @@ func (s *Store) CheckByName(ctx context.Context, userID uint, relation string, r
 }
 
 // ListResourcesByName returns raw resource strings where the user has the given relation.
+// Results are bounded by the server's configured max (default 1000).
 // Use this for types with non-numeric IDs (e.g. plugin_resource with composite keys).
 func (s *Store) ListResourcesByName(ctx context.Context, userID uint, relation string, resourceType string) ([]string, error) {
 	resp, err := s.server.ListObjects(ctx, &openfgav1.ListObjectsRequest{
@@ -122,13 +123,43 @@ func (s *Store) ListResourcesByName(ctx context.Context, userID uint, relation s
 }
 
 // ListResources returns numeric resource IDs where the user has the given relation.
+// Results are bounded by the server's configured max (default 1000).
 // Returns an error if any resource has a non-numeric ID — use ListResourcesByName for those types.
 func (s *Store) ListResources(ctx context.Context, userID uint, relation string, resourceType string) ([]uint, error) {
 	resources, err := s.ListResourcesByName(ctx, userID, relation, resourceType)
 	if err != nil {
 		return nil, err
 	}
+	return parseNumericIDs(resourceType, resources)
+}
 
+// ListResourcesByNamePage returns a page of raw resource identifiers.
+// The underlying ListObjects API does not support cursor-based pagination natively,
+// so this implementation fetches all results and applies client-side windowing.
+// Note: result ordering is not guaranteed to be stable between calls.
+func (s *Store) ListResourcesByNamePage(ctx context.Context, userID uint, relation string, resourceType string, pageSize int, token string) ([]string, string, error) {
+	all, err := s.ListResourcesByName(ctx, userID, relation, resourceType)
+	if err != nil {
+		return nil, "", err
+	}
+	return paginateStrings(all, pageSize, token)
+}
+
+// ListResourcesPage returns a page of numeric resource IDs.
+// Same client-side windowing as ListResourcesByNamePage.
+func (s *Store) ListResourcesPage(ctx context.Context, userID uint, relation string, resourceType string, pageSize int, token string) ([]uint, string, error) {
+	resources, nextToken, err := s.ListResourcesByNamePage(ctx, userID, relation, resourceType, pageSize, token)
+	if err != nil {
+		return nil, "", err
+	}
+	ids, err := parseNumericIDs(resourceType, resources)
+	if err != nil {
+		return nil, "", err
+	}
+	return ids, nextToken, nil
+}
+
+func parseNumericIDs(resourceType string, resources []string) ([]uint, error) {
 	ids := make([]uint, 0, len(resources))
 	for _, res := range resources {
 		id, err := authz.ParseResourceNumericID(res)
@@ -138,6 +169,33 @@ func (s *Store) ListResources(ctx context.Context, userID uint, relation string,
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+// paginateStrings applies offset-based pagination using a numeric token.
+// Token is the string index to start from (empty = start). Returns the next token or "".
+func paginateStrings(all []string, pageSize int, token string) ([]string, string, error) {
+	offset := 0
+	if token != "" {
+		var err error
+		n, err := strconv.Atoi(token)
+		if err != nil {
+			return nil, "", fmt.Errorf("authz: invalid pagination token: %w", err)
+		}
+		offset = n
+	}
+	if offset >= len(all) {
+		return nil, "", nil
+	}
+	end := offset + pageSize
+	if end > len(all) {
+		end = len(all)
+	}
+	page := all[offset:end]
+	var nextToken string
+	if end < len(all) {
+		nextToken = strconv.Itoa(end)
+	}
+	return page, nextToken, nil
 }
 
 // Grant writes relationship grants to the authorization store.

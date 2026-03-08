@@ -31,13 +31,24 @@ type Authorizer interface {
 	CheckByName(ctx context.Context, userID uint, relation string, resourceType string, resourceID string) (bool, error)
 
 	// ListResources returns numeric resource IDs of the given type where the user
-	// has the given relation. Returns an error if any resource has a non-numeric ID;
-	// use ListResourcesByName for those types.
+	// has the given relation. Results are bounded by the backend's configured maximum.
+	// Returns an error if any resource has a non-numeric ID; use ListResourcesByName
+	// for those types.
 	ListResources(ctx context.Context, userID uint, relation string, resourceType string) ([]uint, error)
 
 	// ListResourcesByName returns raw resource identifiers (e.g. "llm:5",
 	// "plugin_resource:3_srv-1") where the user has the given relation.
+	// Results are bounded by the backend's configured maximum.
 	ListResourcesByName(ctx context.Context, userID uint, relation string, resourceType string) ([]string, error)
+
+	// ListResourcesPage returns a page of numeric resource IDs. Pass an empty
+	// token to start from the beginning. Returns a continuation token for the
+	// next page, or empty string when there are no more results.
+	ListResourcesPage(ctx context.Context, userID uint, relation string, resourceType string, pageSize int, token string) (ids []uint, nextToken string, err error)
+
+	// ListResourcesByNamePage returns a page of raw resource identifiers.
+	// Same pagination semantics as ListResourcesPage.
+	ListResourcesByNamePage(ctx context.Context, userID uint, relation string, resourceType string, pageSize int, token string) (resources []string, nextToken string, err error)
 
 	// Grant writes relationship grants to the authorization store.
 	Grant(ctx context.Context, grants []Relationship) error

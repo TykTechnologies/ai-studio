@@ -26,6 +26,14 @@ func (n *NoopAuthorizer) ListResourcesByName(context.Context, uint, string, stri
 	return nil, nil
 }
 
+func (n *NoopAuthorizer) ListResourcesPage(context.Context, uint, string, string, int, string) ([]uint, string, error) {
+	return nil, "", nil
+}
+
+func (n *NoopAuthorizer) ListResourcesByNamePage(context.Context, uint, string, string, int, string) ([]string, string, error) {
+	return nil, "", nil
+}
+
 func (n *NoopAuthorizer) Grant(context.Context, []Relationship) error   { return nil }
 func (n *NoopAuthorizer) Revoke(context.Context, []Relationship) error  { return nil }
 func (n *NoopAuthorizer) GrantAndRevoke(context.Context, []Relationship, []Relationship) error {
