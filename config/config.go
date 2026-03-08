@@ -52,6 +52,7 @@ type AppConf struct {
 	DefaultSignupMode     string
 	TIBEnabled            bool
 	TIBAPISecret          string
+	EncryptionKey         string
 	DocsLinks             DocsLinks
 	DevMode               bool
 	AuthServerURL         string
@@ -356,6 +357,13 @@ func getConfigFromEnv(envFile string) *AppConf {
 	conf.TIBAPISecret = os.Getenv("TYK_AI_SECRET_KEY")
 	if conf.TIBAPISecret == "" && conf.TIBEnabled {
 		cfgLog.Info().Msg("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
+	}
+
+	// Encryption key for secrets envelope encryption.
+	// Falls back to TYK_AI_SECRET_KEY for backward compatibility.
+	conf.EncryptionKey = os.Getenv("TYK_AI_ENCRYPTION_KEY")
+	if conf.EncryptionKey == "" {
+		conf.EncryptionKey = conf.TIBAPISecret
 	}
 
 	// Licensing configuration (Enterprise Edition)

@@ -104,11 +104,11 @@ func main() {
 
 	// Initialize secrets store with encryption key from config
 	var secretStore secrets.SecretStore
-	if appConf.TIBAPISecret != "" {
-		secretStore = secretsdb.New(db, appConf.TIBAPISecret)
+	if appConf.EncryptionKey != "" {
+		secretStore = secretsdb.New(db, appConf.EncryptionKey)
 		logger.Info("Secrets store initialized")
 	} else {
-		logger.Warn("TYK_AI_SECRET_KEY not set — secrets encryption is disabled")
+		logger.Warn("TYK_AI_ENCRYPTION_KEY (or TYK_AI_SECRET_KEY) not set — secrets encryption is disabled")
 	}
 
 	// Ensure default group and catalogues exist and are linked
