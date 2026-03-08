@@ -14,8 +14,8 @@ import (
 
 // KEKProvider abstracts the master encryption key (MEK) operations.
 // The MEK stays with the provider — it generates DEKs, wraps them for storage,
-// and unwraps them for use. Implementations: LocalKEKProvider (passphrase-derived),
-// or external providers (Vault, AWS KMS) where the MEK never leaves the service.
+// and unwraps them for use. Implementations live in subpackages (e.g., secrets/local)
+// and register via init() with the DefaultRegistry.
 type KEKProvider interface {
 	// GenerateDEK creates a new random DEK and returns it wrapped for storage.
 	GenerateDEK(ctx context.Context) (wrappedDEK []byte, err error)
@@ -39,74 +39,6 @@ type KeyStore interface {
 	ListKeys(ctx context.Context) ([]EncryptionKey, error)
 	// UpdateKey updates an encryption key record.
 	UpdateKey(ctx context.Context, key *EncryptionKey) error
-}
-
-// LocalKEKProvider wraps DEKs using a local KEK derived from a passphrase.
-// Suitable for single-node deployments without an external KMS.
-type LocalKEKProvider struct {
-	kek []byte
-}
-
-// NewLocalKEKProvider creates a KEKProvider that uses AES-256-GCM with a KEK
-// derived from rawKey via SHA-256.
-func NewLocalKEKProvider(rawKey string) *LocalKEKProvider {
-	return &LocalKEKProvider{kek: deriveKey(rawKey)}
-}
-
-func (w *LocalKEKProvider) GenerateDEK(ctx context.Context) ([]byte, error) {
-	dek := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, dek); err != nil {
-		return nil, fmt.Errorf("generate dek: %w", err)
-	}
-	wrapped, err := w.WrapKey(ctx, dek)
-	if err != nil {
-		return nil, fmt.Errorf("wrap new dek: %w", err)
-	}
-	return wrapped, nil
-}
-
-func (w *LocalKEKProvider) WrapKey(_ context.Context, dek []byte) ([]byte, error) {
-	block, err := aes.NewCipher(w.kek)
-	if err != nil {
-		return nil, fmt.Errorf("wrap key: create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("wrap key: create gcm: %w", err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, fmt.Errorf("wrap key: generate nonce: %w", err)
-	}
-
-	return gcm.Seal(nonce, nonce, dek, nil), nil
-}
-
-func (w *LocalKEKProvider) UnwrapKey(_ context.Context, wrappedDEK []byte) ([]byte, error) {
-	block, err := aes.NewCipher(w.kek)
-	if err != nil {
-		return nil, fmt.Errorf("unwrap key: create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("unwrap key: create gcm: %w", err)
-	}
-
-	nonceSize := gcm.NonceSize()
-	if len(wrappedDEK) < nonceSize {
-		return nil, fmt.Errorf("unwrap key: wrapped key too short")
-	}
-
-	nonce, ciphertext := wrappedDEK[:nonceSize], wrappedDEK[nonceSize:]
-	dek, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, fmt.Errorf("unwrap key: %w", err)
-	}
-
-	return dek, nil
 }
 
 // EnvelopeCipher implements envelope encryption (v2).

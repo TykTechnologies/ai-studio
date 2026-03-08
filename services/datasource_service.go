@@ -111,7 +111,7 @@ func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc,
 }
 
 func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url string, privacyScore int, dbConnString, dbSourceType, dbConnAPIKey, dbName, embedVendor, embedUrl, embedAPIKey, embedModel string, active bool, tagNames []string, userID uint, namespace ...string) (*models.Datasource, error) {
-	datasource, err := s.GetDatasourceByID(id)
+	datasource, err := s.GetDatasourceByID(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
@@ -237,21 +237,21 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 	return datasource, nil
 }
 
-func (s *Service) GetDatasourceByID(id uint) (*models.Datasource, error) {
+func (s *Service) GetDatasourceByID(ctx context.Context, id uint) (*models.Datasource, error) {
 	datasource := models.NewDatasource()
 	if err := datasource.Get(s.DB, id); err != nil {
 		return nil, err
 	}
 
 	if s.Secrets != nil {
-		datasource.DBConnAPIKey = s.Secrets.ResolveReference(context.Background(), datasource.DBConnAPIKey, true)
-		datasource.EmbedAPIKey = s.Secrets.ResolveReference(context.Background(), datasource.EmbedAPIKey, true)
+		datasource.DBConnAPIKey = s.Secrets.ResolveReference(ctx, datasource.DBConnAPIKey, true)
+		datasource.EmbedAPIKey = s.Secrets.ResolveReference(ctx, datasource.EmbedAPIKey, true)
 	}
 	return datasource, nil
 }
 
 func (s *Service) DeleteDatasource(id uint) error {
-	datasource, err := s.GetDatasourceByID(id)
+	datasource, err := s.GetDatasourceByID(context.Background(), id)
 	if err != nil {
 		return err
 	}
@@ -305,7 +305,7 @@ func (s *Service) DeleteDatasource(id uint) error {
 // CloneDatasource creates a copy of an existing datasource with all configuration including API keys
 func (s *Service) CloneDatasource(sourceDatasourceID uint) (*models.Datasource, error) {
 	// Get source datasource with all relationships
-	source, err := s.GetDatasourceByID(sourceDatasourceID)
+	source, err := s.GetDatasourceByID(context.Background(), sourceDatasourceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get source datasource: %w", err)
 	}
@@ -375,7 +375,7 @@ func (s *Service) GetActiveDatasources() ([]models.Datasource, error) {
 	return []models.Datasource(datasources), nil
 }
 
-func (s *Service) SearchDatasources(query string) (models.Datasources, error) {
+func (s *Service) SearchDatasources(ctx context.Context, query string) (models.Datasources, error) {
 	var datasources models.Datasources
 	if err := datasources.Search(s.DB, query); err != nil {
 		return nil, err
@@ -383,8 +383,8 @@ func (s *Service) SearchDatasources(query string) (models.Datasources, error) {
 
 	if s.Secrets != nil {
 		for i := range datasources {
-			datasources[i].DBConnAPIKey = s.Secrets.ResolveReference(context.Background(), datasources[i].DBConnAPIKey, true)
-			datasources[i].EmbedAPIKey = s.Secrets.ResolveReference(context.Background(), datasources[i].EmbedAPIKey, true)
+			datasources[i].DBConnAPIKey = s.Secrets.ResolveReference(ctx, datasources[i].DBConnAPIKey, true)
+			datasources[i].EmbedAPIKey = s.Secrets.ResolveReference(ctx, datasources[i].EmbedAPIKey, true)
 		}
 	}
 
@@ -400,7 +400,7 @@ func (s *Service) GetDatasourcesByTag(tagName string) (models.Datasources, error
 }
 
 func (s *Service) AddTagsToDatasource(datasourceID uint, tagNames []string) error {
-	datasource, err := s.GetDatasourceByID(datasourceID)
+	datasource, err := s.GetDatasourceByID(context.Background(), datasourceID)
 	if err != nil {
 		return err
 	}
@@ -442,7 +442,7 @@ func (s *Service) GetDatasourcesByUserID(userID uint) (models.Datasources, error
 
 // AddFileStoreToTool adds a FileStore to a Tool
 func (s *Service) AddFileToDatasource(dsID uint, fileStoreID uint) error {
-	ds, err := s.GetDatasourceByID(dsID)
+	ds, err := s.GetDatasourceByID(context.Background(), dsID)
 	if err != nil {
 		return err
 	}
@@ -457,7 +457,7 @@ func (s *Service) AddFileToDatasource(dsID uint, fileStoreID uint) error {
 
 // RemoveFileStoreFromTool removes a FileStore from a Tool
 func (s *Service) RemoveFileFromDatasource(dsID uint, fileStoreID uint) error {
-	ds, err := s.GetDatasourceByID(dsID)
+	ds, err := s.GetDatasourceByID(context.Background(), dsID)
 	if err != nil {
 		return err
 	}

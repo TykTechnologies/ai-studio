@@ -104,7 +104,7 @@ func (s *ToolsServer) GetTool(ctx context.Context, req *pb.GetToolRequest) (*pb.
 	}
 
 	// Call existing service method
-	tool, err := s.service.GetToolByID(uint(toolID))
+	tool, err := s.service.GetToolByID(ctx, uint(toolID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "tool not found: %d", toolID)
@@ -131,7 +131,7 @@ func (s *ToolsServer) GetToolOperations(ctx context.Context, req *pb.GetToolOper
 	}
 
 	// Get tool first to verify it exists
-	tool, err := s.service.GetToolByID(uint(toolID))
+	tool, err := s.service.GetToolByID(ctx, uint(toolID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "tool not found: %d", toolID)

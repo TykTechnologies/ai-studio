@@ -173,12 +173,11 @@ func (s *Service) CreateSubmission(submitterID uint, resourceType, status string
 		submission.SubmittedAt = &now
 	}
 
-	ctx := context.Background()
-	s.encryptSubmissionPayload(ctx, submission.ResourcePayload)
+	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	if err := submission.Create(s.DB); err != nil {
 		return nil, err
 	}
-	s.decryptSubmissionPayload(ctx, submission.ResourcePayload)
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	// Notify admins of new submission
 	if status == models.SubmissionStatusSubmitted && s.NotificationService != nil {

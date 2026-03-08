@@ -111,7 +111,7 @@ func (a *API) getDatasource(c *gin.Context) {
 		return
 	}
 
-	datasource, err := a.service.GetDatasourceByID(uint(id))
+	datasource, err := a.service.GetDatasourceByID(c.Request.Context(), uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -161,7 +161,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 	}
 
 	// Fetch existing datasource to check namespace change
-	existingDS, err := a.service.GetDatasourceByID(uint(id))
+	existingDS, err := a.service.GetDatasourceByID(c.Request.Context(), uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -304,7 +304,7 @@ func (a *API) searchDatasources(c *gin.Context) {
 		return
 	}
 
-	datasources, err := a.service.SearchDatasources(query)
+	datasources, err := a.service.SearchDatasources(c.Request.Context(), query)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -402,7 +402,7 @@ func (a *API) addFileStoreToDatasource(c *gin.Context) {
 		return
 	}
 
-	datasource, err := a.service.GetDatasourceByID(uint(datasourceID))
+	datasource, err := a.service.GetDatasourceByID(c.Request.Context(), uint(datasourceID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -463,7 +463,7 @@ func (a *API) removeFileStoreFromDatasource(c *gin.Context) {
 		return
 	}
 
-	datasource, err := a.service.GetDatasourceByID(uint(datasourceID))
+	datasource, err := a.service.GetDatasourceByID(c.Request.Context(), uint(datasourceID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -503,7 +503,7 @@ func (a *API) ProcessFileEmbeddingHandler(c *gin.Context) {
 	}
 
 	// Get datasource to verify it exists
-	datasource, err := a.service.GetDatasourceByID(uint(id))
+	datasource, err := a.service.GetDatasourceByID(c.Request.Context(), uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {

@@ -61,14 +61,13 @@ func (s *Service) CreateChat(name string, description string, llmSettingsID, llm
 }
 
 // GetChatByID retrieves a chat by its ID
-func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
+func (s *Service) GetChatByID(ctx context.Context, id uint) (*models.Chat, error) {
 	chat := &models.Chat{}
 	if err := chat.Get(s.DB, id); err != nil {
 		return nil, err
 	}
 
 	if s.Secrets != nil {
-		ctx := context.Background()
 		if chat.LLM != nil {
 			chat.LLM.APIKey = s.Secrets.ResolveReference(ctx, chat.LLM.APIKey, false)
 			chat.LLM.APIEndpoint = s.Secrets.ResolveReference(ctx, chat.LLM.APIEndpoint, false)
@@ -204,7 +203,7 @@ func (s *Service) UpdateChat(id uint, name string, description string, llmSettin
 
 // DeleteChat deletes a chat by its ID
 func (s *Service) DeleteChat(id uint) error {
-	chat, err := s.GetChatByID(id)
+	chat, err := s.GetChatByID(context.Background(), id)
 	if err != nil {
 		return err
 	}
@@ -250,7 +249,7 @@ func (s *Service) GetChatsByLLMSettingsID(llmSettingsID uint) (models.Chats, err
 
 // AddExtraContextToChat adds a ExtraContext to a Chat
 func (s *Service) AddExtraContextToChat(toolID uint, fileStoreID uint) error {
-	chat, err := s.GetChatByID(toolID)
+	chat, err := s.GetChatByID(context.Background(), toolID)
 	if err != nil {
 		return err
 	}
@@ -265,7 +264,7 @@ func (s *Service) AddExtraContextToChat(toolID uint, fileStoreID uint) error {
 
 // RemoveExtraContextFromChat removes a ExtraContext from a Chat
 func (s *Service) RemoveExtraContextFromChat(toolID uint, fileStoreID uint) error {
-	chat, err := s.GetChatByID(toolID)
+	chat, err := s.GetChatByID(context.Background(), toolID)
 	if err != nil {
 		return err
 	}
@@ -280,7 +279,7 @@ func (s *Service) RemoveExtraContextFromChat(toolID uint, fileStoreID uint) erro
 
 // GetChatExtraContexts gets all ExtraContexts associated with a Chat
 func (s *Service) GetChatExtraContexts(toolID uint) ([]models.FileStore, error) {
-	chat, err := s.GetChatByID(toolID)
+	chat, err := s.GetChatByID(context.Background(), toolID)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +289,7 @@ func (s *Service) GetChatExtraContexts(toolID uint) ([]models.FileStore, error) 
 
 // SetChatExtraContexts replaces all existing ExtraContext associations with new ones
 func (s *Service) SetChatExtraContexts(toolID uint, fileStoreIDs []uint) error {
-	chat, err := s.GetChatByID(toolID)
+	chat, err := s.GetChatByID(context.Background(), toolID)
 	if err != nil {
 		return err
 	}

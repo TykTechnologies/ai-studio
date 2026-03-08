@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -58,7 +57,7 @@ func (a *API) createSecret(c *gin.Context) {
 	}
 
 	log.Printf("[DEBUG] Creating secret with name: %s", secret.VarName)
-	if err := a.service.Secrets.Create(context.Background(), secret); err != nil {
+	if err := a.service.Secrets.Create(c.Request.Context(), secret); err != nil {
 		log.Printf("[DEBUG] Failed to create secret: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -99,7 +98,7 @@ func (a *API) getSecret(c *gin.Context) {
 		return
 	}
 
-	secret, err := a.service.Secrets.GetByID(context.Background(), uint(id), true)
+	secret, err := a.service.Secrets.GetByID(c.Request.Context(), uint(id), true)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -153,7 +152,7 @@ func (a *API) updateSecret(c *gin.Context) {
 		return
 	}
 
-	secret, err := a.service.Secrets.GetByID(context.Background(), uint(id), true)
+	secret, err := a.service.Secrets.GetByID(c.Request.Context(), uint(id), true)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -167,7 +166,7 @@ func (a *API) updateSecret(c *gin.Context) {
 	secret.Value = input.Data.Attributes.Value
 	secret.VarName = input.Data.Attributes.VarName
 
-	if err := a.service.Secrets.Update(context.Background(), secret); err != nil {
+	if err := a.service.Secrets.Update(c.Request.Context(), secret); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -207,7 +206,7 @@ func (a *API) deleteSecret(c *gin.Context) {
 		return
 	}
 
-	if err := a.service.Secrets.Delete(context.Background(), uint(id)); err != nil {
+	if err := a.service.Secrets.Delete(c.Request.Context(), uint(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -239,7 +238,7 @@ func (a *API) listSecrets(c *gin.Context) {
 	}
 	pageSize, pageNumber, all := getPaginationParams(c)
 
-	items, totalCount, totalPages, err := a.service.Secrets.List(context.Background(), pageSize, pageNumber, all)
+	items, totalCount, totalPages, err := a.service.Secrets.List(c.Request.Context(), pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

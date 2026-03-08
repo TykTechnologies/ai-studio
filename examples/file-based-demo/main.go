@@ -151,7 +151,7 @@ func printConfigSummary(gatewayService *services.FileGatewayService, budgetServi
 	fmt.Printf("\n📊 Configuration Summary:\n")
 
 	// Get active LLMs
-	llms, err := gatewayService.GetActiveLLMs()
+	llms, err := gatewayService.GetActiveLLMs(context.Background())
 	if err != nil {
 		fmt.Printf("❌ Failed to get LLMs: %v\n", err)
 	} else {

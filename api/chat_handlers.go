@@ -109,7 +109,7 @@ func (a *API) getChat(c *gin.Context) {
 		return
 	}
 
-	chat, err := a.service.GetChatByID(uint(id))
+	chat, err := a.service.GetChatByID(c.Request.Context(), uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -293,7 +293,7 @@ func (a *API) addExtraContextToChat(c *gin.Context) {
 		return
 	}
 
-	chat, err := a.service.GetChatByID(uint(chatID))
+	chat, err := a.service.GetChatByID(c.Request.Context(), uint(chatID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -341,7 +341,7 @@ func (a *API) removeExtraContextFromChat(c *gin.Context) {
 		return
 	}
 
-	chat, err := a.service.GetChatByID(uint(chatID))
+	chat, err := a.service.GetChatByID(c.Request.Context(), uint(chatID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -415,7 +415,7 @@ func (a *API) setChatExtraContext(c *gin.Context) {
 		return
 	}
 
-	chat, err := a.service.GetChatByID(uint(chatID))
+	chat, err := a.service.GetChatByID(c.Request.Context(), uint(chatID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {

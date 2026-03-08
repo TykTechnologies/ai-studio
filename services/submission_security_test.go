@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -349,7 +350,7 @@ func TestSecurity_ApprovalTransaction_ResourceAndSubmissionConsistent(t *testing
 	require.NotNil(t, approved.ResourceID)
 
 	// Verify resource exists
-	ds, err := svc.GetDatasourceByID(*approved.ResourceID)
+	ds, err := svc.GetDatasourceByID(context.Background(), *approved.ResourceID)
 	require.NoError(t, err)
 	assert.Equal(t, "Consistent Test", ds.Name)
 	assert.True(t, ds.CommunitySubmitted)

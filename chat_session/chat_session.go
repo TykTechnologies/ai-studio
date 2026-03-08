@@ -224,7 +224,7 @@ func (cs *ChatSession) AddTool(id string, t models.Tool) error {
 	if len(t.Dependencies) > 0 {
 		slog.Info("tool has dependencies", "count", len(t.Dependencies))
 		for i, _ := range t.Dependencies {
-			dep, err := cs.service.GetToolByID(t.Dependencies[i].ID)
+			dep, err := cs.service.GetToolByID(context.Background(), t.Dependencies[i].ID)
 			if err != nil {
 				return fmt.Errorf("error getting tool dependency: %v", err)
 			}
@@ -606,7 +606,7 @@ func (cs *ChatSession) handleDefaults() error {
 
 	if cs.chatRef.DefaultTools != nil {
 		for i, _ := range cs.chatRef.DefaultTools {
-			toolDef, err := cs.service.GetToolByID(cs.chatRef.DefaultTools[i].ID)
+			toolDef, err := cs.service.GetToolByID(context.Background(), cs.chatRef.DefaultTools[i].ID)
 			if err != nil {
 				return fmt.Errorf("error getting default tool definition: %v", err)
 			}

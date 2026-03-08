@@ -1,6 +1,8 @@
 package services
 
 import (
+	"context"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
@@ -80,7 +82,7 @@ func (s *Service) GetToolCataloguesByTag(tagName string) (models.ToolCatalogues,
 }
 
 func (s *Service) AddToolToToolCatalogue(toolID, toolCatalogueID uint) error {
-	tool, err := s.GetToolByID(toolID)
+	tool, err := s.GetToolByID(context.Background(), toolID)
 	if err != nil {
 		return err
 	}
@@ -94,7 +96,7 @@ func (s *Service) AddToolToToolCatalogue(toolID, toolCatalogueID uint) error {
 }
 
 func (s *Service) RemoveToolFromToolCatalogue(toolID, toolCatalogueID uint) error {
-	tool, err := s.GetToolByID(toolID)
+	tool, err := s.GetToolByID(context.Background(), toolID)
 	if err != nil {
 		return err
 	}

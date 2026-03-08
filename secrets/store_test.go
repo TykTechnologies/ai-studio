@@ -22,7 +22,9 @@ func setupTestDB(t *testing.T) *gorm.DB {
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	db := setupTestDB(t)
-	return New(db, "test-secret-key")
+	store, err := New(db, "test-secret-key")
+	require.NoError(t, err)
+	return store
 }
 
 func TestStore_CreateAndGetByID(t *testing.T) {
@@ -189,7 +191,8 @@ func TestBackwardCompat_ReadV1Secret(t *testing.T) {
 	secret := insertV1Secret(t, db, rawKey, "LEGACY_V1", "v1-data")
 
 	// Current store should decrypt it transparently
-	store := New(db, rawKey)
+	store, err := New(db, rawKey)
+	require.NoError(t, err)
 	got, err := store.GetByID(ctx, secret.ID, false)
 	require.NoError(t, err)
 	assert.Equal(t, "v1-data", got.Value)
@@ -202,7 +205,8 @@ func TestBackwardCompat_ReadV1ByVarName(t *testing.T) {
 
 	insertV1Secret(t, db, rawKey, "LEGACY_TOKEN", "sk-legacy-123")
 
-	store := New(db, rawKey)
+	store, err := New(db, rawKey)
+	require.NoError(t, err)
 	got, err := store.GetByVarName(ctx, "LEGACY_TOKEN", false)
 	require.NoError(t, err)
 	assert.Equal(t, "sk-legacy-123", got.Value)
@@ -215,7 +219,8 @@ func TestBackwardCompat_UpdateV1SecretRewritesAsV2(t *testing.T) {
 
 	secret := insertV1Secret(t, db, rawKey, "UPGRADE_ME", "old-v1-value")
 
-	store := New(db, rawKey)
+	store, err := New(db, rawKey)
+	require.NoError(t, err)
 
 	// Read, modify, and update
 	got, err := store.GetByID(ctx, secret.ID, false)
@@ -247,7 +252,8 @@ func TestBackwardCompat_DecryptValueV1(t *testing.T) {
 	require.NoError(t, err)
 
 	// DecryptValue should handle it
-	store := New(db, rawKey)
+	store, err := New(db, rawKey)
+	require.NoError(t, err)
 	decrypted, err := store.DecryptValue(ctx, encrypted)
 	require.NoError(t, err)
 	assert.Equal(t, "direct-v1", decrypted)
@@ -287,7 +293,7 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	rawKey := "kek-rotation-key"
 	ctx := context.Background()
 
-	oldKEK := NewLocalKEKProvider("old-kek")
+	oldKEK := newTestLocalKEK("old-kek")
 	oldStore := NewWithKEKProvider(db, rawKey, oldKEK)
 
 	for _, name := range []string{"A", "B", "C"} {
@@ -296,7 +302,7 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	}
 
 	// Rotate KEK (re-wraps encryption_keys rows, not secrets)
-	newKEK := NewLocalKEKProvider("new-kek")
+	newKEK := newTestLocalKEK("new-kek")
 	result, err := oldStore.RotateKEK(ctx, oldKEK, newKEK)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Total)   // 1 encryption key
@@ -318,7 +324,8 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 
 func TestEnvelope_EncryptionKeyAutoCreated(t *testing.T) {
 	db := setupTestDB(t)
-	store := New(db, "auto-key")
+	store, err := New(db, "auto-key")
+	require.NoError(t, err)
 	ctx := context.Background()
 
 	var count int64

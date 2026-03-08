@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -190,7 +191,7 @@ func (s *Service) CreateUpdateSubmission(submitterID uint, resourceType string, 
 	// Verify the target resource exists and is community-submitted
 	switch resourceType {
 	case models.SubmissionResourceTypeDatasource:
-		ds, err := s.GetDatasourceByID(targetResourceID)
+		ds, err := s.GetDatasourceByID(context.Background(), targetResourceID)
 		if err != nil {
 			return nil, fmt.Errorf("target datasource not found: %w", err)
 		}
@@ -198,7 +199,7 @@ func (s *Service) CreateUpdateSubmission(submitterID uint, resourceType string, 
 			return nil, fmt.Errorf("not authorized: you can only propose updates to resources you own")
 		}
 	case models.SubmissionResourceTypeTool:
-		tool, err := s.GetToolByID(targetResourceID)
+		tool, err := s.GetToolByID(context.Background(), targetResourceID)
 		if err != nil {
 			return nil, fmt.Errorf("target tool not found: %w", err)
 		}
@@ -321,7 +322,7 @@ func structToJSONMap(v interface{}) (models.JSONMap, error) {
 }
 
 func (s *Service) snapshotDatasource(id uint) (models.JSONMap, error) {
-	ds, err := s.GetDatasourceByID(id)
+	ds, err := s.GetDatasourceByID(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +330,7 @@ func (s *Service) snapshotDatasource(id uint) (models.JSONMap, error) {
 }
 
 func (s *Service) snapshotTool(id uint) (models.JSONMap, error) {
-	tool, err := s.GetToolByID(id)
+	tool, err := s.GetToolByID(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}

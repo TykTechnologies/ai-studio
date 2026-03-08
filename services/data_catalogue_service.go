@@ -1,6 +1,8 @@
 package services
 
 import (
+	"context"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
@@ -88,7 +90,7 @@ func (s *Service) AddDatasourceToDataCatalogue(dataCatalogueID, datasourceID uin
 		return err
 	}
 
-	datasource, err := s.GetDatasourceByID(datasourceID)
+	datasource, err := s.GetDatasourceByID(context.Background(), datasourceID)
 	if err != nil {
 		return err
 	}
@@ -102,7 +104,7 @@ func (s *Service) RemoveDatasourceFromDataCatalogue(dataCatalogueID, datasourceI
 		return err
 	}
 
-	datasource, err := s.GetDatasourceByID(datasourceID)
+	datasource, err := s.GetDatasourceByID(context.Background(), datasourceID)
 	if err != nil {
 		return err
 	}

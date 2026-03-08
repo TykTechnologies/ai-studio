@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
@@ -846,7 +847,7 @@ func TestLLMService(t *testing.T) {
 	assert.Equal(t, "https://logo.com", llm.LogoURL)
 
 	// Test GetLLMByID
-	fetchedLLM, err := service.GetLLMByID(llm.ID)
+	fetchedLLM, err := service.GetLLMByID(context.Background(), llm.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, llm.Name, fetchedLLM.Name)
 	assert.Equal(t, llm.APIKey, fetchedLLM.APIKey)
@@ -857,7 +858,7 @@ func TestLLMService(t *testing.T) {
 	assert.Equal(t, llm.LogoURL, fetchedLLM.LogoURL)
 
 	// Test UpdateLLM
-	updatedLLM, err := service.UpdateLLM(llm.ID, "UpdatedLLM", "updated-api-key", "https://updated-api.test.com", 80,
+	updatedLLM, err := service.UpdateLLM(context.Background(), llm.ID, "UpdatedLLM", "updated-api-key", "https://updated-api.test.com", 80,
 		"Updated short", "Updated long", "https://updated-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "")
 	assert.NoError(t, err)
 	assert.Equal(t, "UpdatedLLM", updatedLLM.Name)
@@ -869,7 +870,7 @@ func TestLLMService(t *testing.T) {
 	assert.Equal(t, "https://updated-logo.com", updatedLLM.LogoURL)
 
 	// Test GetLLMByName
-	fetchedLLMByName, err := service.GetLLMByName("UpdatedLLM")
+	fetchedLLMByName, err := service.GetLLMByName(context.Background(), "UpdatedLLM")
 	assert.NoError(t, err)
 	assert.Equal(t, updatedLLM.ID, fetchedLLMByName.ID)
 	assert.Equal(t, updatedLLM.Name, fetchedLLMByName.Name)
@@ -887,11 +888,11 @@ func TestLLMService(t *testing.T) {
 	assert.Equal(t, updatedLLM.ID, (stubLLMs)[0].ID)
 
 	// Test DeleteLLM
-	err = service.DeleteLLM(llm.ID)
+	err = service.DeleteLLM(context.Background(), llm.ID)
 	assert.NoError(t, err)
 
 	// Verify LLM is deleted
-	_, err = service.GetLLMByID(llm.ID)
+	_, err = service.GetLLMByID(context.Background(), llm.ID)
 	assert.Error(t, err)
 
 	// Test creating multiple LLMs and searching
@@ -1425,21 +1426,21 @@ func TestSmartAPIKeyUpdateLogic(t *testing.T) {
 		assert.Equal(t, "initial-api-key", llm.APIKey)
 
 		// Test 1: Update with [redacted] should preserve existing key
-		updatedLLM1, err := service.UpdateLLM(llm.ID, "Test LLM", "[redacted]", "https://api.test.com", 75,
+		updatedLLM1, err := service.UpdateLLM(context.Background(), llm.ID, "Test LLM", "[redacted]", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
 			"gpt-4", []string{}, nil, nil, "")
 		assert.NoError(t, err)
 		assert.Equal(t, "initial-api-key", updatedLLM1.APIKey, "API key should be preserved when [redacted] is sent")
 
 		// Test 2: Update with empty string should clear the key
-		updatedLLM2, err := service.UpdateLLM(llm.ID, "Test LLM", "", "https://api.test.com", 75,
+		updatedLLM2, err := service.UpdateLLM(context.Background(), llm.ID, "Test LLM", "", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
 			"gpt-4", []string{}, nil, nil, "")
 		assert.NoError(t, err)
 		assert.Equal(t, "", updatedLLM2.APIKey, "API key should be cleared when empty string is sent")
 
 		// Test 3: Update with new key should update the key
-		updatedLLM3, err := service.UpdateLLM(llm.ID, "Test LLM", "new-api-key", "https://api.test.com", 75,
+		updatedLLM3, err := service.UpdateLLM(context.Background(), llm.ID, "Test LLM", "new-api-key", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
 			"gpt-4", []string{}, nil, nil, "")
 		assert.NoError(t, err)

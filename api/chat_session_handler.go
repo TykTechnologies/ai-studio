@@ -125,7 +125,7 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 		return
 	}
 
-	chat, err := a.service.GetChatByID(uint(chatID))
+	chat, err := a.service.GetChatByID(c.Request.Context(), uint(chatID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -658,7 +658,7 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(uint(toolId))
+	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolId))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

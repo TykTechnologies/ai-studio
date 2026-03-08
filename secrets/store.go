@@ -44,19 +44,22 @@ type Store struct {
 // New creates a new DB-backed secret store using the "local" KEK provider.
 // The rawKey is used both as the KEK passphrase and for decrypting
 // legacy v1 secrets. New secrets are always written with envelope encryption.
-func New(db *gorm.DB, rawKey string) *Store {
-	return NewFromProvider(db, rawKey, "local")
+// Requires that secrets/local has been imported (blank import) to register
+// the "local" provider.
+func New(db *gorm.DB, rawKey string) (*Store, error) {
+	return NewFromProvider(db, rawKey, "local", nil)
 }
 
 // NewFromProvider creates a DB-backed secret store using the named KEK provider
-// from the registry. Falls back to "local" if the provider is not found.
-func NewFromProvider(db *gorm.DB, rawKey string, providerName string) *Store {
-	kek, err := NewKEKProvider(providerName, rawKey)
+// from the DefaultRegistry. The config map holds provider-specific settings
+// collected from TYK_AI_<PROVIDER>_* env vars.
+// Requires that the provider package has been imported to register its factory.
+func NewFromProvider(db *gorm.DB, rawKey string, providerName string, config map[string]string) (*Store, error) {
+	kek, err := DefaultRegistry.Get(providerName, rawKey, config)
 	if err != nil {
-		log.Warnf("KEK provider %q not available: %v — falling back to local", providerName, err)
-		kek = NewLocalKEKProvider(rawKey)
+		return nil, fmt.Errorf("KEK provider %q not available: %w (registered: %v)", providerName, err, DefaultRegistry.Names())
 	}
-	return NewWithKEKProvider(db, rawKey, kek)
+	return NewWithKEKProvider(db, rawKey, kek), nil
 }
 
 // NewWithKEKProvider creates a DB-backed secret store that uses envelope encryption (v2)

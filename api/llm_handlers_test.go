@@ -9,6 +9,7 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	_ "github.com/TykTechnologies/midsommar/v2/secrets/local" // Register local KEK provider
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,7 +33,11 @@ func TestLLMWithSecretReference(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Initialize secrets store on the service
-	service.SetSecretStore(secrets.New(db, "test-key"))
+	secretStore, err := secrets.New(db, "test-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetSecretStore(secretStore)
 
 	// Create a secret directly in the database
 	secret := &secrets.Secret{
@@ -60,12 +65,12 @@ func TestLLMWithSecretReference(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify the actual secret value is used when loading into proxy
-	activeLLMs, err := service.GetActiveLLMs()
+	activeLLMs, err := service.GetActiveLLMs(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, "sk-test-key-123", activeLLMs[0].APIKey)
 
 	// But when getting directly via API, we preserve the reference
-	llm, err = service.GetLLMByID(uint(1))
+	llm, err = service.GetLLMByID(context.Background(), uint(1))
 	assert.NoError(t, err)
 	assert.Equal(t, "$SECRET/OPENAI_KEY", llm.APIKey)
 }
@@ -79,7 +84,11 @@ func TestSerializeLLMRedactsAPIKey(t *testing.T) {
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
 	// Initialize secrets store on the service
-	service.SetSecretStore(secrets.New(db, "test-key"))
+	secretStore, err := secrets.New(db, "test-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetSecretStore(secretStore)
 
 	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
@@ -100,7 +109,7 @@ func TestSerializeLLMRedactsAPIKey(t *testing.T) {
 		VarName: "TEST_KEY",
 		Value:   "sk-secret-key-456",
 	}
-	err := service.Secrets.Create(context.Background(), secret)
+	err = service.Secrets.Create(context.Background(), secret)
 	assert.NoError(t, err)
 
 	llmWithSecretRef := &models.LLM{

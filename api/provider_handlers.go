@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"context"
-
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/direct"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
@@ -101,7 +99,7 @@ func (a *ProviderAPI) configureProvider(c *gin.Context) {
 		// Resolve any secret references in the token
 		config := req.Config
 		if a.api.service.Secrets != nil {
-			config.Token = a.api.service.Secrets.ResolveReference(context.Background(), config.Token, false)
+			config.Token = a.api.service.Secrets.ResolveReference(c.Request.Context(), config.Token, false)
 		}
 		newProvider = tyk.NewTykDashboardProvider(config)
 	case "direct":

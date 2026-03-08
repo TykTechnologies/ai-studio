@@ -319,7 +319,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 	}
 
 	// Get initial configuration using normalized namespace
-	initialConfig, err := s.getConfigurationSnapshot(namespace)
+	initialConfig, err := s.getConfigurationSnapshot(ctx, namespace)
 	if err != nil {
 		log.Error().Err(err).Str("edge_id", req.EdgeId).Msg("Failed to get initial configuration")
 		initialConfig = &pb.ConfigurationSnapshot{
@@ -362,7 +362,7 @@ func (s *ControlServer) GetFullConfiguration(ctx context.Context, req *pb.Config
 		Str("namespace", req.EdgeNamespace).
 		Msg("AI Studio control server: full configuration request")
 
-	snapshot, err := s.getConfigurationSnapshot(req.EdgeNamespace)
+	snapshot, err := s.getConfigurationSnapshot(ctx, req.EdgeNamespace)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to get configuration: %v", err))
 	}
@@ -557,7 +557,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 			case *pb.EdgeMessage_ConfigRequest:
 				// Handle configuration request
 				if edgeConnection != nil {
-					snapshot, err := s.getConfigurationSnapshot(edgeConnection.Namespace)
+					snapshot, err := s.getConfigurationSnapshot(stream.Context(), edgeConnection.Namespace)
 					if err != nil {
 						log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to get configuration snapshot")
 					} else {
@@ -998,11 +998,11 @@ func (s *ControlServer) SetSecretStore(store *secrets.Store) {
 }
 
 // resolveSecret resolves a secret reference to its actual value.
-func (s *ControlServer) resolveSecret(reference string) string {
+func (s *ControlServer) resolveSecret(ctx context.Context, reference string) string {
 	if s.secretStore == nil {
 		return reference
 	}
-	return s.secretStore.ResolveReference(context.Background(), reference, false)
+	return s.secretStore.ResolveReference(ctx, reference, false)
 }
 
 // extractVendorFromEvent extracts vendor from analytics event
@@ -1113,7 +1113,7 @@ func (s *ControlServer) authenticate(ctx context.Context) error {
 }
 
 // getConfigurationSnapshot generates a complete configuration snapshot for an edge namespace
-func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.ConfigurationSnapshot, error) {
+func (s *ControlServer) getConfigurationSnapshot(ctx context.Context, namespace string) (*pb.ConfigurationSnapshot, error) {
 	snapshot := &pb.ConfigurationSnapshot{
 		Version:      fmt.Sprintf("%d", time.Now().Unix()),
 		Llms:         []*pb.LLMConfig{},
@@ -1157,8 +1157,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 
 		// Resolve secret references for microgateway
-		resolvedAPIKey := s.resolveSecret(llm.APIKey)
-		resolvedEndpoint := s.resolveSecret(llm.APIEndpoint)
+		resolvedAPIKey := s.resolveSecret(ctx, llm.APIKey)
+		resolvedEndpoint := s.resolveSecret(ctx, llm.APIEndpoint)
 
 		// Encrypt API key using microgateway's encryption format
 		encryptedAPIKey, err := s.encryptForMicrogateway(resolvedAPIKey)
@@ -1731,7 +1731,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Convert Tools to protobuf
 	for _, tool := range tools {
 		// Resolve and encrypt auth key for edge transit (fail-closed: skip tool if encryption fails)
-		resolvedAuthKey := s.resolveSecret(tool.AuthKey)
+		resolvedAuthKey := s.resolveSecret(ctx, tool.AuthKey)
 		encryptedAuthKey := ""
 		if resolvedAuthKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
@@ -1812,7 +1812,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Convert Datasources to protobuf (fail-closed: skip datasource if any secret encryption fails)
 	for _, ds := range datasources {
 		// Resolve and encrypt secrets for edge transit
-		resolvedConnString := s.resolveSecret(ds.DBConnString)
+		resolvedConnString := s.resolveSecret(ctx, ds.DBConnString)
 		encryptedConnString := ""
 		if resolvedConnString != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnString)
@@ -1823,7 +1823,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedConnString = encrypted
 		}
 
-		resolvedConnAPIKey := s.resolveSecret(ds.DBConnAPIKey)
+		resolvedConnAPIKey := s.resolveSecret(ctx, ds.DBConnAPIKey)
 		encryptedConnAPIKey := ""
 		if resolvedConnAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey)
@@ -1834,7 +1834,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedConnAPIKey = encrypted
 		}
 
-		resolvedEmbedAPIKey := s.resolveSecret(ds.EmbedAPIKey)
+		resolvedEmbedAPIKey := s.resolveSecret(ctx, ds.EmbedAPIKey)
 		encryptedEmbedAPIKey := ""
 		if resolvedEmbedAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)
@@ -2287,7 +2287,7 @@ func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.E
 	for _, namespace := range namespaces {
 		// Recompute snapshot and checksum for this namespace
 		// This will also update NamespaceSyncStatus
-		snapshot, err := s.getConfigurationSnapshot(namespace)
+		snapshot, err := s.getConfigurationSnapshot(context.Background(), namespace)
 		if err != nil {
 			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to recompute snapshot on config change")
 			continue

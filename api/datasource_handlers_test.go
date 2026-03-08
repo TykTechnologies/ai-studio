@@ -10,6 +10,7 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	_ "github.com/TykTechnologies/midsommar/v2/secrets/local" // Register local KEK provider
 	"github.com/stretchr/testify/assert"
 )
 
@@ -22,7 +23,11 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
 	// Initialize secrets store on the service
-	service.SetSecretStore(secrets.New(db, "test-key"))
+	secretStore, err := secrets.New(db, "test-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetSecretStore(secretStore)
 
 	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
@@ -142,7 +147,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var response map[string]DatasourceResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test Datasource", response["data"].Attributes.Name)
 	assert.Equal(t, "[redacted]", response["data"].Attributes.DBConnAPIKey)
@@ -191,7 +196,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	assert.Equal(t, "[redacted]", searchResponse["data"][0].Attributes.EmbedAPIKey)
 
 	// Verify the actual secret values are used when needed
-	ds, err := service.GetDatasourceByID(uint(1))
+	ds, err := service.GetDatasourceByID(context.Background(), uint(1))
 	assert.NoError(t, err)
 	assert.Equal(t, "$SECRET/DB_KEY", ds.DBConnAPIKey)
 	assert.Equal(t, "$SECRET/EMBED_KEY", ds.EmbedAPIKey)
@@ -206,7 +211,11 @@ func TestSerializeDatasourceRedactsAPIKeys(t *testing.T) {
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
 	// Initialize secrets store on the service
-	service.SetSecretStore(secrets.New(db, "test-key"))
+	secretStore, err := secrets.New(db, "test-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetSecretStore(secretStore)
 
 	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
@@ -215,7 +224,7 @@ func TestSerializeDatasourceRedactsAPIKeys(t *testing.T) {
 		VarName: "TEST_EMBED_KEY",
 		Value:   "embed-key-789",
 	}
-	err := service.Secrets.Create(context.Background(), secret)
+	err = service.Secrets.Create(context.Background(), secret)
 	assert.NoError(t, err)
 
 	// Test 1: Datasource with direct API keys

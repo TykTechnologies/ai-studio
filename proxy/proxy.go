@@ -276,7 +276,7 @@ func (p *Proxy) Handler() http.Handler {
 }
 
 func (p *Proxy) loadResources() error {
-	llms, err := p.gatewayService.GetActiveLLMs()
+	llms, err := p.gatewayService.GetActiveLLMs(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to get LLMs: %w", err)
 	}
@@ -1863,7 +1863,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 
 func (p *Proxy) handleMCPToolSSE(w http.ResponseWriter, r *http.Request) {
 	toolSlug := mux.Vars(r)["toolSlug"]
-	tool, err := p.gatewayService.GetToolBySlug(toolSlug)
+	tool, err := p.gatewayService.GetToolBySlug(context.Background(), toolSlug)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "tool not found", err, false)
 		return
@@ -1877,7 +1877,7 @@ func (p *Proxy) handleMCPToolSSE(w http.ResponseWriter, r *http.Request) {
 }
 func (p *Proxy) handleMCPToolMessage(w http.ResponseWriter, r *http.Request) {
 	toolSlug := mux.Vars(r)["toolSlug"]
-	tool, err := p.gatewayService.GetToolBySlug(toolSlug)
+	tool, err := p.gatewayService.GetToolBySlug(context.Background(), toolSlug)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "tool not found", err, false)
 		return
@@ -1891,7 +1891,7 @@ func (p *Proxy) handleMCPToolMessage(w http.ResponseWriter, r *http.Request) {
 }
 func (p *Proxy) handleMCPToolStreamable(w http.ResponseWriter, r *http.Request) {
 	toolSlug := mux.Vars(r)["toolSlug"]
-	tool, err := p.gatewayService.GetToolBySlug(toolSlug)
+	tool, err := p.gatewayService.GetToolBySlug(context.Background(), toolSlug)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "tool not found", err, false)
 		return

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/base64"
 	"testing"
 
@@ -130,7 +131,7 @@ func TestE2E_DatasourceSubmission_FullLifecycle(t *testing.T) {
 
 	// ---- Step 7: Verify the datasource was created correctly ----
 	t.Log("Step 7: Verify created datasource")
-	ds, err := svc.GetDatasourceByID(*approved.ResourceID)
+	ds, err := svc.GetDatasourceByID(context.Background(), *approved.ResourceID)
 	require.NoError(t, err)
 	assert.Equal(t, "Product Embeddings", ds.Name)
 	assert.Equal(t, "pgvector", ds.DBSourceType)
@@ -160,7 +161,7 @@ func TestE2E_DatasourceSubmission_FullLifecycle(t *testing.T) {
 	assert.Equal(t, models.SubmissionStatusApproved, approvedUpdate.Status)
 
 	// Verify datasource was updated
-	updatedDS, err := svc.GetDatasourceByID(ds.ID)
+	updatedDS, err := svc.GetDatasourceByID(context.Background(), ds.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "Product Embeddings v2", updatedDS.Name)
 	assert.Equal(t, "Updated with 2024 reviews", updatedDS.ShortDescription)
@@ -176,7 +177,7 @@ func TestE2E_DatasourceSubmission_FullLifecycle(t *testing.T) {
 	err = svc.RollbackResource(models.SubmissionResourceTypeDatasource, ds.ID, versions[0].ID, admin.ID)
 	require.NoError(t, err)
 
-	rolledBackDS, err := svc.GetDatasourceByID(ds.ID)
+	rolledBackDS, err := svc.GetDatasourceByID(context.Background(), ds.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "Product Embeddings", rolledBackDS.Name)
 
@@ -304,7 +305,7 @@ components:
 
 	// ---- Step 6: Verify tool created ----
 	t.Log("Step 6: Verify tool was created")
-	tool, err := svc.GetToolByID(*approved.ResourceID)
+	tool, err := svc.GetToolByID(context.Background(), *approved.ResourceID)
 	require.NoError(t, err)
 	assert.Equal(t, "Weather API", tool.Name)
 	assert.True(t, tool.CommunitySubmitted)
@@ -376,7 +377,7 @@ func TestE2E_ChangesRequestedFlow(t *testing.T) {
 	assert.Equal(t, models.SubmissionStatusApproved, approved.Status)
 	assert.NotNil(t, approved.ResourceID)
 
-	ds, err := svc.GetDatasourceByID(*approved.ResourceID)
+	ds, err := svc.GetDatasourceByID(context.Background(), *approved.ResourceID)
 	require.NoError(t, err)
 	assert.Equal(t, "Customer DB", ds.Name)
 	assert.Equal(t, 8, ds.PrivacyScore)
@@ -404,7 +405,7 @@ func TestE2E_OrphanManagement(t *testing.T) {
 	dsID := *approved.ResourceID
 
 	// Verify it's active
-	ds, _ := svc.GetDatasourceByID(dsID)
+	ds, _ := svc.GetDatasourceByID(context.Background(), dsID)
 	assert.True(t, ds.CommunitySubmitted)
 
 	// ---- Handle user deletion for UGC ----
@@ -751,14 +752,14 @@ func TestE2E_ConcurrentSubmissionsForSameResource(t *testing.T) {
 	_, err = svc.ApproveSubmission(update1.ID, admin.ID, 5, nil, "")
 	require.NoError(t, err)
 
-	ds, _ := svc.GetDatasourceByID(dsID)
+	ds, _ := svc.GetDatasourceByID(context.Background(), dsID)
 	assert.Equal(t, "Update 1", ds.Name)
 
 	// Admin can still approve update2 (applies on top of update1)
 	_, err = svc.ApproveSubmission(update2.ID, admin.ID, 5, nil, "")
 	require.NoError(t, err)
 
-	ds, _ = svc.GetDatasourceByID(dsID)
+	ds, _ = svc.GetDatasourceByID(context.Background(), dsID)
 	assert.Equal(t, "Update 2", ds.Name)
 
 	// Both updates created version snapshots

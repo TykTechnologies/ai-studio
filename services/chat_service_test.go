@@ -6,6 +6,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	_ "github.com/TykTechnologies/midsommar/v2/secrets/local" // Register local KEK provider
 	"github.com/stretchr/testify/assert"
 )
 
@@ -40,7 +41,7 @@ func TestChatService(t *testing.T) {
 	assert.Len(t, chat.Groups, 2)
 
 	// Test GetChatByID
-	retrievedChat, err := service.GetChatByID(chat.ID)
+	retrievedChat, err := service.GetChatByID(context.Background(), chat.ID)
 	assert.NoError(t, err)
 	assert.NotNil(t, retrievedChat)
 	assert.Equal(t, chat.ID, retrievedChat.ID)
@@ -80,7 +81,7 @@ func TestChatService(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify deletion
-	_, err = service.GetChatByID(chat.ID)
+	_, err = service.GetChatByID(context.Background(), chat.ID)
 	assert.Error(t, err)
 }
 
@@ -92,7 +93,9 @@ func TestGetChatByID_ResolvesSecrets(t *testing.T) {
 	service := NewService(db)
 
 	// Initialize secrets store on the service
-	service.SetSecretStore(secrets.New(db, "test-secret-key-for-encryption"))
+	secretStore, err := secrets.New(db, "test-secret-key-for-encryption")
+	assert.NoError(t, err)
+	service.SetSecretStore(secretStore)
 
 	// Migrate secrets table
 	db.AutoMigrate(&secrets.Secret{}, &secrets.EncryptionKey{})
@@ -102,7 +105,7 @@ func TestGetChatByID_ResolvesSecrets(t *testing.T) {
 		VarName: "TEST_API_KEY",
 		Value:   "sk-actual-secret-api-key-12345",
 	}
-	err := service.Secrets.Create(context.Background(), apiKeySecret)
+	err = service.Secrets.Create(context.Background(), apiKeySecret)
 	assert.NoError(t, err)
 
 	apiEndpointSecret := &secrets.Secret{
@@ -144,7 +147,7 @@ func TestGetChatByID_ResolvesSecrets(t *testing.T) {
 	assert.NotNil(t, chat)
 
 	// Now retrieve the chat using GetChatByID - this should resolve secrets
-	retrievedChat, err := service.GetChatByID(chat.ID)
+	retrievedChat, err := service.GetChatByID(context.Background(), chat.ID)
 	assert.NoError(t, err)
 	assert.NotNil(t, retrievedChat)
 	assert.NotNil(t, retrievedChat.LLM)
@@ -176,7 +179,7 @@ func TestGetChatByID_ResolvesSecrets(t *testing.T) {
 	)
 	assert.NoError(t, err)
 
-	retrievedChatWithRawKey, err := service.GetChatByID(chatWithRawKey.ID)
+	retrievedChatWithRawKey, err := service.GetChatByID(context.Background(), chatWithRawKey.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, "raw-api-key-no-secret", retrievedChatWithRawKey.LLM.APIKey,
 		"Raw APIKey should pass through unchanged")
@@ -189,7 +192,7 @@ func TestChatServiceErrors(t *testing.T) {
 	service := NewService(db)
 
 	// Test GetChatByID with non-existent ID
-	_, err := service.GetChatByID(999)
+	_, err := service.GetChatByID(context.Background(), 999)
 	assert.Error(t, err)
 
 	// Test UpdateChat with non-existent ID

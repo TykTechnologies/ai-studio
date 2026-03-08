@@ -64,7 +64,8 @@ func TestRotateKey_V1ToV2(t *testing.T) {
 	insertV1Secret(t, db, key, "LEGACY", "legacy-value")
 
 	// Rotate with current store -> migrates to v2
-	store := New(db, key)
+	store, err := New(db, key)
+	require.NoError(t, err)
 	result, err := store.RotateKey(ctx, key, key)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Total)
@@ -91,7 +92,8 @@ func TestRotateKey_MixedV1AndV2(t *testing.T) {
 	insertV1Secret(t, db, key, "V1_SECRET", "v1-data")
 
 	// Create a v2 secret via the store
-	store := New(db, key)
+	store, err := New(db, key)
+	require.NoError(t, err)
 	s := &Secret{VarName: "V2_SECRET", Value: "v2-data"}
 	require.NoError(t, store.Create(ctx, s))
 
@@ -113,7 +115,7 @@ func TestRotateKEK_ReWrapsKeys(t *testing.T) {
 	rawKey := "kek-test"
 	ctx := context.Background()
 
-	oldKEK := NewLocalKEKProvider("old-kek")
+	oldKEK := newTestLocalKEK("old-kek")
 	store := NewWithKEKProvider(db, rawKey, oldKEK)
 
 	for _, name := range []string{"S1", "S2"} {
@@ -126,7 +128,7 @@ func TestRotateKEK_ReWrapsKeys(t *testing.T) {
 	assert.Equal(t, int64(1), keyCount)
 
 	// Rotate KEK
-	newKEK := NewLocalKEKProvider("new-kek")
+	newKEK := newTestLocalKEK("new-kek")
 	result, err := store.RotateKEK(ctx, oldKEK, newKEK)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Total)

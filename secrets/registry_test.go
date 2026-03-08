@@ -4,8 +4,8 @@ import (
 	"testing"
 )
 
-func TestNewKEKProvider_Local(t *testing.T) {
-	kek, err := NewKEKProvider("local", "test-key")
+func TestRegistry_Get_Local(t *testing.T) {
+	kek, err := DefaultRegistry.Get("local", "test-key", nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -24,15 +24,15 @@ func TestNewKEKProvider_Local(t *testing.T) {
 	}
 }
 
-func TestNewKEKProvider_Unknown(t *testing.T) {
-	_, err := NewKEKProvider("nonexistent", "key")
+func TestRegistry_Get_Unknown(t *testing.T) {
+	_, err := DefaultRegistry.Get("nonexistent", "key", nil)
 	if err == nil {
 		t.Fatal("expected error for unknown provider")
 	}
 }
 
-func TestKEKProviderNames(t *testing.T) {
-	names := KEKProviderNames()
+func TestRegistry_Names(t *testing.T) {
+	names := DefaultRegistry.Names()
 	found := false
 	for _, name := range names {
 		if name == "local" {
@@ -44,13 +44,11 @@ func TestKEKProviderNames(t *testing.T) {
 	}
 }
 
-func TestRegisterKEKProvider_DuplicatePanics(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic on duplicate registration")
-		}
-	}()
-	RegisterKEKProvider("local", func(rawKey string) (KEKProvider, error) {
+func TestRegistry_Register_DuplicateReturnsError(t *testing.T) {
+	err := DefaultRegistry.Register("local", func(rawKey string, _ map[string]string) (KEKProvider, error) {
 		return nil, nil
 	})
+	if err == nil {
+		t.Fatal("expected error on duplicate registration")
+	}
 }

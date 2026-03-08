@@ -54,6 +54,7 @@ type AppConf struct {
 	TIBAPISecret          string
 	EncryptionKey         string
 	EncryptionProvider    string
+	EncryptionProviderConfig map[string]string // Provider-specific config from TYK_AI_<PROVIDER>_* env vars
 	DocsLinks             DocsLinks
 	DevMode               bool
 	AuthServerURL         string
@@ -373,6 +374,10 @@ func getConfigFromEnv(envFile string) *AppConf {
 	if conf.EncryptionProvider == "" {
 		conf.EncryptionProvider = "local"
 	}
+
+	// Collect provider-specific config from TYK_AI_<PROVIDER>_* env vars.
+	// e.g., TYK_AI_VAULT_ADDR, TYK_AI_VAULT_TOKEN, TYK_AI_AWSKMS_REGION
+	conf.EncryptionProviderConfig = collectProviderConfig(conf.EncryptionProvider)
 
 	// Licensing configuration (Enterprise Edition)
 	conf.LicenseKey = os.Getenv("TYK_AI_LICENSE")
@@ -865,4 +870,30 @@ func parseDurationWithDefault(envVar string, defaultDuration time.Duration) time
 	}
 
 	return duration
+}
+
+// collectProviderConfig collects env vars matching TYK_AI_<PROVIDER>_* and
+// returns them as a map with the prefix stripped. For example, with provider "vault":
+//
+//	TYK_AI_VAULT_ADDR=https://vault:8200  →  {"ADDR": "https://vault:8200"}
+//	TYK_AI_VAULT_TOKEN=s.xxx              →  {"TOKEN": "s.xxx"}
+func collectProviderConfig(provider string) map[string]string {
+	if provider == "local" {
+		return nil
+	}
+	prefix := "TYK_AI_" + strings.ToUpper(strings.ReplaceAll(provider, "-", "_")) + "_"
+	result := make(map[string]string)
+	for _, env := range os.Environ() {
+		if idx := strings.Index(env, "="); idx > 0 {
+			key := env[:idx]
+			if strings.HasPrefix(key, prefix) {
+				configKey := key[len(prefix):]
+				result[configKey] = env[idx+1:]
+			}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }

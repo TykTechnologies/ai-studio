@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -80,7 +81,7 @@ func TestApproveUpdateSubmission_CreatesVersion(t *testing.T) {
 	dsID := *approved.ResourceID
 
 	// Verify original state
-	ds, _ := service.GetDatasourceByID(dsID)
+	ds, _ := service.GetDatasourceByID(context.Background(), dsID)
 	assert.Equal(t, "Original DS", ds.Name)
 
 	// Submit an update
@@ -97,7 +98,7 @@ func TestApproveUpdateSubmission_CreatesVersion(t *testing.T) {
 	assert.Equal(t, models.SubmissionStatusApproved, approvedUpdate.Status)
 
 	// Verify datasource was updated
-	updatedDS, _ := service.GetDatasourceByID(dsID)
+	updatedDS, _ := service.GetDatasourceByID(context.Background(), dsID)
 	assert.Equal(t, "Updated DS", updatedDS.Name)
 	assert.Equal(t, "New description", updatedDS.ShortDescription)
 	assert.Equal(t, 6, updatedDS.PrivacyScore)
@@ -141,7 +142,7 @@ func TestApproveUpdateSubmission_Tool(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify tool was updated
-	tool, _ := service.GetToolByID(toolID)
+	tool, _ := service.GetToolByID(context.Background(), toolID)
 	assert.Equal(t, "Weather API v2", tool.Name)
 
 	// Verify version snapshot
@@ -179,7 +180,7 @@ func TestRollbackResource(t *testing.T) {
 	service.ApproveSubmission(updateSub.ID, admin.ID, 6, nil, "")
 
 	// Verify updated state
-	ds, _ := service.GetDatasourceByID(dsID)
+	ds, _ := service.GetDatasourceByID(context.Background(), dsID)
 	assert.Equal(t, "Updated DS", ds.Name)
 
 	// Get the version to rollback to
@@ -191,7 +192,7 @@ func TestRollbackResource(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify rolled back
-	rolledBack, _ := service.GetDatasourceByID(dsID)
+	rolledBack, _ := service.GetDatasourceByID(context.Background(), dsID)
 	assert.Equal(t, "Original DS", rolledBack.Name)
 
 	// Verify a pre-rollback snapshot was also created (rollback is reversible)
@@ -263,7 +264,7 @@ func TestMultipleUpdates_IncrementingVersions(t *testing.T) {
 	assert.Equal(t, 1, versions[2].VersionNumber)
 
 	// Latest state should be v4
-	ds, _ := service.GetDatasourceByID(dsID)
+	ds, _ := service.GetDatasourceByID(context.Background(), dsID)
 	assert.Equal(t, "v4", ds.Name)
 
 	// Version payloads should capture the state before each update

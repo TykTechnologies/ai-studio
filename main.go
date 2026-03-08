@@ -28,6 +28,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	_ "github.com/TykTechnologies/midsommar/v2/secrets/local" // Register local KEK provider
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
@@ -104,7 +105,11 @@ func main() {
 	// Initialize secrets store with encryption key from config
 	var secretStore *secrets.Store
 	if appConf.EncryptionKey != "" {
-		secretStore = secrets.NewFromProvider(db, appConf.EncryptionKey, appConf.EncryptionProvider)
+		var err error
+		secretStore, err = secrets.NewFromProvider(db, appConf.EncryptionKey, appConf.EncryptionProvider, appConf.EncryptionProviderConfig)
+		if err != nil {
+			logger.FatalErr("Failed to initialize secrets store", err)
+		}
 		logger.Infof("Secrets store initialized (KEK provider: %s)", appConf.EncryptionProvider)
 	} else {
 		logger.Warn("TYK_AI_ENCRYPTION_KEY (or TYK_AI_SECRET_KEY) not set — secrets encryption is disabled")

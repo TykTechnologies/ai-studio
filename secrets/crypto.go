@@ -25,6 +25,7 @@ func deriveKey(input string) []byte {
 	return hash[:]
 }
 
+
 // detectVersion inspects a trimmed ciphertext payload (after removing "$ENC/" prefix)
 // and returns the version string and the raw payload. Legacy data without a version
 // prefix is treated as "v1".
@@ -90,34 +91,6 @@ func (c *cfbCipher) Decrypt(_ context.Context, key []byte, ciphertext []byte) ([
 	stream := cipher.NewCFBDecrypter(block, iv)
 	stream.XORKeyStream(raw, raw)
 	return raw, nil
-}
-
-// encryptWith encrypts plaintext using the given key and cipher, returning
-// the versioned "$ENC/..." string. Empty or "[redacted]" values pass through unchanged.
-// If rawKey is empty, plaintext is returned as-is (no encryption key configured).
-//
-// Note: v2 envelope encryption does not use this function — it goes through
-// the EnvelopeCipher instead. This is only used for v1 legacy.
-func encryptWith(ctx context.Context, c Cipher, rawKey string, plaintext string) (string, error) {
-	if plaintext == "" || plaintext == "[redacted]" {
-		return plaintext, nil
-	}
-	if rawKey == "" {
-		return plaintext, nil
-	}
-
-	key := deriveKey(rawKey)
-	ciphertext, err := c.Encrypt(ctx, key, []byte(plaintext))
-	if err != nil {
-		return "", err
-	}
-
-	encoded := base64.URLEncoding.EncodeToString(ciphertext)
-
-	if c.Version() == "v1" {
-		return "$ENC/" + encoded, nil
-	}
-	return "$ENC/" + c.Version() + "/" + encoded, nil
 }
 
 // decryptWith decrypts a "$ENC/..." string, auto-detecting the cipher version.

@@ -85,7 +85,7 @@ func seedActiveKey(t *testing.T, ks *memKeyStore, kek KEKProvider) {
 }
 
 func TestLocalKEKProvider_RoundTrip(t *testing.T) {
-	w := NewLocalKEKProvider("test-kek")
+	w := newTestLocalKEK("test-kek")
 	ctx := context.Background()
 
 	dek := make([]byte, 32)
@@ -103,8 +103,8 @@ func TestLocalKEKProvider_RoundTrip(t *testing.T) {
 }
 
 func TestLocalKEKProvider_WrongKEK(t *testing.T) {
-	w1 := NewLocalKEKProvider("kek-1")
-	w2 := NewLocalKEKProvider("kek-2")
+	w1 := newTestLocalKEK("kek-1")
+	w2 := newTestLocalKEK("kek-2")
 	ctx := context.Background()
 
 	dek := []byte("this-is-a-32-byte-data-enc-key!")
@@ -117,7 +117,7 @@ func TestLocalKEKProvider_WrongKEK(t *testing.T) {
 }
 
 func TestLocalKEKProvider_TooShort(t *testing.T) {
-	w := NewLocalKEKProvider("kek")
+	w := newTestLocalKEK("kek")
 	ctx := context.Background()
 
 	_, err := w.UnwrapKey(ctx, []byte("short"))
@@ -126,7 +126,7 @@ func TestLocalKEKProvider_TooShort(t *testing.T) {
 }
 
 func TestLocalKEKProvider_GenerateDEK(t *testing.T) {
-	w := NewLocalKEKProvider("test-kek")
+	w := newTestLocalKEK("test-kek")
 	ctx := context.Background()
 
 	wrapped, err := w.GenerateDEK(ctx)
@@ -140,7 +140,7 @@ func TestLocalKEKProvider_GenerateDEK(t *testing.T) {
 }
 
 func TestEnvelopeCipher_RoundTrip(t *testing.T) {
-	w := NewLocalKEKProvider("my-kek")
+	w := newTestLocalKEK("my-kek")
 	ks := newMemKeyStore()
 	seedActiveKey(t, ks, w)
 	c := NewEnvelopeCipher(w, ks)
@@ -168,7 +168,7 @@ func TestEnvelopeCipher_RoundTrip(t *testing.T) {
 }
 
 func TestEnvelopeCipher_FormatContainsKeyID(t *testing.T) {
-	w := NewLocalKEKProvider("my-kek")
+	w := newTestLocalKEK("my-kek")
 	ks := newMemKeyStore()
 	seedActiveKey(t, ks, w)
 	c := NewEnvelopeCipher(w, ks)
@@ -182,7 +182,7 @@ func TestEnvelopeCipher_FormatContainsKeyID(t *testing.T) {
 }
 
 func TestEnvelopeCipher_TamperDetection(t *testing.T) {
-	w := NewLocalKEKProvider("my-kek")
+	w := newTestLocalKEK("my-kek")
 	ks := newMemKeyStore()
 	seedActiveKey(t, ks, w)
 	c := NewEnvelopeCipher(w, ks)
@@ -200,7 +200,7 @@ func TestEnvelopeCipher_TamperDetection(t *testing.T) {
 }
 
 func TestEnvelopeCipher_InvalidFormat(t *testing.T) {
-	w := NewLocalKEKProvider("my-kek")
+	w := newTestLocalKEK("my-kek")
 	ks := newMemKeyStore()
 	c := NewEnvelopeCipher(w, ks)
 	ctx := context.Background()
@@ -211,8 +211,8 @@ func TestEnvelopeCipher_InvalidFormat(t *testing.T) {
 }
 
 func TestEnvelopeCipher_WrongKEK(t *testing.T) {
-	w1 := NewLocalKEKProvider("kek-1")
-	w2 := NewLocalKEKProvider("kek-2")
+	w1 := newTestLocalKEK("kek-1")
+	w2 := newTestLocalKEK("kek-2")
 	ks := newMemKeyStore()
 	seedActiveKey(t, ks, w1)
 	ctx := context.Background()
@@ -228,7 +228,7 @@ func TestEnvelopeCipher_WrongKEK(t *testing.T) {
 }
 
 func TestEncryptEnvelope_Passthrough(t *testing.T) {
-	w := NewLocalKEKProvider("kek")
+	w := newTestLocalKEK("kek")
 	ks := newMemKeyStore()
 	seedActiveKey(t, ks, w)
 	c := NewEnvelopeCipher(w, ks)
@@ -244,7 +244,7 @@ func TestEncryptEnvelope_Passthrough(t *testing.T) {
 }
 
 func TestEncryptEnvelope_DecryptWithCipherMap(t *testing.T) {
-	w := NewLocalKEKProvider("my-kek")
+	w := newTestLocalKEK("my-kek")
 	ks := newMemKeyStore()
 	seedActiveKey(t, ks, w)
 	envelope := NewEnvelopeCipher(w, ks)
@@ -273,7 +273,7 @@ func TestBackwardCompat_V2StoreReadsV1(t *testing.T) {
 	assert.Contains(t, v1Enc, "$ENC/")
 
 	// Build cipher map with v2 available
-	w := NewLocalKEKProvider(rawKey)
+	w := newTestLocalKEK(rawKey)
 	ks := newMemKeyStore()
 	seedActiveKey(t, ks, w)
 	envelope := NewEnvelopeCipher(w, ks)
@@ -296,7 +296,7 @@ func TestBackwardCompat_V2StoreReadsV1(t *testing.T) {
 }
 
 func TestEnvelopeCipher_MultipleKeys(t *testing.T) {
-	w := NewLocalKEKProvider("kek")
+	w := newTestLocalKEK("kek")
 	ks := newMemKeyStore()
 	ctx := context.Background()
 

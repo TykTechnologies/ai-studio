@@ -14,6 +14,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	_ "github.com/TykTechnologies/midsommar/v2/secrets/local" // Register local KEK provider
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
@@ -32,7 +33,9 @@ func TestSecretReferenceInAuthHeader(t *testing.T) {
 	budgetService := budget.NewService(db, notificationSvc)
 
 	// Initialize secrets store on the service
-	service.SetSecretStore(secrets.New(db, "test-key"))
+	secretStore, err := secrets.New(db, "test-key")
+	require.NoError(t, err)
+	service.SetSecretStore(secretStore)
 
 	// Create a credential
 	cred := &models.Credential{
