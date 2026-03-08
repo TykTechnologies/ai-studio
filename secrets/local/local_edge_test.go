@@ -43,13 +43,13 @@ func TestArgon2id_VeryLongRawKey(t *testing.T) {
 func TestArgon2id_UnicodeRawKey(t *testing.T) {
 	t.Parallel()
 	require.NotPanics(t, func() {
-		p := New("日本語テスト🔐")
+		p := New("unicode-key-日本語テスト")
 		assert.Len(t, p.kek, 32)
 	})
 
 	// And it should be deterministic
-	p1 := New("日本語テスト🔐")
-	p2 := New("日本語テスト🔐")
+	p1 := New("unicode-key-日本語テスト")
+	p2 := New("unicode-key-日本語テスト")
 	assert.Equal(t, p1.kek, p2.kek)
 }
 
