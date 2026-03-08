@@ -55,7 +55,11 @@ func New(db *gorm.DB, rawKey string) (*Store, error) {
 // collected from TYK_AI_<PROVIDER>_* env vars.
 // Requires that the provider package has been imported to register its factory.
 func NewFromProvider(db *gorm.DB, rawKey string, providerName string, config map[string]string) (*Store, error) {
-	kek, err := DefaultRegistry.Get(providerName, rawKey, config)
+	if config == nil {
+		config = make(map[string]string)
+	}
+	config["RAW_KEY"] = rawKey
+	kek, err := DefaultRegistry.Get(providerName, config)
 	if err != nil {
 		return nil, fmt.Errorf("KEK provider %q not available: %w (registered: %v)", providerName, err, DefaultRegistry.Names())
 	}

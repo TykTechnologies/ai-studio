@@ -5,7 +5,7 @@ import (
 )
 
 func TestRegistry_Get_Local(t *testing.T) {
-	kek, err := DefaultRegistry.Get("local", "test-key", nil)
+	kek, err := DefaultRegistry.Get("local", map[string]string{"RAW_KEY": "test-key"})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -25,7 +25,7 @@ func TestRegistry_Get_Local(t *testing.T) {
 }
 
 func TestRegistry_Get_Unknown(t *testing.T) {
-	_, err := DefaultRegistry.Get("nonexistent", "key", nil)
+	_, err := DefaultRegistry.Get("nonexistent", nil)
 	if err == nil {
 		t.Fatal("expected error for unknown provider")
 	}
@@ -45,7 +45,7 @@ func TestRegistry_Names(t *testing.T) {
 }
 
 func TestRegistry_Register_DuplicateReturnsError(t *testing.T) {
-	err := DefaultRegistry.Register("local", func(rawKey string, _ map[string]string) (KEKProvider, error) {
+	err := DefaultRegistry.Register("local", func(config map[string]string) (KEKProvider, error) {
 		return nil, nil
 	})
 	if err == nil {
