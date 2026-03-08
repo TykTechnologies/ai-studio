@@ -32,7 +32,7 @@ func TestToolService(t *testing.T) {
 	assert.NotZero(t, tool.ID)
 
 	// Test GetToolByID
-	fetchedTool, err := service.GetToolByID(context.Background(),tool.ID)
+	fetchedTool, err := service.GetToolByID(tool.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, tool.ID, fetchedTool.ID)
 	assert.Equal(t, tool.Name, fetchedTool.Name)
@@ -112,7 +112,7 @@ func TestToolService(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify tool is deleted
-	_, err = service.GetToolByID(context.Background(),tool.ID)
+	_, err = service.GetToolByID(tool.ID)
 	assert.Error(t, err)
 }
 
@@ -121,7 +121,7 @@ func TestToolServiceErrorCases(t *testing.T) {
 	service := NewService(db)
 
 	// Test GetToolByID with non-existent ID
-	_, err := service.GetToolByID(context.Background(),9999)
+	_, err := service.GetToolByID(9999)
 	assert.Error(t, err)
 
 	// Test UpdateTool with non-existent ID
@@ -223,7 +223,7 @@ func TestToolService_GetToolBySlug(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Look up by slug
-	fetchedTool, err := service.GetToolBySlug(context.Background(),"test-tool")
+	fetchedTool, err := service.GetToolBySlug("test-tool")
 	assert.NoError(t, err)
 	assert.Equal(t, tool.ID, fetchedTool.ID)
 	assert.Equal(t, tool.Name, fetchedTool.Name)
@@ -280,13 +280,13 @@ func TestToolService_GetToolBySlug_WithVersionNumber(t *testing.T) {
 
 			// Look up by the same slug that the proxy would use
 			proxySlug := slug.Make(tc.toolName)
-			fetchedTool, err := service.GetToolBySlug(context.Background(),proxySlug)
+			fetchedTool, err := service.GetToolBySlug(proxySlug)
 			assert.NoError(t, err, "Should be able to find tool by slug generated with slug.Make()")
 			assert.Equal(t, tool.ID, fetchedTool.ID)
 			assert.Equal(t, tool.Name, fetchedTool.Name)
 
 			// Also verify direct lookup works
-			fetchedTool2, err := service.GetToolBySlug(context.Background(),tc.lookupSlug)
+			fetchedTool2, err := service.GetToolBySlug(tc.lookupSlug)
 			assert.NoError(t, err)
 			assert.Equal(t, tool.ID, fetchedTool2.ID)
 		})
@@ -300,7 +300,7 @@ func TestToolService_GetToolBySlug_NotFound(t *testing.T) {
 	service := NewService(db)
 
 	// Try to find a non-existent tool
-	_, err := service.GetToolBySlug(context.Background(),"non-existent-tool")
+	_, err := service.GetToolBySlug("non-existent-tool")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "tool not found")
 }
@@ -317,7 +317,7 @@ func TestToolService_GetToolBySlug_AfterNameUpdate(t *testing.T) {
 	assert.Equal(t, "original-name", tool.Slug)
 
 	// Verify original slug lookup works
-	fetchedTool, err := service.GetToolBySlug(context.Background(),"original-name")
+	fetchedTool, err := service.GetToolBySlug("original-name")
 	assert.NoError(t, err)
 	assert.Equal(t, tool.ID, fetchedTool.ID)
 
@@ -327,11 +327,11 @@ func TestToolService_GetToolBySlug_AfterNameUpdate(t *testing.T) {
 	assert.Equal(t, "new-name-v2-0", updatedTool.Slug)
 
 	// Verify new slug lookup works
-	fetchedTool2, err := service.GetToolBySlug(context.Background(),"new-name-v2-0")
+	fetchedTool2, err := service.GetToolBySlug("new-name-v2-0")
 	assert.NoError(t, err)
 	assert.Equal(t, tool.ID, fetchedTool2.ID)
 
 	// Verify old slug no longer works
-	_, err = service.GetToolBySlug(context.Background(),"original-name")
+	_, err = service.GetToolBySlug("original-name")
 	assert.Error(t, err)
 }

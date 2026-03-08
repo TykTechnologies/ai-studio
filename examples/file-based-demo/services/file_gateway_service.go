@@ -3,7 +3,6 @@
 package services
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -318,7 +317,7 @@ func (s *FileGatewayService) loadFilters() error {
 }
 
 // GetActiveLLMs returns all active LLMs
-func (s *FileGatewayService) GetActiveLLMs(ctx context.Context) ([]models.LLM, error) {
+func (s *FileGatewayService) GetActiveLLMs() ([]models.LLM, error) {
 	var activeLLMs []models.LLM
 	for _, llm := range s.llms {
 		if llm.Active {
@@ -334,7 +333,7 @@ func (s *FileGatewayService) GetActiveDatasources() ([]models.Datasource, error)
 }
 
 // GetToolBySlug returns a tool by its slug (not implemented for this demo)
-func (s *FileGatewayService) GetToolBySlug(ctx context.Context, slug string) (*models.Tool, error) {
+func (s *FileGatewayService) GetToolBySlug(slug string) (*models.Tool, error) {
 	return nil, fmt.Errorf("tool not found: %s", slug)
 }
 
@@ -389,7 +388,7 @@ func (s *FileGatewayService) GetDB() interface{} {
 }
 
 // GetLLMByID returns an LLM by its ID
-func (s *FileGatewayService) GetLLMByID(ctx context.Context, id uint) (*models.LLM, error) {
+func (s *FileGatewayService) GetLLMByID(id uint) (*models.LLM, error) {
 	for _, llm := range s.llms {
 		if llm.ID == id {
 			return &llm, nil
@@ -404,7 +403,7 @@ func (s *FileGatewayService) GetLLMSettingsByID(id uint) (*models.LLMSettings, e
 }
 
 // GetDatasourceByID returns a datasource by its ID (not implemented for demo)
-func (s *FileGatewayService) GetDatasourceByID(ctx context.Context, id uint) (*models.Datasource, error) {
+func (s *FileGatewayService) GetDatasourceByID(id uint) (*models.Datasource, error) {
 	return nil, fmt.Errorf("datasource not found: %d", id)
 }
 
@@ -448,7 +447,7 @@ func (s *FileGatewayService) GetOAuthClient(clientID string) (*models.OAuthClien
 }
 
 // GetToolByID returns a tool by its ID (not implemented for demo)
-func (s *FileGatewayService) GetToolByID(ctx context.Context, id uint) (*models.Tool, error) {
+func (s *FileGatewayService) GetToolByID(id uint) (*models.Tool, error) {
 	return nil, fmt.Errorf("tool not found: %d", id)
 }
 

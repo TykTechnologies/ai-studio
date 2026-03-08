@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -81,7 +80,7 @@ func registerTestTool(t *testing.T, service *services.Service, mockServerURL str
 func unregisterTestTool(t *testing.T, service *services.Service, slug string) {
 	t.Helper()
 	// Find the tool by slug first
-	tool, err := service.GetToolBySlug(context.Background(),slug)
+	tool, err := service.GetToolBySlug(slug)
 	if err != nil {
 		// If not found, just return
 		return
@@ -263,7 +262,7 @@ func TestHandleToolRequest_ValidGET(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, createdTool)
 	// Ensure the tool is found by slug for unregistration
-	registeredToolDef, err := service.GetToolBySlug(context.Background(),testToolSlug)
+	registeredToolDef, err := service.GetToolBySlug(testToolSlug)
 	require.NoError(t, err)
 	require.NotNil(t, registeredToolDef)
 
@@ -379,7 +378,7 @@ func TestHandleToolRequest_ValidPOST(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, createdTool)
-	registeredToolDef, err := service.GetToolBySlug(context.Background(),testToolSlug) // Fetch full def for ID and correct slug
+	registeredToolDef, err := service.GetToolBySlug(testToolSlug) // Fetch full def for ID and correct slug
 	require.NoError(t, err)
 	require.NotNil(t, registeredToolDef)
 

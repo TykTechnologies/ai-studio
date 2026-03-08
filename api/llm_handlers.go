@@ -122,7 +122,7 @@ func (a *API) getLLM(c *gin.Context) {
 		return
 	}
 
-	llm, err := a.service.GetLLMByID(c.Request.Context(), uint(id))
+	llm, err := a.service.GetLLMByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -171,7 +171,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		return
 	}
 
-	thisLLM, err := a.service.GetLLMByID(c.Request.Context(), uint(id))
+	thisLLM, err := a.service.GetLLMByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {

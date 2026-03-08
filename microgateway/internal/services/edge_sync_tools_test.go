@@ -2,7 +2,6 @@
 package services
 
 import (
-	"context"
 	"encoding/base64"
 	"testing"
 	"time"
@@ -400,7 +399,7 @@ func TestGatewayAdapterToolMethods(t *testing.T) {
 	)
 
 	t.Run("GetToolBySlug", func(t *testing.T) {
-		tool, err := adapter.GetToolBySlug(context.Background(),"weather-api")
+		tool, err := adapter.GetToolBySlug("weather-api")
 		require.NoError(t, err)
 		assert.Equal(t, "Weather API", tool.Name)
 		assert.Equal(t, "weather-api", tool.Slug)
@@ -412,19 +411,19 @@ func TestGatewayAdapterToolMethods(t *testing.T) {
 	})
 
 	t.Run("GetToolBySlug_NotFound", func(t *testing.T) {
-		_, err := adapter.GetToolBySlug(context.Background(),"nonexistent-tool")
+		_, err := adapter.GetToolBySlug("nonexistent-tool")
 		assert.Error(t, err)
 	})
 
 	t.Run("GetToolByID", func(t *testing.T) {
-		tool, err := adapter.GetToolByID(context.Background(),1)
+		tool, err := adapter.GetToolByID(1)
 		require.NoError(t, err)
 		assert.Equal(t, "Weather API", tool.Name)
 		assert.Equal(t, uint(1), tool.ID)
 	})
 
 	t.Run("GetToolByID_NotFound", func(t *testing.T) {
-		_, err := adapter.GetToolByID(context.Background(),999)
+		_, err := adapter.GetToolByID(999)
 		assert.Error(t, err)
 	})
 
@@ -441,13 +440,13 @@ func TestGatewayAdapterToolMethods(t *testing.T) {
 	})
 
 	t.Run("GetDatasourceByID", func(t *testing.T) {
-		ds, err := adapter.GetDatasourceByID(context.Background(),1)
+		ds, err := adapter.GetDatasourceByID(1)
 		require.NoError(t, err)
 		assert.Equal(t, "Knowledge Base", ds.Name)
 	})
 
 	t.Run("GetDatasourceByID_NotFound", func(t *testing.T) {
-		_, err := adapter.GetDatasourceByID(context.Background(),999)
+		_, err := adapter.GetDatasourceByID(999)
 		assert.Error(t, err)
 	})
 

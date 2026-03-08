@@ -622,7 +622,7 @@ func (a *API) GetToolDocumentation(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(idUint))
+	tool, err := a.service.GetToolByID(uint(idUint))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
@@ -1011,7 +1011,7 @@ func (a *API) getToolUserApps(c *gin.Context) {
 	}
 
 	// Verify tool exists and user has access to it
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(idUint))
+	tool, err := a.service.GetToolByID(uint(idUint))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {

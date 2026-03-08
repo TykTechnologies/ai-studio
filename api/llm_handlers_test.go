@@ -65,12 +65,12 @@ func TestLLMWithSecretReference(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify the actual secret value is used when loading into proxy
-	activeLLMs, err := service.GetActiveLLMs(context.Background())
+	activeLLMs, err := service.GetActiveLLMs()
 	assert.NoError(t, err)
 	assert.Equal(t, "sk-test-key-123", activeLLMs[0].APIKey)
 
 	// But when getting directly via API, we preserve the reference
-	llm, err = service.GetLLMByID(context.Background(), uint(1))
+	llm, err = service.GetLLMByID(uint(1))
 	assert.NoError(t, err)
 	assert.Equal(t, "$SECRET/OPENAI_KEY", llm.APIKey)
 }

@@ -1,8 +1,6 @@
 package services
 
 import (
-	"context"
-
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
@@ -51,7 +49,7 @@ func (s *Service) DeleteCatalogue(id uint) error {
 }
 
 func (s *Service) AddLLMToCatalogue(llmID, catalogueID uint) error {
-	llm, err := s.GetLLMByID(context.Background(), llmID)
+	llm, err := s.GetLLMByID(llmID)
 	if err != nil {
 		return err
 	}
@@ -65,7 +63,7 @@ func (s *Service) AddLLMToCatalogue(llmID, catalogueID uint) error {
 }
 
 func (s *Service) RemoveLLMFromCatalogue(llmID, catalogueID uint) error {
-	llm, err := s.GetLLMByID(context.Background(), llmID)
+	llm, err := s.GetLLMByID(llmID)
 	if err != nil {
 		return err
 	}

@@ -1,7 +1,6 @@
 package services
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -145,7 +144,7 @@ func TestGetActiveLLMs(t *testing.T) {
 		t.Fatalf("Failed to create service: %v", err)
 	}
 
-	llms, err := service.GetActiveLLMs(context.Background())
+	llms, err := service.GetActiveLLMs()
 	if err != nil {
 		t.Fatalf("Failed to get active LLMs: %v", err)
 	}
@@ -278,7 +277,7 @@ func TestGetToolBySlug(t *testing.T) {
 	}
 
 	// Tools are not implemented in file-based demo
-	_, err = service.GetToolBySlug(context.Background(),"any-slug")
+	_, err = service.GetToolBySlug("any-slug")
 	if err == nil {
 		t.Fatal("Expected error for tool operations")
 	}
@@ -347,7 +346,7 @@ func TestReload(t *testing.T) {
 	}
 
 	// Verify data is still loaded correctly
-	llms, err := service.GetActiveLLMs(context.Background())
+	llms, err := service.GetActiveLLMs()
 	if err != nil {
 		t.Fatalf("Failed to get LLMs after reload: %v", err)
 	}
@@ -401,7 +400,7 @@ func TestEnvironmentVariableResolution(t *testing.T) {
 		t.Fatalf("Failed to create service: %v", err)
 	}
 
-	llms, err := service.GetActiveLLMs(context.Background())
+	llms, err := service.GetActiveLLMs()
 	if err != nil {
 		t.Fatalf("Failed to get LLMs: %v", err)
 	}

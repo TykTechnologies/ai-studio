@@ -1,8 +1,6 @@
 package services
 
 import (
-	"context"
-
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
@@ -21,13 +19,13 @@ type BudgetServiceInterface interface {
 // and GatewayServiceInterface to eliminate duplication and confusion.
 type ServiceInterface interface {
 	// LLM Management
-	GetActiveLLMs(ctx context.Context) ([]models.LLM, error)
-	GetLLMByID(ctx context.Context, id uint) (*models.LLM, error)
+	GetActiveLLMs() ([]models.LLM, error)
+	GetLLMByID(id uint) (*models.LLM, error)
 	GetLLMSettingsByID(id uint) (*models.LLMSettings, error)
 
 	// Datasource Management
 	GetActiveDatasources() ([]models.Datasource, error)
-	GetDatasourceByID(ctx context.Context, id uint) (*models.Datasource, error)
+	GetDatasourceByID(id uint) (*models.Datasource, error)
 
 	// Authentication & Authorization
 	GetCredentialBySecret(secret string) (*models.Credential, error)
@@ -46,8 +44,8 @@ type ServiceInterface interface {
 	GetAppByCredentialID(credID uint) (*models.App, error)
 
 	// Tool Management
-	GetToolByID(ctx context.Context, id uint) (*models.Tool, error)
-	GetToolBySlug(ctx context.Context, slug string) (*models.Tool, error)
+	GetToolByID(id uint) (*models.Tool, error)
+	GetToolBySlug(slug string) (*models.Tool, error)
 	CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error)
 
 	// Analytics & Pricing

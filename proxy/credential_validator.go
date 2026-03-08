@@ -162,7 +162,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					pathParts := strings.Split(r.URL.Path, "/")
 					if len(pathParts) >= 3 && pathParts[1] == "tools" {
 						toolSlug := pathParts[2]
-						tool, err := cv.service.GetToolBySlug(context.Background(), toolSlug)
+						tool, err := cv.service.GetToolBySlug(toolSlug)
 						if err != nil {
 							// Return 401 for security - don't leak whether tool exists
 							respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
@@ -491,7 +491,7 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 
 	if toolSlugContext := r.Context().Value("toolSlug"); toolSlugContext != nil {
 		if ts, ok := toolSlugContext.(string); ok && ts != "" {
-			tool, err := cv.service.GetToolBySlug(context.Background(), ts)
+			tool, err := cv.service.GetToolBySlug(ts)
 			if err != nil {
 				return false, r
 			}

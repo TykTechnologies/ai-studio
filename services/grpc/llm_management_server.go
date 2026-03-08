@@ -113,7 +113,7 @@ func (s *LLMManagementServer) GetLLM(ctx context.Context, req *pb.GetLLMRequest)
 	}
 
 	// Call existing service method
-	llm, err := s.service.GetLLMByID(ctx, uint(llmID))
+	llm, err := s.service.GetLLMByID(uint(llmID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
@@ -223,7 +223,7 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 	}
 
 	// Get existing LLM to preserve vendor (UpdateLLMRequest doesn't include vendor)
-	existingLLM, err := s.service.GetLLMByID(ctx, uint(llmID))
+	existingLLM, err := s.service.GetLLMByID(uint(llmID))
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)
 	}

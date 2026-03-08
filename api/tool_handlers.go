@@ -152,7 +152,7 @@ func (a *API) getTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(id))
+	tool, err := a.service.GetToolByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -202,7 +202,7 @@ func (a *API) updateTool(c *gin.Context) {
 	}
 
 	// Get existing tool
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(id))
+	tool, err := a.service.GetToolByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -441,7 +441,7 @@ func (a *API) addOperationToTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(id))
+	tool, err := a.service.GetToolByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -502,7 +502,7 @@ func (a *API) removeOperationFromTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(id))
+	tool, err := a.service.GetToolByID(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -605,7 +605,7 @@ func (a *API) addFileStoreToTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolID))
+	tool, err := a.service.GetToolByID(uint(toolID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -666,7 +666,7 @@ func (a *API) removeFileStoreFromTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolID))
+	tool, err := a.service.GetToolByID(uint(toolID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -765,7 +765,7 @@ func (a *API) setToolFileStores(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolID))
+	tool, err := a.service.GetToolByID(uint(toolID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -826,7 +826,7 @@ func (a *API) addFilterToTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolID))
+	tool, err := a.service.GetToolByID(uint(toolID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -887,7 +887,7 @@ func (a *API) removeFilterFromTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolID))
+	tool, err := a.service.GetToolByID(uint(toolID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -986,7 +986,7 @@ func (a *API) setToolFilters(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolID))
+	tool, err := a.service.GetToolByID(uint(toolID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -1189,7 +1189,7 @@ func (a *API) addDependencyToTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolID))
+	tool, err := a.service.GetToolByID(uint(toolID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -1250,7 +1250,7 @@ func (a *API) removeDependencyFromTool(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolID))
+	tool, err := a.service.GetToolByID(uint(toolID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -1349,7 +1349,7 @@ func (a *API) setToolDependencies(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolID))
+	tool, err := a.service.GetToolByID(uint(toolID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {

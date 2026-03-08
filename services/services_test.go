@@ -847,7 +847,7 @@ func TestLLMService(t *testing.T) {
 	assert.Equal(t, "https://logo.com", llm.LogoURL)
 
 	// Test GetLLMByID
-	fetchedLLM, err := service.GetLLMByID(context.Background(), llm.ID)
+	fetchedLLM, err := service.GetLLMByID(llm.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, llm.Name, fetchedLLM.Name)
 	assert.Equal(t, llm.APIKey, fetchedLLM.APIKey)
@@ -892,7 +892,7 @@ func TestLLMService(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify LLM is deleted
-	_, err = service.GetLLMByID(context.Background(), llm.ID)
+	_, err = service.GetLLMByID(llm.ID)
 	assert.Error(t, err)
 
 	// Test creating multiple LLMs and searching

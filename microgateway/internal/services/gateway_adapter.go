@@ -2,7 +2,6 @@
 package services
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -115,7 +114,7 @@ func NewGatewayServiceAdapter(
 	log.Debug().Msg("GatewayServiceAdapter created - testing LLM loading...")
 	
 	// Test LLM loading immediately to debug
-	llms, err := adapter.GetActiveLLMs(context.Background())
+	llms, err := adapter.GetActiveLLMs()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to load LLMs in adapter creation")
 	} else {
@@ -129,7 +128,7 @@ func NewGatewayServiceAdapter(
 }
 
 // GetActiveLLMs returns all active LLMs
-func (a *GatewayServiceAdapter) GetActiveLLMs(ctx context.Context) ([]models.LLM, error) {
+func (a *GatewayServiceAdapter) GetActiveLLMs() ([]models.LLM, error) {
 	log.Debug().Msg("GatewayServiceAdapter.GetActiveLLMs() called by AI Gateway")
 	
 	llmInterfaces, err := a.gatewayService.GetActiveLLMs()
@@ -154,7 +153,7 @@ func (a *GatewayServiceAdapter) GetActiveLLMs(ctx context.Context) ([]models.LLM
 }
 
 // GetLLMByID returns an LLM by its ID
-func (a *GatewayServiceAdapter) GetLLMByID(ctx context.Context, id uint) (*models.LLM, error) {
+func (a *GatewayServiceAdapter) GetLLMByID(id uint) (*models.LLM, error) {
 	dbLLM, err := a.management.GetLLM(id)
 	if err != nil {
 		return nil, err
@@ -190,7 +189,7 @@ func (a *GatewayServiceAdapter) GetActiveDatasources() ([]models.Datasource, err
 }
 
 // GetDatasourceByID returns a datasource by ID from local SQLite
-func (a *GatewayServiceAdapter) GetDatasourceByID(ctx context.Context, id uint) (*models.Datasource, error) {
+func (a *GatewayServiceAdapter) GetDatasourceByID(id uint) (*models.Datasource, error) {
 	if a.db == nil {
 		return nil, fmt.Errorf("datasource with ID %d not found (no DB)", id)
 	}
@@ -740,7 +739,7 @@ func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, 
 }
 
 // GetToolByID returns a tool by ID from local SQLite
-func (a *GatewayServiceAdapter) GetToolByID(ctx context.Context, id uint) (*models.Tool, error) {
+func (a *GatewayServiceAdapter) GetToolByID(id uint) (*models.Tool, error) {
 	if a.db == nil {
 		return nil, fmt.Errorf("tool with ID %d not found (no DB)", id)
 	}
@@ -756,7 +755,7 @@ func (a *GatewayServiceAdapter) GetToolByID(ctx context.Context, id uint) (*mode
 }
 
 // GetToolBySlug returns a tool by slug from local SQLite
-func (a *GatewayServiceAdapter) GetToolBySlug(ctx context.Context, slug string) (*models.Tool, error) {
+func (a *GatewayServiceAdapter) GetToolBySlug(slug string) (*models.Tool, error) {
 	if a.db == nil {
 		return nil, fmt.Errorf("tool with slug %s not found (no DB)", slug)
 	}
@@ -773,7 +772,7 @@ func (a *GatewayServiceAdapter) GetToolBySlug(ctx context.Context, slug string) 
 
 // CallToolOperation executes a tool operation using the universalclient
 func (a *GatewayServiceAdapter) CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
-	tool, err := a.GetToolByID(context.Background(), toolID)
+	tool, err := a.GetToolByID(toolID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
 	}

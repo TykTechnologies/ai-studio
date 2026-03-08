@@ -1,7 +1,6 @@
 package services
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,7 +54,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 
 	// Add datasources to the app
 	for _, dsID := range datasourceIDs {
-		ds, err := s.GetDatasourceByID(context.Background(), dsID)
+		ds, err := s.GetDatasourceByID(dsID)
 		if err != nil {
 			return nil, err
 		}
@@ -66,7 +65,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 
 	// Add LLMs to the app
 	for _, llmID := range llmIDs {
-		llm, err := s.GetLLMByID(context.Background(), llmID)
+		llm, err := s.GetLLMByID(llmID)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +76,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 
 	// Add Tools to the app
 	for _, toolID := range toolIDs {
-		tool, err := s.GetToolByID(context.Background(), toolID) // Assuming GetToolByID exists
+		tool, err := s.GetToolByID(toolID) // Assuming GetToolByID exists
 		if err != nil {
 			return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
 		}
@@ -170,7 +169,7 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 
 	// Add datasources to the app
 	for _, dsID := range datasourceIDs {
-		ds, err := s.GetDatasourceByID(context.Background(), dsID)
+		ds, err := s.GetDatasourceByID(dsID)
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +180,7 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 
 	// Add LLMs to the app
 	for _, llmID := range llmIDs {
-		llm, err := s.GetLLMByID(context.Background(), llmID)
+		llm, err := s.GetLLMByID(llmID)
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +191,7 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 
 	// Add Tools to the app
 	for _, toolID := range toolIDs {
-		tool, err := s.GetToolByID(context.Background(), toolID)
+		tool, err := s.GetToolByID(toolID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
 		}
@@ -344,7 +343,7 @@ func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs
 	var maxDatasourceScore int = -1 // Default to -1 if no datasources
 
 	for _, llmID := range llmIDs {
-		llm, err := s.GetLLMByID(context.Background(), llmID)
+		llm, err := s.GetLLMByID(llmID)
 		if err != nil {
 			return err
 		}
@@ -354,7 +353,7 @@ func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs
 	}
 
 	for _, dsID := range datasourceIDs {
-		ds, err := s.GetDatasourceByID(context.Background(), dsID)
+		ds, err := s.GetDatasourceByID(dsID)
 		if err != nil {
 			return err
 		}
@@ -392,7 +391,7 @@ func (s *Service) updateAppDatasources(app *models.App, datasourceIDs []uint) er
 
 	// Add all new datasources
 	for _, dsID := range datasourceIDs {
-		ds, err := s.GetDatasourceByID(context.Background(), dsID)
+		ds, err := s.GetDatasourceByID(dsID)
 		if err != nil {
 			return err
 		}
@@ -418,7 +417,7 @@ func (s *Service) updateAppLLMs(app *models.App, llmIDs []uint) error {
 
 	// Add all new LLMs
 	for _, llmID := range llmIDs {
-		llm, err := s.GetLLMByID(context.Background(), llmID)
+		llm, err := s.GetLLMByID(llmID)
 		if err != nil {
 			return err
 		}
@@ -444,7 +443,7 @@ func (s *Service) updateAppTools(app *models.App, toolIDs []uint) error {
 
 	// Add all new Tools
 	for _, toolID := range toolIDs {
-		tool, err := s.GetToolByID(context.Background(), toolID)
+		tool, err := s.GetToolByID(toolID)
 		if err != nil {
 			return err
 		}
@@ -592,7 +591,7 @@ func (s *Service) AddDatasourceToApp(appID, datasourceID uint) error {
 		return err
 	}
 
-	datasource, err := s.GetDatasourceByID(context.Background(), datasourceID)
+	datasource, err := s.GetDatasourceByID(datasourceID)
 	if err != nil {
 		return err
 	}
@@ -607,7 +606,7 @@ func (s *Service) RemoveDatasourceFromApp(appID, datasourceID uint) error {
 		return err
 	}
 
-	datasource, err := s.GetDatasourceByID(context.Background(), datasourceID)
+	datasource, err := s.GetDatasourceByID(datasourceID)
 	if err != nil {
 		return err
 	}
@@ -636,7 +635,7 @@ func (s *Service) AddLLMToApp(appID, llmID uint) error {
 		return err
 	}
 
-	llm, err := s.GetLLMByID(context.Background(), llmID)
+	llm, err := s.GetLLMByID(llmID)
 	if err != nil {
 		return err
 	}
@@ -651,7 +650,7 @@ func (s *Service) RemoveLLMFromApp(appID, llmID uint) error {
 		return err
 	}
 
-	llm, err := s.GetLLMByID(context.Background(), llmID)
+	llm, err := s.GetLLMByID(llmID)
 	if err != nil {
 		return err
 	}
@@ -681,7 +680,7 @@ func (s *Service) AddToolToApp(appID, toolID uint) (*models.App, error) {
 		return nil, fmt.Errorf("failed to get app %d: %w", appID, err)
 	}
 
-	tool, err := s.GetToolByID(context.Background(), toolID) // Assuming GetToolByID exists
+	tool, err := s.GetToolByID(toolID) // Assuming GetToolByID exists
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tool %d: %w", toolID, err)
 	}
@@ -713,7 +712,7 @@ func (s *Service) RemoveToolFromApp(appID, toolID uint) error {
 		return fmt.Errorf("failed to get app %d: %w", appID, err)
 	}
 
-	tool, err := s.GetToolByID(context.Background(), toolID) // Assuming GetToolByID exists
+	tool, err := s.GetToolByID(toolID) // Assuming GetToolByID exists
 	if err != nil {
 		return fmt.Errorf("failed to get tool %d: %w", toolID, err)
 	}

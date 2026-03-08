@@ -196,7 +196,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	assert.Equal(t, "[redacted]", searchResponse["data"][0].Attributes.EmbedAPIKey)
 
 	// Verify the actual secret values are used when needed
-	ds, err := service.GetDatasourceByID(context.Background(), uint(1))
+	ds, err := service.GetDatasourceByID(uint(1))
 	assert.NoError(t, err)
 	assert.Equal(t, "$SECRET/DB_KEY", ds.DBConnAPIKey)
 	assert.Equal(t, "$SECRET/EMBED_KEY", ds.EmbedAPIKey)

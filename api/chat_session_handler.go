@@ -658,7 +658,7 @@ func (a *API) addToolToChatSession(c *gin.Context) {
 		return
 	}
 
-	tool, err := a.service.GetToolByID(c.Request.Context(), uint(toolId))
+	tool, err := a.service.GetToolByID(uint(toolId))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

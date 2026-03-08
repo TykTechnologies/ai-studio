@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 
@@ -44,7 +43,7 @@ func testFilters() {
 
 	// Test 3: Check LLM-Filter associations
 	fmt.Println("\n3. Checking LLM-Filter associations:")
-	llms, err := gatewayService.GetActiveLLMs(context.Background())
+	llms, err := gatewayService.GetActiveLLMs()
 	if err != nil {
 		log.Fatalf("Failed to get LLMs: %v", err)
 	}

@@ -14,13 +14,14 @@ import (
 // This matches the value used by secrets.FilterSensitiveFields() for consistency
 const REDACTED_VALUE = "[redacted]"
 
-func (s *Service) GetLLMByID(ctx context.Context, id uint) (*models.LLM, error) {
+func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	llm := models.NewLLM()
 	if err := llm.Get(s.DB, id); err != nil {
 		return nil, err
 	}
 
 	if s.Secrets != nil {
+		ctx := context.Background()
 		llm.APIKey = s.Secrets.ResolveReference(ctx, llm.APIKey, true)
 		llm.APIEndpoint = s.Secrets.ResolveReference(ctx, llm.APIEndpoint, true)
 	}
@@ -207,7 +208,7 @@ func (s *Service) UpdateLLM(ctx context.Context, id uint, name, apiKey, apiEndpo
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
 	budgetStartDate *time.Time, namespace string) (*models.LLM, error) {
-	llm, err := s.GetLLMByID(ctx, id)
+	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +298,7 @@ func (s *Service) UpdateLLM(ctx context.Context, id uint, name, apiKey, apiEndpo
 
 // Add some helper functions for managing allowed models
 func (s *Service) AddAllowedModel(ctx context.Context, id uint, modelPattern string) error {
-	llm, err := s.GetLLMByID(ctx, id)
+	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return err
 	}
@@ -319,7 +320,7 @@ func (s *Service) AddAllowedModel(ctx context.Context, id uint, modelPattern str
 }
 
 func (s *Service) RemoveAllowedModel(ctx context.Context, id uint, modelPattern string) error {
-	llm, err := s.GetLLMByID(ctx, id)
+	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return err
 	}
@@ -337,7 +338,7 @@ func (s *Service) RemoveAllowedModel(ctx context.Context, id uint, modelPattern 
 }
 
 func (s *Service) ClearAllowedModels(ctx context.Context, id uint) error {
-	llm, err := s.GetLLMByID(ctx, id)
+	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return err
 	}
@@ -347,7 +348,7 @@ func (s *Service) ClearAllowedModels(ctx context.Context, id uint) error {
 }
 
 func (s *Service) GetAllowedModels(ctx context.Context, id uint) ([]string, error) {
-	llm, err := s.GetLLMByID(ctx, id)
+	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +358,7 @@ func (s *Service) GetAllowedModels(ctx context.Context, id uint) ([]string, erro
 
 // Add a validation helper
 func (s *Service) IsModelAllowed(ctx context.Context, id uint, modelName string) (bool, error) {
-	llm, err := s.GetLLMByID(ctx, id)
+	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return false, err
 	}
@@ -381,7 +382,7 @@ func (s *Service) IsModelAllowed(ctx context.Context, id uint, modelName string)
 
 // The following functions remain unchanged
 func (s *Service) DeleteLLM(ctx context.Context, id uint) error {
-	llm, err := s.GetLLMByID(ctx, id)
+	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return err
 	}
@@ -454,13 +455,14 @@ func (s *Service) GetAllLLMs(pageSize int, pageNumber int, all bool) (models.LLM
 	return llms, totalCount, totalPages, nil
 }
 
-func (s *Service) GetActiveLLMs(ctx context.Context) ([]models.LLM, error) {
+func (s *Service) GetActiveLLMs() ([]models.LLM, error) {
 	llms := models.LLMs{}
 	if err := llms.GetActiveLLMs(s.DB); err != nil {
 		return nil, err
 	}
 
 	if s.Secrets != nil {
+		ctx := context.Background()
 		for i := range llms {
 			llms[i].APIKey = s.Secrets.ResolveReference(ctx, llms[i].APIKey, false)
 			llms[i].APIEndpoint = s.Secrets.ResolveReference(ctx, llms[i].APIEndpoint, false)

@@ -98,7 +98,7 @@ func (s *Service) CreateToolWithDB(db *gorm.DB, name, description, toolType stri
 
 // UpdateTool updates an existing tool with validity checks
 func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpec string, privacyScore int, schemaName, APIKey string) (*models.Tool, error) {
-	tool, err := s.GetToolByID(context.Background(), id)
+	tool, err := s.GetToolByID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -170,13 +170,14 @@ func (s *Service) UpdateTool(id uint, name, description, toolType string, oasSpe
 }
 
 // GetToolByID retrieves a tool by its ID
-func (s *Service) GetToolByID(ctx context.Context, id uint) (*models.Tool, error) {
+func (s *Service) GetToolByID(id uint) (*models.Tool, error) {
 	tool := models.NewTool()
 	if err := tool.Get(s.DB, id); err != nil {
 		return nil, err
 	}
 
 	if s.Secrets != nil {
+		ctx := context.Background()
 		tool.AuthKey = s.Secrets.ResolveReference(ctx, tool.AuthKey, true)
 	} // preserve reference for API responses
 	return tool, nil
@@ -184,7 +185,7 @@ func (s *Service) GetToolByID(ctx context.Context, id uint) (*models.Tool, error
 
 // DeleteTool deletes a tool
 func (s *Service) DeleteTool(id uint) error {
-	tool, err := s.GetToolByID(context.Background(), id)
+	tool, err := s.GetToolByID(id)
 	if err != nil {
 		return err
 	}
@@ -249,7 +250,7 @@ func (s *Service) GetToolByName(ctx context.Context, name string) (*models.Tool,
 }
 
 // GetToolBySlug retrieves a tool by its slug (pre-computed from name using slug.Make)
-func (s *Service) GetToolBySlug(ctx context.Context, slug string) (*models.Tool, error) {
+func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
 	var tool models.Tool
 
 	// Use the pre-computed slug column for efficient indexed lookup
@@ -268,6 +269,7 @@ func (s *Service) GetToolBySlug(ctx context.Context, slug string) (*models.Tool,
 	}
 
 	if s.Secrets != nil {
+		ctx := context.Background()
 		tool.AuthKey = s.Secrets.ResolveReference(ctx, tool.AuthKey, true)
 	} // preserve reference for API responses
 	return &tool, nil
@@ -330,7 +332,7 @@ func (s *Service) SearchTools(query string) ([]models.Tool, error) {
 
 // AddOperationToTool adds an operation to a tool
 func (s *Service) AddOperationToTool(toolID uint, operation string) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -341,7 +343,7 @@ func (s *Service) AddOperationToTool(toolID uint, operation string) error {
 
 // RemoveOperationFromTool removes an operation from a tool
 func (s *Service) RemoveOperationFromTool(toolID uint, operation string) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -352,7 +354,7 @@ func (s *Service) RemoveOperationFromTool(toolID uint, operation string) error {
 
 // GetToolOperations retrieves all operations associated with a tool
 func (s *Service) GetToolOperations(toolID uint) ([]string, error) {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +364,7 @@ func (s *Service) GetToolOperations(toolID uint) ([]string, error) {
 
 // AddFileStoreToTool adds a FileStore to a Tool
 func (s *Service) AddFileStoreToTool(toolID uint, fileStoreID uint) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -377,7 +379,7 @@ func (s *Service) AddFileStoreToTool(toolID uint, fileStoreID uint) error {
 
 // RemoveFileStoreFromTool removes a FileStore from a Tool
 func (s *Service) RemoveFileStoreFromTool(toolID uint, fileStoreID uint) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -392,7 +394,7 @@ func (s *Service) RemoveFileStoreFromTool(toolID uint, fileStoreID uint) error {
 
 // GetToolFileStores gets all FileStores associated with a Tool
 func (s *Service) GetToolFileStores(toolID uint) ([]models.FileStore, error) {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +404,7 @@ func (s *Service) GetToolFileStores(toolID uint) ([]models.FileStore, error) {
 
 // SetToolFileStores replaces all existing FileStore associations with new ones
 func (s *Service) SetToolFileStores(toolID uint, fileStoreIDs []uint) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -421,7 +423,7 @@ func (s *Service) SetToolFileStores(toolID uint, fileStoreIDs []uint) error {
 
 // AddFilterToTool adds a Filter to a Tool
 func (s *Service) AddFilterToTool(toolID uint, filterID uint) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -436,7 +438,7 @@ func (s *Service) AddFilterToTool(toolID uint, filterID uint) error {
 
 // RemoveFilterFromTool removes a Filter from a Tool
 func (s *Service) RemoveFilterFromTool(toolID uint, filterID uint) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -451,7 +453,7 @@ func (s *Service) RemoveFilterFromTool(toolID uint, filterID uint) error {
 
 // GetToolFilters gets all Filters associated with a Tool
 func (s *Service) GetToolFilters(toolID uint) ([]models.Filter, error) {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return nil, err
 	}
@@ -461,7 +463,7 @@ func (s *Service) GetToolFilters(toolID uint) ([]models.Filter, error) {
 
 // SetToolFilters replaces all existing Filter associations with new ones
 func (s *Service) SetToolFilters(toolID uint, filterIDs []uint) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -485,7 +487,7 @@ func (s *Service) AddDependencyToTool(toolID uint, dependencyID uint) error {
 		return fmt.Errorf("tool cannot depend on itself")
 	}
 
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -508,7 +510,7 @@ func (s *Service) AddDependencyToTool(toolID uint, dependencyID uint) error {
 
 // RemoveDependencyFromTool removes a dependency from a Tool
 func (s *Service) RemoveDependencyFromTool(toolID uint, dependencyID uint) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -523,7 +525,7 @@ func (s *Service) RemoveDependencyFromTool(toolID uint, dependencyID uint) error
 
 // GetToolDependencies gets all dependencies associated with a Tool
 func (s *Service) GetToolDependencies(toolID uint) ([]*models.Tool, error) {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return nil, err
 	}
@@ -533,7 +535,7 @@ func (s *Service) GetToolDependencies(toolID uint) ([]*models.Tool, error) {
 
 // SetToolDependencies replaces all existing Tool dependencies with new ones
 func (s *Service) SetToolDependencies(toolID uint, dependencyIDs []uint) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -552,7 +554,7 @@ func (s *Service) SetToolDependencies(toolID uint, dependencyIDs []uint) error {
 
 // ClearToolDependencies removes all dependencies from a Tool
 func (s *Service) ClearToolDependencies(toolID uint) error {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return err
 	}
@@ -562,7 +564,7 @@ func (s *Service) ClearToolDependencies(toolID uint) error {
 
 // HasToolDependency checks if a specific Tool is a dependency
 func (s *Service) HasToolDependency(toolID uint, dependencyID uint) (bool, error) {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return false, err
 	}
@@ -594,7 +596,7 @@ var (
 
 // ListToolOperationsFromSpec retrieves all operations from the tool's OpenAPI spec
 func (s *Service) ListToolOperationsFromSpec(toolID uint) ([]string, error) {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return nil, err
 	}
@@ -732,7 +734,7 @@ func (s *Service) getCachedUniversalClient(tool *models.Tool, authSchemaName, au
 
 // CallToolOperation calls an operation from the tool's OpenAPI spec
 func (s *Service) CallToolOperation(toolID uint, operationID string, params map[string][]string, payload map[string]interface{}, headers map[string][]string) (interface{}, error) {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return nil, err
 	}
@@ -762,7 +764,7 @@ type ToolOperationDetail struct {
 
 // GetToolOperationDetails retrieves detailed information about tool operations from OpenAPI spec
 func (s *Service) GetToolOperationDetails(toolID uint) ([]ToolOperationDetail, error) {
-	tool, err := s.GetToolByID(context.Background(), toolID)
+	tool, err := s.GetToolByID(toolID)
 	if err != nil {
 		return nil, err
 	}

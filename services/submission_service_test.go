@@ -1,7 +1,6 @@
 package services
 
 import (
-	"context"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -312,7 +311,7 @@ func TestAdminApproveSubmission_Datasource(t *testing.T) {
 	assert.Equal(t, &finalScore, approved.FinalPrivacyScore)
 
 	// Verify the datasource was created
-	ds, err := service.GetDatasourceByID(context.Background(), *approved.ResourceID)
+	ds, err := service.GetDatasourceByID(*approved.ResourceID)
 	assert.NoError(t, err)
 	assert.Equal(t, "Community Vector DB", ds.Name)
 	assert.True(t, ds.CommunitySubmitted)
@@ -344,7 +343,7 @@ func TestAdminApproveSubmission_Tool(t *testing.T) {
 	assert.NotNil(t, approved.ResourceID)
 
 	// Verify the tool was created
-	tool, err := service.GetToolByID(context.Background(), *approved.ResourceID)
+	tool, err := service.GetToolByID(*approved.ResourceID)
 	assert.NoError(t, err)
 	assert.Equal(t, "Weather API", tool.Name)
 	assert.True(t, tool.CommunitySubmitted)

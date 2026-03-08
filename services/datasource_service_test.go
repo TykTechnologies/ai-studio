@@ -41,7 +41,7 @@ func TestGetDatasourceByID(t *testing.T) {
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
-	fetchedDatasource, err := service.GetDatasourceByID(context.Background(), datasource.ID)
+	fetchedDatasource, err := service.GetDatasourceByID(datasource.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, datasource.ID, fetchedDatasource.ID)
 	assert.Equal(t, datasource.Name, fetchedDatasource.Name)
@@ -109,7 +109,7 @@ func TestAddTagsToDatasource(t *testing.T) {
 
 	err := service.AddTagsToDatasource(datasource.ID, []string{"NLP"})
 	assert.NoError(t, err)
-	updatedDatasource, _ := service.GetDatasourceByID(context.Background(), datasource.ID)
+	updatedDatasource, _ := service.GetDatasourceByID(datasource.ID)
 	assert.Len(t, updatedDatasource.Tags, 3)
 }
 
@@ -149,7 +149,7 @@ func TestDeleteDatasource(t *testing.T) {
 	err := service.DeleteDatasource(datasource.ID)
 	assert.NoError(t, err)
 
-	_, err = service.GetDatasourceByID(context.Background(), datasource.ID)
+	_, err = service.GetDatasourceByID(datasource.ID)
 	assert.Error(t, err)
 }
 
