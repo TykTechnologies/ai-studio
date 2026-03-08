@@ -83,6 +83,8 @@ nfpms:
         dst: /opt/tyk-ai-studio/PORTS.md
       - src: "templates/*"
         dst: "/opt/tyk-ai-studio/templates"
+      - src: "config/docs_links.json"
+        dst: "/opt/tyk-ai-studio/config/docs_links.json"
     scripts:
       preinstall: "ci/install/before_install.sh"
       postinstall: "ci/install/post_install.sh"
@@ -127,6 +129,8 @@ nfpms:
         dst: /opt/tyk-ai-studio/PORTS.md
       - src: "templates/*"
         dst: "/opt/tyk-ai-studio/templates"
+      - src: "config/docs_links.json"
+        dst: "/opt/tyk-ai-studio/config/docs_links.json"
     scripts:
       preinstall: "ci/install/before_install.sh"
       postinstall: "ci/install/post_install.sh"
