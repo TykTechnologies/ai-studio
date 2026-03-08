@@ -1,11 +1,9 @@
 // Package authz provides fine-grained relationship-based authorization.
 //
 // It defines an abstract Authorizer interface for checking permissions using
-// a subject/relation/resource model. The interface is backend-agnostic — the
-// current implementation uses an embedded OpenFGA server, but any authorization
-// engine that can evaluate relationship graphs could be substituted.
+// a subject/relation/resource model. The interface is backend-agnostic — any
+// authorization engine that can evaluate relationship graphs can implement it.
 //
-// The feature is controlled by the OPENFGA_ENABLED environment variable.
 // When disabled, a NoopAuthorizer is used that always permits access,
 // deferring all authorization decisions to the legacy auth system.
 package authz
@@ -57,9 +55,9 @@ type Authorizer interface {
 // Relationship represents a single authorization relationship:
 // "Subject has Relation on Resource".
 type Relationship struct {
-	Subject  string // The actor, e.g. "user:42" or "group:5#member"
+	Subject  string // The actor, e.g. "user:42" or "group:5"
 	Relation string // The permission, e.g. "member", "viewer", "admin"
-	Resource string // The target, e.g. "system:1", "catalogue:3", "app:7"
+	Resource string // The target, e.g. "app:7", "llm:3"
 }
 
 // --- Helper functions for constructing subject/resource identifiers ---
@@ -72,11 +70,6 @@ func SubjectUser(id uint) string {
 // SubjectGroup returns the resource identifier for a group.
 func SubjectGroup(id uint) string {
 	return "group:" + strconv.FormatUint(uint64(id), 10)
-}
-
-// SubjectGroupMembers returns a subject identifier representing all members of a group.
-func SubjectGroupMembers(id uint) string {
-	return "group:" + strconv.FormatUint(uint64(id), 10) + "#member"
 }
 
 // ResourceID returns the resource identifier for a typed resource with a numeric ID.

@@ -16,10 +16,6 @@ func TestSubjectGroup(t *testing.T) {
 	assert.Equal(t, "group:5", SubjectGroup(5))
 }
 
-func TestSubjectGroupMembers(t *testing.T) {
-	assert.Equal(t, "group:5#member", SubjectGroupMembers(5))
-}
-
 func TestResourceID(t *testing.T) {
 	assert.Equal(t, "catalogue:3", ResourceID("catalogue", 3))
 	assert.Equal(t, "llm:100", ResourceID("llm", 100))
