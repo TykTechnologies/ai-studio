@@ -2,6 +2,8 @@ package secrets
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -81,6 +83,148 @@ func TestRotateKEK_PartialFailure_CacheStillCleared(t *testing.T) {
 	got, err := store.GetByVarName(ctx, "A", false)
 	require.NoError(t, err)
 	assert.Equal(t, "val", got.Value, "should still decrypt since DB wrapping didn't change")
+}
+
+func TestRotateKEK_InvalidBase64WrappedKey(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	kek := newTestLocalKEK("kek")
+	store := NewWithKEKProvider(db, "key", kek)
+
+	// Create a secret so an encryption key exists
+	s := &Secret{VarName: "A", Value: "val"}
+	require.NoError(t, store.Create(ctx, s))
+
+	// Corrupt the wrapped key in the DB to invalid base64
+	db.Model(&EncryptionKey{}).Where("1 = 1").Update("wrapped_key", "!!!not-base64!!!")
+
+	newKEK := newTestLocalKEK("new")
+	result, err := store.RotateKEK(ctx, kek, newKEK)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 0, result.Rotated)
+	assert.Len(t, result.Errors, 1)
+	assert.Contains(t, result.Errors[0].Error(), "decode wrapped key")
+}
+
+func TestRotateKEK_WrapKeyError(t *testing.T) {
+	db := setupTestDB(t)
+	ctx := context.Background()
+
+	kek := newTestLocalKEK("kek")
+	store := NewWithKEKProvider(db, "key", kek)
+
+	// Create a secret so an encryption key exists
+	s := &Secret{VarName: "A", Value: "val"}
+	require.NoError(t, store.Create(ctx, s))
+
+	// Use a newKEK that fails on WrapKey
+	badNewKEK := &failingWrapKEK{testLocalKEK: *newTestLocalKEK("bad")}
+	result, err := store.RotateKEK(ctx, kek, badNewKEK)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 0, result.Rotated)
+	assert.Len(t, result.Errors, 1)
+	assert.Contains(t, result.Errors[0].Error(), "wrap with new kek")
+}
+
+// failingWrapKEK wraps successfully on read but fails on WrapKey.
+type failingWrapKEK struct {
+	testLocalKEK
+}
+
+func (f *failingWrapKEK) WrapKey(_ context.Context, _ []byte) ([]byte, error) {
+	return nil, fmt.Errorf("simulated wrap failure")
+}
+
+// failOnSecondWrapKEK succeeds on WrapKey until failWrap is set to true.
+type failOnSecondWrapKEK struct {
+	testLocalKEK
+	failWrap atomic.Bool
+}
+
+func (f *failOnSecondWrapKEK) WrapKey(ctx context.Context, dek []byte) ([]byte, error) {
+	if f.failWrap.Load() {
+		return nil, fmt.Errorf("simulated wrap failure on re-encrypt")
+	}
+	return f.testLocalKEK.WrapKey(ctx, dek)
+}
+
+func (f *failOnSecondWrapKEK) UnwrapKey(ctx context.Context, wrappedDEK []byte) ([]byte, error) {
+	if f.failWrap.Load() {
+		return nil, fmt.Errorf("simulated unwrap failure on re-encrypt")
+	}
+	return f.testLocalKEK.UnwrapKey(ctx, wrappedDEK)
+}
+
+func TestRotateKey_DecryptFailure(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "decrypt-fail"
+	ctx := context.Background()
+
+	store, err := New(db, rawKey)
+	require.NoError(t, err)
+
+	// Create a valid secret
+	s1 := &Secret{VarName: "GOOD", Value: "hello"}
+	require.NoError(t, store.Create(ctx, s1))
+
+	// Insert a secret with a corrupt encrypted value directly in DB
+	corrupt := &Secret{VarName: "BAD", Value: "$ENC/v2/999/not-valid-ciphertext"}
+	require.NoError(t, db.Create(corrupt).Error)
+
+	result, err := store.RotateKey(ctx, rawKey, rawKey)
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Total)
+	assert.Equal(t, 1, result.Rotated)
+	assert.Len(t, result.Errors, 1)
+	assert.Equal(t, "BAD", result.Errors[0].VarName)
+}
+
+func TestRotateKey_ReEncryptFailure(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "reencrypt-fail"
+	ctx := context.Background()
+
+	// Use a KEK that works initially but can be toggled to fail.
+	kek := &failOnSecondWrapKEK{testLocalKEK: *newTestLocalKEK(rawKey)}
+	store := NewWithKEKProvider(db, rawKey, kek)
+
+	// Insert a v1-encrypted secret so decrypt uses the v1 cipher (no envelope needed).
+	v1Cipher := legacyCipherInstances()["v1"]
+	enc, err := encryptWith(ctx, v1Cipher, rawKey, "hello")
+	require.NoError(t, err)
+	require.NoError(t, db.Create(&Secret{VarName: "V1", Value: enc}).Error)
+
+	// Now fail the KEK so envelope re-encrypt (WrapKey for new DEK) fails.
+	kek.failWrap.Store(true)
+
+	result, err := store.RotateKey(ctx, rawKey, rawKey)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 0, result.Rotated)
+	assert.Len(t, result.Errors, 1)
+}
+
+func TestRotateKey_DBUpdateFailure(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "update-fail"
+	ctx := context.Background()
+
+	store, err := New(db, rawKey)
+	require.NoError(t, err)
+
+	// Create a secret
+	s := &Secret{VarName: "A", Value: "val"}
+	require.NoError(t, store.Create(ctx, s))
+
+	// Drop the secrets table so the batch load fails
+	db.Exec("DROP TABLE secrets")
+
+	_, err = store.RotateKey(ctx, rawKey, rawKey)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "load batch")
 }
 
 func TestRotateKey_ClearsCacheSoNewEncryptUsesNewKey(t *testing.T) {
