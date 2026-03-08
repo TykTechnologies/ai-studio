@@ -1114,6 +1114,19 @@ func (s *ControlServer) authenticate(ctx context.Context) error {
 
 // getConfigurationSnapshot generates a complete configuration snapshot for an edge namespace
 func (s *ControlServer) getConfigurationSnapshot(ctx context.Context, namespace string) (*pb.ConfigurationSnapshot, error) {
+	// Cache resolved secrets for the duration of this snapshot to avoid
+	// redundant DB lookups and decryption when the same reference appears
+	// on multiple resources (e.g., a shared API key across LLMs).
+	secretCache := make(map[string]string)
+	resolve := func(ref string) string {
+		if v, ok := secretCache[ref]; ok {
+			return v
+		}
+		v := s.resolveSecret(ctx, ref)
+		secretCache[ref] = v
+		return v
+	}
+
 	snapshot := &pb.ConfigurationSnapshot{
 		Version:      fmt.Sprintf("%d", time.Now().Unix()),
 		Llms:         []*pb.LLMConfig{},
@@ -1157,8 +1170,8 @@ func (s *ControlServer) getConfigurationSnapshot(ctx context.Context, namespace 
 		}
 
 		// Resolve secret references for microgateway
-		resolvedAPIKey := s.resolveSecret(ctx, llm.APIKey)
-		resolvedEndpoint := s.resolveSecret(ctx, llm.APIEndpoint)
+		resolvedAPIKey := resolve(llm.APIKey)
+		resolvedEndpoint := resolve(llm.APIEndpoint)
 
 		// Encrypt API key using microgateway's encryption format
 		encryptedAPIKey, err := s.encryptForMicrogateway(resolvedAPIKey)
@@ -1731,7 +1744,7 @@ func (s *ControlServer) getConfigurationSnapshot(ctx context.Context, namespace 
 	// Convert Tools to protobuf
 	for _, tool := range tools {
 		// Resolve and encrypt auth key for edge transit (fail-closed: skip tool if encryption fails)
-		resolvedAuthKey := s.resolveSecret(ctx, tool.AuthKey)
+		resolvedAuthKey := resolve(tool.AuthKey)
 		encryptedAuthKey := ""
 		if resolvedAuthKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
@@ -1812,7 +1825,7 @@ func (s *ControlServer) getConfigurationSnapshot(ctx context.Context, namespace 
 	// Convert Datasources to protobuf (fail-closed: skip datasource if any secret encryption fails)
 	for _, ds := range datasources {
 		// Resolve and encrypt secrets for edge transit
-		resolvedConnString := s.resolveSecret(ctx, ds.DBConnString)
+		resolvedConnString := resolve(ds.DBConnString)
 		encryptedConnString := ""
 		if resolvedConnString != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnString)
@@ -1823,7 +1836,7 @@ func (s *ControlServer) getConfigurationSnapshot(ctx context.Context, namespace 
 			encryptedConnString = encrypted
 		}
 
-		resolvedConnAPIKey := s.resolveSecret(ctx, ds.DBConnAPIKey)
+		resolvedConnAPIKey := resolve(ds.DBConnAPIKey)
 		encryptedConnAPIKey := ""
 		if resolvedConnAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey)
@@ -1834,7 +1847,7 @@ func (s *ControlServer) getConfigurationSnapshot(ctx context.Context, namespace 
 			encryptedConnAPIKey = encrypted
 		}
 
-		resolvedEmbedAPIKey := s.resolveSecret(ctx, ds.EmbedAPIKey)
+		resolvedEmbedAPIKey := resolve(ds.EmbedAPIKey)
 		encryptedEmbedAPIKey := ""
 		if resolvedEmbedAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)

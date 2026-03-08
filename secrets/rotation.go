@@ -149,5 +149,10 @@ func (s *Store) RotateKEK(ctx context.Context, oldKEK, newKEK KEKProvider) (*Rot
 	}
 
 	result.Skipped = result.Total - result.Rotated - len(result.Errors)
+
+	// Invalidate cached DEKs so the next operation re-fetches and unwraps
+	// with whatever KEK the store currently holds.
+	s.envelope.ClearCache()
+
 	return result, nil
 }

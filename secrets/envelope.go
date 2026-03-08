@@ -10,6 +10,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // KEKProvider abstracts the master encryption key (MEK) operations.
@@ -41,59 +42,52 @@ type KeyStore interface {
 	UpdateKey(ctx context.Context, key *EncryptionKey) error
 }
 
+// cachedDEK holds a plaintext DEK and the pre-built AES-GCM cipher for it.
+type cachedDEK struct {
+	keyID uint
+	gcm   cipher.AEAD
+}
+
 // EnvelopeCipher implements envelope encryption (v2).
 // Uses a shared active DEK from the encryption_keys table.
+// Caches unwrapped DEKs in memory to avoid repeated DB lookups and
+// KMS unwrap calls on every encrypt/decrypt operation.
 // Format: $ENC/v2/<key_id>/<base64(nonce+ciphertext)>
 type EnvelopeCipher struct {
 	kek      KEKProvider
 	keyStore KeyStore
+
+	mu        sync.RWMutex
+	activeKey *cachedDEK            // cached active key for encryption
+	dekCache  map[uint]*cachedDEK   // cached DEKs by key ID for decryption
 }
 
 // NewEnvelopeCipher creates a v2 envelope cipher.
 func NewEnvelopeCipher(kek KEKProvider, keyStore KeyStore) *EnvelopeCipher {
-	return &EnvelopeCipher{kek: kek, keyStore: keyStore}
+	return &EnvelopeCipher{
+		kek:      kek,
+		keyStore: keyStore,
+		dekCache: make(map[uint]*cachedDEK),
+	}
 }
 
 func (c *EnvelopeCipher) Version() string { return "v2" }
 
 func (c *EnvelopeCipher) Encrypt(ctx context.Context, _ []byte, plaintext []byte) ([]byte, error) {
-	// Get or create the active encryption key
-	encKey, err := c.keyStore.GetActiveKey(ctx)
+	cached, err := c.getActiveGCM(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("envelope encrypt: get active key: %w", err)
+		return nil, err
 	}
 
-	// Unwrap the DEK
-	wrappedDEK, err := base64.URLEncoding.DecodeString(encKey.WrappedKey)
-	if err != nil {
-		return nil, fmt.Errorf("envelope encrypt: decode wrapped key: %w", err)
-	}
-
-	dek, err := c.kek.UnwrapKey(ctx, wrappedDEK)
-	if err != nil {
-		return nil, fmt.Errorf("envelope encrypt: unwrap key: %w", err)
-	}
-
-	// Encrypt plaintext with DEK using AES-GCM
-	block, err := aes.NewCipher(dek)
-	if err != nil {
-		return nil, fmt.Errorf("envelope encrypt: create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("envelope encrypt: create gcm: %w", err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
+	nonce := make([]byte, cached.gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, fmt.Errorf("envelope encrypt: generate nonce: %w", err)
 	}
 
-	ct := gcm.Seal(nonce, nonce, plaintext, nil)
+	ct := cached.gcm.Seal(nonce, nonce, plaintext, nil)
 
 	// Format: <key_id>/<base64(nonce+ciphertext)>
-	encoded := fmt.Sprintf("%d/%s", encKey.ID, base64.URLEncoding.EncodeToString(ct))
+	encoded := fmt.Sprintf("%d/%s", cached.keyID, base64.URLEncoding.EncodeToString(ct))
 
 	return []byte(encoded), nil
 }
@@ -115,46 +109,117 @@ func (c *EnvelopeCipher) Decrypt(ctx context.Context, _ []byte, payload []byte) 
 		return nil, fmt.Errorf("envelope decrypt: decode ciphertext: %w", err)
 	}
 
-	// Look up the encryption key
-	encKey, err := c.keyStore.GetKeyByID(ctx, uint(keyID))
+	cached, err := c.getGCMByKeyID(ctx, uint(keyID))
 	if err != nil {
-		return nil, fmt.Errorf("envelope decrypt: get key %d: %w", keyID, err)
+		return nil, err
 	}
 
-	// Unwrap the DEK
-	wrappedDEK, err := base64.URLEncoding.DecodeString(encKey.WrappedKey)
-	if err != nil {
-		return nil, fmt.Errorf("envelope decrypt: decode wrapped key: %w", err)
-	}
-
-	dek, err := c.kek.UnwrapKey(ctx, wrappedDEK)
-	if err != nil {
-		return nil, fmt.Errorf("envelope decrypt: unwrap key %d: %w", keyID, err)
-	}
-
-	// Decrypt with DEK
-	block, err := aes.NewCipher(dek)
-	if err != nil {
-		return nil, fmt.Errorf("envelope decrypt: create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("envelope decrypt: create gcm: %w", err)
-	}
-
-	nonceSize := gcm.NonceSize()
+	nonceSize := cached.gcm.NonceSize()
 	if len(ct) < nonceSize {
 		return nil, fmt.Errorf("envelope decrypt: ciphertext too short")
 	}
 
 	nonce, raw := ct[:nonceSize], ct[nonceSize:]
-	result, err := gcm.Open(nil, nonce, raw, nil)
+	result, err := cached.gcm.Open(nil, nonce, raw, nil)
 	if err != nil {
 		return nil, fmt.Errorf("envelope decrypt: %w", err)
 	}
 
 	return result, nil
+}
+
+// getActiveGCM returns the cached active-key GCM cipher, loading it on first use.
+func (c *EnvelopeCipher) getActiveGCM(ctx context.Context) (*cachedDEK, error) {
+	c.mu.RLock()
+	if c.activeKey != nil {
+		cached := c.activeKey
+		c.mu.RUnlock()
+		return cached, nil
+	}
+	c.mu.RUnlock()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Double-check after acquiring write lock.
+	if c.activeKey != nil {
+		return c.activeKey, nil
+	}
+
+	encKey, err := c.keyStore.GetActiveKey(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("envelope encrypt: get active key: %w", err)
+	}
+
+	cached, err := c.unwrapAndBuild(ctx, encKey)
+	if err != nil {
+		return nil, err
+	}
+	c.activeKey = cached
+	c.dekCache[cached.keyID] = cached
+	return cached, nil
+}
+
+// getGCMByKeyID returns the cached GCM cipher for a given key ID, loading it on cache miss.
+func (c *EnvelopeCipher) getGCMByKeyID(ctx context.Context, keyID uint) (*cachedDEK, error) {
+	c.mu.RLock()
+	if cached, ok := c.dekCache[keyID]; ok {
+		c.mu.RUnlock()
+		return cached, nil
+	}
+	c.mu.RUnlock()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Double-check after acquiring write lock.
+	if cached, ok := c.dekCache[keyID]; ok {
+		return cached, nil
+	}
+
+	encKey, err := c.keyStore.GetKeyByID(ctx, keyID)
+	if err != nil {
+		return nil, fmt.Errorf("envelope decrypt: get key %d: %w", keyID, err)
+	}
+
+	cached, err := c.unwrapAndBuild(ctx, encKey)
+	if err != nil {
+		return nil, err
+	}
+	c.dekCache[keyID] = cached
+	return cached, nil
+}
+
+// unwrapAndBuild decodes/unwraps a stored key and builds an AES-GCM cipher from it.
+func (c *EnvelopeCipher) unwrapAndBuild(ctx context.Context, encKey *EncryptionKey) (*cachedDEK, error) {
+	wrappedDEK, err := base64.URLEncoding.DecodeString(encKey.WrappedKey)
+	if err != nil {
+		return nil, fmt.Errorf("envelope: decode wrapped key %d: %w", encKey.ID, err)
+	}
+
+	dek, err := c.kek.UnwrapKey(ctx, wrappedDEK)
+	if err != nil {
+		return nil, fmt.Errorf("envelope: unwrap key %d: %w", encKey.ID, err)
+	}
+
+	block, err := aes.NewCipher(dek)
+	if err != nil {
+		return nil, fmt.Errorf("envelope: create cipher for key %d: %w", encKey.ID, err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("envelope: create gcm for key %d: %w", encKey.ID, err)
+	}
+
+	return &cachedDEK{keyID: encKey.ID, gcm: gcm}, nil
+}
+
+// ClearCache invalidates the in-memory DEK cache. Call after key rotation
+// to ensure the next operation picks up the new active key.
+func (c *EnvelopeCipher) ClearCache() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.activeKey = nil
+	c.dekCache = make(map[uint]*cachedDEK)
 }
 
 // EncryptEnvelope encrypts plaintext using envelope encryption (v2).

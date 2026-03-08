@@ -314,6 +314,7 @@ func TestEnvelopeCipher_MultipleKeys(t *testing.T) {
 	key1.Status = EncryptionKeyRetired
 	ks.UpdateKey(ctx, key1)
 	seedActiveKey(t, ks, w)
+	c.ClearCache() // force re-fetch of active key
 
 	// Encrypt with key 2
 	enc2, err := c.Encrypt(ctx, nil, []byte("data-with-key-2"))
