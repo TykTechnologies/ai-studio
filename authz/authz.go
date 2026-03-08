@@ -87,7 +87,7 @@ func ResourceID(resourceType string, id uint) string {
 // ResourceByName returns the resource identifier for a typed resource with a string ID.
 // The id is validated to ensure it does not contain colons (which would break parsing).
 func ResourceByName(resourceType string, id string) (string, error) {
-	if err := validateID(id); err != nil {
+	if err := ValidateID(id); err != nil {
 		return "", fmt.Errorf("invalid resource ID for type %q: %w", resourceType, err)
 	}
 	return resourceType + ":" + id, nil
@@ -118,10 +118,10 @@ func ParseResourceID(resource string) (string, error) {
 	return resource[idx+1:], nil
 }
 
-// validateID checks that an ID string does not contain characters that would
+// ValidateID checks that an ID string does not contain characters that would
 // break the "type:id" format. Colons are forbidden to prevent injection attacks
 // where a malicious ID like "evil:123" would be parsed as type "evil" with ID "123".
-func validateID(id string) error {
+func ValidateID(id string) error {
 	if id == "" {
 		return fmt.Errorf("empty ID")
 	}
@@ -130,6 +130,3 @@ func validateID(id string) error {
 	}
 	return nil
 }
-
-// maxBatchSize is the backend limit for relationships in a single write call.
-const maxBatchSize = 100

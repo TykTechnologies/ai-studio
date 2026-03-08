@@ -1,9 +1,10 @@
-package authz
+package openfga
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/TykTechnologies/midsommar/v2/authz"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -14,7 +15,7 @@ import (
 func (s *Store) FullSync(ctx context.Context, db *gorm.DB) error {
 	log.Info().Msg("authz: starting full relationship sync from database")
 
-	var rels []Relationship
+	var rels []authz.Relationship
 
 	var err error
 	if rels, err = collectSystemRels(db, rels); err != nil {
@@ -76,7 +77,7 @@ type joinRow struct {
 	RightID uint
 }
 
-func collectSystemRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
+func collectSystemRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	// Users with IsAdmin=true -> system:1#admin
 	var adminIDs []uint
 	if err := db.Table("users").
@@ -85,7 +86,7 @@ func collectSystemRels(db *gorm.DB, rels []Relationship) ([]Relationship, error)
 		return rels, err
 	}
 	for _, id := range adminIDs {
-		rels = append(rels, Relationship{Subject: SubjectUser(id), Relation: "admin", Resource: "system:1"})
+		rels = append(rels, authz.Relationship{Subject: authz.SubjectUser(id), Relation: "admin", Resource: "system:1"})
 	}
 
 	// Users with AccessToSSOConfig=true -> system:1#sso_admin
@@ -96,7 +97,7 @@ func collectSystemRels(db *gorm.DB, rels []Relationship) ([]Relationship, error)
 		return rels, err
 	}
 	for _, id := range ssoIDs {
-		rels = append(rels, Relationship{Subject: SubjectUser(id), Relation: "sso_admin", Resource: "system:1"})
+		rels = append(rels, authz.Relationship{Subject: authz.SubjectUser(id), Relation: "sso_admin", Resource: "system:1"})
 	}
 
 	// All active users are system members.
@@ -107,104 +108,100 @@ func collectSystemRels(db *gorm.DB, rels []Relationship) ([]Relationship, error)
 		return rels, err
 	}
 	for _, id := range allIDs {
-		rels = append(rels, Relationship{Subject: SubjectUser(id), Relation: "member", Resource: "system:1"})
+		rels = append(rels, authz.Relationship{Subject: authz.SubjectUser(id), Relation: "member", Resource: "system:1"})
 	}
 
 	return rels, nil
 }
 
-func collectGroupMemberRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
+func collectGroupMemberRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("user_groups").Select("group_id as left_id, user_id as right_id").Find(&rows).Error; err != nil {
 		return rels, err
 	}
 	for _, r := range rows {
-		rels = append(rels, Relationship{
-			Subject:  SubjectUser(r.RightID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.SubjectUser(r.RightID),
 			Relation: "member",
-			Resource: SubjectGroup(r.LeftID),
+			Resource: authz.SubjectGroup(r.LeftID),
 		})
 	}
 	return rels, nil
 }
 
-func collectCatalogueRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
-	// group_catalogues -> catalogue#assigned_group
+func collectCatalogueRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("group_catalogues").Select("group_id as left_id, catalogue_id as right_id").Find(&rows).Error; err != nil {
 		return rels, err
 	}
 	for _, r := range rows {
-		rels = append(rels, Relationship{
-			Subject:  SubjectGroup(r.LeftID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.SubjectGroup(r.LeftID),
 			Relation: "assigned_group",
-			Resource: ResourceID("catalogue", r.RightID),
+			Resource: authz.ResourceID("catalogue", r.RightID),
 		})
 	}
 	return rels, nil
 }
 
-func collectDataCatalogueRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
+func collectDataCatalogueRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("group_datacatalogues").Select("group_id as left_id, data_catalogue_id as right_id").Find(&rows).Error; err != nil {
 		return rels, err
 	}
 	for _, r := range rows {
-		rels = append(rels, Relationship{
-			Subject:  SubjectGroup(r.LeftID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.SubjectGroup(r.LeftID),
 			Relation: "assigned_group",
-			Resource: ResourceID("data_catalogue", r.RightID),
+			Resource: authz.ResourceID("data_catalogue", r.RightID),
 		})
 	}
 	return rels, nil
 }
 
-func collectToolCatalogueRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
+func collectToolCatalogueRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("group_toolcatalogues").Select("group_id as left_id, tool_catalogue_id as right_id").Find(&rows).Error; err != nil {
 		return rels, err
 	}
 	for _, r := range rows {
-		rels = append(rels, Relationship{
-			Subject:  SubjectGroup(r.LeftID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.SubjectGroup(r.LeftID),
 			Relation: "assigned_group",
-			Resource: ResourceID("tool_catalogue", r.RightID),
+			Resource: authz.ResourceID("tool_catalogue", r.RightID),
 		})
 	}
 	return rels, nil
 }
 
-func collectLLMRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
-	// catalogue_llms -> llm#parent_catalogue
+func collectLLMRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("catalogue_llms").Select("catalogue_id as left_id, llm_id as right_id").Find(&rows).Error; err != nil {
 		return rels, err
 	}
 	for _, r := range rows {
-		rels = append(rels, Relationship{
-			Subject:  ResourceID("catalogue", r.LeftID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.ResourceID("catalogue", r.LeftID),
 			Relation: "parent_catalogue",
-			Resource: ResourceID("llm", r.RightID),
+			Resource: authz.ResourceID("llm", r.RightID),
 		})
 	}
 	return rels, nil
 }
 
-func collectDatasourceRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
-	// data_catalogue_data_sources -> datasource#parent_catalogue
+func collectDatasourceRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("data_catalogue_data_sources").Select("data_catalogue_id as left_id, datasource_id as right_id").Find(&rows).Error; err != nil {
 		return rels, err
 	}
 	for _, r := range rows {
-		rels = append(rels, Relationship{
-			Subject:  ResourceID("data_catalogue", r.LeftID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.ResourceID("data_catalogue", r.LeftID),
 			Relation: "parent_catalogue",
-			Resource: ResourceID("datasource", r.RightID),
+			Resource: authz.ResourceID("datasource", r.RightID),
 		})
 	}
 
-	// datasource.user_id -> datasource#owner
 	type ownerRow struct {
 		ID     uint
 		UserID uint
@@ -214,34 +211,32 @@ func collectDatasourceRels(db *gorm.DB, rels []Relationship) ([]Relationship, er
 		return rels, err
 	}
 	for _, o := range owners {
-		rels = append(rels, Relationship{
-			Subject:  SubjectUser(o.UserID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.SubjectUser(o.UserID),
 			Relation: "owner",
-			Resource: ResourceID("datasource", o.ID),
+			Resource: authz.ResourceID("datasource", o.ID),
 		})
 	}
 
 	return rels, nil
 }
 
-func collectToolRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
-	// tool_catalogue_tools -> tool#parent_catalogue
+func collectToolRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("tool_catalogue_tools").Select("tool_catalogue_id as left_id, tool_id as right_id").Find(&rows).Error; err != nil {
 		return rels, err
 	}
 	for _, r := range rows {
-		rels = append(rels, Relationship{
-			Subject:  ResourceID("tool_catalogue", r.LeftID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.ResourceID("tool_catalogue", r.LeftID),
 			Relation: "parent_catalogue",
-			Resource: ResourceID("tool", r.RightID),
+			Resource: authz.ResourceID("tool", r.RightID),
 		})
 	}
 	return rels, nil
 }
 
-func collectAppRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
-	// app.user_id -> app#owner
+func collectAppRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	type ownerRow struct {
 		ID     uint
 		UserID uint
@@ -251,32 +246,31 @@ func collectAppRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 		return rels, err
 	}
 	for _, o := range owners {
-		rels = append(rels, Relationship{
-			Subject:  SubjectUser(o.UserID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.SubjectUser(o.UserID),
 			Relation: "owner",
-			Resource: ResourceID("app", o.ID),
+			Resource: authz.ResourceID("app", o.ID),
 		})
 	}
 	return rels, nil
 }
 
-func collectChatRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
-	// chat_groups -> chat#assigned_group
+func collectChatRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("chat_groups").Select("group_id as left_id, chat_id as right_id").Find(&rows).Error; err != nil {
 		return rels, err
 	}
 	for _, r := range rows {
-		rels = append(rels, Relationship{
-			Subject:  SubjectGroup(r.LeftID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.SubjectGroup(r.LeftID),
 			Relation: "assigned_group",
-			Resource: ResourceID("chat", r.RightID),
+			Resource: authz.ResourceID("chat", r.RightID),
 		})
 	}
 	return rels, nil
 }
 
-func collectPluginResourceRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
+func collectPluginResourceRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	type pluginResRow struct {
 		GroupID              uint
 		PluginResourceTypeID uint
@@ -290,8 +284,7 @@ func collectPluginResourceRels(db *gorm.DB, rels []Relationship) ([]Relationship
 		return rels, err
 	}
 	for _, r := range rows {
-		// Validate InstanceID to prevent colon injection in composite IDs.
-		if err := validateID(r.InstanceID); err != nil {
+		if err := authz.ValidateID(r.InstanceID); err != nil {
 			log.Warn().Err(err).
 				Uint("group_id", r.GroupID).
 				Uint("plugin_resource_type_id", r.PluginResourceTypeID).
@@ -300,8 +293,8 @@ func collectPluginResourceRels(db *gorm.DB, rels []Relationship) ([]Relationship
 			continue
 		}
 		objectID := fmt.Sprintf("%d_%s", r.PluginResourceTypeID, r.InstanceID)
-		rels = append(rels, Relationship{
-			Subject:  SubjectGroup(r.GroupID),
+		rels = append(rels, authz.Relationship{
+			Subject:  authz.SubjectGroup(r.GroupID),
 			Relation: "assigned_group",
 			Resource: "plugin_resource:" + objectID,
 		})
@@ -309,7 +302,7 @@ func collectPluginResourceRels(db *gorm.DB, rels []Relationship) ([]Relationship
 	return rels, nil
 }
 
-func collectSubmissionRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
+func collectSubmissionRels(db *gorm.DB, rels []authz.Relationship) ([]authz.Relationship, error) {
 	type subRow struct {
 		ID          uint
 		SubmitterID uint
@@ -324,17 +317,17 @@ func collectSubmissionRels(db *gorm.DB, rels []Relationship) ([]Relationship, er
 	}
 	for _, r := range rows {
 		if r.SubmitterID > 0 {
-			rels = append(rels, Relationship{
-				Subject:  SubjectUser(r.SubmitterID),
+			rels = append(rels, authz.Relationship{
+				Subject:  authz.SubjectUser(r.SubmitterID),
 				Relation: "submitter",
-				Resource: ResourceID("submission", r.ID),
+				Resource: authz.ResourceID("submission", r.ID),
 			})
 		}
 		if r.ReviewerID != nil && *r.ReviewerID > 0 {
-			rels = append(rels, Relationship{
-				Subject:  SubjectUser(*r.ReviewerID),
+			rels = append(rels, authz.Relationship{
+				Subject:  authz.SubjectUser(*r.ReviewerID),
 				Relation: "reviewer",
-				Resource: ResourceID("submission", r.ID),
+				Resource: authz.ResourceID("submission", r.ID),
 			})
 		}
 	}

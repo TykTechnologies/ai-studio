@@ -93,8 +93,8 @@ func TestParseResourceID(t *testing.T) {
 }
 
 func TestValidateID_RejectsColons(t *testing.T) {
-	assert.NoError(t, validateID("5_srv-1"))
-	assert.NoError(t, validateID("42"))
-	assert.Error(t, validateID("evil:123"))
-	assert.Error(t, validateID(""))
+	assert.NoError(t, ValidateID("5_srv-1"))
+	assert.NoError(t, ValidateID("42"))
+	assert.Error(t, ValidateID("evil:123"))
+	assert.Error(t, ValidateID(""))
 }

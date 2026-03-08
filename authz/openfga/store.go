@@ -1,4 +1,5 @@
-package authz
+// Package openfga provides the OpenFGA-backed implementation of authz.Authorizer.
+package openfga
 
 import (
 	"context"
@@ -6,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/authz"
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/openfga/language/pkg/go/transformer"
 	"github.com/openfga/openfga/pkg/server"
@@ -15,6 +17,9 @@ import (
 
 //go:embed model.fga
 var modelDSL string
+
+// maxBatchSize is the backend limit for relationships in a single write call.
+const maxBatchSize = 100
 
 // Store is the production Authorizer backed by an embedded relationship engine.
 type Store struct {
@@ -89,7 +94,7 @@ func (s *Store) CheckByName(ctx context.Context, userID uint, relation string, r
 		StoreId:              s.storeID,
 		AuthorizationModelId: s.modelID,
 		TupleKey: &openfgav1.CheckRequestTupleKey{
-			User:     SubjectUser(userID),
+			User:     authz.SubjectUser(userID),
 			Relation: relation,
 			Object:   resourceType + ":" + resourceID,
 		},
@@ -108,7 +113,7 @@ func (s *Store) ListResourcesByName(ctx context.Context, userID uint, relation s
 		AuthorizationModelId: s.modelID,
 		Type:                 resourceType,
 		Relation:             relation,
-		User:                 SubjectUser(userID),
+		User:                 authz.SubjectUser(userID),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("authz: list resources failed: %w", err)
@@ -126,7 +131,7 @@ func (s *Store) ListResources(ctx context.Context, userID uint, relation string,
 
 	ids := make([]uint, 0, len(resources))
 	for _, res := range resources {
-		id, err := ParseResourceNumericID(res)
+		id, err := authz.ParseResourceNumericID(res)
 		if err != nil {
 			return nil, fmt.Errorf("authz: non-numeric resource ID in ListResources for type %q: %w (use ListResourcesByName instead)", resourceType, err)
 		}
@@ -136,18 +141,18 @@ func (s *Store) ListResources(ctx context.Context, userID uint, relation string,
 }
 
 // Grant writes relationship grants to the authorization store.
-func (s *Store) Grant(ctx context.Context, grants []Relationship) error {
+func (s *Store) Grant(ctx context.Context, grants []authz.Relationship) error {
 	return s.GrantAndRevoke(ctx, grants, nil)
 }
 
 // Revoke removes relationship grants from the authorization store.
-func (s *Store) Revoke(ctx context.Context, revocations []Relationship) error {
+func (s *Store) Revoke(ctx context.Context, revocations []authz.Relationship) error {
 	return s.GrantAndRevoke(ctx, nil, revocations)
 }
 
 // GrantAndRevoke atomically writes and removes relationships.
 // Batches are split to respect the per-call limit.
-func (s *Store) GrantAndRevoke(ctx context.Context, grants []Relationship, revocations []Relationship) error {
+func (s *Store) GrantAndRevoke(ctx context.Context, grants []authz.Relationship, revocations []authz.Relationship) error {
 	gi, ri := 0, 0
 	for gi < len(grants) || ri < len(revocations) {
 		req := &openfgav1.WriteRequest{
@@ -211,4 +216,4 @@ func (s *Store) Close() {
 }
 
 // Verify Store implements Authorizer at compile time.
-var _ Authorizer = (*Store)(nil)
+var _ authz.Authorizer = (*Store)(nil)
