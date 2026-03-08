@@ -8,12 +8,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// ShadowMode runs OpenFGA checks alongside the legacy auth system and logs discrepancies.
+// ShadowMode runs authorization checks alongside the legacy auth system and logs discrepancies.
 // It never blocks requests — the legacy system remains the source of truth.
-// This is used in Phase 2 to validate OpenFGA correctness before switching over.
+// This is used in Phase 2 to validate authorization correctness before switching over.
 
-// ShadowCheckAdmin runs an OpenFGA admin check after the legacy AdminOnly middleware
-// has already allowed the request. Logs a warning if OpenFGA would have denied it.
+// ShadowCheckAdmin runs an authorization admin check after the legacy AdminOnly middleware
+// has already allowed the request. Logs a warning if the authorizer would have denied it.
 func ShadowCheckAdmin(authz Authorizer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !authz.Enabled() {
@@ -27,7 +27,7 @@ func ShadowCheckAdmin(authz Authorizer) gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := authz.CheckStr(c.Request.Context(), user.ID, "admin", "system", "1")
+		allowed, err := authz.CheckByName(c.Request.Context(), user.ID, "admin", "system", "1")
 		if err != nil {
 			log.Warn().Err(err).Uint("user_id", user.ID).
 				Msg("authz/shadow: admin check error")
@@ -40,7 +40,7 @@ func ShadowCheckAdmin(authz Authorizer) gin.HandlerFunc {
 			log.Warn().
 				Uint("user_id", user.ID).
 				Bool("legacy", legacyAllowed).
-				Bool("openfga", allowed).
+				Bool("authz", allowed).
 				Str("path", c.Request.URL.Path).
 				Msg("authz/shadow: DISCREPANCY in admin check")
 		} else {
@@ -55,9 +55,9 @@ func ShadowCheckAdmin(authz Authorizer) gin.HandlerFunc {
 	}
 }
 
-// ShadowCheckResource runs an OpenFGA check for a specific resource after the request
+// ShadowCheckResource runs an authorization check for a specific resource after the request
 // has been allowed by legacy auth. Logs a warning on discrepancy.
-func ShadowCheckResource(authz Authorizer, objectType, relation, paramName string, legacyCheck func(c *gin.Context) bool) gin.HandlerFunc {
+func ShadowCheckResource(authz Authorizer, resourceType, relation, paramName string, legacyCheck func(c *gin.Context) bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !authz.Enabled() {
 			c.Next()
@@ -82,11 +82,11 @@ func ShadowCheckResource(authz Authorizer, objectType, relation, paramName strin
 			return
 		}
 
-		allowed, err := authz.Check(c.Request.Context(), user.ID, relation, objectType, uint(id))
+		allowed, err := authz.Check(c.Request.Context(), user.ID, relation, resourceType, uint(id))
 		if err != nil {
 			log.Warn().Err(err).
 				Uint("user_id", user.ID).
-				Str("object", objectType+":"+idStr).
+				Str("resource", resourceType+":"+idStr).
 				Str("relation", relation).
 				Msg("authz/shadow: resource check error")
 			c.Next()
@@ -97,10 +97,10 @@ func ShadowCheckResource(authz Authorizer, objectType, relation, paramName strin
 		if legacyAllowed != allowed {
 			log.Warn().
 				Uint("user_id", user.ID).
-				Str("object", objectType+":"+idStr).
+				Str("resource", resourceType+":"+idStr).
 				Str("relation", relation).
 				Bool("legacy", legacyAllowed).
-				Bool("openfga", allowed).
+				Bool("authz", allowed).
 				Str("method", c.Request.Method).
 				Str("path", c.Request.URL.Path).
 				Msg("authz/shadow: DISCREPANCY in resource check")
@@ -110,9 +110,9 @@ func ShadowCheckResource(authz Authorizer, objectType, relation, paramName strin
 	}
 }
 
-// ShadowCheckOwnership runs an OpenFGA ownership check alongside the legacy inline
+// ShadowCheckOwnership runs an authorization ownership check alongside the legacy inline
 // check (resource.UserID == currentUser.ID). Logs discrepancies.
-func ShadowCheckOwnership(authz Authorizer, objectType, paramName string) gin.HandlerFunc {
+func ShadowCheckOwnership(authz Authorizer, resourceType, paramName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !authz.Enabled() {
 			c.Next()
@@ -138,22 +138,22 @@ func ShadowCheckOwnership(authz Authorizer, objectType, paramName string) gin.Ha
 		}
 
 		// Check both can_use (includes owner) and editor (includes owner).
-		allowed, err := authz.Check(c.Request.Context(), user.ID, "can_use", objectType, uint(id))
+		allowed, err := authz.Check(c.Request.Context(), user.ID, "can_use", resourceType, uint(id))
 		if err != nil {
 			log.Warn().Err(err).
 				Uint("user_id", user.ID).
-				Str("object", objectType+":"+idStr).
+				Str("resource", resourceType+":"+idStr).
 				Msg("authz/shadow: ownership check error")
 			c.Next()
 			return
 		}
 
-		// Log the OpenFGA result. We can't know the legacy result here (it happens
-		// later in the handler), so we log the OpenFGA decision for post-hoc comparison.
+		// Log the authz result. We can't know the legacy result here (it happens
+		// later in the handler), so we log the decision for post-hoc comparison.
 		log.Debug().
 			Uint("user_id", user.ID).
-			Str("object", objectType+":"+idStr).
-			Bool("openfga_can_use", allowed).
+			Str("resource", resourceType+":"+idStr).
+			Bool("authz_can_use", allowed).
 			Str("method", c.Request.Method).
 			Str("path", c.Request.URL.Path).
 			Msg("authz/shadow: ownership pre-check")
@@ -165,11 +165,11 @@ func ShadowCheckOwnership(authz Authorizer, objectType, paramName string) gin.Ha
 		// After handler runs, check if the response was 403 (legacy denied).
 		legacyDenied := c.Writer.Status() == http.StatusForbidden
 		if legacyDenied == allowed {
-			// Legacy denied but OpenFGA allowed, or vice versa.
+			// Legacy denied but authz allowed, or vice versa.
 			log.Warn().
 				Uint("user_id", user.ID).
-				Str("object", objectType+":"+idStr).
-				Bool("openfga_allowed", allowed).
+				Str("resource", resourceType+":"+idStr).
+				Bool("authz_allowed", allowed).
 				Bool("legacy_denied", legacyDenied).
 				Int("status", c.Writer.Status()).
 				Str("path", c.Request.URL.Path).

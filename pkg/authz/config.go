@@ -10,11 +10,11 @@ import (
 )
 
 // NewFromEnv creates an Authorizer based on the OPENFGA_ENABLED environment variable.
-// When enabled ("true", "1", "yes"), it creates an embedded OpenFGA store and runs FullSync.
+// When enabled ("true", "1", "yes"), it creates an embedded authorization store and runs FullSync.
 // When disabled (default), it returns a NoopAuthorizer that defers to the legacy auth system.
 func NewFromEnv(ctx context.Context, db *gorm.DB) (Authorizer, error) {
 	if !isEnabled() {
-		log.Info().Msg("authz: OpenFGA disabled (set OPENFGA_ENABLED=true to enable)")
+		log.Info().Msg("authz: fine-grained authorization disabled (set OPENFGA_ENABLED=true to enable)")
 		return &NoopAuthorizer{}, nil
 	}
 

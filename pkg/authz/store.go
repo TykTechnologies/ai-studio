@@ -16,14 +16,14 @@ import (
 //go:embed model.fga
 var modelDSL string
 
-// Store wraps the embedded OpenFGA server and implements Authorizer.
+// Store is the production Authorizer backed by an embedded relationship engine.
 type Store struct {
 	server  *server.Server
 	storeID string
 	modelID string
 }
 
-// New creates a new embedded OpenFGA authorization store.
+// New creates a new embedded authorization store.
 // It initializes an in-memory datastore, creates a store, and writes the authorization model.
 func New(ctx context.Context) (*Store, error) {
 	datastore := memory.New()
@@ -33,7 +33,7 @@ func New(ctx context.Context) (*Store, error) {
 	)
 	if err != nil {
 		datastore.Close()
-		return nil, fmt.Errorf("authz: failed to create openfga server: %w", err)
+		return nil, fmt.Errorf("authz: failed to create server: %w", err)
 	}
 
 	// Create a store.
@@ -45,7 +45,7 @@ func New(ctx context.Context) (*Store, error) {
 		return nil, fmt.Errorf("authz: failed to create store: %w", err)
 	}
 
-	// Parse the FGA model DSL and write it.
+	// Parse the authorization model DSL and write it.
 	model, err := transformer.TransformDSLToProto(modelDSL)
 	if err != nil {
 		srv.Close()
@@ -66,7 +66,7 @@ func New(ctx context.Context) (*Store, error) {
 	log.Info().
 		Str("store_id", storeResp.GetId()).
 		Str("model_id", modelResp.GetAuthorizationModelId()).
-		Msg("OpenFGA authorization store initialized")
+		Msg("authz: authorization store initialized")
 
 	return &Store{
 		server:  srv,
@@ -78,20 +78,20 @@ func New(ctx context.Context) (*Store, error) {
 // Enabled returns true — the Store is always an active authorizer.
 func (s *Store) Enabled() bool { return true }
 
-// Check returns true if the user has the given relation on the object.
-func (s *Store) Check(ctx context.Context, userID uint, relation string, objectType string, objectID uint) (bool, error) {
-	return s.CheckStr(ctx, userID, relation, objectType, strconv.FormatUint(uint64(objectID), 10))
+// Check returns true if the user has the given relation on the resource.
+func (s *Store) Check(ctx context.Context, userID uint, relation string, resourceType string, resourceID uint) (bool, error) {
+	return s.CheckByName(ctx, userID, relation, resourceType, strconv.FormatUint(uint64(resourceID), 10))
 }
 
-// CheckStr is like Check but accepts a string object ID.
-func (s *Store) CheckStr(ctx context.Context, userID uint, relation string, objectType string, objectID string) (bool, error) {
+// CheckByName is like Check but accepts a string resource ID.
+func (s *Store) CheckByName(ctx context.Context, userID uint, relation string, resourceType string, resourceID string) (bool, error) {
 	resp, err := s.server.Check(ctx, &openfgav1.CheckRequest{
 		StoreId:              s.storeID,
 		AuthorizationModelId: s.modelID,
 		TupleKey: &openfgav1.CheckRequestTupleKey{
-			User:     UserStr(userID),
+			User:     SubjectUser(userID),
 			Relation: relation,
-			Object:   objectType + ":" + objectID,
+			Object:   resourceType + ":" + resourceID,
 		},
 	})
 	if err != nil {
@@ -100,101 +100,100 @@ func (s *Store) CheckStr(ctx context.Context, userID uint, relation string, obje
 	return resp.GetAllowed(), nil
 }
 
-// ListObjectsStr returns raw object strings where the user has the given relation.
+// ListResourcesByName returns raw resource strings where the user has the given relation.
 // Use this for types with non-numeric IDs (e.g. plugin_resource with composite keys).
-func (s *Store) ListObjectsStr(ctx context.Context, userID uint, relation string, objectType string) ([]string, error) {
+func (s *Store) ListResourcesByName(ctx context.Context, userID uint, relation string, resourceType string) ([]string, error) {
 	resp, err := s.server.ListObjects(ctx, &openfgav1.ListObjectsRequest{
 		StoreId:              s.storeID,
 		AuthorizationModelId: s.modelID,
-		Type:                 objectType,
+		Type:                 resourceType,
 		Relation:             relation,
-		User:                 UserStr(userID),
+		User:                 SubjectUser(userID),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("authz: list objects failed: %w", err)
+		return nil, fmt.Errorf("authz: list resources failed: %w", err)
 	}
 	return resp.GetObjects(), nil
 }
 
-// ListObjects returns numeric object IDs where the user has the given relation.
-// Returns an error if any object has a non-numeric ID — use ListObjectsStr for those types.
-func (s *Store) ListObjects(ctx context.Context, userID uint, relation string, objectType string) ([]uint, error) {
-	objects, err := s.ListObjectsStr(ctx, userID, relation, objectType)
+// ListResources returns numeric resource IDs where the user has the given relation.
+// Returns an error if any resource has a non-numeric ID — use ListResourcesByName for those types.
+func (s *Store) ListResources(ctx context.Context, userID uint, relation string, resourceType string) ([]uint, error) {
+	resources, err := s.ListResourcesByName(ctx, userID, relation, resourceType)
 	if err != nil {
 		return nil, err
 	}
 
-	ids := make([]uint, 0, len(objects))
-	for _, obj := range objects {
-		id, err := ParseObjectID(obj)
+	ids := make([]uint, 0, len(resources))
+	for _, res := range resources {
+		id, err := ParseResourceNumericID(res)
 		if err != nil {
-			return nil, fmt.Errorf("authz: non-numeric object ID in ListObjects for type %q: %w (use ListObjectsStr instead)", objectType, err)
+			return nil, fmt.Errorf("authz: non-numeric resource ID in ListResources for type %q: %w (use ListResourcesByName instead)", resourceType, err)
 		}
 		ids = append(ids, id)
 	}
 	return ids, nil
 }
 
-// WriteTuples writes relationship tuples to the store in batches.
-func (s *Store) WriteTuples(ctx context.Context, writes []Tuple) error {
-	return s.WriteTuplesAndDelete(ctx, writes, nil)
+// Grant writes relationship grants to the authorization store.
+func (s *Store) Grant(ctx context.Context, grants []Relationship) error {
+	return s.GrantAndRevoke(ctx, grants, nil)
 }
 
-// DeleteTuples removes relationship tuples from the store in batches.
-func (s *Store) DeleteTuples(ctx context.Context, deletes []Tuple) error {
-	return s.WriteTuplesAndDelete(ctx, nil, deletes)
+// Revoke removes relationship grants from the authorization store.
+func (s *Store) Revoke(ctx context.Context, revocations []Relationship) error {
+	return s.GrantAndRevoke(ctx, nil, revocations)
 }
 
-// WriteTuplesAndDelete atomically writes and deletes tuples.
-// Batches are split to respect the OpenFGA per-call limit.
-func (s *Store) WriteTuplesAndDelete(ctx context.Context, writes []Tuple, deletes []Tuple) error {
-	// Process in batches. Each batch can have up to maxTuplesPerWrite total (writes + deletes).
-	wi, di := 0, 0
-	for wi < len(writes) || di < len(deletes) {
+// GrantAndRevoke atomically writes and removes relationships.
+// Batches are split to respect the per-call limit.
+func (s *Store) GrantAndRevoke(ctx context.Context, grants []Relationship, revocations []Relationship) error {
+	gi, ri := 0, 0
+	for gi < len(grants) || ri < len(revocations) {
 		req := &openfgav1.WriteRequest{
 			StoreId:              s.storeID,
 			AuthorizationModelId: s.modelID,
 		}
 
-		remaining := maxTuplesPerWrite
+		remaining := maxBatchSize
 
-		// Add writes for this batch.
-		if wi < len(writes) {
-			end := wi + remaining
-			if end > len(writes) {
-				end = len(writes)
+		// Add grants for this batch.
+		if gi < len(grants) {
+			end := gi + remaining
+			if end > len(grants) {
+				end = len(grants)
 			}
-			batch := writes[wi:end]
-			tupleKeys := make([]*openfgav1.TupleKey, len(batch))
-			for i, t := range batch {
-				tupleKeys[i] = &openfgav1.TupleKey{
-					User:     t.User,
-					Relation: t.Relation,
-					Object:   t.Object,
+			batch := grants[gi:end]
+			writes := make([]*openfgav1.TupleKey, len(batch))
+			for i, rel := range batch {
+				writes[i] = &openfgav1.TupleKey{
+					User:     rel.Subject,
+					Relation: rel.Relation,
+					Object:   rel.Resource,
 				}
 			}
-			req.Writes = &openfgav1.WriteRequestWrites{TupleKeys: tupleKeys}
+			req.Writes = &openfgav1.WriteRequestWrites{TupleKeys: writes}
 			remaining -= len(batch)
-			wi = end
+			gi = end
 		}
 
-		// Add deletes for this batch.
-		if di < len(deletes) && remaining > 0 {
-			end := di + remaining
-			if end > len(deletes) {
-				end = len(deletes)
+		// Add revocations for this batch.
+		if ri < len(revocations) && remaining > 0 {
+			end := ri + remaining
+			if end > len(revocations) {
+				end = len(revocations)
 			}
-			batch := deletes[di:end]
-			tupleKeys := make([]*openfgav1.TupleKeyWithoutCondition, len(batch))
-			for i, t := range batch {
-				tupleKeys[i] = &openfgav1.TupleKeyWithoutCondition{
-					User:     t.User,
-					Relation: t.Relation,
-					Object:   t.Object,
+			batch := revocations[ri:end]
+			deletes := make([]*openfgav1.TupleKeyWithoutCondition, len(batch))
+			for i, rel := range batch {
+				deletes[i] = &openfgav1.TupleKeyWithoutCondition{
+					User:     rel.Subject,
+					Relation: rel.Relation,
+					Object:   rel.Resource,
 				}
 			}
-			req.Deletes = &openfgav1.WriteRequestDeletes{TupleKeys: tupleKeys}
-			di = end
+			req.Deletes = &openfgav1.WriteRequestDeletes{TupleKeys: deletes}
+			ri = end
 		}
 
 		if _, err := s.server.Write(ctx, req); err != nil {
@@ -204,7 +203,7 @@ func (s *Store) WriteTuplesAndDelete(ctx context.Context, writes []Tuple, delete
 	return nil
 }
 
-// Close shuts down the embedded OpenFGA server.
+// Close shuts down the embedded authorization server.
 func (s *Store) Close() {
 	if s.server != nil {
 		s.server.Close()

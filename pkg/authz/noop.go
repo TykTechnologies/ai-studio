@@ -2,7 +2,7 @@ package authz
 
 import "context"
 
-// NoopAuthorizer is used when OpenFGA is disabled. It always allows access,
+// NoopAuthorizer is used when fine-grained authorization is disabled. It always allows access,
 // deferring all authorization decisions to the legacy auth system.
 type NoopAuthorizer struct{}
 
@@ -14,21 +14,21 @@ func (n *NoopAuthorizer) Check(context.Context, uint, string, string, uint) (boo
 	return true, nil
 }
 
-func (n *NoopAuthorizer) CheckStr(context.Context, uint, string, string, string) (bool, error) {
+func (n *NoopAuthorizer) CheckByName(context.Context, uint, string, string, string) (bool, error) {
 	return true, nil
 }
 
-func (n *NoopAuthorizer) ListObjects(context.Context, uint, string, string) ([]uint, error) {
+func (n *NoopAuthorizer) ListResources(context.Context, uint, string, string) ([]uint, error) {
 	return nil, nil
 }
 
-func (n *NoopAuthorizer) ListObjectsStr(context.Context, uint, string, string) ([]string, error) {
+func (n *NoopAuthorizer) ListResourcesByName(context.Context, uint, string, string) ([]string, error) {
 	return nil, nil
 }
 
-func (n *NoopAuthorizer) WriteTuples(context.Context, []Tuple) error   { return nil }
-func (n *NoopAuthorizer) DeleteTuples(context.Context, []Tuple) error  { return nil }
-func (n *NoopAuthorizer) WriteTuplesAndDelete(context.Context, []Tuple, []Tuple) error {
+func (n *NoopAuthorizer) Grant(context.Context, []Relationship) error   { return nil }
+func (n *NoopAuthorizer) Revoke(context.Context, []Relationship) error  { return nil }
+func (n *NoopAuthorizer) GrantAndRevoke(context.Context, []Relationship, []Relationship) error {
 	return nil
 }
 func (n *NoopAuthorizer) Close() {}

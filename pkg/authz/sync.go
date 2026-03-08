@@ -8,67 +8,67 @@ import (
 	"gorm.io/gorm"
 )
 
-// FullSync reads the entire GORM database and populates the OpenFGA store with all
-// relationship tuples. This is called at startup and can be called periodically as a
+// FullSync reads the entire GORM database and populates the authorization store with all
+// relationships. This is called at startup and can be called periodically as a
 // consistency safety net.
 func (s *Store) FullSync(ctx context.Context, db *gorm.DB) error {
-	log.Info().Msg("authz: starting full tuple sync from database")
+	log.Info().Msg("authz: starting full relationship sync from database")
 
-	var tuples []Tuple
+	var rels []Relationship
 
 	var err error
-	if tuples, err = collectSystemTuples(db, tuples); err != nil {
-		return fmt.Errorf("authz: sync system tuples: %w", err)
+	if rels, err = collectSystemRels(db, rels); err != nil {
+		return fmt.Errorf("authz: sync system relationships: %w", err)
 	}
-	if tuples, err = collectGroupMemberTuples(db, tuples); err != nil {
+	if rels, err = collectGroupMemberRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync group members: %w", err)
 	}
-	if tuples, err = collectCatalogueTuples(db, tuples); err != nil {
+	if rels, err = collectCatalogueRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync catalogues: %w", err)
 	}
-	if tuples, err = collectDataCatalogueTuples(db, tuples); err != nil {
+	if rels, err = collectDataCatalogueRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync data catalogues: %w", err)
 	}
-	if tuples, err = collectToolCatalogueTuples(db, tuples); err != nil {
+	if rels, err = collectToolCatalogueRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync tool catalogues: %w", err)
 	}
-	if tuples, err = collectLLMTuples(db, tuples); err != nil {
+	if rels, err = collectLLMRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync llms: %w", err)
 	}
-	if tuples, err = collectDatasourceTuples(db, tuples); err != nil {
+	if rels, err = collectDatasourceRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync datasources: %w", err)
 	}
-	if tuples, err = collectToolTuples(db, tuples); err != nil {
+	if rels, err = collectToolRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync tools: %w", err)
 	}
-	if tuples, err = collectAppTuples(db, tuples); err != nil {
+	if rels, err = collectAppRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync apps: %w", err)
 	}
-	if tuples, err = collectChatTuples(db, tuples); err != nil {
+	if rels, err = collectChatRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync chats: %w", err)
 	}
-	if tuples, err = collectPluginResourceTuples(db, tuples); err != nil {
+	if rels, err = collectPluginResourceRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync plugin resources: %w", err)
 	}
-	if tuples, err = collectSubmissionTuples(db, tuples); err != nil {
+	if rels, err = collectSubmissionRels(db, rels); err != nil {
 		return fmt.Errorf("authz: sync submissions: %w", err)
 	}
 
-	if len(tuples) == 0 {
-		log.Info().Msg("authz: no tuples to sync (empty database)")
+	if len(rels) == 0 {
+		log.Info().Msg("authz: no relationships to sync (empty database)")
 		return nil
 	}
 
-	if err := s.WriteTuples(ctx, tuples); err != nil {
-		return fmt.Errorf("authz: failed to write tuples during sync: %w", err)
+	if err := s.Grant(ctx, rels); err != nil {
+		return fmt.Errorf("authz: failed to write relationships during sync: %w", err)
 	}
 
-	log.Info().Int("tuple_count", len(tuples)).Msg("authz: full sync complete")
+	log.Info().Int("count", len(rels)).Msg("authz: full sync complete")
 	return nil
 }
 
-// --- Tuple collectors ---
-// Each collector queries a set of GORM tables and appends tuples to the slice.
+// --- Relationship collectors ---
+// Each collector queries a set of GORM tables and appends relationships to the slice.
 
 // joinRow is a generic struct for scanning join table rows.
 type joinRow struct {
@@ -76,16 +76,16 @@ type joinRow struct {
 	RightID uint
 }
 
-func collectSystemTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectSystemRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	// Users with IsAdmin=true -> system:1#admin
 	var adminIDs []uint
 	if err := db.Table("users").
 		Where("is_admin = ? AND deleted_at IS NULL", true).
 		Pluck("id", &adminIDs).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, id := range adminIDs {
-		tuples = append(tuples, Tuple{User: UserStr(id), Relation: "admin", Object: "system:1"})
+		rels = append(rels, Relationship{Subject: SubjectUser(id), Relation: "admin", Resource: "system:1"})
 	}
 
 	// Users with AccessToSSOConfig=true -> system:1#sso_admin
@@ -93,10 +93,10 @@ func collectSystemTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
 	if err := db.Table("users").
 		Where("access_to_sso_config = ? AND deleted_at IS NULL", true).
 		Pluck("id", &ssoIDs).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, id := range ssoIDs {
-		tuples = append(tuples, Tuple{User: UserStr(id), Relation: "sso_admin", Object: "system:1"})
+		rels = append(rels, Relationship{Subject: SubjectUser(id), Relation: "sso_admin", Resource: "system:1"})
 	}
 
 	// All active users are system members.
@@ -104,103 +104,103 @@ func collectSystemTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
 	if err := db.Table("users").
 		Where("deleted_at IS NULL").
 		Pluck("id", &allIDs).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, id := range allIDs {
-		tuples = append(tuples, Tuple{User: UserStr(id), Relation: "member", Object: "system:1"})
+		rels = append(rels, Relationship{Subject: SubjectUser(id), Relation: "member", Resource: "system:1"})
 	}
 
-	return tuples, nil
+	return rels, nil
 }
 
-func collectGroupMemberTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectGroupMemberRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("user_groups").Select("group_id as left_id, user_id as right_id").Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
-		tuples = append(tuples, Tuple{
-			User:     UserStr(r.RightID),
+		rels = append(rels, Relationship{
+			Subject:  SubjectUser(r.RightID),
 			Relation: "member",
-			Object:   GroupStr(r.LeftID),
+			Resource: SubjectGroup(r.LeftID),
 		})
 	}
-	return tuples, nil
+	return rels, nil
 }
 
-func collectCatalogueTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectCatalogueRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	// group_catalogues -> catalogue#assigned_group
 	var rows []joinRow
 	if err := db.Table("group_catalogues").Select("group_id as left_id, catalogue_id as right_id").Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
-		tuples = append(tuples, Tuple{
-			User:     GroupStr(r.LeftID),
+		rels = append(rels, Relationship{
+			Subject:  SubjectGroup(r.LeftID),
 			Relation: "assigned_group",
-			Object:   ObjectStr("catalogue", r.RightID),
+			Resource: ResourceID("catalogue", r.RightID),
 		})
 	}
-	return tuples, nil
+	return rels, nil
 }
 
-func collectDataCatalogueTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectDataCatalogueRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("group_datacatalogues").Select("group_id as left_id, data_catalogue_id as right_id").Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
-		tuples = append(tuples, Tuple{
-			User:     GroupStr(r.LeftID),
+		rels = append(rels, Relationship{
+			Subject:  SubjectGroup(r.LeftID),
 			Relation: "assigned_group",
-			Object:   ObjectStr("data_catalogue", r.RightID),
+			Resource: ResourceID("data_catalogue", r.RightID),
 		})
 	}
-	return tuples, nil
+	return rels, nil
 }
 
-func collectToolCatalogueTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectToolCatalogueRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	var rows []joinRow
 	if err := db.Table("group_toolcatalogues").Select("group_id as left_id, tool_catalogue_id as right_id").Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
-		tuples = append(tuples, Tuple{
-			User:     GroupStr(r.LeftID),
+		rels = append(rels, Relationship{
+			Subject:  SubjectGroup(r.LeftID),
 			Relation: "assigned_group",
-			Object:   ObjectStr("tool_catalogue", r.RightID),
+			Resource: ResourceID("tool_catalogue", r.RightID),
 		})
 	}
-	return tuples, nil
+	return rels, nil
 }
 
-func collectLLMTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectLLMRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	// catalogue_llms -> llm#parent_catalogue
 	var rows []joinRow
 	if err := db.Table("catalogue_llms").Select("catalogue_id as left_id, llm_id as right_id").Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
-		tuples = append(tuples, Tuple{
-			User:     ObjectStr("catalogue", r.LeftID),
+		rels = append(rels, Relationship{
+			Subject:  ResourceID("catalogue", r.LeftID),
 			Relation: "parent_catalogue",
-			Object:   ObjectStr("llm", r.RightID),
+			Resource: ResourceID("llm", r.RightID),
 		})
 	}
-	return tuples, nil
+	return rels, nil
 }
 
-func collectDatasourceTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectDatasourceRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	// data_catalogue_data_sources -> datasource#parent_catalogue
 	var rows []joinRow
 	if err := db.Table("data_catalogue_data_sources").Select("data_catalogue_id as left_id, datasource_id as right_id").Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
-		tuples = append(tuples, Tuple{
-			User:     ObjectStr("data_catalogue", r.LeftID),
+		rels = append(rels, Relationship{
+			Subject:  ResourceID("data_catalogue", r.LeftID),
 			Relation: "parent_catalogue",
-			Object:   ObjectStr("datasource", r.RightID),
+			Resource: ResourceID("datasource", r.RightID),
 		})
 	}
 
@@ -211,36 +211,36 @@ func collectDatasourceTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
 	}
 	var owners []ownerRow
 	if err := db.Table("datasources").Select("id, user_id").Where("user_id > 0 AND deleted_at IS NULL").Find(&owners).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, o := range owners {
-		tuples = append(tuples, Tuple{
-			User:     UserStr(o.UserID),
+		rels = append(rels, Relationship{
+			Subject:  SubjectUser(o.UserID),
 			Relation: "owner",
-			Object:   ObjectStr("datasource", o.ID),
+			Resource: ResourceID("datasource", o.ID),
 		})
 	}
 
-	return tuples, nil
+	return rels, nil
 }
 
-func collectToolTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectToolRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	// tool_catalogue_tools -> tool#parent_catalogue
 	var rows []joinRow
 	if err := db.Table("tool_catalogue_tools").Select("tool_catalogue_id as left_id, tool_id as right_id").Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
-		tuples = append(tuples, Tuple{
-			User:     ObjectStr("tool_catalogue", r.LeftID),
+		rels = append(rels, Relationship{
+			Subject:  ResourceID("tool_catalogue", r.LeftID),
 			Relation: "parent_catalogue",
-			Object:   ObjectStr("tool", r.RightID),
+			Resource: ResourceID("tool", r.RightID),
 		})
 	}
-	return tuples, nil
+	return rels, nil
 }
 
-func collectAppTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectAppRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	// app.user_id -> app#owner
 	type ownerRow struct {
 		ID     uint
@@ -248,35 +248,35 @@ func collectAppTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
 	}
 	var owners []ownerRow
 	if err := db.Table("apps").Select("id, user_id").Where("user_id > 0 AND deleted_at IS NULL").Find(&owners).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, o := range owners {
-		tuples = append(tuples, Tuple{
-			User:     UserStr(o.UserID),
+		rels = append(rels, Relationship{
+			Subject:  SubjectUser(o.UserID),
 			Relation: "owner",
-			Object:   ObjectStr("app", o.ID),
+			Resource: ResourceID("app", o.ID),
 		})
 	}
-	return tuples, nil
+	return rels, nil
 }
 
-func collectChatTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectChatRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	// chat_groups -> chat#assigned_group
 	var rows []joinRow
 	if err := db.Table("chat_groups").Select("group_id as left_id, chat_id as right_id").Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
-		tuples = append(tuples, Tuple{
-			User:     GroupStr(r.LeftID),
+		rels = append(rels, Relationship{
+			Subject:  SubjectGroup(r.LeftID),
 			Relation: "assigned_group",
-			Object:   ObjectStr("chat", r.RightID),
+			Resource: ResourceID("chat", r.RightID),
 		})
 	}
-	return tuples, nil
+	return rels, nil
 }
 
-func collectPluginResourceTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectPluginResourceRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	type pluginResRow struct {
 		GroupID              uint
 		PluginResourceTypeID uint
@@ -287,20 +287,29 @@ func collectPluginResourceTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
 		Select("group_id, plugin_resource_type_id, instance_id").
 		Where("deleted_at IS NULL").
 		Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
+		// Validate InstanceID to prevent colon injection in composite IDs.
+		if err := validateID(r.InstanceID); err != nil {
+			log.Warn().Err(err).
+				Uint("group_id", r.GroupID).
+				Uint("plugin_resource_type_id", r.PluginResourceTypeID).
+				Str("instance_id", r.InstanceID).
+				Msg("authz: skipping plugin resource with invalid instance ID")
+			continue
+		}
 		objectID := fmt.Sprintf("%d_%s", r.PluginResourceTypeID, r.InstanceID)
-		tuples = append(tuples, Tuple{
-			User:     GroupStr(r.GroupID),
+		rels = append(rels, Relationship{
+			Subject:  SubjectGroup(r.GroupID),
 			Relation: "assigned_group",
-			Object:   "plugin_resource:" + objectID,
+			Resource: "plugin_resource:" + objectID,
 		})
 	}
-	return tuples, nil
+	return rels, nil
 }
 
-func collectSubmissionTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
+func collectSubmissionRels(db *gorm.DB, rels []Relationship) ([]Relationship, error) {
 	type subRow struct {
 		ID          uint
 		SubmitterID uint
@@ -311,23 +320,23 @@ func collectSubmissionTuples(db *gorm.DB, tuples []Tuple) ([]Tuple, error) {
 		Select("id, submitter_id, reviewer_id").
 		Where("deleted_at IS NULL").
 		Find(&rows).Error; err != nil {
-		return tuples, err
+		return rels, err
 	}
 	for _, r := range rows {
 		if r.SubmitterID > 0 {
-			tuples = append(tuples, Tuple{
-				User:     UserStr(r.SubmitterID),
+			rels = append(rels, Relationship{
+				Subject:  SubjectUser(r.SubmitterID),
 				Relation: "submitter",
-				Object:   ObjectStr("submission", r.ID),
+				Resource: ResourceID("submission", r.ID),
 			})
 		}
 		if r.ReviewerID != nil && *r.ReviewerID > 0 {
-			tuples = append(tuples, Tuple{
-				User:     UserStr(*r.ReviewerID),
+			rels = append(rels, Relationship{
+				Subject:  SubjectUser(*r.ReviewerID),
 				Relation: "reviewer",
-				Object:   ObjectStr("submission", r.ID),
+				Resource: ResourceID("submission", r.ID),
 			})
 		}
 	}
-	return tuples, nil
+	return rels, nil
 }

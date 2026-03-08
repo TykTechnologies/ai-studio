@@ -7,25 +7,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUserStr(t *testing.T) {
-	assert.Equal(t, "user:1", UserStr(1))
-	assert.Equal(t, "user:42", UserStr(42))
+func TestSubjectUser(t *testing.T) {
+	assert.Equal(t, "user:1", SubjectUser(1))
+	assert.Equal(t, "user:42", SubjectUser(42))
 }
 
-func TestGroupStr(t *testing.T) {
-	assert.Equal(t, "group:5", GroupStr(5))
+func TestSubjectGroup(t *testing.T) {
+	assert.Equal(t, "group:5", SubjectGroup(5))
 }
 
-func TestGroupMemberStr(t *testing.T) {
-	assert.Equal(t, "group:5#member", GroupMemberStr(5))
+func TestSubjectGroupMembers(t *testing.T) {
+	assert.Equal(t, "group:5#member", SubjectGroupMembers(5))
 }
 
-func TestObjectStr(t *testing.T) {
-	assert.Equal(t, "catalogue:3", ObjectStr("catalogue", 3))
-	assert.Equal(t, "llm:100", ObjectStr("llm", 100))
+func TestResourceID(t *testing.T) {
+	assert.Equal(t, "catalogue:3", ResourceID("catalogue", 3))
+	assert.Equal(t, "llm:100", ResourceID("llm", 100))
 }
 
-func TestParseObjectID(t *testing.T) {
+func TestResourceByName(t *testing.T) {
+	// Valid IDs
+	res, err := ResourceByName("plugin_resource", "5_srv-1")
+	require.NoError(t, err)
+	assert.Equal(t, "plugin_resource:5_srv-1", res)
+
+	// Colons are rejected
+	_, err = ResourceByName("plugin_resource", "evil:123")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "forbidden colon")
+
+	// Empty IDs are rejected
+	_, err = ResourceByName("plugin_resource", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty ID")
+}
+
+func TestParseResourceNumericID(t *testing.T) {
 	tests := []struct {
 		input   string
 		wantID  uint
@@ -40,7 +57,7 @@ func TestParseObjectID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			id, err := ParseObjectID(tt.input)
+			id, err := ParseResourceNumericID(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -49,4 +66,35 @@ func TestParseObjectID(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseResourceID(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"llm:42", "42", false},
+		{"plugin_resource:5_srv-1", "5_srv-1", false},
+		{"system:1", "1", false},
+		{"invalid", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := ParseResourceID(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
+
+func TestValidateID_RejectsColons(t *testing.T) {
+	assert.NoError(t, validateID("5_srv-1"))
+	assert.NoError(t, validateID("42"))
+	assert.Error(t, validateID("evil:123"))
+	assert.Error(t, validateID(""))
 }

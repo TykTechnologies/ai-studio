@@ -1,51 +1,116 @@
 model
   schema 1.1
 
-# System-level roles (replaces IsAdmin, AccessToSSOConfig booleans)
+# Tyk AI Studio — Fine-Grained Authorization Model
+#
+# This model implements relationship-based access control (ReBAC) for Tyk AI
+# Studio. It replaces the legacy boolean flags (IsAdmin) and SQL JOIN-based
+# group filtering with a unified authorization graph.
+#
+# Core concepts:
+#   - Users belong to Groups (membership).
+#   - Groups are assigned to Catalogues (LLM, Data, Tool).
+#   - Catalogues contain resources (LLMs, Datasources, Tools).
+#   - Access flows: User -> Group -> Catalogue -> Resource.
+#   - Some resources (Apps, Datasources) also have direct ownership.
+#
+# The access chain for catalogue-based resources is:
+#   user:10 --member--> group:1 --assigned_group--> catalogue:1
+#   catalogue:1 --parent_catalogue--> llm:5
+#   Therefore: user:10 can_use llm:5 (via transitive resolution)
+
+# System — global platform-level roles.
+# Replaces: models.User.IsAdmin (boolean), models.User.AccessToSSOConfig (boolean).
+# A single system:1 object represents the platform instance.
+#
+# Roles:
+#   admin     — full platform administration (replaces IsAdmin=true)
+#   sso_admin — SSO configuration access (replaces AccessToSSOConfig=true);
+#               admins automatically inherit this role
+#   member    — any active user (used for platform-wide policies)
 type system
   relations
     define admin: [user, group#member]
     define sso_admin: [user, group#member] or admin
     define member: [user, group#member]
 
-# Users
+# User — represents platform users (maps to models.User).
+# Users are the primary actors in the system. They are referenced as subjects
+# in relationships (e.g. "user:42 is member of group:1").
 type user
 
-# Groups — users belong to groups, groups grant access to catalogues
+# Group — user groups for access control (maps to models.Group).
+# Groups organize users and grant access to catalogues. A user's access to
+# LLMs, Datasources, and Tools is determined by their group memberships.
+#
+# Relations:
+#   member — users who belong to this group (from user_groups join table)
+#   admin  — users who can manage the group itself
 type group
   relations
     define member: [user]
     define admin: [user]
 
-# LLM catalogue (maps to models.Catalogue)
+# LLM Catalogue (maps to models.Catalogue).
+# Catalogues group LLMs for access control. Groups are assigned to catalogues
+# via the group_catalogues join table.
+#
+# Relations:
+#   assigned_group — groups that have access to this catalogue
+#   viewer         — users who can view/use LLMs in this catalogue
+#                    (automatically includes all members of assigned groups)
+#   editor         — users who can manage LLMs in this catalogue
+#                    (includes group admins and directly assigned users)
 type catalogue
   relations
     define assigned_group: [group]
     define viewer: member from assigned_group
     define editor: [user] or admin from assigned_group
 
-# Data catalogue (maps to models.DataCatalogue)
+# Data Catalogue (maps to models.DataCatalogue).
+# Groups datasources for access control. Groups are assigned via the
+# group_datacatalogues join table.
 type data_catalogue
   relations
     define assigned_group: [group]
     define viewer: member from assigned_group
     define editor: [user] or admin from assigned_group
 
-# Tool catalogue (maps to models.ToolCatalogue)
+# Tool Catalogue (maps to models.ToolCatalogue).
+# Groups tools for access control. Groups are assigned via the
+# group_toolcatalogues join table.
 type tool_catalogue
   relations
     define assigned_group: [group]
     define viewer: member from assigned_group
     define editor: [user] or admin from assigned_group
 
-# LLM provider (maps to models.LLM)
+# LLM Provider (maps to models.LLM).
+# Individual LLM configurations. Access is derived from the parent catalogue.
+#
+# Access chain: user -> group -> catalogue -> llm
+# Data flow: catalogue_llms join table creates the parent_catalogue relation.
+#
+# Relations:
+#   parent_catalogue — the catalogue this LLM belongs to
+#   can_use          — users who can send requests to this LLM
+#   can_admin        — users who can modify this LLM's configuration
 type llm
   relations
     define parent_catalogue: [catalogue]
     define can_use: viewer from parent_catalogue
     define can_admin: editor from parent_catalogue
 
-# Datasource (maps to models.Datasource)
+# Datasource (maps to models.Datasource).
+# Data connections (databases, APIs, etc.). Access comes from either:
+#   1. Direct ownership (datasource.user_id — the creator)
+#   2. Group membership through data catalogues
+#
+# Relations:
+#   owner            — the user who created this datasource
+#   parent_catalogue — the data catalogue this datasource belongs to
+#   can_use          — owner OR anyone with viewer access via catalogue
+#   can_admin        — owner OR anyone with editor access via catalogue
 type datasource
   relations
     define owner: [user]
@@ -53,14 +118,28 @@ type datasource
     define can_use: owner or viewer from parent_catalogue
     define can_admin: owner or editor from parent_catalogue
 
-# Tool (maps to models.Tool)
+# Tool (maps to models.Tool).
+# External service integrations (OpenAPI tools). Access is derived from the
+# parent tool catalogue via the tool_catalogue_tools join table.
 type tool
   relations
     define parent_catalogue: [tool_catalogue]
     define can_use: viewer from parent_catalogue
     define can_admin: editor from parent_catalogue
 
-# App (maps to models.App)
+# App (maps to models.App).
+# AI applications created by users. Supports direct ownership and sharing.
+#
+# Access model:
+#   - Owner has full control (editor + can_use)
+#   - Apps can be shared with individual users or group members as viewers
+#   - Editors can modify the app; viewers can only use it
+#
+# Relations:
+#   owner   — the user who created the app (app.user_id)
+#   viewer  — users/groups granted read-only access (via app sharing)
+#   editor  — users/groups granted edit access; owners are automatically editors
+#   can_use — anyone who can interact with the app (viewers + editors)
 type app
   relations
     define owner: [user]
@@ -68,20 +147,43 @@ type app
     define editor: [user, group#member] or owner
     define can_use: viewer or editor
 
-# Chat interface (maps to models.Chat)
+# Chat Interface (maps to models.Chat).
+# Chat configurations assigned to groups. Access is determined by group
+# membership via the chat_groups join table.
+#
+# Relations:
+#   assigned_group — groups that can access this chat
+#   viewer         — members of assigned groups (can use the chat)
+#   editor         — group admins or directly assigned users (can configure)
 type chat
   relations
     define assigned_group: [group]
     define viewer: member from assigned_group
     define editor: [user] or admin from assigned_group
 
-# Plugin (maps to models.Plugin)
+# Plugin (maps to models.Plugin).
+# Installed plugins. The installer has admin rights over the plugin.
+#
+# Relations:
+#   installer — the user who installed the plugin
+#   can_admin — users who can manage the plugin (currently = installer)
 type plugin
   relations
     define installer: [user]
     define can_admin: installer
 
-# Plugin resource (maps to models.GroupPluginResource)
+# Plugin Resource (maps to models.GroupPluginResource).
+# Custom resources registered by plugins. Uses composite IDs in the format
+# "{plugin_resource_type_id}_{instance_id}" (e.g. "5_srv-1").
+#
+# Access is granted through group assignment. Admin access is inherited from
+# the parent plugin.
+#
+# Relations:
+#   parent_plugin  — the plugin that owns this resource type
+#   assigned_group — groups that can use this resource
+#   can_use        — members of assigned groups
+#   can_admin      — users who can admin the parent plugin
 type plugin_resource
   relations
     define parent_plugin: [plugin]
@@ -89,7 +191,14 @@ type plugin_resource
     define can_use: member from assigned_group
     define can_admin: can_admin from parent_plugin
 
-# Submission (maps to models.Submission)
+# Submission (maps to models.Submission — UGC system).
+# User-generated content submissions with a review workflow.
+#
+# Relations:
+#   submitter  — the user who created the submission
+#   reviewer   — users/groups assigned to review the submission
+#   can_view   — submitters and reviewers can view the submission
+#   can_review — only reviewers can approve/reject
 type submission
   relations
     define submitter: [user]
@@ -97,7 +206,13 @@ type submission
     define can_view: submitter or reviewer
     define can_review: reviewer
 
-# Filter (maps to models.Filter)
+# Filter (maps to models.Filter).
+# Content moderation filters. Currently only tracks the creator for admin
+# purposes. Future: may add shared filter management.
+#
+# Relations:
+#   creator   — the user who created the filter
+#   can_admin — users who can modify/delete the filter (currently = creator)
 type filter
   relations
     define creator: [user]

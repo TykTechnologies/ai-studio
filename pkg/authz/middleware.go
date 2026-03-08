@@ -18,7 +18,7 @@ func RequireSystemAdmin(authz Authorizer) gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := authz.CheckStr(c.Request.Context(), user.ID, "admin", "system", "1")
+		allowed, err := authz.CheckByName(c.Request.Context(), user.ID, "admin", "system", "1")
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Authorization check failed"})
 			return
@@ -41,7 +41,7 @@ func RequireSSOAdmin(authz Authorizer) gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := authz.CheckStr(c.Request.Context(), user.ID, "sso_admin", "system", "1")
+		allowed, err := authz.CheckByName(c.Request.Context(), user.ID, "sso_admin", "system", "1")
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Authorization check failed"})
 			return
@@ -54,9 +54,9 @@ func RequireSSOAdmin(authz Authorizer) gin.HandlerFunc {
 	}
 }
 
-// RequireRelation returns middleware that checks a specific relation on an object.
-// The object ID is extracted from the URL parameter named paramName.
-func RequireRelation(authz Authorizer, objectType, relation, paramName string) gin.HandlerFunc {
+// RequireRelation returns middleware that checks a specific relation on a resource.
+// The resource ID is extracted from the URL parameter named paramName.
+func RequireRelation(authz Authorizer, resourceType, relation, paramName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user, ok := userFromContext(c)
 		if !ok {
@@ -71,7 +71,7 @@ func RequireRelation(authz Authorizer, objectType, relation, paramName string) g
 			return
 		}
 
-		allowed, err := authz.Check(c.Request.Context(), user.ID, relation, objectType, uint(id))
+		allowed, err := authz.Check(c.Request.Context(), user.ID, relation, resourceType, uint(id))
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Authorization check failed"})
 			return
@@ -84,14 +84,14 @@ func RequireRelation(authz Authorizer, objectType, relation, paramName string) g
 	}
 }
 
-// RequireCanUse returns middleware that checks "can_use" relation on an object type.
-func RequireCanUse(authz Authorizer, objectType, paramName string) gin.HandlerFunc {
-	return RequireRelation(authz, objectType, "can_use", paramName)
+// RequireCanUse returns middleware that checks "can_use" relation on a resource type.
+func RequireCanUse(authz Authorizer, resourceType, paramName string) gin.HandlerFunc {
+	return RequireRelation(authz, resourceType, "can_use", paramName)
 }
 
-// RequireCanAdmin returns middleware that checks "can_admin" relation on an object type.
-func RequireCanAdmin(authz Authorizer, objectType, paramName string) gin.HandlerFunc {
-	return RequireRelation(authz, objectType, "can_admin", paramName)
+// RequireCanAdmin returns middleware that checks "can_admin" relation on a resource type.
+func RequireCanAdmin(authz Authorizer, resourceType, paramName string) gin.HandlerFunc {
+	return RequireRelation(authz, resourceType, "can_admin", paramName)
 }
 
 func userFromContext(c *gin.Context) (*models.User, bool) {
