@@ -5,12 +5,13 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
 	"testing"
+
+	"golang.org/x/crypto/argon2"
 )
 
 // testLocalKEK is a test-only KEKProvider identical to local.Provider.
@@ -21,8 +22,9 @@ type testLocalKEK struct {
 }
 
 func newTestLocalKEK(rawKey string) *testLocalKEK {
-	hash := sha256.Sum256([]byte(rawKey))
-	return &testLocalKEK{kek: hash[:]}
+	salt := []byte("tyk-ai-studio-local-kek-v1")
+	kek := argon2.IDKey([]byte(rawKey), salt, 3, 64*1024, 4, 32)
+	return &testLocalKEK{kek: kek}
 }
 
 func (p *testLocalKEK) GenerateDEK(ctx context.Context) ([]byte, error) {
