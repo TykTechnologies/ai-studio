@@ -41,15 +41,6 @@ type Authorizer interface {
 	// Results are bounded by the backend's configured maximum.
 	ListResourcesByName(ctx context.Context, userID uint, relation string, resourceType string) ([]string, error)
 
-	// ListResourcesPage returns a page of numeric resource IDs. Pass an empty
-	// token to start from the beginning. Returns a continuation token for the
-	// next page, or empty string when there are no more results.
-	ListResourcesPage(ctx context.Context, userID uint, relation string, resourceType string, pageSize int, token string) (ids []uint, nextToken string, err error)
-
-	// ListResourcesByNamePage returns a page of raw resource identifiers.
-	// Same pagination semantics as ListResourcesPage.
-	ListResourcesByNamePage(ctx context.Context, userID uint, relation string, resourceType string, pageSize int, token string) (resources []string, nextToken string, err error)
-
 	// Grant writes relationship grants to the authorization store.
 	Grant(ctx context.Context, grants []Relationship) error
 

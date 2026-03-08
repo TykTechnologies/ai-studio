@@ -21,6 +21,14 @@ var modelDSL string
 // maxBatchSize is the backend limit for relationships in a single write call.
 const maxBatchSize = 100
 
+// SubjectGroupMembers returns an OpenFGA userset identifier representing all
+// members of a group. This uses the "#member" syntax specific to OpenFGA's
+// relationship model and is needed for group-based sharing (e.g. granting
+// all members of a group viewer access to an app).
+func SubjectGroupMembers(id uint) string {
+	return authz.SubjectGroup(id) + "#member"
+}
+
 // Store is the production Authorizer backed by an embedded relationship engine.
 type Store struct {
 	server  *server.Server
@@ -133,32 +141,6 @@ func (s *Store) ListResources(ctx context.Context, userID uint, relation string,
 	return parseNumericIDs(resourceType, resources)
 }
 
-// ListResourcesByNamePage returns a page of raw resource identifiers.
-// The underlying ListObjects API does not support cursor-based pagination natively,
-// so this implementation fetches all results and applies client-side windowing.
-// Note: result ordering is not guaranteed to be stable between calls.
-func (s *Store) ListResourcesByNamePage(ctx context.Context, userID uint, relation string, resourceType string, pageSize int, token string) ([]string, string, error) {
-	all, err := s.ListResourcesByName(ctx, userID, relation, resourceType)
-	if err != nil {
-		return nil, "", err
-	}
-	return paginateStrings(all, pageSize, token)
-}
-
-// ListResourcesPage returns a page of numeric resource IDs.
-// Same client-side windowing as ListResourcesByNamePage.
-func (s *Store) ListResourcesPage(ctx context.Context, userID uint, relation string, resourceType string, pageSize int, token string) ([]uint, string, error) {
-	resources, nextToken, err := s.ListResourcesByNamePage(ctx, userID, relation, resourceType, pageSize, token)
-	if err != nil {
-		return nil, "", err
-	}
-	ids, err := parseNumericIDs(resourceType, resources)
-	if err != nil {
-		return nil, "", err
-	}
-	return ids, nextToken, nil
-}
-
 func parseNumericIDs(resourceType string, resources []string) ([]uint, error) {
 	ids := make([]uint, 0, len(resources))
 	for _, res := range resources {
@@ -169,33 +151,6 @@ func parseNumericIDs(resourceType string, resources []string) ([]uint, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
-}
-
-// paginateStrings applies offset-based pagination using a numeric token.
-// Token is the string index to start from (empty = start). Returns the next token or "".
-func paginateStrings(all []string, pageSize int, token string) ([]string, string, error) {
-	offset := 0
-	if token != "" {
-		var err error
-		n, err := strconv.Atoi(token)
-		if err != nil {
-			return nil, "", fmt.Errorf("authz: invalid pagination token: %w", err)
-		}
-		offset = n
-	}
-	if offset >= len(all) {
-		return nil, "", nil
-	}
-	end := offset + pageSize
-	if end > len(all) {
-		end = len(all)
-	}
-	page := all[offset:end]
-	var nextToken string
-	if end < len(all) {
-		nextToken = strconv.Itoa(end)
-	}
-	return page, nextToken, nil
 }
 
 // Grant writes relationship grants to the authorization store.

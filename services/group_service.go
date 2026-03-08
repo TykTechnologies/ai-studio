@@ -1,6 +1,8 @@
 package services
 
 import (
+	"context"
+
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
@@ -140,7 +142,13 @@ func (s *Service) AddUserToGroup(userID, groupID uint) error {
 		return err
 	}
 
-	return group.AddUser(s.DB, user)
+	if err := group.AddUser(s.DB, user); err != nil {
+		return err
+	}
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnUserAddedToGroup(context.Background(), userID, groupID)
+	}
+	return nil
 }
 
 func (s *Service) RemoveUserFromGroup(userID, groupID uint) error {
@@ -154,7 +162,13 @@ func (s *Service) RemoveUserFromGroup(userID, groupID uint) error {
 		return err
 	}
 
-	return group.RemoveUser(s.DB, user)
+	if err := group.RemoveUser(s.DB, user); err != nil {
+		return err
+	}
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnUserRemovedFromGroup(context.Background(), userID, groupID)
+	}
+	return nil
 }
 
 func (s *Service) GetGroupUsers(groupID uint, pageSize int, pageNumber int, all bool) (models.Users, int64, int, error) {
@@ -227,7 +241,13 @@ func (s *Service) AddCatalogueToGroup(catalogueID, groupID uint) error {
 		return err
 	}
 
-	return group.AddCatalogue(s.DB, catalogue)
+	if err := group.AddCatalogue(s.DB, catalogue); err != nil {
+		return err
+	}
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnCatalogueAssignedToGroup(context.Background(), "catalogue", catalogueID, groupID)
+	}
+	return nil
 }
 
 func (s *Service) RemoveCatalogueFromGroup(catalogueID, groupID uint) error {
@@ -241,7 +261,13 @@ func (s *Service) RemoveCatalogueFromGroup(catalogueID, groupID uint) error {
 		return err
 	}
 
-	return group.RemoveCatalogue(s.DB, catalogue)
+	if err := group.RemoveCatalogue(s.DB, catalogue); err != nil {
+		return err
+	}
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnCatalogueRemovedFromGroup(context.Background(), "catalogue", catalogueID, groupID)
+	}
+	return nil
 }
 
 func (s *Service) GetGroupCatalogues(groupID uint) (models.Catalogues, error) {
@@ -277,7 +303,13 @@ func (s *Service) AddDataCatalogueToGroup(dataCatalogueID, groupID uint) error {
 		return err
 	}
 
-	return group.AddDataCatalogue(s.DB, dataCatalogue)
+	if err := group.AddDataCatalogue(s.DB, dataCatalogue); err != nil {
+		return err
+	}
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnCatalogueAssignedToGroup(context.Background(), "data_catalogue", dataCatalogueID, groupID)
+	}
+	return nil
 }
 
 func (s *Service) RemoveDataCatalogueFromGroup(dataCatalogueID, groupID uint) error {
@@ -291,7 +323,13 @@ func (s *Service) RemoveDataCatalogueFromGroup(dataCatalogueID, groupID uint) er
 		return err
 	}
 
-	return group.RemoveDataCatalogue(s.DB, dataCatalogue)
+	if err := group.RemoveDataCatalogue(s.DB, dataCatalogue); err != nil {
+		return err
+	}
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnCatalogueRemovedFromGroup(context.Background(), "data_catalogue", dataCatalogueID, groupID)
+	}
+	return nil
 }
 
 func (s *Service) GetGroupDataCatalogues(groupID uint) (models.DataCatalogues, error) {
@@ -318,7 +356,13 @@ func (s *Service) AddToolCatalogueToGroup(toolCatalogueID, groupID uint) error {
 		return err
 	}
 
-	return group.AddToolCatalogue(s.DB, toolCatalogue)
+	if err := group.AddToolCatalogue(s.DB, toolCatalogue); err != nil {
+		return err
+	}
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnCatalogueAssignedToGroup(context.Background(), "tool_catalogue", toolCatalogueID, groupID)
+	}
+	return nil
 }
 
 func (s *Service) RemoveToolCatalogueFromGroup(toolCatalogueID, groupID uint) error {
@@ -332,7 +376,13 @@ func (s *Service) RemoveToolCatalogueFromGroup(toolCatalogueID, groupID uint) er
 		return err
 	}
 
-	return group.RemoveToolCatalogue(s.DB, toolCatalogue)
+	if err := group.RemoveToolCatalogue(s.DB, toolCatalogue); err != nil {
+		return err
+	}
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnCatalogueRemovedFromGroup(context.Background(), "tool_catalogue", toolCatalogueID, groupID)
+	}
+	return nil
 }
 
 func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber int, all bool) (models.ToolCatalogues, int64, int, error) {

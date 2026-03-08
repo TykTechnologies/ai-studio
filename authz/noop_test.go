@@ -39,21 +39,6 @@ func TestNoopAuthorizer_ListResourcesReturnsNil(t *testing.T) {
 	assert.Nil(t, strs)
 }
 
-func TestNoopAuthorizer_PaginationReturnsNil(t *testing.T) {
-	ctx := context.Background()
-	noop := &NoopAuthorizer{}
-
-	ids, token, err := noop.ListResourcesPage(ctx, 1, "can_use", "llm", 10, "")
-	require.NoError(t, err)
-	assert.Nil(t, ids)
-	assert.Empty(t, token)
-
-	strs, token, err := noop.ListResourcesByNamePage(ctx, 1, "can_use", "llm", 10, "")
-	require.NoError(t, err)
-	assert.Nil(t, strs)
-	assert.Empty(t, token)
-}
-
 func TestNoopAuthorizer_WritesAreNoOps(t *testing.T) {
 	ctx := context.Background()
 	noop := &NoopAuthorizer{}

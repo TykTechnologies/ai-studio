@@ -151,6 +151,14 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		s.SystemEvents.EmitUserCreated(user, user.ID, 0)
 	}
 
+	// Sync authorization relationships
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnUserCreated(context.Background(), user.ID, user.IsAdmin, user.AccessToSSOConfig)
+		for _, g := range user.Groups {
+			s.AuthzSyncer.OnUserAddedToGroup(context.Background(), user.ID, g.ID)
+		}
+	}
+
 	return user, nil
 }
 
@@ -195,6 +203,14 @@ func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, error) {
 	if err := s.validateUserInput(dto); err != nil {
 		return nil, err
+	}
+
+	// Capture old state for authz sync.
+	wasAdmin := user.IsAdmin
+	hadSSOConfig := user.AccessToSSOConfig
+	var oldGroupIDs []uint
+	for _, g := range user.Groups {
+		oldGroupIDs = append(oldGroupIDs, g.ID)
 	}
 
 	user.Email = dto.Email
@@ -275,6 +291,14 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 	// Emit system event
 	if s.SystemEvents != nil {
 		s.SystemEvents.EmitUserUpdated(user, user.ID, user.ID)
+	}
+
+	// Sync authorization relationships
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnUserUpdated(context.Background(), user.ID, user.IsAdmin, wasAdmin, user.AccessToSSOConfig, hadSSOConfig)
+		if newGroups != nil {
+			s.AuthzSyncer.OnGroupMembersReplaced(context.Background(), user.ID, oldGroupIDs, dto.Groups)
+		}
 	}
 
 	return user, nil
@@ -381,6 +405,11 @@ func (s *Service) DeleteUser(user *models.User) error {
 	// Emit system event
 	if s.SystemEvents != nil {
 		s.SystemEvents.EmitUserDeleted(user.ID, 0)
+	}
+
+	// Sync authorization relationships
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnUserDeleted(context.Background(), user.ID)
 	}
 
 	return nil
@@ -568,6 +597,12 @@ func (s *Service) UpdateGroupUsers(id uint, userIDs []uint) error {
 		return err
 	}
 
+	// Capture old member IDs for authz sync.
+	var oldUserIDs []uint
+	for _, u := range group.Users {
+		oldUserIDs = append(oldUserIDs, u.ID)
+	}
+
 	tx := s.DB.Begin()
 
 	users := make([]models.User, 0, len(userIDs))
@@ -580,5 +615,14 @@ func (s *Service) UpdateGroupUsers(id uint, userIDs []uint) error {
 		return err
 	}
 
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	// Sync authorization relationships
+	if s.AuthzSyncer != nil {
+		s.AuthzSyncer.OnGroupMembersReplaced(context.Background(), id, oldUserIDs, userIDs)
+	}
+
+	return nil
 }

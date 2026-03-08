@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/TykTechnologies/midsommar/v2/authz"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
@@ -47,6 +48,9 @@ type Service struct {
 	ModelRouterService model_router.Service
 	// Sync Status (Hub-and-Spoke)
 	SyncStatusService *SyncStatusService
+	// Fine-grained authorization
+	Authz      authz.Authorizer
+	AuthzSyncer *authz.Syncer
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -251,6 +255,13 @@ func (s *Service) Cleanup() error {
 		// Currently no explicit cleanup required
 	}
 
+	// Close authorization backend
+	if s.Authz != nil {
+		logger.Info("Closing authorization backend...")
+		s.Authz.Close()
+		logger.Info("Authorization backend closed")
+	}
+
 	// Close database connections
 	if s.DB != nil {
 		logger.Info("Closing database connections...")
@@ -305,4 +316,13 @@ func (s *Service) SetEventBus(bus eventbridge.Bus) {
 func (s *Service) SetLicensingService(svc licensing.Service) {
 	s.LicensingService = svc
 	logger.Debug("Licensing service set on main service")
+}
+
+// SetAuthorizer sets the fine-grained authorization backend and creates
+// an AuthzSyncer that keeps authorization relationships in sync with
+// database mutations.
+func (s *Service) SetAuthorizer(a authz.Authorizer) {
+	s.Authz = a
+	s.AuthzSyncer = authz.NewSyncer(a)
+	logger.Debug("Fine-grained authorization set on main service")
 }

@@ -346,39 +346,6 @@ func TestListResourcesByName_PluginResources(t *testing.T) {
 	assert.Contains(t, err.Error(), "non-numeric resource ID")
 }
 
-func TestListResourcesPage(t *testing.T) {
-	ctx := context.Background()
-	store := newTestStore(t)
-
-	require.NoError(t, store.Grant(ctx, []authz.Relationship{
-		{Subject: "user:10", Relation: "member", Resource: "group:1"},
-		{Subject: "group:1", Relation: "assigned_group", Resource: "catalogue:1"},
-		{Subject: "catalogue:1", Relation: "parent_catalogue", Resource: "llm:1"},
-		{Subject: "catalogue:1", Relation: "parent_catalogue", Resource: "llm:2"},
-		{Subject: "catalogue:1", Relation: "parent_catalogue", Resource: "llm:3"},
-		{Subject: "catalogue:1", Relation: "parent_catalogue", Resource: "llm:4"},
-		{Subject: "catalogue:1", Relation: "parent_catalogue", Resource: "llm:5"},
-	}))
-
-	// Paginate through all results with page size 2.
-	var all []uint
-	token := ""
-	pages := 0
-	for {
-		ids, nextToken, err := store.ListResourcesPage(ctx, 10, "can_use", "llm", 2, token)
-		require.NoError(t, err)
-		all = append(all, ids...)
-		pages++
-		if nextToken == "" {
-			break
-		}
-		token = nextToken
-	}
-
-	assert.ElementsMatch(t, []uint{1, 2, 3, 4, 5}, all)
-	assert.Equal(t, 3, pages, "expected 3 pages for 5 items with page size 2")
-}
-
 func TestStore_Enabled(t *testing.T) {
 	store := newTestStore(t)
 	assert.True(t, store.Enabled())
