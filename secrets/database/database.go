@@ -242,8 +242,19 @@ func (ks *gormKeyStore) GetActiveKey(ctx context.Context) (*secrets.EncryptionKe
 		return nil, fmt.Errorf("query active key: %w", err)
 	}
 
-	// No active key — generate one
-	return ks.generateKey(ctx)
+	// No active key — generate one. If a concurrent request already created
+	// one, the insert may fail; retry the lookup in that case.
+	created, err := ks.generateKey(ctx)
+	if err == nil {
+		return created, nil
+	}
+
+	// Retry lookup — another goroutine may have won the race
+	err = ks.db.Where("status = ?", secrets.EncryptionKeyActive).First(&key).Error
+	if err == nil {
+		return &key, nil
+	}
+	return nil, fmt.Errorf("generate active key: %w", err)
 }
 
 func (ks *gormKeyStore) GetKeyByID(_ context.Context, id uint) (*secrets.EncryptionKey, error) {
