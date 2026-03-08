@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"gorm.io/gorm"
 )
 
@@ -76,49 +75,8 @@ func NewSubmission() *Submission {
 	return &Submission{}
 }
 
-// payloadCredentialFields are the keys in ResourcePayload that contain secrets
-var payloadCredentialFields = []string{"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string"}
-
-// BeforeSave encrypts credential fields in ResourcePayload before writing to DB
-func (s *Submission) BeforeSave(tx *gorm.DB) error {
-	if s.ResourcePayload != nil {
-		for _, field := range payloadCredentialFields {
-			if val, ok := s.ResourcePayload[field]; ok {
-				if str, ok := val.(string); ok && str != "" && str != "[redacted]" {
-					s.ResourcePayload[field] = secrets.EncryptValue(str)
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// AfterFind decrypts credential fields in ResourcePayload after reading from DB
-func (s *Submission) AfterFind(tx *gorm.DB) error {
-	s.decryptPayloadFields()
-	return nil
-}
-
-// decryptPayloadFields decrypts credential fields in ResourcePayload in-place.
-func (s *Submission) decryptPayloadFields() {
-	if s.ResourcePayload != nil {
-		for _, field := range payloadCredentialFields {
-			if val, ok := s.ResourcePayload[field]; ok {
-				if str, ok := val.(string); ok {
-					s.ResourcePayload[field] = secrets.DecryptValue(str)
-				}
-			}
-		}
-	}
-}
-
 func (s *Submission) Create(db *gorm.DB) error {
-	if err := db.Create(s).Error; err != nil {
-		return err
-	}
-	// BeforeSave encrypts fields in-place; decrypt so callers see plaintext.
-	s.decryptPayloadFields()
-	return nil
+	return db.Create(s).Error
 }
 
 func (s *Submission) Get(db *gorm.DB, id uint) error {
@@ -126,11 +84,7 @@ func (s *Submission) Get(db *gorm.DB, id uint) error {
 }
 
 func (s *Submission) Update(db *gorm.DB) error {
-	if err := db.Save(s).Error; err != nil {
-		return err
-	}
-	s.decryptPayloadFields()
-	return nil
+	return db.Save(s).Error
 }
 
 // UpdateWithLock performs an optimistic concurrency update.
@@ -154,7 +108,6 @@ func (s *Submission) UpdateWithLock(db *gorm.DB) error {
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("concurrent modification detected: submission was modified by another request")
 	}
-	s.decryptPayloadFields()
 	return nil
 }
 

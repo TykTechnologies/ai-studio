@@ -8,7 +8,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // REDACTED_VALUE is the value used to redact sensitive fields in API responses
@@ -21,8 +20,10 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 		return nil, err
 	}
 
-	llm.APIKey = secrets.GetValue(llm.APIKey, true) // preserve reference for API responses
-	llm.APIEndpoint = secrets.GetValue(llm.APIEndpoint, true)
+	if s.Secrets != nil {
+		llm.APIKey = s.Secrets.ResolveReference(context.Background(), llm.APIKey, true)
+		llm.APIEndpoint = s.Secrets.ResolveReference(context.Background(), llm.APIEndpoint, true)
+	}
 	return llm, nil
 }
 
@@ -437,8 +438,10 @@ func (s *Service) GetLLMByName(name string) (*models.LLM, error) {
 		return nil, err
 	}
 
-	llm.APIKey = secrets.GetValue(llm.APIKey, false) // false to resolve the actual value
-	llm.APIEndpoint = secrets.GetValue(llm.APIEndpoint, false)
+	if s.Secrets != nil {
+		llm.APIKey = s.Secrets.ResolveReference(context.Background(), llm.APIKey, false)
+		llm.APIEndpoint = s.Secrets.ResolveReference(context.Background(), llm.APIEndpoint, false)
+	}
 	return llm, nil
 }
 
@@ -457,9 +460,11 @@ func (s *Service) GetActiveLLMs() ([]models.LLM, error) {
 		return nil, err
 	}
 
-	for i := range llms {
-		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false) // false to resolve the actual value
-		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+	if s.Secrets != nil {
+		for i := range llms {
+			llms[i].APIKey = s.Secrets.ResolveReference(context.Background(), llms[i].APIKey, false)
+			llms[i].APIEndpoint = s.Secrets.ResolveReference(context.Background(), llms[i].APIEndpoint, false)
+		}
 	}
 
 	return []models.LLM(llms), nil
@@ -490,9 +495,11 @@ func (s *Service) GetLLMsInNamespace(namespace string) ([]models.LLM, error) {
 		return nil, err
 	}
 
-	for i := range llms {
-		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)
-		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+	if s.Secrets != nil {
+		for i := range llms {
+			llms[i].APIKey = s.Secrets.ResolveReference(context.Background(), llms[i].APIKey, false)
+			llms[i].APIEndpoint = s.Secrets.ResolveReference(context.Background(), llms[i].APIEndpoint, false)
+		}
 	}
 
 	return []models.LLM(llms), nil
@@ -515,9 +522,11 @@ func (s *Service) GetActiveLLMsInNamespace(namespace string) ([]models.LLM, erro
 		return nil, err
 	}
 
-	for i := range llms {
-		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)
-		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+	if s.Secrets != nil {
+		for i := range llms {
+			llms[i].APIKey = s.Secrets.ResolveReference(context.Background(), llms[i].APIKey, false)
+			llms[i].APIEndpoint = s.Secrets.ResolveReference(context.Background(), llms[i].APIEndpoint, false)
+		}
 	}
 
 	return []models.LLM(llms), nil

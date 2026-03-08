@@ -103,15 +103,16 @@ func main() {
 	}
 
 	// Initialize secrets store with encryption key from config
+	var secretStore secrets.SecretStore
 	if appConf.TIBAPISecret != "" {
-		secrets.SetStore(secretsdb.New(db, appConf.TIBAPISecret))
+		secretStore = secretsdb.New(db, appConf.TIBAPISecret)
 		logger.Info("Secrets store initialized")
 	} else {
 		logger.Warn("TYK_AI_SECRET_KEY not set — secrets encryption is disabled")
 	}
 
 	// Ensure default group and catalogues exist and are linked
-	if err := ensureDefaults(db, *noLLMDefaults); err != nil {
+	if err := ensureDefaults(db, *noLLMDefaults, secretStore); err != nil {
 		logger.FatalErr("Failed to ensure default group and catalogues", err)
 	}
 
@@ -150,6 +151,11 @@ func main() {
 	}
 
 	service := services.NewServiceWithOCI(db, ociConfig)
+
+	// Wire secrets store to service
+	if secretStore != nil {
+		service.SetSecretStore(secretStore)
+	}
 
 	// Wire licensing service to main service for plugin license checks
 	service.SetLicensingService(licensingService)
@@ -309,6 +315,11 @@ func main() {
 
 		controlServer = grpc.NewControlServer(grpcConfig, db)
 
+		// Wire secret store to control server for resolving secret references
+		if secretStore != nil {
+			controlServer.SetSecretStore(secretStore)
+		}
+
 		// Create reload coordinator and connect it to control server
 		reloadCoordinator = services.NewReloadCoordinator(controlServer)
 		controlServer.SetReloadCoordinator(reloadCoordinator)
@@ -447,7 +458,7 @@ func main() {
 }
 
 // ensureDefaults ensures default group and catalogues exist and are linked
-func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
+func ensureDefaults(db *gorm.DB, skipLLMDefaults bool, secretStore secrets.SecretStore) error {
 	logger.Info("Ensuring default group and catalogues exist...")
 
 	// Get or create Default group
@@ -499,8 +510,8 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
 
 	// Seed default secrets and LLM configurations if not disabled
 	if !skipLLMDefaults {
-		if secrets.DefaultStore() != nil {
-			if err := secrets.GetOrCreateDefaultSecrets(db); err != nil {
+		if secretStore != nil {
+			if err := secretStore.EnsureDefaults(context.Background(), []string{"OPENAI_KEY", "ANTHROPIC_KEY"}); err != nil {
 				return fmt.Errorf("failed to create default secrets: %w", err)
 			}
 			logger.Info("Default secrets checked/initialized")

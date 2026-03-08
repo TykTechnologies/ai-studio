@@ -16,7 +16,7 @@ const rotationBatchSize = 100
 // envelope encryption (v2). This migrates any legacy v1 secrets to v2.
 func (s *Database) RotateKey(ctx context.Context, oldKey, _ string) (*secrets.RotationResult, error) {
 	// Build old ciphers for decryption (v1 legacy + v2 envelope)
-	oldCiphers := secrets.LegacyCipherInstances()
+	oldCiphers := LegacyCipherInstances()
 	oldCiphers["v2"] = s.envelope
 
 	result := &secrets.RotationResult{
@@ -43,7 +43,7 @@ func (s *Database) RotateKey(ctx context.Context, oldKey, _ string) (*secrets.Ro
 			result.Total++
 			secret := &batch[i]
 
-			plaintext, err := secrets.DecryptWith(ctx, oldCiphers, oldKey, secret.Value)
+			plaintext, err := DecryptWith(ctx, oldCiphers, oldKey, secret.Value)
 			if err != nil {
 				log.Warnf("rotation: failed to decrypt secret %d (%s): %v", secret.ID, secret.VarName, err)
 				result.Errors = append(result.Errors, secrets.RotationError{

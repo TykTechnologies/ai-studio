@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	_ "github.com/TykTechnologies/midsommar/v2/secrets/all"
+	secretsdb "github.com/TykTechnologies/midsommar/v2/secrets/database"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 )
@@ -32,8 +33,8 @@ func TestSecretReferenceInAuthHeader(t *testing.T) {
 	notificationSvc := services.NewTestNotificationService(db)
 	budgetService := budget.NewService(db, notificationSvc)
 
-	// Initialize secrets
-	secrets.SetDBRef(db)
+	// Initialize secrets store on the service
+	service.SetSecretStore(secretsdb.New(db, "test-key"))
 
 	// Create a credential
 	cred := &models.Credential{
@@ -66,13 +67,13 @@ func TestSecretReferenceInAuthHeader(t *testing.T) {
 		VarName: "TEST_API_KEY",
 		Value:   "sk-test-key-123",
 	}
-	require.NoError(t, secrets.CreateSecret(db, apiKeySecret))
+	require.NoError(t, service.Secrets.Create(context.Background(), apiKeySecret))
 
 	apiEndpointSecret := &secrets.Secret{
 		VarName: "TEST_API_ENDPOINT",
 		Value:   server.URL,
 	}
-	require.NoError(t, secrets.CreateSecret(db, apiEndpointSecret))
+	require.NoError(t, service.Secrets.Create(context.Background(), apiEndpointSecret))
 
 	// Create LLM directly in DB that uses secret references
 	llm := &models.LLM{

@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	_ "github.com/TykTechnologies/midsommar/v2/secrets/all"
+	secretsdb "github.com/TykTechnologies/midsommar/v2/secrets/database"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,8 +27,8 @@ func TestAPIKeysNeverExposedInResponses(t *testing.T) {
 	authService := apitest.SetupTestAuthService(db, service)
 	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
-	// Initialize secrets package with DB reference
-	secrets.SetDBRef(db)
+	// Initialize secrets store on the service
+	service.SetSecretStore(secretsdb.New(db, "test-key"))
 
 	// Create test user
 	user := &models.User{
@@ -45,7 +47,7 @@ func TestAPIKeysNeverExposedInResponses(t *testing.T) {
 		VarName: "OPENAI_SECRET",
 		Value:   "sk-secret-actual-key-123",
 	}
-	err = secrets.CreateSecret(db, secret)
+	err = service.Secrets.Create(context.Background(), secret)
 	assert.NoError(t, err)
 
 	t.Run("LLM_Endpoints_Never_Expose_API_Keys", func(t *testing.T) {

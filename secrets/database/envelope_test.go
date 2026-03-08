@@ -1,9 +1,9 @@
-package secrets
+package database
 
 import (
 	"context"
-	"encoding/base64"
 	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"sync"
@@ -11,31 +11,33 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // memKeyStore is an in-memory KeyStore for testing.
 type memKeyStore struct {
 	mu     sync.Mutex
-	keys   map[uint]*EncryptionKey
+	keys   map[uint]*secrets.EncryptionKey
 	nextID uint
 }
 
 func newMemKeyStore() *memKeyStore {
-	return &memKeyStore{keys: make(map[uint]*EncryptionKey), nextID: 1}
+	return &memKeyStore{keys: make(map[uint]*secrets.EncryptionKey), nextID: 1}
 }
 
-func (m *memKeyStore) GetActiveKey(_ context.Context) (*EncryptionKey, error) {
+func (m *memKeyStore) GetActiveKey(_ context.Context) (*secrets.EncryptionKey, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, k := range m.keys {
-		if k.Status == EncryptionKeyActive {
+		if k.Status == secrets.EncryptionKeyActive {
 			return k, nil
 		}
 	}
 	return nil, fmt.Errorf("no active key")
 }
 
-func (m *memKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, error) {
+func (m *memKeyStore) GetKeyByID(_ context.Context, id uint) (*secrets.EncryptionKey, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k, ok := m.keys[id]
@@ -45,26 +47,26 @@ func (m *memKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, er
 	return k, nil
 }
 
-func (m *memKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
+func (m *memKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*secrets.EncryptionKey, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	k := &EncryptionKey{ID: m.nextID, WrappedKey: wrappedKey, Status: status}
+	k := &secrets.EncryptionKey{ID: m.nextID, WrappedKey: wrappedKey, Status: status}
 	m.keys[k.ID] = k
 	m.nextID++
 	return k, nil
 }
 
-func (m *memKeyStore) ListKeys(_ context.Context) ([]EncryptionKey, error) {
+func (m *memKeyStore) ListKeys(_ context.Context) ([]secrets.EncryptionKey, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var out []EncryptionKey
+	var out []secrets.EncryptionKey
 	for _, k := range m.keys {
 		out = append(out, *k)
 	}
 	return out, nil
 }
 
-func (m *memKeyStore) UpdateKey(_ context.Context, key *EncryptionKey) error {
+func (m *memKeyStore) UpdateKey(_ context.Context, key *secrets.EncryptionKey) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.keys[key.ID] = key
@@ -72,7 +74,7 @@ func (m *memKeyStore) UpdateKey(_ context.Context, key *EncryptionKey) error {
 }
 
 // seedActiveKey generates a DEK, wraps it, and stores it as the active key.
-func seedActiveKey(t *testing.T, ks *memKeyStore, wrapper KeyWrapper) {
+func seedActiveKey(t *testing.T, ks *memKeyStore, wrapper secrets.KeyWrapper) {
 	t.Helper()
 	ctx := context.Background()
 	dek := make([]byte, 32)
@@ -80,7 +82,7 @@ func seedActiveKey(t *testing.T, ks *memKeyStore, wrapper KeyWrapper) {
 	require.NoError(t, err)
 	wrapped, err := wrapper.WrapKey(ctx, dek)
 	require.NoError(t, err)
-	_, err = ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
+	_, err = ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), secrets.EncryptionKeyActive)
 	require.NoError(t, err)
 }
 
@@ -297,7 +299,7 @@ func TestEnvelopeCipher_MultipleKeys(t *testing.T) {
 
 	// Retire key 1, create key 2
 	key1, _ := ks.GetKeyByID(ctx, 1)
-	key1.Status = EncryptionKeyRetired
+	key1.Status = secrets.EncryptionKeyRetired
 	ks.UpdateKey(ctx, key1)
 	seedActiveKey(t, ks, w)
 

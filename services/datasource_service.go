@@ -6,7 +6,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"gorm.io/gorm"
 )
 
@@ -244,8 +243,10 @@ func (s *Service) GetDatasourceByID(id uint) (*models.Datasource, error) {
 		return nil, err
 	}
 
-	datasource.DBConnAPIKey = secrets.GetValue(datasource.DBConnAPIKey, true) // preserve reference for API responses
-	datasource.EmbedAPIKey = secrets.GetValue(datasource.EmbedAPIKey, true)   // preserve reference for API responses
+	if s.Secrets != nil {
+		datasource.DBConnAPIKey = s.Secrets.ResolveReference(context.Background(), datasource.DBConnAPIKey, true)
+		datasource.EmbedAPIKey = s.Secrets.ResolveReference(context.Background(), datasource.EmbedAPIKey, true)
+	}
 	return datasource, nil
 }
 
@@ -380,9 +381,11 @@ func (s *Service) SearchDatasources(query string) (models.Datasources, error) {
 		return nil, err
 	}
 
-	for i := range datasources {
-		datasources[i].DBConnAPIKey = secrets.GetValue(datasources[i].DBConnAPIKey, true) // preserve reference for API responses
-		datasources[i].EmbedAPIKey = secrets.GetValue(datasources[i].EmbedAPIKey, true)   // preserve reference for API responses
+	if s.Secrets != nil {
+		for i := range datasources {
+			datasources[i].DBConnAPIKey = s.Secrets.ResolveReference(context.Background(), datasources[i].DBConnAPIKey, true)
+			datasources[i].EmbedAPIKey = s.Secrets.ResolveReference(context.Background(), datasources[i].EmbedAPIKey, true)
+		}
 	}
 
 	return datasources, nil

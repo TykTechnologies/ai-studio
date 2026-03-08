@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -10,8 +11,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func checkSecretKey(c *gin.Context) bool {
-	if secrets.Store() == nil {
+func checkSecretKey(a *API, c *gin.Context) bool {
+	if a.service.Secrets == nil {
 		c.JSON(http.StatusServiceUnavailable, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -36,7 +37,7 @@ func checkSecretKey(c *gin.Context) bool {
 // @Router /secrets [post]
 // @Security BearerAuth
 func (a *API) createSecret(c *gin.Context) {
-	if !checkSecretKey(c) {
+	if !checkSecretKey(a, c) {
 		return
 	}
 	var input SecretInput
@@ -57,7 +58,7 @@ func (a *API) createSecret(c *gin.Context) {
 	}
 
 	log.Printf("[DEBUG] Creating secret with name: %s", secret.VarName)
-	if err := secrets.CreateSecret(a.config.DB, secret); err != nil {
+	if err := a.service.Secrets.Create(context.Background(), secret); err != nil {
 		log.Printf("[DEBUG] Failed to create secret: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -84,7 +85,7 @@ func (a *API) createSecret(c *gin.Context) {
 // @Router /secrets/{id} [get]
 // @Security BearerAuth
 func (a *API) getSecret(c *gin.Context) {
-	if !checkSecretKey(c) {
+	if !checkSecretKey(a, c) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -98,7 +99,7 @@ func (a *API) getSecret(c *gin.Context) {
 		return
 	}
 
-	secret, err := secrets.GetSecretByID(a.config.DB, uint(id), true) // Preserve reference format when viewing
+	secret, err := a.service.Secrets.GetByID(context.Background(), uint(id), true)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -127,7 +128,7 @@ func (a *API) getSecret(c *gin.Context) {
 // @Router /secrets/{id} [patch]
 // @Security BearerAuth
 func (a *API) updateSecret(c *gin.Context) {
-	if !checkSecretKey(c) {
+	if !checkSecretKey(a, c) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -152,7 +153,7 @@ func (a *API) updateSecret(c *gin.Context) {
 		return
 	}
 
-	secret, err := secrets.GetSecretByID(a.config.DB, uint(id), true) // Preserve reference format when editing
+	secret, err := a.service.Secrets.GetByID(context.Background(), uint(id), true)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -166,7 +167,7 @@ func (a *API) updateSecret(c *gin.Context) {
 	secret.Value = input.Data.Attributes.Value
 	secret.VarName = input.Data.Attributes.VarName
 
-	if err := secrets.UpdateSecret(a.config.DB, secret); err != nil {
+	if err := a.service.Secrets.Update(context.Background(), secret); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -192,7 +193,7 @@ func (a *API) updateSecret(c *gin.Context) {
 // @Router /secrets/{id} [delete]
 // @Security BearerAuth
 func (a *API) deleteSecret(c *gin.Context) {
-	if !checkSecretKey(c) {
+	if !checkSecretKey(a, c) {
 		return
 	}
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -206,7 +207,7 @@ func (a *API) deleteSecret(c *gin.Context) {
 		return
 	}
 
-	if err := secrets.DeleteSecretByID(a.config.DB, uint(id)); err != nil {
+	if err := a.service.Secrets.Delete(context.Background(), uint(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -233,12 +234,12 @@ func (a *API) deleteSecret(c *gin.Context) {
 // @Router /secrets [get]
 // @Security BearerAuth
 func (a *API) listSecrets(c *gin.Context) {
-	if !checkSecretKey(c) {
+	if !checkSecretKey(a, c) {
 		return
 	}
 	pageSize, pageNumber, all := getPaginationParams(c)
 
-	secrets, totalCount, totalPages, err := secrets.ListSecrets(a.config.DB, pageSize, pageNumber, all)
+	items, totalCount, totalPages, err := a.service.Secrets.List(context.Background(), pageSize, pageNumber, all)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -253,7 +254,7 @@ func (a *API) listSecrets(c *gin.Context) {
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 
 	response := SecretListResponse{
-		Data: serializeSecrets(secrets),
+		Data: serializeSecrets(items),
 		Meta: struct {
 			TotalCount int64 `json:"total_count"`
 			TotalPages int   `json:"total_pages"`

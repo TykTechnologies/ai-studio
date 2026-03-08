@@ -115,7 +115,7 @@ func TestRotateKEK_ReWrapsKeys(t *testing.T) {
 	rawKey := "kek-test"
 	ctx := context.Background()
 
-	oldWrapper := secrets.NewLocalKeyWrapper("old-kek")
+	oldWrapper := NewLocalKeyWrapper("old-kek")
 	store := NewWithEnvelope(db, rawKey, oldWrapper)
 
 	for _, name := range []string{"S1", "S2"} {
@@ -128,7 +128,7 @@ func TestRotateKEK_ReWrapsKeys(t *testing.T) {
 	assert.Equal(t, int64(1), keyCount)
 
 	// Rotate KEK
-	newWrapper := secrets.NewLocalKeyWrapper("new-kek")
+	newWrapper := NewLocalKeyWrapper("new-kek")
 	result, err := store.RotateKEK(ctx, oldWrapper, newWrapper)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Total)

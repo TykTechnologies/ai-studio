@@ -32,7 +32,7 @@ type Database struct {
 	db       *gorm.DB
 	rawKey   string
 	ciphers  map[string]secrets.Cipher
-	envelope *secrets.EnvelopeCipher
+	envelope *EnvelopeCipher
 	wrapper  secrets.KeyWrapper
 }
 
@@ -40,7 +40,7 @@ type Database struct {
 // The rawKey is used both as the KEK (via LocalKeyWrapper) and for decrypting
 // legacy v1 secrets. New secrets are always written with envelope encryption.
 func New(db *gorm.DB, rawKey string) *Database {
-	wrapper := secrets.NewLocalKeyWrapper(rawKey)
+	wrapper := NewLocalKeyWrapper(rawKey)
 	return NewWithEnvelope(db, rawKey, wrapper)
 }
 
@@ -49,8 +49,8 @@ func New(db *gorm.DB, rawKey string) *Database {
 // with envelope encryption. Legacy v1 secrets are read transparently.
 func NewWithEnvelope(db *gorm.DB, rawKey string, wrapper secrets.KeyWrapper) *Database {
 	ks := &gormKeyStore{db: db, wrapper: wrapper}
-	envelope := secrets.NewEnvelopeCipher(wrapper, ks)
-	ciphers := secrets.LegacyCipherInstances()
+	envelope := NewEnvelopeCipher(wrapper, ks)
+	ciphers := LegacyCipherInstances()
 	ciphers["v2"] = envelope
 
 	return &Database{
@@ -66,6 +66,7 @@ func NewWithEnvelope(db *gorm.DB, rawKey string, wrapper secrets.KeyWrapper) *Da
 func (s *Database) DB() *gorm.DB {
 	return s.db
 }
+
 
 func (s *Database) Create(ctx context.Context, secret *secrets.Secret) error {
 	log.Debugf("[DEBUG] CreateSecret: Got key, length: %d", len(s.rawKey))
@@ -95,7 +96,7 @@ func (s *Database) GetByID(ctx context.Context, id uint, preserveRef bool) (*sec
 		return &secret, nil
 	}
 
-	decrypted, err := secrets.DecryptWith(ctx, s.ciphers, s.rawKey, secret.Value)
+	decrypted, err := DecryptWith(ctx, s.ciphers, s.rawKey, secret.Value)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt secret %d: %w", id, err)
 	}
@@ -114,7 +115,7 @@ func (s *Database) GetByVarName(ctx context.Context, name string, preserveRef bo
 		return &secret, nil
 	}
 
-	decrypted, err := secrets.DecryptWith(ctx, s.ciphers, s.rawKey, secret.Value)
+	decrypted, err := DecryptWith(ctx, s.ciphers, s.rawKey, secret.Value)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt secret %q: %w", name, err)
 	}
@@ -186,7 +187,7 @@ func (s *Database) EncryptValue(ctx context.Context, plaintext string) (string, 
 }
 
 func (s *Database) DecryptValue(ctx context.Context, ciphertext string) (string, error) {
-	return secrets.DecryptWith(ctx, s.ciphers, s.rawKey, ciphertext)
+	return DecryptWith(ctx, s.ciphers, s.rawKey, ciphertext)
 }
 
 func (s *Database) ResolveReference(ctx context.Context, reference string, preserveRef bool) string {
@@ -222,7 +223,7 @@ func (s *Database) ResolveReference(ctx context.Context, reference string, prese
 
 // encryptValue encrypts using envelope encryption (v2).
 func (s *Database) encryptValue(ctx context.Context, plaintext string) (string, error) {
-	return secrets.EncryptEnvelope(ctx, s.envelope, plaintext)
+	return EncryptEnvelope(ctx, s.envelope, plaintext)
 }
 
 // --- gormKeyStore implements secrets.KeyStore backed by GORM ---

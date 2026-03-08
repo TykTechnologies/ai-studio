@@ -1,10 +1,10 @@
 package services
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // CreateChat creates a new chat
@@ -67,17 +67,19 @@ func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
 		return nil, err
 	}
 
-	if chat.LLM != nil {
-		chat.LLM.APIKey = secrets.GetValue(chat.LLM.APIKey, false)         // false to resolve actual value
-		chat.LLM.APIEndpoint = secrets.GetValue(chat.LLM.APIEndpoint, false) // resolve endpoint secrets too
-	}
-	for i := range chat.DefaultTools {
-		chat.DefaultTools[i].AuthKey = secrets.GetValue(chat.DefaultTools[i].AuthKey, false) // false to resolve actual value
-	}
-
-	if chat.DefaultDataSource != nil {
-		chat.DefaultDataSource.DBConnAPIKey = secrets.GetValue(chat.DefaultDataSource.DBConnAPIKey, false) // false to resolve actual value
-		chat.DefaultDataSource.EmbedAPIKey = secrets.GetValue(chat.DefaultDataSource.EmbedAPIKey, false)   // false to resolve actual value
+	if s.Secrets != nil {
+		ctx := context.Background()
+		if chat.LLM != nil {
+			chat.LLM.APIKey = s.Secrets.ResolveReference(ctx, chat.LLM.APIKey, false)
+			chat.LLM.APIEndpoint = s.Secrets.ResolveReference(ctx, chat.LLM.APIEndpoint, false)
+		}
+		for i := range chat.DefaultTools {
+			chat.DefaultTools[i].AuthKey = s.Secrets.ResolveReference(ctx, chat.DefaultTools[i].AuthKey, false)
+		}
+		if chat.DefaultDataSource != nil {
+			chat.DefaultDataSource.DBConnAPIKey = s.Secrets.ResolveReference(ctx, chat.DefaultDataSource.DBConnAPIKey, false)
+			chat.DefaultDataSource.EmbedAPIKey = s.Secrets.ResolveReference(ctx, chat.DefaultDataSource.EmbedAPIKey, false)
+		}
 	}
 
 	return chat, nil

@@ -1,12 +1,13 @@
 package services
 
 import (
-	"os"
+	"context"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	_ "github.com/TykTechnologies/midsommar/v2/secrets/all"
+	secretsdb "github.com/TykTechnologies/midsommar/v2/secrets/database"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -89,33 +90,28 @@ func TestChatService(t *testing.T) {
 // secret references in LLM credentials (APIKey and APIEndpoint).
 // This is a regression test for a bug where the SSE handler bypassed secret resolution.
 func TestGetChatByID_ResolvesSecrets(t *testing.T) {
-	// Set up the secret key environment variable
-	originalKey := os.Getenv("TYK_AI_SECRET_KEY")
-	os.Setenv("TYK_AI_SECRET_KEY", "test-secret-key-for-encryption")
-	defer os.Setenv("TYK_AI_SECRET_KEY", originalKey)
-
 	db := setupTestDB(t)
 	service := NewService(db)
 
-	// Set the secrets DB reference (required for secret resolution)
-	secrets.SetDBRef(db)
+	// Initialize secrets store on the service
+	service.SetSecretStore(secretsdb.New(db, "test-secret-key-for-encryption"))
 
 	// Migrate secrets table
-	db.AutoMigrate(&secrets.Secret{})
+	db.AutoMigrate(&secrets.Secret{}, &secrets.EncryptionKey{})
 
 	// Create test secrets
 	apiKeySecret := &secrets.Secret{
 		VarName: "TEST_API_KEY",
 		Value:   "sk-actual-secret-api-key-12345",
 	}
-	err := secrets.CreateSecret(db, apiKeySecret)
+	err := service.Secrets.Create(context.Background(), apiKeySecret)
 	assert.NoError(t, err)
 
 	apiEndpointSecret := &secrets.Secret{
 		VarName: "TEST_API_ENDPOINT",
 		Value:   "https://api.example.com/v1",
 	}
-	err = secrets.CreateSecret(db, apiEndpointSecret)
+	err = service.Secrets.Create(context.Background(), apiEndpointSecret)
 	assert.NoError(t, err)
 
 	// Create LLM settings

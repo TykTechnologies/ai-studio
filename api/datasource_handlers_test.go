@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	_ "github.com/TykTechnologies/midsommar/v2/secrets/all"
+	secretsdb "github.com/TykTechnologies/midsommar/v2/secrets/database"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,10 +23,10 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
+	// Initialize secrets store on the service
+	service.SetSecretStore(secretsdb.New(db, "test-key"))
 
-	// Initialize secrets package with DB reference
-	secrets.SetDBRef(db)
+	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
 	// Create secrets first
 	secretInput1 := SecretInput{
@@ -205,17 +207,17 @@ func TestSerializeDatasourceRedactsAPIKeys(t *testing.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
+	// Initialize secrets store on the service
+	service.SetSecretStore(secretsdb.New(db, "test-key"))
 
-	// Initialize secrets package with DB reference
-	secrets.SetDBRef(db)
+	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
 	// Create a secret
 	secret := &secrets.Secret{
 		VarName: "TEST_EMBED_KEY",
 		Value:   "embed-key-789",
 	}
-	err := secrets.CreateSecret(db, secret)
+	err := service.Secrets.Create(context.Background(), secret)
 	assert.NoError(t, err)
 
 	// Test 1: Datasource with direct API keys

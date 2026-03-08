@@ -97,6 +97,9 @@ type ControlServer struct {
 
 	// Budget sync service for multi-edge budget synchronization
 	budgetSyncService *BudgetSyncService
+
+	// Secret store for resolving secret references
+	secretStore secrets.SecretStore
 }
 
 // Config holds the control server configuration
@@ -989,6 +992,19 @@ func (s *ControlServer) SetPluginManager(manager interface{}) {
 	}
 }
 
+// SetSecretStore sets the secret store for resolving secret references
+func (s *ControlServer) SetSecretStore(store secrets.SecretStore) {
+	s.secretStore = store
+}
+
+// resolveSecret resolves a secret reference to its actual value.
+func (s *ControlServer) resolveSecret(reference string) string {
+	if s.secretStore == nil {
+		return reference
+	}
+	return s.secretStore.ResolveReference(context.Background(), reference, false)
+}
+
 // extractVendorFromEvent extracts vendor from analytics event
 func (s *ControlServer) extractVendorFromEvent(event *pb.AnalyticsEvent) string {
 	// Fallback: lookup LLM vendor from database
@@ -1141,8 +1157,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 
 		// Resolve secret references for microgateway
-		resolvedAPIKey := secrets.GetValue(llm.APIKey, false) // false to resolve actual value
-		resolvedEndpoint := secrets.GetValue(llm.APIEndpoint, false)
+		resolvedAPIKey := s.resolveSecret(llm.APIKey)
+		resolvedEndpoint := s.resolveSecret(llm.APIEndpoint)
 
 		// Encrypt API key using microgateway's encryption format
 		encryptedAPIKey, err := s.encryptForMicrogateway(resolvedAPIKey)
@@ -1715,7 +1731,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Convert Tools to protobuf
 	for _, tool := range tools {
 		// Resolve and encrypt auth key for edge transit (fail-closed: skip tool if encryption fails)
-		resolvedAuthKey := secrets.GetValue(tool.AuthKey, false)
+		resolvedAuthKey := s.resolveSecret(tool.AuthKey)
 		encryptedAuthKey := ""
 		if resolvedAuthKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
@@ -1796,7 +1812,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Convert Datasources to protobuf (fail-closed: skip datasource if any secret encryption fails)
 	for _, ds := range datasources {
 		// Resolve and encrypt secrets for edge transit
-		resolvedConnString := secrets.GetValue(ds.DBConnString, false)
+		resolvedConnString := s.resolveSecret(ds.DBConnString)
 		encryptedConnString := ""
 		if resolvedConnString != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnString)
@@ -1807,7 +1823,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedConnString = encrypted
 		}
 
-		resolvedConnAPIKey := secrets.GetValue(ds.DBConnAPIKey, false)
+		resolvedConnAPIKey := s.resolveSecret(ds.DBConnAPIKey)
 		encryptedConnAPIKey := ""
 		if resolvedConnAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey)
@@ -1818,7 +1834,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedConnAPIKey = encrypted
 		}
 
-		resolvedEmbedAPIKey := secrets.GetValue(ds.EmbedAPIKey, false)
+		resolvedEmbedAPIKey := s.resolveSecret(ds.EmbedAPIKey)
 		encryptedEmbedAPIKey := ""
 		if resolvedEmbedAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)

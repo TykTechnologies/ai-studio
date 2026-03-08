@@ -6,16 +6,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestSecretsHandlersWithoutKey(t *testing.T) {
-	// Clear the global store to simulate no encryption key
-	prevStore := secrets.Store()
-	secrets.SetStore(nil)
-	defer secrets.SetStore(prevStore)
-
+	// The service has no Secrets store set, simulating no encryption key
 	api, _ := setupTestAPI(t)
 
 	tests := []struct {

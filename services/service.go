@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/group_access"
@@ -46,6 +47,8 @@ type Service struct {
 	ModelRouterService model_router.Service
 	// Sync Status (Hub-and-Spoke)
 	SyncStatusService *SyncStatusService
+	// Secrets (set after creation via SetSecretStore)
+	Secrets secrets.SecretStore
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -303,4 +306,9 @@ func (s *Service) SetEventBus(bus eventbridge.Bus) {
 func (s *Service) SetLicensingService(svc licensing.Service) {
 	s.LicensingService = svc
 	logger.Debug("Licensing service set on main service")
+}
+
+// SetSecretStore sets the secret store for encryption/decryption operations
+func (s *Service) SetSecretStore(store secrets.SecretStore) {
+	s.Secrets = store
 }

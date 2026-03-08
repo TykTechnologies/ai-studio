@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	neturl "net/url"
@@ -19,6 +20,41 @@ const (
 	minPrivacyScore       = 0
 	maxPrivacyScore       = 100
 )
+
+// payloadCredentialFields are the keys in ResourcePayload that contain secrets
+var payloadCredentialFields = []string{"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string"}
+
+func (s *Service) encryptSubmissionPayload(ctx context.Context, payload map[string]interface{}) {
+	if s.Secrets == nil || payload == nil {
+		return
+	}
+	for _, field := range payloadCredentialFields {
+		if val, ok := payload[field]; ok {
+			if str, ok := val.(string); ok && str != "" && str != "[redacted]" {
+				encrypted, err := s.Secrets.EncryptValue(ctx, str)
+				if err == nil {
+					payload[field] = encrypted
+				}
+			}
+		}
+	}
+}
+
+func (s *Service) decryptSubmissionPayload(ctx context.Context, payload map[string]interface{}) {
+	if s.Secrets == nil || payload == nil {
+		return
+	}
+	for _, field := range payloadCredentialFields {
+		if val, ok := payload[field]; ok {
+			if str, ok := val.(string); ok {
+				decrypted, err := s.Secrets.DecryptValue(ctx, str)
+				if err == nil {
+					payload[field] = decrypted
+				}
+			}
+		}
+	}
+}
 
 // validateDocumentationURL ensures the URL uses a safe protocol (http/https only).
 // This prevents XSS via javascript: URIs being rendered as clickable links.
@@ -137,9 +173,12 @@ func (s *Service) CreateSubmission(submitterID uint, resourceType, status string
 		submission.SubmittedAt = &now
 	}
 
+	ctx := context.Background()
+	s.encryptSubmissionPayload(ctx, submission.ResourcePayload)
 	if err := submission.Create(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(ctx, submission.ResourcePayload)
 
 	// Notify admins of new submission
 	if status == models.SubmissionStatusSubmitted && s.NotificationService != nil {
@@ -155,6 +194,7 @@ func (s *Service) GetSubmissionByID(id uint) (*models.Submission, error) {
 	if err := submission.Get(s.DB, id); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	return submission, nil
 }
 
@@ -195,9 +235,12 @@ func (s *Service) UpdateSubmission(id uint, submitterID uint, payload models.JSO
 	submission.DocumentationURL = documentationURL
 	submission.Notes = notes
 
+	ctx := context.Background()
+	s.encryptSubmissionPayload(ctx, submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(ctx, submission.ResourcePayload)
 	return submission, nil
 }
 
@@ -273,6 +316,10 @@ func (s *Service) GetSubmissionsBySubmitter(submitterID uint, status string, pag
 	if err != nil {
 		return nil, 0, 0, err
 	}
+	ctx := context.Background()
+	for i := range submissions {
+		s.decryptSubmissionPayload(ctx, submissions[i].ResourcePayload)
+	}
 	return submissions, totalCount, totalPages, nil
 }
 
@@ -284,6 +331,10 @@ func (s *Service) GetAllSubmissions(status, resourceType string, pageSize, pageN
 	totalCount, totalPages, err := submissions.GetAll(s.DB, status, resourceType, pageSize, pageNumber)
 	if err != nil {
 		return nil, 0, 0, err
+	}
+	ctx := context.Background()
+	for i := range submissions {
+		s.decryptSubmissionPayload(ctx, submissions[i].ResourcePayload)
 	}
 	return submissions, totalCount, totalPages, nil
 }

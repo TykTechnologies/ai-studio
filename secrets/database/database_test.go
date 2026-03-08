@@ -193,8 +193,8 @@ func TestRegistryUnknownStore(t *testing.T) {
 func insertV1Secret(t *testing.T, db *gorm.DB, rawKey, varName, plaintext string) *secrets.Secret {
 	t.Helper()
 	ctx := context.Background()
-	v1 := secrets.LegacyCipherInstances()["v1"]
-	encrypted, err := secrets.EncryptWith(ctx, v1, rawKey, plaintext)
+	v1 := LegacyCipherInstances()["v1"]
+	encrypted, err := EncryptWith(ctx, v1, rawKey, plaintext)
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(encrypted, "$ENC/"))
 	require.False(t, strings.HasPrefix(encrypted, "$ENC/v2/"))
@@ -266,8 +266,8 @@ func TestBackwardCompat_DecryptValueV1(t *testing.T) {
 	ctx := context.Background()
 
 	// Encrypt with v1 manually
-	v1 := secrets.LegacyCipherInstances()["v1"]
-	encrypted, err := secrets.EncryptWith(ctx, v1, rawKey, "direct-v1")
+	v1 := LegacyCipherInstances()["v1"]
+	encrypted, err := EncryptWith(ctx, v1, rawKey, "direct-v1")
 	require.NoError(t, err)
 
 	// DecryptValue should handle it
@@ -311,7 +311,7 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	rawKey := "kek-rotation-key"
 	ctx := context.Background()
 
-	oldWrapper := secrets.NewLocalKeyWrapper("old-kek")
+	oldWrapper := NewLocalKeyWrapper("old-kek")
 	oldStore := NewWithEnvelope(db, rawKey, oldWrapper)
 
 	for _, name := range []string{"A", "B", "C"} {
@@ -320,7 +320,7 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	}
 
 	// Rotate KEK (re-wraps encryption_keys rows, not secrets)
-	newWrapper := secrets.NewLocalKeyWrapper("new-kek")
+	newWrapper := NewLocalKeyWrapper("new-kek")
 	result, err := oldStore.RotateKEK(ctx, oldWrapper, newWrapper)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Total)   // 1 encryption key
