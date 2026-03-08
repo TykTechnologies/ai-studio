@@ -1,6 +1,9 @@
 package secrets
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Secret represents an encrypted secret stored in the database.
 type Secret struct {
@@ -35,8 +38,32 @@ type EncryptionKey struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	WrappedKey string    `json:"-"`
 	Status     string    `gorm:"default:active;index" json:"status"`
+	ObjectType string    `gorm:"index;default:''" json:"object_type"` // e.g. "secret", "submission", "datasource"
+	ObjectID   uint      `gorm:"index;default:0" json:"object_id"`   // ID of the encrypted object
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// Context key type for encryption metadata.
+type encMetaKeyType struct{}
+
+var encMetaKey = encMetaKeyType{}
+
+// EncryptionMeta holds metadata about what is being encrypted.
+type EncryptionMeta struct {
+	ObjectType string
+	ObjectID   uint
+}
+
+// WithEncryptionMeta returns a context carrying encryption metadata.
+func WithEncryptionMeta(ctx context.Context, objectType string, objectID uint) context.Context {
+	return context.WithValue(ctx, encMetaKey, EncryptionMeta{ObjectType: objectType, ObjectID: objectID})
+}
+
+// encryptionMetaFromCtx extracts encryption metadata from context, if present.
+func encryptionMetaFromCtx(ctx context.Context) (EncryptionMeta, bool) {
+	m, ok := ctx.Value(encMetaKey).(EncryptionMeta)
+	return m, ok
 }
 
 const (

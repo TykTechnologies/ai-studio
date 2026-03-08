@@ -242,7 +242,7 @@ func TestEncryptDecryptSubmissionPayload_RoundTrip(t *testing.T) {
 		"name":            "not-a-credential",
 	}
 
-	svc.encryptSubmissionPayload(ctx, payload)
+	svc.encryptSubmissionPayload(ctx, 42, payload)
 
 	// All credential fields should now be encrypted
 	assert.True(t, isEncrypted(payload["auth_key"].(string)))
@@ -271,7 +271,7 @@ func TestEncryptSubmissionPayload_NonStringFieldsSkipped(t *testing.T) {
 		"db_conn_string": nil,
 	}
 
-	svc.encryptSubmissionPayload(ctx, payload)
+	svc.encryptSubmissionPayload(ctx, 0, payload)
 
 	// Non-string values should be unchanged
 	assert.Equal(t, 12345, payload["auth_key"])
@@ -284,6 +284,6 @@ func TestEncryptSubmissionPayload_NilPayload(t *testing.T) {
 	ctx := context.Background()
 
 	// Should not panic
-	svc.encryptSubmissionPayload(ctx, nil)
+	svc.encryptSubmissionPayload(ctx, 0, nil)
 	svc.decryptSubmissionPayload(ctx, nil)
 }

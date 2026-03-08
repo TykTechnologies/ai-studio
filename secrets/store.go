@@ -2,7 +2,6 @@ package secrets
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
@@ -101,7 +100,7 @@ func (s *Store) Close(ctx context.Context) error {
 func (s *Store) Create(ctx context.Context, secret *Secret) error {
 	log.Debugf("[DEBUG] CreateSecret: Got key, length: %d", len(s.rawKey))
 
-	encrypted, err := s.encryptValue(ctx, secret.Value)
+	encrypted, err := s.encryptValue(WithEncryptionMeta(ctx, "secret", secret.ID), secret.Value)
 	if err != nil {
 		log.Errorf("[DEBUG] CreateSecret: Failed to encrypt value: %v", err)
 		return err
@@ -154,7 +153,7 @@ func (s *Store) GetByVarName(ctx context.Context, name string, preserveRef bool)
 }
 
 func (s *Store) Update(ctx context.Context, secret *Secret) error {
-	encrypted, err := s.encryptValue(ctx, secret.Value)
+	encrypted, err := s.encryptValue(WithEncryptionMeta(ctx, "secret", secret.ID), secret.Value)
 	if err != nil {
 		return err
 	}
@@ -263,31 +262,6 @@ type gormKeyStore struct {
 	kek KEKProvider
 }
 
-func (ks *gormKeyStore) GetActiveKey(ctx context.Context) (*EncryptionKey, error) {
-	var key EncryptionKey
-	err := ks.db.Where("status = ?", EncryptionKeyActive).First(&key).Error
-	if err == nil {
-		return &key, nil
-	}
-	if err != gorm.ErrRecordNotFound {
-		return nil, fmt.Errorf("query active key: %w", err)
-	}
-
-	// No active key — generate one. If a concurrent request already created
-	// one, the insert may fail; retry the lookup in that case.
-	created, err := ks.generateKey(ctx)
-	if err == nil {
-		return created, nil
-	}
-
-	// Retry lookup — another goroutine may have won the race
-	err = ks.db.Where("status = ?", EncryptionKeyActive).First(&key).Error
-	if err == nil {
-		return &key, nil
-	}
-	return nil, fmt.Errorf("generate active key: %w", err)
-}
-
 func (ks *gormKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, error) {
 	var key EncryptionKey
 	if err := ks.db.First(&key, id).Error; err != nil {
@@ -296,10 +270,12 @@ func (ks *gormKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, 
 	return &key, nil
 }
 
-func (ks *gormKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
+func (ks *gormKeyStore) CreateKey(_ context.Context, wrappedKey string, status string, objectType string, objectID uint) (*EncryptionKey, error) {
 	key := &EncryptionKey{
 		WrappedKey: wrappedKey,
 		Status:     status,
+		ObjectType: objectType,
+		ObjectID:   objectID,
 	}
 	if err := ks.db.Create(key).Error; err != nil {
 		return nil, err
@@ -319,22 +295,3 @@ func (ks *gormKeyStore) UpdateKey(_ context.Context, key *EncryptionKey) error {
 	return ks.db.Save(key).Error
 }
 
-func (ks *gormKeyStore) generateKey(ctx context.Context) (*EncryptionKey, error) {
-	wrapped, err := GenerateDEK(ctx, ks.kek)
-	if err != nil {
-		return nil, fmt.Errorf("generate dek: %w", err)
-	}
-
-	key, err := ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
-	if err != nil {
-		return nil, err
-	}
-
-	if h, ok := ks.kek.(KeyGeneratedHook); ok {
-		if err := h.KeyGenerated(ctx, key.ID); err != nil {
-			log.Warnf("key generated hook: %v", err)
-		}
-	}
-
-	return key, nil
-}

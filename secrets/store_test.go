@@ -347,8 +347,8 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	newKEK := newTestLocalKEK("new-kek")
 	result, err := oldStore.RotateKEK(ctx, oldKEK, newKEK)
 	require.NoError(t, err)
-	assert.Equal(t, 1, result.Total)   // 1 encryption key
-	assert.Equal(t, 1, result.Rotated)
+	assert.Equal(t, 3, result.Total)   // per-object DEKs: 3 secrets = 3 keys
+	assert.Equal(t, 3, result.Rotated)
 	assert.Empty(t, result.Errors)
 
 	// New store with new KEK should decrypt all secrets

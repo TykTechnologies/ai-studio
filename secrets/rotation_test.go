@@ -125,14 +125,14 @@ func TestRotateKEK_ReWrapsKeys(t *testing.T) {
 
 	var keyCount int64
 	db.Model(&EncryptionKey{}).Count(&keyCount)
-	assert.Equal(t, int64(1), keyCount)
+	assert.Equal(t, int64(2), keyCount, "per-object DEKs: 2 secrets = 2 keys")
 
 	// Rotate KEK
 	newKEK := newTestLocalKEK("new-kek")
 	result, err := store.RotateKEK(ctx, oldKEK, newKEK)
 	require.NoError(t, err)
-	assert.Equal(t, 1, result.Total)
-	assert.Equal(t, 1, result.Rotated)
+	assert.Equal(t, 2, result.Total)
+	assert.Equal(t, 2, result.Rotated)
 	assert.Empty(t, result.Errors)
 
 	// New store can decrypt

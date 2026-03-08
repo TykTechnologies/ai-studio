@@ -10,6 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // Input length limits for submission fields
@@ -24,10 +25,11 @@ const (
 // payloadCredentialFields are the keys in ResourcePayload that contain secrets
 var payloadCredentialFields = []string{"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string"}
 
-func (s *Service) encryptSubmissionPayload(ctx context.Context, payload map[string]interface{}) {
+func (s *Service) encryptSubmissionPayload(ctx context.Context, submissionID uint, payload map[string]interface{}) {
 	if s.Secrets == nil || payload == nil {
 		return
 	}
+	ctx = secrets.WithEncryptionMeta(ctx, "submission", submissionID)
 	for _, field := range payloadCredentialFields {
 		if val, ok := payload[field]; ok {
 			if str, ok := val.(string); ok && str != "" && str != "[redacted]" {
@@ -233,7 +235,7 @@ func (s *Service) CreateSubmission(submitterID uint, resourceType, status string
 		submission.SubmittedAt = &now
 	}
 
-	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
+	s.encryptSubmissionPayload(context.Background(), submission.ID, submission.ResourcePayload)
 	if err := submission.Create(s.DB); err != nil {
 		return nil, err
 	}
@@ -295,7 +297,7 @@ func (s *Service) UpdateSubmission(id uint, submitterID uint, payload models.JSO
 	submission.Notes = notes
 
 	ctx := context.Background()
-	s.encryptSubmissionPayload(ctx, submission.ResourcePayload)
+	s.encryptSubmissionPayload(ctx, submission.ID, submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
@@ -333,9 +335,11 @@ func (s *Service) SubmitSubmission(id, submitterID uint) (*models.Submission, er
 	submission.Status = models.SubmissionStatusSubmitted
 	submission.SubmittedAt = &now
 
+	s.encryptSubmissionPayload(context.Background(), submission.ID, submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	activityType := models.ActivityTypeSubmitted
 	if wasChangesRequested {
@@ -419,9 +423,11 @@ func (s *Service) StartReview(submissionID, reviewerID uint) (*models.Submission
 	submission.ReviewerID = &reviewerID
 	submission.ReviewStartedAt = &now
 
+	s.encryptSubmissionPayload(context.Background(), submission.ID, submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	s.RecordSubmissionActivity(submission.ID, reviewerID, "", models.ActivityTypeReviewStarted, "", "")
 
@@ -471,10 +477,12 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 	submission.ReviewNotes = reviewNotes
 	submission.ReviewCompletedAt = &now
 
+	s.encryptSubmissionPayload(context.Background(), submission.ID, submission.ResourcePayload)
 	if err := submission.UpdateWithLock(tx); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	// Record activity within the transaction
 	activity := &models.SubmissionActivity{
@@ -518,9 +526,11 @@ func (s *Service) RejectSubmission(submissionID, reviewerID uint, feedback, revi
 	submission.ReviewNotes = reviewNotes
 	submission.ReviewCompletedAt = &now
 
+	s.encryptSubmissionPayload(context.Background(), submission.ID, submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	s.RecordSubmissionActivity(submissionID, reviewerID, "", models.ActivityTypeRejected, feedback, reviewNotes)
 
@@ -547,9 +557,11 @@ func (s *Service) RequestChanges(submissionID, reviewerID uint, feedback, review
 	submission.SubmitterFeedback = feedback
 	submission.ReviewNotes = reviewNotes
 
+	s.encryptSubmissionPayload(context.Background(), submission.ID, submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	s.RecordSubmissionActivity(submissionID, reviewerID, "", models.ActivityTypeChangesRequested, feedback, reviewNotes)
 

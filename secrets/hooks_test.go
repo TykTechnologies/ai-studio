@@ -149,8 +149,8 @@ func TestKeyGeneratedHook_CalledOnFirstEncrypt(t *testing.T) {
 	assert.Equal(t, uint(1), tracker.keyGeneratedIDs[0])
 }
 
-func TestKeyGeneratedHook_NotCalledOnSubsequentEncrypt(t *testing.T) {
-	tracker := newHookTracker("keygen-once")
+func TestKeyGeneratedHook_CalledPerEncrypt(t *testing.T) {
+	tracker := newHookTracker("keygen-per-object")
 	db := setupTestDB(t)
 	store := NewWithKEKProvider(db, "key", tracker)
 	ctx := context.Background()
@@ -159,8 +159,8 @@ func TestKeyGeneratedHook_NotCalledOnSubsequentEncrypt(t *testing.T) {
 		_, err := store.EncryptValue(ctx, fmt.Sprintf("data-%d", i))
 		require.NoError(t, err)
 	}
-	// Key is generated once, then cached
-	assert.Equal(t, int64(1), tracker.keyGeneratedCalls.Load())
+	// Per-object DEKs: each encrypt generates a new key
+	assert.Equal(t, int64(10), tracker.keyGeneratedCalls.Load())
 }
 
 func TestKeyRotatedHook_CalledAfterRotateKEK(t *testing.T) {

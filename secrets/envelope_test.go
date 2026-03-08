@@ -24,17 +24,6 @@ func newMemKeyStore() *memKeyStore {
 	return &memKeyStore{keys: make(map[uint]*EncryptionKey), nextID: 1}
 }
 
-func (m *memKeyStore) GetActiveKey(_ context.Context) (*EncryptionKey, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, k := range m.keys {
-		if k.Status == EncryptionKeyActive {
-			return k, nil
-		}
-	}
-	return nil, fmt.Errorf("no active key")
-}
-
 func (m *memKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -45,10 +34,10 @@ func (m *memKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, er
 	return k, nil
 }
 
-func (m *memKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
+func (m *memKeyStore) CreateKey(_ context.Context, wrappedKey string, status string, objectType string, objectID uint) (*EncryptionKey, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	k := &EncryptionKey{ID: m.nextID, WrappedKey: wrappedKey, Status: status}
+	k := &EncryptionKey{ID: m.nextID, WrappedKey: wrappedKey, Status: status, ObjectType: objectType, ObjectID: objectID}
 	m.keys[k.ID] = k
 	m.nextID++
 	return k, nil
@@ -80,7 +69,7 @@ func seedActiveKey(t *testing.T, ks *memKeyStore, kek KEKProvider) {
 	require.NoError(t, err)
 	wrapped, err := kek.WrapKey(ctx, dek)
 	require.NoError(t, err)
-	_, err = ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
+	_, err = ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive, "", 0)
 	require.NoError(t, err)
 }
 
@@ -142,7 +131,6 @@ func TestGenerateDEK(t *testing.T) {
 func TestEnvelopeCipher_RoundTrip(t *testing.T) {
 	w := newTestLocalKEK("my-kek")
 	ks := newMemKeyStore()
-	seedActiveKey(t, ks, w)
 	c := NewEnvelopeCipher(w, ks)
 	ctx := context.Background()
 
@@ -170,7 +158,6 @@ func TestEnvelopeCipher_RoundTrip(t *testing.T) {
 func TestEnvelopeCipher_FormatContainsKeyID(t *testing.T) {
 	w := newTestLocalKEK("my-kek")
 	ks := newMemKeyStore()
-	seedActiveKey(t, ks, w)
 	c := NewEnvelopeCipher(w, ks)
 	ctx := context.Background()
 
@@ -178,13 +165,12 @@ func TestEnvelopeCipher_FormatContainsKeyID(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should be $ENC/v2/<key_id>/<ciphertext>
-	assert.Contains(t, encrypted, "$ENC/v2/1/")
+	assert.Contains(t, encrypted, "$ENC/v2/")
 }
 
 func TestEnvelopeCipher_TamperDetection(t *testing.T) {
 	w := newTestLocalKEK("my-kek")
 	ks := newMemKeyStore()
-	seedActiveKey(t, ks, w)
 	c := NewEnvelopeCipher(w, ks)
 	ctx := context.Background()
 
@@ -214,7 +200,6 @@ func TestEnvelopeCipher_WrongKEK(t *testing.T) {
 	w1 := newTestLocalKEK("kek-1")
 	w2 := newTestLocalKEK("kek-2")
 	ks := newMemKeyStore()
-	seedActiveKey(t, ks, w1)
 	ctx := context.Background()
 
 	c1 := NewEnvelopeCipher(w1, ks)
@@ -230,7 +215,6 @@ func TestEnvelopeCipher_WrongKEK(t *testing.T) {
 func TestEncryptEnvelope_Passthrough(t *testing.T) {
 	w := newTestLocalKEK("kek")
 	ks := newMemKeyStore()
-	seedActiveKey(t, ks, w)
 	c := NewEnvelopeCipher(w, ks)
 	ctx := context.Background()
 
@@ -246,7 +230,6 @@ func TestEncryptEnvelope_Passthrough(t *testing.T) {
 func TestEncryptEnvelope_DecryptWithCipherMap(t *testing.T) {
 	w := newTestLocalKEK("my-kek")
 	ks := newMemKeyStore()
-	seedActiveKey(t, ks, w)
 	envelope := NewEnvelopeCipher(w, ks)
 	ctx := context.Background()
 
@@ -275,7 +258,6 @@ func TestBackwardCompat_V2StoreReadsV1(t *testing.T) {
 	// Build cipher map with v2 available
 	w := newTestLocalKEK(rawKey)
 	ks := newMemKeyStore()
-	seedActiveKey(t, ks, w)
 	envelope := NewEnvelopeCipher(w, ks)
 
 	ciphers := legacyCipherInstances()
@@ -300,28 +282,16 @@ func TestEnvelopeCipher_MultipleKeys(t *testing.T) {
 	ks := newMemKeyStore()
 	ctx := context.Background()
 
-	// Create first active key
-	seedActiveKey(t, ks, w)
 	c := NewEnvelopeCipher(w, ks)
 
-	// Encrypt with key 1
+	// Each encrypt creates a unique per-object DEK
 	enc1, err := c.Encrypt(ctx, nil, []byte("data-with-key-1"))
 	require.NoError(t, err)
-	assert.Contains(t, string(enc1), "1/")
 
-	// Retire key 1, create key 2
-	key1, _ := ks.GetKeyByID(ctx, 1)
-	key1.Status = EncryptionKeyRetired
-	ks.UpdateKey(ctx, key1)
-	seedActiveKey(t, ks, w)
-	c.ClearCache() // force re-fetch of active key
-
-	// Encrypt with key 2
 	enc2, err := c.Encrypt(ctx, nil, []byte("data-with-key-2"))
 	require.NoError(t, err)
-	assert.Contains(t, string(enc2), "2/")
 
-	// Both should decrypt (retired keys still readable)
+	// Both should decrypt with their own keys
 	dec1, err := c.Decrypt(ctx, nil, enc1)
 	require.NoError(t, err)
 	assert.Equal(t, "data-with-key-1", string(dec1))
@@ -329,4 +299,9 @@ func TestEnvelopeCipher_MultipleKeys(t *testing.T) {
 	dec2, err := c.Decrypt(ctx, nil, enc2)
 	require.NoError(t, err)
 	assert.Equal(t, "data-with-key-2", string(dec2))
+
+	// Verify two different keys were created
+	keys, err := ks.ListKeys(ctx)
+	require.NoError(t, err)
+	assert.Len(t, keys, 2)
 }

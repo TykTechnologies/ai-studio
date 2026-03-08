@@ -244,7 +244,7 @@ func (s *Service) CreateUpdateSubmission(submitterID uint, resourceType string, 
 		submission.SubmittedAt = &now
 	}
 
-	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
+	s.encryptSubmissionPayload(context.Background(), submission.ID, submission.ResourcePayload)
 	if err := submission.Create(s.DB); err != nil {
 		return nil, err
 	}
