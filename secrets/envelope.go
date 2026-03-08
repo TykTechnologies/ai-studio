@@ -24,6 +24,38 @@ type KEKProvider interface {
 	UnwrapKey(ctx context.Context, wrappedDEK []byte) ([]byte, error)
 }
 
+// Optional lifecycle interfaces. Providers implement these to hook into
+// specific points in the encryption lifecycle. The core code type-asserts
+// and calls them when present; providers that don't need them simply
+// don't implement them.
+
+// StartupChecker is implemented by providers that need to verify
+// connectivity or configuration before first use (e.g., Vault token validity).
+type StartupChecker interface {
+	Startup(ctx context.Context) error
+}
+
+// Shutdowner is implemented by providers that hold resources requiring
+// cleanup (e.g., HTTP clients, token renewal goroutines).
+type Shutdowner interface {
+	Shutdown(ctx context.Context) error
+}
+
+// KeyGeneratedHook is called after a new DEK is created and persisted.
+type KeyGeneratedHook interface {
+	KeyGenerated(ctx context.Context, keyID uint) error
+}
+
+// KeyRotatedHook is called after all DEKs have been re-wrapped with a new KEK.
+type KeyRotatedHook interface {
+	KeyRotated(ctx context.Context, rotated int, failed int) error
+}
+
+// KeyRetiredHook is called after an encryption key is marked as retired.
+type KeyRetiredHook interface {
+	KeyRetired(ctx context.Context, keyID uint) error
+}
+
 // GenerateDEK creates a new random 32-byte DEK and returns it wrapped by the given provider.
 func GenerateDEK(ctx context.Context, kek KEKProvider) ([]byte, error) {
 	dek := make([]byte, 32)

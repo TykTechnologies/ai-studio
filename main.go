@@ -480,6 +480,13 @@ func main() {
 		logger.Errorf("Error during service cleanup: %v", err)
 	}
 
+	// Shutdown KEK provider (releases connections, stops token renewal, etc.)
+	if secretStore != nil {
+		if err := secretStore.Close(cleanupCtx); err != nil {
+			logger.Errorf("Error during secrets store shutdown: %v", err)
+		}
+	}
+
 	logger.Info("Application stopped gracefully")
 }
 

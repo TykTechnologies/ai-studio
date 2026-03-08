@@ -63,6 +63,11 @@ func NewFromProvider(db *gorm.DB, rawKey string, providerName string, config map
 	if err != nil {
 		return nil, fmt.Errorf("KEK provider %q not available: %w (registered: %v)", providerName, err, DefaultRegistry.Names())
 	}
+	if sc, ok := kek.(StartupChecker); ok {
+		if err := sc.Startup(context.Background()); err != nil {
+			return nil, fmt.Errorf("KEK provider %q startup check failed: %w", providerName, err)
+		}
+	}
 	return NewWithKEKProvider(db, rawKey, kek), nil
 }
 
@@ -82,6 +87,15 @@ func NewWithKEKProvider(db *gorm.DB, rawKey string, kek KEKProvider) *Store {
 		envelope: envelope,
 		kek:      kek,
 	}
+}
+
+// Close releases any resources held by the KEK provider.
+// Safe to call even if the provider does not implement Shutdowner.
+func (s *Store) Close(ctx context.Context) error {
+	if sd, ok := s.kek.(Shutdowner); ok {
+		return sd.Shutdown(ctx)
+	}
+	return nil
 }
 
 func (s *Store) Create(ctx context.Context, secret *Secret) error {
@@ -311,5 +325,16 @@ func (ks *gormKeyStore) generateKey(ctx context.Context) (*EncryptionKey, error)
 		return nil, fmt.Errorf("generate dek: %w", err)
 	}
 
-	return ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
+	key, err := ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
+	if err != nil {
+		return nil, err
+	}
+
+	if h, ok := ks.kek.(KeyGeneratedHook); ok {
+		if err := h.KeyGenerated(ctx, key.ID); err != nil {
+			log.Warnf("key generated hook: %v", err)
+		}
+	}
+
+	return key, nil
 }

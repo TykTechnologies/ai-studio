@@ -154,5 +154,11 @@ func (s *Store) RotateKEK(ctx context.Context, oldKEK, newKEK KEKProvider) (*Rot
 	// with whatever KEK the store currently holds.
 	s.envelope.ClearCache()
 
+	if h, ok := newKEK.(KeyRotatedHook); ok {
+		if err := h.KeyRotated(ctx, result.Rotated, len(result.Errors)); err != nil {
+			log.Warnf("key rotated hook: %v", err)
+		}
+	}
+
 	return result, nil
 }
