@@ -114,9 +114,16 @@ GRPC_AUTH_TOKEN=CHANGE-ME-generate-with-openssl-rand-hex-16
 # LICENSE_TELEMETRY_PERIOD=1h
 
 # -----------------------------------------------------------------------------
-# OCI Plugin Configuration (Optional)
+# Plugin Marketplace & OCI Plugin Configuration
 # -----------------------------------------------------------------------------
-# Enable OCI plugin support by setting cache directory
-# AI_STUDIO_OCI_CACHE_DIR=/opt/tyk-ai-studio/data/cache/plugins
+# The Plugin Marketplace is enabled by default, but requires
+# AI_STUDIO_OCI_CACHE_DIR to be set. Without it, the Marketplace
+# page will be empty and no plugins can be browsed or installed.
+AI_STUDIO_OCI_CACHE_DIR=/opt/tyk-ai-studio/data/cache/plugins
+
+# To disable the marketplace entirely:
+# MARKETPLACE_ENABLED=false
+
+# OCI security settings (optional)
 # AI_STUDIO_OCI_REQUIRE_SIGNATURE=false
 # AI_STUDIO_OCI_ALLOWED_REGISTRIES=docker.tyk.io

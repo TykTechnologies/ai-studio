@@ -129,6 +129,20 @@ When creating resources (LLMs, Apps, Filters, etc.), you can specify a `namespac
 
 Edge instances register with the hub using their namespace identifier, and only receive configuration relevant to their namespace.
 
+## 6. Enable the Plugin Marketplace
+
+The Plugin Marketplace lets you browse and install community plugins directly from the admin UI. It is enabled by default (`MARKETPLACE_ENABLED=true`), but requires the `AI_STUDIO_OCI_CACHE_DIR` environment variable to be set. **Without it, the Marketplace page will appear empty.**
+
+Set this variable in your deployment configuration:
+
+| Deployment Method | Where to Set |
+|---|---|
+| Docker Compose | Add `AI_STUDIO_OCI_CACHE_DIR=./cache/plugins` to your `studio.env` |
+| Helm / Kubernetes | Set `config.ociCacheDir: "./cache/plugins"` in your values file |
+| Bare Metal / VM | Add `AI_STUDIO_OCI_CACHE_DIR=/opt/tyk-ai-studio/cache/plugins` to `/etc/default/tyk-ai-studio` |
+
+Restart AI Studio after making this change. On startup, the marketplace service will automatically sync the default plugin index.
+
 ## Next Steps
 
 With the initial configuration complete, you can now:

@@ -39,6 +39,9 @@ setupOwnership() {
     # Ensure data directory exists
     mkdir -p /opt/tyk-microgateway/data
     chown tyk:tyk /opt/tyk-microgateway/data
+    # Ensure OCI plugin cache directory exists (default path used by microgateway)
+    mkdir -p /var/lib/microgateway/plugins
+    chown -R tyk:tyk /var/lib/microgateway
 }
 
 cleanInstall() {

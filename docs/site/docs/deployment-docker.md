@@ -94,7 +94,7 @@ volumes:
 # =============================================================================
 # Core Settings
 # =============================================================================
-DEVMODE=false
+DEVMODE=true  # Set to false when using HTTPS; required for login over plain HTTP
 ALLOW_REGISTRATIONS=true
 SITE_URL=http://localhost:8080
 ADMIN_EMAIL=admin@example.com
@@ -121,6 +121,13 @@ LOG_LEVEL=info
 # Enterprise Edition Only
 # =============================================================================
 # TYK_AI_LICENSE=your-license-key
+
+# =============================================================================
+# Plugin Marketplace (Optional — enables browsing and installing plugins)
+# =============================================================================
+# AI_STUDIO_OCI_CACHE_DIR must be set to enable the marketplace.
+# Without it, the Marketplace page will be empty.
+AI_STUDIO_OCI_CACHE_DIR=./cache/plugins
 
 # =============================================================================
 # SMTP (Optional — required for email invites/notifications)
@@ -219,7 +226,7 @@ volumes:
 # =============================================================================
 # Core Settings
 # =============================================================================
-DEVMODE=false
+DEVMODE=true  # Set to false when using HTTPS; required for login over plain HTTP
 ALLOW_REGISTRATIONS=true
 SITE_URL=http://localhost:8080
 ADMIN_EMAIL=admin@example.com
@@ -264,10 +271,11 @@ LOG_LEVEL=info
 # TYK_AI_LICENSE=your-license-key
 
 # =============================================================================
-# OCI Plugin Marketplace (Optional, Enterprise)
+# Plugin Marketplace (Optional — enables browsing and installing plugins)
 # =============================================================================
-# AI_STUDIO_OCI_CACHE_DIR=./cache/plugins
-# MARKETPLACE_ENABLED=true
+# AI_STUDIO_OCI_CACHE_DIR must be set to enable the marketplace.
+# Without it, the Marketplace page will be empty.
+AI_STUDIO_OCI_CACHE_DIR=./cache/plugins
 
 # =============================================================================
 # SMTP (Optional — required for email invites/notifications)
@@ -391,7 +399,7 @@ docker compose up -d
 docker compose ps
 
 # Check AI Studio is responding
-curl -s http://localhost:8080/api/v1/health
+curl -s http://localhost:8080/health
 
 # Check Microgateway is responding
 curl -s http://localhost:9091/health
@@ -463,6 +471,16 @@ docker compose logs <service-name>
 - Ensure the `postgres` container is healthy: `docker compose ps`
 - Verify `DATABASE_URL` credentials match the `POSTGRES_USER`/`POSTGRES_PASSWORD` in `compose.yaml`
 - For external databases, verify network connectivity and SSL mode
+
+### Marketplace page is empty
+
+The Plugin Marketplace requires `AI_STUDIO_OCI_CACHE_DIR` to be set. Without it, the marketplace service does not start and no plugins will appear. Add this to your `studio.env`:
+
+```env
+AI_STUDIO_OCI_CACHE_DIR=./cache/plugins
+```
+
+Restart AI Studio after making this change. The marketplace is enabled by default (`MARKETPLACE_ENABLED=true`), but it will not function without the OCI cache directory configured.
 
 ### Port conflicts
 

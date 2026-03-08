@@ -71,6 +71,8 @@ config:
   databaseType: "postgres"
   tykAiSecretKey: "your-secret-key"
   tykAiLicense: "your-license"
+  # Plugin Marketplace — set ociCacheDir to enable (without it, the Marketplace page will be empty)
+  ociCacheDir: "./cache/plugins"
 
 database:
   internal: true
@@ -135,6 +137,8 @@ config:
   databaseType: "postgres"
   tykAiSecretKey: "your-production-key"
   tykAiLicense: "your-production-license"
+  # Plugin Marketplace — set ociCacheDir to enable (without it, the Marketplace page will be empty)
+  ociCacheDir: "./cache/plugins"
 
 database:
   internal: false
@@ -193,6 +197,8 @@ config:
   databaseType: "postgres"
   tykAiSecretKey: "your-production-key"
   tykAiLicense: "your-production-license"
+  # Plugin Marketplace — set ociCacheDir to enable (without it, the Marketplace page will be empty)
+  ociCacheDir: "./cache/plugins"
 
 database:
   internal: false
@@ -247,7 +253,9 @@ config:
   databaseType: "postgres"
   tykAiSecretKey: "your-production-key"
   tykAiLicense: "your-production-license"
-  
+  # Plugin Marketplace — set ociCacheDir to enable (without it, the Marketplace page will be empty)
+  ociCacheDir: "./cache/plugins"
+
   # NATS Queue Configuration
   queueType: "nats"
   natsUrl: "nats://nats-cluster:4222"
@@ -703,6 +711,7 @@ kubectl describe pod <pod-name>
 - Database connection failures: Check credentials and network access
 - Ingress not working: Verify DNS records and TLS configuration
 - Resource constraints: Check pod resource limits and node capacity
+- Marketplace page is empty: Set `ociCacheDir: "./cache/plugins"` in your config values — the marketplace service will not start without it
 
 ## Next Steps
 
