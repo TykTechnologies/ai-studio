@@ -18,7 +18,7 @@ require (
 	github.com/go-openapi/strfmt v0.25.0
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/csrf v1.7.3
+	github.com/gorilla/csrf v1.7.2
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.2.1
 	github.com/gosimple/slug v1.15.0
@@ -285,7 +285,7 @@ require (
 
 replace github.com/tmc/langchaingo => github.com/lonelycode/langchaingo v0.0.0-20251125225155-18c4ce82812d
 
-replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.40.0
+replace go.opentelemetry.io/otel/sdk => go.opentelemetry.io/otel/sdk v1.34.0
 
 replace github.com/TykTechnologies/midsommar/microgateway => ./microgateway
 
