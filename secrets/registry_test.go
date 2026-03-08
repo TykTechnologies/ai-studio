@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -44,11 +45,19 @@ func TestRegistry_Names(t *testing.T) {
 	}
 }
 
-func TestRegistry_Register_DuplicateReturnsError(t *testing.T) {
-	err := DefaultRegistry.Register("local", func(config map[string]string) (KEKProvider, error) {
-		return nil, nil
+func TestRegistry_Register_OverridesPrevious(t *testing.T) {
+	reg := NewProviderRegistry()
+	reg.Register("test", func(config map[string]string) (KEKProvider, error) {
+		return nil, fmt.Errorf("old factory")
 	})
-	if err == nil {
-		t.Fatal("expected error on duplicate registration")
+	reg.Register("test", func(config map[string]string) (KEKProvider, error) {
+		return newTestLocalKEK("override"), nil
+	})
+	kek, err := reg.Get("test", nil)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if kek == nil {
+		t.Fatal("expected non-nil KEKProvider from overridden factory")
 	}
 }

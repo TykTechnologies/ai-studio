@@ -28,15 +28,12 @@ func NewProviderRegistry() *ProviderRegistry {
 }
 
 // Register registers a KEK provider factory under the given name.
-// Returns an error if a provider with the same name is already registered.
-func (r *ProviderRegistry) Register(name string, factory KEKProviderFactory) error {
+// If a provider with the same name already exists it is silently replaced
+// (last writer wins), which allows tests and overrides to work naturally.
+func (r *ProviderRegistry) Register(name string, factory KEKProviderFactory) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.factories[name]; exists {
-		return fmt.Errorf("secrets: KEK provider %q already registered", name)
-	}
 	r.factories[name] = factory
-	return nil
 }
 
 // Get creates a KEK provider by name using the registered factory.

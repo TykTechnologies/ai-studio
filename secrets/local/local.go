@@ -28,15 +28,13 @@ const (
 var kekSalt = []byte("tyk-ai-studio-local-kek-v1")
 
 func init() {
-	if err := secrets.DefaultRegistry.Register("local", func(config map[string]string) (secrets.KEKProvider, error) {
+	secrets.DefaultRegistry.Register("local", func(config map[string]string) (secrets.KEKProvider, error) {
 		rawKey := config["RAW_KEY"]
 		if rawKey == "" {
 			return nil, fmt.Errorf("local KEK provider requires RAW_KEY in config")
 		}
 		return New(rawKey), nil
-	}); err != nil {
-		panic(err)
-	}
+	})
 }
 
 // Provider wraps DEKs using a local KEK derived from a passphrase.

@@ -100,10 +100,8 @@ func encryptWith(ctx context.Context, c Cipher, rawKey string, plaintext string)
 func TestMain(m *testing.M) {
 	// Register the local provider for tests since we can't import secrets/local
 	// from same-package tests.
-	if err := DefaultRegistry.Register("local", func(config map[string]string) (KEKProvider, error) {
+	DefaultRegistry.Register("local", func(config map[string]string) (KEKProvider, error) {
 		return newTestLocalKEK(config["RAW_KEY"]), nil
-	}); err != nil {
-		panic(err)
-	}
+	})
 	os.Exit(m.Run())
 }
