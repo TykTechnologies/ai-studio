@@ -26,7 +26,8 @@ type GoogleAIChatResponse struct {
 		CachedContentTokenCount int `json:"cachedContentTokenCount"`
 		ThoughtsTokenCount      int `json:"thoughtsTokenCount"`
 	} `json:"usageMetadata"`
-	Model string `json:"model"`
+	Model        string `json:"model"`
+	ModelVersion string `json:"modelVersion"`
 }
 
 type GoogleAIStreamChunk struct {
@@ -47,9 +48,11 @@ type GoogleAIStreamChunk struct {
 	UsageMetadata struct {
 		PromptTokenCount     int `json:"promptTokenCount"`
 		CandidatesTokenCount int `json:"candidatesTokenCount"`
-		TotalTokenCount      int `json:"totalTokenCount"`
-		ThoughtsTokenCount   int `json:"thoughtsTokenCount"`
+		TotalTokenCount         int `json:"totalTokenCount"`
+		CachedContentTokenCount int `json:"cachedContentTokenCount"`
+		ThoughtsTokenCount      int `json:"thoughtsTokenCount"`
 	} `json:"usageMetadata"`
+	ModelVersion string `json:"modelVersion"`
 }
 
 // type GoogleAIChatResponse struct {

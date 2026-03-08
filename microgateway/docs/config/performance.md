@@ -85,9 +85,9 @@ mgw system metrics | grep cache_evictions_total
 ### Request Processing
 ```bash
 # Gateway timeout settings
-GATEWAY_TIMEOUT=30s         # Standard timeout
-GATEWAY_TIMEOUT=15s         # Low-latency applications
-GATEWAY_TIMEOUT=60s         # Large model operations
+GATEWAY_TIMEOUT=5m          # Default (suitable for agentic workloads)
+GATEWAY_TIMEOUT=30s         # Low-latency applications
+GATEWAY_TIMEOUT=10m         # Very long agentic operations
 
 # Request size limits
 GATEWAY_MAX_REQUEST_SIZE=10MB
@@ -346,7 +346,7 @@ ANALYTICS_BUFFER_SIZE=2000
 ANALYTICS_FLUSH_INTERVAL=10s
 ANALYTICS_WORKERS=5
 
-GATEWAY_TIMEOUT=30s
+GATEWAY_TIMEOUT=5m
 COMPRESSION_ENABLED=true
 COMPRESSION_LEVEL=6
 

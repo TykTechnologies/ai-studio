@@ -290,6 +290,64 @@ func TestTokenAnalytics_StreamingResponse(t *testing.T) {
 	}
 }
 
+// TestTokenAnalytics_StreamingSSEResponse verifies analytics work with SSE format (alt=sse),
+// which is the standard format used by Google's streamGenerateContent endpoint.
+func TestTokenAnalytics_StreamingSSEResponse(t *testing.T) {
+	db, cancel := setupTest(t)
+	defer tearDownTest(db, cancel)
+
+	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		// SSE format as returned by Google with alt=sse
+		sseResponse := `data: {"candidates":[{"content":{"parts":[{"text":"The morning sun cast long shadows."}],"role":"model"},"index":0}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":36,"totalTokenCount":220,"thoughtsTokenCount":176},"modelVersion":"gemini-2.5-pro"}
+
+data: {"candidates":[{"content":{"parts":[{"text":" A gentle start."}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":8,"candidatesTokenCount":43,"totalTokenCount":227,"thoughtsTokenCount":176},"modelVersion":"gemini-2.5-pro"}
+
+`
+		w.Write([]byte(sseResponse))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}))
+	defer mockUpstream.Close()
+
+	proxy, _, _, secret := setupIntegrationProxy(t, db, mockUpstream.URL)
+
+	price := &models.ModelPrice{
+		Model:     gorm.Model{ID: 1},
+		ModelName: "gemini-2.5-pro",
+		Vendor:    string(models.GOOGLEAI),
+		CPT:       0.0000025,
+		CPIT:      0.0000003,
+		Currency:  "USD",
+	}
+	require.NoError(t, db.Create(price).Error)
+
+	srv := startProxyServer(t, proxy)
+	defer srv.Close()
+
+	reqBody := `{"model":"gemini-2.5-pro", "contents": [{"role":"user","parts":[{"text":"Hello!"}]}]}`
+	resp := sendProxyRequest(t, srv.URL, "gemini-api", secret, reqBody, "", true)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	waitForAnalytics(t, db, 1)
+	waitUntilIdle(t, db)
+
+	var record models.LLMChatRecord
+	require.NoError(t, db.First(&record).Error)
+
+	// Model name should come from modelVersion in the SSE response, not from URL
+	assert.Equal(t, "gemini-2.5-pro", record.Name)
+	assert.Equal(t, 8, record.PromptTokens)
+	// Response tokens = candidatesTokenCount + thoughtsTokenCount = 43 + 176
+	assert.Equal(t, 219, record.ResponseTokens)
+	assert.Equal(t, 1, record.Choices)
+}
+
 func setupIntegrationProxy(t *testing.T, db *gorm.DB, mockURL string) (*Proxy, *models.LLM, *models.App, string) {
 	t.Helper()
 

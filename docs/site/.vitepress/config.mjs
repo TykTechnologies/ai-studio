@@ -14,7 +14,7 @@ export default defineConfig({
     // https://vitepress.dev/reference/default-theme-config
     logo: '/logo.png',
     nav: [
-      { text: 'Quickstart', link: '/docs/quickstart' }
+      { text: 'Quickstart', link: '/docs/deployment-docker' }
     ],
 
     sidebar: [
@@ -30,8 +30,10 @@ export default defineConfig({
       {
         text: 'Getting Started',
         items: [
-          { text: 'Installation (Helm/K8s)', link: '/docs/deployment-helm-k8s' }, // Renamed
-          { text: 'Initial Configuration', link: '/docs/configuration' } // Renamed
+          { text: 'Docker Compose', link: '/docs/deployment-docker' },
+          { text: 'Kubernetes / Helm', link: '/docs/deployment-helm-k8s' },
+          { text: 'Bare Metal / VM', link: '/docs/deployment-packages' },
+          { text: 'Initial Configuration', link: '/docs/configuration' }
         ]
       },
       {

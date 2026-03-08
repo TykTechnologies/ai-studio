@@ -57,7 +57,7 @@ TLS_KEY_PATH=/etc/certs/server.key
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `GATEWAY_TIMEOUT` | duration | `30s` | Default timeout for LLM requests |
+| `GATEWAY_TIMEOUT` | duration | `5m` | Timeout for upstream LLM requests (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | bytes | `10MB` | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | bytes | `50MB` | Maximum response size |
 | `GATEWAY_DEFAULT_RATE_LIMIT` | int | `100` | Default requests per minute limit |

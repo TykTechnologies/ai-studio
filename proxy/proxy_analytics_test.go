@@ -399,3 +399,95 @@ func TestAnalyzeCompletionResponse(t *testing.T) {
 	assert.Equal(t, 1, record.Choices)
 	assert.Equal(t, 0.025, record.Cost) // (10 * 0.002) + (5 * 0.001)
 }
+
+
+func TestAnalyzeCompletionResponseWithCacheGoogleAI(t *testing.T) {
+	db, cancel := setupTest(t)
+	defer tearDownTest(db, cancel)
+
+	service := services.NewService(db)
+	notificationSvc := services.NewTestNotificationService(db)
+	budgetService := budget.NewService(db, notificationSvc)
+	proxy := NewProxy(service, &Config{Port: 9999}, budgetService)
+	require.NotNil(t, proxy)
+
+	// Create test user
+	user := &models.User{
+		ID:    1,
+		Email: "test@example.com",
+	}
+	err := db.Create(user).Error
+	require.NoError(t, err)
+
+	// Create test LLM
+	llm := &models.LLM{
+		Model:        gorm.Model{ID: 1},
+		Name:         "TestLLM",
+		Vendor:       models.GOOGLEAI,
+		DefaultModel: "test-model",
+		Active:       true,
+		APIEndpoint:  "http://mock-api.example.com",
+	}
+	err = db.Create(llm).Error
+	require.NoError(t, err)
+
+	// Create test app
+	app := &models.App{
+		Model:  gorm.Model{ID: 1},
+		Name:   "TestApp",
+		UserID: user.ID,
+	}
+	err = db.Create(app).Error
+	require.NoError(t, err)
+
+	// Create a mock price
+	price := &models.ModelPrice{
+		Model:        gorm.Model{ID: 1},
+		ModelName:    "test-model",
+		Vendor:       string(models.GOOGLEAI),
+		CPT:          0.002,
+		CPIT:         0.001,
+		CacheReadPT:  0.0005,
+		CacheWritePT: 0,
+		Currency:     "USD",
+	}
+	err = db.Create(price).Error
+	require.NoError(t, err)
+
+	// Create mock response with cache tokens
+	mockResp := &mockTokenResponse{
+		model:      "test-model",
+		prompt:     100, // This includes cached tokens for Google
+		resp:       50,
+		choices:    1,
+		tools:      0,
+		cacheWrite: 0,
+		cacheRead:  20,
+	}
+
+	// Create request with model in context
+	req, _ := http.NewRequest("POST", "http://example.com/test", nil)
+	ctx := context.WithValue(req.Context(), "model_name", "test-model")
+	req = req.WithContext(ctx)
+
+	// Test response analysis
+	AnalyzeCompletionResponse(service, llm, app, mockResp, req, time.Now())
+
+	// Wait for analytics to process the request
+	waitForAnalytics(t, db, 1)
+	waitUntilIdle(t, db)
+	record := waitForRecordWithCost(t, db)
+	require.NotNil(t, record)
+	assert.Equal(t, app.ID, record.AppID)
+	assert.Equal(t, llm.ID, record.LLMID)
+	assert.Equal(t, string(models.GOOGLEAI), record.Vendor)
+	assert.Equal(t, 80, record.PromptTokens)   // 100 (original) - 20 (cache read)
+	assert.Equal(t, 50, record.ResponseTokens)
+	assert.Equal(t, 20, record.CacheReadPromptTokens)
+	assert.Equal(t, 0, record.CacheWritePromptTokens)
+	assert.Equal(t, 150, record.TotalTokens) // 80 (new pt) + 50 (rt) + 20 (cacheRead) + 0 (cacheWrite)
+	assert.Equal(t, 1, record.Choices)
+	// Cost = (50 * 0.002) + (80 * 0.001) + (20 * 0.0005) = 0.1 + 0.08 + 0.01 = 0.19
+	assert.InDelta(t, 0.19, record.Cost, 0.0001)
+}
+

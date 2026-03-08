@@ -816,14 +816,16 @@ func (a *GatewayServiceAdapter) GetModelPriceByModelNameAndVendor(modelName, ven
 	dbPrice, err := a.management.GetModelPrice(modelName, vendor)
 	
 	if err != nil {
-		// Return default pricing if not found
-		log.Debug().Str("model", modelName).Str("vendor", vendor).Msg("No pricing found, using default rates")
+		// Return zero pricing if not found (matches AI Studio behavior which auto-creates
+		// a zero-priced record). Using non-zero defaults would cause phantom costs in
+		// dashboards when no price has been explicitly configured.
+		log.Debug().Str("model", modelName).Str("vendor", vendor).Msg("No pricing found, using zero rates")
 		return &models.ModelPrice{
 			ID:        0,
 			ModelName: modelName,
 			Vendor:    vendor,
-			CPT:       0.0003,  // Default: $0.0003 per 1K prompt tokens
-			CPIT:      0.0015,  // Default: $0.0015 per 1K completion tokens
+			CPT:       0,
+			CPIT:      0,
 			Currency:  "USD",
 		}, nil
 	}
