@@ -100,6 +100,10 @@ type AppConf struct {
 	DocsPort     int
 	DocsDisabled bool
 
+	// Migration Configuration
+	MigrationBatchSize int  // Batch size for data migrations (default: 100)
+	MigrationDisabled  bool // Disable startup data migrations (default: false)
+
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
 }
@@ -525,6 +529,19 @@ func getConfigFromEnv(envFile string) *AppConf {
 		} else {
 			cfgLog.Warn().Msgf("Warning: Invalid MAX_RESOURCE_PAYLOAD_SIZE value: %s, using default 5MB", maxPayloadStr)
 		}
+	}
+
+	// Migration configuration
+	conf.MigrationBatchSize = 100
+	if batchStr := os.Getenv("TYK_AI_MIGRATION_BATCH_SIZE"); batchStr != "" {
+		if batch, err := strconv.Atoi(batchStr); err == nil && batch > 0 {
+			conf.MigrationBatchSize = batch
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid TYK_AI_MIGRATION_BATCH_SIZE value: %s, using default 100", batchStr)
+		}
+	}
+	if v := os.Getenv("TYK_AI_MIGRATION_DISABLED"); v == "true" || v == "1" {
+		conf.MigrationDisabled = true
 	}
 
 	// Default app budget configuration

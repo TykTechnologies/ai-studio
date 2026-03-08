@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -115,13 +116,74 @@ func TestEncryptDecryptValueRoundTrip_V1(t *testing.T) {
 	assert.Equal(t, "hello", decrypted)
 }
 
-func TestDecryptValueNonEncrypted(t *testing.T) {
+func TestDecryptWith_PlainPrefix(t *testing.T) {
 	ciphers := legacyCipherInstances()
 	ctx := context.Background()
 
-	result, err := decryptWith(ctx, ciphers, "key", "plain-text")
+	result, err := decryptWith(ctx, ciphers, "key", "$PLAIN/my-api-key")
 	require.NoError(t, err)
-	assert.Equal(t, "plain-text", result)
+	assert.Equal(t, "my-api-key", result)
+
+	// Works even without a rawKey
+	result, err = decryptWith(ctx, ciphers, "", "$PLAIN/no-key-needed")
+	require.NoError(t, err)
+	assert.Equal(t, "no-key-needed", result)
+}
+
+func TestDecryptWith_PlainPrefix_EmptyValue(t *testing.T) {
+	ciphers := legacyCipherInstances()
+	ctx := context.Background()
+
+	result, err := decryptWith(ctx, ciphers, "key", "$PLAIN/")
+	require.NoError(t, err)
+	assert.Equal(t, "", result)
+}
+
+func TestDecryptWith_UnprefixedLegacy(t *testing.T) {
+	ciphers := legacyCipherInstances()
+	ctx := context.Background()
+	rawKey := "legacy-key"
+
+	// Encrypt with v1 cipher, get raw base64 (no $ENC/ prefix)
+	v1 := &cfbCipher{}
+	key := deriveKey(rawKey)
+	ct, err := v1.Encrypt(ctx, key, []byte("legacy-secret"))
+	require.NoError(t, err)
+	raw := base64.URLEncoding.EncodeToString(ct)
+
+	// decryptWith should handle unprefixed as legacy v1
+	result, err := decryptWith(ctx, ciphers, rawKey, raw)
+	require.NoError(t, err)
+	assert.Equal(t, "legacy-secret", result)
+}
+
+func TestDecryptWith_EmptyString(t *testing.T) {
+	ciphers := legacyCipherInstances()
+	ctx := context.Background()
+
+	result, err := decryptWith(ctx, ciphers, "key", "")
+	require.NoError(t, err)
+	assert.Equal(t, "", result)
+}
+
+func TestDecryptWith_UnprefixedNonBase64_ReturnsError(t *testing.T) {
+	ciphers := legacyCipherInstances()
+	ctx := context.Background()
+
+	// Unprefixed non-base64 string is treated as legacy v1 — base64 decode fails
+	_, err := decryptWith(ctx, ciphers, "key", "not-valid-base64!!!")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "decode legacy base64")
+}
+
+func TestDecryptWith_NoRawKey_Passthrough(t *testing.T) {
+	ciphers := legacyCipherInstances()
+	ctx := context.Background()
+
+	// No rawKey: unprefixed values pass through as-is
+	result, err := decryptWith(ctx, ciphers, "", "some-value")
+	require.NoError(t, err)
+	assert.Equal(t, "some-value", result)
 }
 
 func TestDecryptValueUnsupportedVersion(t *testing.T) {

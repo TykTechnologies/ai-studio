@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -257,6 +258,47 @@ func TestBackwardCompat_DecryptValueV1(t *testing.T) {
 	decrypted, err := store.DecryptValue(ctx, encrypted)
 	require.NoError(t, err)
 	assert.Equal(t, "direct-v1", decrypted)
+}
+
+// --- Legacy migration tests ---
+
+// insertRawLegacySecret encrypts a value with v1 CFB cipher and inserts
+// the raw base64 into the DB WITHOUT the $ENC/ prefix — the actual format
+// used by older versions of the codebase.
+func insertRawLegacySecret(t *testing.T, db *gorm.DB, rawKey, varName, plaintext string) *Secret {
+	t.Helper()
+	ctx := context.Background()
+	v1 := &cfbCipher{}
+	key := deriveKey(rawKey)
+	ct, err := v1.Encrypt(ctx, key, []byte(plaintext))
+	require.NoError(t, err)
+	raw := base64.URLEncoding.EncodeToString(ct)
+
+	secret := &Secret{VarName: varName, Value: raw}
+	require.NoError(t, db.Create(secret).Error)
+	return secret
+}
+
+func TestBackwardCompat_ReadUnprefixedLegacySecret(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "legacy-raw-key"
+	ctx := context.Background()
+
+	// Insert a secret with raw base64 (no $ENC/ prefix) — the old format
+	secret := insertRawLegacySecret(t, db, rawKey, "RAW_LEGACY", "raw-secret-value")
+
+	store, err := New(db, rawKey)
+	require.NoError(t, err)
+
+	// decryptWith now handles unprefixed values as legacy v1 — no migration needed
+	got, err := store.GetByID(ctx, secret.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, "raw-secret-value", got.Value)
+
+	// Also via GetByVarName
+	got, err = store.GetByVarName(ctx, "RAW_LEGACY", false)
+	require.NoError(t, err)
+	assert.Equal(t, "raw-secret-value", got.Value)
 }
 
 // --- Envelope encryption (v2) tests ---

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 
 	"gorm.io/driver/postgres"
@@ -409,6 +410,24 @@ func main() {
 	)
 	defer stop()
 
+	// Run async data migrations (cancelled on shutdown, waited during cleanup)
+	var migrationWg sync.WaitGroup
+	if !appConf.MigrationDisabled {
+		migrationWg.Add(1)
+		go func() {
+			defer migrationWg.Done()
+			if migrated, err := service.MigrateLegacySubmissions(shutdownCtx, appConf.MigrationBatchSize); err != nil {
+				if shutdownCtx.Err() != nil {
+					logger.Infof("Legacy submission migration interrupted by shutdown (migrated %d so far)", migrated)
+				} else {
+					logger.Errorf("Failed to migrate legacy submissions: %v", err)
+				}
+			} else if migrated > 0 {
+				logger.Infof("Migrated %d legacy submission payloads", migrated)
+			}
+		}()
+	}
+
 	var apiServer *api.API
 	if !appConf.ProxyOnly {
 		// Create a new API instance
@@ -452,6 +471,9 @@ func main() {
 			logger.Errorf("Error during API shutdown: %v", err)
 		}
 	}
+
+	// Wait for background migrations to finish
+	migrationWg.Wait()
 
 	// Cleanup services
 	if err := service.Cleanup(); err != nil {

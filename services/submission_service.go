@@ -56,6 +56,66 @@ func (s *Service) decryptSubmissionPayload(ctx context.Context, payload map[stri
 	}
 }
 
+// MigrateLegacySubmissions tags unprefixed credential fields in submission payloads
+// with the "$PLAIN/" prefix so that decryptWith treats them correctly.
+// Processes rows in batches. Returns the number of submissions updated.
+// This is idempotent — fields that already have $ENC/ or $PLAIN/ are skipped.
+// Respects context cancellation between batches for graceful shutdown.
+func (s *Service) MigrateLegacySubmissions(ctx context.Context, batchSize int) (int, error) {
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+	migrated := 0
+	offset := 0
+
+	for {
+		select {
+		case <-ctx.Done():
+			return migrated, ctx.Err()
+		default:
+		}
+
+		var batch []models.Submission
+		if err := s.DB.Offset(offset).Limit(batchSize).Find(&batch).Error; err != nil {
+			return migrated, fmt.Errorf("query submissions: %w", err)
+		}
+		if len(batch) == 0 {
+			break
+		}
+		offset += len(batch)
+
+		for i := range batch {
+			payload := batch[i].ResourcePayload
+			if payload == nil {
+				continue
+			}
+			changed := false
+			for _, field := range payloadCredentialFields {
+				val, ok := payload[field]
+				if !ok {
+					continue
+				}
+				str, ok := val.(string)
+				if !ok || str == "" {
+					continue
+				}
+				if strings.HasPrefix(str, "$ENC/") || strings.HasPrefix(str, "$PLAIN/") {
+					continue
+				}
+				payload[field] = "$PLAIN/" + str
+				changed = true
+			}
+			if changed {
+				if err := s.DB.Model(&batch[i]).Update("resource_payload", payload).Error; err != nil {
+					return migrated, fmt.Errorf("migrate submission %d: %w", batch[i].ID, err)
+				}
+				migrated++
+			}
+		}
+	}
+	return migrated, nil
+}
+
 // validateDocumentationURL ensures the URL uses a safe protocol (http/https only).
 // This prevents XSS via javascript: URIs being rendered as clickable links.
 func validateDocumentationURL(rawURL string) error {

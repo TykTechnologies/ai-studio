@@ -93,50 +93,76 @@ func (c *cfbCipher) Decrypt(_ context.Context, key []byte, ciphertext []byte) ([
 	return raw, nil
 }
 
-// decryptWith decrypts a "$ENC/..." string, auto-detecting the cipher version.
-// Non-encrypted values pass through unchanged.
-// If rawKey is empty, the original value is returned as-is (no key to decrypt with).
+// decryptWith decrypts a stored value using three-way prefix detection:
 //
-// For v2 envelope-encrypted values ($ENC/v2/<key_id>/<ciphertext>), an EnvelopeCipher
-// must be registered as the "v2" entry in the ciphers map. The key_id is parsed and
-// the cipher receives the full "<key_id>/<ciphertext>" payload.
+//   - "$PLAIN/" → plaintext passthrough, strip prefix and return as-is
+//   - "$ENC/"   → encrypted, detect version and decrypt
+//   - no prefix → legacy v1 AES-CFB encrypted (base64-encoded, no tag)
+//
+// If rawKey is empty, the original value is returned as-is (no key to decrypt with).
+// Empty strings pass through unchanged.
 func decryptWith(ctx context.Context, ciphers map[string]Cipher, rawKey string, value string) (string, error) {
-	if !strings.HasPrefix(value, "$ENC/") {
+	if value == "" {
 		return value, nil
 	}
+
+	// $PLAIN/ prefix: strip and return as-is
+	if strings.HasPrefix(value, "$PLAIN/") {
+		return strings.TrimPrefix(value, "$PLAIN/"), nil
+	}
+
 	if rawKey == "" {
 		return value, nil
 	}
 
-	trimmed := strings.TrimPrefix(value, "$ENC/")
-	version, payload := detectVersion(trimmed)
+	// $ENC/ prefix: versioned encrypted value
+	if strings.HasPrefix(value, "$ENC/") {
+		trimmed := strings.TrimPrefix(value, "$ENC/")
+		version, payload := detectVersion(trimmed)
 
-	c, ok := ciphers[version]
-	if !ok {
-		return "", fmt.Errorf("unsupported cipher version: %s", version)
-	}
+		c, ok := ciphers[version]
+		if !ok {
+			return "", fmt.Errorf("unsupported cipher version: %s", version)
+		}
 
-	// v2 envelope uses a structured payload (<key_id>/<ciphertext>), not a single
-	// base64 blob. Pass it as-is to the envelope cipher's Decrypt.
-	if version == "v2" {
-		plaintext, err := c.Decrypt(ctx, nil, []byte(payload))
+		// v2 envelope uses a structured payload (<key_id>/<ciphertext>)
+		if version == "v2" {
+			plaintext, err := c.Decrypt(ctx, nil, []byte(payload))
+			if err != nil {
+				return "", fmt.Errorf("decrypt (version %s): %w", version, err)
+			}
+			return string(plaintext), nil
+		}
+
+		raw, err := base64.URLEncoding.DecodeString(payload)
+		if err != nil {
+			return "", fmt.Errorf("decode base64: %w", err)
+		}
+
+		key := deriveKey(rawKey)
+		plaintext, err := c.Decrypt(ctx, key, raw)
 		if err != nil {
 			return "", fmt.Errorf("decrypt (version %s): %w", version, err)
 		}
 		return string(plaintext), nil
 	}
 
-	raw, err := base64.URLEncoding.DecodeString(payload)
+	// No prefix: legacy v1 (raw base64-encoded AES-CFB ciphertext)
+	c, ok := ciphers["v1"]
+	if !ok {
+		return "", fmt.Errorf("unsupported cipher version: v1")
+	}
+
+	raw, err := base64.URLEncoding.DecodeString(value)
 	if err != nil {
-		return "", fmt.Errorf("decode base64: %w", err)
+		return "", fmt.Errorf("decode legacy base64: %w", err)
 	}
 
 	key := deriveKey(rawKey)
 	plaintext, err := c.Decrypt(ctx, key, raw)
 	if err != nil {
-		return "", fmt.Errorf("decrypt (version %s): %w", version, err)
+		return "", fmt.Errorf("decrypt legacy v1: %w", err)
 	}
-
 	return string(plaintext), nil
 }
 
