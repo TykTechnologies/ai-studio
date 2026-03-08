@@ -9,8 +9,15 @@ This guide covers installing Tyk AI Studio and the optional Microgateway on Linu
 
 ## Prerequisites
 
-- **OS**: Ubuntu/Debian (DEB) or RHEL/CentOS/Amazon Linux (RPM)
+- **OS**: Ubuntu/Debian (DEB) or RHEL 7-9/CentOS 7-9/Amazon Linux 2/2023 (RPM)
 - **Architecture**: amd64 (x86_64), arm64 (aarch64), or s390x
+
+> **Note:** RPM packages are published for EL 7, 8, 9 and Amazon Linux 2/2023. If you are running a different RPM-based distribution (e.g. CentOS Stream 10, Fedora), you can edit the repo file to use the closest supported version:
+> ```bash
+> # Example: use el/9 packages on CentOS Stream 10
+> sudo sed -i 's/el\/10/el\/9/g' /etc/yum.repos.d/tyk_*.repo
+> sudo yum clean all
+> ```
 - **PostgreSQL 14+** (for AI Studio production use; SQLite is the default for development)
 - **systemd** (for service management)
 - Root or sudo access
@@ -21,8 +28,8 @@ Packages are available in Community and Enterprise editions:
 
 | Component | Community Package | Enterprise Package |
 |-----------|-------------------|--------------------|
-| AI Studio | `tyk-ai-studio` | `tyk-ai-studio` |
-| Microgateway | `tyk-microgateway` | `tyk-microgateway` |
+| AI Studio | `tyk-ai-studio` | `tyk-ai-studio-ee` |
+| Microgateway | `tyk-microgateway` | `tyk-microgateway-ee` |
 
 Community packages are published to component-specific repos. Enterprise packages for **both** components are published to a single shared repo: `tyk/tyk-ee-unstable`.
 
@@ -78,7 +85,7 @@ curl -s https://packagecloud.io/install/repositories/tyk/tyk-ee-unstable/script.
 sudo apt-get install tyk-ai-studio
 
 # Enterprise Edition
-sudo apt-get install tyk-ai-studio
+sudo apt-get install tyk-ai-studio-ee
 ```
 
 **RPM:**
@@ -88,7 +95,7 @@ sudo apt-get install tyk-ai-studio
 sudo yum install tyk-ai-studio
 
 # Enterprise Edition
-sudo yum install tyk-ai-studio
+sudo yum install tyk-ai-studio-ee
 ```
 
 The package installs:
@@ -107,7 +114,11 @@ The installer automatically creates a `tyk` user and group to run the service.
 Edit the environment configuration file:
 
 ```bash
-sudo nano /etc/default/tyk-ai-studio
+# Debian/Ubuntu
+sudo vi /etc/default/tyk-ai-studio
+
+# RHEL/CentOS (symlinked automatically by the installer)
+sudo vi /etc/sysconfig/tyk-ai-studio
 ```
 
 At minimum, set these values:
@@ -150,6 +161,9 @@ GRPC_PORT=50051
 GRPC_HOST=0.0.0.0
 GRPC_TLS_INSECURE=true
 GRPC_AUTH_TOKEN=your-generated-grpc-token
+
+# Proxy URL — point to the Microgateway so AI requests are routed through it
+PROXY_URL=http://your-microgateway-host:9091
 
 # Portal display URLs — set these to your Microgateway's address so that
 # the portal shows the correct endpoint URLs for tools and datasources
@@ -217,7 +231,7 @@ curl -s https://packagecloud.io/install/repositories/tyk/tyk-ee-unstable/script.
 sudo apt-get install tyk-microgateway
 
 # Enterprise Edition
-sudo apt-get install tyk-microgateway
+sudo apt-get install tyk-microgateway-ee
 ```
 
 **RPM:**
@@ -227,7 +241,7 @@ sudo apt-get install tyk-microgateway
 sudo yum install tyk-microgateway
 
 # Enterprise Edition
-sudo yum install tyk-microgateway
+sudo yum install tyk-microgateway-ee
 ```
 
 The package installs:
@@ -248,7 +262,11 @@ The package installs:
 Edit the environment configuration file:
 
 ```bash
-sudo nano /etc/default/tyk-microgateway
+# Debian/Ubuntu
+sudo vi /etc/default/tyk-microgateway
+
+# RHEL/CentOS (symlinked automatically by the installer)
+sudo vi /etc/sysconfig/tyk-microgateway
 ```
 
 At minimum, set these values:
@@ -492,8 +510,8 @@ sudo apt-get upgrade tyk-ai-studio
 sudo apt-get upgrade tyk-microgateway  # if installed
 
 # Enterprise Edition
-sudo apt-get upgrade tyk-ai-studio
-sudo apt-get upgrade tyk-microgateway  # if installed
+sudo apt-get upgrade tyk-ai-studio-ee
+sudo apt-get upgrade tyk-microgateway-ee  # if installed
 ```
 
 **RPM:**
@@ -504,8 +522,8 @@ sudo yum update tyk-ai-studio
 sudo yum update tyk-microgateway  # if installed
 
 # Enterprise Edition
-sudo yum update tyk-ai-studio
-sudo yum update tyk-microgateway  # if installed
+sudo yum update tyk-ai-studio-ee
+sudo yum update tyk-microgateway-ee  # if installed
 ```
 
 > **Note:** Package upgrades will **not** overwrite your configuration in `/etc/default/`. The services are automatically restarted after upgrade.

@@ -42,6 +42,10 @@ setupOwnership() {
     # Ensure OCI plugin cache directory exists (default path used by microgateway)
     mkdir -p /var/lib/microgateway/plugins
     chown -R tyk:tyk /var/lib/microgateway
+    # On RPM systems, symlink /etc/default/ config to /etc/sysconfig/ so both paths work
+    if [ -d /etc/sysconfig ] && [ -f /etc/default/tyk-microgateway ] && [ ! -e /etc/sysconfig/tyk-microgateway ]; then
+        ln -s /etc/default/tyk-microgateway /etc/sysconfig/tyk-microgateway
+    fi
 }
 
 cleanInstall() {

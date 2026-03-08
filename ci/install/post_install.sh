@@ -41,6 +41,10 @@ setupOwnership() {
     [ "${change_ownership}" = "True" ] && chown -R tyk:tyk /opt/tyk-ai-studio
     # Config file should never be world-readable (only if it exists)
     [ -f /opt/tyk-ai-studio/tyk-ai-studio.conf ] && chmod 660 /opt/tyk-ai-studio/tyk-ai-studio.conf
+    # On RPM systems, symlink /etc/default/ config to /etc/sysconfig/ so both paths work
+    if [ -d /etc/sysconfig ] && [ -f /etc/default/tyk-ai-studio ] && [ ! -e /etc/sysconfig/tyk-ai-studio ]; then
+        ln -s /etc/default/tyk-ai-studio /etc/sysconfig/tyk-ai-studio
+    fi
 }
 
 cleanInstall() {
