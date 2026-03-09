@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/pkg/ratelimit"
+	"github.com/TykTechnologies/midsommar/v2/ratelimit"
 	"github.com/gin-gonic/gin"
 )
 
