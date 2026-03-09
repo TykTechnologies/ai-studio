@@ -59,23 +59,23 @@ func rateLimitHandler(entry *rateLimitEntry) gin.HandlerFunc {
 		}
 
 		if entry.ipLimiter != nil {
-			if allowed, retryAfter := entry.ipLimiter.Allow(ctx, ip); !allowed {
-				rejectWithRetry(c, retryAfter)
+			if r, err := entry.ipLimiter.Allow(ctx, ip); err == nil && !r.Allowed {
+				rejectWithRetry(c, r.RetryAfter)
 				return
 			}
 		}
 
 		if entry.compoundLimiter != nil && fieldValue != "" {
 			key := ip + ":" + fieldValue
-			if allowed, retryAfter := entry.compoundLimiter.Allow(ctx, key); !allowed {
-				rejectWithRetry(c, retryAfter)
+			if r, err := entry.compoundLimiter.Allow(ctx, key); err == nil && !r.Allowed {
+				rejectWithRetry(c, r.RetryAfter)
 				return
 			}
 		}
 
 		if entry.fieldLimiter != nil && fieldValue != "" {
-			if allowed, retryAfter := entry.fieldLimiter.Allow(ctx, fieldValue); !allowed {
-				rejectWithRetry(c, retryAfter)
+			if r, err := entry.fieldLimiter.Allow(ctx, fieldValue); err == nil && !r.Allowed {
+				rejectWithRetry(c, r.RetryAfter)
 				return
 			}
 		}

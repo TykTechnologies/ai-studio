@@ -9,106 +9,94 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/ratelimit/memory"
 )
 
+func allow(t *testing.T, l *ratelimit.Limiter, key string) ratelimit.Result {
+	t.Helper()
+	r, err := l.Allow(t.Context(), key)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !r.Allowed {
+		t.Fatalf("expected %q allowed, got denied", key)
+	}
+	return r
+}
+
+func deny(t *testing.T, l *ratelimit.Limiter, key string) ratelimit.Result {
+	t.Helper()
+	r, err := l.Allow(t.Context(), key)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if r.Allowed {
+		t.Fatalf("expected %q denied, got allowed", key)
+	}
+	return r
+}
+
 func TestAllow(t *testing.T) {
-	ctx := t.Context()
-	backend := memory.New(ctx, time.Minute)
+	backend := memory.New(t.Context(), time.Minute)
 	l := ratelimit.NewLimiter(backend, 3, time.Minute)
 
 	for range 3 {
-		allowed, _ := l.Allow(ctx, "key")
-		if !allowed {
-			t.Fatal("should be allowed")
-		}
+		allow(t, l, "key")
 	}
 
-	allowed, retryAfter := l.Allow(ctx, "key")
-	if allowed {
-		t.Fatal("4th request should be denied")
-	}
-	if retryAfter <= 0 {
+	r := deny(t, l, "key")
+	if r.RetryAfter <= 0 {
 		t.Fatal("retryAfter should be positive")
 	}
 }
 
 func TestSeparateKeys(t *testing.T) {
-	ctx := t.Context()
-	backend := memory.New(ctx, time.Minute)
+	backend := memory.New(t.Context(), time.Minute)
 	l := ratelimit.NewLimiter(backend, 1, time.Minute)
 
-	allowed, _ := l.Allow(ctx, "a")
-	if !allowed {
-		t.Fatal("first key should be allowed")
-	}
-
-	allowed, _ = l.Allow(ctx, "b")
-	if !allowed {
-		t.Fatal("second key should be allowed independently")
-	}
-
-	allowed, _ = l.Allow(ctx, "a")
-	if allowed {
-		t.Fatal("first key should be denied after limit")
-	}
+	allow(t, l, "a")
+	allow(t, l, "b")
+	deny(t, l, "a")
 }
 
 func TestWindowExpiry(t *testing.T) {
-	ctx := t.Context()
-	backend := memory.New(ctx, time.Minute)
+	backend := memory.New(t.Context(), time.Minute)
 	window := 50 * time.Millisecond
 	l := ratelimit.NewLimiter(backend, 1, window)
 
-	allowed, _ := l.Allow(ctx, "key")
-	if !allowed {
-		t.Fatal("should be allowed")
-	}
-
-	allowed, _ = l.Allow(ctx, "key")
-	if allowed {
-		t.Fatal("should be denied")
-	}
+	allow(t, l, "key")
+	deny(t, l, "key")
 
 	time.Sleep(window + 10*time.Millisecond)
 
-	allowed, _ = l.Allow(ctx, "key")
-	if !allowed {
-		t.Fatal("should be allowed after window expires")
-	}
+	allow(t, l, "key")
 }
 
 func TestRetryAfterAccuracy(t *testing.T) {
-	ctx := t.Context()
-	backend := memory.New(ctx, time.Minute)
+	backend := memory.New(t.Context(), time.Minute)
 	window := 200 * time.Millisecond
 	l := ratelimit.NewLimiter(backend, 1, window)
 
-	l.Allow(ctx, "key")
-	_, retryAfter := l.Allow(ctx, "key")
+	allow(t, l, "key")
+	r := deny(t, l, "key")
 
-	if retryAfter > window {
-		t.Fatalf("retryAfter %v should not exceed window %v", retryAfter, window)
+	if r.RetryAfter > window {
+		t.Fatalf("retryAfter %v should not exceed window %v", r.RetryAfter, window)
 	}
-	if retryAfter < window/2 {
-		t.Fatalf("retryAfter %v seems too small for window %v", retryAfter, window)
+	if r.RetryAfter < window/2 {
+		t.Fatalf("retryAfter %v seems too small for window %v", r.RetryAfter, window)
 	}
 }
 
 func TestReset(t *testing.T) {
-	ctx := t.Context()
-	backend := memory.New(ctx, time.Minute)
+	backend := memory.New(t.Context(), time.Minute)
 	l := ratelimit.NewLimiter(backend, 1, time.Minute)
 
-	l.Allow(ctx, "key")
-	allowed, _ := l.Allow(ctx, "key")
-	if allowed {
-		t.Fatal("should be denied")
+	allow(t, l, "key")
+	deny(t, l, "key")
+
+	if err := l.Reset(t.Context(), "key"); err != nil {
+		t.Fatalf("reset error: %v", err)
 	}
 
-	l.Reset(ctx, "key")
-
-	allowed, _ = l.Allow(ctx, "key")
-	if !allowed {
-		t.Fatal("should be allowed after reset")
-	}
+	allow(t, l, "key")
 }
 
 func TestConcurrentSafety(t *testing.T) {
@@ -124,10 +112,7 @@ func TestConcurrentSafety(t *testing.T) {
 	}
 	wg.Wait()
 
-	allowed, _ := l.Allow(ctx, "key")
-	if allowed {
-		t.Fatal("should be denied after concurrent flood")
-	}
+	deny(t, l, "key")
 }
 
 func TestCleanupStopsOnCancel(t *testing.T) {

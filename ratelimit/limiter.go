@@ -9,6 +9,12 @@ import (
 
 var nextID atomic.Uint64
 
+// Result holds the outcome of a rate limit check.
+type Result struct {
+	Allowed    bool
+	RetryAfter time.Duration
+}
+
 // Limiter implements rate limiting logic using a pluggable Backend for storage.
 // Each Limiter instance has a unique key prefix to avoid collisions
 // when multiple limiters share the same Backend.
@@ -30,29 +36,30 @@ func NewLimiter(backend Backend, limit int, window time.Duration) *Limiter {
 }
 
 // Allow records a hit and checks if the request is within the rate limit.
-// Returns whether the request is allowed and, if denied, how long to wait.
-func (l *Limiter) Allow(ctx context.Context, key string) (bool, time.Duration) {
+func (l *Limiter) Allow(ctx context.Context, key string) (Result, error) {
 	prefixed := l.prefix + key
 
 	count, err := l.backend.Record(ctx, prefixed, l.window)
 	if err != nil {
-		// Fail open: if backend is unavailable, allow the request.
-		return true, 0
+		return Result{}, fmt.Errorf("ratelimit record: %w", err)
 	}
 
 	if count > l.limit {
 		oldest, err := l.backend.Oldest(ctx, prefixed, l.window)
-		if err != nil || oldest.IsZero() {
-			return false, l.window
+		if err != nil {
+			return Result{Allowed: false, RetryAfter: l.window}, fmt.Errorf("ratelimit oldest: %w", err)
 		}
-		retryAfter := max(time.Until(oldest.Add(l.window)), 0)
-		return false, retryAfter
+		retryAfter := l.window
+		if !oldest.IsZero() {
+			retryAfter = max(time.Until(oldest.Add(l.window)), 0)
+		}
+		return Result{Allowed: false, RetryAfter: retryAfter}, nil
 	}
 
-	return true, 0
+	return Result{Allowed: true}, nil
 }
 
 // Reset clears the rate limit state for a key.
-func (l *Limiter) Reset(ctx context.Context, key string) {
-	l.backend.Reset(ctx, l.prefix+key) //nolint:errcheck
+func (l *Limiter) Reset(ctx context.Context, key string) error {
+	return l.backend.Reset(ctx, l.prefix+key)
 }
