@@ -164,10 +164,17 @@ func (a *API) updateSecret(c *gin.Context) {
 		return
 	}
 
-	secret.Value = input.Data.Attributes.Value
 	secret.VarName = input.Data.Attributes.VarName
 
-	if err := secrets.UpdateSecret(a.config.DB, secret); err != nil {
+	// Only update the value if the user actually provided a new secret value.
+	// When editing, the frontend loads the placeholder reference (e.g. $SECRET/NAME)
+	// and may send it back unchanged — we must not overwrite the real encrypted value.
+	valueChanged := !secrets.IsSecretReference(input.Data.Attributes.Value) && input.Data.Attributes.Value != ""
+	if valueChanged {
+		secret.Value = input.Data.Attributes.Value
+	}
+
+	if err := secrets.UpdateSecret(a.config.DB, secret, valueChanged); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
