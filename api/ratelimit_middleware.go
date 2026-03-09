@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/ratelimit"
+	"github.com/TykTechnologies/midsommar/v2/ratelimit/memory"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,7 +23,7 @@ type rateLimitEntry struct {
 }
 
 func setupRateLimiters(ctx context.Context) map[string]*rateLimitEntry {
-	backend := ratelimit.NewMemoryBackend(ctx, time.Minute)
+	backend := memory.New(ctx, time.Minute)
 
 	return map[string]*rateLimitEntry{
 		"login": {
@@ -49,6 +50,7 @@ func setupRateLimiters(ctx context.Context) map[string]*rateLimitEntry {
 
 func rateLimitHandler(entry *rateLimitEntry) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
 		ip := c.ClientIP()
 
 		var fieldValue string
@@ -57,7 +59,7 @@ func rateLimitHandler(entry *rateLimitEntry) gin.HandlerFunc {
 		}
 
 		if entry.ipLimiter != nil {
-			if allowed, retryAfter := entry.ipLimiter.Allow(ip); !allowed {
+			if allowed, retryAfter := entry.ipLimiter.Allow(ctx, ip); !allowed {
 				rejectWithRetry(c, retryAfter)
 				return
 			}
@@ -65,14 +67,14 @@ func rateLimitHandler(entry *rateLimitEntry) gin.HandlerFunc {
 
 		if entry.compoundLimiter != nil && fieldValue != "" {
 			key := ip + ":" + fieldValue
-			if allowed, retryAfter := entry.compoundLimiter.Allow(key); !allowed {
+			if allowed, retryAfter := entry.compoundLimiter.Allow(ctx, key); !allowed {
 				rejectWithRetry(c, retryAfter)
 				return
 			}
 		}
 
 		if entry.fieldLimiter != nil && fieldValue != "" {
-			if allowed, retryAfter := entry.fieldLimiter.Allow(fieldValue); !allowed {
+			if allowed, retryAfter := entry.fieldLimiter.Allow(ctx, fieldValue); !allowed {
 				rejectWithRetry(c, retryAfter)
 				return
 			}

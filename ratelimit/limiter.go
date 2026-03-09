@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -8,8 +9,8 @@ import (
 
 var nextID atomic.Uint64
 
-// Limiter applies a rate limit using a pluggable Backend.
-// Each Limiter instance has a unique prefix to avoid key collisions
+// Limiter implements rate limiting logic using a pluggable Backend for storage.
+// Each Limiter instance has a unique key prefix to avoid collisions
 // when multiple limiters share the same Backend.
 type Limiter struct {
 	backend Backend
@@ -18,8 +19,7 @@ type Limiter struct {
 	prefix  string
 }
 
-// NewLimiter creates a rate limiter that allows limit requests per window,
-// backed by the provided Backend.
+// NewLimiter creates a rate limiter that allows limit requests per window.
 func NewLimiter(backend Backend, limit int, window time.Duration) *Limiter {
 	return &Limiter{
 		backend: backend,
@@ -29,12 +29,30 @@ func NewLimiter(backend Backend, limit int, window time.Duration) *Limiter {
 	}
 }
 
-// Allow checks if a request identified by key is within the rate limit.
-func (l *Limiter) Allow(key string) (bool, time.Duration) {
-	return l.backend.Allow(l.prefix+key, l.limit, l.window)
+// Allow records a hit and checks if the request is within the rate limit.
+// Returns whether the request is allowed and, if denied, how long to wait.
+func (l *Limiter) Allow(ctx context.Context, key string) (bool, time.Duration) {
+	prefixed := l.prefix + key
+
+	count, err := l.backend.Record(ctx, prefixed, l.window)
+	if err != nil {
+		// Fail open: if backend is unavailable, allow the request.
+		return true, 0
+	}
+
+	if count > l.limit {
+		oldest, err := l.backend.Oldest(ctx, prefixed, l.window)
+		if err != nil || oldest.IsZero() {
+			return false, l.window
+		}
+		retryAfter := max(time.Until(oldest.Add(l.window)), 0)
+		return false, retryAfter
+	}
+
+	return true, 0
 }
 
 // Reset clears the rate limit state for a key.
-func (l *Limiter) Reset(key string) {
-	l.backend.Reset(l.prefix + key)
+func (l *Limiter) Reset(ctx context.Context, key string) {
+	l.backend.Reset(ctx, l.prefix+key) //nolint:errcheck
 }
