@@ -352,6 +352,7 @@ const ChatForm = () => {
         display="flex"
         justifyContent="center"
         alignItems="center"
+    if (!chat.groups || chat.groups.length === 0) newErrors.groups = "At least one group is required";
         height="100vh"
       >
         <CircularProgress />
@@ -419,7 +420,7 @@ const ChatForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth error={!!errors.llm_settings_id}>
+              <FormControl fullWidth required error={!!errors.llm_settings_id}>
                 <InputLabel>LLM Settings</InputLabel>
                 <Select
                   name="llm_settings_id"
@@ -441,7 +442,7 @@ const ChatForm = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth error={!!errors.llm_id}>
+              <FormControl fullWidth required error={!!errors.llm_id}>
                 <InputLabel>LLM</InputLabel>
                 <Select
                   name="llm_id"
@@ -461,7 +462,7 @@ const ChatForm = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth>
+              <FormControl fullWidth error={!!errors.groups} required>
                 <InputLabel>Teams</InputLabel>
                 <Select
                   multiple
@@ -487,6 +488,9 @@ const ChatForm = () => {
                     </MenuItem>
                   ))}
                 </Select>
+                {errors.groups && (
+                  <Typography color="error">{errors.groups}</Typography>
+                )}
               </FormControl>
             </Grid>
             <Grid item xs={12}>
