@@ -21,6 +21,8 @@ import {
   FormText,
   StyledCheckbox
 } from "../styles/authStyles";
+import CaptchaWidget from "../components/CaptchaWidget";
+import useCaptcha from "../hooks/useCaptcha";
 
 
 const Register = () => {
@@ -39,6 +41,7 @@ const Register = () => {
     uppercase: false,
   });
   const navigate = useNavigate();
+  const { captchaConfig, setCaptchaToken, getToken } = useCaptcha();
 
   useEffect(() => {
     const config = getConfig() || {};
@@ -94,7 +97,9 @@ const Register = () => {
     }
 
     try {
+      const token = await getToken();
       const response = await apiClient.post("/auth/register", {
+        captcha_token: token || undefined,
         data: {
           type: "register",
           attributes: {
@@ -244,6 +249,14 @@ const Register = () => {
           </FormGroup>
         )}
         
+        {captchaConfig && (
+          <CaptchaWidget
+            provider={captchaConfig.provider}
+            siteKey={captchaConfig.site_key}
+            onToken={setCaptchaToken}
+          />
+        )}
+
         <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', mb: 3 }}>
           <PrimaryButton
             type="submit"

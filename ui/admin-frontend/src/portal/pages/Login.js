@@ -10,6 +10,8 @@ import {
   FormLink,
   FormText
 } from "../styles/authStyles";
+import CaptchaWidget from "../components/CaptchaWidget";
+import useCaptcha from "../hooks/useCaptcha";
 
 const Login = () => {
   const theme = useTheme();
@@ -18,6 +20,7 @@ const Login = () => {
   const [error, setError] = useState(null);
   const [ssoEnabled, setSSOEnabled] = useState(false);
   const [ssoProfile, setSSOProfile] = useState(null);
+  const { captchaConfig, setCaptchaToken, getToken } = useCaptcha();
 
   useEffect(() => {
     const fetchSSOConfig = async () => {
@@ -44,7 +47,9 @@ const Login = () => {
     e.preventDefault();
     setError(null);
     try {
+      const token = await getToken();
       const loginResponse = await pubClient.post("/auth/login", {
+        captcha_token: token || undefined,
         data: {
           type: "login",
           attributes: { email, password },
@@ -130,6 +135,14 @@ const Login = () => {
           />
         </Box>
         
+        {captchaConfig && (
+          <CaptchaWidget
+            provider={captchaConfig.provider}
+            siteKey={captchaConfig.site_key}
+            onToken={setCaptchaToken}
+          />
+        )}
+
         <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', mb: 3 }}>
           <PrimaryButton
             type="submit"

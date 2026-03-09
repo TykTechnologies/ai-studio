@@ -9,17 +9,22 @@ import {
   FormLabel,
   FormLink
 } from "../styles/authStyles";
+import CaptchaWidget from "../components/CaptchaWidget";
+import useCaptcha from "../hooks/useCaptcha";
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [isSuccess, setIsSuccess] = useState(false);
+  const { captchaConfig, setCaptchaToken, getToken } = useCaptcha();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     try {
+      const token = await getToken();
       await apiClient.post("/auth/forgot-password", {
+        captcha_token: token || undefined,
         data: {
           type: "forgot-password",
           attributes: { email },
@@ -90,6 +95,14 @@ const ForgotPassword = () => {
           />
         </Box>
         
+        {captchaConfig && (
+          <CaptchaWidget
+            provider={captchaConfig.provider}
+            siteKey={captchaConfig.site_key}
+            onToken={setCaptchaToken}
+          />
+        )}
+
         <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', mb: 3 }}>
           <PrimaryButton
             type="submit"

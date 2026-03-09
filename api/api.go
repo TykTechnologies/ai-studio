@@ -19,10 +19,9 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/captcha"
-	// Provider registrations — each import triggers init() which registers the provider.
-	// _ "github.com/TykTechnologies/midsommar/v2/captcha/hcaptcha"
-	// _ "github.com/TykTechnologies/midsommar/v2/captcha/recaptcha"
-	// _ "github.com/TykTechnologies/midsommar/v2/captcha/turnstile"
+	_ "github.com/TykTechnologies/midsommar/v2/captcha/hcaptcha"
+	_ "github.com/TykTechnologies/midsommar/v2/captcha/recaptcha"
+	_ "github.com/TykTechnologies/midsommar/v2/captcha/turnstile"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
