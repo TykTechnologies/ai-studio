@@ -26,6 +26,7 @@ const SecretForm = () => {
     var_name: "",
     value: "",
   });
+  const [valueModified, setValueModified] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -65,7 +66,7 @@ const SecretForm = () => {
     if (!formData.var_name.trim()) {
       newErrors.var_name = "Variable name is required";
     }
-    if (!formData.value.trim()) {
+    if (!id && !formData.value.trim()) {
       newErrors.value = "Secret value is required";
     }
 
@@ -80,6 +81,9 @@ const SecretForm = () => {
   };
 
   const handleChange = (field) => (event) => {
+    if (field === "value") {
+      setValueModified(true);
+    }
     setFormData({
       ...formData,
       [field]: event.target.value,
@@ -90,13 +94,20 @@ const SecretForm = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
+    const attributes = {
+      var_name: formData.var_name,
+    };
+
+    // Only include value if creating a new secret or if the user actually changed it.
+    // This prevents overwriting the real encrypted value with the placeholder reference.
+    if (!id || valueModified) {
+      attributes.value = formData.value;
+    }
+
     const secretData = {
       data: {
         type: "secrets",
-        attributes: {
-          var_name: formData.var_name,
-          value: formData.value,
-        },
+        attributes,
       },
     };
 
@@ -206,7 +217,7 @@ const SecretForm = () => {
               <PrimaryButton
                 variant="contained"
                 type="submit"
-                disabled={!formData.var_name || !formData.value}
+                disabled={!formData.var_name || (!id && !formData.value)}
               >
                 {id ? "Update secret" : "Add secret"}
               </PrimaryButton>

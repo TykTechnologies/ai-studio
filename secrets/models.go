@@ -194,12 +194,16 @@ func CreateSecret(db *gorm.DB, settings *Secret) error {
 }
 
 // UpdateSecret updates an existing Secret record in the database.
-func UpdateSecret(db *gorm.DB, settings *Secret) error {
-	key := os.Getenv(midsommarSecret)
-	var err error
-	settings.Value, err = encrypt(key, settings.Value)
-	if err != nil {
-		return err
+// When encryptValue is true, the Value field is encrypted before saving.
+// Pass false when the Value already contains the stored (encrypted) value and should not be re-encrypted.
+func UpdateSecret(db *gorm.DB, settings *Secret, encryptValue bool) error {
+	if encryptValue {
+		key := os.Getenv(midsommarSecret)
+		var err error
+		settings.Value, err = encrypt(key, settings.Value)
+		if err != nil {
+			return err
+		}
 	}
 
 	return db.Save(settings).Error
