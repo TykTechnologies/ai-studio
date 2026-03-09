@@ -115,6 +115,71 @@ func TestConcurrentSafety(t *testing.T) {
 	deny(t, l, "key")
 }
 
+func TestCount(t *testing.T) {
+	ctx := t.Context()
+	backend := memory.New(ctx, time.Minute)
+	window := time.Minute
+
+	// Count on empty key
+	count, err := backend.Count(ctx, "empty", window)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0, got %d", count)
+	}
+
+	// Record some hits and count
+	backend.Record(ctx, "counted", window)
+	backend.Record(ctx, "counted", window)
+	count, err = backend.Count(ctx, "counted", window)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected 2, got %d", count)
+	}
+}
+
+func TestOldest_Empty(t *testing.T) {
+	ctx := t.Context()
+	backend := memory.New(ctx, time.Minute)
+
+	oldest, err := backend.Oldest(ctx, "noexist", time.Minute)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !oldest.IsZero() {
+		t.Fatalf("expected zero time, got %v", oldest)
+	}
+}
+
+func TestRemoveStale_DeletesEmptyKeepsNonEmpty(t *testing.T) {
+	ctx := t.Context()
+	// Short cleanup interval to trigger removeStale quickly
+	backend := memory.New(ctx, 10*time.Millisecond)
+
+	// Record a hit with a long window so it stays
+	backend.Record(ctx, "stays", time.Minute)
+	// Record a hit with a tiny window, then prune it to 0 via Count
+	backend.Record(ctx, "expires", time.Nanosecond)
+	time.Sleep(time.Millisecond)
+	// Count prunes old timestamps — entry now has 0 timestamps
+	backend.Count(ctx, "expires", time.Nanosecond)
+
+	// Wait for removeStale to run and delete the empty entry
+	time.Sleep(30 * time.Millisecond)
+
+	// "stays" should still be countable (non-empty entry kept)
+	count, err := backend.Count(ctx, "stays", time.Minute)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1, got %d", count)
+	}
+}
+
 func TestCleanupStopsOnCancel(t *testing.T) {
 	ctx := t.Context()
 	backend := memory.New(ctx, 10*time.Millisecond)

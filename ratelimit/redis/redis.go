@@ -48,11 +48,7 @@ func (b *Backend) Record(ctx context.Context, key string, window time.Duration) 
 		return 0, fmt.Errorf("redis record pipeline: %w", err)
 	}
 
-	count, err := countCmd.Result()
-	if err != nil {
-		return 0, fmt.Errorf("redis zcard: %w", err)
-	}
-	return int(count), nil
+	return int(countCmd.Val()), nil
 }
 
 func (b *Backend) Count(ctx context.Context, key string, window time.Duration) (int, error) {
