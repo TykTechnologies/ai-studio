@@ -419,7 +419,7 @@ const ChatForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth error={!!errors.llm_settings_id}>
+              <FormControl fullWidth required error={!!errors.llm_settings_id}>
                 <InputLabel>LLM Settings</InputLabel>
                 <Select
                   name="llm_settings_id"
@@ -441,7 +441,7 @@ const ChatForm = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth error={!!errors.llm_id}>
+              <FormControl fullWidth required error={!!errors.llm_id}>
                 <InputLabel>LLM</InputLabel>
                 <Select
                   name="llm_id"
