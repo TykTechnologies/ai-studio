@@ -99,17 +99,18 @@ func DefaultLLMSettings() []LLMSettings {
 		{ModelName: "gpt-4o", Temperature: 1.0, MaxTokens: 16384, MaxLength: 128000},
 		{ModelName: "gpt-4o-mini", Temperature: 1.0, MaxTokens: 16384, MaxLength: 128000},
 		// Anthropic Claude 4.6 Family - temperature=1.0 is default, 64K max output
-		{ModelName: "claude-opus-4-6", Temperature: 1.0, MaxTokens: 64000, TopP: 1.0, MaxLength: 200000},
+		// Anthropic does not allow temperature and top_p together. TopP=0 means not sent.
+		{ModelName: "claude-opus-4-6", Temperature: 1.0, MaxTokens: 64000, MaxLength: 200000},
 		// Anthropic Claude 4.5 Family (December 2025) - temperature=1.0 is default, 64K max output
-		{ModelName: "claude-opus-4-5-20251101", Temperature: 1.0, MaxTokens: 64000, TopP: 1.0, MaxLength: 200000},
-		{ModelName: "claude-sonnet-4-5-20250929", Temperature: 1.0, MaxTokens: 64000, TopP: 1.0, MaxLength: 200000},
-		{ModelName: "claude-haiku-4-5-20251001", Temperature: 1.0, MaxTokens: 64000, TopP: 1.0, MaxLength: 200000},
+		{ModelName: "claude-opus-4-5-20251101", Temperature: 1.0, MaxTokens: 64000, MaxLength: 200000},
+		{ModelName: "claude-sonnet-4-5-20250929", Temperature: 1.0, MaxTokens: 64000, MaxLength: 200000},
+		{ModelName: "claude-haiku-4-5-20251001", Temperature: 1.0, MaxTokens: 64000, MaxLength: 200000},
 		// Anthropic Claude 4 Family
-		{ModelName: "claude-sonnet-4-20250514", Temperature: 1.0, MaxTokens: 16384, TopP: 1.0, MaxLength: 200000},
-		{ModelName: "claude-opus-4-20250514", Temperature: 1.0, MaxTokens: 32768, TopP: 1.0, MaxLength: 200000},
+		{ModelName: "claude-sonnet-4-20250514", Temperature: 1.0, MaxTokens: 16384, MaxLength: 200000},
+		{ModelName: "claude-opus-4-20250514", Temperature: 1.0, MaxTokens: 32768, MaxLength: 200000},
 		// Anthropic Claude 3.5 Family (Legacy)
-		{ModelName: "claude-3-5-sonnet-20241022", Temperature: 1.0, MaxTokens: 8192, TopP: 1.0, MaxLength: 200000},
-		{ModelName: "claude-3-5-haiku-20241022", Temperature: 1.0, MaxTokens: 8192, TopP: 1.0, MaxLength: 200000},
+		{ModelName: "claude-3-5-sonnet-20241022", Temperature: 1.0, MaxTokens: 8192, MaxLength: 200000},
+		{ModelName: "claude-3-5-haiku-20241022", Temperature: 1.0, MaxTokens: 8192, MaxLength: 200000},
 		// Google Gemini 3 Family (December 2025) - temperature=1.0 is default, top_k=40 is typical
 		{ModelName: "gemini-3-pro-preview", Temperature: 1.0, MaxTokens: 65536, TopP: 0.95, TopK: 40, MaxLength: 1048576},
 		// Google Gemini 2.5 Family
