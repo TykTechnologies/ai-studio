@@ -5,7 +5,7 @@ weight: 1
 
 # Docker Compose Deployment
 
-This guide covers deploying Tyk AI Studio using Docker Compose, with optional Microgateway for distributed hub-spoke architectures.
+This guide covers deploying Tyk AI Studio with a Microgateway using Docker Compose. AI Studio acts as the **control plane** (hub) and the Microgateway acts as the **data plane** (spoke), receiving configuration via gRPC.
 
 ## Prerequisites
 
@@ -19,10 +19,10 @@ Tyk AI Studio is available in two editions:
 
 | Component | Community Edition | Enterprise Edition |
 |-----------|------------------|--------------------|
-| AI Studio | `tykio/tyk-ai-studio:latest` | `tykio/tyk-ai-studio:latest-ent` |
-| Microgateway | `tykio/microgateway:latest` | `tykio/microgateway:latest-ent` |
+| AI Studio | `tykio/tyk-ai-studio` | `tykio/tyk-ai-studio-ent` |
+| Microgateway | `tykio/tyk-microgateway` | `tykio/tyk-microgateway-ent` |
 
-Enterprise Edition includes SSO, edge gateways, model router, and plugin marketplace features. Replace the image tags in the examples below according to your edition.
+Images are tagged with semver versions (e.g. `v2.0.0-rc4`, `v2.0.0-rc4.3`). There is no `latest` tag — always specify a version. Enterprise Edition includes SSO, edge gateways, model router, and plugin marketplace features. Replace the image names and tags in the examples below according to your edition.
 
 ## Generate Secrets
 
@@ -46,119 +46,7 @@ Save these values — you will need them for both the AI Studio and Microgateway
 
 ---
 
-## Option A: AI Studio Standalone
-
-This is the simplest deployment — AI Studio with its embedded gateway and a PostgreSQL database. Suitable for single-instance setups where you don't need a separate Microgateway.
-
-### 1. Create Directory Structure
-
-```bash
-mkdir -p tyk-ai-studio/confs
-cd tyk-ai-studio
-```
-
-### 2. Create `compose.yaml`
-
-```yaml
-services:
-  tyk-ai-studio:
-    image: tykio/tyk-ai-studio:latest
-    volumes:
-      - ./confs/studio.env:/app/.env
-    env_file:
-      - ./confs/studio.env
-    depends_on:
-      - postgres
-    ports:
-      - "8080:8080"   # Admin UI + REST API
-      - "9090:9090"   # Embedded AI Gateway
-    restart: always
-
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: tyk
-      POSTGRES_PASSWORD: your-db-password
-      POSTGRES_DB: tyk_ai_studio
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    restart: always
-
-volumes:
-  pgdata:
-```
-
-### 3. Create `confs/studio.env`
-
-```env
-# =============================================================================
-# Core Settings
-# =============================================================================
-DEVMODE=true  # Set to false when using HTTPS; required for login over plain HTTP
-ALLOW_REGISTRATIONS=true
-SITE_URL=http://localhost:8080
-ADMIN_EMAIL=admin@example.com
-FROM_EMAIL=noreply@example.com
-
-# =============================================================================
-# Database
-# =============================================================================
-DATABASE_TYPE=postgres
-DATABASE_URL=postgresql://tyk:your-db-password@postgres:5432/tyk_ai_studio?sslmode=disable
-
-# =============================================================================
-# Security — CHANGE THESE (use values from "Generate Secrets" above)
-# =============================================================================
-TYK_AI_SECRET_KEY=CHANGE-ME-generate-with-openssl-rand-hex-16
-MICROGATEWAY_ENCRYPTION_KEY=CHANGE-ME-generate-with-openssl-rand-hex-16
-
-# =============================================================================
-# Logging
-# =============================================================================
-LOG_LEVEL=info
-
-# =============================================================================
-# Enterprise Edition Only
-# =============================================================================
-# TYK_AI_LICENSE=your-license-key
-
-# =============================================================================
-# Plugin Marketplace (Optional — enables browsing and installing plugins)
-# =============================================================================
-# AI_STUDIO_OCI_CACHE_DIR must be set to enable the marketplace.
-# Without it, the Marketplace page will be empty.
-AI_STUDIO_OCI_CACHE_DIR=./cache/plugins
-
-# =============================================================================
-# SMTP (Optional — required for email invites/notifications)
-# =============================================================================
-# SMTP_SERVER=smtp.example.com
-# SMTP_PORT=587
-# SMTP_USER=apikey
-# SMTP_PASS=your-smtp-password
-```
-
-### 4. Start Services
-
-```bash
-docker compose up -d
-```
-
-### 5. Verify
-
-```bash
-docker compose ps
-```
-
-Access the AI Studio UI at `http://localhost:8080` and the embedded gateway at `http://localhost:9090`.
-
----
-
-## Option B: AI Studio + Microgateway (Hub-Spoke)
-
-This deployment adds a Microgateway as a separate edge gateway. AI Studio acts as the **control plane** (hub) and the Microgateway acts as the **data plane** (spoke), receiving configuration via gRPC.
-
-This is the recommended production architecture — it separates management from request processing and enables distributed deployments.
+## Setup
 
 ### 1. Create Directory Structure
 
@@ -176,30 +64,34 @@ networks:
 
 services:
   tyk-ai-studio:
-    image: tykio/tyk-ai-studio:latest
+    image: tykio/tyk-ai-studio:v2.0.0-rc4  # Enterprise: tykio/tyk-ai-studio-ent:v2.0.0-rc4
     networks:
       - tyk-network
     volumes:
-      - ./confs/studio.env:/app/.env
+      - ./confs/studio.env:/opt/tyk-ai-studio/.env
     env_file:
       - ./confs/studio.env
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     ports:
       - "8080:8080"   # Admin UI + REST API
       - "9090:9090"   # Embedded AI Gateway
     restart: always
 
   microgateway:
-    image: tykio/microgateway:latest
+    image: tykio/tyk-microgateway:v2.0.0-rc4  # Enterprise: tykio/tyk-microgateway-ent:v2.0.0-rc4
     networks:
       - tyk-network
     volumes:
-      - ./confs/microgateway.env:/app/.env
-      - ./confs/analytics-pulse.yaml:/app/analytics-pulse.yaml
-      - ./mgw-data:/app/data
+      - ./confs/microgateway.env:/opt/tyk-microgateway/.env
+      - ./confs/analytics-pulse.yaml:/opt/tyk-microgateway/analytics-pulse.yaml
+      - ./mgw-data:/opt/tyk-microgateway/data
     env_file:
       - ./confs/microgateway.env
+    depends_on:
+      tyk-ai-studio:
+        condition: service_started
     ports:
       - "9091:8080"   # AI Gateway (external 9091 -> internal 8080)
     restart: always
@@ -214,6 +106,12 @@ services:
       POSTGRES_DB: tyk_ai_studio
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tyk -d tyk_ai_studio"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: always
 
 volumes:
@@ -266,9 +164,9 @@ DATASOURCE_DISPLAY_URL=http://localhost:9091
 LOG_LEVEL=info
 
 # =============================================================================
-# Enterprise Edition Only
+# Enterprise Edition — REQUIRED for EE images, must be set before first start
 # =============================================================================
-# TYK_AI_LICENSE=your-license-key
+TYK_AI_LICENSE=your-license-key
 
 # =============================================================================
 # Plugin Marketplace (Optional — enables browsing and installing plugins)
@@ -340,7 +238,7 @@ ANALYTICS_RETENTION_DAYS=90
 # =============================================================================
 # Analytics Pulse Plugin (sends data to control plane)
 # =============================================================================
-PLUGINS_CONFIG_PATH=/app/analytics-pulse.yaml
+PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/analytics-pulse.yaml
 
 # =============================================================================
 # Cache
@@ -354,9 +252,9 @@ CACHE_TTL=1h
 LOG_LEVEL=info
 
 # =============================================================================
-# Enterprise Edition Only
+# Enterprise Edition — REQUIRED for EE images, must be set before first start
 # =============================================================================
-# TYK_AI_LICENSE=your-license-key
+TYK_AI_LICENSE=your-license-key
 ```
 
 ### 5. Create `confs/analytics-pulse.yaml`
@@ -417,7 +315,7 @@ Access points:
 
 ## Shared Secrets Reference
 
-When running AI Studio with a Microgateway, these values **must match** between the two configuration files:
+These values **must match** between the AI Studio and Microgateway configuration files:
 
 | AI Studio Variable | Microgateway Variable | Purpose |
 |---|---|---|
@@ -431,7 +329,7 @@ When running AI Studio with a Microgateway, these values **must match** between 
 |------|-----------|---------|
 | 8080 | AI Studio | Admin UI + REST API |
 | 9090 | AI Studio | Embedded AI Gateway |
-| 9080 | AI Studio | gRPC control server (internal, hub-spoke only) |
+| 9080 | AI Studio | gRPC control server (internal) |
 | 9091 | Microgateway | Edge AI Gateway (mapped from internal 8080) |
 | 5432 | PostgreSQL | Database |
 

@@ -18,4 +18,4 @@ EXPOSE $PORTS
 WORKDIR /opt/tyk-ai-studio/
 
 ENTRYPOINT ["/opt/tyk-ai-studio/tyk-ai-studio" ]
-CMD [ "--conf=/opt/tyk-ai-studio/tyk-ai-studio.conf" ]
+CMD [ "-env=/opt/tyk-ai-studio/.env" ]
