@@ -109,12 +109,29 @@ type RateLimitConfig struct {
 	Enabled bool   // Enable rate limiting (default: true)
 	Backend string // "memory" (default) or "redis"
 	Redis   RateLimitRedisConfig
+	Rules   RateLimitRules
 }
 
 // RateLimitRedisConfig holds Redis-specific rate limit configuration.
 type RateLimitRedisConfig struct {
 	URL       string // Redis URL (e.g. "redis://localhost:6379/0")
 	KeyPrefix string // Key prefix for namespacing (default: "tyk:ratelimit:")
+}
+
+// RateLimitRule defines a rate limit: max requests per window.
+type RateLimitRule struct {
+	Limit  int
+	Window time.Duration
+}
+
+// RateLimitRules holds per-endpoint rate limit configuration.
+type RateLimitRules struct {
+	LoginIP           RateLimitRule // Per-IP limit on /auth/login (default: 10/1m)
+	LoginAccount      RateLimitRule // Per-IP+email limit on /auth/login (default: 5/1m)
+	Register          RateLimitRule // Per-IP limit on /auth/register (default: 3/1m)
+	ForgotPassword    RateLimitRule // Per-email limit on /auth/forgot-password (default: 2/5m)
+	ResendVerify      RateLimitRule // Per-email limit on /auth/resend-verification (default: 3/5m)
+	OAuthToken        RateLimitRule // Per-IP limit on /oauth/token (default: 10/1m)
 }
 
 // QueueConfig holds configuration for message queues
@@ -548,6 +565,21 @@ func getConfigFromEnv(envFile string) *AppConf {
 		conf.RateLimit.Redis.KeyPrefix = v
 	}
 
+	conf.RateLimit.Rules = RateLimitRules{
+		LoginIP:        RateLimitRule{Limit: 10, Window: time.Minute},
+		LoginAccount:   RateLimitRule{Limit: 5, Window: time.Minute},
+		Register:       RateLimitRule{Limit: 3, Window: time.Minute},
+		ForgotPassword: RateLimitRule{Limit: 2, Window: 5 * time.Minute},
+		ResendVerify:   RateLimitRule{Limit: 3, Window: 5 * time.Minute},
+		OAuthToken:     RateLimitRule{Limit: 10, Window: time.Minute},
+	}
+	parseRateLimitRule("TYK_AI_RATE_LIMIT_LOGIN_IP", &conf.RateLimit.Rules.LoginIP)
+	parseRateLimitRule("TYK_AI_RATE_LIMIT_LOGIN_ACCOUNT", &conf.RateLimit.Rules.LoginAccount)
+	parseRateLimitRule("TYK_AI_RATE_LIMIT_REGISTER", &conf.RateLimit.Rules.Register)
+	parseRateLimitRule("TYK_AI_RATE_LIMIT_FORGOT_PASSWORD", &conf.RateLimit.Rules.ForgotPassword)
+	parseRateLimitRule("TYK_AI_RATE_LIMIT_RESEND_VERIFY", &conf.RateLimit.Rules.ResendVerify)
+	parseRateLimitRule("TYK_AI_RATE_LIMIT_OAUTH_TOKEN", &conf.RateLimit.Rules.OAuthToken)
+
 	return conf
 }
 
@@ -865,6 +897,32 @@ func Get(envFile string) *AppConf {
 // This is primarily for testing purposes to ensure test isolation
 func ResetGlobalConfig() {
 	globalConfig = nil
+}
+
+// parseRateLimitRule parses a "limit/window" env var (e.g. "10/1m", "5/30s") into a RateLimitRule.
+// If the env var is empty, the rule is left unchanged. If malformed, a warning is logged.
+func parseRateLimitRule(envVar string, rule *RateLimitRule) {
+	value := os.Getenv(envVar)
+	if value == "" {
+		return
+	}
+	parts := strings.SplitN(value, "/", 2)
+	if len(parts) != 2 {
+		cfgLog.Warn().Msgf("Invalid rate limit rule for %s: %q (expected format: limit/window, e.g. 10/1m)", envVar, value)
+		return
+	}
+	limit, err := strconv.Atoi(parts[0])
+	if err != nil || limit <= 0 {
+		cfgLog.Warn().Msgf("Invalid rate limit count for %s: %q", envVar, parts[0])
+		return
+	}
+	window, err := time.ParseDuration(parts[1])
+	if err != nil || window <= 0 {
+		cfgLog.Warn().Msgf("Invalid rate limit window for %s: %q", envVar, parts[1])
+		return
+	}
+	rule.Limit = limit
+	rule.Window = window
 }
 
 // parseDurationWithDefault parses a duration from an environment variable with a default fallback
