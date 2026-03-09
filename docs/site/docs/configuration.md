@@ -19,44 +19,47 @@ This guide covers the essential first steps to take within the Tyk AI Studio UI 
 
 ## 1. First Login
 
-1.  **Access the UI:** Open your web browser and navigate to the `SITE_URL` (or the Ingress host configured for `app.yourdomain.com`) specified during deployment.
-2.  **Admin Credentials:** Log in using the initial administrator credentials. This is typically:
-    *   **Email:** The `ADMIN_EMAIL` configured during deployment (e.g., `admin@yourdomain.com`).
-    *   **Password:** Check the deployment logs or default configuration for the initial admin password setup. You may be required to set a new password upon first login.
+1.  **Access the UI:** Open your web browser and navigate to the `SITE_URL` specified during deployment (e.g., `http://localhost:8080`).
+2.  **Register an account:** If `ALLOW_REGISTRATIONS=true` (the default for new deployments), click **Register** to create your admin account. The first registered user automatically becomes the administrator.
 
-## 2. Configure Your First LLM
+## 2. Add Your LLM API Keys
 
-One of the most common initial steps is connecting Tyk AI Studio to an LLM provider.
+Tyk AI Studio pre-populates OpenAI and Anthropic LLM configurations on first startup. These are already wired to placeholder secrets (`OPENAI_KEY` and `ANTHROPIC_KEY`) — you just need to fill in your actual API keys.
 
-1.  **Navigate to LLM Management:** In the admin UI sidebar, find the section for LLM Management (or similar) and select it.
-2.  **Add LLM Configuration:** Click the button to add a new LLM Configuration.
-3.  **Select Provider:** Choose the LLM provider you want to connect (e.g., OpenAI, Anthropic, Google Vertex AI, Ollama).
-4.  **Enter Details:**
-    *   **Configuration Name:** Give it a recognizable name (e.g., `OpenAI-GPT-4o`).
-    *   **Model Name(s):** Specify the exact model identifier(s) provided by the vendor (e.g., `gpt-4o`, `gpt-4-turbo`).
-    *   **API Key (Using Secrets):**
-        *   **IMPORTANT:** Do *not* paste your API key directly here. Instead, use [Secrets Management](./secrets.md).
-        *   If you haven't already, go to the **Secrets** section in the admin UI and create a new secret:
-            *   **Variable Name:** `OPENAI_API_KEY` (or similar)
-            *   **Secret Value:** Paste your actual OpenAI API key here.
-            *   Save the secret.
-        *   Return to the LLM Configuration screen.
-        *   In the API Key field, enter the secret reference: `$SECRET/OPENAI_API_KEY` (using the exact Variable Name you created).
-    *   **Other Parameters:** Configure any other provider-specific settings (e.g., Base URL for Azure/custom endpoints, default temperature, etc.).
-5.  **Save:** Save the LLM configuration.
+1.  **Navigate to Secrets:** In the admin UI sidebar, go to **Governance → Secrets**.
+2.  **Edit `OPENAI_KEY`:** Click on the `OPENAI_KEY` secret, then click **Edit** and paste your OpenAI API key.
+3.  **Edit `ANTHROPIC_KEY`:** Do the same for `ANTHROPIC_KEY` with your Anthropic API key.
 
-This LLM is now available for use within Tyk AI Studio, subject to [User/Group permissions](./user-management.md).
+The pre-created LLM configs reference these secrets using the format `$SECRET/OPENAI_KEY`. For more on secrets management, see the [Secrets](./secrets.md) documentation.
+
+### Adding More LLM Providers
+
+To connect additional providers (Google Vertex AI, Ollama, Azure, etc.):
+
+1.  Navigate to **LLM Management** in the sidebar and click **Add LLM Configuration**.
+2.  Select the provider and enter the configuration details (name, model identifiers, base URL if applicable).
+3.  For the API key, create a new secret in **Governance → Secrets** and reference it as `$SECRET/YOUR_SECRET_NAME` in the API Key field.
 
 For more details, see the [LLM Management](./llm-management.md) documentation.
 
-## 3. Verify Core System Settings
+## 3. Push Configuration to Edge Gateways
+
+If you are running a Microgateway (hub-spoke deployment), you need to push the updated configuration after adding your API keys:
+
+1.  Navigate to **AI Portal → Edge Gateways** in the sidebar.
+2.  Verify your edge gateway shows as **Connected**.
+3.  Click **Push Configuration** to sync the latest settings.
+
+Once the sync status shows **Synced**, the Microgateway is ready to proxy LLM requests. This LLM is now available for use within Tyk AI Studio, subject to [User/Group permissions](./user-management.md).
+
+## 4. Verify Core System Settings
 
 While most core settings are configured during deployment, you can usually review them within the administration UI:
 
 *   **Site URL:** Check that the base URL for accessing the portal is correct.
 *   **Email Configuration:** If using features like user invites or notifications, ensure SMTP settings are correctly configured and test email delivery if possible ([Notifications](./notifications.md)).
 
-## 4. Configuration Reference (Deployment)
+## 5. Configuration Reference (Deployment)
 
 Remember that fundamental system parameters are typically set via environment variables or Helm values *during deployment*. This includes:
 
@@ -65,11 +68,11 @@ Remember that fundamental system parameters are typically set via environment va
 *   License Key (`TYK_AI_LICENSE`)
 *   Secrets Encryption Key (`TYK_AI_SECRET_KEY`)
 *   Base URL (`SITE_URL`)
-*   Email Server Settings (`SMTP_*`, `FROM_EMAIL`, `ADMIN_EMAIL`)
+*   Email Server Settings (`SMTP_*`, `FROM_EMAIL`)
 *   Registration Settings (`ALLOW_REGISTRATIONS`, `FILTER_SIGNUP_DOMAINS`)
 
 ### Message Queue Configuration
-*   Queue Type (`QUEUE_TYPE`): `inmemory` (default) or `nats`
+*   Queue Type (`QUEUE_TYPE`): `inmemory` (default), `nats`, or `postgres`
 *   Buffer Size (`QUEUE_BUFFER_SIZE`): Default 100
 
 ### NATS Configuration (when QUEUE_TYPE=nats)
@@ -82,7 +85,7 @@ For detailed NATS configuration options, see the [NATS Configuration Guide](./na
 
 Refer to the **Configuration Options** detailed within the [Installation Guide](./deployment-helm-k8s.md) for specifics on setting these values during the deployment process.
 
-## 5. Namespace Support (Enterprise)
+## 6. Namespace Support (Enterprise)
 
 > **Note:** Namespace support is an **Enterprise Edition** feature for hub-and-spoke deployments.
 
@@ -129,7 +132,7 @@ When creating resources (LLMs, Apps, Filters, etc.), you can specify a `namespac
 
 Edge instances register with the hub using their namespace identifier, and only receive configuration relevant to their namespace.
 
-## 6. Enable the Plugin Marketplace
+## 7. Enable the Plugin Marketplace
 
 The Plugin Marketplace lets you browse and install community plugins directly from the admin UI. It is enabled by default (`MARKETPLACE_ENABLED=true`), but requires the `AI_STUDIO_OCI_CACHE_DIR` environment variable to be set. **Without it, the Marketplace page will appear empty.**
 
@@ -137,7 +140,7 @@ Set this variable in your deployment configuration:
 
 | Deployment Method | Where to Set |
 |---|---|
-| Docker Compose | Add `AI_STUDIO_OCI_CACHE_DIR=./cache/plugins` to your `studio.env` |
+| Docker Compose | Add `AI_STUDIO_OCI_CACHE_DIR=./data/cache/plugins` to your `studio.env` |
 | Helm / Kubernetes | Set `config.ociCacheDir: "./cache/plugins"` in your values file |
 | Bare Metal / VM | Add `AI_STUDIO_OCI_CACHE_DIR=/opt/tyk-ai-studio/cache/plugins` to `/etc/default/tyk-ai-studio` |
 

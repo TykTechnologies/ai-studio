@@ -701,8 +701,17 @@ func (p *Proxy) executeBufferedResponseHooks(capture *bufferedResponseCapture, l
 		currentHeaders = headerReq.Headers // Use original if not modified
 	}
 
+	capturedBody := capture.CapturedBody()
+
+	// CapturedBody() returns decompressed data, so strip Content-Encoding
+	// to ensure plugins see consistent state (decompressed body + no encoding header).
+	// Without this, plugins like caching middleware may store decompressed body
+	// with a stale Content-Encoding header, causing client decompression errors.
+	delete(currentHeaders, "Content-Encoding")
+	currentHeaders["Content-Length"] = fmt.Sprintf("%d", len(capturedBody))
+
 	writeReq := &ResponseWriteRequest{
-		Body:    capture.CapturedBody(),
+		Body:    capturedBody,
 		Headers: currentHeaders,
 		Context: pluginCtx,
 	}
