@@ -100,7 +100,7 @@ func (s *Store) Close(ctx context.Context) error {
 func (s *Store) Create(ctx context.Context, secret *Secret) error {
 	log.Debugf("[DEBUG] CreateSecret: Got key, length: %d", len(s.rawKey))
 
-	encrypted, err := s.encryptValue(WithEncryptionMeta(ctx, "secret", secret.ID), secret.Value)
+	encrypted, err := s.encryptValue(ctx, secret.Value)
 	if err != nil {
 		log.Errorf("[DEBUG] CreateSecret: Failed to encrypt value: %v", err)
 		return err
@@ -153,7 +153,7 @@ func (s *Store) GetByVarName(ctx context.Context, name string, preserveRef bool)
 }
 
 func (s *Store) Update(ctx context.Context, secret *Secret) error {
-	encrypted, err := s.encryptValue(WithEncryptionMeta(ctx, "secret", secret.ID), secret.Value)
+	encrypted, err := s.encryptValue(ctx, secret.Value)
 	if err != nil {
 		return err
 	}
@@ -270,12 +270,10 @@ func (ks *gormKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, 
 	return &key, nil
 }
 
-func (ks *gormKeyStore) CreateKey(_ context.Context, wrappedKey string, status string, objectType string, objectID uint) (*EncryptionKey, error) {
+func (ks *gormKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
 	key := &EncryptionKey{
 		WrappedKey: wrappedKey,
 		Status:     status,
-		ObjectType: objectType,
-		ObjectID:   objectID,
 	}
 	if err := ks.db.Create(key).Error; err != nil {
 		return nil, err

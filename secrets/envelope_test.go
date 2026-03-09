@@ -34,10 +34,10 @@ func (m *memKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, er
 	return k, nil
 }
 
-func (m *memKeyStore) CreateKey(_ context.Context, wrappedKey string, status string, objectType string, objectID uint) (*EncryptionKey, error) {
+func (m *memKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	k := &EncryptionKey{ID: m.nextID, WrappedKey: wrappedKey, Status: status, ObjectType: objectType, ObjectID: objectID}
+	k := &EncryptionKey{ID: m.nextID, WrappedKey: wrappedKey, Status: status}
 	m.keys[k.ID] = k
 	m.nextID++
 	return k, nil
@@ -69,7 +69,7 @@ func seedActiveKey(t *testing.T, ks *memKeyStore, kek KEKProvider) {
 	require.NoError(t, err)
 	wrapped, err := kek.WrapKey(ctx, dek)
 	require.NoError(t, err)
-	_, err = ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive, "", 0)
+	_, err = ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
 	require.NoError(t, err)
 }
 

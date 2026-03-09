@@ -72,9 +72,8 @@ func GenerateDEK(ctx context.Context, kek KEKProvider) ([]byte, error) {
 type KeyStore interface {
 	// GetKeyByID returns an encryption key by ID for decryption.
 	GetKeyByID(ctx context.Context, id uint) (*EncryptionKey, error)
-	// CreateKey creates a new encryption key with the given wrapped key bytes
-	// and optional object metadata (type + ID of what it encrypts).
-	CreateKey(ctx context.Context, wrappedKey string, status string, objectType string, objectID uint) (*EncryptionKey, error)
+	// CreateKey creates a new encryption key with the given wrapped key bytes.
+	CreateKey(ctx context.Context, wrappedKey string, status string) (*EncryptionKey, error)
 	// ListKeys returns all encryption keys.
 	ListKeys(ctx context.Context) ([]EncryptionKey, error)
 	// UpdateKey updates an encryption key record.
@@ -125,9 +124,8 @@ func (c *EnvelopeCipher) Encrypt(ctx context.Context, _ []byte, plaintext []byte
 		return nil, fmt.Errorf("envelope encrypt: wrap dek: %w", err)
 	}
 
-	// Persist wrapped DEK with object metadata if available
-	meta, _ := encryptionMetaFromCtx(ctx)
-	encKey, err := c.keyStore.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive, meta.ObjectType, meta.ObjectID)
+	// Persist wrapped DEK
+	encKey, err := c.keyStore.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
 	if err != nil {
 		return nil, fmt.Errorf("envelope encrypt: store dek: %w", err)
 	}

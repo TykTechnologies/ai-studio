@@ -253,3 +253,69 @@ func TestRotateKey_ClearsCacheSoNewEncryptUsesNewKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "v1", got.Value)
 }
+
+func TestRotateKey_StableKeyIDReferences(t *testing.T) {
+	db := setupTestDB(t)
+	rawKey := "stable-refs"
+	ctx := context.Background()
+
+	store, err := New(db, rawKey)
+	require.NoError(t, err)
+
+	// Create secrets
+	for _, name := range []string{"A", "B", "C"} {
+		require.NoError(t, store.Create(ctx, &Secret{VarName: name, Value: "val-" + name}))
+	}
+
+	// Record key IDs before rotation
+	var beforeKeys []EncryptionKey
+	db.Order("id ASC").Find(&beforeKeys)
+	require.Len(t, beforeKeys, 3)
+
+	beforeKeyIDs := make(map[uint]uint) // key ID -> version
+	for _, k := range beforeKeys {
+		beforeKeyIDs[k.ID] = k.Version
+	}
+
+	// Record encrypted values to extract key ID references
+	var beforeSecrets []Secret
+	db.Find(&beforeSecrets)
+	beforeRefs := make(map[string]uint) // var_name -> key_id
+	for _, s := range beforeSecrets {
+		keyID, err := parseV2KeyID(s.Value)
+		require.NoError(t, err)
+		beforeRefs[s.VarName] = keyID
+	}
+
+	// Rotate
+	result, err := store.RotateKey(ctx, rawKey, rawKey)
+	require.NoError(t, err)
+	assert.Equal(t, 3, result.Rotated)
+	assert.Empty(t, result.Errors)
+
+	// Verify key IDs in secrets are unchanged
+	var afterSecrets []Secret
+	db.Find(&afterSecrets)
+	for _, s := range afterSecrets {
+		keyID, err := parseV2KeyID(s.Value)
+		require.NoError(t, err)
+		assert.Equal(t, beforeRefs[s.VarName], keyID, "key ID reference for %s should be stable", s.VarName)
+	}
+
+	// Verify no new keys were created (same count)
+	var afterKeys []EncryptionKey
+	db.Order("id ASC").Find(&afterKeys)
+	assert.Len(t, afterKeys, 3, "no new keys should be created")
+
+	// Verify versions were bumped
+	for _, k := range afterKeys {
+		assert.Equal(t, beforeKeyIDs[k.ID]+1, k.Version, "key %d version should be bumped", k.ID)
+	}
+
+	// Verify values still decrypt
+	for _, name := range []string{"A", "B", "C"} {
+		got, err := store.GetByVarName(ctx, name, false)
+		require.NoError(t, err)
+		assert.Equal(t, "val-"+name, got.Value)
+	}
+}

@@ -32,9 +32,9 @@ func (c *countingKeyStore) GetKeyByID(ctx context.Context, id uint) (*Encryption
 	return c.inner.GetKeyByID(ctx, id)
 }
 
-func (c *countingKeyStore) CreateKey(ctx context.Context, wrappedKey string, status string, objectType string, objectID uint) (*EncryptionKey, error) {
+func (c *countingKeyStore) CreateKey(ctx context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
 	c.createKeyHits.Add(1)
-	return c.inner.CreateKey(ctx, wrappedKey, status, objectType, objectID)
+	return c.inner.CreateKey(ctx, wrappedKey, status)
 }
 
 func (c *countingKeyStore) ListKeys(ctx context.Context) ([]EncryptionKey, error) {
@@ -59,11 +59,11 @@ func (f *failingKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey
 	return f.memKeyStore.GetKeyByID(context.Background(), id)
 }
 
-func (f *failingKeyStore) CreateKey(_ context.Context, wrappedKey string, status string, objectType string, objectID uint) (*EncryptionKey, error) {
+func (f *failingKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
 	if f.failCreate {
 		return nil, fmt.Errorf("db write error")
 	}
-	return f.memKeyStore.CreateKey(context.Background(), wrappedKey, status, objectType, objectID)
+	return f.memKeyStore.CreateKey(context.Background(), wrappedKey, status)
 }
 
 // --- 1. Per-object DEK tests ---
@@ -250,7 +250,7 @@ func TestCache_DecryptCorruptedWrappedDEK(t *testing.T) {
 	require.NoError(t, err)
 	wrongWrapped, err := wrongKEK.WrapKey(ctx, dek)
 	require.NoError(t, err)
-	key, err := ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrongWrapped), EncryptionKeyActive, "", 0)
+	key, err := ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrongWrapped), EncryptionKeyActive)
 	require.NoError(t, err)
 
 	c := NewEnvelopeCipher(kek, ks) // uses different KEK than what wrapped the DEK
@@ -269,7 +269,7 @@ func TestCache_InvalidBase64WrappedKey(t *testing.T) {
 	ctx := context.Background()
 
 	// Create key with invalid base64
-	key, err := ks.CreateKey(ctx, "not-valid-base64!!!", EncryptionKeyActive, "", 0)
+	key, err := ks.CreateKey(ctx, "not-valid-base64!!!", EncryptionKeyActive)
 	require.NoError(t, err)
 
 	c := NewEnvelopeCipher(kek, ks)
