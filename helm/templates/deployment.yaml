@@ -17,6 +17,13 @@ spec:
         - name: midsommar
           image: "{{ .Values.midsommar.image.repository }}:{{ .Values.midsommar.image.tag }}"
           imagePullPolicy: {{ .Values.midsommar.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: gateway
+              containerPort: 9090
+              protocol: TCP
           env:
             - name: DATABASE_TYPE
               value: {{ .Values.config.databaseType }}
@@ -28,24 +35,39 @@ spec:
                 (default 5432 .Values.database.port)
                 (default "midsommar" .Values.database.name))
                 .Values.database.url }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "midsommar.fullname" . }}-config
+            - secretRef:
+                name: {{ include "midsommar.fullname" . }}-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            successThreshold: {{ .Values.probes.liveness.successThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            successThreshold: {{ .Values.probes.readiness.successThreshold }}
           volumeMounts:
-            - name: config
-              mountPath: /app/.env
-              subPath: .env
-            {{- if .Values.config.smtpPass }}
-            - name: secrets
-              mountPath: /app/secrets
-              readOnly: true
-            {{- end }}
+            - name: data
+              mountPath: /opt/tyk-ai-studio/data
+          {{- if .Values.midsommar.resources }}
+          resources:
+            {{- toYaml .Values.midsommar.resources | nindent 12 }}
+          {{- end }}
       volumes:
-        - name: config
-          configMap:
-            name: {{ include "midsommar.fullname" . }}-config
-        {{- if .Values.config.smtpPass }}
-        - name: secrets
-          secret:
-            secretName: {{ include "midsommar.fullname" . }}-secrets
-        {{- end }}
+        - name: data
+          emptyDir: {}
 {{- if .Values.database.internal }}
 ---
 apiVersion: apps/v1
@@ -66,6 +88,10 @@ spec:
         - name: postgres
           image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
           imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
           env:
             - name: POSTGRES_USER
               value: {{ .Values.database.user }}
@@ -73,6 +99,26 @@ spec:
               value: {{ .Values.database.password }}
             - name: POSTGRES_DB
               value: {{ .Values.database.name }}
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.database.user }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.database.user }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
           {{- if .Values.postgres.resources }}
           resources:
             {{- toYaml .Values.postgres.resources | nindent 12 }}

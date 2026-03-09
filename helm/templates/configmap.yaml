@@ -3,38 +3,58 @@ kind: ConfigMap
 metadata:
   name: {{ include "midsommar.fullname" . }}-config
 data:
-  .env: |
-    {{- if .Values.config.smtpServer }}
-    SMTP_SERVER={{ .Values.config.smtpServer }}
-    {{- end }}
-    {{- if .Values.config.smtpPort }}
-    SMTP_PORT={{ .Values.config.smtpPort }}
-    {{- end }}
-    {{- if .Values.config.smtpUser }}
-    SMTP_USER={{ .Values.config.smtpUser }}
-    {{- end }}
-    {{- if .Values.config.smtpPass }}
-    SMTP_PASS={{ .Values.config.smtpPass }}
-    {{- end }}
-    ALLOW_REGISTRATIONS={{ .Values.config.allowRegistrations }}
-    ADMIN_EMAIL={{ .Values.config.adminEmail }}
-    SITE_URL={{ .Values.config.siteUrl }}
-    FROM_EMAIL={{ .Values.config.fromEmail }}
-    DEVMODE={{ .Values.config.devMode }}
-    DATABASE_TYPE={{ .Values.config.databaseType }}
-    {{- if .Values.config.filterSignupDomains }}
-    FILTER_SIGNUP_DOMAINS={{ .Values.config.filterSignupDomains }}
-    {{- end }}
-    {{- if .Values.config.databaseUrl }}
-    DATABASE_URL={{ .Values.config.databaseUrl }}
-    {{- else if .Values.database.url }}
-    DATABASE_URL={{ .Values.database.url }}
-    {{- else }}
-    DATABASE_URL=postgres://{{ .Values.database.user }}:{{ .Values.database.password }}@{{ default (printf "%s-postgres" (include "midsommar.fullname" .)) .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}
-    {{- end }}
-    {{- if .Values.config.tykAiSecretKey }}
-    TYK_AI_SECRET_KEY={{ .Values.config.tykAiSecretKey }}
-    {{- end }}
-    {{- if .Values.config.tykAiLicense }}
-    TYK_AI_LICENSE={{ .Values.config.tykAiLicense }}
-    {{- end }}
+  {{- if .Values.config.smtpServer }}
+  SMTP_SERVER: {{ .Values.config.smtpServer | quote }}
+  {{- end }}
+  {{- if .Values.config.smtpPort }}
+  SMTP_PORT: {{ .Values.config.smtpPort | quote }}
+  {{- end }}
+  {{- if .Values.config.smtpUser }}
+  SMTP_USER: {{ .Values.config.smtpUser | quote }}
+  {{- end }}
+  ALLOW_REGISTRATIONS: {{ .Values.config.allowRegistrations | quote }}
+  ADMIN_EMAIL: {{ .Values.config.adminEmail | quote }}
+  SITE_URL: {{ .Values.config.siteUrl | quote }}
+  FROM_EMAIL: {{ .Values.config.fromEmail | quote }}
+  DEVMODE: {{ .Values.config.devMode | quote }}
+  DATABASE_TYPE: {{ .Values.config.databaseType | quote }}
+  {{- if .Values.config.filterSignupDomains }}
+  FILTER_SIGNUP_DOMAINS: {{ .Values.config.filterSignupDomains | quote }}
+  {{- end }}
+  {{- if .Values.config.databaseUrl }}
+  DATABASE_URL: {{ .Values.config.databaseUrl | quote }}
+  {{- else if .Values.database.url }}
+  DATABASE_URL: {{ .Values.database.url | quote }}
+  {{- else }}
+  DATABASE_URL: {{ printf "postgres://%s:%s@%s:%v/%s" .Values.database.user .Values.database.password (default (printf "%s-postgres" (include "midsommar.fullname" .)) .Values.database.host) (default 5432 .Values.database.port) .Values.database.name | quote }}
+  {{- end }}
+  {{- /* OCI Plugin / Marketplace Configuration */}}
+  {{- if .Values.config.ociCacheDir }}
+  AI_STUDIO_OCI_CACHE_DIR: {{ .Values.config.ociCacheDir | quote }}
+  {{- end }}
+  {{- if .Values.config.ociRequireSignature }}
+  AI_STUDIO_OCI_REQUIRE_SIGNATURE: {{ .Values.config.ociRequireSignature | quote }}
+  {{- end }}
+  {{- /* Hub-Spoke: Control Plane Mode */}}
+  {{- if .Values.config.gatewayMode }}
+  GATEWAY_MODE: {{ .Values.config.gatewayMode | quote }}
+  {{- end }}
+  {{- if .Values.config.grpcPort }}
+  GRPC_PORT: {{ .Values.config.grpcPort | quote }}
+  {{- end }}
+  {{- if .Values.config.grpcHost }}
+  GRPC_HOST: {{ .Values.config.grpcHost | quote }}
+  {{- end }}
+  {{- if .Values.config.grpcTlsInsecure }}
+  GRPC_TLS_INSECURE: {{ .Values.config.grpcTlsInsecure | quote }}
+  {{- end }}
+  {{- /* Proxy / Display URLs */}}
+  {{- if .Values.config.proxyUrl }}
+  PROXY_URL: {{ .Values.config.proxyUrl | quote }}
+  {{- end }}
+  {{- if .Values.config.toolDisplayUrl }}
+  TOOL_DISPLAY_URL: {{ .Values.config.toolDisplayUrl | quote }}
+  {{- end }}
+  {{- if .Values.config.datasourceDisplayUrl }}
+  DATASOURCE_DISPLAY_URL: {{ .Values.config.datasourceDisplayUrl | quote }}
+  {{- end }}

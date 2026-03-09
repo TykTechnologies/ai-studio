@@ -1,8 +1,8 @@
 midsommar:
   image:
-    repository: tykio/midsommar
-    tag: latest
-    pullPolicy: Always
+    repository: tykio/tyk-ai-studio
+    tag: v2.0.0
+    pullPolicy: IfNotPresent
 
   # Service configuration
   service:
@@ -71,7 +71,7 @@ postgres:
   enabled: true # This will be tied to database.internal
   image:
     repository: postgres
-    tag: latest
+    tag: "16"
     pullPolicy: IfNotPresent
 
   service:
@@ -116,9 +116,26 @@ config:
   filterSignupDomains: ""
   databaseUrl: ""
 
-  # Tyk AI Configuration
+  # Tyk AI Configuration (sensitive — stored in Secret)
   tykAiSecretKey: ""
   tykAiLicense: ""
+
+  # OCI Plugin / Marketplace Configuration
+  ociCacheDir: "./data/cache/plugins"
+  ociRequireSignature: "false"  # cosign not available in distroless images
+
+  # Hub-Spoke: Control Plane Mode (leave empty to disable)
+  gatewayMode: ""           # Set to "control" to enable hub-spoke
+  grpcPort: ""              # e.g. "50051"
+  grpcHost: ""              # e.g. "0.0.0.0"
+  grpcTlsInsecure: ""       # "true" or "false"
+  grpcAuthToken: ""          # Sensitive — stored in Secret
+  microgatewayEncryptionKey: ""  # Sensitive — stored in Secret
+
+  # Proxy / Display URLs (set when using external microgateway)
+  proxyUrl: ""
+  toolDisplayUrl: ""
+  datasourceDisplayUrl: ""
 
 # Global configuration
 global:

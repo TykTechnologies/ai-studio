@@ -5,7 +5,16 @@
       "Bash(npx -y @probelabs/vow@latest consent:*)",
       "Bash(npx -y @probelabs/vow@latest rules:*)",
       "mcp__firecrawl__firecrawl_map",
-      "WebFetch(domain:ai.google.dev)"
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(docker manifest inspect tykio/tyk-ai-studio:v2.0.0-rc4)",
+      "Bash(docker manifest inspect tykio/tyk-microgateway:v2.0.0-rc4)",
+      "Bash(docker manifest inspect tykio/tyk-ai-studio-ent:v2.0.0-rc4)",
+      "Bash(docker manifest inspect tykio/tyk-microgateway-ent:v2.0.0-rc4)",
+      "Bash(docker manifest inspect tykio/tyk-ai-studio:v2.0.0-rc3)",
+      "Bash(docker manifest inspect tykio/tyk-ai-studio-ent:v2.0.0-rc3)",
+      "Bash(docker manifest inspect tykio/tyk-microgateway:v2.0.0-rc3)",
+      "Bash(docker manifest inspect tykio/tyk-microgateway-ent:v2.0.0-rc3)",
+      "Bash(helm template test .)"
     ]
   }
 }
