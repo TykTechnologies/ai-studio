@@ -45,29 +45,36 @@ func newBackend(ctx context.Context, cfg config.RateLimitConfig) ratelimit.Backe
 	return memory.New(ctx, time.Minute)
 }
 
+func newLimiterIfEnabled(backend ratelimit.Backend, rule config.RateLimitRule) *ratelimit.Limiter {
+	if !rule.Enabled {
+		return nil
+	}
+	return ratelimit.NewLimiter(backend, rule.Limit, rule.Window)
+}
+
 func setupRateLimiters(ctx context.Context, cfg config.RateLimitConfig) map[string]*rateLimitEntry {
 	backend := newBackend(ctx, cfg)
 	r := cfg.Rules
 
 	return map[string]*rateLimitEntry{
 		"login": {
-			ipLimiter:       ratelimit.NewLimiter(backend, r.LoginIP.Limit, r.LoginIP.Window),
-			compoundLimiter: ratelimit.NewLimiter(backend, r.LoginAccount.Limit, r.LoginAccount.Window),
+			ipLimiter:       newLimiterIfEnabled(backend, r.LoginIP),
+			compoundLimiter: newLimiterIfEnabled(backend, r.LoginAccount),
 			fieldName:       "email",
 		},
 		"register": {
-			ipLimiter: ratelimit.NewLimiter(backend, r.Register.Limit, r.Register.Window),
+			ipLimiter: newLimiterIfEnabled(backend, r.Register),
 		},
 		"forgot-password": {
-			fieldLimiter: ratelimit.NewLimiter(backend, r.ForgotPassword.Limit, r.ForgotPassword.Window),
+			fieldLimiter: newLimiterIfEnabled(backend, r.ForgotPassword),
 			fieldName:    "email",
 		},
 		"resend-verification": {
-			fieldLimiter: ratelimit.NewLimiter(backend, r.ResendVerify.Limit, r.ResendVerify.Window),
+			fieldLimiter: newLimiterIfEnabled(backend, r.ResendVerify),
 			fieldName:    "email",
 		},
 		"oauth-token": {
-			ipLimiter: ratelimit.NewLimiter(backend, r.OAuthToken.Limit, r.OAuthToken.Window),
+			ipLimiter: newLimiterIfEnabled(backend, r.OAuthToken),
 		},
 	}
 }

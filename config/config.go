@@ -120,18 +120,19 @@ type RateLimitRedisConfig struct {
 
 // RateLimitRule defines a rate limit: max requests per window.
 type RateLimitRule struct {
-	Limit  int
-	Window time.Duration
+	Enabled bool
+	Limit   int
+	Window  time.Duration
 }
 
 // RateLimitRules holds per-endpoint rate limit configuration.
 type RateLimitRules struct {
-	LoginIP           RateLimitRule // Per-IP limit on /auth/login (default: 10/1m)
-	LoginAccount      RateLimitRule // Per-IP+email limit on /auth/login (default: 5/1m)
-	Register          RateLimitRule // Per-IP limit on /auth/register (default: 3/1m)
-	ForgotPassword    RateLimitRule // Per-email limit on /auth/forgot-password (default: 2/5m)
-	ResendVerify      RateLimitRule // Per-email limit on /auth/resend-verification (default: 3/5m)
-	OAuthToken        RateLimitRule // Per-IP limit on /oauth/token (default: 10/1m)
+	LoginIP        RateLimitRule // Per-IP limit on /auth/login (default: 10/1m)
+	LoginAccount   RateLimitRule // Per-IP+email limit on /auth/login (default: 5/1m)
+	Register       RateLimitRule // Per-IP limit on /auth/register (default: 3/1m)
+	ForgotPassword RateLimitRule // Per-email limit on /auth/forgot-password (default: 2/5m)
+	ResendVerify   RateLimitRule // Per-email limit on /auth/resend-verification (default: 3/5m)
+	OAuthToken     RateLimitRule // Per-IP limit on /oauth/token (default: 10/1m)
 }
 
 // QueueConfig holds configuration for message queues
@@ -566,12 +567,12 @@ func getConfigFromEnv(envFile string) *AppConf {
 	}
 
 	conf.RateLimit.Rules = RateLimitRules{
-		LoginIP:        RateLimitRule{Limit: 10, Window: time.Minute},
-		LoginAccount:   RateLimitRule{Limit: 5, Window: time.Minute},
-		Register:       RateLimitRule{Limit: 3, Window: time.Minute},
-		ForgotPassword: RateLimitRule{Limit: 2, Window: 5 * time.Minute},
-		ResendVerify:   RateLimitRule{Limit: 3, Window: 5 * time.Minute},
-		OAuthToken:     RateLimitRule{Limit: 10, Window: time.Minute},
+		LoginIP:        RateLimitRule{Enabled: true, Limit: 10, Window: time.Minute},
+		LoginAccount:   RateLimitRule{Enabled: true, Limit: 5, Window: time.Minute},
+		Register:       RateLimitRule{Enabled: true, Limit: 3, Window: time.Minute},
+		ForgotPassword: RateLimitRule{Enabled: true, Limit: 2, Window: 5 * time.Minute},
+		ResendVerify:   RateLimitRule{Enabled: true, Limit: 3, Window: 5 * time.Minute},
+		OAuthToken:     RateLimitRule{Enabled: true, Limit: 10, Window: time.Minute},
 	}
 	parseRateLimitRule("TYK_AI_RATE_LIMIT_LOGIN_IP", &conf.RateLimit.Rules.LoginIP)
 	parseRateLimitRule("TYK_AI_RATE_LIMIT_LOGIN_ACCOUNT", &conf.RateLimit.Rules.LoginAccount)
@@ -902,6 +903,12 @@ func ResetGlobalConfig() {
 // parseRateLimitRule parses a "limit/window" env var (e.g. "10/1m", "5/30s") into a RateLimitRule.
 // If the env var is empty, the rule is left unchanged. If malformed, a warning is logged.
 func parseRateLimitRule(envVar string, rule *RateLimitRule) {
+	// Check for _DISABLED override (e.g. TYK_AI_RATE_LIMIT_LOGIN_IP_DISABLED=true)
+	if v := os.Getenv(envVar + "_DISABLED"); v == "true" || v == "1" {
+		rule.Enabled = false
+	}
+
+	// Parse limit/window (e.g. "10/1m")
 	value := os.Getenv(envVar)
 	if value == "" {
 		return
