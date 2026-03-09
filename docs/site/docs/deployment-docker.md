@@ -22,7 +22,7 @@ Tyk AI Studio is available in two editions:
 | AI Studio | `tykio/tyk-ai-studio` | `tykio/tyk-ai-studio-ent` |
 | Microgateway | `tykio/tyk-microgateway` | `tykio/tyk-microgateway-ent` |
 
-Images are tagged with semver versions (e.g. `v2.0.0-rc4`, `v2.0.0-rc4.3`). There is no `latest` tag — always specify a version. Enterprise Edition includes SSO, edge gateways, model router, and plugin marketplace features. Replace the image names and tags in the examples below according to your edition.
+Images are tagged with semver versions (e.g. `v2.0.0`, `v2.0.0.3`). There is no `latest` tag — always specify a version. Enterprise Edition includes SSO, edge gateways, model router, and plugin marketplace features. Replace the image names and tags in the examples below according to your edition.
 
 ## Generate Secrets
 
@@ -52,7 +52,9 @@ Save these values — you will need them for both the AI Studio and Microgateway
 
 ```bash
 mkdir -p tyk-ai-studio/confs
+mkdir -p tyk-ai-studio/studio-data
 mkdir -p tyk-ai-studio/mgw-data
+mkdir -p tyk-ai-studio/mgw-plugins
 cd tyk-ai-studio
 ```
 
@@ -64,11 +66,12 @@ networks:
 
 services:
   tyk-ai-studio:
-    image: tykio/tyk-ai-studio:v2.0.0-rc4  # Enterprise: tykio/tyk-ai-studio-ent:v2.0.0-rc4
+    image: tykio/tyk-ai-studio:v2.0.0  # Enterprise: tykio/tyk-ai-studio-ent:v2.0.0
     networks:
       - tyk-network
     volumes:
       - ./confs/studio.env:/opt/tyk-ai-studio/.env
+      - ./studio-data:/opt/tyk-ai-studio/data
     env_file:
       - ./confs/studio.env
     depends_on:
@@ -80,13 +83,14 @@ services:
     restart: always
 
   microgateway:
-    image: tykio/tyk-microgateway:v2.0.0-rc4  # Enterprise: tykio/tyk-microgateway-ent:v2.0.0-rc4
+    image: tykio/tyk-microgateway:v2.0.0  # Enterprise: tykio/tyk-microgateway-ent:v2.0.0
     networks:
       - tyk-network
     volumes:
       - ./confs/microgateway.env:/opt/tyk-microgateway/.env
       - ./confs/analytics-pulse.yaml:/opt/tyk-microgateway/analytics-pulse.yaml
       - ./mgw-data:/opt/tyk-microgateway/data
+      - ./mgw-plugins:/var/lib/microgateway
     env_file:
       - ./confs/microgateway.env
     depends_on:
@@ -173,7 +177,8 @@ TYK_AI_LICENSE=your-license-key
 # =============================================================================
 # AI_STUDIO_OCI_CACHE_DIR must be set to enable the marketplace.
 # Without it, the Marketplace page will be empty.
-AI_STUDIO_OCI_CACHE_DIR=./cache/plugins
+AI_STUDIO_OCI_CACHE_DIR=./data/cache/plugins
+AI_STUDIO_OCI_REQUIRE_SIGNATURE=false  # cosign not available in distroless images
 
 # =============================================================================
 # SMTP (Optional — required for email invites/notifications)
@@ -252,6 +257,12 @@ CACHE_TTL=1h
 LOG_LEVEL=info
 
 # =============================================================================
+# OCI Plugin Support
+# =============================================================================
+OCI_PLUGINS_CACHE_DIR=/var/lib/microgateway/plugins
+OCI_PLUGINS_REQUIRE_SIGNATURE=false  # cosign not available in distroless images
+
+# =============================================================================
 # Enterprise Edition — REQUIRED for EE images, must be set before first start
 # =============================================================================
 TYK_AI_LICENSE=your-license-key
@@ -285,6 +296,8 @@ data_collection_plugins:
 ```
 
 ### 6. Start Services
+
+> **Important:** Make sure all configuration files (`studio.env`, `microgateway.env`, `analytics-pulse.yaml`) exist before running `docker compose up`. If a file-mounted volume target does not exist, Docker will create it as a directory, causing errors.
 
 ```bash
 docker compose up -d
@@ -375,7 +388,7 @@ docker compose logs <service-name>
 The Plugin Marketplace requires `AI_STUDIO_OCI_CACHE_DIR` to be set. Without it, the marketplace service does not start and no plugins will appear. Add this to your `studio.env`:
 
 ```env
-AI_STUDIO_OCI_CACHE_DIR=./cache/plugins
+AI_STUDIO_OCI_CACHE_DIR=./data/cache/plugins
 ```
 
 Restart AI Studio after making this change. The marketplace is enabled by default (`MARKETPLACE_ENABLED=true`), but it will not function without the OCI cache directory configured.
