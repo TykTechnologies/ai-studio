@@ -380,6 +380,10 @@ AI_STUDIO_OCI_CACHE_DIR=./cache/plugins
 
 Restart AI Studio after making this change. The marketplace is enabled by default (`MARKETPLACE_ENABLED=true`), but it will not function without the OCI cache directory configured.
 
+### Plugin signature verification not available
+
+The Docker images use distroless base images which do not include the `cosign` CLI. Plugin signature verification requires cosign to be available in the container. Plugins will still install and run, but signature verification will be skipped. If you require signature verification, use a [bare metal / VM package deployment](./deployment-packages.md) where cosign can be installed on the host system.
+
 ### Port conflicts
 
 If ports 8080, 9090, or 9091 are already in use, change the **left-hand side** of the port mapping in `compose.yaml`:
