@@ -139,6 +139,7 @@ const Login = () => {
           <CaptchaWidget
             provider={captchaConfig.provider}
             siteKey={captchaConfig.site_key}
+            instanceUrl={captchaConfig.instance_url}
             onToken={setCaptchaToken}
           />
         )}

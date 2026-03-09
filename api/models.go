@@ -1036,8 +1036,9 @@ type FrontendConfig struct {
 
 // CaptchaFrontendConfig exposes CAPTCHA settings to the frontend.
 type CaptchaFrontendConfig struct {
-	Provider string `json:"provider"`
-	SiteKey  string `json:"site_key"`
+	Provider    string `json:"provider"`
+	SiteKey     string `json:"site_key"`
+	InstanceURL string `json:"instance_url,omitempty"` // mCaptcha only
 }
 
 // BrandingConfig holds branding customization settings for the frontend

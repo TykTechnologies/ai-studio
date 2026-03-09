@@ -20,6 +20,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/captcha"
 	_ "github.com/TykTechnologies/midsommar/v2/captcha/hcaptcha"
+	_ "github.com/TykTechnologies/midsommar/v2/captcha/mcaptcha"
 	_ "github.com/TykTechnologies/midsommar/v2/captcha/recaptcha"
 	_ "github.com/TykTechnologies/midsommar/v2/captcha/turnstile"
 	"github.com/TykTechnologies/midsommar/v2/config"
@@ -1096,6 +1097,9 @@ func (a *API) handleGetConfig(c *gin.Context) {
 			Provider: a.captchaProvider.Name(),
 			SiteKey:  a.captchaProvider.SiteKey(),
 		}
+		if a.captchaProvider.Name() == "mcaptcha" {
+			captchaConfig.InstanceURL = config.Get("").MCaptcha.InstanceURL
+		}
 	}
 
 	cfg := FrontendConfig{
@@ -1132,6 +1136,12 @@ func captchaCredentials(appCfg *config.AppConf) (siteKey, secretKey string, opts
 	case "turnstile":
 		siteKey = appCfg.Turnstile.SiteKey
 		secretKey = appCfg.Turnstile.SecretKey
+	case "mcaptcha":
+		siteKey = appCfg.MCaptcha.SiteKey
+		secretKey = appCfg.MCaptcha.SecretKey
+		opts = map[string]string{
+			"instance_url": appCfg.MCaptcha.InstanceURL,
+		}
 	}
 	return
 }

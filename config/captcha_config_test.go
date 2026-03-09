@@ -185,11 +185,65 @@ func TestProviderEnvPrefix(t *testing.T) {
 		{"recaptcha_v3", "RECAPTCHA"},
 		{"hcaptcha", "HCAPTCHA"},
 		{"turnstile", "TURNSTILE"},
+		{"mcaptcha", "MCAPTCHA"},
 		{"unknown", "UNKNOWN"},
 	}
 	for _, tt := range tests {
 		if got := providerEnvPrefix(tt.provider); got != tt.want {
 			t.Errorf("providerEnvPrefix(%q) = %q, want %q", tt.provider, got, tt.want)
 		}
+	}
+}
+
+func TestGetMCaptchaConfig(t *testing.T) {
+	t.Setenv("TYK_AI_MCAPTCHA_SITE_KEY", "mc-site")
+	t.Setenv("TYK_AI_MCAPTCHA_SECRET_KEY", "mc-secret")
+	t.Setenv("TYK_AI_MCAPTCHA_INSTANCE_URL", "https://captcha.example.com")
+
+	cfg := getMCaptchaConfig()
+	if cfg.SiteKey != "mc-site" {
+		t.Fatalf("expected site key 'mc-site', got %q", cfg.SiteKey)
+	}
+	if cfg.SecretKey != "mc-secret" {
+		t.Fatalf("expected secret key 'mc-secret', got %q", cfg.SecretKey)
+	}
+	if cfg.InstanceURL != "https://captcha.example.com" {
+		t.Fatalf("expected instance URL 'https://captcha.example.com', got %q", cfg.InstanceURL)
+	}
+}
+
+func TestGetCaptchaConfig_MCaptcha(t *testing.T) {
+	t.Setenv("TYK_AI_CAPTCHA_ENABLED", "true")
+	t.Setenv("TYK_AI_CAPTCHA_PROVIDER", "mcaptcha")
+
+	conf := &AppConf{
+		MCaptcha: MCaptchaConfig{
+			SiteKey:     "mc-site",
+			SecretKey:   "mc-secret",
+			InstanceURL: "https://captcha.example.com",
+		},
+	}
+	cfg := getCaptchaConfig(conf)
+	if !cfg.Enabled {
+		t.Fatal("expected enabled")
+	}
+	if cfg.Provider != "mcaptcha" {
+		t.Fatalf("expected provider 'mcaptcha', got %q", cfg.Provider)
+	}
+}
+
+func TestGetCaptchaConfig_MCaptcha_MissingInstanceURL(t *testing.T) {
+	t.Setenv("TYK_AI_CAPTCHA_ENABLED", "true")
+	t.Setenv("TYK_AI_CAPTCHA_PROVIDER", "mcaptcha")
+
+	conf := &AppConf{
+		MCaptcha: MCaptchaConfig{
+			SiteKey:   "mc-site",
+			SecretKey: "mc-secret",
+		},
+	}
+	cfg := getCaptchaConfig(conf)
+	if cfg.Enabled {
+		t.Fatal("expected disabled without instance URL")
 	}
 }

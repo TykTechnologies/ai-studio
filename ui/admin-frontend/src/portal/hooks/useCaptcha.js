@@ -11,6 +11,9 @@ import { executeRecaptchaV3 } from "../components/CaptchaWidget";
  *   setCaptchaToken – setter for explicit widget callbacks
  *   getToken       – async function that returns a fresh token (needed for reCAPTCHA v3)
  */
+/**
+ * captchaConfig shape: { provider, site_key, instance_url? }
+ */
 const useCaptcha = () => {
   const [captchaConfig, setCaptchaConfig] = useState(null);
   const [captchaToken, setCaptchaToken] = useState("");

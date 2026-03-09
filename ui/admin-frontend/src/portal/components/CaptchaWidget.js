@@ -21,7 +21,7 @@ function loadScript(src) {
   });
 }
 
-const CaptchaWidget = ({ provider, siteKey, onToken }) => {
+const CaptchaWidget = ({ provider, siteKey, instanceUrl, onToken }) => {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
   const readyRef = useRef(false);
@@ -69,7 +69,7 @@ const CaptchaWidget = ({ provider, siteKey, onToken }) => {
     if (!provider || !siteKey) return;
     readyRef.current = false;
 
-    // reCAPTCHA v3 works differently — no visible widget, token on demand
+    // reCAPTCHA v3 — invisible, token on demand
     if (provider === "recaptcha_v3") {
       const src = SCRIPT_URLS.recaptcha_v3 + siteKey;
       loadScript(src).then(() => {
@@ -82,6 +82,24 @@ const CaptchaWidget = ({ provider, siteKey, onToken }) => {
       return;
     }
 
+    // mCaptcha — uses an iframe-style vanilla widget from the instance
+    if (provider === "mcaptcha") {
+      if (!instanceUrl) return;
+      const glueUrl = `${instanceUrl}/widget/?sitekey=${siteKey}`;
+      loadScript(glueUrl).then(() => {
+        readyRef.current = true;
+      });
+      // mCaptcha widget writes the token to an input with name="mcaptcha__token".
+      // We poll for it since there's no callback API.
+      const interval = setInterval(() => {
+        const input = containerRef.current?.querySelector("input[name='mcaptcha__token']");
+        if (input && input.value) {
+          onToken(input.value);
+        }
+      }, 500);
+      return () => clearInterval(interval);
+    }
+
     // Explicit render for v2, hcaptcha, turnstile
     const callbackName =
       provider === "recaptcha_v2" ? "onRecaptchaLoad" :
@@ -91,17 +109,28 @@ const CaptchaWidget = ({ provider, siteKey, onToken }) => {
     window[callbackName] = renderWidget;
 
     loadScript(SCRIPT_URLS[provider]).then(() => {
-      // In case the script was already loaded (cached), try rendering immediately
       renderWidget();
     });
 
     return () => {
       delete window[callbackName];
     };
-  }, [provider, siteKey, renderWidget]);
+  }, [provider, siteKey, instanceUrl, renderWidget, onToken]);
 
   // reCAPTCHA v3 has no visible widget
   if (provider === "recaptcha_v3") return null;
+
+  // mCaptcha renders into the container via its glue script
+  if (provider === "mcaptcha") {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>
+        <div ref={containerRef}>
+          <div id="mcaptcha__widget-container"></div>
+          <input type="hidden" name="mcaptcha__token" />
+        </div>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>

@@ -107,6 +107,7 @@ type AppConf struct {
 	Recaptcha RecaptchaConfig
 	HCaptcha  HCaptchaConfig
 	Turnstile TurnstileConfig
+	MCaptcha  MCaptchaConfig
 }
 
 // CaptchaConfig holds the active CAPTCHA provider selection.
@@ -132,6 +133,13 @@ type HCaptchaConfig struct {
 type TurnstileConfig struct {
 	SiteKey   string
 	SecretKey string
+}
+
+// MCaptchaConfig holds mCaptcha (self-hosted, open source) credentials.
+type MCaptchaConfig struct {
+	SiteKey     string
+	SecretKey   string
+	InstanceURL string // URL of the mCaptcha instance (e.g. https://captcha.example.com)
 }
 
 // QueueConfig holds configuration for message queues
@@ -554,6 +562,8 @@ func getConfigFromEnv(envFile string) *AppConf {
 	conf.HCaptcha = getHCaptchaConfig()
 	conf.Turnstile = getTurnstileConfig()
 
+	conf.MCaptcha = getMCaptchaConfig()
+
 	// CAPTCHA provider selection
 	conf.Captcha = getCaptchaConfig(conf)
 
@@ -593,6 +603,15 @@ func getTurnstileConfig() TurnstileConfig {
 	}
 }
 
+// getMCaptchaConfig parses mCaptcha environment variables.
+func getMCaptchaConfig() MCaptchaConfig {
+	return MCaptchaConfig{
+		SiteKey:     os.Getenv("TYK_AI_MCAPTCHA_SITE_KEY"),
+		SecretKey:   os.Getenv("TYK_AI_MCAPTCHA_SECRET_KEY"),
+		InstanceURL: os.Getenv("TYK_AI_MCAPTCHA_INSTANCE_URL"),
+	}
+}
+
 // getCaptchaConfig determines whether CAPTCHA is active and which provider to use.
 func getCaptchaConfig(conf *AppConf) CaptchaConfig {
 	cfg := CaptchaConfig{}
@@ -617,6 +636,12 @@ func getCaptchaConfig(conf *AppConf) CaptchaConfig {
 		siteKey, secretKey = conf.HCaptcha.SiteKey, conf.HCaptcha.SecretKey
 	case "turnstile":
 		siteKey, secretKey = conf.Turnstile.SiteKey, conf.Turnstile.SecretKey
+	case "mcaptcha":
+		siteKey, secretKey = conf.MCaptcha.SiteKey, conf.MCaptcha.SecretKey
+		if conf.MCaptcha.InstanceURL == "" {
+			cfgLog.Warn().Msg("TYK_AI_MCAPTCHA_INSTANCE_URL is required. CAPTCHA disabled.")
+			return CaptchaConfig{}
+		}
 	default:
 		cfgLog.Warn().Msgf("Unknown TYK_AI_CAPTCHA_PROVIDER: %s. CAPTCHA disabled.", cfg.Provider)
 		return CaptchaConfig{}
@@ -642,6 +667,8 @@ func providerEnvPrefix(provider string) string {
 		return "HCAPTCHA"
 	case "turnstile":
 		return "TURNSTILE"
+	case "mcaptcha":
+		return "MCAPTCHA"
 	default:
 		return strings.ToUpper(provider)
 	}
