@@ -1,0 +1,123 @@
+package api
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/ratelimit"
+	"github.com/gin-gonic/gin"
+)
+
+type rateLimitEntry struct {
+	ipLimiter       *ratelimit.Limiter
+	compoundLimiter *ratelimit.Limiter
+	fieldLimiter    *ratelimit.Limiter
+	fieldName       string
+}
+
+func setupRateLimiters(ctx context.Context) map[string]*rateLimitEntry {
+	return map[string]*rateLimitEntry{
+		"login": {
+			ipLimiter:       ratelimit.NewLimiter(10, time.Minute, ctx),
+			compoundLimiter: ratelimit.NewLimiter(5, time.Minute, ctx),
+			fieldName:       "email",
+		},
+		"register": {
+			ipLimiter: ratelimit.NewLimiter(3, time.Minute, ctx),
+		},
+		"forgot-password": {
+			fieldLimiter: ratelimit.NewLimiter(2, 5*time.Minute, ctx),
+			fieldName:    "email",
+		},
+		"resend-verification": {
+			fieldLimiter: ratelimit.NewLimiter(3, 5*time.Minute, ctx),
+			fieldName:    "email",
+		},
+		"oauth-token": {
+			ipLimiter: ratelimit.NewLimiter(10, time.Minute, ctx),
+		},
+	}
+}
+
+func rateLimitHandler(entry *rateLimitEntry) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+
+		var fieldValue string
+		if entry.fieldName != "" && (entry.compoundLimiter != nil || entry.fieldLimiter != nil) {
+			fieldValue = extractField(c, entry.fieldName)
+		}
+
+		if entry.ipLimiter != nil {
+			if allowed, retryAfter := entry.ipLimiter.Allow(ip); !allowed {
+				rejectWithRetry(c, retryAfter)
+				return
+			}
+		}
+
+		if entry.compoundLimiter != nil && fieldValue != "" {
+			key := ip + ":" + fieldValue
+			if allowed, retryAfter := entry.compoundLimiter.Allow(key); !allowed {
+				rejectWithRetry(c, retryAfter)
+				return
+			}
+		}
+
+		if entry.fieldLimiter != nil && fieldValue != "" {
+			if allowed, retryAfter := entry.fieldLimiter.Allow(fieldValue); !allowed {
+				rejectWithRetry(c, retryAfter)
+				return
+			}
+		}
+
+		c.Next()
+	}
+}
+
+func extractField(c *gin.Context, field string) string {
+	if c.Request.Body == nil {
+		return ""
+	}
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return ""
+	}
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &parsed); err != nil {
+		return ""
+	}
+	if v, ok := parsed[field]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func rejectWithRetry(c *gin.Context, retryAfter time.Duration) {
+	seconds := int(math.Ceil(retryAfter.Seconds()))
+	if seconds < 1 {
+		seconds = 1
+	}
+	c.Header("Retry-After", fmt.Sprintf("%d", seconds))
+	c.JSON(http.StatusTooManyRequests, ErrorResponse{
+		Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{
+			{
+				Title:  "Too Many Requests",
+				Detail: fmt.Sprintf("Rate limit exceeded. Try again in %d seconds.", seconds),
+			},
+		},
+	})
+	c.Abort()
+}

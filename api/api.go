@@ -80,6 +80,7 @@ type API struct {
 	licensingService              licensing.Service
 	pluginSecurityService         plugin_security.Service
 	marketplaceManagementService  marketplace_management.Service
+	rateLimitCancel               context.CancelFunc
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
@@ -257,6 +258,10 @@ func (a *API) Run(addr string, certFile string, keyFile string) error {
 
 // Shutdown gracefully shuts down the API server
 func (a *API) Shutdown(ctx context.Context) error {
+	if a.rateLimitCancel != nil {
+		a.rateLimitCancel()
+	}
+
 	if a.server == nil {
 		return nil
 	}
@@ -365,6 +370,14 @@ func (a *API) setupRoutes() {
 	}
 	a.router.StaticFS("/logos", http.FS(logosFS))
 
+	// Set up rate limiters if enabled
+	var rlEntries map[string]*rateLimitEntry
+	if config.Get("").RateLimitEnabled {
+		var rlCtx context.Context
+		rlCtx, a.rateLimitCancel = context.WithCancel(context.Background())
+		rlEntries = setupRateLimiters(rlCtx)
+	}
+
 	// OAuth 2.0 Authorization Server Endpoints - must be registered before NoRoute
 	public := a.router.Group("/")
 	oauthGroup := public.Group("/oauth")
@@ -377,7 +390,11 @@ func (a *API) setupRoutes() {
 		oauthGroup.GET("/authorize", a.auth.AuthMiddleware(), a.handleOAuthAuthorize)
 		oauthGroup.OPTIONS("/authorize", a.handleOAuthAuthorize)
 		// Token Endpoint - typically requires client authentication
-		oauthGroup.POST("/token", a.handleOAuthToken)
+		if rlEntries != nil {
+			oauthGroup.POST("/token", rateLimitHandler(rlEntries["oauth-token"]), a.handleOAuthToken)
+		} else {
+			oauthGroup.POST("/token", a.handleOAuthToken)
+		}
 		oauthGroup.OPTIONS("/token", a.handleOAuthToken)
 
 		// Endpoints for consent screen flow - require user authentication
@@ -428,13 +445,20 @@ func (a *API) setupRoutes() {
 	portalAnalytics.GET("/budget-usage-for-app", a.getBudgetUsageForApp)
 
 	// Public routes
-	public.POST("/auth/login", a.handleLogin)
-	public.POST("/auth/register", a.handleRegister)
-	public.POST("/auth/forgot-password", a.handleForgotPassword)
+	if rlEntries != nil {
+		public.POST("/auth/login", rateLimitHandler(rlEntries["login"]), a.handleLogin)
+		public.POST("/auth/register", rateLimitHandler(rlEntries["register"]), a.handleRegister)
+		public.POST("/auth/forgot-password", rateLimitHandler(rlEntries["forgot-password"]), a.handleForgotPassword)
+		public.POST("/auth/resend-verification", rateLimitHandler(rlEntries["resend-verification"]), a.handleResendVerification)
+	} else {
+		public.POST("/auth/login", a.handleLogin)
+		public.POST("/auth/register", a.handleRegister)
+		public.POST("/auth/forgot-password", a.handleForgotPassword)
+		public.POST("/auth/resend-verification", a.handleResendVerification)
+	}
 	public.POST("/auth/reset-password", a.handleResetPassword)
 	public.GET("/auth/validate-reset-token", a.handleValidateResetToken)
 	public.GET("/auth/verify-email", a.handleVerifyEmail)
-	public.POST("/auth/resend-verification", a.handleResendVerification)
 	public.GET("/auth/config", a.handleGetConfig)
 	public.GET("/auth/features", a.handleFeatureSet)
 

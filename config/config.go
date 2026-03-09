@@ -99,6 +99,7 @@ type AppConf struct {
 
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
+	RateLimitEnabled       bool
 }
 
 // QueueConfig holds configuration for message queues
@@ -514,6 +515,11 @@ func getConfigFromEnv(envFile string) *AppConf {
 		} else if err != nil {
 			cfgLog.Warn().Msgf("Warning: Invalid DEFAULT_APP_BUDGET value: %s", defaultBudgetStr)
 		}
+	}
+
+	conf.RateLimitEnabled = true
+	if v := os.Getenv("TYK_AI_RATE_LIMIT_DISABLED"); v == "true" || v == "1" {
+		conf.RateLimitEnabled = false
 	}
 
 	return conf
