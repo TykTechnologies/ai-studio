@@ -1,17 +1,11 @@
 ---
 title: "Installation (Helm/Kubernetes)"
 weight: 2
-# bookFlatSection: false
-# bookToc: true
-# bookHidden: false
-# bookCollapseSection: false
-# bookComments: false
-# bookSearchExclude: false
 ---
 
 # Installation (Helm/Kubernetes)
 
-This guide explains how to deploy Tyk AI Studio (Tyk AI Studio), a secure and extensible AI gateway, using Helm on Kubernetes.
+This guide explains how to deploy Tyk AI Studio using Helm on Kubernetes.
 
 ## Prerequisites
 
@@ -24,14 +18,14 @@ This guide explains how to deploy Tyk AI Studio (Tyk AI Studio), a secure and ex
 
 ## Edition Selection
 
-Tyk AI Studio images are available in two editions:
+Tyk AI Studio is available in two editions:
 
 | Component | Community Edition | Enterprise Edition |
 |-----------|------------------|--------------------|
-| AI Studio | `tykio/tyk-ai-studio:latest` | `tykio/tyk-ai-studio:latest-ent` |
-| Microgateway | `tykio/microgateway:latest` | `tykio/microgateway:latest-ent` |
+| AI Studio | `tykio/tyk-ai-studio:v2.0.0` | `tykio/tyk-ai-studio-ent:v2.0.0` |
+| Microgateway | `tykio/tyk-microgateway:v2.0.0` | `tykio/tyk-microgateway-ent:v2.0.0` |
 
-Update the `image` values in your Helm values file according to your edition.
+Images are tagged with semver versions (e.g. `v2.0.0`). There is no `latest` tag — always specify a version. Update the `image` values in your Helm values file according to your edition. For Enterprise Edition, use the `-ent` suffixed image name (not a tag suffix).
 
 *Note: The following examples use placeholder values (e.g., `your-domain.com`, `your-secret-key`). Remember to replace these with your actual configuration values.*
 
@@ -39,7 +33,7 @@ Update the `image` values in your Helm values file according to your edition.
 
 Tyk AI Studio can be deployed in several configurations:
 
-1. Local Development  
+1. Local Development
 2. Production without TLS
 3. Production with TLS
 4. Production with NATS Distributed Queue
@@ -50,6 +44,9 @@ Tyk AI Studio can be deployed in several configurations:
 
 ```yaml
 midsommar:
+  image:
+    repository: tykio/tyk-ai-studio  # Enterprise: tykio/tyk-ai-studio-ent
+    tag: v2.0.0
   ingress:
     enabled: false
   service:
@@ -67,10 +64,12 @@ config:
   adminEmail: "admin@localhost"
   siteUrl: "http://localhost:32580"
   fromEmail: "noreply@localhost"
-  devMode: "true"
+  devMode: "true"  # Required for login over plain HTTP (non-HTTPS)
   databaseType: "postgres"
   tykAiSecretKey: "your-secret-key"
   tykAiLicense: "your-license"
+  ociCacheDir: "./data/cache/plugins"
+  ociRequireSignature: "false"  # cosign not available in distroless images
 
 database:
   internal: true
@@ -110,6 +109,9 @@ For a production deployment without TLS certificates:
 
 ```yaml
 midsommar:
+  image:
+    repository: tykio/tyk-ai-studio  # Enterprise: tykio/tyk-ai-studio-ent
+    tag: v2.0.0
   ingress:
     enabled: true
     certificateEnabled: false
@@ -131,10 +133,12 @@ config:
   adminEmail: "admin@yourdomain.com"
   siteUrl: "http://app.yourdomain.com"
   fromEmail: "noreply@yourdomain.com"
-  devMode: "false"
+  devMode: "true"  # Required for login over plain HTTP (non-HTTPS)
   databaseType: "postgres"
   tykAiSecretKey: "your-production-key"
   tykAiLicense: "your-production-license"
+  ociCacheDir: "./data/cache/plugins"
+  ociRequireSignature: "false"
 
 database:
   internal: false
@@ -159,6 +163,9 @@ For a secure production deployment with TLS:
 
 ```yaml
 midsommar:
+  image:
+    repository: tykio/tyk-ai-studio  # Enterprise: tykio/tyk-ai-studio-ent
+    tag: v2.0.0
   ingress:
     enabled: true
     certificateEnabled: true
@@ -189,10 +196,12 @@ config:
   adminEmail: "admin@yourdomain.com"
   siteUrl: "https://app.yourdomain.com"
   fromEmail: "noreply@yourdomain.com"
-  devMode: "false"
+  devMode: "false"  # Safe to disable when using HTTPS
   databaseType: "postgres"
   tykAiSecretKey: "your-production-key"
   tykAiLicense: "your-production-license"
+  ociCacheDir: "./data/cache/plugins"
+  ociRequireSignature: "false"
 
 database:
   internal: false
@@ -213,6 +222,9 @@ For high-availability production deployment with distributed message queuing:
 
 ```yaml
 midsommar:
+  image:
+    repository: tykio/tyk-ai-studio  # Enterprise: tykio/tyk-ai-studio-ent
+    tag: v2.0.0
   ingress:
     enabled: true
     certificateEnabled: true
@@ -247,7 +259,9 @@ config:
   databaseType: "postgres"
   tykAiSecretKey: "your-production-key"
   tykAiLicense: "your-production-license"
-  
+  ociCacheDir: "./data/cache/plugins"
+  ociRequireSignature: "false"
+
   # NATS Queue Configuration
   queueType: "nats"
   natsUrl: "nats://nats-cluster:4222"
@@ -331,6 +345,12 @@ config:
   grpcHost: "0.0.0.0"
   grpcTlsInsecure: "true"  # Set to "false" in production with TLS
   grpcAuthToken: "your-grpc-auth-token"  # Generate with: openssl rand -hex 16
+  microgatewayEncryptionKey: "your-encryption-key"  # Generate with: openssl rand -hex 16
+
+  # Point portal display URLs to the microgateway service
+  proxyUrl: "http://microgateway:8080"
+  toolDisplayUrl: "http://gateway.yourdomain.com"
+  datasourceDisplayUrl: "http://gateway.yourdomain.com"
 
 midsommar:
   service:
@@ -345,7 +365,7 @@ midsommar:
 
 ### Step 2: Create Microgateway Resources
 
-Create a `microgateway-values.yaml`:
+Create a `microgateway.yaml`:
 
 ```yaml
 apiVersion: v1
@@ -381,8 +401,8 @@ metadata:
 type: Opaque
 stringData:
   EDGE_AUTH_TOKEN: "your-grpc-auth-token"          # Must match AI Studio grpcAuthToken
-  ENCRYPTION_KEY: "your-microgateway-encryption-key" # Must match AI Studio microgatewayEncryptionKey
-  # TYK_AI_LICENSE: "your-license-key"             # Enterprise only
+  ENCRYPTION_KEY: "your-encryption-key"            # Must match AI Studio microgatewayEncryptionKey
+  TYK_AI_LICENSE: "your-license-key"               # Enterprise only
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -400,7 +420,7 @@ spec:
     spec:
       containers:
         - name: microgateway
-          image: tykio/microgateway:latest-ent
+          image: tykio/tyk-microgateway-ent:v2.0.0
           ports:
             - containerPort: 8080
           envFrom:
@@ -434,19 +454,39 @@ spec:
             - name: ANALYTICS_ENABLED
               value: "true"
             - name: PLUGINS_CONFIG_PATH
-              value: "/app/config/analytics-pulse.yaml"
+              value: "/opt/tyk-microgateway/config/analytics-pulse.yaml"
+            - name: OCI_PLUGINS_CACHE_DIR
+              value: "/var/lib/microgateway/plugins"
+            - name: OCI_PLUGINS_REQUIRE_SIGNATURE
+              value: "false"
             - name: LOG_LEVEL
               value: "info"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
           volumeMounts:
             - name: analytics-config
-              mountPath: /app/config
+              mountPath: /opt/tyk-microgateway/config
             - name: data
-              mountPath: /app/data
+              mountPath: /opt/tyk-microgateway/data
+            - name: plugins
+              mountPath: /var/lib/microgateway
       volumes:
         - name: analytics-config
           configMap:
             name: analytics-pulse-config
         - name: data
+          emptyDir: {}
+        - name: plugins
           emptyDir: {}
 ---
 apiVersion: v1
@@ -469,7 +509,7 @@ spec:
 helm upgrade midsommar . -f your-values.yaml
 
 # Deploy Microgateway resources
-kubectl apply -f microgateway-values.yaml
+kubectl apply -f microgateway.yaml
 ```
 
 ### Step 4: Add Ingress for Microgateway (Optional)
@@ -541,22 +581,22 @@ For distributed deployments with message persistence:
 config:
   queueType: "nats"
   queueBufferSize: 100
-  
+
   # NATS Connection
   natsUrl: "nats://nats-server:4222"
   natsStorageType: "file"
   natsRetentionPolicy: "interest"
   natsMaxAge: "2h"
   natsMaxBytes: 104857600
-  
+
   # NATS Authentication (choose one method)
   natsUsername: "chat_service"           # Basic auth
   natsPassword: "secure_password"        # Basic auth
   # OR
   natsToken: "your-secret-token"         # Token auth
-  # OR  
+  # OR
   natsCredentialsFile: "/etc/nats/user.creds"  # JWT auth (recommended)
-  
+
   # NATS TLS (optional)
   natsTlsEnabled: true
   natsTlsCertFile: "/etc/ssl/client-cert.pem"
@@ -677,6 +717,9 @@ kubectl logs -l app.kubernetes.io/name=midsommar
 # Database logs (if using internal database)
 kubectl logs -l app=postgres
 
+# Microgateway logs
+kubectl logs -l app=microgateway
+
 # Optional component logs
 kubectl logs -l app=reranker
 kubectl logs -l app=transformer
@@ -700,9 +743,12 @@ kubectl describe pod <pod-name>
 ```
 
 4. Common issues:
-- Database connection failures: Check credentials and network access
-- Ingress not working: Verify DNS records and TLS configuration
-- Resource constraints: Check pod resource limits and node capacity
+- **Database connection failures**: Check credentials and network access
+- **Ingress not working**: Verify DNS records and TLS configuration
+- **Resource constraints**: Check pod resource limits and node capacity
+- **Marketplace page is empty**: Set `ociCacheDir: "./data/cache/plugins"` in your config values — the marketplace service will not start without it
+- **Login fails on HTTP**: Set `devMode: "true"` — session cookies require this when not using HTTPS
+- **Plugin signature verification**: The Docker images use distroless bases which do not include cosign. Set `ociRequireSignature: "false"` to disable signature verification
 
 ## Next Steps
 

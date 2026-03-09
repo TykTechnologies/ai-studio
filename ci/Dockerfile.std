@@ -32,4 +32,4 @@ WORKDIR /opt/tyk-ai-studio/
 # Uncomment this to test in dev
 # COPY midsommar .
 ENTRYPOINT ["/opt/tyk-ai-studio/tyk-ai-studio" ]
-CMD [ "--conf=/opt/tyk-ai-studio/tyk-ai-studio.conf" ]
+CMD [ "-env=/opt/tyk-ai-studio/.env" ]

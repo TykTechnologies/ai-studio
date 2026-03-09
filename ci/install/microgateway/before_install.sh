@@ -5,4 +5,10 @@ GROUPNAME="tyk"
 USERNAME="tyk"
 
 getent group "$GROUPNAME" >/dev/null || groupadd -r "$GROUPNAME"
-getent passwd "$USERNAME" >/dev/null || useradd -r -g "$GROUPNAME" -M -s /sbin/nologin -c "Tyk service user" "$USERNAME"
+getent passwd "$USERNAME" >/dev/null || useradd -r -g "$GROUPNAME" -d /home/tyk -s /sbin/nologin -c "Tyk service user" "$USERNAME"
+
+# Ensure home directory exists (needed by cosign for signature verification cache)
+if [ ! -d /home/tyk ]; then
+    mkdir -p /home/tyk
+    chown tyk:tyk /home/tyk
+fi

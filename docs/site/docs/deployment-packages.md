@@ -9,10 +9,18 @@ This guide covers installing Tyk AI Studio and the optional Microgateway on Linu
 
 ## Prerequisites
 
-- **OS**: Ubuntu/Debian (DEB) or RHEL/CentOS/Amazon Linux (RPM)
+- **OS**: Ubuntu/Debian (DEB) or RHEL 7-9/CentOS 7-9/Amazon Linux 2/2023 (RPM)
 - **Architecture**: amd64 (x86_64), arm64 (aarch64), or s390x
+
+> **Note:** RPM packages are published for EL 7, 8, 9 and Amazon Linux 2/2023. If you are running a different RPM-based distribution (e.g. CentOS Stream 10, Fedora), you can edit the repo file to use the closest supported version:
+> ```bash
+> # Example: use el/9 packages on CentOS Stream 10
+> sudo sed -i 's/el\/10/el\/9/g' /etc/yum.repos.d/tyk_*.repo
+> sudo yum clean all
+> ```
 - **PostgreSQL 14+** (for AI Studio production use; SQLite is the default for development)
 - **systemd** (for service management)
+- **cosign** (for plugin signature verification in the Marketplace — [install instructions](https://docs.sigstore.dev/cosign/system_config/installation/))
 - Root or sudo access
 
 ## Edition Selection
@@ -107,7 +115,11 @@ The installer automatically creates a `tyk` user and group to run the service.
 Edit the environment configuration file:
 
 ```bash
-sudo nano /etc/default/tyk-ai-studio
+# Debian/Ubuntu
+sudo vi /etc/default/tyk-ai-studio
+
+# RHEL/CentOS (symlinked automatically by the installer)
+sudo vi /etc/sysconfig/tyk-ai-studio
 ```
 
 At minimum, set these values:
@@ -126,7 +138,20 @@ ADMIN_EMAIL=admin@example.com
 # Database — SQLite is default, use PostgreSQL for production
 DATABASE_TYPE=postgres
 DATABASE_URL=postgresql://user:password@localhost:5432/tyk_ai_studio?sslmode=require
+
+# Enterprise Edition — REQUIRED for EE installs
+TYK_AI_LICENSE=your-license-key
+
+# Plugin Marketplace — set this to enable the marketplace.
+# Without it, the Marketplace page will be empty.
+AI_STUDIO_OCI_CACHE_DIR=/opt/tyk-ai-studio/cache/plugins
+
+# If NOT using HTTPS, enable dev mode to allow login over plain HTTP
+# Without this, session cookies will be rejected by the browser
+DEVMODE=true
 ```
+
+> **Note:** `DEVMODE=true` disables secure cookie flags so that login works over HTTP. For production deployments with HTTPS, remove this setting.
 
 For hub-spoke deployments with a Microgateway, also set:
 
@@ -137,9 +162,15 @@ GRPC_PORT=50051
 GRPC_HOST=0.0.0.0
 GRPC_TLS_INSECURE=true
 GRPC_AUTH_TOKEN=your-generated-grpc-token
-```
 
-> **Note:** For Enterprise Edition, also set `TYK_AI_LICENSE=your-license-key`.
+# Proxy URL — point to the Microgateway so AI requests are routed through it
+PROXY_URL=http://your-microgateway-host:9091
+
+# Portal display URLs — set these to your Microgateway's address so that
+# the portal shows the correct endpoint URLs for tools and datasources
+TOOL_DISPLAY_URL=http://your-microgateway-host:9091
+DATASOURCE_DISPLAY_URL=http://your-microgateway-host:9091
+```
 
 The full default configuration file contains extensive comments explaining every option. See the [Configuration Reference](#configuration-reference) below for key variables.
 
@@ -153,7 +184,7 @@ sudo systemctl enable --now tyk-ai-studio
 
 ```bash
 sudo systemctl status tyk-ai-studio
-curl -s http://localhost:8080/api/v1/health
+curl -s http://localhost:8080/health
 ```
 
 View logs:
@@ -164,7 +195,7 @@ sudo journalctl -u tyk-ai-studio -f
 
 ---
 
-## Part 2: Install Microgateway (Optional)
+## Part 2: Install Microgateway
 
 The Microgateway is the data plane component for hub-spoke deployments. It connects to AI Studio via gRPC to receive configuration and processes AI requests locally.
 
@@ -227,15 +258,24 @@ The package installs:
 
 ### Configure Microgateway
 
+> **Important:** If you are installing the Microgateway on the **same machine** as AI Studio, you **must** change the `PORT` to something other than `8080` (e.g. `9091`) to avoid a port conflict. AI Studio already listens on port 8080.
+
 Edit the environment configuration file:
 
 ```bash
-sudo nano /etc/default/tyk-microgateway
+# Debian/Ubuntu
+sudo vi /etc/default/tyk-microgateway
+
+# RHEL/CentOS (symlinked automatically by the installer)
+sudo vi /etc/sysconfig/tyk-microgateway
 ```
 
 At minimum, set these values:
 
 ```env
+# Server port — change if running on the same host as AI Studio
+PORT=9091
+
 # Hub-Spoke: Edge Mode
 GATEWAY_MODE=edge
 CONTROL_ENDPOINT=your-studio-host:50051
@@ -249,9 +289,10 @@ ENCRYPTION_KEY=must-match-studio-MICROGATEWAY_ENCRYPTION_KEY
 # TLS — disable for initial setup, enable for production
 EDGE_ALLOW_INSECURE=true
 EDGE_TLS_ENABLED=false
-```
 
-> **Note:** For Enterprise Edition, also set `TYK_AI_LICENSE=your-license-key`.
+# Enterprise Edition — REQUIRED for EE installs
+TYK_AI_LICENSE=your-license-key
+```
 
 ### Configure Analytics Pulse
 
@@ -436,6 +477,8 @@ EDGE_ALLOW_INSECURE=false
 | `GRPC_AUTH_TOKEN` | — | gRPC authentication token |
 | `LOG_LEVEL` | `info` | `trace`, `debug`, `info`, `warn`, `error` |
 | `ALLOW_REGISTRATIONS` | `true` | Allow new user sign-ups |
+| `AI_STUDIO_OCI_CACHE_DIR` | — | OCI plugin cache directory; **must be set** for the Plugin Marketplace to work |
+| `MARKETPLACE_ENABLED` | `true` | Enable/disable the Plugin Marketplace |
 | `TYK_AI_LICENSE` | — | Enterprise license key |
 
 ### Microgateway Key Variables
@@ -519,6 +562,16 @@ sudo setsebool -P httpd_can_network_connect 1
 # Or check audit log for specific denials:
 sudo ausearch -m avc -ts recent
 ```
+
+### Marketplace page is empty
+
+The Plugin Marketplace requires `AI_STUDIO_OCI_CACHE_DIR` to be set. Without it, the marketplace service does not start and no plugins will appear. Add this to `/etc/default/tyk-ai-studio`:
+
+```env
+AI_STUDIO_OCI_CACHE_DIR=/opt/tyk-ai-studio/cache/plugins
+```
+
+Restart the service after making this change: `sudo systemctl restart tyk-ai-studio`
 
 ### Microgateway cannot connect to AI Studio
 
