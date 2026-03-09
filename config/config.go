@@ -99,6 +99,39 @@ type AppConf struct {
 
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
+
+	// CAPTCHA Configuration
+	Captcha CaptchaConfig
+
+	// Provider-specific configurations (independent of CAPTCHA selection)
+	Recaptcha RecaptchaConfig
+	HCaptcha  HCaptchaConfig
+	Turnstile TurnstileConfig
+}
+
+// CaptchaConfig holds the active CAPTCHA provider selection.
+type CaptchaConfig struct {
+	Enabled  bool
+	Provider string // "recaptcha_v2", "recaptcha_v3", "hcaptcha", "turnstile"
+}
+
+// RecaptchaConfig holds Google reCAPTCHA v2/v3 credentials and settings.
+type RecaptchaConfig struct {
+	SiteKey   string
+	SecretKey string
+	MinScore  float64 // v3 only (0.0–1.0, default 0.5)
+}
+
+// HCaptchaConfig holds hCaptcha credentials.
+type HCaptchaConfig struct {
+	SiteKey   string
+	SecretKey string
+}
+
+// TurnstileConfig holds Cloudflare Turnstile credentials.
+type TurnstileConfig struct {
+	SiteKey   string
+	SecretKey string
 }
 
 // QueueConfig holds configuration for message queues
@@ -516,7 +549,102 @@ func getConfigFromEnv(envFile string) *AppConf {
 		}
 	}
 
+	// Provider-specific CAPTCHA configurations (always loaded)
+	conf.Recaptcha = getRecaptchaConfig()
+	conf.HCaptcha = getHCaptchaConfig()
+	conf.Turnstile = getTurnstileConfig()
+
+	// CAPTCHA provider selection
+	conf.Captcha = getCaptchaConfig(conf)
+
 	return conf
+}
+
+// getRecaptchaConfig parses Google reCAPTCHA environment variables.
+func getRecaptchaConfig() RecaptchaConfig {
+	cfg := RecaptchaConfig{
+		SiteKey:   os.Getenv("TYK_AI_RECAPTCHA_SITE_KEY"),
+		SecretKey: os.Getenv("TYK_AI_RECAPTCHA_SECRET_KEY"),
+		MinScore:  0.5,
+	}
+	if scoreStr := os.Getenv("TYK_AI_RECAPTCHA_MIN_SCORE"); scoreStr != "" {
+		if score, err := strconv.ParseFloat(scoreStr, 64); err == nil && score > 0 && score <= 1.0 {
+			cfg.MinScore = score
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid TYK_AI_RECAPTCHA_MIN_SCORE value: %s. Using default 0.5", scoreStr)
+		}
+	}
+	return cfg
+}
+
+// getHCaptchaConfig parses hCaptcha environment variables.
+func getHCaptchaConfig() HCaptchaConfig {
+	return HCaptchaConfig{
+		SiteKey:   os.Getenv("TYK_AI_HCAPTCHA_SITE_KEY"),
+		SecretKey: os.Getenv("TYK_AI_HCAPTCHA_SECRET_KEY"),
+	}
+}
+
+// getTurnstileConfig parses Cloudflare Turnstile environment variables.
+func getTurnstileConfig() TurnstileConfig {
+	return TurnstileConfig{
+		SiteKey:   os.Getenv("TYK_AI_TURNSTILE_SITE_KEY"),
+		SecretKey: os.Getenv("TYK_AI_TURNSTILE_SECRET_KEY"),
+	}
+}
+
+// getCaptchaConfig determines whether CAPTCHA is active and which provider to use.
+func getCaptchaConfig(conf *AppConf) CaptchaConfig {
+	cfg := CaptchaConfig{}
+
+	enabledStr := os.Getenv("TYK_AI_CAPTCHA_ENABLED")
+	if enabledStr != "true" && enabledStr != "1" {
+		return cfg
+	}
+
+	cfg.Provider = strings.ToLower(os.Getenv("TYK_AI_CAPTCHA_PROVIDER"))
+	if cfg.Provider == "" {
+		cfgLog.Warn().Msg("TYK_AI_CAPTCHA_ENABLED=true but TYK_AI_CAPTCHA_PROVIDER is not set. CAPTCHA disabled.")
+		return CaptchaConfig{}
+	}
+
+	// Validate the selected provider has credentials
+	var siteKey, secretKey string
+	switch cfg.Provider {
+	case "recaptcha_v2", "recaptcha_v3":
+		siteKey, secretKey = conf.Recaptcha.SiteKey, conf.Recaptcha.SecretKey
+	case "hcaptcha":
+		siteKey, secretKey = conf.HCaptcha.SiteKey, conf.HCaptcha.SecretKey
+	case "turnstile":
+		siteKey, secretKey = conf.Turnstile.SiteKey, conf.Turnstile.SecretKey
+	default:
+		cfgLog.Warn().Msgf("Unknown TYK_AI_CAPTCHA_PROVIDER: %s. CAPTCHA disabled.", cfg.Provider)
+		return CaptchaConfig{}
+	}
+
+	if siteKey == "" || secretKey == "" {
+		prefix := providerEnvPrefix(cfg.Provider)
+		cfgLog.Warn().Msgf("TYK_AI_%s_SITE_KEY and TYK_AI_%s_SECRET_KEY are required. CAPTCHA disabled.", prefix, prefix)
+		return CaptchaConfig{}
+	}
+
+	cfg.Enabled = true
+	cfgLog.Info().Msgf("CAPTCHA enabled with provider: %s", cfg.Provider)
+	return cfg
+}
+
+// providerEnvPrefix maps a provider name to its env var prefix segment.
+func providerEnvPrefix(provider string) string {
+	switch provider {
+	case "recaptcha_v2", "recaptcha_v3":
+		return "RECAPTCHA"
+	case "hcaptcha":
+		return "HCAPTCHA"
+	case "turnstile":
+		return "TURNSTILE"
+	default:
+		return strings.ToUpper(provider)
+	}
 }
 
 // getQueueConfig parses queue-related environment variables

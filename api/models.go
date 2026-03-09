@@ -1030,7 +1030,14 @@ type FrontendConfig struct {
 	DocsLinks            map[string]string `json:"docsLinks"`
 	Branding             *BrandingConfig   `json:"branding,omitempty"`
 	DocsEnabled          bool              `json:"docsEnabled"`
-	DocsURL              string            `json:"docsURL,omitempty"`
+	DocsURL              string                 `json:"docsURL,omitempty"`
+	Captcha              *CaptchaFrontendConfig `json:"captcha,omitempty"`
+}
+
+// CaptchaFrontendConfig exposes CAPTCHA settings to the frontend.
+type CaptchaFrontendConfig struct {
+	Provider string `json:"provider"`
+	SiteKey  string `json:"site_key"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend

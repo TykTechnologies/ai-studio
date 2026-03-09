@@ -18,6 +18,11 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/captcha"
+	// Provider registrations — each import triggers init() which registers the provider.
+	// _ "github.com/TykTechnologies/midsommar/v2/captcha/hcaptcha"
+	// _ "github.com/TykTechnologies/midsommar/v2/captcha/recaptcha"
+	// _ "github.com/TykTechnologies/midsommar/v2/captcha/turnstile"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
@@ -80,6 +85,7 @@ type API struct {
 	licensingService              licensing.Service
 	pluginSecurityService         plugin_security.Service
 	marketplaceManagementService  marketplace_management.Service
+	captchaProvider               captcha.Provider
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
@@ -427,14 +433,33 @@ func (a *API) setupRoutes() {
 	portalAnalytics.GET("/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
 	portalAnalytics.GET("/budget-usage-for-app", a.getBudgetUsageForApp)
 
-	// Public routes
-	public.POST("/auth/login", a.handleLogin)
-	public.POST("/auth/register", a.handleRegister)
-	public.POST("/auth/forgot-password", a.handleForgotPassword)
+	// Initialize CAPTCHA provider if configured
+	appCfg := config.Get("")
+	if appCfg.Captcha.Enabled {
+		siteKey, secretKey, opts := captchaCredentials(appCfg)
+		provider, err := captcha.NewProvider(appCfg.Captcha.Provider, siteKey, secretKey, opts)
+		if err != nil {
+			logger.Error("failed to create captcha provider: " + err.Error())
+		} else {
+			a.captchaProvider = provider
+			logger.Info("CAPTCHA middleware enabled with provider: " + appCfg.Captcha.Provider)
+		}
+	}
+
+	// Public routes — CAPTCHA middleware on abuse-prone endpoints
+	captchaProtected := public.Group("/")
+	if a.captchaProvider != nil {
+		captchaProtected.Use(captchaMiddleware(a.captchaProvider))
+	}
+
+	captchaProtected.POST("/auth/login", a.handleLogin)
+	captchaProtected.POST("/auth/register", a.handleRegister)
+	captchaProtected.POST("/auth/forgot-password", a.handleForgotPassword)
+	captchaProtected.POST("/auth/resend-verification", a.handleResendVerification)
+
 	public.POST("/auth/reset-password", a.handleResetPassword)
 	public.GET("/auth/validate-reset-token", a.handleValidateResetToken)
 	public.GET("/auth/verify-email", a.handleVerifyEmail)
-	public.POST("/auth/resend-verification", a.handleResendVerification)
 	public.GET("/auth/config", a.handleGetConfig)
 	public.GET("/auth/features", a.handleFeatureSet)
 
@@ -1065,6 +1090,15 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		dataSourceDisplayURL = proxyURL
 	}
 
+	// Expose CAPTCHA config to frontend (provider + public site key only)
+	var captchaConfig *CaptchaFrontendConfig
+	if a.captchaProvider != nil {
+		captchaConfig = &CaptchaFrontendConfig{
+			Provider: a.captchaProvider.Name(),
+			SiteKey:  a.captchaProvider.SiteKey(),
+		}
+	}
+
 	cfg := FrontendConfig{
 		APIBaseURL:           apiBaseURL,
 		ProxyURL:             proxyURL,
@@ -1077,7 +1111,28 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		Branding:             brandingConfig,
 		DocsEnabled:          !config.Get("").DocsDisabled,
 		DocsURL:              config.Get("").DocsURL,
+		Captcha:              captchaConfig,
 	}
 
 	c.JSON(http.StatusOK, cfg)
+}
+
+// captchaCredentials extracts the site key, secret key, and options for the
+// configured CAPTCHA provider.
+func captchaCredentials(appCfg *config.AppConf) (siteKey, secretKey string, opts map[string]string) {
+	switch appCfg.Captcha.Provider {
+	case "recaptcha_v2", "recaptcha_v3":
+		siteKey = appCfg.Recaptcha.SiteKey
+		secretKey = appCfg.Recaptcha.SecretKey
+		opts = map[string]string{
+			"min_score": fmt.Sprintf("%f", appCfg.Recaptcha.MinScore),
+		}
+	case "hcaptcha":
+		siteKey = appCfg.HCaptcha.SiteKey
+		secretKey = appCfg.HCaptcha.SecretKey
+	case "turnstile":
+		siteKey = appCfg.Turnstile.SiteKey
+		secretKey = appCfg.Turnstile.SecretKey
+	}
+	return
 }
