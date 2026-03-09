@@ -288,6 +288,7 @@ const ChatForm = () => {
     if (chat.rag_n && (isNaN(chat.rag_n) || chat.rag_n < 0)) {
       newErrors.rag_n = "RAG N must be a non-negative number";
     }
+    if (!chat.groups || chat.groups.length === 0) newErrors.groups = "At least one team is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -352,7 +353,6 @@ const ChatForm = () => {
         display="flex"
         justifyContent="center"
         alignItems="center"
-    if (!chat.groups || chat.groups.length === 0) newErrors.groups = "At least one group is required";
         height="100vh"
       >
         <CircularProgress />
