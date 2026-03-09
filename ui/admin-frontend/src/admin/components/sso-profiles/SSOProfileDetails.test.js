@@ -225,7 +225,7 @@ describe('SSOProfileDetails', () => {
     // Check if sections are rendered
     expect(screen.getByTestId('collapsible-section-profile-details')).toBeInTheDocument();
     expect(screen.getByTestId('collapsible-section-provider-configuration')).toBeInTheDocument();
-    expect(screen.getByTestId('collapsible-section-user-group-mapping')).toBeInTheDocument();
+    expect(screen.getByTestId('collapsible-section-user-team-mapping')).toBeInTheDocument();
     
     // Check if child components are rendered with correct props
     expect(screen.getByTestId('profile-details-section')).toBeInTheDocument();
@@ -273,7 +273,7 @@ describe('SSOProfileDetails', () => {
     
     expect(screen.getByTestId('user-group-mapping-section')).toHaveAttribute(
       'groupsError',
-      'Failed to load groups. Group names may not be displayed correctly.'
+      'Failed to load teams. Team names may not be displayed correctly.'
     );
   });
 
@@ -488,6 +488,6 @@ describe('SSOProfileDetails', () => {
     // Check that no content is rendered
     expect(screen.queryByTestId('collapsible-section-profile-details')).not.toBeInTheDocument();
     expect(screen.queryByTestId('collapsible-section-provider-configuration')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('collapsible-section-user-group-mapping')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('collapsible-section-user-team-mapping')).not.toBeInTheDocument();
   });
 });

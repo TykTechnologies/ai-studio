@@ -146,12 +146,12 @@ const AgentFormFields = ({
       <Typography variant="headingMedium">Access Control</Typography>
 
       <FormControl fullWidth>
-        <InputLabel>Groups</InputLabel>
+        <InputLabel>Teams</InputLabel>
         <Select
           multiple
           value={formData.groupIds || []}
           onChange={(e) => handleChange('groupIds', e.target.value)}
-          input={<OutlinedInput label="Groups" />}
+          input={<OutlinedInput label="Teams" />}
           renderValue={(selected) => (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
               {selected.map((groupId) => {
@@ -159,7 +159,7 @@ const AgentFormFields = ({
                 return (
                   <Chip
                     key={groupId}
-                    label={group?.attributes?.name || `Group ${groupId}`}
+                    label={group?.attributes?.name || `Team ${groupId}`}
                     size="small"
                   />
                 );
@@ -171,7 +171,7 @@ const AgentFormFields = ({
           {groups.map((group) => (
             <MenuItem key={group.id} value={group.id}>
               <Checkbox checked={(formData.groupIds || []).indexOf(group.id) > -1} />
-              {group.attributes?.name || `Group ${group.id}`}
+              {group.attributes?.name || `Team ${group.id}`}
             </MenuItem>
           ))}
         </Select>

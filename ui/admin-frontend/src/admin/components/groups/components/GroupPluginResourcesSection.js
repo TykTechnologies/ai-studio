@@ -101,7 +101,7 @@ const GroupPluginResourcesSection = ({ groupId, onChange }) => {
         Plugin Resources
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Assign plugin resource instances to this group. Members will only be
+        Assign plugin resource instances to this team. Members will only be
         able to select these resources when creating apps.
       </Typography>
 
