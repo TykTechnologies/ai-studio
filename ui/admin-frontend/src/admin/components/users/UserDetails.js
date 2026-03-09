@@ -246,7 +246,7 @@ const UserDetails = () => {
           justifyContent="space-between"
           alignItems="center"
         >
-          <Typography variant="h5">Groups</Typography>
+          <Typography variant="h5">Teams</Typography>
           <PrimaryButton
             variant="contained"
             startIcon={<EditIcon />}
@@ -258,7 +258,7 @@ const UserDetails = () => {
         <Divider />
         <Box mt={4} mb={2}>
           <Typography variant="h5" sx={{ color: "black" }}>
-            Group Membership
+            Team Membership
           </Typography>
         </Box>
         {loading ? (
@@ -281,7 +281,7 @@ const UserDetails = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <StyledTableCell>User is not a member of any groups</StyledTableCell>
+                    <StyledTableCell>User is not a member of any teams</StyledTableCell>
                   </TableRow>
                 )}
               </TableBody>

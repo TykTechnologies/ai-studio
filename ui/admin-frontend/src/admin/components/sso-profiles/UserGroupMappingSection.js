@@ -43,8 +43,8 @@ const UserGroupMappingSection = ({ profileData, groups, groupsError, getGroupNam
   return (
     <>
       <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mb: 3 }}>
-        User group mapping is how you assign users to AI studio teams after Single Sign-On.
-        If you don't specify a user group mapping,
+        User team mapping is how you assign users to AI studio teams after Single Sign-On.
+        If you don't specify a user team mapping,
         users will be automatically assigned to the default team.
       </Typography>
 
@@ -57,14 +57,14 @@ const UserGroupMappingSection = ({ profileData, groups, groupsError, getGroupNam
       <Box sx={{ py: 3, borderBottom: "1px solid", borderColor: "border.neutralDefaultSubdued" }}>
         <TwoColumnLayout>
           <FieldGroup>
-            <FieldLabel variant="bodyLargeBold" sx={{ width: '40%' }}>Default user group</FieldLabel>
+            <FieldLabel variant="bodyLargeBold" sx={{ width: '40%' }}>Default user team</FieldLabel>
             <FieldValue variant="bodyLargeDefault" ml={1}>
-              {getGroupNameById(profileData.DefaultUserGroupID) || "Default group"}
+              {getGroupNameById(profileData.DefaultUserGroupID) || "Default team"}
             </FieldValue>
           </FieldGroup>
           <FieldGroup>
             <FieldLabel variant="bodyLargeBold" sx={{ minWidth: '40%', width: '40%' }}>
-              Custom user group claim name
+              Custom user team claim name
             </FieldLabel>
             <BreakableFieldValue variant="bodyLargeDefault" ml={1}>
               {profileData.CustomUserGroupField || "group"}

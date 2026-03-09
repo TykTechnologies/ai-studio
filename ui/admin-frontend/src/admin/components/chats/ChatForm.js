@@ -463,7 +463,7 @@ const ChatForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth error={!!errors.groups} required>
-                <InputLabel>Groups</InputLabel>
+                <InputLabel>Teams</InputLabel>
                 <Select
                   multiple
                   value={chat.groups}

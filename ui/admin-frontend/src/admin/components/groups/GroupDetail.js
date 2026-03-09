@@ -41,7 +41,7 @@ const GroupDetail = () => {
 
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">{error}</Typography>;
-  if (!group) return <Typography>Group not found</Typography>;
+  if (!group) return <Typography>Team not found</Typography>;
 
   const userRows = users?.map((u) => ({
     id: u.id,

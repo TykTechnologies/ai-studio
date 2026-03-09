@@ -110,7 +110,7 @@ const UserForm = () => {
       console.error("Error fetching user groups", error);
       setSnackbar({
         open: true,
-        message: "Failed to fetch user groups",
+        message: "Failed to fetch user teams",
         severity: "error",
       });
     }
@@ -197,7 +197,7 @@ const UserForm = () => {
     if (!newGroupName.trim()) {
       setSnackbar({
         open: true,
-        message: "Group name cannot be empty",
+        message: "Team name cannot be empty",
         severity: "warning",
       });
       return;
@@ -219,7 +219,7 @@ const UserForm = () => {
       setIsAddingGroup(false);
       setSnackbar({
         open: true,
-        message: "New group added successfully",
+        message: "New team added successfully",
         severity: "success",
       });
     } catch (error) {
@@ -443,13 +443,13 @@ const UserForm = () => {
         {id && (
           <Box mt={4}>
             <Typography variant="h6" gutterBottom>
-              User Groups
+              User Teams
             </Typography>
             <StyledPaper>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <StyledTableHeaderCell>Group Name</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Team Name</StyledTableHeaderCell>
                     {userGroups.length > 1 && (
                       <StyledTableHeaderCell align="right">Action</StyledTableHeaderCell>
                     )}
@@ -477,7 +477,7 @@ const UserForm = () => {
             </StyledPaper>
             <Box display="flex" alignItems="center" mt={3}>
               <FormControl fullWidth>
-                <InputLabel>Add to Group</InputLabel>
+                <InputLabel>Add to Team</InputLabel>
                 <Select
                   value={selectedGroup}
                   onChange={(e) => setSelectedGroup(e.target.value)}

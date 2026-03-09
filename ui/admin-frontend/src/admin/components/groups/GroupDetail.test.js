@@ -122,7 +122,7 @@ describe('GroupDetail', () => {
     
     renderWithRouterAndTheme(<GroupDetail />);
 
-    expect(screen.getByText('Group not found')).toBeInTheDocument();
+    expect(screen.getByText('Team not found')).toBeInTheDocument();
   });
 
   describe('with group data', () => {

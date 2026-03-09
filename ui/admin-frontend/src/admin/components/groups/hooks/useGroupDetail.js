@@ -27,7 +27,7 @@ const useGroupDetail = () => {
       setDataCatalogues(attributes.data_catalogues || []);
       setToolCatalogues(attributes.tool_catalogues || []);
     } catch (err) {
-      setError("Failed to load group details");
+      setError("Failed to load team details");
     } finally {
       setLoading(false);
     }

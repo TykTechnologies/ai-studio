@@ -189,13 +189,13 @@ const ChatList = () => {
           </PrimaryButton>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Chats are customized interfaces that allow users to have one-on-one conversations with specific LLM providers, tools, and data based on their needs. Access is tailored to the user's group, ensuring relevant and secure interactions.</Typography>  
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Chats are customized interfaces that allow users to have one-on-one conversations with specific LLM providers, tools, and data based on their needs. Access is tailored to the user's team, ensuring relevant and secure interactions.</Typography>  
         </Box>
         <ContentBox>
           {chats.length === 0 ? (
             <EmptyStateWidget
               title="No chat rooms created yet"
-              description="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to their group. They can be associated with one or more groups. Create a new chat room by clicking the button below."
+              description="Chat rooms are portal areas where your users can have one-on-one chats with specific LLMs, and the tools and data sources that are granted to their team. They can be associated with one or more teams. Create a new chat room by clicking the button below."
               buttonText="Add Chat Room"
               buttonIcon={<AddIcon />}
               onButtonClick={handleAddChat}

@@ -103,7 +103,7 @@ const SSOProfileDetails = () => {
       setGroupsError("");
     } catch (error) {
       console.error("Error fetching groups", error);
-      setGroupsError("Failed to load groups. Group names may not be displayed correctly.");
+      setGroupsError("Failed to load teams. Team names may not be displayed correctly.");
     }
   }, []);
 
@@ -199,7 +199,7 @@ const SSOProfileDetails = () => {
         </CollapsibleSection>
 
         {/* User Group Mapping Section */}
-        <CollapsibleSection title="User group mapping">
+        <CollapsibleSection title="User team mapping">
           <UserGroupMappingSection
             profileData={profileData}
             groups={groups}
