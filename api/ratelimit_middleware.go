@@ -22,25 +22,27 @@ type rateLimitEntry struct {
 }
 
 func setupRateLimiters(ctx context.Context) map[string]*rateLimitEntry {
+	backend := ratelimit.NewMemoryBackend(ctx, time.Minute)
+
 	return map[string]*rateLimitEntry{
 		"login": {
-			ipLimiter:       ratelimit.NewLimiter(10, time.Minute, ctx),
-			compoundLimiter: ratelimit.NewLimiter(5, time.Minute, ctx),
+			ipLimiter:       ratelimit.NewLimiter(backend, 10, time.Minute),
+			compoundLimiter: ratelimit.NewLimiter(backend, 5, time.Minute),
 			fieldName:       "email",
 		},
 		"register": {
-			ipLimiter: ratelimit.NewLimiter(3, time.Minute, ctx),
+			ipLimiter: ratelimit.NewLimiter(backend, 3, time.Minute),
 		},
 		"forgot-password": {
-			fieldLimiter: ratelimit.NewLimiter(2, 5*time.Minute, ctx),
+			fieldLimiter: ratelimit.NewLimiter(backend, 2, 5*time.Minute),
 			fieldName:    "email",
 		},
 		"resend-verification": {
-			fieldLimiter: ratelimit.NewLimiter(3, 5*time.Minute, ctx),
+			fieldLimiter: ratelimit.NewLimiter(backend, 3, 5*time.Minute),
 			fieldName:    "email",
 		},
 		"oauth-token": {
-			ipLimiter: ratelimit.NewLimiter(10, time.Minute, ctx),
+			ipLimiter: ratelimit.NewLimiter(backend, 10, time.Minute),
 		},
 	}
 }

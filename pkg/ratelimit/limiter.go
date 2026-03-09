@@ -1,107 +1,40 @@
 package ratelimit
 
 import (
-	"context"
-	"sync"
+	"fmt"
+	"sync/atomic"
 	"time"
 )
 
-type entry struct {
-	mu         sync.Mutex
-	timestamps []time.Time
-}
+var nextID atomic.Uint64
 
+// Limiter applies a rate limit using a pluggable Backend.
+// Each Limiter instance has a unique prefix to avoid key collisions
+// when multiple limiters share the same Backend.
 type Limiter struct {
+	backend Backend
 	limit   int
 	window  time.Duration
-	mu      sync.Mutex
-	entries map[string]*entry
+	prefix  string
 }
 
-func NewLimiter(limit int, window time.Duration, cleanupCtx context.Context) *Limiter {
-	l := &Limiter{
+// NewLimiter creates a rate limiter that allows limit requests per window,
+// backed by the provided Backend.
+func NewLimiter(backend Backend, limit int, window time.Duration) *Limiter {
+	return &Limiter{
+		backend: backend,
 		limit:   limit,
 		window:  window,
-		entries: make(map[string]*entry),
+		prefix:  fmt.Sprintf("rl%d:", nextID.Add(1)),
 	}
-	go l.cleanup(cleanupCtx)
-	return l
 }
 
+// Allow checks if a request identified by key is within the rate limit.
 func (l *Limiter) Allow(key string) (bool, time.Duration) {
-	now := time.Now()
-	cutoff := now.Add(-l.window)
-
-	l.mu.Lock()
-	e, ok := l.entries[key]
-	if !ok {
-		e = &entry{}
-		l.entries[key] = e
-	}
-	l.mu.Unlock()
-
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	// Remove expired timestamps
-	valid := e.timestamps[:0]
-	for _, ts := range e.timestamps {
-		if ts.After(cutoff) {
-			valid = append(valid, ts)
-		}
-	}
-	e.timestamps = valid
-
-	if len(e.timestamps) >= l.limit {
-		retryAfter := e.timestamps[0].Add(l.window).Sub(now)
-		if retryAfter < 0 {
-			retryAfter = 0
-		}
-		return false, retryAfter
-	}
-
-	e.timestamps = append(e.timestamps, now)
-	return true, 0
+	return l.backend.Allow(l.prefix+key, l.limit, l.window)
 }
 
+// Reset clears the rate limit state for a key.
 func (l *Limiter) Reset(key string) {
-	l.mu.Lock()
-	delete(l.entries, key)
-	l.mu.Unlock()
-}
-
-func (l *Limiter) cleanup(ctx context.Context) {
-	ticker := time.NewTicker(l.window)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			l.removeExpired()
-		}
-	}
-}
-
-func (l *Limiter) removeExpired() {
-	now := time.Now()
-	cutoff := now.Add(-l.window)
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	for key, e := range l.entries {
-		e.mu.Lock()
-		valid := e.timestamps[:0]
-		for _, ts := range e.timestamps {
-			if ts.After(cutoff) {
-				valid = append(valid, ts)
-			}
-		}
-		e.timestamps = valid
-		if len(e.timestamps) == 0 {
-			delete(l.entries, key)
-		}
-		e.mu.Unlock()
-	}
+	l.backend.Reset(l.prefix + key)
 }

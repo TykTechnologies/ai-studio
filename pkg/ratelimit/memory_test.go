@@ -1,22 +1,19 @@
 package ratelimit
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestAllow(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	backend := NewMemoryBackend(t.Context(), time.Minute)
+	l := NewLimiter(backend, 3, time.Minute)
 
-	l := NewLimiter(3, time.Minute, ctx)
-
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		allowed, _ := l.Allow("key")
 		if !allowed {
-			t.Fatalf("request %d should be allowed", i+1)
+			t.Fatal("should be allowed")
 		}
 	}
 
@@ -30,10 +27,8 @@ func TestAllow(t *testing.T) {
 }
 
 func TestSeparateKeys(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	l := NewLimiter(1, time.Minute, ctx)
+	backend := NewMemoryBackend(t.Context(), time.Minute)
+	l := NewLimiter(backend, 1, time.Minute)
 
 	allowed, _ := l.Allow("a")
 	if !allowed {
@@ -52,11 +47,9 @@ func TestSeparateKeys(t *testing.T) {
 }
 
 func TestWindowExpiry(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	backend := NewMemoryBackend(t.Context(), time.Minute)
 	window := 50 * time.Millisecond
-	l := NewLimiter(1, window, ctx)
+	l := NewLimiter(backend, 1, window)
 
 	allowed, _ := l.Allow("key")
 	if !allowed {
@@ -77,11 +70,9 @@ func TestWindowExpiry(t *testing.T) {
 }
 
 func TestRetryAfterAccuracy(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	backend := NewMemoryBackend(t.Context(), time.Minute)
 	window := 200 * time.Millisecond
-	l := NewLimiter(1, window, ctx)
+	l := NewLimiter(backend, 1, window)
 
 	l.Allow("key")
 	_, retryAfter := l.Allow("key")
@@ -95,10 +86,8 @@ func TestRetryAfterAccuracy(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	l := NewLimiter(1, time.Minute, ctx)
+	backend := NewMemoryBackend(t.Context(), time.Minute)
+	l := NewLimiter(backend, 1, time.Minute)
 
 	l.Allow("key")
 	allowed, _ := l.Allow("key")
@@ -115,22 +104,17 @@ func TestReset(t *testing.T) {
 }
 
 func TestConcurrentSafety(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	l := NewLimiter(100, time.Minute, ctx)
+	backend := NewMemoryBackend(t.Context(), time.Minute)
+	l := NewLimiter(backend, 100, time.Minute)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 200; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 200 {
+		wg.Go(func() {
 			l.Allow("key")
-		}()
+		})
 	}
 	wg.Wait()
 
-	// After 200 concurrent attempts with limit 100, further requests should be denied
 	allowed, _ := l.Allow("key")
 	if allowed {
 		t.Fatal("should be denied after concurrent flood")
@@ -138,10 +122,11 @@ func TestConcurrentSafety(t *testing.T) {
 }
 
 func TestCleanupStopsOnCancel(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	l := NewLimiter(1, 10*time.Millisecond, ctx)
+	ctx, cancel := t.Context(), func() {} // t.Context cancels on test end
+	_ = ctx
+	backend := NewMemoryBackend(t.Context(), 10*time.Millisecond)
+	l := NewLimiter(backend, 1, 10*time.Millisecond)
 	l.Allow("key")
 	cancel()
-	// Just verify no panic or hang
 	time.Sleep(30 * time.Millisecond)
 }
