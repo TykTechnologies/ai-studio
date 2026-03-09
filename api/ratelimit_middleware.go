@@ -10,9 +10,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/ratelimit"
 	"github.com/TykTechnologies/midsommar/v2/ratelimit/memory"
+	rlredis "github.com/TykTechnologies/midsommar/v2/ratelimit/redis"
 	"github.com/gin-gonic/gin"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 type rateLimitEntry struct {
@@ -22,8 +26,27 @@ type rateLimitEntry struct {
 	fieldName       string
 }
 
-func setupRateLimiters(ctx context.Context) map[string]*rateLimitEntry {
-	backend := memory.New(ctx, time.Minute)
+func newBackend(ctx context.Context, cfg config.RateLimitConfig) ratelimit.Backend {
+	if cfg.Backend == "redis" && cfg.Redis.URL != "" {
+		opts, err := goredis.ParseURL(cfg.Redis.URL)
+		if err != nil {
+			logger.ErrorErr("invalid rate limit Redis URL, falling back to memory", err)
+			return memory.New(ctx, time.Minute)
+		}
+		client := goredis.NewClient(opts)
+		if err := client.Ping(ctx).Err(); err != nil {
+			logger.ErrorErr("rate limit Redis unreachable, falling back to memory", err)
+			return memory.New(ctx, time.Minute)
+		}
+		logger.Info("rate limiter using Redis backend")
+		return rlredis.New(client, cfg.Redis.KeyPrefix)
+	}
+	logger.Info("rate limiter using in-memory backend")
+	return memory.New(ctx, time.Minute)
+}
+
+func setupRateLimiters(ctx context.Context, cfg config.RateLimitConfig) map[string]*rateLimitEntry {
+	backend := newBackend(ctx, cfg)
 
 	return map[string]*rateLimitEntry{
 		"login": {

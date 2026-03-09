@@ -372,10 +372,10 @@ func (a *API) setupRoutes() {
 
 	// Set up rate limiters if enabled
 	var rlEntries map[string]*rateLimitEntry
-	if config.Get("").RateLimitEnabled {
+	if config.Get("").RateLimit.Enabled {
 		var rlCtx context.Context
 		rlCtx, a.rateLimitCancel = context.WithCancel(context.Background())
-		rlEntries = setupRateLimiters(rlCtx)
+		rlEntries = setupRateLimiters(rlCtx, config.Get("").RateLimit)
 	}
 
 	// OAuth 2.0 Authorization Server Endpoints - must be registered before NoRoute

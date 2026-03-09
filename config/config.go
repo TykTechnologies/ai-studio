@@ -99,7 +99,22 @@ type AppConf struct {
 
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
-	RateLimitEnabled       bool
+
+	// Rate Limiting Configuration
+	RateLimit RateLimitConfig
+}
+
+// RateLimitConfig holds configuration for auth endpoint rate limiting.
+type RateLimitConfig struct {
+	Enabled bool   // Enable rate limiting (default: true)
+	Backend string // "memory" (default) or "redis"
+	Redis   RateLimitRedisConfig
+}
+
+// RateLimitRedisConfig holds Redis-specific rate limit configuration.
+type RateLimitRedisConfig struct {
+	URL       string // Redis URL (e.g. "redis://localhost:6379/0")
+	KeyPrefix string // Key prefix for namespacing (default: "tyk:ratelimit:")
 }
 
 // QueueConfig holds configuration for message queues
@@ -517,9 +532,20 @@ func getConfigFromEnv(envFile string) *AppConf {
 		}
 	}
 
-	conf.RateLimitEnabled = true
+	conf.RateLimit.Enabled = true
 	if v := os.Getenv("TYK_AI_RATE_LIMIT_DISABLED"); v == "true" || v == "1" {
-		conf.RateLimitEnabled = false
+		conf.RateLimit.Enabled = false
+	}
+	conf.RateLimit.Backend = "memory"
+	if v := os.Getenv("TYK_AI_RATE_LIMIT_BACKEND"); v == "redis" {
+		conf.RateLimit.Backend = "redis"
+	}
+	if v := os.Getenv("TYK_AI_RATE_LIMIT_REDIS_URL"); v != "" {
+		conf.RateLimit.Redis.URL = v
+	}
+	conf.RateLimit.Redis.KeyPrefix = "tyk:ratelimit:"
+	if v := os.Getenv("TYK_AI_RATE_LIMIT_REDIS_PREFIX"); v != "" {
+		conf.RateLimit.Redis.KeyPrefix = v
 	}
 
 	return conf
