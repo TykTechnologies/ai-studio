@@ -1,9 +1,8 @@
 midsommar:
   ingress:
-    enabled: false # Disable ingress since we're using direct port access
-
+    enabled: false
   service:
-    type: NodePort # Change to NodePort to expose ports directly
+    type: NodePort
     ports:
       - name: http
         port: 8080
@@ -13,29 +12,38 @@ midsommar:
         port: 9090
         targetPort: 9090
         nodePort: 32590
+      - name: grpc
+        port: 50051
+        targetPort: 50051
 
 config:
   allowRegistrations: "true"
-  adminEmail: "admin@localhost"
   siteUrl: "http://localhost:32580"
   fromEmail: "noreply@localhost"
   devMode: "true"
   databaseType: "postgres"
-  filterSignupDomains: "tyk.io"
-  tykAiSecretKey: "your-secret-key" # Add these new values
+  tykAiSecretKey: "your-secret-key"
   tykAiLicense: "your-license"
+  ociCacheDir: "./data/cache/plugins"
+  ociRequireSignature: "false"
+  gatewayMode: "control"
+  grpcPort: "50051"
+  grpcHost: "0.0.0.0"
+  grpcTlsInsecure: "true"
+  grpcAuthToken: "your-grpc-auth-token"
+  microgatewayEncryptionKey: "your-encryption-key"
+  # proxyUrl, toolDisplayUrl, datasourceDisplayUrl auto-resolve from microgateway config
 
-# Internal database configuration for local development
 database:
   internal: true
   user: "postgres"
   password: "localdev123"
-  name: "midsommar"
+  name: "tyk_ai_studio"
 
 postgres:
   image:
     repository: postgres
-    tag: latest
+    tag: "16"
     pullPolicy: IfNotPresent
   persistence:
     enabled: true
@@ -50,6 +58,23 @@ postgres:
     limits:
       cpu: 500m
       memory: 512Mi
+
+microgateway:
+  enabled: true
+  image:
+    repository: tykio/tyk-microgateway
+    tag: v2.0.0
+  service:
+    type: NodePort
+    port: 8080
+    nodePort: 32591
+  config:
+    edgeId: "edge-1"
+    edgeNamespace: "default"
+  secrets:
+    edgeAuthToken: "your-grpc-auth-token"
+    encryptionKey: "your-encryption-key"
+    tykAiLicense: "your-license"
 
 # Optional services
 reranker:

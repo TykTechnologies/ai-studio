@@ -13,7 +13,6 @@ data:
   SMTP_USER: {{ .Values.config.smtpUser | quote }}
   {{- end }}
   ALLOW_REGISTRATIONS: {{ .Values.config.allowRegistrations | quote }}
-  ADMIN_EMAIL: {{ .Values.config.adminEmail | quote }}
   SITE_URL: {{ .Values.config.siteUrl | quote }}
   FROM_EMAIL: {{ .Values.config.fromEmail | quote }}
   DEVMODE: {{ .Values.config.devMode | quote }}
@@ -48,13 +47,19 @@ data:
   {{- if .Values.config.grpcTlsInsecure }}
   GRPC_TLS_INSECURE: {{ .Values.config.grpcTlsInsecure | quote }}
   {{- end }}
-  {{- /* Proxy / Display URLs */}}
-  {{- if .Values.config.proxyUrl }}
-  PROXY_URL: {{ .Values.config.proxyUrl | quote }}
+  {{- /* Proxy / Display URLs — auto-resolve from microgateway config */}}
+  {{- /* PROXY_URL: explicit > microgateway internal service */}}
+  PROXY_URL: {{ default (printf "http://%s-microgateway:%v" .Release.Name (default 8080 .Values.microgateway.service.port)) .Values.config.proxyUrl | quote }}
+  {{- /* Display URLs: explicit > microgateway ingress host > fallback to PROXY_URL (in app code) */}}
+  {{- $mgwDisplayUrl := "" }}
+  {{- if and .Values.microgateway.ingress.enabled .Values.microgateway.ingress.hosts }}
+    {{- $firstHost := index .Values.microgateway.ingress.hosts 0 }}
+    {{- $scheme := ternary "https" "http" (and .Values.microgateway.ingress.certificateEnabled (gt (len (default list .Values.microgateway.ingress.tls)) 0)) }}
+    {{- $mgwDisplayUrl = printf "%s://%s" $scheme $firstHost.host }}
   {{- end }}
-  {{- if .Values.config.toolDisplayUrl }}
-  TOOL_DISPLAY_URL: {{ .Values.config.toolDisplayUrl | quote }}
+  {{- if or .Values.config.toolDisplayUrl $mgwDisplayUrl }}
+  TOOL_DISPLAY_URL: {{ default $mgwDisplayUrl .Values.config.toolDisplayUrl | quote }}
   {{- end }}
-  {{- if .Values.config.datasourceDisplayUrl }}
-  DATASOURCE_DISPLAY_URL: {{ .Values.config.datasourceDisplayUrl | quote }}
+  {{- if or .Values.config.datasourceDisplayUrl $mgwDisplayUrl }}
+  DATASOURCE_DISPLAY_URL: {{ default $mgwDisplayUrl .Values.config.datasourceDisplayUrl | quote }}
   {{- end }}

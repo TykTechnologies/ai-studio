@@ -14,6 +14,9 @@ midsommar:
       - name: gateway
         port: 9090
         targetPort: 9090
+      - name: grpc
+        port: 50051
+        targetPort: 50051
 
   # Ingress configuration
   ingress:
@@ -62,7 +65,7 @@ database:
   url: "" # If set, this takes precedence over individual connection parameters
   host: ""
   port: 5432
-  name: "midsommar"
+  name: "tyk_ai_studio"
   user: "postgres"
   password: "postgres"
 
@@ -108,9 +111,8 @@ config:
 
   # Application Configuration
   allowRegistrations: "true"
-  adminEmail: "you@tyk.io"
-  siteUrl: "http://localhost:3000"
-  fromEmail: "noreply@tyk.io"
+  siteUrl: "http://localhost:8080"
+  fromEmail: "noreply@example.com"
   devMode: "false"
   databaseType: "postgres"
   filterSignupDomains: ""
@@ -124,18 +126,59 @@ config:
   ociCacheDir: "./data/cache/plugins"
   ociRequireSignature: "false"  # cosign not available in distroless images
 
-  # Hub-Spoke: Control Plane Mode (leave empty to disable)
-  gatewayMode: ""           # Set to "control" to enable hub-spoke
-  grpcPort: ""              # e.g. "50051"
-  grpcHost: ""              # e.g. "0.0.0.0"
-  grpcTlsInsecure: ""       # "true" or "false"
-  grpcAuthToken: ""          # Sensitive — stored in Secret
-  microgatewayEncryptionKey: ""  # Sensitive — stored in Secret
+  # Hub-Spoke: Control Plane Mode
+  gatewayMode: "control"
+  grpcPort: "50051"
+  grpcHost: "0.0.0.0"
+  grpcTlsInsecure: "true"    # Set to "false" in production with TLS
+  grpcAuthToken: ""           # Sensitive — stored in Secret. Generate with: openssl rand -hex 16
+  microgatewayEncryptionKey: ""  # Sensitive — stored in Secret. Generate with: openssl rand -hex 16
 
-  # Proxy / Display URLs (set when using external microgateway)
+  # Proxy / Display URLs
+  # proxyUrl auto-resolves to the microgateway k8s service if left empty.
+  # Override for production with an external-facing URL (e.g. ingress hostname).
+  # toolDisplayUrl and datasourceDisplayUrl fall back to proxyUrl if not set.
   proxyUrl: ""
   toolDisplayUrl: ""
   datasourceDisplayUrl: ""
+
+# Microgateway (data plane) — deployed as a subchart
+microgateway:
+  enabled: true
+  image:
+    repository: tykio/tyk-microgateway    # Enterprise: tykio/tyk-microgateway-ent
+    tag: v2.0.0
+  service:
+    type: ClusterIP
+    port: 8080
+  ingress:
+    enabled: false
+  config:
+    controlEndpoint: ""   # Auto-resolved to "<release-name>:50051"
+    edgeId: "edge-1"
+    edgeNamespace: "default"
+    heartbeatInterval: "30s"
+    allowInsecure: "true"
+    tlsEnabled: "false"
+    gatewayTimeout: "300s"
+    gatewayEnableFilters: "true"
+    gatewayEnableAnalytics: "true"
+    analyticsEnabled: "true"
+    analyticsBufferSize: "1000"
+    analyticsFlushInterval: "10s"
+    analyticsRetentionDays: "90"
+    databaseType: "sqlite"
+    databaseDsn: "file:./data/edge.db?cache=shared&mode=rwc"
+    dbAutoMigrate: "true"
+    pluginsConfigPath: "/opt/tyk-microgateway/config/analytics-pulse.yaml"
+    ociPluginsCacheDir: "/var/lib/microgateway/plugins"
+    ociPluginsRequireSignature: "false"
+    logLevel: "info"
+  # Secrets — MUST match AI Studio config values
+  secrets:
+    edgeAuthToken: ""         # Must match config.grpcAuthToken
+    encryptionKey: ""         # Must match config.microgatewayEncryptionKey
+    tykAiLicense: ""          # Must match config.tykAiLicense
 
 # Global configuration
 global:

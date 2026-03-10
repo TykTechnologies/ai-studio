@@ -1,0 +1,27 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-microgateway-analytics
+data:
+  analytics-pulse.yaml: |
+    version: "1.0"
+    data_collection_plugins:
+      - name: "analytics_pulse"
+        enabled: true
+        hook_types: ["analytics", "budget", "proxy_log"]
+        replace_database: false
+        priority: 100
+        config:
+          interval_seconds: {{ .Values.analyticsPulse.intervalSeconds }}
+          max_batch_size: {{ .Values.analyticsPulse.maxBatchSize }}
+          max_buffer_size: {{ .Values.analyticsPulse.maxBufferSize }}
+          compression_enabled: {{ .Values.analyticsPulse.compressionEnabled }}
+          include_proxy_summaries: {{ .Values.analyticsPulse.includeProxySummaries }}
+          include_request_response_data: {{ .Values.analyticsPulse.includeRequestResponseData }}
+          edge_retention_hours: {{ .Values.analyticsPulse.edgeRetentionHours }}
+          excluded_vendors: {{ .Values.analyticsPulse.excludedVendors | toJson }}
+          timeout_seconds: {{ .Values.analyticsPulse.timeoutSeconds }}
+          max_retries: {{ .Values.analyticsPulse.maxRetries }}
+          retry_interval_secs: {{ .Values.analyticsPulse.retryIntervalSecs }}
+{{- end }}
