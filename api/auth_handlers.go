@@ -230,7 +230,7 @@ func (a *API) handleForgotPassword(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param token query string true "Reset token"
-// @Success 200 {object} TokenValidationResponse
+// @Success 200 {object} SuccessResponse
 // @Failure 400 {object} ErrorResponse
 // @Router /auth/validate-reset-token [get]
 func (a *API) handleValidateResetToken(c *gin.Context) {

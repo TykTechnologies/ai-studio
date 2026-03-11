@@ -483,7 +483,7 @@ func (a *API) removeFileStoreFromDatasource(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Datasource ID"
-// @Success 202 {object} MessageResponse
+// @Success 202 {object} SuccessResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
