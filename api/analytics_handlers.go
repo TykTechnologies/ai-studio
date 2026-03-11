@@ -774,7 +774,7 @@ func (a *API) getUsage(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 // @Param app_id query int true "App ID"
-// @Success 200 {object} analytics.MultiAxisChartData
+// @Success 200 {object} models.MultiAxisChartData
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/token-usage-and-cost-for-app [get]
@@ -824,12 +824,7 @@ func (a *API) getTokenUsageAndCostForApp(c *gin.Context) {
 // @Param start_date query string true "Start date (YYYY-MM-DD)"
 // @Param end_date query string true "End date (YYYY-MM-DD)"
 //
-//	@Success 200 {array} struct {
-//		Vendor    string  `json:"vendor"`
-//		Model     string  `json:"model"`
-//		Currency  string  `json:"currency"`
-//		TotalCost float64 `json:"totalCost"`
-//	}
+// @Success 200 {array} models.VendorModelCost
 //
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
@@ -1096,7 +1091,7 @@ func (a *API) getProxyLogsForApp(c *gin.Context) {
 // @Produce json
 // @Param start_date query string false "Start date (YYYY-MM-DD) for total cost calculation"
 // @Param end_date query string false "End date (YYYY-MM-DD) for total cost calculation"
-// @Success 200 {array} struct{Name string `json:"name"`;Type string `json:"type"`;MonthlyBudget *float64 `json:"monthlyBudget"`;CurrentUsage float64 `json:"currentUsage"`;UsagePercent float64 `json:"usagePercent"`;TotalCost float64 `json:"totalCost"`}
+// @Success 200 {array} models.BudgetUsage
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
 // @Router /analytics/budget-usage [get]
@@ -1188,12 +1183,7 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 // @Produce json
 // @Param app_id query int true "App ID"
 //
-//	@Success 200 {object} struct {
-//		CurrentUsage  float64    `json:"current_usage"`
-//		MonthlyBudget *float64   `json:"monthly_budget"`
-//		Percentage    *float64   `json:"percentage"`
-//		StartDate     time.Time  `json:"start_date"`
-//	}
+// @Success 200 {object} models.AppBudgetUsageResponse
 //
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse

@@ -90,6 +90,14 @@ type VendorModelCost struct {
 	Currency  string  `json:"currency"`
 }
 
+// AppBudgetUsageResponse represents the budget usage for a specific app
+type AppBudgetUsageResponse struct {
+	CurrentUsage  float64   `json:"current_usage"`
+	MonthlyBudget *float64  `json:"monthly_budget"`
+	Percentage    *float64  `json:"percentage"`
+	StartDate     time.Time `json:"start_date"`
+}
+
 // ProxyLogResponse represents a proxy log response in JSON API format
 type ProxyLogResponse struct {
 	Type       string `json:"type"`
