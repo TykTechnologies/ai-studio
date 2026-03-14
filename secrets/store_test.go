@@ -16,6 +16,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	// AutoMigrate secrets table (note: no EncryptionKey table with inline DEKs)
+	require.NoError(t, db.AutoMigrate(&Secret{}))
 	return db
 }
 
@@ -346,7 +348,7 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	newKEK := newTestLocalKEK("new-kek")
 	result, err := oldStore.RotateKEK(ctx, oldKEK, newKEK)
 	require.NoError(t, err)
-	assert.Equal(t, 3, result.Total)   // per-object DEKs: 3 secrets = 3 keys
+	assert.Equal(t, 3, result.Total) // per-object DEKs: 3 secrets = 3 keys
 	assert.Equal(t, 3, result.Rotated)
 	assert.Empty(t, result.Errors)
 
@@ -361,22 +363,6 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	// Old store should NOT decrypt (wrong KEK)
 	_, err = oldStore.GetByVarName(ctx, "A", false)
 	assert.Error(t, err)
-}
-
-	db := setupTestDB(t)
-	store, err := New(db, "auto-key")
-	require.NoError(t, err)
-	ctx := context.Background()
-
-	var count int64
-	assert.Equal(t, int64(0), count)
-
-	s := &Secret{VarName: "AUTO", Value: "auto-val"}
-	require.NoError(t, store.Create(ctx, s))
-
-	assert.Equal(t, int64(1), count)
-
-	db.First(&key)
 }
 
 func TestEnvelope_NewAlwaysWritesV2(t *testing.T) {

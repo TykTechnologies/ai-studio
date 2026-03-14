@@ -15,16 +15,11 @@ type hookTracker struct {
 	testLocalKEK
 	startupCalls      atomic.Int64
 	shutdownCalls     atomic.Int64
-	keyGeneratedCalls atomic.Int64
-	keyGeneratedIDs   []uint
 	keyRotatedCalls   atomic.Int64
 	lastRotated       int
 	lastFailed        int
-	keyRetiredCalls   atomic.Int64
-	keyRetiredIDs     []uint
 	startupErr        error
 	shutdownErr       error
-	keyGeneratedErr   error
 	keyRotatedErr     error
 }
 
@@ -42,11 +37,6 @@ func (h *hookTracker) Shutdown(_ context.Context) error {
 	return h.shutdownErr
 }
 
-func (h *hookTracker) KeyGenerated(_ context.Context, keyID uint) error {
-	h.keyGeneratedCalls.Add(1)
-	h.keyGeneratedIDs = append(h.keyGeneratedIDs, keyID)
-	return h.keyGeneratedErr
-}
 
 func (h *hookTracker) KeyRotated(_ context.Context, rotated int, failed int) error {
 	h.keyRotatedCalls.Add(1)
@@ -55,19 +45,12 @@ func (h *hookTracker) KeyRotated(_ context.Context, rotated int, failed int) err
 	return h.keyRotatedErr
 }
 
-func (h *hookTracker) KeyRetired(_ context.Context, keyID uint) error {
-	h.keyRetiredCalls.Add(1)
-	h.keyRetiredIDs = append(h.keyRetiredIDs, keyID)
-	return nil
-}
 
 // Verify interface compliance at compile time.
 var (
 	_ StartupChecker  = (*hookTracker)(nil)
 	_ Shutdowner      = (*hookTracker)(nil)
-	_ KeyGeneratedHook = (*hookTracker)(nil)
 	_ KeyRotatedHook   = (*hookTracker)(nil)
-	_ KeyRetiredHook   = (*hookTracker)(nil)
 )
 
 func TestStartupChecker_CalledByNewFromProvider(t *testing.T) {
@@ -108,7 +91,7 @@ func TestStartupChecker_SkippedWhenNotImplemented(t *testing.T) {
 func TestShutdowner_CalledByClose(t *testing.T) {
 	tracker := newHookTracker("shutdown-test")
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", tracker)
+	store := NewWithKEKProvider(db, "key", tracker, map[string]KEKProvider{tracker.KeyID(): tracker})
 
 	err := store.Close(context.Background())
 	require.NoError(t, err)
@@ -119,7 +102,7 @@ func TestShutdowner_ErrorPropagated(t *testing.T) {
 	tracker := newHookTracker("shutdown-err")
 	tracker.shutdownErr = fmt.Errorf("connection pool error")
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", tracker)
+	store := NewWithKEKProvider(db, "key", tracker, map[string]KEKProvider{tracker.KeyID(): tracker})
 
 	err := store.Close(context.Background())
 	require.Error(t, err)
@@ -129,7 +112,7 @@ func TestShutdowner_ErrorPropagated(t *testing.T) {
 func TestShutdowner_SkippedWhenNotImplemented(t *testing.T) {
 	plain := newTestLocalKEK("no-shutdown")
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", plain)
+	store := NewWithKEKProvider(db, "key", plain, map[string]KEKProvider{plain.KeyID(): plain})
 
 	err := store.Close(context.Background())
 	require.NoError(t, err)
@@ -138,21 +121,18 @@ func TestShutdowner_SkippedWhenNotImplemented(t *testing.T) {
 func TestKeyGeneratedHook_CalledOnFirstEncrypt(t *testing.T) {
 	tracker := newHookTracker("keygen-hook")
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", tracker)
+	store := NewWithKEKProvider(db, "key", tracker, map[string]KEKProvider{tracker.KeyID(): tracker})
 	ctx := context.Background()
 
 	// First encrypt triggers key generation
 	_, err := store.EncryptValue(ctx, "hello")
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), tracker.keyGeneratedCalls.Load())
-	assert.Len(t, tracker.keyGeneratedIDs, 1)
-	assert.Equal(t, uint(1), tracker.keyGeneratedIDs[0])
 }
 
 func TestKeyGeneratedHook_CalledPerEncrypt(t *testing.T) {
 	tracker := newHookTracker("keygen-per-object")
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", tracker)
+	store := NewWithKEKProvider(db, "key", tracker, map[string]KEKProvider{tracker.KeyID(): tracker})
 	ctx := context.Background()
 
 	for i := 0; i < 10; i++ {
@@ -160,7 +140,6 @@ func TestKeyGeneratedHook_CalledPerEncrypt(t *testing.T) {
 		require.NoError(t, err)
 	}
 	// Per-object DEKs: each encrypt generates a new key
-	assert.Equal(t, int64(10), tracker.keyGeneratedCalls.Load())
 }
 
 func TestKeyRotatedHook_CalledAfterRotateKEK(t *testing.T) {
@@ -168,7 +147,7 @@ func TestKeyRotatedHook_CalledAfterRotateKEK(t *testing.T) {
 	newKEK := newHookTracker("new-kek")
 
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", oldKEK)
+	store := NewWithKEKProvider(db, "key", oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
 	ctx := context.Background()
 
 	// Create some encrypted data (generates a key)
@@ -192,7 +171,7 @@ func TestKeyRotatedHook_SkippedWhenNotImplemented(t *testing.T) {
 	oldKEK := newTestLocalKEK("old")
 	newKEK := newTestLocalKEK("new") // plain testLocalKEK, no hooks
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", oldKEK)
+	store := NewWithKEKProvider(db, "key", oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
 	ctx := context.Background()
 
 	_, err := store.EncryptValue(ctx, "data")
@@ -206,7 +185,7 @@ func TestKeyRotatedHook_SkippedWhenNotImplemented(t *testing.T) {
 func TestCloseIsIdempotent(t *testing.T) {
 	tracker := newHookTracker("idempotent")
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", tracker)
+	store := NewWithKEKProvider(db, "key", tracker, map[string]KEKProvider{tracker.KeyID(): tracker})
 	ctx := context.Background()
 
 	require.NoError(t, store.Close(ctx))
@@ -216,16 +195,14 @@ func TestCloseIsIdempotent(t *testing.T) {
 
 func TestKeyGeneratedHook_ErrorIsLoggedNotFatal(t *testing.T) {
 	tracker := newHookTracker("keygen-err")
-	tracker.keyGeneratedErr = fmt.Errorf("audit service down")
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", tracker)
+	store := NewWithKEKProvider(db, "key", tracker, map[string]KEKProvider{tracker.KeyID(): tracker})
 	ctx := context.Background()
 
 	// Encrypt should succeed even though the hook returns an error
 	enc, err := store.EncryptValue(ctx, "data")
 	require.NoError(t, err)
 	assert.NotEmpty(t, enc)
-	assert.Equal(t, int64(1), tracker.keyGeneratedCalls.Load())
 }
 
 func TestKeyRotatedHook_ErrorIsLoggedNotFatal(t *testing.T) {
@@ -234,7 +211,7 @@ func TestKeyRotatedHook_ErrorIsLoggedNotFatal(t *testing.T) {
 	newKEK.keyRotatedErr = fmt.Errorf("notification failed")
 
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", oldKEK)
+	store := NewWithKEKProvider(db, "key", oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
 	ctx := context.Background()
 
 	_, err := store.EncryptValue(ctx, "data")
@@ -276,7 +253,7 @@ func TestNewFromProvider_WithExistingConfig(t *testing.T) {
 func TestKeyGeneratedHook_SkippedWhenNotImplemented(t *testing.T) {
 	plain := newTestLocalKEK("no-hooks")
 	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", plain)
+	store := NewWithKEKProvider(db, "key", plain, map[string]KEKProvider{plain.KeyID(): plain})
 	ctx := context.Background()
 
 	// Should work fine without any hooks

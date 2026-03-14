@@ -49,7 +49,6 @@ func TestDecryptWith_ENC_UnknownVersion(t *testing.T) {
 func TestDecryptWith_ENCV2_InvalidKeyID(t *testing.T) {
 	t.Parallel()
 	kek := newTestLocalKEK("kek")
-	ks := nil
 	envelope := newTestEnvelopeCipher(kek)
 	ciphers := legacyCipherInstances()
 	ciphers["v2"] = envelope
@@ -77,7 +76,6 @@ func TestDecryptWith_ENCV2_InvalidKeyID(t *testing.T) {
 func TestDecryptWith_ENCV2_CorruptedCiphertext(t *testing.T) {
 	t.Parallel()
 	kek := newTestLocalKEK("kek")
-	ks := nil
 	envelope := newTestEnvelopeCipher(kek)
 	ciphers := legacyCipherInstances()
 	ciphers["v2"] = envelope
@@ -163,7 +161,6 @@ func TestDecryptWith_ENCV2SlashOnly(t *testing.T) {
 	t.Parallel()
 	ciphers := legacyCipherInstances()
 	kek := newTestLocalKEK("kek")
-	ks := nil
 	ciphers["v2"] = newTestEnvelopeCipher(kek)
 	ctx := context.Background()
 

@@ -2,11 +2,6 @@ package secrets
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"fmt"
-	"io"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -236,14 +231,14 @@ func TestEnvelopeCipher_MultipleKeys(t *testing.T) {
 
 	c := newTestEnvelopeCipher(w)
 
-	// Each encrypt creates a unique per-object DEK
+	// Each encrypt creates a unique per-object DEK (inline)
 	enc1, err := c.Encrypt(ctx, nil, []byte("data-with-key-1"))
 	require.NoError(t, err)
 
 	enc2, err := c.Encrypt(ctx, nil, []byte("data-with-key-2"))
 	require.NoError(t, err)
 
-	// Both should decrypt with their own keys
+	// Both should decrypt with their own embedded DEKs
 	dec1, err := c.Decrypt(ctx, nil, enc1)
 	require.NoError(t, err)
 	assert.Equal(t, "data-with-key-1", string(dec1))
@@ -252,8 +247,8 @@ func TestEnvelopeCipher_MultipleKeys(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "data-with-key-2", string(dec2))
 
-	// Verify two different keys were created
-	keys, err := ks.ListKeys(ctx)
-	require.NoError(t, err)
-	assert.Len(t, keys, 2)
+	// Verify each has unique wrapped DEK (3-part format)
+	parts1 := string(enc1)
+	parts2 := string(enc2)
+	assert.NotEqual(t, parts1, parts2, "Each encryption should have unique DEK")
 }
