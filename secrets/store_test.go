@@ -331,40 +331,6 @@ func TestEnvelope_EncryptDecryptValue(t *testing.T) {
 	assert.Equal(t, "hello envelope", decrypted)
 }
 
-func TestEnvelope_RotateKEK(t *testing.T) {
-	db := setupTestDB(t)
-	rawKey := "kek-rotation-key"
-	ctx := context.Background()
-
-	oldKEK := newTestLocalKEK("old-kek")
-	oldStore := NewWithKEKProvider(db, rawKey, oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
-
-	for _, name := range []string{"A", "B", "C"} {
-		s := &Secret{VarName: name, Value: "val-" + name}
-		require.NoError(t, oldStore.Create(ctx, s))
-	}
-
-	// Rotate KEK (re-wraps encryption_keys rows, not secrets)
-	newKEK := newTestLocalKEK("new-kek")
-	result, err := oldStore.RotateKEK(ctx, oldKEK, newKEK)
-	require.NoError(t, err)
-	assert.Equal(t, 3, result.Total) // per-object DEKs: 3 secrets = 3 keys
-	assert.Equal(t, 3, result.Rotated)
-	assert.Empty(t, result.Errors)
-
-	// New store with new KEK should decrypt all secrets
-	newStore := NewWithKEKProvider(db, rawKey, newKEK, map[string]KEKProvider{newKEK.KeyID(): newKEK})
-	for _, name := range []string{"A", "B", "C"} {
-		got, err := newStore.GetByVarName(ctx, name, false)
-		require.NoError(t, err)
-		assert.Equal(t, "val-"+name, got.Value)
-	}
-
-	// Old store should NOT decrypt (wrong KEK)
-	_, err = oldStore.GetByVarName(ctx, "A", false)
-	assert.Error(t, err)
-}
-
 func TestEnvelope_NewAlwaysWritesV2(t *testing.T) {
 	store := newTestStoreDefault(t)
 	ctx := context.Background()

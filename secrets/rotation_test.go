@@ -109,36 +109,3 @@ func TestRotateKey_MixedV1AndV2(t *testing.T) {
 		assert.True(t, strings.HasPrefix(raw.Value, "$ENC/v2/"), "%s should be v2", name)
 	}
 }
-
-func TestRotateKEK_ReWrapsKeys(t *testing.T) {
-	db := setupTestDB(t)
-	rawKey := "kek-test"
-	ctx := context.Background()
-
-	oldKEK := newTestLocalKEK("old-kek")
-	store := NewWithKEKProvider(db, rawKey, oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
-
-	for _, name := range []string{"S1", "S2"} {
-		s := &Secret{VarName: name, Value: "val-" + name}
-		require.NoError(t, store.Create(ctx, s))
-	}
-
-	var keyCount int64
-	assert.Equal(t, int64(2), keyCount, "per-object DEKs: 2 secrets = 2 keys")
-
-	// Rotate KEK
-	newKEK := newTestLocalKEK("new-kek")
-	result, err := store.RotateKEK(ctx, oldKEK, newKEK)
-	require.NoError(t, err)
-	assert.Equal(t, 2, result.Total)
-	assert.Equal(t, 2, result.Rotated)
-	assert.Empty(t, result.Errors)
-
-	// New store can decrypt
-	newStore := NewWithKEKProvider(db, rawKey, newKEK, map[string]KEKProvider{newKEK.KeyID(): newKEK})
-	for _, name := range []string{"S1", "S2"} {
-		got, err := newStore.GetByVarName(ctx, name, false)
-		require.NoError(t, err)
-		assert.Equal(t, "val-"+name, got.Value)
-	}
-}

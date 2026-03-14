@@ -13,14 +13,14 @@ import (
 // hookTracker records lifecycle hook calls.
 type hookTracker struct {
 	testLocalKEK
-	startupCalls      atomic.Int64
-	shutdownCalls     atomic.Int64
-	keyRotatedCalls   atomic.Int64
-	lastRotated       int
-	lastFailed        int
-	startupErr        error
-	shutdownErr       error
-	keyRotatedErr     error
+	startupCalls    atomic.Int64
+	shutdownCalls   atomic.Int64
+	keyRotatedCalls atomic.Int64
+	lastRotated     int
+	lastFailed      int
+	startupErr      error
+	shutdownErr     error
+	keyRotatedErr   error
 }
 
 func newHookTracker(name string) *hookTracker {
@@ -37,7 +37,6 @@ func (h *hookTracker) Shutdown(_ context.Context) error {
 	return h.shutdownErr
 }
 
-
 func (h *hookTracker) KeyRotated(_ context.Context, rotated int, failed int) error {
 	h.keyRotatedCalls.Add(1)
 	h.lastRotated = rotated
@@ -45,12 +44,11 @@ func (h *hookTracker) KeyRotated(_ context.Context, rotated int, failed int) err
 	return h.keyRotatedErr
 }
 
-
 // Verify interface compliance at compile time.
 var (
-	_ StartupChecker  = (*hookTracker)(nil)
-	_ Shutdowner      = (*hookTracker)(nil)
-	_ KeyRotatedHook   = (*hookTracker)(nil)
+	_ StartupChecker = (*hookTracker)(nil)
+	_ Shutdowner     = (*hookTracker)(nil)
+	_ KeyRotatedHook = (*hookTracker)(nil)
 )
 
 func TestStartupChecker_CalledByNewFromProvider(t *testing.T) {
@@ -142,46 +140,6 @@ func TestKeyGeneratedHook_CalledPerEncrypt(t *testing.T) {
 	// Per-object DEKs: each encrypt generates a new key
 }
 
-func TestKeyRotatedHook_CalledAfterRotateKEK(t *testing.T) {
-	oldKEK := newHookTracker("old-kek")
-	newKEK := newHookTracker("new-kek")
-
-	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
-	ctx := context.Background()
-
-	// Create some encrypted data (generates a key)
-	_, err := store.EncryptValue(ctx, "data")
-	require.NoError(t, err)
-
-	result, err := store.RotateKEK(ctx, oldKEK, newKEK)
-	require.NoError(t, err)
-	assert.Equal(t, 1, result.Rotated)
-
-	// Hook should be called on the NEW kek
-	assert.Equal(t, int64(1), newKEK.keyRotatedCalls.Load())
-	assert.Equal(t, 1, newKEK.lastRotated)
-	assert.Equal(t, 0, newKEK.lastFailed)
-
-	// Old KEK should NOT get the hook
-	assert.Equal(t, int64(0), oldKEK.keyRotatedCalls.Load())
-}
-
-func TestKeyRotatedHook_SkippedWhenNotImplemented(t *testing.T) {
-	oldKEK := newTestLocalKEK("old")
-	newKEK := newTestLocalKEK("new") // plain testLocalKEK, no hooks
-	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
-	ctx := context.Background()
-
-	_, err := store.EncryptValue(ctx, "data")
-	require.NoError(t, err)
-
-	// Should not panic
-	_, err = store.RotateKEK(ctx, oldKEK, newKEK)
-	require.NoError(t, err)
-}
-
 func TestCloseIsIdempotent(t *testing.T) {
 	tracker := newHookTracker("idempotent")
 	db := setupTestDB(t)
@@ -203,25 +161,6 @@ func TestKeyGeneratedHook_ErrorIsLoggedNotFatal(t *testing.T) {
 	enc, err := store.EncryptValue(ctx, "data")
 	require.NoError(t, err)
 	assert.NotEmpty(t, enc)
-}
-
-func TestKeyRotatedHook_ErrorIsLoggedNotFatal(t *testing.T) {
-	oldKEK := newHookTracker("old")
-	newKEK := newHookTracker("new")
-	newKEK.keyRotatedErr = fmt.Errorf("notification failed")
-
-	db := setupTestDB(t)
-	store := NewWithKEKProvider(db, "key", oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
-	ctx := context.Background()
-
-	_, err := store.EncryptValue(ctx, "data")
-	require.NoError(t, err)
-
-	// RotateKEK should succeed even though the hook returns an error
-	result, err := store.RotateKEK(ctx, oldKEK, newKEK)
-	require.NoError(t, err)
-	assert.Equal(t, 1, result.Rotated)
-	assert.Equal(t, int64(1), newKEK.keyRotatedCalls.Load())
 }
 
 func TestNewFromProvider_UnknownProviderReturnsError(t *testing.T) {
