@@ -48,7 +48,6 @@ func InitModels(db *gorm.DB) error {
 		&ChatHistoryRecord{},
 		&ToolCatalogue{}, // Done
 		&secrets.Secret{},
-		&secrets.EncryptionKey{},
 		&LLMChatRecord{},
 		&Notification{},   // For storing notifications
 		&PromptTemplate{}, // For storing prompt templates
