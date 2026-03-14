@@ -28,6 +28,9 @@ func TestUpdateSecret_DoesNotOverwriteWithPlaceholder(t *testing.T) {
 	require.NoError(t, err)
 	defer secretStore.Close(ctx)
 
+	// Set secret store on API service so handlers can use it
+	api.service.SetSecretStore(secretStore)
+
 	// Create a secret with a real value
 	secret := &secrets.Secret{
 		VarName: "MY_API_KEY",
@@ -75,6 +78,9 @@ func TestUpdateSecret_UpdatesValueWhenChanged(t *testing.T) {
 	require.NoError(t, err)
 	defer secretStore.Close(ctx)
 
+	// Set secret store on API service so handlers can use it
+	api.service.SetSecretStore(secretStore)
+
 	// Create a secret
 	secret := &secrets.Secret{
 		VarName: "MY_API_KEY",
@@ -114,6 +120,9 @@ func TestUpdateSecret_EmptyValueDoesNotOverwrite(t *testing.T) {
 	secretStore, err := secrets.NewFromProvider(db, "test-secret-key-for-unit-test-12345678", "local", nil)
 	require.NoError(t, err)
 	defer secretStore.Close(ctx)
+
+	// Set secret store on API service so handlers can use it
+	api.service.SetSecretStore(secretStore)
 
 	// Create a secret
 	secret := &secrets.Secret{
