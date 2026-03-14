@@ -25,7 +25,6 @@ func deriveKey(input string) []byte {
 	return hash[:]
 }
 
-
 // detectVersion inspects a trimmed ciphertext payload (after removing "$ENC/" prefix)
 // and returns the version string and the raw payload. Legacy data without a version
 // prefix is treated as "v1".
@@ -93,11 +92,15 @@ func (c *cfbCipher) Decrypt(_ context.Context, key []byte, ciphertext []byte) ([
 	return raw, nil
 }
 
-// decryptWith decrypts a stored value using three-way prefix detection:
+// decryptWith decrypts a stored value using two-way prefix detection:
 //
-//   - "$PLAIN/" → plaintext passthrough, strip prefix and return as-is
-//   - "$ENC/"   → encrypted, detect version and decrypt
-//   - no prefix → legacy v1 AES-CFB encrypted (base64-encoded, no tag)
+//   - "$ENC/v2/" → new envelope encryption with inline DEK storage
+//   - no prefix → legacy main branch format (base64-encoded AES-CFB)
+//
+// Unsupported formats that return error:
+//   - "$PLAIN/" → passthrough prefix (not needed)
+//   - "$ENC/v1/" → old database-backed envelope (never shipped)
+//   - "$ENC/" with unknown version
 //
 // If rawKey is empty, the original value is returned as-is (no key to decrypt with).
 // Empty strings pass through unchanged.
@@ -106,9 +109,9 @@ func decryptWith(ctx context.Context, ciphers map[string]Cipher, rawKey string, 
 		return value, nil
 	}
 
-	// $PLAIN/ prefix: strip and return as-is
+	// Reject $PLAIN/ prefix - not supported
 	if strings.HasPrefix(value, "$PLAIN/") {
-		return strings.TrimPrefix(value, "$PLAIN/"), nil
+		return "", fmt.Errorf("unsupported encryption format: $PLAIN/ prefix is not supported")
 	}
 
 	if rawKey == "" {

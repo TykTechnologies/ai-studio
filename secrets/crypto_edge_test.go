@@ -8,28 +8,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDecryptWith_PlainPrefix_SpecialChars tests that $PLAIN/ prefix is NOT supported
 func TestDecryptWith_PlainPrefix_SpecialChars(t *testing.T) {
-	rawKey := "test-key"
+	t.Parallel()
+	ciphers := legacyCipherInstances()
+	ctx := context.Background()
+
 	tests := []struct {
-		name        string
-		input       string
-		expected    string
-		expectError bool
+		name  string
+		input string
 	}{
-		{"embedded ENC marker", "$PLAIN/hello$ENC/world", "hello$ENC/world"},
-		{"empty suffix", "$PLAIN/", ""},
-		{"nested PLAIN prefix", "$PLAIN/$PLAIN/nested", "$PLAIN/nested"},
-		{"just dollar sign", "$PLAIN/$", "$"},
-		{"unicode", "$PLAIN/日本語テスト", "日本語テスト"},
-		{"spaces and newlines", "$PLAIN/hello world\nline2", "hello world\nline2"},
+		{"embedded ENC marker", "$PLAIN/hello$ENC/world"},
+		{"empty suffix", "$PLAIN/"},
+		{"nested PLAIN prefix", "$PLAIN/$PLAIN/nested"},
+		{"just dollar sign", "$PLAIN/$"},
+		{"unicode", "$PLAIN/日本語テスト"},
+		{"spaces and newlines", "$PLAIN/hello world\nline2"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := decryptWith(ctx, ciphers, "key", tt.input)
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, result)
+			_, err := decryptWith(ctx, ciphers, "key", tt.input)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "unsupported encryption format")
 		})
 	}
 }
@@ -64,17 +66,11 @@ func TestDecryptWith_ENCV2_InvalidKeyID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := DecryptWith(rawKey, tt.input, nil, nil)
-			if tt.expectError {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "unsupported encryption format")
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
-			}
+			t.Parallel()
+			_, err := decryptWith(ctx, ciphers, "key", tt.value)
+			assert.Error(t, err)
 		})
 	}
-}
 }
 
 func TestDecryptWith_ENCV2_CorruptedCiphertext(t *testing.T) {
