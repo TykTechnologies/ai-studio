@@ -150,7 +150,7 @@ MICROGATEWAY_ENCRYPTION_KEY=CHANGE-ME-generate-with-openssl-rand-hex-16
 # Hub-Spoke: Control Plane Mode
 # =============================================================================
 GATEWAY_MODE=control
-GRPC_PORT=9080
+GRPC_PORT=50051
 GRPC_HOST=0.0.0.0
 GRPC_TLS_INSECURE=true
 GRPC_AUTH_TOKEN=CHANGE-ME-generate-with-openssl-rand-hex-16
@@ -212,7 +212,7 @@ DB_AUTO_MIGRATE=true
 # Hub-Spoke: Edge Mode
 # =============================================================================
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=tyk-ai-studio:9080
+CONTROL_ENDPOINT=tyk-ai-studio:50051
 EDGE_ID=edge-1
 EDGE_NAMESPACE=default
 EDGE_HEARTBEAT_INTERVAL=30s
@@ -342,7 +342,7 @@ These values **must match** between the AI Studio and Microgateway configuration
 |------|-----------|---------|
 | 8080 | AI Studio | Admin UI + REST API |
 | 9090 | AI Studio | Embedded AI Gateway |
-| 9080 | AI Studio | gRPC control server (internal) |
+| 50051 | AI Studio | gRPC control server (internal) |
 | 9091 | Microgateway | Edge AI Gateway (mapped from internal 8080) |
 | 5432 | PostgreSQL | Database |
 
@@ -372,7 +372,7 @@ docker compose logs <service-name>
 
 ### Microgateway cannot connect to AI Studio
 
-- Verify `CONTROL_ENDPOINT` in `microgateway.env` matches the AI Studio service name and gRPC port (e.g., `tyk-ai-studio:9080`)
+- Verify `CONTROL_ENDPOINT` in `microgateway.env` matches the AI Studio service name and gRPC port (e.g., `tyk-ai-studio:50051`)
 - Verify `EDGE_AUTH_TOKEN` matches `GRPC_AUTH_TOKEN`
 - Verify `ENCRYPTION_KEY` matches `MICROGATEWAY_ENCRYPTION_KEY`
 - Check that `GATEWAY_MODE=control` is set in `studio.env`

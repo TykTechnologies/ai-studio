@@ -604,7 +604,7 @@ func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
 // @Tags tools
 // @Produce json
 // @Param id path string true "Tool ID"
-// @Success 200 {object} gin.H
+// @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} ErrorResponse
 // @Router /tools/{id}/documentation [get]
 func (a *API) GetToolDocumentation(c *gin.Context) {
@@ -973,7 +973,7 @@ func convertSchemaToGinH(schema *base.Schema) gin.H {
 // @Accept json
 // @Produce json
 // @Param id path string true "Tool ID"
-// @Success 200 {object} gin.H
+// @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse

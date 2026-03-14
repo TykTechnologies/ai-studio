@@ -189,7 +189,7 @@ const Users = memo(() => {
     if (!selectedGroup || !selectedUser) {
       setSnackbar({
         open: true,
-        message: "Please select a group",
+        message: "Please select a team",
         severity: "warning",
       });
       return;
@@ -204,7 +204,7 @@ const Users = memo(() => {
       });
       setSnackbar({
         open: true,
-        message: "User added to group successfully",
+        message: "User added to team successfully",
         severity: "success",
       });
       handleCloseAddToGroupModal();
@@ -213,7 +213,7 @@ const Users = memo(() => {
       console.error("Error adding user to group", error);
       setSnackbar({
         open: true,
-        message: "Failed to add user to group",
+        message: "Failed to add user to team",
         severity: "error",
       });
     }
@@ -223,7 +223,7 @@ const Users = memo(() => {
     if (!newGroupName.trim()) {
       setSnackbar({
         open: true,
-        message: "Group name cannot be empty",
+        message: "Team name cannot be empty",
         severity: "warning",
       });
       return;
@@ -244,14 +244,14 @@ const Users = memo(() => {
       setIsAddingGroup(false);
       setSnackbar({
         open: true,
-        message: "New group added successfully",
+        message: "New team added successfully",
         severity: "success",
       });
     } catch (error) {
       console.error("Error adding new group", error);
       setSnackbar({
         open: true,
-        message: "Failed to add new group",
+        message: "Failed to add new team",
         severity: "error",
       });
     }
@@ -394,9 +394,9 @@ const Users = memo(() => {
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
         >
-          {/* Only show Add to Group if not in gateway-only mode */}
+          {/* Only show Add to Team if not in gateway-only mode */}
           {!isGatewayOnlyMode() && (
-            <MenuItem onClick={handleAddToGroup}>Add to group</MenuItem>
+            <MenuItem onClick={handleAddToGroup}>Add to team</MenuItem>
           )}
           <MenuItem
             onClick={() => navigate(`/admin/users/edit/${selectedUser?.id}`)}
@@ -413,13 +413,13 @@ const Users = memo(() => {
           onClose={handleCloseAddToGroupModal}
         >
           <StyledDialogTitle>
-            {isAddingGroup ? "Add New Group" : "Add User to Group"}
+            {isAddingGroup ? "Add New Team" : "Add User to Team"}
           </StyledDialogTitle>
           <StyledDialogContent>
             {isAddingGroup ? (
               <TextField
                 fullWidth
-                label="New Group Name"
+                label="New Team Name"
                 value={newGroupName}
                 onChange={(e) => setNewGroupName(e.target.value)}
                 sx={{ mt: 2 }}
@@ -430,12 +430,12 @@ const Users = memo(() => {
                   gutterBottom
                   sx={(theme) => ({ padding: theme.spacing(2) })}
                 >
-                  Select a group from the dropdown menu below to add the user to
-                  that group. This action will grant the user permissions
-                  associated with the selected group.
+                  Select a team from the dropdown menu below to add the user to
+                  that team. This action will grant the user permissions
+                  associated with the selected team.
                 </Typography>
                 <FormControl fullWidth sx={{ mt: 2 }}>
-                  <InputLabel>Group</InputLabel>
+                  <InputLabel>Team</InputLabel>
                   <Select
                     value={selectedGroup}
                     onChange={(e) => setSelectedGroup(e.target.value)}
@@ -456,7 +456,7 @@ const Users = memo(() => {
               onClick={isAddingGroup ? handleAddNewGroup : handleAddUserToGroup}
               color="primary"
             >
-              {isAddingGroup ? "Add Group" : "Add to Group"}
+              {isAddingGroup ? "Add Team" : "Add to Team"}
             </PrimaryButton>
           </DialogActions>
         </StyledDialog>

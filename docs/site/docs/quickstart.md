@@ -118,7 +118,7 @@ TYK_AI_SECRET_KEY=CHANGE-ME-generate-with-openssl-rand-hex-16
 MICROGATEWAY_ENCRYPTION_KEY=CHANGE-ME-generate-with-openssl-rand-hex-16
 
 GATEWAY_MODE=control
-GRPC_PORT=9080
+GRPC_PORT=50051
 GRPC_HOST=0.0.0.0
 GRPC_TLS_INSECURE=true
 GRPC_AUTH_TOKEN=CHANGE-ME-generate-with-openssl-rand-hex-16
@@ -146,7 +146,7 @@ DATABASE_DSN=file:./data/edge.db?cache=shared&mode=rwc
 DB_AUTO_MIGRATE=true
 
 GATEWAY_MODE=edge
-CONTROL_ENDPOINT=tyk-ai-studio:9080
+CONTROL_ENDPOINT=tyk-ai-studio:50051
 EDGE_ID=edge-1
 EDGE_NAMESPACE=default
 EDGE_HEARTBEAT_INTERVAL=30s

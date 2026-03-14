@@ -288,6 +288,7 @@ const ChatForm = () => {
     if (chat.rag_n && (isNaN(chat.rag_n) || chat.rag_n < 0)) {
       newErrors.rag_n = "RAG N must be a non-negative number";
     }
+    if (!chat.groups || chat.groups.length === 0) newErrors.groups = "At least one team is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -419,7 +420,7 @@ const ChatForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth error={!!errors.llm_settings_id}>
+              <FormControl fullWidth required error={!!errors.llm_settings_id}>
                 <InputLabel>LLM Settings</InputLabel>
                 <Select
                   name="llm_settings_id"
@@ -441,7 +442,7 @@ const ChatForm = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth error={!!errors.llm_id}>
+              <FormControl fullWidth required error={!!errors.llm_id}>
                 <InputLabel>LLM</InputLabel>
                 <Select
                   name="llm_id"
@@ -461,8 +462,8 @@ const ChatForm = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Groups</InputLabel>
+              <FormControl fullWidth error={!!errors.groups} required>
+                <InputLabel>Teams</InputLabel>
                 <Select
                   multiple
                   value={chat.groups}
@@ -487,6 +488,9 @@ const ChatForm = () => {
                     </MenuItem>
                   ))}
                 </Select>
+                {errors.groups && (
+                  <Typography color="error">{errors.groups}</Typography>
+                )}
               </FormControl>
             </Grid>
             <Grid item xs={12}>

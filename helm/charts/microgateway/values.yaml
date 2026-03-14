@@ -1,0 +1,92 @@
+enabled: true
+
+image:
+  repository: tykio/tyk-microgateway    # Enterprise: tykio/tyk-microgateway-ent
+  tag: v2.0.0
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: nginx
+  certificateEnabled: false
+  certManager:
+    issuer: letsencrypt-prod
+  hosts: []
+  #  - host: gateway.example.com
+  #    paths:
+  #      - path: /
+  #        pathType: Prefix
+  tls: []
+  #  - secretName: gateway-tls-secret
+  #    hosts:
+  #      - gateway.example.com
+
+# Edge configuration
+config:
+  # Control endpoint — AI Studio service name and gRPC port
+  controlEndpoint: ""   # Auto-set in parent values, e.g. "midsommar:50051"
+  edgeId: "edge-1"
+  edgeNamespace: "default"
+  heartbeatInterval: "30s"
+  allowInsecure: "true"
+  tlsEnabled: "false"
+
+  # Gateway
+  gatewayTimeout: "300s"
+  gatewayEnableFilters: "true"
+  gatewayEnableAnalytics: "true"
+
+  # Analytics
+  analyticsEnabled: "true"
+  analyticsBufferSize: "1000"
+  analyticsFlushInterval: "10s"
+  analyticsRetentionDays: "90"
+
+  # Database (SQLite for edge)
+  databaseType: "sqlite"
+  databaseDsn: "file:./data/edge.db?cache=shared&mode=rwc"
+  dbAutoMigrate: "true"
+
+  # Plugins
+  pluginsConfigPath: "/opt/tyk-microgateway/config/analytics-pulse.yaml"
+  ociPluginsCacheDir: "/var/lib/microgateway/plugins"
+  ociPluginsRequireSignature: "false"
+
+  # Logging
+  logLevel: "info"
+
+# Secrets — MUST match AI Studio values
+secrets:
+  edgeAuthToken: ""         # Must match config.grpcAuthToken
+  encryptionKey: ""         # Must match config.microgatewayEncryptionKey
+  tykAiLicense: ""          # Must match config.tykAiLicense
+
+# Analytics pulse plugin configuration
+analyticsPulse:
+  intervalSeconds: 10
+  maxBatchSize: 1000
+  maxBufferSize: 10000
+  compressionEnabled: true
+  includeProxySummaries: true
+  includeRequestResponseData: true
+  edgeRetentionHours: 24
+  excludedVendors:
+    - mock
+    - test
+  timeoutSeconds: 30
+  maxRetries: 3
+  retryIntervalSecs: 5
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

@@ -39,7 +39,7 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
   const steps = [
     "LLM Vendor Details",
     "Call Settings",
-    "Group & Catalogue Details",
+    "Team & Catalogue Details",
     "Completion",
   ];
 
@@ -248,7 +248,7 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
             <TextField
               fullWidth
               margin="normal"
-              label="Group Name"
+              label="Team Name"
               name="groupName"
               value={formData.groupName}
               onChange={handleInputChange}

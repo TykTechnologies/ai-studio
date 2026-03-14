@@ -73,15 +73,15 @@ describe('UserGroupMappingSection', () => {
     );
 
     // Check if the description text is displayed
-    expect(screen.getByText(/User group mapping is how you assign users to AI studio teams/)).toBeInTheDocument();
+    expect(screen.getByText(/User team mapping is how you assign users to AI studio teams/)).toBeInTheDocument();
 
-    // Check if default user group is displayed
-    expect(screen.getByText('Default user group')).toBeInTheDocument();
-    // Check that Default group text exists
-    expect(screen.getAllByText('Default group').length).toBeGreaterThan(0);
+    // Check if default user team is displayed
+    expect(screen.getByText('Default user team')).toBeInTheDocument();
+    // Check that Default team text exists
+    expect(screen.getAllByText('Default team').length).toBeGreaterThan(0);
 
-    // Check if custom user group claim name is displayed
-    expect(screen.getByText('Custom user group claim name')).toBeInTheDocument();
+    // Check if custom user team claim name is displayed
+    expect(screen.getByText('Custom user team claim name')).toBeInTheDocument();
     expect(screen.getByText('groups')).toBeInTheDocument();
 
     // Check if DataTable is rendered
@@ -270,10 +270,10 @@ describe('UserGroupMappingSection', () => {
       </TestWrapper>
     );
 
-    // Default user group should show "Default group" when DefaultUserGroupID is missing
-    expect(screen.getByText('Default group')).toBeInTheDocument();
+    // Default user team should show "Default team" when DefaultUserGroupID is missing
+    expect(screen.getByText('Default team')).toBeInTheDocument();
 
-    // Custom user group claim name should show "group" when CustomUserGroupField is missing
+    // Custom user team claim name should show "group" when CustomUserGroupField is missing
     expect(screen.getByText('group')).toBeInTheDocument();
   });
 });

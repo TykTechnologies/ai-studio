@@ -23,7 +23,7 @@ import (
 // @Success 302 {string} string "Redirect to the provider's authentication page"
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /auth/{id}/{provider} [get, post]
+// @Router /auth/{id}/{provider} [get]
 func (a *API) handleTIBAuth(c *gin.Context) {
 	user := a.auth.GetAuthenticatedUser(c)
 	if user != nil {
@@ -67,7 +67,7 @@ func (a *API) handleTIBAuth(c *gin.Context) {
 // @Success 302 {string} string "Redirect to the dashboard or portal"
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /auth/{id}/{provider}/callback [get, post]
+// @Router /auth/{id}/{provider}/callback [get]
 func (a *API) handleTIBAuthCallback(c *gin.Context) {
 	user := a.auth.GetAuthenticatedUser(c)
 	if user != nil {
@@ -99,7 +99,7 @@ func (a *API) handleTIBAuthCallback(c *gin.Context) {
 // @Success 200 {object} string "Success"
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /auth/{id}/saml/metadata [get, post]
+// @Router /auth/{id}/saml/metadata [get]
 func (a *API) handleSAMLMetadata(c *gin.Context) {
 	user := a.auth.GetAuthenticatedUser(c)
 	if user != nil {

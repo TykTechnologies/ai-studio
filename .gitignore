@@ -139,3 +139,4 @@ tyk-internal-marketplace
 tests/postgres_data_ci/
 .playwright-mcp
 oci-cache
+helm/values-testing.yaml

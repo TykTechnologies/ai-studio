@@ -289,7 +289,7 @@ const SSOProfiles = () => {
 
   const emptyState = {
     title: "No Identity provider profiles have been created yet.",
-    description: "Single Sign-On (SSO) is an authentication process in which a user is provided access to the AI studio applications by using only a single set of login credentials e.g. username and password.\nGet started with Single Sign-On by adding a profile. Configure settings and, if needed, map user groups to assign users to teams.",
+    description: "Single Sign-On (SSO) is an authentication process in which a user is provided access to the AI studio applications by using only a single set of login credentials e.g. username and password.\nGet started with Single Sign-On by adding a profile. Configure settings and, if needed, map identity provider groups to assign users to teams.",
     learnMoreLink: "",
   };
 

@@ -1,0 +1,33 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-microgateway-config
+data:
+  PORT: "8080"
+  HOST: "0.0.0.0"
+  READ_TIMEOUT: "300s"
+  WRITE_TIMEOUT: "300s"
+  SHUTDOWN_TIMEOUT: "30s"
+  DATABASE_TYPE: {{ .Values.config.databaseType | quote }}
+  DATABASE_DSN: {{ .Values.config.databaseDsn | quote }}
+  DB_AUTO_MIGRATE: {{ .Values.config.dbAutoMigrate | quote }}
+  GATEWAY_MODE: "edge"
+  CONTROL_ENDPOINT: {{ default (printf "%s:50051" .Release.Name) .Values.config.controlEndpoint | quote }}
+  EDGE_ID: {{ .Values.config.edgeId | quote }}
+  EDGE_NAMESPACE: {{ .Values.config.edgeNamespace | quote }}
+  EDGE_HEARTBEAT_INTERVAL: {{ .Values.config.heartbeatInterval | quote }}
+  EDGE_ALLOW_INSECURE: {{ .Values.config.allowInsecure | quote }}
+  EDGE_TLS_ENABLED: {{ .Values.config.tlsEnabled | quote }}
+  GATEWAY_TIMEOUT: {{ .Values.config.gatewayTimeout | quote }}
+  GATEWAY_ENABLE_FILTERS: {{ .Values.config.gatewayEnableFilters | quote }}
+  GATEWAY_ENABLE_ANALYTICS: {{ .Values.config.gatewayEnableAnalytics | quote }}
+  ANALYTICS_ENABLED: {{ .Values.config.analyticsEnabled | quote }}
+  ANALYTICS_BUFFER_SIZE: {{ .Values.config.analyticsBufferSize | quote }}
+  ANALYTICS_FLUSH_INTERVAL: {{ .Values.config.analyticsFlushInterval | quote }}
+  ANALYTICS_RETENTION_DAYS: {{ .Values.config.analyticsRetentionDays | quote }}
+  PLUGINS_CONFIG_PATH: {{ .Values.config.pluginsConfigPath | quote }}
+  OCI_PLUGINS_CACHE_DIR: {{ .Values.config.ociPluginsCacheDir | quote }}
+  OCI_PLUGINS_REQUIRE_SIGNATURE: {{ .Values.config.ociPluginsRequireSignature | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+{{- end }}

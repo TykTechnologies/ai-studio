@@ -1,10 +1,31 @@
 package models
 
 import (
+	"sort"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"gorm.io/gorm"
 )
+
+// sortPluginsBySemverDesc sorts marketplace plugins by semantic version descending (highest first).
+// Entries with invalid semver strings are sorted after valid ones.
+func sortPluginsBySemverDesc(plugins []*MarketplacePlugin) {
+	sort.Slice(plugins, func(i, j int) bool {
+		vi, erri := semver.NewVersion(plugins[i].Version)
+		vj, errj := semver.NewVersion(plugins[j].Version)
+		if erri != nil && errj != nil {
+			return plugins[i].Version > plugins[j].Version
+		}
+		if erri != nil {
+			return false
+		}
+		if errj != nil {
+			return true
+		}
+		return vi.GreaterThan(vj)
+	})
+}
 
 // MarketplacePlugin represents a cached plugin entry from the marketplace index
 type MarketplacePlugin struct {
@@ -156,17 +177,24 @@ func (mp *MarketplacePlugin) GetByPluginIDAndVersion(db *gorm.DB, pluginID, vers
 	return db.Where("plugin_id = ? AND version = ?", pluginID, version).First(mp).Error
 }
 
-// GetLatestVersion retrieves the latest version of a marketplace plugin
+// GetLatestVersion retrieves the latest version of a marketplace plugin by semver
 func (mp *MarketplacePlugin) GetLatestVersion(db *gorm.DB, pluginID string) error {
-	return db.Where("plugin_id = ?", pluginID).
-		Order("plugin_updated_at DESC").
-		First(mp).Error
+	var all []*MarketplacePlugin
+	if err := db.Where("plugin_id = ?", pluginID).Find(&all).Error; err != nil {
+		return err
+	}
+	if len(all) == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	sortPluginsBySemverDesc(all)
+	*mp = *all[0]
+	return nil
 }
 
-// ListMarketplacePlugins returns paginated marketplace plugins with filtering
+// ListMarketplacePlugins returns paginated marketplace plugins with filtering.
+// Only the highest semver version of each plugin_id is returned.
 func ListMarketplacePlugins(db *gorm.DB, pageSize, pageNumber int, category, publisher, maturity, search string, includeDeprecated bool) ([]*MarketplacePlugin, int64, int, error) {
-	var plugins []*MarketplacePlugin
-	var totalCount int64
+	var allPlugins []*MarketplacePlugin
 
 	query := db.Model(&MarketplacePlugin{})
 
@@ -188,12 +216,23 @@ func ListMarketplacePlugins(db *gorm.DB, pageSize, pageNumber int, category, pub
 		query = query.Where("name LIKE ? OR description LIKE ? OR plugin_id LIKE ?", searchPattern, searchPattern, searchPattern)
 	}
 
-	// Get total count
-	if err := query.Count(&totalCount).Error; err != nil {
+	if err := query.Find(&allPlugins).Error; err != nil {
 		return nil, 0, 0, err
 	}
 
-	// Calculate total pages
+	// Sort by semver descending, then deduplicate to keep only the highest version per plugin_id
+	sortPluginsBySemverDesc(allPlugins)
+	seen := make(map[string]bool)
+	var latest []*MarketplacePlugin
+	for _, p := range allPlugins {
+		if !seen[p.PluginID] {
+			seen[p.PluginID] = true
+			latest = append(latest, p)
+		}
+	}
+
+	// Pagination
+	totalCount := int64(len(latest))
 	totalPages := 0
 	if totalCount > 0 {
 		totalPages = int(totalCount) / pageSize
@@ -202,54 +241,26 @@ func ListMarketplacePlugins(db *gorm.DB, pageSize, pageNumber int, category, pub
 		}
 	}
 
-	// Get paginated results - only latest version of each plugin
-	// Use a subquery to get the latest version ID for each plugin_id, then fetch those records
-	// This approach works with both PostgreSQL and SQLite
-
-	// First, get the IDs of the latest versions for each plugin
-	subquery := db.Model(&MarketplacePlugin{}).
-		Select("MAX(id) as id").
-		Where("deleted_at IS NULL")
-
-	// Apply same filters to subquery
-	if category != "" && category != "all" {
-		subquery = subquery.Where("category = ?", category)
-	}
-	if publisher != "" && publisher != "all" {
-		subquery = subquery.Where("publisher = ?", publisher)
-	}
-	if maturity != "" && maturity != "all" {
-		subquery = subquery.Where("maturity = ?", maturity)
-	}
-	if !includeDeprecated {
-		subquery = subquery.Where("deprecated = ?", false)
-	}
-	if search != "" {
-		searchPattern := "%" + search + "%"
-		subquery = subquery.Where("name LIKE ? OR description LIKE ? OR plugin_id LIKE ?", searchPattern, searchPattern, searchPattern)
-	}
-
-	subquery = subquery.Group("plugin_id")
-
-	// Now fetch the actual plugin records with these IDs
 	offset := (pageNumber - 1) * pageSize
-	err := db.Model(&MarketplacePlugin{}).
-		Where("id IN (?)", subquery).
-		Order("plugin_updated_at DESC").
-		Offset(offset).
-		Limit(pageSize).
-		Find(&plugins).Error
+	end := offset + pageSize
+	if offset > int(totalCount) {
+		offset = int(totalCount)
+	}
+	if end > int(totalCount) {
+		end = int(totalCount)
+	}
 
-	return plugins, totalCount, totalPages, err
+	return latest[offset:end], totalCount, totalPages, nil
 }
 
-// GetAllVersions returns all versions of a specific plugin from marketplace
+// GetAllVersions returns all versions of a specific plugin from marketplace, sorted by semver descending
 func GetAllPluginVersions(db *gorm.DB, pluginID string) ([]*MarketplacePlugin, error) {
 	var versions []*MarketplacePlugin
-	err := db.Where("plugin_id = ?", pluginID).
-		Order("plugin_updated_at DESC").
-		Find(&versions).Error
-	return versions, err
+	if err := db.Where("plugin_id = ?", pluginID).Find(&versions).Error; err != nil {
+		return nil, err
+	}
+	sortPluginsBySemverDesc(versions)
+	return versions, nil
 }
 
 // GetMarketplaceIndex retrieves the active default marketplace index

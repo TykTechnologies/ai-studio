@@ -299,7 +299,7 @@ const Overview = () => {
                   }}>
                   <IconBadge iconName="users" />
                   <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
-                    Invite users and control who access to what with <BoldText>RBAC and user groups</BoldText>
+                    Invite users and control who access to what with <BoldText>RBAC and teams</BoldText>
                   </CardText>
                 </Box>
               </BasicCard>

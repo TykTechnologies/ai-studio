@@ -825,7 +825,7 @@ func (a *API) getLLMPlugins(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "LLM ID"
-// @Param plugin_ids body struct{PluginIDs []uint `json:"plugin_ids"`} true "Plugin IDs in execution order"
+// @Param plugin_ids body object true "Plugin IDs in execution order"
 // @Success 200 {object} SuccessResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse

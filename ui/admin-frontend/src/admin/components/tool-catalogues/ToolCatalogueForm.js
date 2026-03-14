@@ -244,7 +244,7 @@ const ToolCatalogueForm = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of tools that you can assign to specific user groups to manage access easily.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of tools that you can assign to specific teams to manage access easily.</Typography>  
       </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: microgateway
+description: Tyk AI Microgateway — data plane for hub-spoke deployments
+type: application
+version: 0.1.0
+appVersion: "2.0.0"

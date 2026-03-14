@@ -41,7 +41,7 @@ const useGroups = () => {
       setError("");
     } catch (error) {
       console.error("Error fetching groups", error);
-      setError("Failed to load groups");
+      setError("Failed to load teams");
     } finally {
       setLoading(false);
     }

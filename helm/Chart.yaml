@@ -6,6 +6,10 @@ version: 0.1.0
 appVersion: "latest"
 
 dependencies:
+  - name: microgateway
+    version: 0.1.0
+    condition: microgateway.enabled
+    repository: file://charts/microgateway
   - name: reranker
     version: 0.1.0
     condition: reranker.enabled

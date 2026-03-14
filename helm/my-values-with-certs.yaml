@@ -6,46 +6,80 @@ midsommar:
     certManager:
       issuer: letsencrypt-prod
     hosts:
-      - host: app.example.com
+      - host: studio.example.com
         paths:
           - path: /
             pathType: Prefix
             port: 8080
+    tls:
+      - secretName: studio-tls-secret
+        hosts:
+          - studio.example.com
+  service:
+    ports:
+      - name: http
+        port: 8080
+        targetPort: 8080
+      - name: gateway
+        port: 9090
+        targetPort: 9090
+      - name: grpc
+        port: 50051
+        targetPort: 50051
+
+config:
+  allowRegistrations: "true"
+  siteUrl: "https://studio.example.com"
+  fromEmail: "noreply@example.com"
+  devMode: "false"
+  databaseType: "postgres"
+  tykAiSecretKey: "production-secret-key"
+  tykAiLicense: "production-license"
+  ociCacheDir: "./data/cache/plugins"
+  ociRequireSignature: "false"
+  gatewayMode: "control"
+  grpcPort: "50051"
+  grpcHost: "0.0.0.0"
+  grpcTlsInsecure: "true"
+  grpcAuthToken: "production-grpc-auth-token"
+  microgatewayEncryptionKey: "production-encryption-key"
+  # proxyUrl, toolDisplayUrl, datasourceDisplayUrl auto-resolve from microgateway ingress config
+
+database:
+  internal: false
+  url: "postgres://user:password@production-db.example.com:5432/tyk_ai_studio"
+
+microgateway:
+  enabled: true
+  image:
+    repository: tykio/tyk-microgateway
+    tag: v2.0.0
+  ingress:
+    enabled: true
+    certificateEnabled: true
+    className: nginx
+    certManager:
+      issuer: letsencrypt-prod
+    hosts:
       - host: gateway.example.com
         paths:
           - path: /
             pathType: Prefix
-            port: 9090
     tls:
-      - secretName: app-tls-secret
-        hosts:
-          - app.example.com
       - secretName: gateway-tls-secret
         hosts:
           - gateway.example.com
+  config:
+    edgeId: "edge-1"
+    edgeNamespace: "default"
+    allowInsecure: "false"
+    tlsEnabled: "false"
+  secrets:
+    edgeAuthToken: "production-grpc-auth-token"
+    encryptionKey: "production-encryption-key"
+    tykAiLicense: "production-license"
 
-config:
-  allowRegistrations: "true"
-  adminEmail: "admin@example.com"
-  siteUrl: "https://app.example.com"
-  fromEmail: "noreply@example.com"
-  devMode: "false"
-  databaseType: "postgres"
-  tykAiSecretKey: "production-secret-key" # Add these new values
-  tykAiLicense: "production-license"
-
-# External database configuration using full URL
-database:
-  internal: false
-  url: "postgres://user:password@production-db.example.com:5432/midsommar"
-  # Alternative configuration using individual components:
-  # host: "production-db.example.com"
-  # port: 5432
-  # name: "midsommar"
-  # user: "production-user"
-  # password: "production-password"
-
-# Optional services configuration for production
+# Optional services
 reranker:
   enabled: true
   image:

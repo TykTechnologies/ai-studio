@@ -1369,7 +1369,7 @@ func (a *API) setToolDependencies(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Tool ID"
-// @Success 200 {object} OperationsListResponse
+// @Success 200 {object} OperationsResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse

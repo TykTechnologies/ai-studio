@@ -88,7 +88,7 @@ describe("useGroupDetail", () => {
     expect(result.current.dataCatalogues).toEqual([]);
     expect(result.current.toolCatalogues).toEqual([]);
     expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe("Failed to load group details");
+    expect(result.current.error).toBe("Failed to load team details");
   });
 
    it("should handle missing attributes in API response gracefully", async () => {

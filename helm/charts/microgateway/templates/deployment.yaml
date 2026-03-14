@@ -1,0 +1,57 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-microgateway
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: microgateway
+  template:
+    metadata:
+      labels:
+        app: microgateway
+    spec:
+      containers:
+        - name: microgateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-microgateway-config
+            - secretRef:
+                name: {{ .Release.Name }}-microgateway-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: analytics-config
+              mountPath: /opt/tyk-microgateway/config
+            - name: data
+              mountPath: /opt/tyk-microgateway/data
+            - name: plugins
+              mountPath: /var/lib/microgateway
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: analytics-config
+          configMap:
+            name: {{ .Release.Name }}-microgateway-analytics
+        - name: data
+          emptyDir: {}
+        - name: plugins
+          emptyDir: {}
+{{- end }}

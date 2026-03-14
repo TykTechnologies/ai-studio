@@ -20,6 +20,7 @@ require (
 	github.com/Jeffail/gabs v1.4.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
+	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/TykTechnologies/gojsonschema v0.0.0-20170222154038-dcb3e4bb7990 // indirect
 	github.com/TykTechnologies/graphql-go-tools v1.6.2-0.20240705065952-ae6008677a48 // indirect

@@ -4,33 +4,70 @@ midsommar:
     certificateEnabled: false
     className: nginx
     hosts:
-      - host: app.example.com
+      - host: studio.example.com
         paths:
           - path: /
             pathType: Prefix
             port: 8080
-      - host: gateway.example.com
-        paths:
-          - path: /
-            pathType: Prefix
-            port: 9090
+  service:
+    ports:
+      - name: http
+        port: 8080
+        targetPort: 8080
+      - name: gateway
+        port: 9090
+        targetPort: 9090
+      - name: grpc
+        port: 50051
+        targetPort: 50051
 
 config:
   allowRegistrations: "true"
-  adminEmail: "admin@example.com"
-  siteUrl: "http://app.example.com" # Note: using http instead of https
+  siteUrl: "http://studio.example.com"
   fromEmail: "noreply@example.com"
-  devMode: "false"
+  devMode: "true"                       # Required for login over plain HTTP
   databaseType: "postgres"
+  tykAiSecretKey: "your-secret-key"
+  tykAiLicense: "your-license"
+  ociCacheDir: "./data/cache/plugins"
+  ociRequireSignature: "false"
+  gatewayMode: "control"
+  grpcPort: "50051"
+  grpcHost: "0.0.0.0"
+  grpcTlsInsecure: "true"
+  grpcAuthToken: "your-grpc-auth-token"
+  microgatewayEncryptionKey: "your-encryption-key"
+  # proxyUrl, toolDisplayUrl, datasourceDisplayUrl auto-resolve from microgateway ingress config
 
-# External database configuration
 database:
   internal: false
   host: "your-external-postgres-host"
   port: 5432
-  name: "midsommar"
+  name: "tyk_ai_studio"
   user: "your-db-user"
   password: "your-secure-password-here"
+
+microgateway:
+  enabled: true
+  image:
+    repository: tykio/tyk-microgateway
+    tag: v2.0.0
+  ingress:
+    enabled: true
+    certificateEnabled: false
+    className: nginx
+    hosts:
+      - host: gateway.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+  config:
+    edgeId: "edge-1"
+    edgeNamespace: "default"
+  secrets:
+    edgeAuthToken: "your-grpc-auth-token"
+    encryptionKey: "your-encryption-key"
+    tykAiLicense: "your-license"
 
 # Optional services (disabled by default)
 reranker:

@@ -83,7 +83,7 @@ describe('useGroups', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     
     expect(result.current.groups).toEqual([]);
-    expect(result.current.error).toBe('Failed to load groups');
+    expect(result.current.error).toBe('Failed to load teams');
     expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching groups', mockError);
     consoleErrorSpy.mockRestore();
   });

@@ -76,6 +76,9 @@ type SimpleEdgeClient struct {
 
 	// Budget sync handler for multi-edge budget synchronization
 	budgetSyncHandler BudgetSyncSubscriber
+
+	// Shutdown channel - closed when Close() is called to stop reconnection
+	stopCh chan struct{}
 }
 
 // NewSimpleEdgeClient creates a basic edge client
@@ -88,6 +91,7 @@ func NewSimpleEdgeClient(cfg *config.Config, version, buildHash, buildTime strin
 		maxReconnects:     -1,              // Unlimited reconnections
 		reconnectInterval: 5 * time.Second, // 5 second retry interval
 		eventBus:          eventbridge.NewBus(),
+		stopCh:            make(chan struct{}),
 	}
 
 	log.Debug().Msg("Event bridge bus initialized for edge client")
@@ -748,6 +752,14 @@ func (c *SimpleEdgeClient) HandleReloadRequest(req *pb.ConfigurationReloadReques
 func (c *SimpleEdgeClient) Stop() error {
 	log.Debug().Msg("Stopping SimpleEdgeClient")
 
+	// Signal shutdown to stop reconnection attempts
+	select {
+	case <-c.stopCh:
+		// Already closed
+	default:
+		close(c.stopCh)
+	}
+
 	// Cancel stream context
 	if c.streamCancel != nil {
 		c.streamCancel()
@@ -909,8 +921,8 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 		select {
 		case <-time.After(backoffDelay):
 			// Continue with reconnection attempt
-		case <-c.streamCtx.Done():
-			log.Debug().Msg("Reconnection cancelled due to context cancellation")
+		case <-c.stopCh:
+			log.Debug().Msg("Reconnection cancelled due to client shutdown")
 			return
 		}
 

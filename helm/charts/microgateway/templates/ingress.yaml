@@ -1,0 +1,38 @@
+{{- if and .Values.enabled .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-microgateway
+  annotations:
+    {{- if .Values.ingress.certificateEnabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.certManager.issuer }}
+    {{- end }}
+    kubernetes.io/ingress.class: {{ .Values.ingress.className }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if and .Values.ingress.certificateEnabled .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - secretName: {{ .secretName }}
+      hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $.Release.Name }}-microgateway
+                port:
+                  number: 8080
+          {{- end }}
+    {{- end }}
+{{- end }}
