@@ -98,7 +98,7 @@ func TestGetChatByID_ResolvesSecrets(t *testing.T) {
 	service.SetSecretStore(secretStore)
 
 	// Migrate secrets table
-	db.AutoMigrate(&secrets.Secret{}, &secrets.EncryptionKey{})
+	db.AutoMigrate(&secrets.Secret{})
 
 	// Create test secrets
 	apiKeySecret := &secrets.Secret{
