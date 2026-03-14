@@ -10,7 +10,7 @@ import (
 )
 
 func TestProvider_RoundTrip(t *testing.T) {
-	p := New("test-kek")
+	p := New("test-kek", "test-key-v1")
 	ctx := context.Background()
 
 	dek := make([]byte, 32)
@@ -28,7 +28,7 @@ func TestProvider_RoundTrip(t *testing.T) {
 }
 
 func TestGenerateDEK(t *testing.T) {
-	p := New("test-kek")
+	p := New("test-kek", "test-key-v1")
 	ctx := context.Background()
 
 	wrapped, err := secrets.GenerateDEK(ctx, p)
@@ -41,8 +41,8 @@ func TestGenerateDEK(t *testing.T) {
 }
 
 func TestProvider_WrongKEK(t *testing.T) {
-	p1 := New("kek-1")
-	p2 := New("kek-2")
+	p1 := New("kek-1", "test-key-v1")
+	p2 := New("kek-2", "test-key-v1")
 	ctx := context.Background()
 
 	dek := []byte("this-is-a-32-byte-data-enc-key!")
@@ -54,7 +54,7 @@ func TestProvider_WrongKEK(t *testing.T) {
 }
 
 func TestProvider_TooShort(t *testing.T) {
-	p := New("kek")
+	p := New("kek", "test-key-v1")
 	ctx := context.Background()
 
 	_, err := p.UnwrapKey(ctx, []byte("short"))

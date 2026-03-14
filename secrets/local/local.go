@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"golang.org/x/crypto/argon2"
@@ -33,21 +34,38 @@ func init() {
 		if rawKey == "" {
 			return nil, fmt.Errorf("local KEK provider requires RAW_KEY in config")
 		}
-		return New(rawKey), nil
+
+		// Read keyID from config or auto-generate from date
+		keyID := config["KEK_ID"]
+		if keyID == "" {
+			now := time.Now()
+			keyID = fmt.Sprintf("key-%d-%02d", now.Year(), now.Month())
+		}
+
+		return New(rawKey, keyID), nil
 	})
 }
 
 // Provider wraps DEKs using a local KEK derived from a passphrase.
 // Suitable for single-node deployments without an external KMS.
 type Provider struct {
-	kek []byte
+	kek   []byte
+	keyID string
 }
 
-// New creates a KEKProvider that uses AES-256-GCM with a KEK
-// derived from rawKey via Argon2id.
-func New(rawKey string) *Provider {
+// New creates a KEKProvider with explicit version identifier.
+// The keyID is embedded in encrypted values for KEK rotation tracking.
+func New(rawKey string, keyID string) *Provider {
 	kek := argon2.IDKey([]byte(rawKey), kekSalt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
-	return &Provider{kek: kek}
+	return &Provider{
+		kek:   kek,
+		keyID: keyID,
+	}
+}
+
+// KeyID returns the version identifier for this KEK.
+func (p *Provider) KeyID() string {
+	return p.keyID
 }
 
 func (p *Provider) WrapKey(_ context.Context, dek []byte) ([]byte, error) {

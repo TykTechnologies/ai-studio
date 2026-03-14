@@ -49,9 +49,8 @@ func TestDecryptWith_ENC_UnknownVersion(t *testing.T) {
 func TestDecryptWith_ENCV2_InvalidKeyID(t *testing.T) {
 	t.Parallel()
 	kek := newTestLocalKEK("kek")
-	ks := newMemKeyStore()
-	seedActiveKey(t, ks, kek)
-	envelope := NewEnvelopeCipher(kek, ks)
+	ks := nil
+	envelope := newTestEnvelopeCipher(kek)
 	ciphers := legacyCipherInstances()
 	ciphers["v2"] = envelope
 	ctx := context.Background()
@@ -78,9 +77,8 @@ func TestDecryptWith_ENCV2_InvalidKeyID(t *testing.T) {
 func TestDecryptWith_ENCV2_CorruptedCiphertext(t *testing.T) {
 	t.Parallel()
 	kek := newTestLocalKEK("kek")
-	ks := newMemKeyStore()
-	seedActiveKey(t, ks, kek)
-	envelope := NewEnvelopeCipher(kek, ks)
+	ks := nil
+	envelope := newTestEnvelopeCipher(kek)
 	ciphers := legacyCipherInstances()
 	ciphers["v2"] = envelope
 	ctx := context.Background()
@@ -165,9 +163,8 @@ func TestDecryptWith_ENCV2SlashOnly(t *testing.T) {
 	t.Parallel()
 	ciphers := legacyCipherInstances()
 	kek := newTestLocalKEK("kek")
-	ks := newMemKeyStore()
-	seedActiveKey(t, ks, kek)
-	ciphers["v2"] = NewEnvelopeCipher(kek, ks)
+	ks := nil
+	ciphers["v2"] = newTestEnvelopeCipher(kek)
 	ctx := context.Background()
 
 	// "$ENC/v2/" — v2 payload is empty, which is an invalid format for envelope

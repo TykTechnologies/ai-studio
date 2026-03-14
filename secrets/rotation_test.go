@@ -10,7 +10,7 @@ import (
 )
 
 func TestRotateKey_SameKey(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	for _, name := range []string{"KEY_A", "KEY_B", "KEY_C"} {
@@ -32,7 +32,7 @@ func TestRotateKey_SameKey(t *testing.T) {
 }
 
 func TestRotateKey_EmptyDB(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	result, err := store.RotateKey(ctx, "old", "new")
@@ -43,7 +43,7 @@ func TestRotateKey_EmptyDB(t *testing.T) {
 }
 
 func TestRotateKey_EmptyValues(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	s := &Secret{VarName: "EMPTY", Value: ""}
@@ -116,7 +116,7 @@ func TestRotateKEK_ReWrapsKeys(t *testing.T) {
 	ctx := context.Background()
 
 	oldKEK := newTestLocalKEK("old-kek")
-	store := NewWithKEKProvider(db, rawKey, oldKEK)
+	store := NewWithKEKProvider(db, rawKey, oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
 
 	for _, name := range []string{"S1", "S2"} {
 		s := &Secret{VarName: name, Value: "val-" + name}
@@ -124,7 +124,6 @@ func TestRotateKEK_ReWrapsKeys(t *testing.T) {
 	}
 
 	var keyCount int64
-	db.Model(&EncryptionKey{}).Count(&keyCount)
 	assert.Equal(t, int64(2), keyCount, "per-object DEKs: 2 secrets = 2 keys")
 
 	// Rotate KEK
@@ -136,7 +135,7 @@ func TestRotateKEK_ReWrapsKeys(t *testing.T) {
 	assert.Empty(t, result.Errors)
 
 	// New store can decrypt
-	newStore := NewWithKEKProvider(db, rawKey, newKEK)
+	newStore := NewWithKEKProvider(db, rawKey, newKEK, map[string]KEKProvider{newKEK.KeyID(): newKEK})
 	for _, name := range []string{"S1", "S2"} {
 		got, err := newStore.GetByVarName(ctx, name, false)
 		require.NoError(t, err)

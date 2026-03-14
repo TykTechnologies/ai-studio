@@ -18,13 +18,21 @@ import (
 // We can't import secrets/local from package secrets tests, so we
 // duplicate the minimal implementation here for testing.
 type testLocalKEK struct {
-	kek []byte
+	kek   []byte
+	keyID string
 }
 
 func newTestLocalKEK(rawKey string) *testLocalKEK {
 	salt := []byte("tyk-ai-studio-local-kek-v1")
 	kek := argon2.IDKey([]byte(rawKey), salt, 3, 64*1024, 4, 32)
-	return &testLocalKEK{kek: kek}
+	return &testLocalKEK{
+		kek:   kek,
+		keyID: "test-key-v1",
+	}
+}
+
+func (p *testLocalKEK) KeyID() string {
+	return p.keyID
 }
 
 func (p *testLocalKEK) WrapKey(_ context.Context, dek []byte) ([]byte, error) {
@@ -85,11 +93,22 @@ func encryptWith(ctx context.Context, c Cipher, rawKey string, plaintext string)
 	return "$ENC/" + c.Version() + "/" + encoded, nil
 }
 
+// newTestStore creates a test store with given KEK and cache.
+func newTestStore(db *testing.T, kek KEKProvider) *Store {
+	dbInst := setupTestDB(db)
+	cache := map[string]KEKProvider{kek.KeyID(): kek}
+	return NewWithKEKProvider(dbInst, "test-key", kek, cache)
+}
+
 func TestMain(m *testing.M) {
 	// Register the local provider for tests since we can't import secrets/local
 	// from same-package tests.
 	DefaultRegistry.Register("local", func(config map[string]string) (KEKProvider, error) {
-		return newTestLocalKEK(config["RAW_KEY"]), nil
+		kek := newTestLocalKEK(config["RAW_KEY"])
+		if keyID := config["KEK_ID"]; keyID != "" {
+			kek.keyID = keyID
+		}
+		return kek, nil
 	})
 	os.Exit(m.Run())
 }

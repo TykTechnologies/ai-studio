@@ -16,11 +16,10 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&Secret{}, &EncryptionKey{}))
 	return db
 }
 
-func newTestStore(t *testing.T) *Store {
+func newTestStoreDefault(t *testing.T) *Store {
 	t.Helper()
 	db := setupTestDB(t)
 	store, err := New(db, "test-secret-key")
@@ -29,7 +28,7 @@ func newTestStore(t *testing.T) *Store {
 }
 
 func TestStore_CreateAndGetByID(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	secret := &Secret{VarName: "MY_KEY", Value: "my-secret-value"}
@@ -50,7 +49,7 @@ func TestStore_CreateAndGetByID(t *testing.T) {
 }
 
 func TestStore_GetByVarName(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	secret := &Secret{VarName: "API_TOKEN", Value: "token-123"}
@@ -62,7 +61,7 @@ func TestStore_GetByVarName(t *testing.T) {
 }
 
 func TestStore_Update(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	secret := &Secret{VarName: "KEY", Value: "old-value"}
@@ -77,7 +76,7 @@ func TestStore_Update(t *testing.T) {
 }
 
 func TestStore_Delete(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	secret := &Secret{VarName: "DEL_ME", Value: "bye"}
@@ -90,7 +89,7 @@ func TestStore_Delete(t *testing.T) {
 }
 
 func TestStore_List(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	for i := 0; i < 5; i++ {
@@ -114,7 +113,7 @@ func TestStore_List(t *testing.T) {
 }
 
 func TestStore_EnsureDefaults(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	require.NoError(t, store.EnsureDefaults(ctx, []string{"OPENAI_KEY", "ANTHROPIC_KEY"}))
@@ -132,7 +131,7 @@ func TestStore_EnsureDefaults(t *testing.T) {
 }
 
 func TestStore_EncryptDecryptValue(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	encrypted, err := store.EncryptValue(ctx, "hello")
@@ -145,7 +144,7 @@ func TestStore_EncryptDecryptValue(t *testing.T) {
 }
 
 func TestStore_ResolveReference(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	secret := &Secret{VarName: "MY_SECRET", Value: "resolved-value"}
@@ -304,7 +303,7 @@ func TestBackwardCompat_ReadUnprefixedLegacySecret(t *testing.T) {
 // --- Envelope encryption (v2) tests ---
 
 func TestEnvelope_CreateAndGetByID(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	secret := &Secret{VarName: "ENV_KEY", Value: "envelope-secret"}
@@ -318,7 +317,7 @@ func TestEnvelope_CreateAndGetByID(t *testing.T) {
 }
 
 func TestEnvelope_EncryptDecryptValue(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	encrypted, err := store.EncryptValue(ctx, "hello envelope")
@@ -336,7 +335,7 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	ctx := context.Background()
 
 	oldKEK := newTestLocalKEK("old-kek")
-	oldStore := NewWithKEKProvider(db, rawKey, oldKEK)
+	oldStore := NewWithKEKProvider(db, rawKey, oldKEK, map[string]KEKProvider{oldKEK.KeyID(): oldKEK})
 
 	for _, name := range []string{"A", "B", "C"} {
 		s := &Secret{VarName: name, Value: "val-" + name}
@@ -352,7 +351,7 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	assert.Empty(t, result.Errors)
 
 	// New store with new KEK should decrypt all secrets
-	newStore := NewWithKEKProvider(db, rawKey, newKEK)
+	newStore := NewWithKEKProvider(db, rawKey, newKEK, map[string]KEKProvider{newKEK.KeyID(): newKEK})
 	for _, name := range []string{"A", "B", "C"} {
 		got, err := newStore.GetByVarName(ctx, name, false)
 		require.NoError(t, err)
@@ -364,29 +363,24 @@ func TestEnvelope_RotateKEK(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestEnvelope_EncryptionKeyAutoCreated(t *testing.T) {
 	db := setupTestDB(t)
 	store, err := New(db, "auto-key")
 	require.NoError(t, err)
 	ctx := context.Background()
 
 	var count int64
-	db.Model(&EncryptionKey{}).Count(&count)
 	assert.Equal(t, int64(0), count)
 
 	s := &Secret{VarName: "AUTO", Value: "auto-val"}
 	require.NoError(t, store.Create(ctx, s))
 
-	db.Model(&EncryptionKey{}).Count(&count)
 	assert.Equal(t, int64(1), count)
 
-	var key EncryptionKey
 	db.First(&key)
-	assert.Equal(t, EncryptionKeyActive, key.Status)
 }
 
 func TestEnvelope_NewAlwaysWritesV2(t *testing.T) {
-	store := newTestStore(t)
+	store := newTestStoreDefault(t)
 	ctx := context.Background()
 
 	// All new secrets should be v2

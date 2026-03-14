@@ -8,11 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
-	"sync"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // KEKProvider abstracts the master encryption key (MEK) operations.
@@ -20,6 +16,12 @@ import (
 // and unwraps them for use. Implementations live in subpackages (e.g., secrets/local)
 // and register via init() with the DefaultRegistry.
 type KEKProvider interface {
+	// KeyID returns the version identifier for this KEK (e.g., "key-2024-01").
+	// This value is embedded in encrypted data to enable safe KEK rotation.
+	// Multiple KEK providers can coexist with different IDs, allowing decryption
+	// of data encrypted with previous KEKs.
+	KeyID() string
+
 	// WrapKey wraps a plaintext DEK for storage.
 	WrapKey(ctx context.Context, dek []byte) ([]byte, error)
 	// UnwrapKey unwraps a stored DEK for use.
@@ -43,19 +45,9 @@ type Shutdowner interface {
 	Shutdown(ctx context.Context) error
 }
 
-// KeyGeneratedHook is called after a new DEK is created and persisted.
-type KeyGeneratedHook interface {
-	KeyGenerated(ctx context.Context, keyID uint) error
-}
-
 // KeyRotatedHook is called after all DEKs have been re-wrapped with a new KEK.
 type KeyRotatedHook interface {
 	KeyRotated(ctx context.Context, rotated int, failed int) error
-}
-
-// KeyRetiredHook is called after an encryption key is marked as retired.
-type KeyRetiredHook interface {
-	KeyRetired(ctx context.Context, keyID uint) error
 }
 
 // GenerateDEK creates a new random 32-byte DEK and returns it wrapped by the given provider.
@@ -67,45 +59,28 @@ func GenerateDEK(ctx context.Context, kek KEKProvider) ([]byte, error) {
 	return kek.WrapKey(ctx, dek)
 }
 
-// KeyStore provides access to encryption keys. The database implementation
-// stores keys in the encryption_keys table.
-type KeyStore interface {
-	// GetKeyByID returns an encryption key by ID for decryption.
-	GetKeyByID(ctx context.Context, id uint) (*EncryptionKey, error)
-	// CreateKey creates a new encryption key with the given wrapped key bytes.
-	CreateKey(ctx context.Context, wrappedKey string, status string) (*EncryptionKey, error)
-	// ListKeys returns all encryption keys.
-	ListKeys(ctx context.Context) ([]EncryptionKey, error)
-	// UpdateKey updates an encryption key record.
-	UpdateKey(ctx context.Context, key *EncryptionKey) error
-}
-
-// cachedDEK holds a plaintext DEK and the pre-built AES-GCM cipher for it.
-type cachedDEK struct {
-	keyID uint
-	gcm   cipher.AEAD
-}
-
-// EnvelopeCipher implements envelope encryption (v2) with per-object DEKs.
-// Each Encrypt call generates a fresh DEK, wraps it with the KEK, stores it
-// in the encryption_keys table, and uses it for that single encryption.
-// Caches unwrapped DEKs in memory to avoid repeated DB lookups and
-// KMS unwrap calls on decrypt.
-// Format: $ENC/v2/<key_id>/<base64(nonce+ciphertext)>
+// EnvelopeCipher implements envelope encryption (v2) with inline DEK storage.
+// Each Encrypt call generates a fresh DEK, wraps it with the KEK, and embeds
+// it directly in the encrypted value. No database storage required.
+// Format: $ENC/v2/${keyID}/${wrappedDEK}/${ciphertext}
 type EnvelopeCipher struct {
 	kek      KEKProvider
-	keyStore KeyStore
-
-	mu       sync.RWMutex
-	dekCache map[uint]*cachedDEK // cached DEKs by key ID for decryption
+	kekCache map[string]KEKProvider // Historical KEKs for rotation support
 }
 
-// NewEnvelopeCipher creates a v2 envelope cipher.
-func NewEnvelopeCipher(kek KEKProvider, keyStore KeyStore) *EnvelopeCipher {
+// NewEnvelopeCipher creates a v2 envelope cipher with inline DEK storage.
+// The kekCache holds historical KEK providers for decrypting data encrypted
+// with previous KEKs after rotation.
+func NewEnvelopeCipher(kek KEKProvider, kekCache map[string]KEKProvider) *EnvelopeCipher {
+	if kekCache == nil {
+		kekCache = make(map[string]KEKProvider)
+	}
+	// Register current KEK in cache
+	kekCache[kek.KeyID()] = kek
+
 	return &EnvelopeCipher{
 		kek:      kek,
-		keyStore: keyStore,
-		dekCache: make(map[uint]*cachedDEK),
+		kekCache: kekCache,
 	}
 }
 
@@ -118,23 +93,10 @@ func (c *EnvelopeCipher) Encrypt(ctx context.Context, _ []byte, plaintext []byte
 		return nil, fmt.Errorf("envelope encrypt: generate dek: %w", err)
 	}
 
-	// Wrap with KEK for storage
-	wrapped, err := c.kek.WrapKey(ctx, dek)
+	// Wrap with KEK for inline storage
+	wrappedDEK, err := c.kek.WrapKey(ctx, dek)
 	if err != nil {
 		return nil, fmt.Errorf("envelope encrypt: wrap dek: %w", err)
-	}
-
-	// Persist wrapped DEK
-	encKey, err := c.keyStore.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
-	if err != nil {
-		return nil, fmt.Errorf("envelope encrypt: store dek: %w", err)
-	}
-
-	// Fire lifecycle hook
-	if h, ok := c.kek.(KeyGeneratedHook); ok {
-		if err := h.KeyGenerated(ctx, encKey.ID); err != nil {
-			log.Warnf("key generated hook: %v", err)
-		}
 	}
 
 	// Build AES-GCM from plaintext DEK
@@ -147,124 +109,88 @@ func (c *EnvelopeCipher) Encrypt(ctx context.Context, _ []byte, plaintext []byte
 		return nil, fmt.Errorf("envelope encrypt: create gcm: %w", err)
 	}
 
-	// Encrypt
+	// Encrypt plaintext
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, fmt.Errorf("envelope encrypt: generate nonce: %w", err)
 	}
-	ct := gcm.Seal(nonce, nonce, plaintext, nil)
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 
-	// Cache for future decrypts
-	cached := &cachedDEK{keyID: encKey.ID, gcm: gcm}
-	c.mu.Lock()
-	c.dekCache[encKey.ID] = cached
-	c.mu.Unlock()
-
-	// Format: <key_id>/<base64(nonce+ciphertext)>
-	encoded := fmt.Sprintf("%d/%s", encKey.ID, base64.URLEncoding.EncodeToString(ct))
+	// Format: ${keyID}/${wrappedDEK_base64}/${ciphertext_base64}
+	keyID := c.kek.KeyID()
+	encoded := fmt.Sprintf("%s/%s/%s",
+		keyID,
+		base64.URLEncoding.EncodeToString(wrappedDEK),
+		base64.URLEncoding.EncodeToString(ciphertext),
+	)
 	return []byte(encoded), nil
 }
 
 func (c *EnvelopeCipher) Decrypt(ctx context.Context, _ []byte, payload []byte) ([]byte, error) {
-	// Parse "<key_id>/<ciphertext_base64>"
-	parts := strings.SplitN(string(payload), "/", 2)
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("envelope decrypt: invalid format, expected <key_id>/<ciphertext>")
+	// Parse "${keyID}/${wrappedDEK_base64}/${ciphertext_base64}"
+	parts := strings.SplitN(string(payload), "/", 3)
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("envelope decrypt: invalid format, expected <keyID>/<wrappedDEK>/<ciphertext>")
 	}
 
-	keyID, err := strconv.ParseUint(parts[0], 10, 64)
+	keyID := parts[0]
+	wrappedDEK, err := base64.URLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, fmt.Errorf("envelope decrypt: invalid key id %q: %w", parts[0], err)
+		return nil, fmt.Errorf("envelope decrypt: decode wrapped dek: %w", err)
 	}
-
-	ct, err := base64.URLEncoding.DecodeString(parts[1])
+	ciphertext, err := base64.URLEncoding.DecodeString(parts[2])
 	if err != nil {
 		return nil, fmt.Errorf("envelope decrypt: decode ciphertext: %w", err)
 	}
 
-	cached, err := c.getGCMByKeyID(ctx, uint(keyID))
-	if err != nil {
-		return nil, err
+	// Lookup KEK by version (supports rotation)
+	kek, ok := c.kekCache[keyID]
+	if !ok {
+		return nil, fmt.Errorf("envelope decrypt: unknown KEK version %q (available: %v)", keyID, c.availableKeyIDs())
 	}
 
-	nonceSize := cached.gcm.NonceSize()
-	if len(ct) < nonceSize {
+	// Unwrap DEK using historical KEK
+	dek, err := kek.UnwrapKey(ctx, wrappedDEK)
+	if err != nil {
+		return nil, fmt.Errorf("envelope decrypt: unwrap dek with KEK %q: %w", keyID, err)
+	}
+
+	// Build AES-GCM from unwrapped DEK
+	block, err := aes.NewCipher(dek)
+	if err != nil {
+		return nil, fmt.Errorf("envelope decrypt: create cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("envelope decrypt: create gcm: %w", err)
+	}
+
+	// Decrypt
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
 		return nil, fmt.Errorf("envelope decrypt: ciphertext too short")
 	}
 
-	nonce, raw := ct[:nonceSize], ct[nonceSize:]
-	result, err := cached.gcm.Open(nil, nonce, raw, nil)
+	nonce, raw := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, raw, nil)
 	if err != nil {
 		return nil, fmt.Errorf("envelope decrypt: %w", err)
 	}
 
-	return result, nil
+	return plaintext, nil
 }
 
-// getGCMByKeyID returns the cached GCM cipher for a given key ID, loading it on cache miss.
-func (c *EnvelopeCipher) getGCMByKeyID(ctx context.Context, keyID uint) (*cachedDEK, error) {
-	c.mu.RLock()
-	if cached, ok := c.dekCache[keyID]; ok {
-		c.mu.RUnlock()
-		return cached, nil
+// availableKeyIDs returns the list of KEK versions available for decryption.
+func (c *EnvelopeCipher) availableKeyIDs() []string {
+	var ids []string
+	for id := range c.kekCache {
+		ids = append(ids, id)
 	}
-	c.mu.RUnlock()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// Double-check after acquiring write lock.
-	if cached, ok := c.dekCache[keyID]; ok {
-		return cached, nil
-	}
-
-	encKey, err := c.keyStore.GetKeyByID(ctx, keyID)
-	if err != nil {
-		return nil, fmt.Errorf("envelope decrypt: get key %d: %w", keyID, err)
-	}
-
-	cached, err := c.unwrapAndBuild(ctx, encKey)
-	if err != nil {
-		return nil, err
-	}
-	c.dekCache[keyID] = cached
-	return cached, nil
-}
-
-// unwrapAndBuild decodes/unwraps a stored key and builds an AES-GCM cipher from it.
-func (c *EnvelopeCipher) unwrapAndBuild(ctx context.Context, encKey *EncryptionKey) (*cachedDEK, error) {
-	wrappedDEK, err := base64.URLEncoding.DecodeString(encKey.WrappedKey)
-	if err != nil {
-		return nil, fmt.Errorf("envelope: decode wrapped key %d: %w", encKey.ID, err)
-	}
-
-	dek, err := c.kek.UnwrapKey(ctx, wrappedDEK)
-	if err != nil {
-		return nil, fmt.Errorf("envelope: unwrap key %d: %w", encKey.ID, err)
-	}
-
-	block, err := aes.NewCipher(dek)
-	if err != nil {
-		return nil, fmt.Errorf("envelope: create cipher for key %d: %w", encKey.ID, err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("envelope: create gcm for key %d: %w", encKey.ID, err)
-	}
-
-	return &cachedDEK{keyID: encKey.ID, gcm: gcm}, nil
-}
-
-// ClearCache invalidates the in-memory DEK cache. Call after key rotation
-// to ensure the next operation picks up the new active key.
-func (c *EnvelopeCipher) ClearCache() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.dekCache = make(map[uint]*cachedDEK)
+	return ids
 }
 
 // EncryptEnvelope encrypts plaintext using envelope encryption (v2).
-// Returns the full "$ENC/v2/<key_id>/<ciphertext>" string.
+// Returns the full "$ENC/v2/${keyID}/${wrappedDEK}/${ciphertext}" string.
 // Empty or "[redacted]" values pass through unchanged.
 func EncryptEnvelope(ctx context.Context, c *EnvelopeCipher, plaintext string) (string, error) {
 	if plaintext == "" || plaintext == "[redacted]" {

@@ -40,6 +40,57 @@ type Store struct {
 	kek      KEKProvider
 }
 
+// buildHistoricalKEKCache scans environment variables for historical KEKs.
+// Format: TYK_AI_ENCRYPTION_KEY_2024_01=<passphrase> -> keyID "key-2024-01"
+// This allows decryption of data encrypted with previous KEKs after rotation.
+func buildHistoricalKEKCache(providerName string, rawKey string) map[string]KEKProvider {
+	cache := make(map[string]KEKProvider)
+
+	// Scan environment for historical KEKs
+	for _, env := range os.Environ() {
+		if !strings.HasPrefix(env, "TYK_AI_ENCRYPTION_KEY_") {
+			continue
+		}
+
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		// Extract keyID from env var name
+		// TYK_AI_ENCRYPTION_KEY_2024_01 -> key-2024-01
+		envName := parts[0]
+		suffix := envName[len("TYK_AI_ENCRYPTION_KEY_"):]
+
+		// Skip the current key (without suffix)
+		if suffix == "" || !strings.Contains(suffix, "_") {
+			continue
+		}
+
+		keyID := "key-" + strings.ReplaceAll(suffix, "_", "-")
+		historicalKey := parts[1]
+
+		// Create provider for this historical KEK
+		if providerName == "local" {
+			// Import local package for type
+			config := map[string]string{
+				"RAW_KEY": historicalKey,
+				"KEK_ID":  keyID,
+			}
+			provider, err := DefaultRegistry.Get("local", config)
+			if err != nil {
+				log.Warnf("Failed to load historical KEK %s: %v", keyID, err)
+				continue
+			}
+			cache[keyID] = provider
+			log.Debugf("Loaded historical KEK: %s", keyID)
+		}
+		// Add other providers (Vault, AWS KMS) here when implemented
+	}
+
+	return cache
+}
+
 // New creates a new DB-backed secret store using the "local" KEK provider.
 // The rawKey is used both as the KEK passphrase and for decrypting
 // legacy v1 secrets. New secrets are always written with envelope encryption.
@@ -58,24 +109,31 @@ func NewFromProvider(db *gorm.DB, rawKey string, providerName string, config map
 		config = make(map[string]string)
 	}
 	config["RAW_KEY"] = rawKey
+
+	// Create primary KEK
 	kek, err := DefaultRegistry.Get(providerName, config)
 	if err != nil {
 		return nil, fmt.Errorf("KEK provider %q not available: %w (registered: %v)", providerName, err, DefaultRegistry.Names())
 	}
+
+	// Build historical KEK cache for rotation support
+	kekCache := buildHistoricalKEKCache(providerName, rawKey)
+	kekCache[kek.KeyID()] = kek // Add current KEK to cache
+
 	if sc, ok := kek.(StartupChecker); ok {
 		if err := sc.Startup(context.Background()); err != nil {
 			return nil, fmt.Errorf("KEK provider %q startup check failed: %w", providerName, err)
 		}
 	}
-	return NewWithKEKProvider(db, rawKey, kek), nil
+	return NewWithKEKProvider(db, rawKey, kek, kekCache), nil
 }
 
 // NewWithKEKProvider creates a DB-backed secret store that uses envelope encryption (v2)
 // with a custom KEKProvider (e.g., Vault, AWS KMS). New secrets are always written
 // with envelope encryption. Legacy v1 secrets are read transparently.
-func NewWithKEKProvider(db *gorm.DB, rawKey string, kek KEKProvider) *Store {
-	ks := &gormKeyStore{db: db, kek: kek}
-	envelope := NewEnvelopeCipher(kek, ks)
+// The kekCache holds historical KEK providers for decrypting data encrypted with previous KEKs.
+func NewWithKEKProvider(db *gorm.DB, rawKey string, kek KEKProvider, kekCache map[string]KEKProvider) *Store {
+	envelope := NewEnvelopeCipher(kek, kekCache)
 	ciphers := legacyCipherInstances()
 	ciphers["v2"] = envelope
 
@@ -254,42 +312,3 @@ func (s *Store) ResolveReference(ctx context.Context, reference string, preserve
 func (s *Store) encryptValue(ctx context.Context, plaintext string) (string, error) {
 	return EncryptEnvelope(ctx, s.envelope, plaintext)
 }
-
-// --- gormKeyStore implements KeyStore backed by GORM ---
-
-type gormKeyStore struct {
-	db  *gorm.DB
-	kek KEKProvider
-}
-
-func (ks *gormKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, error) {
-	var key EncryptionKey
-	if err := ks.db.First(&key, id).Error; err != nil {
-		return nil, err
-	}
-	return &key, nil
-}
-
-func (ks *gormKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
-	key := &EncryptionKey{
-		WrappedKey: wrappedKey,
-		Status:     status,
-	}
-	if err := ks.db.Create(key).Error; err != nil {
-		return nil, err
-	}
-	return key, nil
-}
-
-func (ks *gormKeyStore) ListKeys(_ context.Context) ([]EncryptionKey, error) {
-	var keys []EncryptionKey
-	if err := ks.db.Order("id ASC").Find(&keys).Error; err != nil {
-		return nil, err
-	}
-	return keys, nil
-}
-
-func (ks *gormKeyStore) UpdateKey(_ context.Context, key *EncryptionKey) error {
-	return ks.db.Save(key).Error
-}
-

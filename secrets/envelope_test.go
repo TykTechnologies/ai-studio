@@ -13,64 +13,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// memKeyStore is an in-memory KeyStore for testing.
-type memKeyStore struct {
-	mu     sync.Mutex
-	keys   map[uint]*EncryptionKey
-	nextID uint
+// newTestEnvelopeCipher creates a test cipher with KEK cache.
+func newTestEnvelopeCipher(kek KEKProvider) *EnvelopeCipher {
+	cache := map[string]KEKProvider{kek.KeyID(): kek}
+	return NewEnvelopeCipher(kek, cache)
 }
 
-func newMemKeyStore() *memKeyStore {
-	return &memKeyStore{keys: make(map[uint]*EncryptionKey), nextID: 1}
-}
-
-func (m *memKeyStore) GetKeyByID(_ context.Context, id uint) (*EncryptionKey, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	k, ok := m.keys[id]
-	if !ok {
-		return nil, fmt.Errorf("key %d not found", id)
+// newTestEnvelopeCipherWithCache creates a test cipher with custom cache.
+func newTestEnvelopeCipherWithCache(kek KEKProvider, cache map[string]KEKProvider) *EnvelopeCipher {
+	if cache == nil {
+		cache = make(map[string]KEKProvider)
 	}
-	return k, nil
+	cache[kek.KeyID()] = kek
+	return NewEnvelopeCipher(kek, cache)
 }
 
-func (m *memKeyStore) CreateKey(_ context.Context, wrappedKey string, status string) (*EncryptionKey, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	k := &EncryptionKey{ID: m.nextID, WrappedKey: wrappedKey, Status: status}
-	m.keys[k.ID] = k
-	m.nextID++
-	return k, nil
-}
-
-func (m *memKeyStore) ListKeys(_ context.Context) ([]EncryptionKey, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var out []EncryptionKey
-	for _, k := range m.keys {
-		out = append(out, *k)
-	}
-	return out, nil
-}
-
-func (m *memKeyStore) UpdateKey(_ context.Context, key *EncryptionKey) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.keys[key.ID] = key
-	return nil
-}
-
-// seedActiveKey generates a DEK, wraps it, and stores it as the active key.
-func seedActiveKey(t *testing.T, ks *memKeyStore, kek KEKProvider) {
+// Deprecated: seedActiveKey is no longer used with inline DEK storage
+func seedActiveKey(t *testing.T, _ interface{}, kek KEKProvider) {
 	t.Helper()
-	ctx := context.Background()
-	dek := make([]byte, 32)
-	_, err := io.ReadFull(rand.Reader, dek)
-	require.NoError(t, err)
-	wrapped, err := kek.WrapKey(ctx, dek)
-	require.NoError(t, err)
-	_, err = ks.CreateKey(ctx, base64.URLEncoding.EncodeToString(wrapped), EncryptionKeyActive)
-	require.NoError(t, err)
+	// No-op - inline DEK storage doesn't need seeding
 }
 
 func TestLocalKEKProvider_RoundTrip(t *testing.T) {
@@ -130,8 +91,7 @@ func TestGenerateDEK(t *testing.T) {
 
 func TestEnvelopeCipher_RoundTrip(t *testing.T) {
 	w := newTestLocalKEK("my-kek")
-	ks := newMemKeyStore()
-	c := NewEnvelopeCipher(w, ks)
+	c := newTestEnvelopeCipher(w)
 	ctx := context.Background()
 
 	assert.Equal(t, "v2", c.Version())
@@ -157,8 +117,7 @@ func TestEnvelopeCipher_RoundTrip(t *testing.T) {
 
 func TestEnvelopeCipher_FormatContainsKeyID(t *testing.T) {
 	w := newTestLocalKEK("my-kek")
-	ks := newMemKeyStore()
-	c := NewEnvelopeCipher(w, ks)
+	c := newTestEnvelopeCipher(w)
 	ctx := context.Background()
 
 	encrypted, err := EncryptEnvelope(ctx, c, "test-data")
@@ -170,8 +129,7 @@ func TestEnvelopeCipher_FormatContainsKeyID(t *testing.T) {
 
 func TestEnvelopeCipher_TamperDetection(t *testing.T) {
 	w := newTestLocalKEK("my-kek")
-	ks := newMemKeyStore()
-	c := NewEnvelopeCipher(w, ks)
+	c := newTestEnvelopeCipher(w)
 	ctx := context.Background()
 
 	encrypted, err := c.Encrypt(ctx, nil, []byte("sensitive"))
@@ -187,8 +145,7 @@ func TestEnvelopeCipher_TamperDetection(t *testing.T) {
 
 func TestEnvelopeCipher_InvalidFormat(t *testing.T) {
 	w := newTestLocalKEK("my-kek")
-	ks := newMemKeyStore()
-	c := NewEnvelopeCipher(w, ks)
+	c := newTestEnvelopeCipher(w)
 	ctx := context.Background()
 
 	_, err := c.Decrypt(ctx, nil, []byte("no-slash"))
@@ -199,11 +156,10 @@ func TestEnvelopeCipher_InvalidFormat(t *testing.T) {
 func TestEnvelopeCipher_WrongKEK(t *testing.T) {
 	w1 := newTestLocalKEK("kek-1")
 	w2 := newTestLocalKEK("kek-2")
-	ks := newMemKeyStore()
 	ctx := context.Background()
 
-	c1 := NewEnvelopeCipher(w1, ks)
-	c2 := NewEnvelopeCipher(w2, ks) // same key store, wrong kek
+	c1 := newTestEnvelopeCipher(w1)
+	c2 := newTestEnvelopeCipher(w2) // same key store, wrong kek
 
 	encrypted, err := c1.Encrypt(ctx, nil, []byte("secret"))
 	require.NoError(t, err)
@@ -214,8 +170,7 @@ func TestEnvelopeCipher_WrongKEK(t *testing.T) {
 
 func TestEncryptEnvelope_Passthrough(t *testing.T) {
 	w := newTestLocalKEK("kek")
-	ks := newMemKeyStore()
-	c := NewEnvelopeCipher(w, ks)
+	c := newTestEnvelopeCipher(w)
 	ctx := context.Background()
 
 	result, err := EncryptEnvelope(ctx, c, "")
@@ -229,8 +184,7 @@ func TestEncryptEnvelope_Passthrough(t *testing.T) {
 
 func TestEncryptEnvelope_DecryptWithCipherMap(t *testing.T) {
 	w := newTestLocalKEK("my-kek")
-	ks := newMemKeyStore()
-	envelope := NewEnvelopeCipher(w, ks)
+	envelope := newTestEnvelopeCipher(w)
 	ctx := context.Background()
 
 	encrypted, err := EncryptEnvelope(ctx, envelope, "hello envelope")
@@ -257,8 +211,7 @@ func TestBackwardCompat_V2StoreReadsV1(t *testing.T) {
 
 	// Build cipher map with v2 available
 	w := newTestLocalKEK(rawKey)
-	ks := newMemKeyStore()
-	envelope := NewEnvelopeCipher(w, ks)
+	envelope := newTestEnvelopeCipher(w)
 
 	ciphers := legacyCipherInstances()
 	ciphers["v2"] = envelope
@@ -279,10 +232,9 @@ func TestBackwardCompat_V2StoreReadsV1(t *testing.T) {
 
 func TestEnvelopeCipher_MultipleKeys(t *testing.T) {
 	w := newTestLocalKEK("kek")
-	ks := newMemKeyStore()
 	ctx := context.Background()
 
-	c := NewEnvelopeCipher(w, ks)
+	c := newTestEnvelopeCipher(w)
 
 	// Each encrypt creates a unique per-object DEK
 	enc1, err := c.Encrypt(ctx, nil, []byte("data-with-key-1"))
