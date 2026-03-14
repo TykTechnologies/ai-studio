@@ -52,6 +52,9 @@ type AppConf struct {
 	DefaultSignupMode     string
 	TIBEnabled            bool
 	TIBAPISecret          string
+	EncryptionKey         string
+	EncryptionProvider    string
+	EncryptionProviderConfig map[string]string // Provider-specific config from TYK_AI_<PROVIDER>_* env vars
 	DocsLinks             DocsLinks
 	DevMode               bool
 	AuthServerURL         string
@@ -96,6 +99,10 @@ type AppConf struct {
 	// Docs Server Configuration
 	DocsPort     int
 	DocsDisabled bool
+
+	// Migration Configuration
+	MigrationBatchSize int  // Batch size for data migrations (default: 100)
+	MigrationDisabled  bool // Disable startup data migrations (default: false)
 
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
@@ -358,6 +365,24 @@ func getConfigFromEnv(envFile string) *AppConf {
 		cfgLog.Info().Msg("Warning: TYK_AI_SECRET_KEY environment variable is not set but TIB is enabled")
 	}
 
+	// Encryption key for secrets envelope encryption.
+	// Falls back to TYK_AI_SECRET_KEY for backward compatibility.
+	conf.EncryptionKey = os.Getenv("TYK_AI_ENCRYPTION_KEY")
+	if conf.EncryptionKey == "" {
+		conf.EncryptionKey = conf.TIBAPISecret
+	}
+
+	// KEK provider for envelope encryption. Defaults to "local" (passphrase-derived).
+	// External providers (e.g., "vault", "aws-kms") can be registered and selected here.
+	conf.EncryptionProvider = os.Getenv("TYK_AI_ENCRYPTION_PROVIDER")
+	if conf.EncryptionProvider == "" {
+		conf.EncryptionProvider = "local"
+	}
+
+	// Collect provider-specific config from TYK_AI_<PROVIDER>_* env vars.
+	// e.g., TYK_AI_VAULT_ADDR, TYK_AI_VAULT_TOKEN, TYK_AI_AWSKMS_REGION
+	conf.EncryptionProviderConfig = collectProviderConfig(conf.EncryptionProvider)
+
 	// Licensing configuration (Enterprise Edition)
 	conf.LicenseKey = os.Getenv("TYK_AI_LICENSE")
 
@@ -504,6 +529,19 @@ func getConfigFromEnv(envFile string) *AppConf {
 		} else {
 			cfgLog.Warn().Msgf("Warning: Invalid MAX_RESOURCE_PAYLOAD_SIZE value: %s, using default 5MB", maxPayloadStr)
 		}
+	}
+
+	// Migration configuration
+	conf.MigrationBatchSize = 100
+	if batchStr := os.Getenv("TYK_AI_MIGRATION_BATCH_SIZE"); batchStr != "" {
+		if batch, err := strconv.Atoi(batchStr); err == nil && batch > 0 {
+			conf.MigrationBatchSize = batch
+		} else {
+			cfgLog.Warn().Msgf("Warning: Invalid TYK_AI_MIGRATION_BATCH_SIZE value: %s, using default 100", batchStr)
+		}
+	}
+	if v := os.Getenv("TYK_AI_MIGRATION_DISABLED"); v == "true" || v == "1" {
+		conf.MigrationDisabled = true
 	}
 
 	// Default app budget configuration
@@ -849,4 +887,30 @@ func parseDurationWithDefault(envVar string, defaultDuration time.Duration) time
 	}
 
 	return duration
+}
+
+// collectProviderConfig collects env vars matching TYK_AI_<PROVIDER>_* and
+// returns them as a map with the prefix stripped. For example, with provider "vault":
+//
+//	TYK_AI_VAULT_ADDR=https://vault:8200  →  {"ADDR": "https://vault:8200"}
+//	TYK_AI_VAULT_TOKEN=s.xxx              →  {"TOKEN": "s.xxx"}
+func collectProviderConfig(provider string) map[string]string {
+	if provider == "local" {
+		return nil
+	}
+	prefix := "TYK_AI_" + strings.ToUpper(strings.ReplaceAll(provider, "-", "_")) + "_"
+	result := make(map[string]string)
+	for _, env := range os.Environ() {
+		if idx := strings.Index(env, "="); idx > 0 {
+			key := env[:idx]
+			if strings.HasPrefix(key, prefix) {
+				configKey := key[len(prefix):]
+				result[configKey] = env[idx+1:]
+			}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }

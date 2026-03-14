@@ -304,7 +304,7 @@ func (a *API) searchDatasources(c *gin.Context) {
 		return
 	}
 
-	datasources, err := a.service.SearchDatasources(query)
+	datasources, err := a.service.SearchDatasources(c.Request.Context(), query)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

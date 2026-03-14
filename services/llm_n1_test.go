@@ -211,7 +211,7 @@ func TestLLMService_GetActiveLLMsInNamespace_PreventN1Queries(t *testing.T) {
 	queryLogger.QueryCount = 0
 
 	// Call GetActiveLLMsInNamespace which should preload plugins and filters
-	llms, err := service.GetActiveLLMsInNamespace("")
+	llms, err := service.GetActiveLLMsInNamespace(context.Background(), "")
 	require.NoError(t, err)
 	assert.Len(t, llms, 3)
 

@@ -1103,7 +1103,7 @@ func TestControlServer_getConfigurationSnapshot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			snapshot, err := server.getConfigurationSnapshot(tt.namespace)
+			snapshot, err := server.getConfigurationSnapshot(context.Background(),tt.namespace)
 
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -1172,7 +1172,7 @@ func TestControlServer_getConfigurationSnapshot_BudgetUsage(t *testing.T) {
 	db.Create(&oldRecord)
 
 	// Get configuration snapshot
-	snapshot, err := server.getConfigurationSnapshot(namespace)
+	snapshot, err := server.getConfigurationSnapshot(context.Background(),namespace)
 	require.NoError(t, err)
 	require.NotNil(t, snapshot)
 
@@ -1222,7 +1222,7 @@ func TestControlServer_getConfigurationSnapshot_NoBudget(t *testing.T) {
 	db.Create(&chatRecord)
 
 	// Get configuration snapshot
-	snapshot, err := server.getConfigurationSnapshot(namespace)
+	snapshot, err := server.getConfigurationSnapshot(context.Background(),namespace)
 	require.NoError(t, err)
 
 	// Find our test app

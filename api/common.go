@@ -1190,7 +1190,7 @@ func (a *API) getChatDefaults(c *gin.Context) {
 	}
 
 	// Get the chat
-	chat, err := a.service.GetChatByID(uint(chatID))
+	chat, err := a.service.GetChatByID(c.Request.Context(), uint(chatID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {

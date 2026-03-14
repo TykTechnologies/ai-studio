@@ -2,19 +2,9 @@ package secrets
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"reflect"
 	"strings"
-
-	"gorm.io/gorm"
 )
-
-var dbRef *gorm.DB
-
-func SetDBRef(db *gorm.DB) {
-	dbRef = db
-}
 
 // IsSecretReference checks if a string is in the format $SECRET/NAME
 func IsSecretReference(value string) bool {
@@ -29,48 +19,6 @@ func IsSecretReference(value string) bool {
 // GetSecretReference returns a secret reference string for a given name
 func GetSecretReference(name string) string {
 	return fmt.Sprintf("$SECRET/%s", name)
-}
-
-func GetValue(reference string, preserveRef bool) string {
-	if !strings.HasPrefix(reference, "$") {
-		return reference
-	}
-
-	// $ENV/ENV_VAR
-	// $SECRET/SecretName
-	// etc.
-	parts := strings.Split(reference, "/")
-	if len(parts) != 2 {
-		return reference
-	}
-
-	loc := parts[0]
-	name := parts[1]
-
-	switch loc {
-	case "$ENV":
-		return os.Getenv(name)
-	case "$SECRET":
-		// If we're already dealing with a secret reference and preserveRef is true
-		if IsSecretReference(reference) && preserveRef {
-			return reference
-		}
-
-		if dbRef != nil {
-			val, err := GetSecretByVarName(dbRef, name, preserveRef)
-			if err != nil {
-				log.Println(err)
-				return reference
-			}
-
-			return val.Value
-		}
-
-		log.Println("database reference is nil!")
-		return reference
-	default:
-		return reference
-	}
 }
 
 func FilterSensitiveFields(obj interface{}) interface{} {

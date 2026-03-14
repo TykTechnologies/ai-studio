@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -80,7 +81,7 @@ func TestSearchDatasources(t *testing.T) {
 	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
 	datasource, _ := service.CreateDatasource("Test Datasource", "Short Desc", "Long Desc", "icon.png", "https://example.com", 75, user.ID, []string{"AI", "ML"}, "conn_string", "source_type", "api_key", "db1", "embed_vendor", "embed_url", "embed_api_key", "embed_model", true)
 
-	searchedDatasources, err := service.SearchDatasources("Test")
+	searchedDatasources, err := service.SearchDatasources(context.Background(), "Test")
 	assert.NoError(t, err)
 	assert.Len(t, searchedDatasources, 1)
 	assert.Equal(t, datasource.ID, searchedDatasources[0].ID)
@@ -170,7 +171,7 @@ func TestDatasourceService_MultipleDatasourcesScenario(t *testing.T) {
 	assert.Len(t, allDatasources, 3)
 
 	// Test SearchDatasources
-	searchedDatasources, err := service.SearchDatasources("Datasource")
+	searchedDatasources, err := service.SearchDatasources(context.Background(), "Datasource")
 	assert.NoError(t, err)
 	assert.Len(t, searchedDatasources, 3)
 

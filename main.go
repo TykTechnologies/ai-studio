@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 
 	"gorm.io/driver/postgres"
@@ -28,6 +29,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	_ "github.com/TykTechnologies/midsommar/v2/secrets/local" // Register local KEK provider
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
@@ -101,8 +103,21 @@ func main() {
 		logger.FatalErr("Failed to initialize models", err)
 	}
 
+	// Initialize secrets store with encryption key from config
+	var secretStore *secrets.Store
+	if appConf.EncryptionKey != "" {
+		var err error
+		secretStore, err = secrets.NewFromProvider(db, appConf.EncryptionKey, appConf.EncryptionProvider, appConf.EncryptionProviderConfig)
+		if err != nil {
+			logger.FatalErr("Failed to initialize secrets store", err)
+		}
+		logger.Infof("Secrets store initialized (KEK provider: %s)", appConf.EncryptionProvider)
+	} else {
+		logger.Warn("TYK_AI_ENCRYPTION_KEY (or TYK_AI_SECRET_KEY) not set — secrets encryption is disabled")
+	}
+
 	// Ensure default group and catalogues exist and are linked
-	if err := ensureDefaults(db, *noLLMDefaults); err != nil {
+	if err := ensureDefaults(db, *noLLMDefaults, secretStore); err != nil {
 		logger.FatalErr("Failed to ensure default group and catalogues", err)
 	}
 
@@ -141,6 +156,11 @@ func main() {
 	}
 
 	service := services.NewServiceWithOCI(db, ociConfig)
+
+	// Wire secrets store to service
+	if secretStore != nil {
+		service.SetSecretStore(secretStore)
+	}
 
 	// Wire licensing service to main service for plugin license checks
 	service.SetLicensingService(licensingService)
@@ -300,6 +320,11 @@ func main() {
 
 		controlServer = grpc.NewControlServer(grpcConfig, db)
 
+		// Wire secret store to control server for resolving secret references
+		if secretStore != nil {
+			controlServer.SetSecretStore(secretStore)
+		}
+
 		// Create reload coordinator and connect it to control server
 		reloadCoordinator = services.NewReloadCoordinator(controlServer)
 		controlServer.SetReloadCoordinator(reloadCoordinator)
@@ -385,6 +410,24 @@ func main() {
 	)
 	defer stop()
 
+	// Run async data migrations (cancelled on shutdown, waited during cleanup)
+	var migrationWg sync.WaitGroup
+	if !appConf.MigrationDisabled {
+		migrationWg.Add(1)
+		go func() {
+			defer migrationWg.Done()
+			if migrated, err := service.MigrateLegacySubmissions(shutdownCtx, appConf.MigrationBatchSize); err != nil {
+				if shutdownCtx.Err() != nil {
+					logger.Infof("Legacy submission migration interrupted by shutdown (migrated %d so far)", migrated)
+				} else {
+					logger.Errorf("Failed to migrate legacy submissions: %v", err)
+				}
+			} else if migrated > 0 {
+				logger.Infof("Migrated %d legacy submission payloads", migrated)
+			}
+		}()
+	}
+
 	var apiServer *api.API
 	if !appConf.ProxyOnly {
 		// Create a new API instance
@@ -429,16 +472,26 @@ func main() {
 		}
 	}
 
+	// Wait for background migrations to finish
+	migrationWg.Wait()
+
 	// Cleanup services
 	if err := service.Cleanup(); err != nil {
 		logger.Errorf("Error during service cleanup: %v", err)
+	}
+
+	// Shutdown KEK provider (releases connections, stops token renewal, etc.)
+	if secretStore != nil {
+		if err := secretStore.Close(cleanupCtx); err != nil {
+			logger.Errorf("Error during secrets store shutdown: %v", err)
+		}
 	}
 
 	logger.Info("Application stopped gracefully")
 }
 
 // ensureDefaults ensures default group and catalogues exist and are linked
-func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
+func ensureDefaults(db *gorm.DB, skipLLMDefaults bool, secretStore *secrets.Store) error {
 	logger.Info("Ensuring default group and catalogues exist...")
 
 	// Get or create Default group
@@ -490,10 +543,12 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
 
 	// Seed default secrets and LLM configurations if not disabled
 	if !skipLLMDefaults {
-		if err := secrets.GetOrCreateDefaultSecrets(db); err != nil {
-			return fmt.Errorf("failed to create default secrets: %w", err)
+		if secretStore != nil {
+			if err := secretStore.EnsureDefaults(context.Background(), []string{"OPENAI_KEY", "ANTHROPIC_KEY"}); err != nil {
+				return fmt.Errorf("failed to create default secrets: %w", err)
+			}
+			logger.Info("Default secrets checked/initialized")
 		}
-		logger.Info("Default secrets checked/initialized")
 
 		if err := models.GetOrCreateDefaultLLMs(db); err != nil {
 			return fmt.Errorf("failed to create default LLM configurations: %w", err)

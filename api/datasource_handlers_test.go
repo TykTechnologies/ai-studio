@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	_ "github.com/TykTechnologies/midsommar/v2/secrets/local" // Register local KEK provider
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,10 +22,14 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
+	// Initialize secrets store on the service
+	secretStore, err := secrets.New(db, "test-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetSecretStore(secretStore)
 
-	// Initialize secrets package with DB reference
-	secrets.SetDBRef(db)
+	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
 	// Create secrets first
 	secretInput1 := SecretInput{
@@ -141,7 +147,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 
 	var response map[string]DatasourceResponse
-	err := json.Unmarshal(w.Body.Bytes(), &response)
+	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Equal(t, "Test Datasource", response["data"].Attributes.Name)
 	assert.Equal(t, "[redacted]", response["data"].Attributes.DBConnAPIKey)
@@ -204,17 +210,21 @@ func TestSerializeDatasourceRedactsAPIKeys(t *testing.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
+	// Initialize secrets store on the service
+	secretStore, err := secrets.New(db, "test-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetSecretStore(secretStore)
 
-	// Initialize secrets package with DB reference
-	secrets.SetDBRef(db)
+	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
 	// Create a secret
 	secret := &secrets.Secret{
 		VarName: "TEST_EMBED_KEY",
 		Value:   "embed-key-789",
 	}
-	err := secrets.CreateSecret(db, secret)
+	err = service.Secrets.Create(context.Background(), secret)
 	assert.NoError(t, err)
 
 	// Test 1: Datasource with direct API keys

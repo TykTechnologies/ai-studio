@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -243,9 +244,11 @@ func (s *Service) CreateUpdateSubmission(submitterID uint, resourceType string, 
 		submission.SubmittedAt = &now
 	}
 
+	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	if err := submission.Create(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	if status == models.SubmissionStatusSubmitted && s.NotificationService != nil {
 		s.notifyAdminsOfSubmission(submission)

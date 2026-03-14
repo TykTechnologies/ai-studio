@@ -47,7 +47,7 @@ func (s *LLMManagementServer) ListLLMs(ctx context.Context, req *pb.ListLLMsRequ
 	// Check if namespace filtering is requested
 	if req.GetNamespace() != "" {
 		// Use namespace-aware filtering
-		llmsWithMeta, err = s.service.GetActiveLLMsInNamespace(req.GetNamespace())
+		llmsWithMeta, err = s.service.GetActiveLLMsInNamespace(ctx, req.GetNamespace())
 		if err != nil {
 			log.Error().Err(err).Str("namespace", req.GetNamespace()).Msg("Failed to get LLMs by namespace via gRPC")
 			return nil, status.Errorf(codes.Internal, "failed to get LLMs by namespace: %v", err)
@@ -236,6 +236,7 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 
 	// Call existing service method with preserved vendor
 	llm, err := s.service.UpdateLLM(
+		ctx,
 		uint(llmID),
 		req.GetName(),
 		req.GetApiKey(),
@@ -279,7 +280,7 @@ func (s *LLMManagementServer) DeleteLLM(ctx context.Context, req *pb.DeleteLLMRe
 	}
 
 	// Call existing service method
-	err := s.service.DeleteLLM(uint(llmID))
+	err := s.service.DeleteLLM(ctx, uint(llmID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "LLM not found: %d", llmID)

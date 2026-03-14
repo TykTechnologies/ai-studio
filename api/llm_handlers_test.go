@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	_ "github.com/TykTechnologies/midsommar/v2/secrets/local" // Register local KEK provider
 	"github.com/stretchr/testify/assert"
 )
 
@@ -30,15 +32,19 @@ func TestLLMWithSecretReference(t *testing.T) {
 	err := db.Create(user).Error
 	assert.NoError(t, err)
 
-	// Initialize secrets package with DB reference
-	secrets.SetDBRef(db)
+	// Initialize secrets store on the service
+	secretStore, err := secrets.New(db, "test-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetSecretStore(secretStore)
 
 	// Create a secret directly in the database
 	secret := &secrets.Secret{
 		VarName: "OPENAI_KEY",
 		Value:   "sk-test-key-123",
 	}
-	err = secrets.CreateSecret(db, secret)
+	err = service.Secrets.Create(context.Background(), secret)
 	assert.NoError(t, err)
 
 	// Create an LLM that references this secret directly in the database
@@ -77,10 +83,14 @@ func TestSerializeLLMRedactsAPIKey(t *testing.T) {
 	service := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, service)
 	authService := apitest.SetupTestAuthService(db, service)
-	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
+	// Initialize secrets store on the service
+	secretStore, err := secrets.New(db, "test-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.SetSecretStore(secretStore)
 
-	// Initialize secrets package with DB reference
-	secrets.SetDBRef(db)
+	a := NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
 
 	// Test 1: LLM with direct API key
 	llmWithDirectKey := &models.LLM{
@@ -99,7 +109,7 @@ func TestSerializeLLMRedactsAPIKey(t *testing.T) {
 		VarName: "TEST_KEY",
 		Value:   "sk-secret-key-456",
 	}
-	err := secrets.CreateSecret(db, secret)
+	err = service.Secrets.Create(context.Background(), secret)
 	assert.NoError(t, err)
 
 	llmWithSecretRef := &models.LLM{
