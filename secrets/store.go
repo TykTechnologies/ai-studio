@@ -211,11 +211,15 @@ func (s *Store) GetByVarName(ctx context.Context, name string, preserveRef bool)
 }
 
 func (s *Store) Update(ctx context.Context, secret *Secret) error {
-	encrypted, err := s.encryptValue(ctx, secret.Value)
-	if err != nil {
-		return err
+	// Only encrypt if the value is not already encrypted
+	// (the API handler may pass an already-encrypted value when preserveRef=true)
+	if !strings.HasPrefix(secret.Value, "$ENC/") {
+		encrypted, err := s.encryptValue(ctx, secret.Value)
+		if err != nil {
+			return err
+		}
+		secret.Value = encrypted
 	}
-	secret.Value = encrypted
 
 	return s.db.Save(secret).Error
 }
