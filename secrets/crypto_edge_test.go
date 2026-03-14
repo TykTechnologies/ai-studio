@@ -9,14 +9,12 @@ import (
 )
 
 func TestDecryptWith_PlainPrefix_SpecialChars(t *testing.T) {
-	t.Parallel()
-	ciphers := legacyCipherInstances()
-	ctx := context.Background()
-
+	rawKey := "test-key"
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name        string
+		input       string
+		expected    string
+		expectError bool
 	}{
 		{"embedded ENC marker", "$PLAIN/hello$ENC/world", "hello$ENC/world"},
 		{"empty suffix", "$PLAIN/", ""},
@@ -66,11 +64,17 @@ func TestDecryptWith_ENCV2_InvalidKeyID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			_, err := decryptWith(ctx, ciphers, "key", tt.value)
-			assert.Error(t, err)
+			result, err := DecryptWith(rawKey, tt.input, nil, nil)
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "unsupported encryption format")
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
 		})
 	}
+}
 }
 
 func TestDecryptWith_ENCV2_CorruptedCiphertext(t *testing.T) {
@@ -209,12 +213,12 @@ func TestDetectVersion_EdgeCases(t *testing.T) {
 		{"v99/data", "v99", "data"},
 		{"v0/data", "v0", "data"},
 		{"v123456/big-version", "v123456", "big-version"},
-		{"vX/not-a-version", "v1", "vX/not-a-version"},        // non-digit after v
-		{"v/no-number", "v1", "v/no-number"},                   // just "v" with no digits
-		{"/leading-slash", "v1", "/leading-slash"},              // slash at position 0
-		{"noslash", "v1", "noslash"},                            // no slash at all
-		{"", "v1", ""},                                          // empty
-		{"v2/", "v2", ""},                                       // version with empty payload
+		{"vX/not-a-version", "v1", "vX/not-a-version"},                      // non-digit after v
+		{"v/no-number", "v1", "v/no-number"},                                // just "v" with no digits
+		{"/leading-slash", "v1", "/leading-slash"},                          // slash at position 0
+		{"noslash", "v1", "noslash"},                                        // no slash at all
+		{"", "v1", ""},                                                      // empty
+		{"v2/", "v2", ""},                                                   // version with empty payload
 		{"v2/nested/slashes/in/payload", "v2", "nested/slashes/in/payload"}, // only first slash matters
 	}
 

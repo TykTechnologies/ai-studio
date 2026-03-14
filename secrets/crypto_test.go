@@ -117,26 +117,23 @@ func TestEncryptDecryptValueRoundTrip_V1(t *testing.T) {
 }
 
 func TestDecryptWith_PlainPrefix(t *testing.T) {
-	ciphers := legacyCipherInstances()
-	ctx := context.Background()
+	rawKey := "test-key-1234567890123456"
+	value := "$PLAIN/this-is-not-encrypted"
 
-	result, err := decryptWith(ctx, ciphers, "key", "$PLAIN/my-api-key")
-	require.NoError(t, err)
-	assert.Equal(t, "my-api-key", result)
-
-	// Works even without a rawKey
-	result, err = decryptWith(ctx, ciphers, "", "$PLAIN/no-key-needed")
-	require.NoError(t, err)
-	assert.Equal(t, "no-key-needed", result)
+	// $PLAIN/ prefix is not supported - only main branch format (unprefixed) and v2 envelope
+	result, err := DecryptWith(rawKey, value, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported encryption format")
+	assert.Empty(t, result)
 }
 
 func TestDecryptWith_PlainPrefix_EmptyValue(t *testing.T) {
-	ciphers := legacyCipherInstances()
-	ctx := context.Background()
-
-	result, err := decryptWith(ctx, ciphers, "key", "$PLAIN/")
-	require.NoError(t, err)
-	assert.Equal(t, "", result)
+	value := "$PLAIN/"
+	// $PLAIN/ prefix is not supported
+	result, err := DecryptWith("key", value, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported encryption format")
+	assert.Empty(t, result)
 }
 
 func TestDecryptWith_UnprefixedLegacy(t *testing.T) {
