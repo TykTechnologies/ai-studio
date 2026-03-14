@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -16,9 +15,7 @@ import (
 
 func TestUpdateSecret_DoesNotOverwriteWithPlaceholder(t *testing.T) {
 	// Set the secret key for encryption
-	originalKey := os.Getenv("TYK_AI_ENCRYPTION_KEY")
-	os.Setenv("TYK_AI_ENCRYPTION_KEY", "test-secret-key-for-unit-test-12345678")
-	defer os.Setenv("TYK_AI_ENCRYPTION_KEY", originalKey)
+	t.Setenv("TYK_AI_ENCRYPTION_KEY", "test-secret-key-for-unit-test-12345678")
 
 	api, db := setupTestAPI(t)
 	ctx := context.Background()
@@ -68,9 +65,7 @@ func TestUpdateSecret_DoesNotOverwriteWithPlaceholder(t *testing.T) {
 }
 
 func TestUpdateSecret_UpdatesValueWhenChanged(t *testing.T) {
-	originalKey := os.Getenv("TYK_AI_ENCRYPTION_KEY")
-	os.Setenv("TYK_AI_ENCRYPTION_KEY", "test-secret-key-for-unit-test-12345678")
-	defer os.Setenv("TYK_AI_ENCRYPTION_KEY", originalKey)
+	t.Setenv("TYK_AI_ENCRYPTION_KEY", "test-secret-key-for-unit-test-12345678")
 
 	api, db := setupTestAPI(t)
 	ctx := context.Background()
@@ -110,9 +105,7 @@ func TestUpdateSecret_UpdatesValueWhenChanged(t *testing.T) {
 }
 
 func TestUpdateSecret_EmptyValueDoesNotOverwrite(t *testing.T) {
-	originalKey := os.Getenv("TYK_AI_ENCRYPTION_KEY")
-	os.Setenv("TYK_AI_ENCRYPTION_KEY", "test-secret-key-for-unit-test-12345678")
-	defer os.Setenv("TYK_AI_ENCRYPTION_KEY", originalKey)
+	t.Setenv("TYK_AI_ENCRYPTION_KEY", "test-secret-key-for-unit-test-12345678")
 
 	api, db := setupTestAPI(t)
 	ctx := context.Background()
