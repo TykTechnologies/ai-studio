@@ -256,6 +256,30 @@ func TestReconcilePlugins_DetectsChangedChecksum(t *testing.T) {
 	}
 }
 
+func TestReconcilePlugins_DetectsChangedConfig(t *testing.T) {
+	svc := &mockPluginService{
+		allActiveGwPlugins: []PluginData{
+			{ID: 1, Name: "p1", Checksum: "same-checksum", Config: []byte(`{"mcp_servers": ["new"]}`), IsActive: true, HookType: "post_auth"},
+		},
+		getPluginByID: map[uint]PluginData{
+			1: {ID: 1, Name: "p1", Checksum: "same-checksum", Config: []byte(`{"mcp_servers": ["new"]}`), IsActive: true, HookType: "post_auth"},
+		},
+	}
+	pm := newTestManager(svc, map[uint]*LoadedPlugin{
+		1: {ID: 1, Name: "p1", Checksum: "same-checksum", RawConfig: []byte(`{"mcp_servers": ["old"]}`)},
+	})
+
+	_ = pm.ReconcilePlugins(context.Background())
+
+	pm.mu.RLock()
+	lp, exists := pm.loadedPlugins[1]
+	pm.mu.RUnlock()
+
+	if exists && string(lp.RawConfig) == `{"mcp_servers": ["old"]}` {
+		t.Error("plugin 1 should have been reloaded (old config should be gone)")
+	}
+}
+
 func TestReconcilePlugins_SerializesConcurrentCalls(t *testing.T) {
 	svc := &mockPluginService{
 		allActiveGwPlugins: []PluginData{},
