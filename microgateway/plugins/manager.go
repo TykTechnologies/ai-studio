@@ -2,6 +2,7 @@
 package plugins
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -88,6 +89,7 @@ type LoadedPlugin struct {
 	Client        *plugin.Client
 	GRPCClient    pb.PluginServiceClient
 	Config        map[string]interface{}
+	RawConfig     []byte
 	Checksum      string
 	IsHealthy     bool
 	IsGlobal      bool                            // True for global plugins (vs per-LLM plugins)
@@ -434,6 +436,7 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		Client:     client,
 		GRPCClient: grpcClient,
 		Config:     config,
+		RawConfig:  pluginData.Config,
 		Checksum:   pluginData.Checksum,
 		IsHealthy:  true,
 	}
@@ -446,7 +449,6 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	go pm.monitorPluginHealth(pluginID)
 
 	// Start session loop for long-lived broker access
-	// Only if we have a client wrapper with session support
 	if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
 		brokerIDUint, _ := strconv.ParseUint(configStrings["_service_broker_id"], 10, 32)
 		log.Debug().
@@ -2703,13 +2705,20 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 	log.Info().Msg("Starting plugin reconciliation after configuration sync")
 
 	// Phase 1: Snapshot currently loaded (non-global, non-builtin) plugins
+	type pluginState struct {
+		Checksum  string
+		RawConfig []byte
+	}
 	pm.mu.RLock()
-	loadedChecksums := make(map[uint]string, len(pm.loadedPlugins))
+	loadedStates := make(map[uint]pluginState, len(pm.loadedPlugins))
 	for id, lp := range pm.loadedPlugins {
 		if lp.IsGlobal || lp.BuiltinPlugin != nil {
 			continue
 		}
-		loadedChecksums[id] = lp.Checksum
+		loadedStates[id] = pluginState{
+			Checksum:  lp.Checksum,
+			RawConfig: lp.RawConfig,
+		}
 	}
 	pm.mu.RUnlock()
 
@@ -2723,11 +2732,11 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 	var toUnload []uint
 	var toReload []uint
 
-	for id, loadedChecksum := range loadedChecksums {
+	for id, loadedState := range loadedStates {
 		desired, exists := desiredPlugins[id]
 		if !exists {
 			toUnload = append(toUnload, id)
-		} else if loadedChecksum != desired.Checksum {
+		} else if loadedState.Checksum != desired.Checksum || !bytes.Equal(loadedState.RawConfig, desired.Config) {
 			toReload = append(toReload, id)
 		}
 	}
@@ -2735,7 +2744,7 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 	log.Info().
 		Int("to_unload", len(toUnload)).
 		Int("to_reload", len(toReload)).
-		Int("loaded_count", len(loadedChecksums)).
+		Int("loaded_count", len(loadedStates)).
 		Int("desired_count", len(desiredPlugins)).
 		Msg("Plugin reconciliation diff computed")
 
