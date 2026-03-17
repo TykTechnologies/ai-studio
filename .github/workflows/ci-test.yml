@@ -15,7 +15,7 @@ jobs:
   # ==========================================================================
   golangci-lint:
     if: false
-    runs-on: ubuntu-latest-m-2
+    runs-on: warp-ubuntu-latest-arm64-4x
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
   # ==========================================================================
   frontend-tests:
     name: Frontend Tests
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-arm64-2x
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -75,7 +75,7 @@ jobs:
   # ==========================================================================
   go-unit-tests:
     name: Go Unit Tests (${{ matrix.edition }})
-    runs-on: ubuntu-latest-m-2
+    runs-on: warp-ubuntu-latest-arm64-4x
     strategy:
       fail-fast: false
       matrix:
@@ -105,7 +105,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Go Cache
-        uses: actions/cache@v4
+        uses: WarpBuilds/cache@v1
         with:
           path: |
             ~/.cache/go-build
@@ -160,7 +160,7 @@ jobs:
   # ==========================================================================
   docs-build:
     name: Documentation Build
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-arm64-2x
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -173,7 +173,7 @@ jobs:
           cache-dependency-path: "docs/site/package-lock.json"
 
       - name: Cache VitePress
-        uses: actions/cache@v4
+        uses: WarpBuilds/cache@v1
         with:
           path: docs/site/.vitepress/cache
           key: ${{ runner.os }}-vitepress-${{ hashFiles('docs/site/package-lock.json') }}
@@ -192,7 +192,7 @@ jobs:
   # ==========================================================================
   test-summary:
     name: Test Summary
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-arm64-2x
     needs: [frontend-tests, go-unit-tests, docs-build]
     if: always()
     steps:
