@@ -1,10 +1,10 @@
 package services
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // CreateChat creates a new chat
@@ -61,23 +61,24 @@ func (s *Service) CreateChat(name string, description string, llmSettingsID, llm
 }
 
 // GetChatByID retrieves a chat by its ID
-func (s *Service) GetChatByID(id uint) (*models.Chat, error) {
+func (s *Service) GetChatByID(ctx context.Context, id uint) (*models.Chat, error) {
 	chat := &models.Chat{}
 	if err := chat.Get(s.DB, id); err != nil {
 		return nil, err
 	}
 
-	if chat.LLM != nil {
-		chat.LLM.APIKey = secrets.GetValue(chat.LLM.APIKey, false)         // false to resolve actual value
-		chat.LLM.APIEndpoint = secrets.GetValue(chat.LLM.APIEndpoint, false) // resolve endpoint secrets too
-	}
-	for i := range chat.DefaultTools {
-		chat.DefaultTools[i].AuthKey = secrets.GetValue(chat.DefaultTools[i].AuthKey, false) // false to resolve actual value
-	}
-
-	if chat.DefaultDataSource != nil {
-		chat.DefaultDataSource.DBConnAPIKey = secrets.GetValue(chat.DefaultDataSource.DBConnAPIKey, false) // false to resolve actual value
-		chat.DefaultDataSource.EmbedAPIKey = secrets.GetValue(chat.DefaultDataSource.EmbedAPIKey, false)   // false to resolve actual value
+	if s.Secrets != nil {
+		if chat.LLM != nil {
+			chat.LLM.APIKey = s.Secrets.ResolveReference(ctx, chat.LLM.APIKey, false)
+			chat.LLM.APIEndpoint = s.Secrets.ResolveReference(ctx, chat.LLM.APIEndpoint, false)
+		}
+		for i := range chat.DefaultTools {
+			chat.DefaultTools[i].AuthKey = s.Secrets.ResolveReference(ctx, chat.DefaultTools[i].AuthKey, false)
+		}
+		if chat.DefaultDataSource != nil {
+			chat.DefaultDataSource.DBConnAPIKey = s.Secrets.ResolveReference(ctx, chat.DefaultDataSource.DBConnAPIKey, false)
+			chat.DefaultDataSource.EmbedAPIKey = s.Secrets.ResolveReference(ctx, chat.DefaultDataSource.EmbedAPIKey, false)
+		}
 	}
 
 	return chat, nil
@@ -202,7 +203,7 @@ func (s *Service) UpdateChat(id uint, name string, description string, llmSettin
 
 // DeleteChat deletes a chat by its ID
 func (s *Service) DeleteChat(id uint) error {
-	chat, err := s.GetChatByID(id)
+	chat, err := s.GetChatByID(context.Background(), id)
 	if err != nil {
 		return err
 	}
@@ -248,7 +249,7 @@ func (s *Service) GetChatsByLLMSettingsID(llmSettingsID uint) (models.Chats, err
 
 // AddExtraContextToChat adds a ExtraContext to a Chat
 func (s *Service) AddExtraContextToChat(toolID uint, fileStoreID uint) error {
-	chat, err := s.GetChatByID(toolID)
+	chat, err := s.GetChatByID(context.Background(), toolID)
 	if err != nil {
 		return err
 	}
@@ -263,7 +264,7 @@ func (s *Service) AddExtraContextToChat(toolID uint, fileStoreID uint) error {
 
 // RemoveExtraContextFromChat removes a ExtraContext from a Chat
 func (s *Service) RemoveExtraContextFromChat(toolID uint, fileStoreID uint) error {
-	chat, err := s.GetChatByID(toolID)
+	chat, err := s.GetChatByID(context.Background(), toolID)
 	if err != nil {
 		return err
 	}
@@ -278,7 +279,7 @@ func (s *Service) RemoveExtraContextFromChat(toolID uint, fileStoreID uint) erro
 
 // GetChatExtraContexts gets all ExtraContexts associated with a Chat
 func (s *Service) GetChatExtraContexts(toolID uint) ([]models.FileStore, error) {
-	chat, err := s.GetChatByID(toolID)
+	chat, err := s.GetChatByID(context.Background(), toolID)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +289,7 @@ func (s *Service) GetChatExtraContexts(toolID uint) ([]models.FileStore, error) 
 
 // SetChatExtraContexts replaces all existing ExtraContext associations with new ones
 func (s *Service) SetChatExtraContexts(toolID uint, fileStoreIDs []uint) error {
-	chat, err := s.GetChatByID(toolID)
+	chat, err := s.GetChatByID(context.Background(), toolID)
 	if err != nil {
 		return err
 	}

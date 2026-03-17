@@ -10,7 +10,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"gorm.io/gorm"
 )
@@ -177,7 +176,10 @@ func (s *Service) GetToolByID(id uint) (*models.Tool, error) {
 		return nil, err
 	}
 
-	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
+	if s.Secrets != nil {
+		ctx := context.Background()
+		tool.AuthKey = s.Secrets.ResolveReference(ctx, tool.AuthKey, true)
+	} // preserve reference for API responses
 	return tool, nil
 }
 
@@ -235,13 +237,15 @@ func (s *Service) DeleteTool(id uint) error {
 }
 
 // GetToolByName retrieves a tool by its name
-func (s *Service) GetToolByName(name string) (*models.Tool, error) {
+func (s *Service) GetToolByName(ctx context.Context, name string) (*models.Tool, error) {
 	tool := models.NewTool()
 	if err := tool.GetByName(s.DB, name); err != nil {
 		return nil, err
 	}
 
-	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
+	if s.Secrets != nil {
+		tool.AuthKey = s.Secrets.ResolveReference(ctx, tool.AuthKey, true)
+	} // preserve reference for API responses
 	return tool, nil
 }
 
@@ -264,7 +268,10 @@ func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
 		return nil, fmt.Errorf("error retrieving tool: %w", err)
 	}
 
-	tool.AuthKey = secrets.GetValue(tool.AuthKey, true) // preserve reference for API responses
+	if s.Secrets != nil {
+		ctx := context.Background()
+		tool.AuthKey = s.Secrets.ResolveReference(ctx, tool.AuthKey, true)
+	} // preserve reference for API responses
 	return &tool, nil
 }
 

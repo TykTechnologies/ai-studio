@@ -189,6 +189,7 @@ func (a *API) updateLLM(c *gin.Context) {
 	}
 
 	llm, err := a.service.UpdateLLM(
+		c.Request.Context(),
 		uint(id),
 		input.Data.Attributes.Name,
 		input.Data.Attributes.APIKey,
@@ -282,7 +283,7 @@ func (a *API) deleteLLM(c *gin.Context) {
 		return
 	}
 
-	err = a.service.DeleteLLM(uint(id))
+	err = a.service.DeleteLLM(c.Request.Context(), uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

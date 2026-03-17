@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -48,7 +49,7 @@ func TestToolService(t *testing.T) {
 	assert.Equal(t, 9, updatedTool.PrivacyScore)
 
 	// Test GetToolByName
-	namedTool, err := service.GetToolByName("Updated Tool")
+	namedTool, err := service.GetToolByName(context.Background(),"Updated Tool")
 	assert.NoError(t, err)
 	assert.Equal(t, tool.ID, namedTool.ID)
 
@@ -128,7 +129,7 @@ func TestToolServiceErrorCases(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test GetToolByName with non-existent name
-	_, err = service.GetToolByName("Non-existent Tool")
+	_, err = service.GetToolByName(context.Background(),"Non-existent Tool")
 	assert.Error(t, err)
 
 	// Test DeleteTool with non-existent ID

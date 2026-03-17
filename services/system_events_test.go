@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"testing"
@@ -191,7 +192,7 @@ func TestSystemEvents_LLM_Updated(t *testing.T) {
 	sub := bus.Subscribe(TopicLLMUpdated, collector.Handler())
 	defer bus.Unsubscribe(sub)
 
-	_, err = service.UpdateLLM(llm.ID, "Updated LLM", "new-api-key", "https://new-api.test.com", 80,
+	_, err = service.UpdateLLM(context.Background(), llm.ID, "Updated LLM", "new-api-key", "https://new-api.test.com", 80,
 		"Updated short", "Updated long", "https://new-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "")
 	require.NoError(t, err)
 
@@ -218,7 +219,7 @@ func TestSystemEvents_LLM_Deleted(t *testing.T) {
 	sub := bus.Subscribe(TopicLLMDeleted, collector.Handler())
 	defer bus.Unsubscribe(sub)
 
-	err = service.DeleteLLM(llm.ID)
+	err = service.DeleteLLM(context.Background(), llm.ID)
 	require.NoError(t, err)
 
 	assert.True(t, collector.WaitWithTimeout(time.Second))
@@ -797,11 +798,11 @@ func TestSystemEvents_SubscribeAll(t *testing.T) {
 		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
 	require.NoError(t, err)
 
-	_, err = service.UpdateLLM(llm.ID, "Updated All Events LLM", "new-key", "https://new.test.com", 80,
+	_, err = service.UpdateLLM(context.Background(), llm.ID, "Updated All Events LLM", "new-key", "https://new.test.com", 80,
 		"New short", "New long", "https://new-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "")
 	require.NoError(t, err)
 
-	err = service.DeleteLLM(llm.ID)
+	err = service.DeleteLLM(context.Background(), llm.ID)
 	require.NoError(t, err)
 
 	assert.True(t, collector.WaitWithTimeout(2*time.Second))
@@ -856,11 +857,11 @@ func TestSystemEvents_NoEventBus_NoErrors(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, llm)
 
-	_, err = service.UpdateLLM(llm.ID, "Updated No Bus LLM", "new-key", "https://new.test.com", 80,
+	_, err = service.UpdateLLM(context.Background(), llm.ID, "Updated No Bus LLM", "new-key", "https://new.test.com", 80,
 		"New short", "New long", "https://new-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "")
 	assert.NoError(t, err)
 
-	err = service.DeleteLLM(llm.ID)
+	err = service.DeleteLLM(context.Background(), llm.ID)
 	assert.NoError(t, err)
 }
 

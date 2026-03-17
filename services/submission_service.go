@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	neturl "net/url"
@@ -19,6 +20,101 @@ const (
 	minPrivacyScore       = 0
 	maxPrivacyScore       = 100
 )
+
+// payloadCredentialFields are the keys in ResourcePayload that contain secrets
+var payloadCredentialFields = []string{"db_conn_api_key", "embed_api_key", "auth_key", "db_conn_string"}
+
+func (s *Service) encryptSubmissionPayload(ctx context.Context, payload map[string]interface{}) {
+	if s.Secrets == nil || payload == nil {
+		return
+	}
+	for _, field := range payloadCredentialFields {
+		if val, ok := payload[field]; ok {
+			if str, ok := val.(string); ok && str != "" && str != "[redacted]" {
+				encrypted, err := s.Secrets.EncryptValue(ctx, str)
+				if err == nil {
+					payload[field] = encrypted
+				}
+			}
+		}
+	}
+}
+
+func (s *Service) decryptSubmissionPayload(ctx context.Context, payload map[string]interface{}) {
+	if s.Secrets == nil || payload == nil {
+		return
+	}
+	for _, field := range payloadCredentialFields {
+		if val, ok := payload[field]; ok {
+			if str, ok := val.(string); ok {
+				decrypted, err := s.Secrets.DecryptValue(ctx, str)
+				if err == nil {
+					payload[field] = decrypted
+				}
+			}
+		}
+	}
+}
+
+// MigrateLegacySubmissions tags unprefixed credential fields in submission payloads
+// with the "$PLAIN/" prefix so that decryptWith treats them correctly.
+// Processes rows in batches. Returns the number of submissions updated.
+// This is idempotent — fields that already have $ENC/ or $PLAIN/ are skipped.
+// Respects context cancellation between batches for graceful shutdown.
+func (s *Service) MigrateLegacySubmissions(ctx context.Context, batchSize int) (int, error) {
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+	migrated := 0
+	offset := 0
+
+	for {
+		select {
+		case <-ctx.Done():
+			return migrated, ctx.Err()
+		default:
+		}
+
+		var batch []models.Submission
+		if err := s.DB.Offset(offset).Limit(batchSize).Find(&batch).Error; err != nil {
+			return migrated, fmt.Errorf("query submissions: %w", err)
+		}
+		if len(batch) == 0 {
+			break
+		}
+		offset += len(batch)
+
+		for i := range batch {
+			payload := batch[i].ResourcePayload
+			if payload == nil {
+				continue
+			}
+			changed := false
+			for _, field := range payloadCredentialFields {
+				val, ok := payload[field]
+				if !ok {
+					continue
+				}
+				str, ok := val.(string)
+				if !ok || str == "" {
+					continue
+				}
+				if strings.HasPrefix(str, "$ENC/") || strings.HasPrefix(str, "$PLAIN/") {
+					continue
+				}
+				payload[field] = "$PLAIN/" + str
+				changed = true
+			}
+			if changed {
+				if err := s.DB.Model(&batch[i]).Update("resource_payload", payload).Error; err != nil {
+					return migrated, fmt.Errorf("migrate submission %d: %w", batch[i].ID, err)
+				}
+				migrated++
+			}
+		}
+	}
+	return migrated, nil
+}
 
 // validateDocumentationURL ensures the URL uses a safe protocol (http/https only).
 // This prevents XSS via javascript: URIs being rendered as clickable links.
@@ -137,9 +233,11 @@ func (s *Service) CreateSubmission(submitterID uint, resourceType, status string
 		submission.SubmittedAt = &now
 	}
 
+	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	if err := submission.Create(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	// Notify admins of new submission
 	if status == models.SubmissionStatusSubmitted && s.NotificationService != nil {
@@ -155,6 +253,7 @@ func (s *Service) GetSubmissionByID(id uint) (*models.Submission, error) {
 	if err := submission.Get(s.DB, id); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	return submission, nil
 }
 
@@ -195,9 +294,12 @@ func (s *Service) UpdateSubmission(id uint, submitterID uint, payload models.JSO
 	submission.DocumentationURL = documentationURL
 	submission.Notes = notes
 
+	ctx := context.Background()
+	s.encryptSubmissionPayload(ctx, submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(ctx, submission.ResourcePayload)
 	return submission, nil
 }
 
@@ -231,9 +333,11 @@ func (s *Service) SubmitSubmission(id, submitterID uint) (*models.Submission, er
 	submission.Status = models.SubmissionStatusSubmitted
 	submission.SubmittedAt = &now
 
+	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	activityType := models.ActivityTypeSubmitted
 	if wasChangesRequested {
@@ -273,6 +377,10 @@ func (s *Service) GetSubmissionsBySubmitter(submitterID uint, status string, pag
 	if err != nil {
 		return nil, 0, 0, err
 	}
+	ctx := context.Background()
+	for i := range submissions {
+		s.decryptSubmissionPayload(ctx, submissions[i].ResourcePayload)
+	}
 	return submissions, totalCount, totalPages, nil
 }
 
@@ -284,6 +392,10 @@ func (s *Service) GetAllSubmissions(status, resourceType string, pageSize, pageN
 	totalCount, totalPages, err := submissions.GetAll(s.DB, status, resourceType, pageSize, pageNumber)
 	if err != nil {
 		return nil, 0, 0, err
+	}
+	ctx := context.Background()
+	for i := range submissions {
+		s.decryptSubmissionPayload(ctx, submissions[i].ResourcePayload)
 	}
 	return submissions, totalCount, totalPages, nil
 }
@@ -309,9 +421,11 @@ func (s *Service) StartReview(submissionID, reviewerID uint) (*models.Submission
 	submission.ReviewerID = &reviewerID
 	submission.ReviewStartedAt = &now
 
+	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	s.RecordSubmissionActivity(submission.ID, reviewerID, "", models.ActivityTypeReviewStarted, "", "")
 
@@ -361,10 +475,12 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 	submission.ReviewNotes = reviewNotes
 	submission.ReviewCompletedAt = &now
 
+	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	if err := submission.UpdateWithLock(tx); err != nil {
 		tx.Rollback()
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	// Record activity within the transaction
 	activity := &models.SubmissionActivity{
@@ -408,9 +524,11 @@ func (s *Service) RejectSubmission(submissionID, reviewerID uint, feedback, revi
 	submission.ReviewNotes = reviewNotes
 	submission.ReviewCompletedAt = &now
 
+	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	s.RecordSubmissionActivity(submissionID, reviewerID, "", models.ActivityTypeRejected, feedback, reviewNotes)
 
@@ -437,9 +555,11 @@ func (s *Service) RequestChanges(submissionID, reviewerID uint, feedback, review
 	submission.SubmitterFeedback = feedback
 	submission.ReviewNotes = reviewNotes
 
+	s.encryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 	if err := submission.UpdateWithLock(s.DB); err != nil {
 		return nil, err
 	}
+	s.decryptSubmissionPayload(context.Background(), submission.ResourcePayload)
 
 	s.RecordSubmissionActivity(submissionID, reviewerID, "", models.ActivityTypeChangesRequested, feedback, reviewNotes)
 

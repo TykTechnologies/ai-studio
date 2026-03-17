@@ -47,6 +47,8 @@ type Service struct {
 	ModelRouterService model_router.Service
 	// Sync Status (Hub-and-Spoke)
 	SyncStatusService *SyncStatusService
+	// Secrets (set after creation via SetSecretStore)
+	Secrets *secrets.Store
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -54,7 +56,6 @@ func NewService(db *gorm.DB) *Service {
 }
 
 func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
-	secrets.SetDBRef(db)
 	notificationService := NewNotificationService(db, "", "", 0, "", "", nil) // SMTP will be configured when needed
 	budgetSvc := budget.NewService(db, notificationService)
 	groupAccessSvc := group_access.NewService(db)
@@ -305,4 +306,9 @@ func (s *Service) SetEventBus(bus eventbridge.Bus) {
 func (s *Service) SetLicensingService(svc licensing.Service) {
 	s.LicensingService = svc
 	logger.Debug("Licensing service set on main service")
+}
+
+// SetSecretStore sets the secret store for encryption/decryption operations
+func (s *Service) SetSecretStore(store *secrets.Store) {
+	s.Secrets = store
 }

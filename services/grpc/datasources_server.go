@@ -167,7 +167,7 @@ func (s *DatasourcesServer) SearchDatasources(ctx context.Context, req *pb.Searc
 	}
 
 	// Call existing service method
-	datasources, err := s.service.SearchDatasources(query)
+	datasources, err := s.service.SearchDatasources(ctx, query)
 	if err != nil {
 		log.Error().Err(err).Str("query", query).Msg("Failed to search datasources via gRPC")
 		return nil, status.Errorf(codes.Internal, "failed to search datasources: %v", err)

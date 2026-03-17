@@ -8,7 +8,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/direct"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,9 +16,6 @@ type ProviderAPI struct {
 }
 
 func NewProviderAPI(api *API) *ProviderAPI {
-	// Initialize secrets package with database reference
-	secrets.SetDBRef(api.service.DB)
-
 	// Register direct import provider
 	directProvider := direct.NewDirectProvider()
 	api.providers.RegisterProvider("direct", directProvider)
@@ -102,7 +98,9 @@ func (a *ProviderAPI) configureProvider(c *gin.Context) {
 	case "tyk":
 		// Resolve any secret references in the token
 		config := req.Config
-		config.Token = secrets.GetValue(config.Token, false) // false to resolve actual value
+		if a.api.service.Secrets != nil {
+			config.Token = a.api.service.Secrets.ResolveReference(c.Request.Context(), config.Token, false)
+		}
 		newProvider = tyk.NewTykDashboardProvider(config)
 	case "direct":
 		// Direct provider doesn't need configuration

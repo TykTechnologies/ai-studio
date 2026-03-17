@@ -8,7 +8,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
 // REDACTED_VALUE is the value used to redact sensitive fields in API responses
@@ -21,8 +20,11 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 		return nil, err
 	}
 
-	llm.APIKey = secrets.GetValue(llm.APIKey, true) // preserve reference for API responses
-	llm.APIEndpoint = secrets.GetValue(llm.APIEndpoint, true)
+	if s.Secrets != nil {
+		ctx := context.Background()
+		llm.APIKey = s.Secrets.ResolveReference(ctx, llm.APIKey, true)
+		llm.APIEndpoint = s.Secrets.ResolveReference(ctx, llm.APIEndpoint, true)
+	}
 	return llm, nil
 }
 
@@ -201,7 +203,7 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 	return llm, nil
 }
 
-func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
+func (s *Service) UpdateLLM(ctx context.Context, id uint, name, apiKey, apiEndpoint string,
 	privacyScore int, shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
@@ -295,7 +297,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 }
 
 // Add some helper functions for managing allowed models
-func (s *Service) AddAllowedModel(id uint, modelPattern string) error {
+func (s *Service) AddAllowedModel(ctx context.Context, id uint, modelPattern string) error {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return err
@@ -317,7 +319,7 @@ func (s *Service) AddAllowedModel(id uint, modelPattern string) error {
 	return llm.Update(s.DB)
 }
 
-func (s *Service) RemoveAllowedModel(id uint, modelPattern string) error {
+func (s *Service) RemoveAllowedModel(ctx context.Context, id uint, modelPattern string) error {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return err
@@ -335,7 +337,7 @@ func (s *Service) RemoveAllowedModel(id uint, modelPattern string) error {
 	return llm.Update(s.DB)
 }
 
-func (s *Service) ClearAllowedModels(id uint) error {
+func (s *Service) ClearAllowedModels(ctx context.Context, id uint) error {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return err
@@ -345,7 +347,7 @@ func (s *Service) ClearAllowedModels(id uint) error {
 	return llm.Update(s.DB)
 }
 
-func (s *Service) GetAllowedModels(id uint) ([]string, error) {
+func (s *Service) GetAllowedModels(ctx context.Context, id uint) ([]string, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -355,7 +357,7 @@ func (s *Service) GetAllowedModels(id uint) ([]string, error) {
 }
 
 // Add a validation helper
-func (s *Service) IsModelAllowed(id uint, modelName string) (bool, error) {
+func (s *Service) IsModelAllowed(ctx context.Context, id uint, modelName string) (bool, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return false, err
@@ -379,7 +381,7 @@ func (s *Service) IsModelAllowed(id uint, modelName string) (bool, error) {
 }
 
 // The following functions remain unchanged
-func (s *Service) DeleteLLM(id uint) error {
+func (s *Service) DeleteLLM(ctx context.Context, id uint) error {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return err
@@ -431,14 +433,16 @@ func (s *Service) DeleteLLM(id uint) error {
 	return nil
 }
 
-func (s *Service) GetLLMByName(name string) (*models.LLM, error) {
+func (s *Service) GetLLMByName(ctx context.Context, name string) (*models.LLM, error) {
 	llm := models.NewLLM()
 	if err := llm.GetByName(s.DB, name); err != nil {
 		return nil, err
 	}
 
-	llm.APIKey = secrets.GetValue(llm.APIKey, false) // false to resolve the actual value
-	llm.APIEndpoint = secrets.GetValue(llm.APIEndpoint, false)
+	if s.Secrets != nil {
+		llm.APIKey = s.Secrets.ResolveReference(ctx, llm.APIKey, false)
+		llm.APIEndpoint = s.Secrets.ResolveReference(ctx, llm.APIEndpoint, false)
+	}
 	return llm, nil
 }
 
@@ -457,9 +461,12 @@ func (s *Service) GetActiveLLMs() ([]models.LLM, error) {
 		return nil, err
 	}
 
-	for i := range llms {
-		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false) // false to resolve the actual value
-		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+	if s.Secrets != nil {
+		ctx := context.Background()
+		for i := range llms {
+			llms[i].APIKey = s.Secrets.ResolveReference(ctx, llms[i].APIKey, false)
+			llms[i].APIEndpoint = s.Secrets.ResolveReference(ctx, llms[i].APIEndpoint, false)
+		}
 	}
 
 	return []models.LLM(llms), nil
@@ -474,7 +481,7 @@ func (s *Service) GetLLMsByNameStub(name string) (models.LLMs, error) {
 }
 
 // GetLLMsInNamespace returns LLMs in a specific namespace (including global)
-func (s *Service) GetLLMsInNamespace(namespace string) ([]models.LLM, error) {
+func (s *Service) GetLLMsInNamespace(ctx context.Context, namespace string) ([]models.LLM, error) {
 	llms := models.LLMs{}
 
 	query := s.DB.Preload("Filters").Preload("Plugins")
@@ -490,16 +497,18 @@ func (s *Service) GetLLMsInNamespace(namespace string) ([]models.LLM, error) {
 		return nil, err
 	}
 
-	for i := range llms {
-		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)
-		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+	if s.Secrets != nil {
+		for i := range llms {
+			llms[i].APIKey = s.Secrets.ResolveReference(ctx, llms[i].APIKey, false)
+			llms[i].APIEndpoint = s.Secrets.ResolveReference(ctx, llms[i].APIEndpoint, false)
+		}
 	}
 
 	return []models.LLM(llms), nil
 }
 
 // GetActiveLLMsInNamespace returns active LLMs in a specific namespace (including global)
-func (s *Service) GetActiveLLMsInNamespace(namespace string) ([]models.LLM, error) {
+func (s *Service) GetActiveLLMsInNamespace(ctx context.Context, namespace string) ([]models.LLM, error) {
 	llms := models.LLMs{}
 
 	query := s.DB.Preload("Filters").Preload("Plugins").Where("active = ?", true)
@@ -515,9 +524,11 @@ func (s *Service) GetActiveLLMsInNamespace(namespace string) ([]models.LLM, erro
 		return nil, err
 	}
 
-	for i := range llms {
-		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)
-		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+	if s.Secrets != nil {
+		for i := range llms {
+			llms[i].APIKey = s.Secrets.ResolveReference(ctx, llms[i].APIKey, false)
+			llms[i].APIEndpoint = s.Secrets.ResolveReference(ctx, llms[i].APIEndpoint, false)
+		}
 	}
 
 	return []models.LLM(llms), nil
