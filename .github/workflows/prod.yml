@@ -11,7 +11,7 @@ env:
 jobs:
   # Build frontend once and share across all editions
   build-frontend:
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,7 +47,7 @@ jobs:
   # Build Community Edition binaries
   build-ce-binaries:
     needs: build-frontend
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - uses: actions/checkout@v4
         with:
@@ -104,7 +104,7 @@ jobs:
   # Build Community Edition Docker image
   build-ce-image:
     needs: [build-frontend, build-ce-binaries]
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - uses: actions/checkout@v4
 
@@ -148,7 +148,7 @@ jobs:
   # Build Enterprise Edition binaries
   build-ent-binaries:
     needs: build-frontend
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - uses: actions/checkout@v4
         with:
@@ -216,7 +216,7 @@ jobs:
   # Build Enterprise Edition Docker image
   build-ent-image:
     needs: [build-frontend, build-ent-binaries]
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - uses: actions/checkout@v4
         with:
@@ -263,7 +263,7 @@ jobs:
   # Deploy CE image to production server
   deploy-ce:
     needs: build-ce-image
-    runs-on: ubuntu-latest
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - name: Deploy to Remote Server
         env:
