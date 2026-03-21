@@ -40,7 +40,7 @@ func (gprs *GroupPluginResources) GetByGroupAndType(db *gorm.DB, groupID, resour
 
 // DeleteByGroupAndType removes all entries for a group and resource type
 func DeleteGroupPluginResourcesByType(db *gorm.DB, groupID, resourceTypeID uint) error {
-	return db.Where("group_id = ? AND plugin_resource_type_id = ?", groupID, resourceTypeID).
+	return db.Unscoped().Where("group_id = ? AND plugin_resource_type_id = ?", groupID, resourceTypeID).
 		Delete(&GroupPluginResource{}).Error
 }
 
