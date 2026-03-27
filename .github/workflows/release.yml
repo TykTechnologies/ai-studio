@@ -260,7 +260,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           file: midsommar/${{ matrix.dockerfile }}
           provenance: mode=max
-          sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
           push: ${{ startsWith(github.ref, 'refs/tags') }}
@@ -286,10 +285,3 @@ jobs:
             dist/*.rpm
             !dist/*PAYG*.rpm
             !dist/*fips*.rpm
-  sbom:
-    needs: goreleaser
-    uses: TykTechnologies/github-actions/.github/workflows/sbom.yaml@main
-    secrets:
-      DEPDASH_URL: ${{ secrets.DEPDASH_URL }}
-      DEPDASH_KEY: ${{ secrets.DEPDASH_KEY }}
-      ORG_GH_TOKEN: ${{ secrets.ORG_GH_TOKEN }}
