@@ -93,6 +93,12 @@ func InitModels(db *gorm.DB) error {
 		&PluginResourceType{},  // Plugin-registered resource types
 		&AppPluginResource{},   // App ↔ plugin resource instance associations
 		&GroupPluginResource{}, // Group ↔ plugin resource instance access control
+		// Outbound Webhooks
+		&WebhookSubscription{}, // Webhook endpoint subscriptions
+		&WebhookTopic{},        // Subscription–topic join table
+		&WebhookEvent{},        // Persistent delivery queue
+		&WebhookDeliveryLog{},  // Per-attempt delivery audit log
+		&WebhookConfig{},       // Global webhook runtime configuration (singleton)
 	); err != nil {
 		return err
 	}

@@ -99,6 +99,14 @@ type AppConf struct {
 
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
+
+	// Webhook service static startup configuration (overridable at runtime via DB singleton)
+	WebhookWorkers              int
+	WebhookQueueSize            int
+	WebhookMaxRetries           int
+	WebhookBackoffSeconds       []int // parsed from WEBHOOK_BACKOFF_SECONDS (comma-separated)
+	WebhookHTTPTimeoutSeconds   int
+	WebhookMaxResponseBodyBytes int
 }
 
 // QueueConfig holds configuration for message queues
@@ -513,6 +521,41 @@ func getConfigFromEnv(envFile string) *AppConf {
 			cfgLog.Info().Msgf("Default app budget set to: %.2f", defaultBudget)
 		} else if err != nil {
 			cfgLog.Warn().Msgf("Warning: Invalid DEFAULT_APP_BUDGET value: %s", defaultBudgetStr)
+		}
+	}
+
+	// Webhook service static startup configuration
+	if v := os.Getenv("WEBHOOK_WORKERS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			conf.WebhookWorkers = n
+		}
+	}
+	if v := os.Getenv("WEBHOOK_QUEUE_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			conf.WebhookQueueSize = n
+		}
+	}
+	if v := os.Getenv("WEBHOOK_MAX_RETRIES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			conf.WebhookMaxRetries = n
+		}
+	}
+	if v := os.Getenv("WEBHOOK_BACKOFF_SECONDS"); v != "" {
+		for _, part := range strings.Split(v, ",") {
+			part = strings.TrimSpace(part)
+			if n, err := strconv.Atoi(part); err == nil && n >= 0 {
+				conf.WebhookBackoffSeconds = append(conf.WebhookBackoffSeconds, n)
+			}
+		}
+	}
+	if v := os.Getenv("WEBHOOK_HTTP_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			conf.WebhookHTTPTimeoutSeconds = n
+		}
+	}
+	if v := os.Getenv("WEBHOOK_MAX_RESP_BODY"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			conf.WebhookMaxResponseBodyBytes = n
 		}
 	}
 
