@@ -38,11 +38,11 @@ func (aprs *AppPluginResources) GetByApp(db *gorm.DB, appID uint) error {
 
 // DeleteByAppAndType removes all associations for an app and resource type
 func DeleteAppPluginResourcesByType(db *gorm.DB, appID, resourceTypeID uint) error {
-	return db.Where("app_id = ? AND plugin_resource_type_id = ?", appID, resourceTypeID).
+	return db.Unscoped().Where("app_id = ? AND plugin_resource_type_id = ?", appID, resourceTypeID).
 		Delete(&AppPluginResource{}).Error
 }
 
 // DeleteByApp removes all plugin resource associations for an app
 func DeleteAppPluginResources(db *gorm.DB, appID uint) error {
-	return db.Where("app_id = ?", appID).Delete(&AppPluginResource{}).Error
+	return db.Unscoped().Where("app_id = ?", appID).Delete(&AppPluginResource{}).Error
 }

@@ -160,6 +160,21 @@ func TestSetAppPluginResources(t *testing.T) {
 		assert.Equal(t, "server-3", aprs[0].InstanceID)
 	})
 
+	t.Run("replace with same resource instances (soft-delete conflict)", func(t *testing.T) {
+		// Set the resource instance initially
+		err := service.SetAppPluginResources(app.ID, prt.ID, []string{"server-same"})
+		assert.NoError(t, err)
+
+		// Set it again with the same instance ID to trigger the conflict
+		err = service.SetAppPluginResources(app.ID, prt.ID, []string{"server-same"})
+		assert.NoError(t, err, "Should not fail with duplicate key violation on soft-deleted row")
+
+		aprs, err := service.GetAppPluginResources(app.ID)
+		assert.NoError(t, err)
+		assert.Len(t, aprs, 1)
+		assert.Equal(t, "server-same", aprs[0].InstanceID)
+	})
+
 	t.Run("clear resource instances", func(t *testing.T) {
 		err := service.SetAppPluginResources(app.ID, prt.ID, []string{})
 		assert.NoError(t, err)
