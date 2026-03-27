@@ -549,6 +549,7 @@ type ToolResponse struct {
 		PrivacyScore   int                 `json:"privacy_score"`
 		Operations     []string            `json:"operations"`
 		AuthKey        string              `json:"auth_key"`
+		HasAuthKey     bool                `json:"has_auth_key"`
 		AuthSchemaName string              `json:"auth_schema_name"`
 		Active         bool                `json:"active"`
 		Namespace      string              `json:"namespace"`

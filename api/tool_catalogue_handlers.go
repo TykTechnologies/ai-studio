@@ -11,6 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/gin-gonic/gin"
 	"github.com/pb33f/libopenapi"
@@ -358,6 +359,7 @@ func toSecureToolResponse(tool *models.Tool) ToolResponse {
 			PrivacyScore   int                 `json:"privacy_score"`
 			Operations     []string            `json:"operations"`
 			AuthKey        string              `json:"auth_key"`
+			HasAuthKey     bool                `json:"has_auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
 			Active         bool                `json:"active"`
 			Namespace      string              `json:"namespace"`
@@ -371,7 +373,8 @@ func toSecureToolResponse(tool *models.Tool) ToolResponse {
 			OASSpec:        "", // Hide OAS spec for security
 			PrivacyScore:   tool.PrivacyScore,
 			Operations:     ops,
-			AuthKey:        "", // Hide auth key for security
+			AuthKey:        services.REDACTED_VALUE,
+			HasAuthKey:     tool.AuthKey != "",
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
 		},
@@ -391,6 +394,7 @@ func toToolResponse(tool *models.Tool) ToolResponse {
 			PrivacyScore   int                 `json:"privacy_score"`
 			Operations     []string            `json:"operations"`
 			AuthKey        string              `json:"auth_key"`
+			HasAuthKey     bool                `json:"has_auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
 			Active         bool                `json:"active"`
 			Namespace      string              `json:"namespace"`
@@ -404,7 +408,8 @@ func toToolResponse(tool *models.Tool) ToolResponse {
 			OASSpec:        tool.OASSpec,
 			PrivacyScore:   tool.PrivacyScore,
 			Operations:     ops,
-			AuthKey:        tool.AuthKey,
+			AuthKey:        services.REDACTED_VALUE,
+			HasAuthKey:     tool.AuthKey != "",
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
 		},
