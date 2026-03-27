@@ -145,6 +145,94 @@ func TestToolEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
+func TestToolAuthKeyRedaction(t *testing.T) {
+	api, _ := setupTestAPI(t)
+
+	makeInput := func(name, authKey string) ToolInput {
+		return ToolInput{
+			Data: struct {
+				Type       string `json:"type"`
+				Attributes struct {
+					Name           string   `json:"name"`
+					Description    string   `json:"description"`
+					ToolType       string   `json:"tool_type"`
+					OASSpec        string   `json:"oas_spec"`
+					PrivacyScore   int      `json:"privacy_score"`
+					AuthKey        string   `json:"auth_key"`
+					AuthSchemaName string   `json:"auth_schema_name"`
+					Operations     []string `json:"operations"`
+					Namespace      string   `json:"namespace"`
+				} `json:"attributes"`
+			}{
+				Type: "tools",
+				Attributes: struct {
+					Name           string   `json:"name"`
+					Description    string   `json:"description"`
+					ToolType       string   `json:"tool_type"`
+					OASSpec        string   `json:"oas_spec"`
+					PrivacyScore   int      `json:"privacy_score"`
+					AuthKey        string   `json:"auth_key"`
+					AuthSchemaName string   `json:"auth_schema_name"`
+					Operations     []string `json:"operations"`
+					Namespace      string   `json:"namespace"`
+				}{
+					Name:     name,
+					AuthKey:  authKey,
+					ToolType: models.ToolTypeREST,
+					OASSpec:  `{"openapi": "3.0.0"}`,
+				},
+			},
+		}
+	}
+
+	// Create a tool with an auth key
+	w := performRequest(api.router, "POST", "/api/v1/tools", makeInput("SecureTool", "super-secret-key"))
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	var createResp map[string]ToolResponse
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &createResp))
+	toolID := createResp["data"].ID
+
+	// GET single tool: auth_key must be redacted, has_auth_key must be true
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/tools/%s", toolID), nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+	var getResp map[string]ToolResponse
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &getResp))
+	assert.Equal(t, "[redacted]", getResp["data"].Attributes.AuthKey, "auth_key must be redacted on GET")
+	assert.True(t, getResp["data"].Attributes.HasAuthKey, "has_auth_key must be true when a key is set")
+
+	// GET list: same masking applies
+	w = performRequest(api.router, "GET", "/api/v1/tools", nil)
+	assert.Equal(t, http.StatusOK, w.Code)
+	var listResp map[string][]ToolResponse
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &listResp))
+	assert.Equal(t, "[redacted]", listResp["data"][0].Attributes.AuthKey, "auth_key must be redacted in list")
+	assert.True(t, listResp["data"][0].Attributes.HasAuthKey, "has_auth_key must be true in list")
+
+	// PATCH with [redacted] must NOT overwrite the stored key
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/tools/%s", toolID), makeInput("SecureTool", "[redacted]"))
+	assert.Equal(t, http.StatusOK, w.Code)
+	// Re-fetch and confirm key is still set
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/tools/%s", toolID), nil)
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &getResp))
+	assert.True(t, getResp["data"].Attributes.HasAuthKey, "key must still be set after PATCH with [redacted]")
+
+	// PATCH with a new key value must update it (has_auth_key stays true)
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/tools/%s", toolID), makeInput("SecureTool", "new-secret-key"))
+	assert.Equal(t, http.StatusOK, w.Code)
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/tools/%s", toolID), nil)
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &getResp))
+	assert.Equal(t, "[redacted]", getResp["data"].Attributes.AuthKey, "new key must also be redacted")
+	assert.True(t, getResp["data"].Attributes.HasAuthKey, "has_auth_key must remain true after key update")
+
+	// PATCH with empty string must clear the key
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/tools/%s", toolID), makeInput("SecureTool", ""))
+	assert.Equal(t, http.StatusOK, w.Code)
+	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/tools/%s", toolID), nil)
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &getResp))
+	assert.False(t, getResp["data"].Attributes.HasAuthKey, "has_auth_key must be false after clearing key")
+}
+
 func TestToolEndpointsErrors(t *testing.T) {
 	api, _ := setupTestAPI(t)
 

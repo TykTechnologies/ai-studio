@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -220,7 +221,9 @@ func (a *API) updateTool(c *gin.Context) {
 	tool.OASSpec = input.Data.Attributes.OASSpec
 	tool.PrivacyScore = input.Data.Attributes.PrivacyScore
 	tool.AuthSchemaName = input.Data.Attributes.AuthSchemaName
-	tool.AuthKey = input.Data.Attributes.AuthKey
+	if input.Data.Attributes.AuthKey != services.REDACTED_VALUE {
+		tool.AuthKey = input.Data.Attributes.AuthKey
+	}
 
 	// Namespace change requires admin authorization
 	if input.Data.Attributes.Namespace != tool.Namespace {
@@ -1040,6 +1043,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			PrivacyScore   int                 `json:"privacy_score"`
 			Operations     []string            `json:"operations"`
 			AuthKey        string              `json:"auth_key"`
+			HasAuthKey     bool                `json:"has_auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
 			Active         bool                `json:"active"`
 			Namespace      string              `json:"namespace"`
@@ -1053,7 +1057,8 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			OASSpec:        tool.OASSpec,
 			PrivacyScore:   tool.PrivacyScore,
 			Operations:     tool.GetOperations(),
-			AuthKey:        tool.AuthKey,
+			AuthKey:        services.REDACTED_VALUE,
+			HasAuthKey:     tool.AuthKey != "",
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
 			Namespace:      tool.Namespace,
@@ -1100,6 +1105,7 @@ func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
 			PrivacyScore   int                 `json:"privacy_score"`
 			Operations     []string            `json:"operations"`
 			AuthKey        string              `json:"auth_key"`
+			HasAuthKey     bool                `json:"has_auth_key"`
 			AuthSchemaName string              `json:"auth_schema_name"`
 			Active         bool                `json:"active"`
 			Namespace      string              `json:"namespace"`
@@ -1113,7 +1119,8 @@ func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
 			OASSpec:        "", // Omit large OAS spec
 			PrivacyScore:   tool.PrivacyScore,
 			Operations:     tool.GetOperations(),
-			AuthKey:        "", // Omit sensitive auth key
+			AuthKey:        services.REDACTED_VALUE,
+			HasAuthKey:     tool.AuthKey != "",
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
 			Namespace:      tool.Namespace,
