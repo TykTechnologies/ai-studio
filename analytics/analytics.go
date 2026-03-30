@@ -58,6 +58,7 @@ func RecordContentMessage(
 	timeMs int, userID, appID, llmID uint,
 	t time.Time,
 	svc services.ServiceInterface,
+	dontLogBodies bool,
 ) {
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
@@ -181,11 +182,14 @@ func RecordContentMessage(
 	chatLog.Name = name
 	chatLog.Vendor = string(vendor)
 	chatLog.TimeStamp = t
-	chatLog.Prompt = prompt
-	chatLog.Response = strings.Join(responseParts, "\n")
 	chatLog.Tokens = promptTokens
 	chatLog.UserID = userID
 	chatLog.ChatID = chatID
+
+	if !dontLogBodies {
+		chatLog.Prompt = prompt
+		chatLog.Response = strings.Join(responseParts, "\n")
+	}
 
 	// No HTTP request context available in chat session path
 	RecordChatRecord(context.Background(), rec)

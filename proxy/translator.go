@@ -326,6 +326,10 @@ func (p *Proxy) recordTranslatorAnalytics(
 		ResponseBody: truncateString(string(respBody), maxBodySize),
 		ResponseCode: statusCode,
 	}
+	if llm.DontLogBodies {
+		proxyLog.RequestBody = ""
+		proxyLog.ResponseBody = ""
+	}
 	analytics.RecordProxyLog(r.Context(), proxyLog)
 
 	// 2. Record chat analytics (if successful)

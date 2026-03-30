@@ -102,6 +102,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				MonthlyBudget    *float64 `json:"monthly_budget"`
 				BudgetStartDate  *string  `json:"budget_start_date"`
 				Namespace        string   `json:"namespace,omitempty"`
+				DontLogBodies    bool     `json:"dont_log_bodies"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -121,6 +122,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				MonthlyBudget    *float64 `json:"monthly_budget"`
 				BudgetStartDate  *string  `json:"budget_start_date"`
 				Namespace        string   `json:"namespace,omitempty"`
+				DontLogBodies    bool     `json:"dont_log_bodies"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",

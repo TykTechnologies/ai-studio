@@ -46,6 +46,11 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		ResponseCode: statusCode,
 	}
 
+	if llm.DontLogBodies {
+		l.RequestBody = ""
+		l.ResponseBody = ""
+	}
+
 	// Use WithoutCancel to preserve trace context without lifecycle coupling,
 	// since this function is called from goroutines after the HTTP response is sent.
 	ctx := context.WithoutCancel(r.Context())
@@ -75,6 +80,11 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
 		ResponseBody: truncateString(string(decompressedResponses), maxBodySize),
 		ResponseCode: statusCode,
+	}
+
+	if llm.DontLogBodies {
+		l.RequestBody = ""
+		l.ResponseBody = ""
 	}
 
 	// Use WithoutCancel to preserve trace context without lifecycle coupling,
