@@ -211,10 +211,16 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	// no CSRF for tests
 	if !config.TestMode {
 		// Add CSRF middleware
-		csrfMiddleware := csrf.Protect(
-			csrfKey,
+		csrfOpts := []csrf.Option{
 			csrf.Secure(false), // Allow HTTP in development
 			csrf.Path("/"),
+		}
+		if os.Getenv("DEVMODE") == "true" || os.Getenv("DEVMODE") == "1" {
+			csrfOpts = append(csrfOpts, csrf.TrustedOrigins([]string{"localhost:3000"}))
+		}
+		csrfMiddleware := csrf.Protect(
+			csrfKey,
+			csrfOpts...,
 		)
 
 		api.router.Use(func(c *gin.Context) {
@@ -234,6 +240,11 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 				c.Request = r
 				c.Next()
 			})).ServeHTTP(c.Writer, c.Request)
+
+			// If CSRF middleware rejected the request, abort the gin chain
+			if c.Writer.Status() == http.StatusForbidden {
+				c.Abort()
+			}
 		})
 	}
 
