@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tmc/langchaingo/llms"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -102,13 +104,14 @@ func TestProxyLogBodySuppression_Unit(t *testing.T) {
 	}
 }
 
-// TestChatLogEntryBodySuppression_Unit verifies that RecordContentMessage
-// suppresses prompt/response in the LLMChatLogEntry when dontLogBodies is true.
-func TestChatLogEntryBodySuppression_Unit(t *testing.T) {
+// TestRecordContentMessage_BodySuppression calls analytics.RecordContentMessage directly
+// to verify that the production code path suppresses prompt/response in the
+// LLMChatLogEntry when dontLogBodies is true.
+func TestRecordContentMessage_BodySuppression(t *testing.T) {
 	tests := []struct {
-		name           string
-		dontLogBodies  bool
-		wantPromptSet  bool
+		name            string
+		dontLogBodies   bool
+		wantPromptSet   bool
 		wantResponseSet bool
 	}{
 		{
@@ -131,35 +134,58 @@ func TestChatLogEntryBodySuppression_Unit(t *testing.T) {
 			analytics.SetHandler(handler)
 			defer analytics.ResetHandler()
 
-			// Simulate what RecordContentMessage does for the chat log entry
-			chatLog := &models.LLMChatLogEntry{
-				Name:      "test-model",
-				Vendor:    "mock",
-				TimeStamp: time.Now(),
-				Tokens:    10,
-				UserID:    1,
-				ChatID:    "chat-123",
+			// Build the inputs that RecordContentMessage expects
+			mc := llms.TextParts(llms.ChatMessageTypeHuman, "sensitive user prompt")
+
+			cr := &llms.ContentResponse{
+				Choices: []*llms.ContentChoice{
+					{
+						Content: "sensitive assistant response",
+					},
+				},
 			}
 
-			if !tt.dontLogBodies {
-				chatLog.Prompt = "sensitive user prompt"
-				chatLog.Response = "sensitive assistant response"
-			}
+			// Mock service that returns a price (required by RecordContentMessage)
+			mockSvc := new(MockService)
+			mockSvc.On("GetModelPriceByModelNameAndVendor", "test-model", "mock").Return(
+				&models.ModelPrice{
+					ModelName: "test-model",
+					Vendor:    "mock",
+					CPT:       0.002,
+					CPIT:      0.001,
+					Currency:  "USD",
+				}, nil,
+			)
 
-			analytics.RecordChatLogEntry(chatLog)
+			analytics.RecordContentMessage(
+				&mc,
+				cr,
+				models.MOCK_VENDOR,
+				"test-model",
+				"chat-123",
+				0,    // timeMs
+				1,    // userID
+				1,    // appID
+				1,    // llmID
+				time.Now(),
+				mockSvc,
+				tt.dontLogBodies,
+			)
 
-			assert.NotNil(t, handler.lastChatLogEntry)
+			require.NotNil(t, handler.lastChatLogEntry, "RecordContentMessage should produce a chat log entry")
 			if tt.wantPromptSet {
 				assert.Equal(t, "sensitive user prompt", handler.lastChatLogEntry.Prompt)
 				assert.Equal(t, "sensitive assistant response", handler.lastChatLogEntry.Response)
 			} else {
-				assert.Empty(t, handler.lastChatLogEntry.Prompt)
-				assert.Empty(t, handler.lastChatLogEntry.Response)
+				assert.Empty(t, handler.lastChatLogEntry.Prompt, "prompt should be empty when dontLogBodies is true")
+				assert.Empty(t, handler.lastChatLogEntry.Response, "response should be empty when dontLogBodies is true")
 			}
-			// Metadata should always be preserved
+			// Metadata should always be preserved regardless of body suppression
 			assert.Equal(t, "test-model", handler.lastChatLogEntry.Name)
 			assert.Equal(t, uint(1), handler.lastChatLogEntry.UserID)
 			assert.Equal(t, "chat-123", handler.lastChatLogEntry.ChatID)
+
+			mockSvc.AssertExpectations(t)
 		})
 	}
 }
