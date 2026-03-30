@@ -272,7 +272,7 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	flusher.Flush()
 
 	// Record analytics
-	go recordBedrockStreamAnalytics(p, conf, app, modelID, int(inputTokens), int(outputTokens), reqBody, r, timestamp)
+	go recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), timestamp)
 }
 
 // --- Helper functions ---
@@ -388,48 +388,23 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID 
 
 	// Record chat analytics
 	if output.Usage != nil {
-		promptTokens := int(aws.ToInt32(output.Usage.InputTokens))
-		responseTokens := int(aws.ToInt32(output.Usage.OutputTokens))
-
-		// Use the actual model ID from the request for correct billing
-		modelName := modelID
-		price, err := p.gatewayService.GetModelPriceByModelNameAndVendor(modelName, string(llm.Vendor))
-		if err != nil {
-			log.Debug().Str("model", modelName).Str("vendor", string(llm.Vendor)).Msg("No pricing found for Bedrock model")
-			price = &models.ModelPrice{}
-		}
-
-		cost := ((price.CPT * float64(responseTokens)) + (price.CPIT * float64(promptTokens))) * 10000
-
-		record := &models.LLMChatRecord{
-			LLMID:           llm.ID,
-			Name:            modelName,
-			Vendor:          string(llm.Vendor),
-			PromptTokens:    promptTokens,
-			ResponseTokens:  responseTokens,
-			TotalTokens:     promptTokens + responseTokens,
-			Cost:            cost,
-			Currency:        price.Currency,
-			Choices:         1,
-			TimeStamp:       timestamp,
-			AppID:           app.ID,
-			UserID:          app.UserID,
-			InteractionType: models.ProxyInteraction,
-		}
-		analytics.RecordChatRecord(record)
+		recordBedrockChatRecord(p, llm, app, modelID,
+			int(aws.ToInt32(output.Usage.InputTokens)),
+			int(aws.ToInt32(output.Usage.OutputTokens)),
+			timestamp)
 	}
 }
 
-func recordBedrockStreamAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, reqBody []byte, r *http.Request, timestamp time.Time) {
+// recordBedrockChatRecord is the single place that calculates cost and records an LLMChatRecord
+// for all Bedrock paths (non-streaming /ai/, streaming /ai/, and streaming /llm/stream/).
+func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, timestamp time.Time) {
 	if promptTokens == 0 && responseTokens == 0 {
 		return
 	}
 
-	// Use the actual model ID from the request for correct billing
-	modelName := modelID
-	price, err := p.gatewayService.GetModelPriceByModelNameAndVendor(modelName, string(llm.Vendor))
+	price, err := p.gatewayService.GetModelPriceByModelNameAndVendor(modelID, string(llm.Vendor))
 	if err != nil {
-		log.Debug().Str("model", modelName).Str("vendor", string(llm.Vendor)).Msg("No pricing found for Bedrock model")
+		log.Debug().Str("model", modelID).Str("vendor", string(llm.Vendor)).Msg("No pricing found for Bedrock model")
 		price = &models.ModelPrice{}
 	}
 
@@ -437,7 +412,7 @@ func recordBedrockStreamAnalytics(p *Proxy, llm *models.LLM, app *models.App, mo
 
 	record := &models.LLMChatRecord{
 		LLMID:           llm.ID,
-		Name:            modelName,
+		Name:            modelID,
 		Vendor:          string(llm.Vendor),
 		PromptTokens:    promptTokens,
 		ResponseTokens:  responseTokens,

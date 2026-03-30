@@ -9,7 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
-	"github.com/TykTechnologies/midsommar/v2/analytics"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/rs/zerolog/log"
@@ -155,42 +154,8 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 
 	// Record analytics using token counts captured on-the-fly from the metadata event
 	if !isErr {
-		go recordBedrockStreamProxyAnalytics(p, llm, app, modelID, int(inputTokens), int(outputTokens), reqBody, startTime)
+		go recordBedrockChatRecord(p, llm, app, modelID, int(inputTokens), int(outputTokens), startTime)
 	}
-}
-
-// recordBedrockStreamProxyAnalytics records analytics for the /llm/stream/ Bedrock path
-// using token counts extracted on-the-fly from the stream metadata event.
-func recordBedrockStreamProxyAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, reqBody []byte, timestamp time.Time) {
-	if promptTokens == 0 && responseTokens == 0 {
-		return
-	}
-
-	// Use actual model ID for correct billing
-	price, err := p.gatewayService.GetModelPriceByModelNameAndVendor(modelID, string(llm.Vendor))
-	if err != nil {
-		log.Debug().Str("model", modelID).Str("vendor", string(llm.Vendor)).Msg("No pricing found for Bedrock model")
-		price = &models.ModelPrice{}
-	}
-
-	cost := ((price.CPT * float64(responseTokens)) + (price.CPIT * float64(promptTokens))) * 10000
-
-	record := &models.LLMChatRecord{
-		LLMID:           llm.ID,
-		Name:            modelID,
-		Vendor:          string(llm.Vendor),
-		PromptTokens:    promptTokens,
-		ResponseTokens:  responseTokens,
-		TotalTokens:     promptTokens + responseTokens,
-		Cost:            cost,
-		Currency:        price.Currency,
-		Choices:         1,
-		TimeStamp:       timestamp,
-		AppID:           app.ID,
-		UserID:          app.UserID,
-		InteractionType: models.ProxyInteraction,
-	}
-	analytics.RecordChatRecord(record)
 }
 
 // --- Helper types and functions ---
