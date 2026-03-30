@@ -88,7 +88,7 @@ func (p *Proxy) handleBedrockChatCompletion(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Record analytics
-	go recordBedrockAnalytics(p, conf, app, output, reqBody, respBody, r, timestamp)
+	go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, respBody, r, timestamp)
 
 	// Send response
 	w.Header().Set("Content-Type", "application/json")
@@ -272,7 +272,7 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	flusher.Flush()
 
 	// Record analytics
-	go recordBedrockStreamAnalytics(p, conf, app, int(inputTokens), int(outputTokens), reqBody, r, timestamp)
+	go recordBedrockStreamAnalytics(p, conf, app, modelID, int(inputTokens), int(outputTokens), reqBody, r, timestamp)
 }
 
 // --- Helper functions ---
@@ -371,7 +371,7 @@ func sendSSEChunk(w http.ResponseWriter, flusher http.Flusher, chunk ChatComplet
 	flusher.Flush()
 }
 
-func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, output *bedrockruntime.ConverseOutput, reqBody []byte, respBody []byte, r *http.Request, timestamp time.Time) {
+func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, output *bedrockruntime.ConverseOutput, reqBody []byte, respBody []byte, r *http.Request, timestamp time.Time) {
 	const maxBodySize = 65535
 
 	// Record proxy log
@@ -391,7 +391,8 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, output *
 		promptTokens := int(aws.ToInt32(output.Usage.InputTokens))
 		responseTokens := int(aws.ToInt32(output.Usage.OutputTokens))
 
-		modelName := llm.DefaultModel
+		// Use the actual model ID from the request for correct billing
+		modelName := modelID
 		price, err := p.gatewayService.GetModelPriceByModelNameAndVendor(modelName, string(llm.Vendor))
 		if err != nil {
 			log.Debug().Str("model", modelName).Str("vendor", string(llm.Vendor)).Msg("No pricing found for Bedrock model")
@@ -419,12 +420,13 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, output *
 	}
 }
 
-func recordBedrockStreamAnalytics(p *Proxy, llm *models.LLM, app *models.App, promptTokens int, responseTokens int, reqBody []byte, r *http.Request, timestamp time.Time) {
+func recordBedrockStreamAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, reqBody []byte, r *http.Request, timestamp time.Time) {
 	if promptTokens == 0 && responseTokens == 0 {
 		return
 	}
 
-	modelName := llm.DefaultModel
+	// Use the actual model ID from the request for correct billing
+	modelName := modelID
 	price, err := p.gatewayService.GetModelPriceByModelNameAndVendor(modelName, string(llm.Vendor))
 	if err != nil {
 		log.Debug().Str("model", modelName).Str("vendor", string(llm.Vendor)).Msg("No pricing found for Bedrock model")

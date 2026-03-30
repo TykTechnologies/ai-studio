@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	"github.com/TykTechnologies/midsommar/v2/analytics"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/rs/zerolog/log"
@@ -19,6 +19,9 @@ import (
 // handleBedrockStreamingProxy handles streaming requests for Bedrock on the /llm/stream/ path.
 // Instead of raw HTTP forwarding (which can't handle Bedrock's binary event stream protocol),
 // this uses the AWS SDK's ConverseStream API to decode events and re-serialize them as SSE.
+//
+// Analytics data (token usage) is extracted on-the-fly from the metadata event rather than
+// buffering the entire response in memory.
 func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Request, llm *models.LLM, app *models.App, reqBody []byte) {
 	startTime := time.Now()
 
@@ -77,13 +80,13 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	}
 	flusher.Flush()
 
-	// Iterate over decoded stream events
-	var fullResponse bytes.Buffer
-	var responses [][]byte
+	// Stream events to client, extracting analytics on-the-fly.
+	// We do NOT buffer the full response — token usage comes from the metadata event.
 	var textBuffer strings.Builder
 	hasResponseFilters := p.hasResponseFilters(llm)
 	chunkIndex := 0
 	isErr := false
+	var inputTokens, outputTokens int32
 
 	for event := range stream.Events() {
 		if err := stream.Err(); err != nil {
@@ -92,17 +95,23 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 			break
 		}
 
+		// Extract token usage from metadata event (no buffering needed)
+		if metadata, ok := event.(*types.ConverseStreamOutputMemberMetadata); ok {
+			if metadata.Value.Usage != nil {
+				inputTokens = aws.ToInt32(metadata.Value.Usage.InputTokens)
+				outputTokens = aws.ToInt32(metadata.Value.Usage.OutputTokens)
+			}
+		}
+
 		eventJSON, err := marshalStreamEvent(event)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to marshal Bedrock stream event")
 			continue
 		}
 
-		chunk := []byte(fmt.Sprintf("data: %s\n\n", eventJSON))
-		responses = append(responses, chunk)
-		fullResponse.Write(chunk)
+		chunk := fmt.Appendf(nil, "data: %s\n\n", eventJSON)
 
-		// Extract text for response filters
+		// Execute response filters per-chunk if configured
 		if hasResponseFilters {
 			if text := extractTextFromStreamEvent(event); text != "" {
 				textBuffer.WriteString(text)
@@ -116,11 +125,10 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 				log.Error().Err(filterErr).Int("chunk", chunkIndex).Msg("Response filter error on Bedrock stream chunk")
 			} else if blocked {
 				log.Warn().Int("chunk", chunkIndex).Str("reason", blockMsg).Msg("Bedrock stream blocked by filter")
-				errorChunk := []byte(fmt.Sprintf(`{"error":"Response blocked by filter: %s"}`, blockMsg))
+				errorChunk := fmt.Appendf(nil, `{"error":"Response blocked by filter: %s"}`, blockMsg)
 				w.Write(errorChunk)
 				flusher.Flush()
 				isErr = true
-				go p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, fullResponse.Bytes(), reqBody, responses, startTime, "")
 				return
 			}
 		}
@@ -140,18 +148,47 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Send [DONE] marker
-	doneChunk := []byte("data: [DONE]\n\n")
-	w.Write(doneChunk)
-	fullResponse.Write(doneChunk)
+	w.Write([]byte("data: [DONE]\n\n"))
 	flusher.Flush()
 
+	// Record analytics using token counts captured on-the-fly from the metadata event
 	if !isErr {
-		go p.analyzeStreamingResponse(llm, app, r, http.StatusOK, fullResponse.Bytes(), reqBody, responses, startTime, "")
-
-		if p.responseHookManager != nil && p.hasResponseHooks() {
-			go p.executeOnStreamComplete(r, nil, llm, app, fullResponse.Bytes(), reqBody, chunkIndex)
-		}
+		go recordBedrockStreamProxyAnalytics(p, llm, app, modelID, int(inputTokens), int(outputTokens), reqBody, startTime)
 	}
+}
+
+// recordBedrockStreamProxyAnalytics records analytics for the /llm/stream/ Bedrock path
+// using token counts extracted on-the-fly from the stream metadata event.
+func recordBedrockStreamProxyAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, reqBody []byte, timestamp time.Time) {
+	if promptTokens == 0 && responseTokens == 0 {
+		return
+	}
+
+	// Use actual model ID for correct billing
+	price, err := p.gatewayService.GetModelPriceByModelNameAndVendor(modelID, string(llm.Vendor))
+	if err != nil {
+		log.Debug().Str("model", modelID).Str("vendor", string(llm.Vendor)).Msg("No pricing found for Bedrock model")
+		price = &models.ModelPrice{}
+	}
+
+	cost := ((price.CPT * float64(responseTokens)) + (price.CPIT * float64(promptTokens))) * 10000
+
+	record := &models.LLMChatRecord{
+		LLMID:           llm.ID,
+		Name:            modelID,
+		Vendor:          string(llm.Vendor),
+		PromptTokens:    promptTokens,
+		ResponseTokens:  responseTokens,
+		TotalTokens:     promptTokens + responseTokens,
+		Cost:            cost,
+		Currency:        price.Currency,
+		Choices:         1,
+		TimeStamp:       timestamp,
+		AppID:           app.ID,
+		UserID:          app.UserID,
+		InteractionType: models.ProxyInteraction,
+	}
+	analytics.RecordChatRecord(record)
 }
 
 // --- Helper types and functions ---
@@ -231,57 +268,56 @@ func buildConverseStreamInput(modelID string, req *bedrockConverseStreamRequest)
 
 // marshalStreamEvent converts a ConverseStream event to JSON for SSE output.
 func marshalStreamEvent(event types.ConverseStreamOutput) ([]byte, error) {
-	// Create a typed wrapper for JSON serialization
 	switch v := event.(type) {
 	case *types.ConverseStreamOutputMemberMessageStart:
-		return json.Marshal(map[string]interface{}{
+		return json.Marshal(map[string]any{
 			"type":         "messageStart",
-			"messageStart": map[string]interface{}{"role": string(v.Value.Role)},
+			"messageStart": map[string]any{"role": string(v.Value.Role)},
 		})
 	case *types.ConverseStreamOutputMemberContentBlockStart:
-		return json.Marshal(map[string]interface{}{
+		return json.Marshal(map[string]any{
 			"type":              "contentBlockStart",
 			"contentBlockIndex": v.Value.ContentBlockIndex,
 		})
 	case *types.ConverseStreamOutputMemberContentBlockDelta:
-		delta := map[string]interface{}{}
+		delta := map[string]any{}
 		if textDelta, ok := v.Value.Delta.(*types.ContentBlockDeltaMemberText); ok {
 			delta["text"] = textDelta.Value
 		}
-		return json.Marshal(map[string]interface{}{
+		return json.Marshal(map[string]any{
 			"type":              "contentBlockDelta",
 			"contentBlockIndex": v.Value.ContentBlockIndex,
 			"delta":             delta,
 		})
 	case *types.ConverseStreamOutputMemberContentBlockStop:
-		return json.Marshal(map[string]interface{}{
+		return json.Marshal(map[string]any{
 			"type":              "contentBlockStop",
 			"contentBlockIndex": v.Value.ContentBlockIndex,
 		})
 	case *types.ConverseStreamOutputMemberMessageStop:
-		return json.Marshal(map[string]interface{}{
+		return json.Marshal(map[string]any{
 			"type":       "messageStop",
 			"stopReason": string(v.Value.StopReason),
 		})
 	case *types.ConverseStreamOutputMemberMetadata:
-		result := map[string]interface{}{
+		result := map[string]any{
 			"type": "metadata",
 		}
 		if v.Value.Usage != nil {
-			result["usage"] = map[string]interface{}{
+			result["usage"] = map[string]any{
 				"inputTokens":  aws.ToInt32(v.Value.Usage.InputTokens),
 				"outputTokens": aws.ToInt32(v.Value.Usage.OutputTokens),
 				"totalTokens":  aws.ToInt32(v.Value.Usage.TotalTokens),
 			}
 		}
 		if v.Value.Metrics != nil {
-			result["metrics"] = map[string]interface{}{
+			result["metrics"] = map[string]any{
 				"latencyMs": aws.ToInt64(v.Value.Metrics.LatencyMs),
 			}
 		}
 		return json.Marshal(result)
 	default:
-		return json.Marshal(map[string]interface{}{"type": "unknown"})
+		return json.Marshal(map[string]any{"type": "unknown"})
 	}
 }
 
@@ -294,4 +330,3 @@ func extractTextFromStreamEvent(event types.ConverseStreamOutput) string {
 	}
 	return ""
 }
-

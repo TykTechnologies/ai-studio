@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -34,9 +35,29 @@ func New() models.LLMVendorProvider {
 	return &Bedrock{}
 }
 
+// --- Client Cache ---
+// AWS SDK clients are safe for concurrent use and expensive to create (LoadDefaultConfig
+// performs filesystem I/O). Cache them keyed by LLM ID + credential fingerprint.
+
+type clientCacheEntry struct {
+	client      *bedrockruntime.Client
+	fingerprint string // hash of credentials + region to detect config changes
+}
+
+var (
+	clientCache sync.Map // map[uint]*clientCacheEntry keyed by LLM ID
+)
+
+// credentialFingerprint produces a short hash of the credential fields to detect changes.
+func credentialFingerprint(accessKeyID, secretAccessKey, sessionToken, region string) string {
+	h := sha256.Sum256([]byte(accessKeyID + "|" + secretAccessKey + "|" + sessionToken + "|" + region))
+	return hex.EncodeToString(h[:8])
+}
+
 // --- Exported Helpers (used by proxy handlers) ---
 
-// NewBedrockClient creates a bedrockruntime.Client from LLM configuration.
+// NewBedrockClient returns a cached bedrockruntime.Client for the given LLM config,
+// creating a new one only if the LLM ID is unseen or credentials have changed.
 func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 	region, err := ParseRegionFromEndpoint(llm.APIEndpoint)
 	if err != nil {
@@ -46,6 +67,17 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 	accessKeyID, secretAccessKey, sessionToken, err := extractAWSCredentials(llm)
 	if err != nil {
 		return nil, err
+	}
+
+	fp := credentialFingerprint(accessKeyID, secretAccessKey, sessionToken, region)
+
+	// Check cache
+	if cached, ok := clientCache.Load(llm.ID); ok {
+		entry := cached.(*clientCacheEntry)
+		if entry.fingerprint == fp {
+			return entry.client, nil
+		}
+		// Credentials changed — fall through to create new client
 	}
 
 	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
@@ -58,7 +90,15 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	return bedrockruntime.NewFromConfig(cfg), nil
+	client := bedrockruntime.NewFromConfig(cfg)
+	clientCache.Store(llm.ID, &clientCacheEntry{client: client, fingerprint: fp})
+	return client, nil
+}
+
+// InvalidateClientCache removes a cached client for the given LLM ID.
+// Useful when credentials are updated.
+func InvalidateClientCache(llmID uint) {
+	clientCache.Delete(llmID)
 }
 
 // ParseRegionFromEndpoint extracts the AWS region from a Bedrock endpoint URL.
