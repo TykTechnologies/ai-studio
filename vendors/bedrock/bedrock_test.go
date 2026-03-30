@@ -87,12 +87,12 @@ func TestGetModelID(t *testing.T) {
 // --- extractAWSCredentials ---
 
 func TestExtractAWSCredentials(t *testing.T) {
-	t.Run("valid credentials", func(t *testing.T) {
+	t.Run("valid credentials with all fields in metadata", func(t *testing.T) {
 		llm := &models.LLM{
-			APIKey: "secret-access-key",
 			Metadata: models.JSONMap{
-				"aws_access_key_id":  "AKIAIOSFODNN7EXAMPLE",
-				"aws_session_token":  "session-token-123",
+				"aws_access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+				"aws_secret_access_key": "secret-access-key",
+				"aws_session_token":     "session-token-123",
 			},
 		}
 		accessKey, secretKey, sessionToken, err := extractAWSCredentials(llm)
@@ -102,9 +102,8 @@ func TestExtractAWSCredentials(t *testing.T) {
 		assert.Equal(t, "session-token-123", sessionToken)
 	})
 
-	t.Run("missing secret key", func(t *testing.T) {
+	t.Run("missing secret access key", func(t *testing.T) {
 		llm := &models.LLM{
-			APIKey: "",
 			Metadata: models.JSONMap{
 				"aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
 			},
@@ -116,8 +115,9 @@ func TestExtractAWSCredentials(t *testing.T) {
 
 	t.Run("missing access key ID", func(t *testing.T) {
 		llm := &models.LLM{
-			APIKey:   "secret-key",
-			Metadata: models.JSONMap{},
+			Metadata: models.JSONMap{
+				"aws_secret_access_key": "secret-key",
+			},
 		}
 		_, _, _, err := extractAWSCredentials(llm)
 		assert.Error(t, err)
@@ -126,19 +126,18 @@ func TestExtractAWSCredentials(t *testing.T) {
 
 	t.Run("nil metadata", func(t *testing.T) {
 		llm := &models.LLM{
-			APIKey:   "secret-key",
 			Metadata: nil,
 		}
 		_, _, _, err := extractAWSCredentials(llm)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "Access Key ID is required")
+		assert.Contains(t, err.Error(), "metadata is required")
 	})
 
 	t.Run("optional session token", func(t *testing.T) {
 		llm := &models.LLM{
-			APIKey: "secret-key",
 			Metadata: models.JSONMap{
-				"aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+				"aws_access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+				"aws_secret_access_key": "secret-key",
 			},
 		}
 		accessKey, secretKey, sessionToken, err := extractAWSCredentials(llm)
@@ -214,10 +213,10 @@ func TestProxySetAuthHeader(t *testing.T) {
 
 	t.Run("adds SigV4 headers", func(t *testing.T) {
 		llm := &models.LLM{
-			APIKey:      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 			APIEndpoint: "https://bedrock-runtime.us-east-1.amazonaws.com",
 			Metadata: models.JSONMap{
-				"aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+				"aws_access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+				"aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 			},
 		}
 
@@ -241,8 +240,8 @@ func TestProxySetAuthHeader(t *testing.T) {
 
 	t.Run("fails with missing credentials", func(t *testing.T) {
 		llm := &models.LLM{
-			APIKey:      "",
 			APIEndpoint: "https://bedrock-runtime.us-east-1.amazonaws.com",
+			Metadata:    models.JSONMap{},
 		}
 
 		body := []byte(`{}`)

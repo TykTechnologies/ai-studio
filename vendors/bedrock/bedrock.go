@@ -416,29 +416,31 @@ func (v *Bedrock) ProvidesEmbedder() bool {
 // --- Internal helpers ---
 
 func extractAWSCredentials(llm *models.LLM) (accessKeyID, secretAccessKey, sessionToken string, err error) {
-	secretAccessKey = llm.APIKey
-	if secretAccessKey == "" {
-		return "", "", "", fmt.Errorf("bedrock: AWS Secret Access Key is required (set in APIKey field)")
+	if llm.Metadata == nil {
+		return "", "", "", fmt.Errorf("bedrock: metadata is required with aws_access_key_id and aws_secret_access_key")
 	}
 
-	if llm.Metadata != nil {
-		if v, ok := llm.Metadata["aws_access_key_id"]; ok {
-			if s, ok := v.(string); ok {
-				accessKeyID = s
-			}
-		}
-		if v, ok := llm.Metadata["aws_session_token"]; ok {
-			if s, ok := v.(string); ok {
-				sessionToken = s
-			}
-		}
-	}
+	accessKeyID = metadataString(llm.Metadata, "aws_access_key_id")
+	secretAccessKey = metadataString(llm.Metadata, "aws_secret_access_key")
+	sessionToken = metadataString(llm.Metadata, "aws_session_token") // optional
 
 	if accessKeyID == "" {
-		return "", "", "", fmt.Errorf("bedrock: AWS Access Key ID is required (set in metadata.aws_access_key_id)")
+		return "", "", "", fmt.Errorf("bedrock: AWS Access Key ID is required (set metadata.aws_access_key_id)")
+	}
+	if secretAccessKey == "" {
+		return "", "", "", fmt.Errorf("bedrock: AWS Secret Access Key is required (set metadata.aws_secret_access_key)")
 	}
 
 	return accessKeyID, secretAccessKey, sessionToken, nil
+}
+
+func metadataString(m models.JSONMap, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 func sha256Hex(data []byte) string {
