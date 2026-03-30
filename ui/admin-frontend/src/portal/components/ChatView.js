@@ -15,7 +15,10 @@ import { TitleBox } from '../../admin/styles/sharedStyles';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import AddIcon from '@mui/icons-material/Add';
+import PrintIcon from '@mui/icons-material/Print';
 import pubClient from '../../admin/utils/pubClient';
+import usePrintChat from './chat/hooks/usePrintChat';
+import './chat/printChat.css';
 
 import { useChatSSE } from './chat/hooks/useChatSSE';
 import MessageContent from './chat/MessageContent';
@@ -62,6 +65,12 @@ const ChatView = () => {
     messages.some(message => message.type === 'user'),
     [messages]
   );
+
+  const { handlePrint, canPrint } = usePrintChat({
+    chatName,
+    messages,
+    messagesContainerRef: messageContainerRef,
+  });
 
   // Process error messages to extract meaningful information
   const processErrorMessage = (error) => {
@@ -715,16 +724,25 @@ const ChatView = () => {
 
   return (
     <>
-      <TitleBox top="64px">
+      <TitleBox top="64px" data-print-role="toolbar">
         <Typography variant="headingXLarge">{chatName}</Typography>
-        <Button
-          variant="outlined"
-          startIcon={<AddIcon />}
-          onClick={handleNewChat}
-          sx={{ ml: 2 }}
-        >
-          New Chat
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<PrintIcon />}
+            onClick={handlePrint}
+            disabled={!canPrint}
+          >
+            Export
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={handleNewChat}
+          >
+            New Chat
+          </Button>
+        </Box>
       </TitleBox>
       <Box
         sx={{
@@ -732,9 +750,10 @@ const ChatView = () => {
           display: 'flex',
           flexDirection: 'column',
         }}
+        data-print-role="chat-outer"
       >
         <Grid container sx={{ flexGrow: 1, overflow: 'hidden', mb: 4 }}>
-          <Grid item xs={9} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Grid item xs={9} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }} data-print-role="messages-grid">
             {/* Messages container */}
             <Box
               sx={{
@@ -745,6 +764,7 @@ const ChatView = () => {
                 width: '100%',
               }}
               ref={messageContainerRef}
+              data-print-role="messages"
             >
               <Box sx={{
                 maxWidth: '740px',
@@ -753,7 +773,7 @@ const ChatView = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 flexGrow: 1,
-              }}>
+              }} data-print-role="messages-inner">
                 {!hasUserMessages ? (
                   <Box sx={{
                     width: '100%',
@@ -802,7 +822,7 @@ const ChatView = () => {
                 ) : (
                   <>
                     {messages.length > 1 && (
-                      <Box sx={{ mt: 2, textAlign: 'right' }}>
+                      <Box sx={{ mt: 2, textAlign: 'right' }} data-print-role="system-toggle">
                         <Typography
                           variant="caption"
                           component="div"
@@ -926,7 +946,7 @@ const ChatView = () => {
                 width: '100%',
                 padding: 2,
                 paddingTop: 0,
-              }}>
+              }} data-print-role="input">
                 <Box sx={{
                   maxWidth: '740px',
                   width: '100%',
@@ -950,7 +970,7 @@ const ChatView = () => {
             )}
           </Grid>
 
-          <Grid item xs={3} sx={{ height: '100%', overflowY: 'auto' }}>
+          <Grid item xs={3} sx={{ height: '100%', overflowY: 'auto' }} data-print-role="sidebar">
             <ChatSidebar
               currentlyUsing={currentlyUsing}
               databases={databases}

@@ -1,0 +1,146 @@
+@media print {
+  /* Hide MUI AppBar (fixed position, renders outside parent flow) */
+  .MuiAppBar-root {
+    display: none !important;
+  }
+
+  /* Hide MUI Drawer (fixed position, renders outside parent flow) */
+  .MuiDrawer-root {
+    display: none !important;
+  }
+
+  /* Hide the Toolbar spacer in the main content area */
+  [data-print-role="main"] > .MuiToolbar-root {
+    display: none !important;
+  }
+
+  /* Hide entire toolbar (print header replaces it) */
+  [data-print-role="toolbar"] {
+    display: none !important;
+  }
+
+  /* Hide chat input */
+  [data-print-role="input"] {
+    display: none !important;
+  }
+
+  /* Hide sidebar */
+  [data-print-role="sidebar"] {
+    display: none !important;
+  }
+
+  /* Hide system message toggle */
+  [data-print-role="system-toggle"] {
+    display: none !important;
+  }
+
+  /* Hide welcome screen */
+  [data-print-role="welcome"] {
+    display: none !important;
+  }
+
+  /* Show print header */
+  [data-print-role="print-header"] {
+    display: block !important;
+    padding: 16px 0;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #333;
+  }
+
+  [data-print-role="print-header"] h1 {
+    margin: 0 0 4px 0;
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  [data-print-role="print-header"] p {
+    margin: 0;
+    font-size: 12px;
+    color: #666;
+  }
+
+  /* Make main content full width, remove margin/padding from drawer offset */
+  [data-print-role="main"],
+  main,
+  [class*="MuiBox-root"] > main {
+    margin: 0 !important;
+    margin-top: 0 !important;
+    margin-left: 0 !important;
+    padding: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-grow: 1 !important;
+  }
+
+  /* Messages container: full width, no scroll */
+  [data-print-role="messages"] {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Remove max-width on message content */
+  [data-print-role="messages-inner"] {
+    max-width: 100% !important;
+  }
+
+  /* Messages grid: full width */
+  [data-print-role="messages-grid"] {
+    max-width: 100% !important;
+    flex-basis: 100% !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Outer container: no fixed height */
+  [data-print-role="chat-outer"] {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Prevent page breaks inside messages */
+  [data-print-role="messages"] > div > div {
+    break-inside: avoid;
+  }
+
+  /* Code blocks: ensure they wrap and don't overflow the page */
+  pre {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+  }
+
+  /* Hide code copy buttons */
+  pre button,
+  .copy-button {
+    display: none !important;
+  }
+
+  /* Ensure links are visible with URL */
+  a[href]:after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+  }
+
+  /* Internal links: don't show URL */
+  a[href^="#"]:after,
+  a[href^="javascript"]:after {
+    content: "";
+  }
+
+  /* Page setup */
+  @page {
+    margin: 1.5cm;
+    size: A4;
+  }
+
+  /* Remove backgrounds and shadows for cleaner print */
+  * {
+    box-shadow: none !important;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

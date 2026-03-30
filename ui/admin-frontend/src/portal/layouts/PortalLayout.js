@@ -9,7 +9,7 @@ const PortalLayout = () => {
     <Box sx={{ display: "flex" }}>
       <PortalAppBar />
       <PortalDrawer />
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box component="main" sx={{ flexGrow: 1, p: 3 }} data-print-role="main">
         <Toolbar /> {/* This creates space below the AppBar */}
         <Outlet />
       </Box>
