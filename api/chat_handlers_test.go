@@ -59,7 +59,7 @@ func TestChatEndpoints(t *gotest.T) {
 	llm, err := service.CreateLLM(
 		"Default Anthropic", "api-key", "https://api.anthropic.com", 75,
 		"Short desc", "Long desc", "http://logo.test",
-		"anthropic", true, nil, "", []string{}, nil, nil)
+		"anthropic", true, nil, "", []string{}, nil, nil, false)
 	assert.NoError(t, err)
 
 	// Create default chat

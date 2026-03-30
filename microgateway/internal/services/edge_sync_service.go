@@ -261,6 +261,7 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 			MonthlyBudget:   pbLLM.MonthlyBudget,
 			RateLimitRPM:    int(pbLLM.RateLimitRpm),
 			Namespace:       pbLLM.Namespace,
+			DontLogBodies:   pbLLM.DontLogBodies,
 		}
 
 		// Handle JSON fields with proper conversion

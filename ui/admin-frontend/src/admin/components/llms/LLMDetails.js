@@ -579,6 +579,12 @@ const LLMDetails = () => {
             <FieldValue>{llm.attributes.active ? "Yes" : "No"}</FieldValue>
           </Grid>
           <Grid item xs={3}>
+            <FieldLabel>Body Logging Disabled:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>{llm.attributes.dont_log_bodies ? "Yes" : "No"}</FieldValue>
+          </Grid>
+          <Grid item xs={3}>
             <FieldLabel>Short Description:</FieldLabel>
           </Grid>
           <Grid item xs={9}>

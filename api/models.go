@@ -119,6 +119,7 @@ type LLMInput struct {
 			MonthlyBudget    *float64 `json:"monthly_budget"`
 			BudgetStartDate  *string  `json:"budget_start_date"`
 			Namespace        string   `json:"namespace,omitempty"`
+			DontLogBodies    bool     `json:"dont_log_bodies"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -167,6 +168,7 @@ type LLMResponse struct {
 		MonthlyBudget    *float64         `json:"monthly_budget"`
 		BudgetStartDate  *time.Time       `json:"budget_start_date"`
 		Namespace        string           `json:"namespace"`
+		DontLogBodies    bool             `json:"dont_log_bodies"`
 		Plugins          []PluginResponse `json:"plugins"`
 	} `json:"attributes"`
 }

@@ -30,7 +30,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 	shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time) (*models.LLM, error) {
+	budgetStartDate *time.Time, dontLogBodies bool) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -47,6 +47,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 		MonthlyBudget:    monthlyBudget,
 		BudgetStartDate:  budgetStartDate,
 		Namespace:        "", // Default to global namespace
+		DontLogBodies:    dontLogBodies,
 	}
 
 	// Execute "before_create" hooks
@@ -118,7 +119,7 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 	shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time, namespace string) (*models.LLM, error) {
+	budgetStartDate *time.Time, namespace string, dontLogBodies bool) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -135,6 +136,7 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 		MonthlyBudget:    monthlyBudget,
 		BudgetStartDate:  budgetStartDate,
 		Namespace:        namespace,
+		DontLogBodies:    dontLogBodies,
 	}
 
 	// Execute "before_create" hooks
@@ -205,7 +207,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	privacyScore int, shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time, namespace string) (*models.LLM, error) {
+	budgetStartDate *time.Time, namespace string, dontLogBodies bool) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -235,6 +237,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	llm.MonthlyBudget = monthlyBudget
 	llm.BudgetStartDate = budgetStartDate
 	llm.Namespace = namespace
+	llm.DontLogBodies = dontLogBodies
 
 	// Execute "before_update" hooks
 	if s.HookManager != nil {

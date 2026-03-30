@@ -269,6 +269,7 @@ message CreateLLMRequest {
     repeated string allowed_models = 12;
     optional double monthly_budget = 13;
     string namespace = 14;
+    bool dont_log_bodies = 15;
 }
 
 message CreateLLMResponse {
@@ -290,6 +291,7 @@ message UpdateLLMRequest {
     repeated string allowed_models = 12;
     optional double monthly_budget = 13;
     string namespace = 14; // Enterprise: Multi-tenant namespace support
+    bool dont_log_bodies = 15;
 }
 
 message UpdateLLMResponse {

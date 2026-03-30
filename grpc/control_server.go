@@ -1184,6 +1184,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Metadata:        metadataJSON,
 			AllowedModels:   allowedModelsJSON,
 			Namespace:       llm.Namespace,
+			DontLogBodies:   llm.DontLogBodies,
 			FilterIds:       filterIDs,
 			CreatedAt:       timestamppb.New(llm.CreatedAt),
 			UpdatedAt:       timestamppb.New(llm.UpdatedAt),

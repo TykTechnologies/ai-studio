@@ -1064,6 +1064,7 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 		cs.chatRef.LLMID,
 		time.Now(),
 		cs.service,
+		cs.chatRef.LLM.DontLogBodies,
 	)
 
 	return resp, nil

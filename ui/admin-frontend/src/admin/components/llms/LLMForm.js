@@ -76,6 +76,7 @@ const LLMForm = () => {
     budget_start_date: null,
     namespace: "", // Added for edge availability
     plugins: [], // Added for plugin assignment
+    dont_log_bodies: false, // When true, request/response bodies are not stored in logs
   });
   const [vendors, setVendors] = useState([]);
   const [filters, setFilters] = useState(null);
@@ -184,6 +185,7 @@ const LLMForm = () => {
         filters: llmData.filters.map((filter) => filter.id.toString()),
         namespace: llmData.namespace || "",
         plugins: pluginsData.map((plugin) => plugin.id.toString()),
+        dont_log_bodies: llmData.dont_log_bodies || false,
       });
       setOriginalName(llmData.name);
     } catch (error) {
@@ -649,6 +651,22 @@ const LLMForm = () => {
                     }
                     label="Enabled in Proxy"
                   />
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={llm.dont_log_bodies}
+                        onChange={(e) => setLLM({ ...llm, dont_log_bodies: e.target.checked })}
+                        name="dont_log_bodies"
+                        color="primary"
+                      />
+                    }
+                    label="Disable Request/Response Body Logging"
+                  />
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    When enabled, request and response bodies will not be stored in proxy logs for this LLM provider.
+                  </Typography>
                 </Grid>
               </Grid>
             </AccordionDetails>
