@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -45,8 +46,11 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		ResponseCode: statusCode,
 	}
 
-	analytics.RecordProxyLog(l)
-	AnalyzeCompletionResponse(service, llm, app, response, r, time.Now())
+	// Use WithoutCancel to preserve trace context without lifecycle coupling,
+	// since this function is called from goroutines after the HTTP response is sent.
+	ctx := context.WithoutCancel(r.Context())
+	analytics.RecordProxyLog(ctx, l)
+	AnalyzeCompletionResponse(service, llm, app, response, ctx, r, time.Now())
 }
 
 func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, statusCode int, responses []byte, reqBody []byte, r *http.Request, chunks [][]byte, timestamp time.Time, contentEncoding string) {
@@ -73,11 +77,14 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		ResponseCode: statusCode,
 	}
 
-	analytics.RecordProxyLog(l)
-	AnalyzeCompletionResponse(service, llm, app, response, r, timestamp)
+	// Use WithoutCancel to preserve trace context without lifecycle coupling,
+	// since this function is called from goroutines after the HTTP response is sent.
+	ctx := context.WithoutCancel(r.Context())
+	analytics.RecordProxyLog(ctx, l)
+	AnalyzeCompletionResponse(service, llm, app, response, ctx, r, timestamp)
 }
 
-func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, r *http.Request, timestamp time.Time) {
+func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LLM, app *models.App, response models.ITokenResponse, ctx context.Context, r *http.Request, timestamp time.Time) {
 	var pt, rt, choices, tools int
 	// Get model from response, fallback to context if not available
 	model := ""
@@ -148,7 +155,7 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 	}
 
 	// Record the chat record with retries
-	analytics.RecordChatRecord(rec)
+	analytics.RecordChatRecord(ctx, rec)
 	// time.Sleep(200 * time.Millisecond) // Removed: Unreliable fixed sleep. Test should handle waiting.
 
 	// Budget analysis

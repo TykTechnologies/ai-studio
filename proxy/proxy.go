@@ -819,11 +819,11 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 	result, err := p.gatewayService.CallToolOperation(tool.ID, input.OperationID, input.Parameters, input.Payload, input.Headers)
 	t1 := time.Now()
 	if err != nil {
-		analytics.RecordToolCall(input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
+		analytics.RecordToolCall(r.Context(), input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
 		respondWithError(w, http.StatusInternalServerError, "failed to call tool operation", err, false)
 		return
 	}
-	analytics.RecordToolCall(input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
+	analytics.RecordToolCall(r.Context(), input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if str, ok := result.(string); ok && (strings.HasPrefix(str, "{") || strings.HasPrefix(str, "[")) {
@@ -1865,6 +1865,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 			if err != nil {
 				// Record failed tool call
 				analytics.RecordToolCall(
+					ctx,
 					operationID,
 					time.Now(),
 					int(t1.Sub(t0).Milliseconds()),
@@ -1875,6 +1876,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 
 			// Record successful tool call
 			analytics.RecordToolCall(
+				ctx,
 				operationID,
 				time.Now(),
 				int(t1.Sub(t0).Milliseconds()),

@@ -857,8 +857,8 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		}
 
 		// Use batch processing for improved performance
-		analytics.RecordProxyLogsBatch(proxyLogs)
-		analytics.RecordChatRecordsBatch(chatRecords)
+		analytics.RecordProxyLogsBatch(context.Background(), proxyLogs)
+		analytics.RecordChatRecordsBatch(context.Background(), chatRecords)
 		processedRecords += uint64(len(req.AnalyticsEvents))
 
 		log.Debug().

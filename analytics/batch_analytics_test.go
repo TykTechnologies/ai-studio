@@ -61,7 +61,7 @@ func TestDatabaseHandler_RecordChatRecordsBatch(t *testing.T) {
 	}
 
 	// Test batch recording
-	handler.RecordChatRecordsBatch(records)
+	handler.RecordChatRecordsBatch(ctx, records)
 
 	// Wait for processing
 	time.Sleep(100 * time.Millisecond)
@@ -116,7 +116,7 @@ func TestDatabaseHandler_RecordProxyLogsBatch(t *testing.T) {
 	}
 
 	// Test batch recording
-	handler.RecordProxyLogsBatch(logs)
+	handler.RecordProxyLogsBatch(ctx, logs)
 
 	// Wait for processing
 	time.Sleep(100 * time.Millisecond)
@@ -148,8 +148,8 @@ func TestDatabaseHandler_EmptyBatches(t *testing.T) {
 	handler := NewDatabaseHandler(ctx, db)
 
 	// Test with empty slices
-	handler.RecordChatRecordsBatch([]*models.LLMChatRecord{})
-	handler.RecordProxyLogsBatch([]*models.ProxyLog{})
+	handler.RecordChatRecordsBatch(ctx, []*models.LLMChatRecord{})
+	handler.RecordProxyLogsBatch(ctx, []*models.ProxyLog{})
 
 	// Verify no records were created
 	var chatCount, proxyCount int64
@@ -190,7 +190,7 @@ func TestDatabaseHandler_LargeBatch(t *testing.T) {
 
 	// Test large batch recording
 	startTime := time.Now()
-	handler.RecordChatRecordsBatch(records)
+	handler.RecordChatRecordsBatch(ctx, records)
 
 	// Wait for processing
 	time.Sleep(200 * time.Millisecond)
@@ -250,7 +250,7 @@ func BenchmarkDatabaseHandler_BatchVsIndividual(b *testing.B) {
 
 			// Process individually
 			for _, record := range records {
-				handler.RecordChatRecord(record)
+				handler.RecordChatRecord(ctx, record)
 			}
 		}
 	})
@@ -263,7 +263,7 @@ func BenchmarkDatabaseHandler_BatchVsIndividual(b *testing.B) {
 			}
 
 			// Process as batch
-			handler.RecordChatRecordsBatch(records)
+			handler.RecordChatRecordsBatch(ctx, records)
 		}
 	})
 }

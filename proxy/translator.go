@@ -326,7 +326,7 @@ func (p *Proxy) recordTranslatorAnalytics(
 		ResponseBody: truncateString(string(respBody), maxBodySize),
 		ResponseCode: statusCode,
 	}
-	analytics.RecordProxyLog(proxyLog)
+	analytics.RecordProxyLog(r.Context(), proxyLog)
 
 	// 2. Record chat analytics (if successful)
 	if statusCode == http.StatusOK && contentResp != nil {
@@ -529,7 +529,7 @@ func recordTranslatorChatAnalytics(
 		InteractionType: models.ProxyInteraction,
 	}
 
-	analytics.RecordChatRecord(rec)
+	analytics.RecordChatRecord(r.Context(), rec)
 
 	// Budget analysis
 	if s, ok := service.(*services.Service); ok && s.Budget != nil {

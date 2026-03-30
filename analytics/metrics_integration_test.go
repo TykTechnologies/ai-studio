@@ -55,7 +55,7 @@ func TestRecordProxyLog_EmitsRequestMetric(t *testing.T) {
 		ResponseCode: 200,
 	}
 
-	RecordProxyLog(log)
+	RecordProxyLog(context.Background(), log)
 
 	body := scrapeMetrics(t)
 
@@ -96,7 +96,7 @@ func TestRecordProxyLog_EmptyModelName(t *testing.T) {
 		ResponseCode: 500,
 	}
 
-	RecordProxyLog(log)
+	RecordProxyLog(context.Background(), log)
 
 	body := scrapeMetrics(t)
 	// Should still emit the metric, just with empty model
@@ -130,7 +130,7 @@ func TestRecordChatRecord_EmitsTokenAndCostMetrics(t *testing.T) {
 		TotalTimeMS:            2500,
 	}
 
-	RecordChatRecord(record)
+	RecordChatRecord(context.Background(), record)
 
 	body := scrapeMetrics(t)
 
@@ -187,7 +187,7 @@ func TestRecordChatRecord_ZeroTokensNotEmitted(t *testing.T) {
 		Cost:                   0, // zero cost should also be skipped
 	}
 
-	RecordChatRecord(record)
+	RecordChatRecord(context.Background(), record)
 
 	body := scrapeMetrics(t)
 
@@ -220,7 +220,7 @@ func TestRecordToolCall_EmitsToolMetrics(t *testing.T) {
 		handlerMu.Unlock()
 	}()
 
-	RecordToolCall("weather_api", time.Now(), 350, 5)
+	RecordToolCall(context.Background(), "weather_api", time.Now(), 350, 5)
 
 	body := scrapeMetrics(t)
 
@@ -252,7 +252,7 @@ func TestRecordToolCall_DurationConversion(t *testing.T) {
 	}()
 
 	// 2500ms = 2.5 seconds. Should land in the 5s bucket.
-	RecordToolCall("slow_tool", time.Now(), 2500, 10)
+	RecordToolCall(context.Background(), "slow_tool", time.Now(), 2500, 10)
 
 	body := scrapeMetrics(t)
 
@@ -279,7 +279,7 @@ func TestRecordProxyLog_WithNilGlobalHandler(t *testing.T) {
 	}
 
 	// Should not panic and should still emit metrics
-	RecordProxyLog(log)
+	RecordProxyLog(context.Background(), log)
 
 	body := scrapeMetrics(t)
 	if !strings.Contains(body, `vendor="nil-handler-vendor"`) {
@@ -318,7 +318,7 @@ func TestRecordChatRecord_WithActiveHandler(t *testing.T) {
 		Cost:           50.0,
 	}
 
-	RecordChatRecord(record)
+	RecordChatRecord(context.Background(), record)
 
 	// Verify the DB handler received the record
 	if capturedRecord == nil {
@@ -340,17 +340,17 @@ type mockHandler struct {
 	onRecordChatRecord func(*models.LLMChatRecord)
 }
 
-func (m *mockHandler) RecordChatRecord(record *models.LLMChatRecord) {
+func (m *mockHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
 	if m.onRecordChatRecord != nil {
 		m.onRecordChatRecord(record)
 	}
 }
-func (m *mockHandler) RecordChatLogEntry(log *models.LLMChatLogEntry)       {}
-func (m *mockHandler) RecordProxyLog(log *models.ProxyLog)                  {}
-func (m *mockHandler) RecordToolCall(name string, t time.Time, execTime int, toolID uint) {}
-func (m *mockHandler) SetAsGlobalHandler()                                  {}
-func (m *mockHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {}
-func (m *mockHandler) RecordProxyLogsBatch(logs []*models.ProxyLog)         {}
+func (m *mockHandler) RecordChatLogEntry(_ context.Context, log *models.LLMChatLogEntry)       {}
+func (m *mockHandler) RecordProxyLog(_ context.Context, log *models.ProxyLog)                  {}
+func (m *mockHandler) RecordToolCall(_ context.Context, name string, t time.Time, execTime int, toolID uint) {}
+func (m *mockHandler) SetAsGlobalHandler()                                                     {}
+func (m *mockHandler) RecordChatRecordsBatch(_ context.Context, records []*models.LLMChatRecord) {}
+func (m *mockHandler) RecordProxyLogsBatch(_ context.Context, logs []*models.ProxyLog)         {}
 
 // Verify mockHandler satisfies the interface at compile time.
 var _ AnalyticsHandler = (*mockHandler)(nil)
@@ -372,13 +372,12 @@ func TestMetricsWithoutInit(t *testing.T) {
 	}
 
 	// Should not panic regardless of metrics initialization state
-	RecordProxyLog(log)
-	RecordChatRecord(&models.LLMChatRecord{Vendor: "test", Name: "model"})
-	RecordToolCall("tool", time.Now(), 100, 1)
+	ctx := context.Background()
+	RecordProxyLog(ctx, log)
+	RecordChatRecord(ctx, &models.LLMChatRecord{Vendor: "test", Name: "model"})
+	RecordToolCall(ctx, "tool", time.Now(), 100, 1)
 
 	// Batch operations should also not panic
-	RecordChatRecordsBatch([]*models.LLMChatRecord{{Vendor: "test"}})
-	RecordProxyLogsBatch([]*models.ProxyLog{{Vendor: "test"}})
-
-	_ = context.Background() // satisfy import
+	RecordChatRecordsBatch(ctx, []*models.LLMChatRecord{{Vendor: "test"}})
+	RecordProxyLogsBatch(ctx, []*models.ProxyLog{{Vendor: "test"}})
 }

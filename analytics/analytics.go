@@ -22,15 +22,14 @@ var (
 	recMutex   sync.RWMutex
 )
 
-func RecordProxyLog(log *models.ProxyLog) {
+func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
 	if globalHandler != nil {
-		globalHandler.RecordProxyLog(log)
+		globalHandler.RecordProxyLog(ctx, log)
 	}
 
-	ctx := context.Background()
 	metrics.RecordRequest(ctx,
 		fmt.Sprintf("%d", log.AppID),
 		log.Vendor,
@@ -39,15 +38,14 @@ func RecordProxyLog(log *models.ProxyLog) {
 	)
 }
 
-func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
+func RecordToolCall(ctx context.Context, name string, t time.Time, execTime int, toolID uint) {
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
 	if globalHandler != nil {
-		globalHandler.RecordToolCall(name, t, execTime, toolID)
+		globalHandler.RecordToolCall(ctx, name, t, execTime, toolID)
 	}
 
-	ctx := context.Background()
 	metrics.RecordToolCall(ctx, name, fmt.Sprintf("%d", toolID))
 	metrics.ObserveToolDuration(ctx, name, float64(execTime)/1000.0)
 }
@@ -189,19 +187,19 @@ func RecordContentMessage(
 	chatLog.UserID = userID
 	chatLog.ChatID = chatID
 
-	RecordChatRecord(rec)
-	RecordChatLogEntry(chatLog)
+	// No HTTP request context available in chat session path
+	RecordChatRecord(context.Background(), rec)
+	RecordChatLogEntry(context.Background(), chatLog)
 }
 
-func RecordChatRecord(record *models.LLMChatRecord) {
+func RecordChatRecord(ctx context.Context, record *models.LLMChatRecord) {
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
 	if globalHandler != nil {
-		globalHandler.RecordChatRecord(record)
+		globalHandler.RecordChatRecord(ctx, record)
 	}
 
-	ctx := context.Background()
 	appID := fmt.Sprintf("%d", record.AppID)
 	metrics.RecordTokens(ctx, record.Vendor, record.Name, "prompt", record.PromptTokens)
 	metrics.RecordTokens(ctx, record.Vendor, record.Name, "completion", record.ResponseTokens)
@@ -210,32 +208,32 @@ func RecordChatRecord(record *models.LLMChatRecord) {
 	metrics.RecordCost(ctx, record.Vendor, record.Name, appID, record.Cost)
 }
 
-func RecordChatLogEntry(log *models.LLMChatLogEntry) {
+func RecordChatLogEntry(ctx context.Context, log *models.LLMChatLogEntry) {
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
 	if globalHandler != nil {
-		globalHandler.RecordChatLogEntry(log)
+		globalHandler.RecordChatLogEntry(ctx, log)
 	}
 }
 
 // RecordChatRecordsBatch records multiple chat records in a batch for improved performance
-func RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+func RecordChatRecordsBatch(ctx context.Context, records []*models.LLMChatRecord) {
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
 	if globalHandler != nil {
-		globalHandler.RecordChatRecordsBatch(records)
+		globalHandler.RecordChatRecordsBatch(ctx, records)
 	}
 }
 
 // RecordProxyLogsBatch records multiple proxy logs in a batch for improved performance
-func RecordProxyLogsBatch(logs []*models.ProxyLog) {
+func RecordProxyLogsBatch(ctx context.Context, logs []*models.ProxyLog) {
 	handlerMu.RLock()
 	defer handlerMu.RUnlock()
 
 	if globalHandler != nil {
-		globalHandler.RecordProxyLogsBatch(logs)
+		globalHandler.RecordProxyLogsBatch(ctx, logs)
 	}
 }
 
