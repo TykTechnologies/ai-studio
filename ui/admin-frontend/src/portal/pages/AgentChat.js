@@ -12,10 +12,13 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import AddIcon from '@mui/icons-material/Add';
+import PrintIcon from '@mui/icons-material/Print';
 import { TitleBox } from '../../admin/styles/sharedStyles';
 import agentService from '../services/agentService';
 import ChatInput from '../components/chat/ChatInput';
 import AgentMessage from '../components/agents/AgentMessage';
+import usePrintChat from '../components/chat/hooks/usePrintChat';
+import '../components/chat/printChat.css';
 
 const AgentChat = () => {
   const { agentId } = useParams();
@@ -42,6 +45,12 @@ const AgentChat = () => {
     messages.some(message => message.role === 'user'),
     [messages]
   );
+
+  const { handlePrint, canPrint } = usePrintChat({
+    chatName: agent?.name,
+    messages,
+    messagesContainerRef: messagesEndRef,
+  });
 
   useEffect(() => {
     loadAgent();
@@ -261,7 +270,7 @@ const AgentChat = () => {
   return (
     <>
       {/* Header */}
-      <TitleBox top="64px">
+      <TitleBox top="64px" data-print-role="toolbar">
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
           <IconButton onClick={handleBack} size="small">
             <ArrowBackIcon />
@@ -277,19 +286,29 @@ const AgentChat = () => {
               </Typography>
             )}
           </Box>
-          <Button
-            variant="outlined"
-            startIcon={<AddIcon />}
-            onClick={handleNewChat}
-          >
-            New Chat
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<PrintIcon />}
+              onClick={handlePrint}
+              disabled={!canPrint}
+            >
+              Export
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<AddIcon />}
+              onClick={handleNewChat}
+            >
+              New Chat
+            </Button>
+          </Box>
         </Box>
       </TitleBox>
 
-      <Box sx={{ height: '85vh', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ height: '85vh', display: 'flex', flexDirection: 'column' }} data-print-role="chat-outer">
         <Grid container sx={{ flexGrow: 1, overflow: 'hidden', mb: 4 }}>
-          <Grid item xs={12} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Grid item xs={12} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }} data-print-role="messages-grid">
             {/* Messages container */}
             <Box
               sx={{
@@ -300,6 +319,7 @@ const AgentChat = () => {
                 width: '100%',
               }}
               ref={messagesEndRef}
+              data-print-role="messages"
             >
               <Box sx={{
                 maxWidth: '740px',
@@ -308,7 +328,7 @@ const AgentChat = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 flexGrow: 1,
-              }}>
+              }} data-print-role="messages-inner">
                 {!hasUserMessages ? (
                   <Box sx={{
                     width: '100%',
@@ -367,7 +387,7 @@ const AgentChat = () => {
                 ) : (
                   <>
                     {/* System message toggle - reserve space even when not shown to prevent layout shift */}
-                    <Box sx={{ mt: 2, textAlign: 'right', minHeight: '24px' }}>
+                    <Box sx={{ mt: 2, textAlign: 'right', minHeight: '24px' }} data-print-role="system-toggle">
                       {messages.length > 1 && (
                         <Typography
                           variant="caption"
@@ -416,7 +436,7 @@ const AgentChat = () => {
                 width: '100%',
                 padding: 2,
                 paddingTop: 0,
-              }}>
+              }} data-print-role="input">
                 <Box sx={{
                   maxWidth: '740px',
                   width: '100%',
