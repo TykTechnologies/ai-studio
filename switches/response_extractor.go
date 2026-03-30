@@ -62,6 +62,20 @@ func ExtractResponseText(vendor models.Vendor, responseBody []byte) (string, err
 		}
 		return fullText, nil
 
+	case models.BEDROCK:
+		var resp responses.BedrockConverseResponse
+		if err := json.Unmarshal(responseBody, &resp); err != nil {
+			return "", fmt.Errorf("failed to parse Bedrock Converse response: %w", err)
+		}
+		var fullText string
+		for _, c := range resp.Output.Message.Content {
+			fullText += c.Text
+		}
+		if fullText == "" {
+			return "", fmt.Errorf("no text content in Bedrock response")
+		}
+		return fullText, nil
+
 	default:
 		// For unknown vendors, try OpenAI format as it's most common
 		var resp responses.OpenAIResponse
@@ -96,6 +110,8 @@ func ExtractStreamingChunkText(vendor models.Vendor, chunk []byte) string {
 			text = extractAnthropicChunkText(payload)
 		case models.GOOGLEAI, models.VERTEX:
 			text = extractGoogleAIChunkText(payload)
+		case models.BEDROCK:
+			text = extractBedrockChunkText(payload)
 		default:
 			text = extractOpenAIChunkText(payload)
 		}
@@ -234,4 +250,21 @@ func extractGoogleAIChunkText(chunk []byte) string {
 	}
 
 	return fullText
+}
+
+// extractBedrockChunkText extracts text from a Bedrock ConverseStream SSE chunk.
+// The SDK-mediated streaming proxy wraps decoded events as SSE JSON.
+func extractBedrockChunkText(chunk []byte) string {
+	var chunkData struct {
+		ContentBlockIndex int `json:"contentBlockIndex"`
+		Delta             struct {
+			Text string `json:"text"`
+		} `json:"delta"`
+	}
+
+	if err := json.Unmarshal(chunk, &chunkData); err != nil {
+		return ""
+	}
+
+	return chunkData.Delta.Text
 }

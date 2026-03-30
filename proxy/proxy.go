@@ -1097,6 +1097,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Bedrock uses SDK-mediated streaming (binary event stream → SSE conversion)
+	if llm.Vendor == models.BEDROCK {
+		p.handleBedrockStreamingProxy(w, r, llm, app, reqBody)
+		return
+	}
+
 	// Check for upstream override from plugins (e.g., DLB load balancer)
 	upstreamEndpoint := llm.APIEndpoint
 	if override := r.Context().Value("upstream_override"); override != nil {

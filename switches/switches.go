@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	anthropicVendor "github.com/TykTechnologies/midsommar/v2/vendors/anthropic"
+	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	googleaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/googleai"
 	hfVendor "github.com/TykTechnologies/midsommar/v2/vendors/huggingface"
 	mockVendor "github.com/TykTechnologies/midsommar/v2/vendors/mock"
@@ -35,6 +36,7 @@ var AVAILABLE_LLM_DRIVERS = []models.Vendor{
 	models.OLLAMA,
 	models.VERTEX,
 	models.GOOGLEAI,
+	models.BEDROCK,
 }
 
 var AVAILABLE_EMBEDDERS = []models.Vendor{
@@ -53,6 +55,7 @@ var VendorMap = map[models.Vendor]newVendorFunc{
 	models.VERTEX:      vertexVendor.New,
 	models.GOOGLEAI:    googleaiVendor.New,
 	models.HUGGINGFACE: hfVendor.New,
+	models.BEDROCK:     bedrockVendor.New,
 	models.MOCK_VENDOR: mockVendor.New,
 }
 
@@ -185,6 +188,9 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 		}
 		return googleai.New(context.Background(), opts...)
 
+	case models.BEDROCK:
+		return nil, fmt.Errorf("vendor bedrock uses direct AWS SDK calls, not langchaingo HTTP clients")
+
 	default:
 		return nil, fmt.Errorf("vendor %s does not support custom HTTP client", LLMConfig.Vendor)
 	}
@@ -273,6 +279,18 @@ func DetectStreamingIntent(vendor models.Vendor, r *http.Request) (bool, error) 
 
 	case models.HUGGINGFACE:
 		// HuggingFace uses the "stream" field in request body
+		return detectStreamFromBody(r, func(data []byte) (bool, error) {
+			var req struct {
+				Stream bool `json:"stream"`
+			}
+			if err := unmarshalJSON(data, &req); err != nil {
+				return false, err
+			}
+			return req.Stream, nil
+		})
+
+	case models.BEDROCK:
+		// Bedrock uses the "stream" field in request body (same as OpenAI/Anthropic)
 		return detectStreamFromBody(r, func(data []byte) (bool, error) {
 			var req struct {
 				Stream bool `json:"stream"`
