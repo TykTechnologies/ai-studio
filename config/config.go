@@ -97,6 +97,10 @@ type AppConf struct {
 	DocsPort     int
 	DocsDisabled bool
 
+	// Metrics Configuration
+	MetricsEnabled bool
+	MetricsPath    string
+
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
 }
@@ -388,6 +392,18 @@ func getConfigFromEnv(envFile string) *AppConf {
 		conf.TelemetryEnabled = false
 	} else {
 		conf.TelemetryEnabled = true // Default to enabled
+	}
+
+	// Metrics configuration - enabled by default
+	metricsEnabledStr := os.Getenv("METRICS_ENABLED")
+	if metricsEnabledStr == "false" || metricsEnabledStr == "0" {
+		conf.MetricsEnabled = false
+	} else {
+		conf.MetricsEnabled = true
+	}
+	conf.MetricsPath = os.Getenv("METRICS_PATH")
+	if conf.MetricsPath == "" {
+		conf.MetricsPath = "/metrics"
 	}
 
 	conf.AuthServerURL = os.Getenv("AUTH_SERVER_URL")

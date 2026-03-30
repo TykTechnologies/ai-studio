@@ -2,11 +2,13 @@ package analytics
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -27,6 +29,14 @@ func RecordProxyLog(log *models.ProxyLog) {
 	if globalHandler != nil {
 		globalHandler.RecordProxyLog(log)
 	}
+
+	ctx := context.Background()
+	metrics.RecordRequest(ctx,
+		fmt.Sprintf("%d", log.AppID),
+		log.Vendor,
+		log.ModelName,
+		log.ResponseCode,
+	)
 }
 
 func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
@@ -36,6 +46,10 @@ func RecordToolCall(name string, t time.Time, execTime int, toolID uint) {
 	if globalHandler != nil {
 		globalHandler.RecordToolCall(name, t, execTime, toolID)
 	}
+
+	ctx := context.Background()
+	metrics.RecordToolCall(ctx, name, fmt.Sprintf("%d", toolID))
+	metrics.ObserveToolDuration(ctx, name, float64(execTime)/1000.0)
 }
 
 func RecordContentMessage(
@@ -186,6 +200,14 @@ func RecordChatRecord(record *models.LLMChatRecord) {
 	if globalHandler != nil {
 		globalHandler.RecordChatRecord(record)
 	}
+
+	ctx := context.Background()
+	appID := fmt.Sprintf("%d", record.AppID)
+	metrics.RecordTokens(ctx, record.Vendor, record.Name, "prompt", record.PromptTokens)
+	metrics.RecordTokens(ctx, record.Vendor, record.Name, "completion", record.ResponseTokens)
+	metrics.RecordTokens(ctx, record.Vendor, record.Name, "cache_read", record.CacheReadPromptTokens)
+	metrics.RecordTokens(ctx, record.Vendor, record.Name, "cache_write", record.CacheWritePromptTokens)
+	metrics.RecordCost(ctx, record.Vendor, record.Name, appID, record.Cost)
 }
 
 func RecordChatLogEntry(log *models.LLMChatLogEntry) {

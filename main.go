@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
@@ -247,6 +248,12 @@ func main() {
 	}
 
 	authService := auth.NewAuthService(config, mailService, service, notificationService)
+
+	// metrics
+	if appConf.MetricsEnabled {
+		metrics.Init()
+		logger.Infof("Prometheus metrics enabled at %s", appConf.MetricsPath)
+	}
 
 	// analytics
 	ctx, stopRec := context.WithCancel(context.Background())
