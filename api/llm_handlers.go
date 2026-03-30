@@ -61,6 +61,7 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.MonthlyBudget,
 			parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 			input.Data.Attributes.Namespace,
+			input.Data.Attributes.DontLogBodies,
 		)
 	} else {
 		llm, err = a.service.CreateLLM(
@@ -78,6 +79,7 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.AllowedModels,
 			input.Data.Attributes.MonthlyBudget,
 			parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
+			input.Data.Attributes.DontLogBodies,
 		)
 	}
 	if err != nil {
@@ -205,6 +207,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.MonthlyBudget,
 		parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 		input.Data.Attributes.Namespace,
+		input.Data.Attributes.DontLogBodies,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -553,6 +556,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			MonthlyBudget    *float64         `json:"monthly_budget"`
 			BudgetStartDate  *time.Time       `json:"budget_start_date"`
 			Namespace        string           `json:"namespace"`
+			DontLogBodies    bool             `json:"dont_log_bodies"`
 			Plugins          []PluginResponse `json:"plugins"`
 		}{
 			Name:             llm.Name,
@@ -571,6 +575,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			MonthlyBudget:    llm.MonthlyBudget,
 			BudgetStartDate:  llm.BudgetStartDate,
 			Namespace:        llm.Namespace,
+			DontLogBodies:    llm.DontLogBodies,
 			Plugins:          plugins,
 		},
 	}
@@ -637,6 +642,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				MonthlyBudget    *float64         `json:"monthly_budget"`
 				BudgetStartDate  *time.Time       `json:"budget_start_date"`
 				Namespace        string           `json:"namespace"`
+				DontLogBodies    bool             `json:"dont_log_bodies"`
 				Plugins          []PluginResponse `json:"plugins"`
 			}{
 				Name:             llm.Name,
@@ -655,6 +661,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				MonthlyBudget:    llm.MonthlyBudget,
 				BudgetStartDate:  llm.BudgetStartDate,
 				Namespace:        llm.Namespace,
+				DontLogBodies:    llm.DontLogBodies,
 				Plugins:          plugins,
 			},
 		}

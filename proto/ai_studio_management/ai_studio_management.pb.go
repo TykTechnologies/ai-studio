@@ -1087,6 +1087,7 @@ type CreateLLMRequest struct {
 	AllowedModels    []string               `protobuf:"bytes,12,rep,name=allowed_models,json=allowedModels,proto3" json:"allowed_models,omitempty"`
 	MonthlyBudget    *float64               `protobuf:"fixed64,13,opt,name=monthly_budget,json=monthlyBudget,proto3,oneof" json:"monthly_budget,omitempty"`
 	Namespace        string                 `protobuf:"bytes,14,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	DontLogBodies    bool                   `protobuf:"varint,15,opt,name=dont_log_bodies,json=dontLogBodies,proto3" json:"dont_log_bodies,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1219,6 +1220,13 @@ func (x *CreateLLMRequest) GetNamespace() string {
 	return ""
 }
 
+func (x *CreateLLMRequest) GetDontLogBodies() bool {
+	if x != nil {
+		return x.DontLogBodies
+	}
+	return false
+}
+
 type CreateLLMResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Llm           *LLMInfo               `protobuf:"bytes,1,opt,name=llm,proto3" json:"llm,omitempty"`
@@ -1279,6 +1287,7 @@ type UpdateLLMRequest struct {
 	AllowedModels    []string               `protobuf:"bytes,12,rep,name=allowed_models,json=allowedModels,proto3" json:"allowed_models,omitempty"`
 	MonthlyBudget    *float64               `protobuf:"fixed64,13,opt,name=monthly_budget,json=monthlyBudget,proto3,oneof" json:"monthly_budget,omitempty"`
 	Namespace        string                 `protobuf:"bytes,14,opt,name=namespace,proto3" json:"namespace,omitempty"` // Enterprise: Multi-tenant namespace support
+	DontLogBodies    bool                   `protobuf:"varint,15,opt,name=dont_log_bodies,json=dontLogBodies,proto3" json:"dont_log_bodies,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1409,6 +1418,13 @@ func (x *UpdateLLMRequest) GetNamespace() string {
 		return x.Namespace
 	}
 	return ""
+}
+
+func (x *UpdateLLMRequest) GetDontLogBodies() bool {
+	if x != nil {
+		return x.DontLogBodies
+	}
+	return false
 }
 
 type UpdateLLMResponse struct {
@@ -13324,7 +13340,7 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x11\n" +
-	"\x0f_monthly_budget\"\x92\x04\n" +
+	"\x0f_monthly_budget\"\xba\x04\n" +
 	"\x10CreateLLMRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
@@ -13340,10 +13356,11 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\rdefault_model\x18\v \x01(\tR\fdefaultModel\x12%\n" +
 	"\x0eallowed_models\x18\f \x03(\tR\rallowedModels\x12*\n" +
 	"\x0emonthly_budget\x18\r \x01(\x01H\x00R\rmonthlyBudget\x88\x01\x01\x12\x1c\n" +
-	"\tnamespace\x18\x0e \x01(\tR\tnamespaceB\x11\n" +
+	"\tnamespace\x18\x0e \x01(\tR\tnamespace\x12&\n" +
+	"\x0fdont_log_bodies\x18\x0f \x01(\bR\rdontLogBodiesB\x11\n" +
 	"\x0f_monthly_budget\"D\n" +
 	"\x11CreateLLMResponse\x12/\n" +
-	"\x03llm\x18\x01 \x01(\v2\x1d.ai_studio_management.LLMInfoR\x03llm\"\x91\x04\n" +
+	"\x03llm\x18\x01 \x01(\v2\x1d.ai_studio_management.LLMInfoR\x03llm\"\xb9\x04\n" +
 	"\x10UpdateLLMRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x12\n" +
@@ -13359,7 +13376,8 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"\rdefault_model\x18\v \x01(\tR\fdefaultModel\x12%\n" +
 	"\x0eallowed_models\x18\f \x03(\tR\rallowedModels\x12*\n" +
 	"\x0emonthly_budget\x18\r \x01(\x01H\x00R\rmonthlyBudget\x88\x01\x01\x12\x1c\n" +
-	"\tnamespace\x18\x0e \x01(\tR\tnamespaceB\x11\n" +
+	"\tnamespace\x18\x0e \x01(\tR\tnamespace\x12&\n" +
+	"\x0fdont_log_bodies\x18\x0f \x01(\bR\rdontLogBodiesB\x11\n" +
 	"\x0f_monthly_budget\"D\n" +
 	"\x11UpdateLLMResponse\x12/\n" +
 	"\x03llm\x18\x01 \x01(\v2\x1d.ai_studio_management.LLMInfoR\x03llm\"h\n" +

@@ -44,6 +44,11 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		ResponseCode: statusCode,
 	}
 
+	if llm.DontLogBodies {
+		l.RequestBody = ""
+		l.ResponseBody = ""
+	}
+
 	analytics.RecordProxyLog(l)
 	AnalyzeCompletionResponse(service, llm, app, response, r, time.Now())
 }
@@ -69,6 +74,11 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
 		ResponseBody: truncateString(string(decompressedResponses), maxBodySize),
 		ResponseCode: statusCode,
+	}
+
+	if llm.DontLogBodies {
+		l.RequestBody = ""
+		l.ResponseBody = ""
 	}
 
 	analytics.RecordProxyLog(l)

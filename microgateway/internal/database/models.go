@@ -60,6 +60,8 @@ type LLM struct {
 	
 	// Hub-and-Spoke Configuration
 	Namespace       string         `gorm:"default:'';index:idx_llm_namespace" json:"namespace"` // Empty = global, specific = filtered to edge
+	// Body logging control - when true, request/response bodies are NOT stored in proxy logs
+	DontLogBodies   bool           `gorm:"default:false" json:"dont_log_bodies"`
 
 	// Relationships
 	Apps    []App           `gorm:"many2many:app_llms;"`

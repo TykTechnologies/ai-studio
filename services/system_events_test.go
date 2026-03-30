@@ -163,7 +163,7 @@ func TestSystemEvents_LLM_Created(t *testing.T) {
 	defer bus.Unsubscribe(sub)
 
 	llm, err := service.CreateLLM("Test LLM", "api-key", "https://api.test.com", 75,
-		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
 	require.NoError(t, err)
 
 	assert.True(t, collector.WaitWithTimeout(time.Second))
@@ -182,7 +182,7 @@ func TestSystemEvents_LLM_Updated(t *testing.T) {
 
 	// Create LLM first (without collecting this event)
 	llm, err := service.CreateLLM("Test LLM", "api-key", "https://api.test.com", 75,
-		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
 	require.NoError(t, err)
 
 	// Now subscribe for update event
@@ -192,7 +192,7 @@ func TestSystemEvents_LLM_Updated(t *testing.T) {
 	defer bus.Unsubscribe(sub)
 
 	_, err = service.UpdateLLM(llm.ID, "Updated LLM", "new-api-key", "https://new-api.test.com", 80,
-		"Updated short", "Updated long", "https://new-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "")
+		"Updated short", "Updated long", "https://new-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "", false)
 	require.NoError(t, err)
 
 	assert.True(t, collector.WaitWithTimeout(time.Second))
@@ -210,7 +210,7 @@ func TestSystemEvents_LLM_Deleted(t *testing.T) {
 	service, bus := setupServiceWithEventBus(t)
 
 	llm, err := service.CreateLLM("Test LLM", "api-key", "https://api.test.com", 75,
-		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
 	require.NoError(t, err)
 
 	collector := NewTestEventCollector()
@@ -794,11 +794,11 @@ func TestSystemEvents_SubscribeAll(t *testing.T) {
 
 	// Create, update, delete an LLM
 	llm, err := service.CreateLLM("All Events Test LLM", "api-key", "https://api.test.com", 75,
-		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
 	require.NoError(t, err)
 
 	_, err = service.UpdateLLM(llm.ID, "Updated All Events LLM", "new-key", "https://new.test.com", 80,
-		"New short", "New long", "https://new-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "")
+		"New short", "New long", "https://new-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "", false)
 	require.NoError(t, err)
 
 	err = service.DeleteLLM(llm.ID)
@@ -830,7 +830,7 @@ func TestSystemEvents_Direction_IsLocal(t *testing.T) {
 	defer bus.Unsubscribe(sub)
 
 	_, err := service.CreateLLM("Direction Test LLM", "api-key", "https://api.test.com", 75,
-		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
 	require.NoError(t, err)
 
 	assert.True(t, collector.WaitWithTimeout(time.Second))
@@ -852,12 +852,12 @@ func TestSystemEvents_NoEventBus_NoErrors(t *testing.T) {
 
 	// Should not panic or error - events are silently skipped
 	llm, err := service.CreateLLM("No Bus Test LLM", "api-key", "https://api.test.com", 75,
-		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil)
+		"Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, llm)
 
 	_, err = service.UpdateLLM(llm.ID, "Updated No Bus LLM", "new-key", "https://new.test.com", 80,
-		"New short", "New long", "https://new-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "")
+		"New short", "New long", "https://new-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "", false)
 	assert.NoError(t, err)
 
 	err = service.DeleteLLM(llm.ID)
