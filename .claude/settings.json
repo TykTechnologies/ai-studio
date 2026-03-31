@@ -22,7 +22,9 @@
       "Bash(helm template midsommar . --set config.tykAiSecretKey=test --set config.grpcAuthToken=test --set config.microgatewayEncryptionKey=test --set microgateway.secrets.edgeAuthToken=test --set microgateway.secrets.encryptionKey=test --set midsommar.ingress.enabled=false)",
       "Bash(helm template midsommar . --set config.tykAiSecretKey=test --set config.grpcAuthToken=test --set config.microgatewayEncryptionKey=test --set microgateway.secrets.edgeAuthToken=test --set microgateway.secrets.encryptionKey=test --set microgateway.ingress.enabled=true --set 'microgateway.ingress.hosts[0].host=gw.example.com' --set 'microgateway.ingress.hosts[0].paths[0].path=/' --set 'microgateway.ingress.hosts[0].paths[0].pathType=Prefix' --set microgateway.ingress.certificateEnabled=true --set 'microgateway.ingress.tls[0].secretName=gw-tls' --set 'microgateway.ingress.tls[0].hosts[0]=gw.example.com')",
       "Bash(docker manifest inspect tykio/tyk-ai-studio-ent:v2.0.0-rc7.1)",
-      "Bash(docker manifest inspect tykio/tyk-microgateway-ent:v2.0.0-rc7.1)"
+      "Bash(docker manifest inspect tykio/tyk-microgateway-ent:v2.0.0-rc7.1)",
+      "Bash(git remote:*)",
+      "Bash(gh issue:*)"
     ]
   }
 }

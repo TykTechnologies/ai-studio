@@ -61,6 +61,7 @@ dist/
 .vow-cooldown
 
 .claude/settings.local.json
+.claude/worktrees
 microgateway/dist
 microgateway/bin
 microgateway/bin/microgateway
