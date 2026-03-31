@@ -307,10 +307,18 @@ func handleSSEOutgoingMessages(w http.ResponseWriter, cs *chat_session.ChatSessi
 
 func (a *API) loadExistingSession(sessionID string, userID uint) (*chat_session.ChatSession, error) {
 	history := chat_session.NewGormChatMessageHistory(a.service.DB, sessionID, 0, userID, "")
-	chat, err := history.GetAssociatedChat(context.Background())
+	chatFromHistory, err := history.GetAssociatedChat(context.Background())
 	if err != nil {
 		return nil, err
 	}
+
+	// Reload via service layer to resolve secret references ($SECRET/NAME)
+	// GetAssociatedChat uses the model layer directly which bypasses secret interpolation
+	chat, err := a.service.GetChatByID(chatFromHistory.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	chatSession, err := chat_session.NewChatSession(
 		chat,
 		chat_session.ChatStream,
