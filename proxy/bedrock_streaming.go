@@ -126,8 +126,9 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 				log.Error().Err(filterErr).Int("chunk", chunkIndex).Msg("Response filter error on Bedrock stream chunk")
 			} else if blocked {
 				log.Warn().Int("chunk", chunkIndex).Str("reason", blockMsg).Msg("Bedrock stream blocked by filter")
-				errorChunk := fmt.Appendf(nil, `{"error":"Response blocked by filter: %s"}`, blockMsg)
-				w.Write(errorChunk)
+				fmt.Fprintf(w, "data: {\"error\":\"Response blocked by filter: %s\"}\n\n", blockMsg)
+				flusher.Flush()
+				fmt.Fprintf(w, "data: [DONE]\n\n")
 				flusher.Flush()
 				isErr = true
 				return

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -85,6 +86,21 @@ func (p *Proxy) handleBedrockChatCompletion(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		respondWithOAIError(w, http.StatusInternalServerError, "failed to marshal response", err, false)
 		return
+	}
+
+	// Execute response filters (non-streaming)
+	if p.hasResponseFilters(conf) {
+		blocked, blockMsg, filterErr := ExecuteResponseFilters(
+			conf, p.gatewayService, respBody, http.StatusOK,
+			false, false, 0, "", r,
+		)
+		if filterErr != nil {
+			log.Error().Err(filterErr).Msg("Response filter error on Bedrock response")
+		} else if blocked {
+			respondWithOAIError(w, http.StatusBadRequest, fmt.Sprintf("Response blocked by filter: %s", blockMsg), nil, false)
+			go recordBedrockAnalytics(p, conf, app, modelID, output, reqBody, []byte(blockMsg), r, timestamp)
+			return
+		}
 	}
 
 	// Record analytics
@@ -184,6 +200,9 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	created := time.Now().Unix()
 	isFirstChunk := true
 	var inputTokens, outputTokens int32
+	hasResponseFilters := p.hasResponseFilters(conf)
+	var textBuffer strings.Builder
+	chunkIndex := 0
 
 	for event := range stream.Events() {
 		if err := stream.Err(); err != nil {
@@ -212,6 +231,25 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 
 		case *types.ConverseStreamOutputMemberContentBlockDelta:
 			if textDelta, ok := v.Value.Delta.(*types.ContentBlockDeltaMemberText); ok {
+				// Execute response filters on text content
+				if hasResponseFilters {
+					textBuffer.WriteString(textDelta.Value)
+					chunkBytes, _ := json.Marshal(textDelta.Value)
+					blocked, blockMsg, filterErr := ExecuteResponseFilters(
+						conf, p.gatewayService, chunkBytes, http.StatusOK,
+						true, true, chunkIndex, textBuffer.String(), r,
+					)
+					if filterErr != nil {
+						log.Error().Err(filterErr).Int("chunk", chunkIndex).Msg("Response filter error on Bedrock stream")
+					} else if blocked {
+						p.sendStreamError(w, flusher, fmt.Sprintf("Response blocked by filter: %s", blockMsg), "content_filter")
+						fmt.Fprintf(w, "data: [DONE]\n\n")
+						flusher.Flush()
+						return
+					}
+					chunkIndex++
+				}
+
 				chunkResp := ChatCompletionChunk{
 					ID:      completionID,
 					Object:  "chat.completion.chunk",
