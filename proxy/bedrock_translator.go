@@ -272,7 +272,7 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	flusher.Flush()
 
 	// Record analytics
-	go recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), timestamp)
+	go recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), r, timestamp)
 }
 
 // --- Helper functions ---
@@ -384,20 +384,24 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID 
 		ResponseBody: truncateString(string(respBody), maxBodySize),
 		ResponseCode: http.StatusOK,
 	}
-	analytics.RecordProxyLog(proxyLog)
+	if llm.DontLogBodies {
+		proxyLog.RequestBody = ""
+		proxyLog.ResponseBody = ""
+	}
+	analytics.RecordProxyLog(r.Context(), proxyLog)
 
 	// Record chat analytics
 	if output.Usage != nil {
 		recordBedrockChatRecord(p, llm, app, modelID,
 			int(aws.ToInt32(output.Usage.InputTokens)),
 			int(aws.ToInt32(output.Usage.OutputTokens)),
-			timestamp)
+			r, timestamp)
 	}
 }
 
 // recordBedrockChatRecord is the single place that calculates cost and records an LLMChatRecord
 // for all Bedrock paths (non-streaming /ai/, streaming /ai/, and streaming /llm/stream/).
-func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, timestamp time.Time) {
+func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, r *http.Request, timestamp time.Time) {
 	if promptTokens == 0 && responseTokens == 0 {
 		return
 	}
@@ -425,6 +429,6 @@ func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID
 		UserID:          app.UserID,
 		InteractionType: models.ProxyInteraction,
 	}
-	analytics.RecordChatRecord(record)
+	analytics.RecordChatRecord(r.Context(), record)
 }
 

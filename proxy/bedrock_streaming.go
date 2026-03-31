@@ -154,7 +154,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 
 	// Record analytics using token counts captured on-the-fly from the metadata event
 	if !isErr {
-		go recordBedrockChatRecord(p, llm, app, modelID, int(inputTokens), int(outputTokens), startTime)
+		go recordBedrockChatRecord(p, llm, app, modelID, int(inputTokens), int(outputTokens), r, startTime)
 	}
 }
 

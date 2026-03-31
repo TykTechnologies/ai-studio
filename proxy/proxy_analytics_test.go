@@ -299,7 +299,7 @@ func TestAnalyzeCompletionResponseWithCache(t *testing.T) {
 	req = req.WithContext(ctx)
 
 	// Test response analysis
-	AnalyzeCompletionResponse(service, llm, app, mockResp, req, time.Now())
+	AnalyzeCompletionResponse(service, llm, app, mockResp, req.Context(), req, time.Now())
 
 	// Wait for analytics to process the request
 	waitForAnalytics(t, db, 1)
@@ -471,7 +471,7 @@ func TestAnalyzeCompletionResponseWithCacheGoogleAI(t *testing.T) {
 	req = req.WithContext(ctx)
 
 	// Test response analysis
-	AnalyzeCompletionResponse(service, llm, app, mockResp, req, time.Now())
+	AnalyzeCompletionResponse(service, llm, app, mockResp, req.Context(), req, time.Now())
 
 	// Wait for analytics to process the request
 	waitForAnalytics(t, db, 1)

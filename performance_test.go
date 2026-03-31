@@ -284,8 +284,8 @@ func TestBatchAnalytics_Interface(t *testing.T) {
 
 	// Test batch interface methods
 	require.NotPanics(t, func() {
-		handler.RecordChatRecordsBatch(records)
-		handler.RecordProxyLogsBatch(logs)
+		handler.RecordChatRecordsBatch(ctx, records)
+		handler.RecordProxyLogsBatch(ctx, logs)
 	}, "Batch methods should not panic")
 
 	// Wait for processing

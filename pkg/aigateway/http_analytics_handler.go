@@ -2,6 +2,7 @@ package aigateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -26,7 +27,7 @@ func NewHTTPAnalyticsHandler(endpoint string) *HTTPAnalyticsHandler {
 }
 
 // RecordChatRecord implements analytics.AnalyticsHandler
-func (h *HTTPAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
+func (h *HTTPAnalyticsHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
 	data := map[string]interface{}{
 		"type":                      "llm_usage",
 		"llm_id":                    record.LLMID,
@@ -50,7 +51,7 @@ func (h *HTTPAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
 }
 
 // RecordChatLogEntry implements analytics.AnalyticsHandler
-func (h *HTTPAnalyticsHandler) RecordChatLogEntry(log *models.LLMChatLogEntry) {
+func (h *HTTPAnalyticsHandler) RecordChatLogEntry(_ context.Context, log *models.LLMChatLogEntry) {
 	data := map[string]interface{}{
 		"type":      "chat_log_entry",
 		"name":      log.Name,
@@ -66,7 +67,7 @@ func (h *HTTPAnalyticsHandler) RecordChatLogEntry(log *models.LLMChatLogEntry) {
 }
 
 // RecordProxyLog implements analytics.AnalyticsHandler
-func (h *HTTPAnalyticsHandler) RecordProxyLog(log *models.ProxyLog) {
+func (h *HTTPAnalyticsHandler) RecordProxyLog(_ context.Context, log *models.ProxyLog) {
 	data := map[string]interface{}{
 		"type":          "proxy_log",
 		"app_id":        log.AppID,
@@ -81,7 +82,7 @@ func (h *HTTPAnalyticsHandler) RecordProxyLog(log *models.ProxyLog) {
 }
 
 // RecordToolCall implements analytics.AnalyticsHandler
-func (h *HTTPAnalyticsHandler) RecordToolCall(name string, timestamp time.Time, execTime int, toolID uint) {
+func (h *HTTPAnalyticsHandler) RecordToolCall(_ context.Context, name string, timestamp time.Time, execTime int, toolID uint) {
 	data := map[string]interface{}{
 		"type":      "tool_call",
 		"tool_id":   toolID,
@@ -113,7 +114,7 @@ func (h *HTTPAnalyticsHandler) postJSON(path string, data interface{}) {
 }
 
 // RecordChatRecordsBatch implements batch recording for HTTP analytics
-func (h *HTTPAnalyticsHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+func (h *HTTPAnalyticsHandler) RecordChatRecordsBatch(_ context.Context, records []*models.LLMChatRecord) {
 	// For HTTP handler, we can send individual records or batch them in a single request
 	// For simplicity, we'll batch them into a single HTTP request
 	if len(records) == 0 {
@@ -151,7 +152,7 @@ func (h *HTTPAnalyticsHandler) RecordChatRecordsBatch(records []*models.LLMChatR
 }
 
 // RecordProxyLogsBatch implements batch recording for HTTP analytics
-func (h *HTTPAnalyticsHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
+func (h *HTTPAnalyticsHandler) RecordProxyLogsBatch(_ context.Context, logs []*models.ProxyLog) {
 	// For HTTP handler, we can send individual records or batch them in a single request
 	if len(logs) == 0 {
 		return

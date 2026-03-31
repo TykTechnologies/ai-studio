@@ -273,7 +273,7 @@ func (h *DatabaseHandler) Stop() {
 }
 
 // Implement AnalyticsHandler interface methods
-func (h *DatabaseHandler) RecordChatRecord(record *models.LLMChatRecord) {
+func (h *DatabaseHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
 	h.recMutex.RLock()
 	if !h.recStarted {
 		logger.Warnf("Analytics recording not started, dropping chat record: model=%s, app_id=%d, llm_id=%d, cost=%.2f", record.Name, record.AppID, record.LLMID, record.Cost)
@@ -293,7 +293,7 @@ func (h *DatabaseHandler) RecordChatRecord(record *models.LLMChatRecord) {
 	}
 }
 
-func (h *DatabaseHandler) RecordProxyLog(log *models.ProxyLog) {
+func (h *DatabaseHandler) RecordProxyLog(_ context.Context, log *models.ProxyLog) {
 	h.recMutex.RLock()
 	if !h.recStarted {
 		h.recMutex.RUnlock()
@@ -311,7 +311,7 @@ func (h *DatabaseHandler) RecordProxyLog(log *models.ProxyLog) {
 	}
 }
 
-func (h *DatabaseHandler) RecordToolCall(name string, timestamp time.Time, execTime int, toolID uint) {
+func (h *DatabaseHandler) RecordToolCall(_ context.Context, name string, timestamp time.Time, execTime int, toolID uint) {
 	h.recMutex.RLock()
 	if !h.recStarted {
 		h.recMutex.RUnlock()
@@ -337,7 +337,7 @@ func (h *DatabaseHandler) RecordToolCall(name string, timestamp time.Time, execT
 }
 
 // RecordChatLogEntry implements analytics.AnalyticsHandler
-func (h *DatabaseHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
+func (h *DatabaseHandler) RecordChatLogEntry(_ context.Context, logEntry *models.LLMChatLogEntry) {
 	h.recMutex.RLock()
 	if !h.recStarted {
 		h.recMutex.RUnlock()
@@ -357,7 +357,7 @@ func (h *DatabaseHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
 
 // RecordChatRecordsBatch records multiple chat records asynchronously using background worker
 // This method is non-blocking and returns immediately to avoid impacting request latency
-func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+func (h *DatabaseHandler) RecordChatRecordsBatch(_ context.Context, records []*models.LLMChatRecord) {
 	if len(records) == 0 {
 		return
 	}
@@ -384,7 +384,7 @@ func (h *DatabaseHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord
 
 // RecordProxyLogsBatch records multiple proxy logs asynchronously using background worker
 // This method is non-blocking and returns immediately to avoid impacting request latency
-func (h *DatabaseHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
+func (h *DatabaseHandler) RecordProxyLogsBatch(_ context.Context, logs []*models.ProxyLog) {
 	if len(logs) == 0 {
 		return
 	}

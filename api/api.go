@@ -20,6 +20,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
@@ -324,6 +325,15 @@ func (a *API) setupRoutes() {
 		a.router.Use(a.devCorsMiddleware())
 	} else {
 		a.router.Use(a.corsMiddleware())
+	}
+
+	// Prometheus metrics endpoint (no auth — intended for Kubernetes pod scraping)
+	if metricsHandler := metrics.Handler(); metricsHandler != nil {
+		metricsPath := config.Get("").MetricsPath
+		if metricsPath == "" {
+			metricsPath = "/metrics"
+		}
+		a.router.GET(metricsPath, gin.WrapH(metricsHandler))
 	}
 
 	a.router.GET("/sun.ico", func(c *gin.Context) {

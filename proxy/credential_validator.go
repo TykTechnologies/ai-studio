@@ -396,7 +396,7 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 		log.Debug().Uint("cred_id", cred.ID).Msg("CheckAPICredential: Credential is inactive")
 		// Log inactive credential usage for compliance tracking
 		if app, appErr := cv.service.GetAppByCredentialID(cred.ID); appErr == nil {
-			analytics.RecordProxyLog(&models.ProxyLog{
+			analytics.RecordProxyLog(r.Context(), &models.ProxyLog{
 				AppID:        app.ID,
 				UserID:       app.UserID,
 				ResponseCode: http.StatusUnauthorized,

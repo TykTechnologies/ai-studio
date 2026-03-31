@@ -857,8 +857,8 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		}
 
 		// Use batch processing for improved performance
-		analytics.RecordProxyLogsBatch(proxyLogs)
-		analytics.RecordChatRecordsBatch(chatRecords)
+		analytics.RecordProxyLogsBatch(ctx, proxyLogs)
+		analytics.RecordChatRecordsBatch(ctx, chatRecords)
 		processedRecords += uint64(len(req.AnalyticsEvents))
 
 		log.Debug().
@@ -1184,6 +1184,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Metadata:        metadataJSON,
 			AllowedModels:   allowedModelsJSON,
 			Namespace:       llm.Namespace,
+			DontLogBodies:   llm.DontLogBodies,
 			FilterIds:       filterIDs,
 			CreatedAt:       timestamppb.New(llm.CreatedAt),
 			UpdatedAt:       timestamppb.New(llm.UpdatedAt),

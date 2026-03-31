@@ -207,7 +207,7 @@ func (h *MicrogatewaAnalyticsHandler) Stop() {
 
 // RecordChatRecord implements the midsommar analytics interface
 // Merges ChatRecord data into existing ProxyLog event (deduplication) or creates standalone event
-func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
+func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
 	log.Debug().
 		Uint("app_id", record.AppID).
 		Uint("llm_id", record.LLMID).
@@ -444,7 +444,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(record *models.LLMChatRec
 
 // RecordChatLogEntry implements the midsommar analytics interface
 // For detailed logging - we can store this in analytics metadata or ignore for now
-func (h *MicrogatewaAnalyticsHandler) RecordChatLogEntry(entry *models.LLMChatLogEntry) {
+func (h *MicrogatewaAnalyticsHandler) RecordChatLogEntry(_ context.Context, entry *models.LLMChatLogEntry) {
 	log.Debug().
 		Str("prompt", entry.Prompt[:min(50, len(entry.Prompt))]).
 		Str("vendor", entry.Vendor).
@@ -456,7 +456,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatLogEntry(entry *models.LLMChatLo
 // RecordProxyLog implements the midsommar analytics interface
 // Creates analytics events directly from AI Gateway proxy logs
 // This is called FIRST for each request, creating a pending event that may be enriched by RecordChatRecord
-func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(proxyLog *models.ProxyLog) {
+func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(_ context.Context, proxyLog *models.ProxyLog) {
 	log.Debug().
 		Uint("app_id", proxyLog.AppID).
 		Uint("user_id", proxyLog.UserID).
@@ -640,7 +640,7 @@ func (h *MicrogatewaAnalyticsHandler) findEventForMatching(proxyLog *models.Prox
 // Records tool usage analytics
 // Note: Tool calls in microgateway context are typically tracked within LLM responses
 // This standalone method is for AI Studio compatibility
-func (h *MicrogatewaAnalyticsHandler) RecordToolCall(name string, timestamp time.Time, execTimeMs int, toolID uint) {
+func (h *MicrogatewaAnalyticsHandler) RecordToolCall(_ context.Context, name string, timestamp time.Time, execTimeMs int, toolID uint) {
 	log.Debug().
 		Str("tool_name", name).
 		Uint("tool_id", toolID).
@@ -654,7 +654,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordToolCall(name string, timestamp time
 
 // RecordChatRecordsBatch implements batch recording for microgateway analytics
 // This method is non-blocking and returns immediately to avoid impacting request latency
-func (h *MicrogatewaAnalyticsHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+func (h *MicrogatewaAnalyticsHandler) RecordChatRecordsBatch(_ context.Context, records []*models.LLMChatRecord) {
 	if len(records) == 0 {
 		return
 	}
@@ -673,7 +673,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecordsBatch(records []*models.L
 
 // RecordProxyLogsBatch implements batch recording for microgateway analytics
 // This method is non-blocking and returns immediately to avoid impacting request latency
-func (h *MicrogatewaAnalyticsHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
+func (h *MicrogatewaAnalyticsHandler) RecordProxyLogsBatch(_ context.Context, logs []*models.ProxyLog) {
 	if len(logs) == 0 {
 		return
 	}

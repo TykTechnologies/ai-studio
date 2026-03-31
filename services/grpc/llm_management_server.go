@@ -195,6 +195,7 @@ func (s *LLMManagementServer) CreateLLM(ctx context.Context, req *pb.CreateLLMRe
 		req.MonthlyBudget,
 		nil, // BudgetStartDate
 		req.GetNamespace(),
+		req.GetDontLogBodies(),
 	)
 	if err != nil {
 		log.Error().Err(err).
@@ -252,6 +253,7 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 		req.MonthlyBudget,
 		nil,       // BudgetStartDate
 		namespace, // Support namespace updates via gRPC
+		req.GetDontLogBodies(),
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

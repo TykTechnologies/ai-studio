@@ -26,6 +26,8 @@ type LLM struct {
 	BudgetStartDate *time.Time `json:"budget_start_date" gorm:"column:budget_start_date"`
 	// Hub-and-Spoke Configuration
 	Namespace       string     `json:"namespace" gorm:"default:'';index:idx_llm_namespace"`
+	// Body logging control - when true, request/response bodies are NOT stored in proxy logs
+	DontLogBodies bool `json:"dont_log_bodies" gorm:"default:false"`
 
 	Filters       []*Filter `json:"filters" gorm:"many2many:llm_filters;"`
 	Plugins       []*Plugin `json:"plugins" gorm:"many2many:llm_plugins;"`

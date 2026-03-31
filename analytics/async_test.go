@@ -79,8 +79,8 @@ func TestAsyncBatchProcessing(t *testing.T) {
 
 	// Call async batch methods - these should return immediately
 	start := time.Now()
-	handler.RecordChatRecordsBatch(chatRecords)
-	handler.RecordProxyLogsBatch(proxyLogs)
+	handler.RecordChatRecordsBatch(ctx, chatRecords)
+	handler.RecordProxyLogsBatch(ctx, proxyLogs)
 	callDuration := time.Since(start)
 
 	// The calls should return very quickly (non-blocking)
@@ -129,10 +129,10 @@ func TestBatchMethodsWithEmptyData(t *testing.T) {
 	defer handler.Stop()
 
 	// Test with empty data - should not cause any issues
-	handler.RecordChatRecordsBatch([]*models.LLMChatRecord{})
-	handler.RecordProxyLogsBatch([]*models.ProxyLog{})
-	handler.RecordChatRecordsBatch(nil)
-	handler.RecordProxyLogsBatch(nil)
+	handler.RecordChatRecordsBatch(ctx, []*models.LLMChatRecord{})
+	handler.RecordProxyLogsBatch(ctx, []*models.ProxyLog{})
+	handler.RecordChatRecordsBatch(ctx, nil)
+	handler.RecordProxyLogsBatch(ctx, nil)
 
 	t.Log("Empty data test passed")
 }

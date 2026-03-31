@@ -51,7 +51,7 @@ func BenchmarkAnalyticsBatchProcessing(b *testing.B) {
 				}
 
 				start := time.Now()
-				handler.RecordChatRecordsBatch(records)
+				handler.RecordChatRecordsBatch(ctx, records)
 				batchDuration := time.Since(start)
 
 				b.ReportMetric(float64(batchDuration.Nanoseconds()), "batch-ns")
@@ -123,9 +123,9 @@ func BenchmarkAnalyticsDataInsertion(b *testing.B) {
 
 				start := time.Now()
 				if scenario.recordType == "chat" {
-					handler.RecordChatRecord(record.(*models.LLMChatRecord))
+					handler.RecordChatRecord(ctx, record.(*models.LLMChatRecord))
 				} else if scenario.recordType == "proxy" {
-					handler.RecordProxyLog(record.(*models.ProxyLog))
+					handler.RecordProxyLog(ctx, record.(*models.ProxyLog))
 				}
 				insertDuration := time.Since(start)
 
@@ -427,7 +427,7 @@ func BenchmarkAnalyticsConcurrency(b *testing.B) {
 					time.Sleep(time.Duration(workerID) * time.Microsecond * 10)
 				}
 
-				handler.RecordChatRecordsBatch(records)
+				handler.RecordChatRecordsBatch(ctx, records)
 				return nil
 			})
 
@@ -483,7 +483,7 @@ func BenchmarkAnalyticsMemoryUsage(b *testing.B) {
 					}
 				}
 
-				handler.RecordChatRecordsBatch(records)
+				handler.RecordChatRecordsBatch(ctx, records)
 
 				// Periodic memory sampling
 				if i%10 == 0 {

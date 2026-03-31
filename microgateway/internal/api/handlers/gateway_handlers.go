@@ -8,26 +8,6 @@ import (
 )
 
 
-// PrometheusMetrics returns basic Prometheus-format metrics
-// Note: Returns static metrics for now - real metrics collection can be added later
-func PrometheusMetrics() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Header("Content-Type", "text/plain")
-		c.String(http.StatusOK, `# HELP microgateway_info Microgateway service info
-# TYPE microgateway_info gauge
-microgateway_info{version="dev"} 1
-
-# HELP microgateway_requests_total Total number of requests
-# TYPE microgateway_requests_total counter
-microgateway_requests_total 0
-
-# HELP microgateway_build_info Build information
-# TYPE microgateway_build_info gauge
-microgateway_build_info{version="dev",build_hash="unknown"} 1
-`)
-	}
-}
-
 // SwaggerHandler serves basic Swagger documentation
 // Note: Returns static API documentation - can be enhanced with generated docs later
 func SwaggerHandler() gin.HandlerFunc {

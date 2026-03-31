@@ -217,9 +217,10 @@ type LLMConfig struct {
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// Embedded relationship data (from join tables)
-	AppIds        []uint32 `protobuf:"varint,21,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`          // From app_llms join table
-	FilterIds     []uint32 `protobuf:"varint,22,rep,packed,name=filter_ids,json=filterIds,proto3" json:"filter_ids,omitempty"` // From llm_filters join table
-	PluginIds     []uint32 `protobuf:"varint,23,rep,packed,name=plugin_ids,json=pluginIds,proto3" json:"plugin_ids,omitempty"` // From llm_plugins join table
+	AppIds        []uint32 `protobuf:"varint,21,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`                 // From app_llms join table
+	FilterIds     []uint32 `protobuf:"varint,22,rep,packed,name=filter_ids,json=filterIds,proto3" json:"filter_ids,omitempty"`        // From llm_filters join table
+	PluginIds     []uint32 `protobuf:"varint,23,rep,packed,name=plugin_ids,json=pluginIds,proto3" json:"plugin_ids,omitempty"`        // From llm_plugins join table
+	DontLogBodies bool     `protobuf:"varint,24,opt,name=dont_log_bodies,json=dontLogBodies,proto3" json:"dont_log_bodies,omitempty"` // When true, suppress request/response body logging
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -413,6 +414,13 @@ func (x *LLMConfig) GetPluginIds() []uint32 {
 		return x.PluginIds
 	}
 	return nil
+}
+
+func (x *LLMConfig) GetDontLogBodies() bool {
+	if x != nil {
+		return x.DontLogBodies
+	}
+	return false
 }
 
 // AppConfig represents an application configuration with embedded relationships
@@ -2552,7 +2560,7 @@ var File_proto_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\x06\n" +
+	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb9\x06\n" +
 	"\tLLMConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2584,7 +2592,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"filter_ids\x18\x16 \x03(\rR\tfilterIds\x12\x1d\n" +
 	"\n" +
-	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\"\xc1\x06\n" +
+	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\x12&\n" +
+	"\x0fdont_log_bodies\x18\x18 \x01(\bR\rdontLogBodies\"\xc1\x06\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +

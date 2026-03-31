@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
@@ -109,6 +110,13 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	gateway.SetAuthHooks(authHooks)
 	log.Debug().Msg("Authentication hooks registered with AI Gateway")
 
+	// Initialize Prometheus metrics if enabled
+	var metricsHandler http.Handler
+	if cfg.Observability.EnableMetrics {
+		metricsHandler = metrics.Init()
+		log.Info().Msg("Prometheus metrics enabled")
+	}
+
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{
 		AuthProvider:                serviceContainer.AuthProvider,
@@ -119,6 +127,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		ModelRouterService:          serviceContainer.ModelRouterService, // Enterprise: Model router
 		EnableSwagger:               cfg.IsDevelopment(),
 		EnableMetrics:               cfg.Observability.EnableMetrics,
+		MetricsHandler:              metricsHandler,
 		PluginEndpointMaxBodySize:   cfg.Gateway.PluginEndpointMaxBodySize,
 		PluginEndpointStreamTimeout: cfg.Gateway.PluginEndpointStreamTimeout,
 		Version:                     version,
@@ -166,6 +175,7 @@ func (s *Server) SetReloadCoordinator(reloadCoordinator *services.ReloadCoordina
 		ReloadCoordinator:           reloadCoordinator, // Add reload coordinator
 		EnableSwagger:               s.config.IsDevelopment(),
 		EnableMetrics:               s.config.Observability.EnableMetrics,
+		MetricsHandler:              metrics.Handler(),
 		PluginEndpointMaxBodySize:   s.config.Gateway.PluginEndpointMaxBodySize,
 		PluginEndpointStreamTimeout: s.config.Gateway.PluginEndpointStreamTimeout,
 		Version:                     s.version,

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -79,7 +80,7 @@ func (h *FileAnalyticsHandler) loadExistingData() {
 }
 
 // RecordChatRecord records LLM chat/proxy usage
-func (h *FileAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
+func (h *FileAnalyticsHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -105,7 +106,7 @@ func (h *FileAnalyticsHandler) RecordChatRecord(record *models.LLMChatRecord) {
 }
 
 // RecordProxyLog records proxy request/response logs
-func (h *FileAnalyticsHandler) RecordProxyLog(logEntry *models.ProxyLog) {
+func (h *FileAnalyticsHandler) RecordProxyLog(_ context.Context, logEntry *models.ProxyLog) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -121,7 +122,7 @@ func (h *FileAnalyticsHandler) RecordProxyLog(logEntry *models.ProxyLog) {
 }
 
 // RecordToolCall records tool call execution
-func (h *FileAnalyticsHandler) RecordToolCall(name string, timestamp time.Time, execTime int, toolID uint) {
+func (h *FileAnalyticsHandler) RecordToolCall(_ context.Context, name string, timestamp time.Time, execTime int, toolID uint) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -144,14 +145,14 @@ func (h *FileAnalyticsHandler) RecordToolCall(name string, timestamp time.Time, 
 }
 
 // RecordChatLogEntry records chat log entries (required for analytics.AnalyticsHandler interface)
-func (h *FileAnalyticsHandler) RecordChatLogEntry(logEntry *models.LLMChatLogEntry) {
+func (h *FileAnalyticsHandler) RecordChatLogEntry(_ context.Context, logEntry *models.LLMChatLogEntry) {
 	// For this demo, we'll just log to console as we don't store chat log entries in files
 	log.Printf("[ANALYTICS] Chat Log Entry: Model=%s, Vendor=%s, User=%d, Chat=%s",
 		logEntry.Name, logEntry.Vendor, logEntry.UserID, logEntry.ChatID)
 }
 
 // RecordChatRecordsBatch records multiple LLM chat/proxy usage records in batch
-func (h *FileAnalyticsHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {
+func (h *FileAnalyticsHandler) RecordChatRecordsBatch(_ context.Context, records []*models.LLMChatRecord) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -180,7 +181,7 @@ func (h *FileAnalyticsHandler) RecordChatRecordsBatch(records []*models.LLMChatR
 }
 
 // RecordProxyLogsBatch records multiple proxy request/response logs in batch
-func (h *FileAnalyticsHandler) RecordProxyLogsBatch(logs []*models.ProxyLog) {
+func (h *FileAnalyticsHandler) RecordProxyLogsBatch(_ context.Context, logs []*models.ProxyLog) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

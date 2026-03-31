@@ -35,6 +35,7 @@ message LLMConfig {
   repeated uint32 app_ids = 21;     // From app_llms join table
   repeated uint32 filter_ids = 22;  // From llm_filters join table  
   repeated uint32 plugin_ids = 23;  // From llm_plugins join table
+  bool dont_log_bodies = 24;        // When true, suppress request/response body logging
 }
 
 // AppConfig represents an application configuration with embedded relationships

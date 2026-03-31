@@ -139,6 +139,7 @@ type ProxyLog struct {
 	UserID       uint      `gorm:"index"`
 	TimeStamp    time.Time `gorm:"index:idx_proxy_logs_time;index:idx_proxy_logs_app_time,priority:2;index:idx_proxy_logs_app_code_time,priority:3"`
 	Vendor       string
+	ModelName    string
 	RequestBody  string
 	ResponseBody string
 	ResponseCode int `gorm:"index:idx_proxy_logs_code;index:idx_proxy_logs_app_code_time,priority:2"`
