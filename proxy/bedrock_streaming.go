@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -81,10 +82,9 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	// Stream events to client, extracting analytics on-the-fly.
 	// We do NOT buffer the full response — token usage comes from the metadata event.
 	hasResponseFilters := p.hasResponseFilters(llm)
-	// accumulatedText is the running text buffer for response filters. It is passed as
-	// currentBuffer so filter scripts can do cross-chunk pattern matching. We use a plain
-	// string instead of strings.Builder to avoid the Builder.String() copy on each iteration.
-	var accumulatedText string
+	// textBuffer accumulates extracted text for response filter scripts that need
+	// cross-chunk pattern matching via the currentBuffer parameter.
+	var textBuffer strings.Builder
 	chunkIndex := 0
 	isErr := false
 	var inputTokens, outputTokens int32
@@ -115,12 +115,12 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		// Execute response filters per-chunk if configured
 		if hasResponseFilters {
 			if text := extractTextFromStreamEvent(event); text != "" {
-				accumulatedText += text
+				textBuffer.WriteString(text)
 			}
 
 			blocked, blockMsg, filterErr := ExecuteResponseFilters(
 				llm, p.gatewayService, chunk, http.StatusOK,
-				true, true, chunkIndex, accumulatedText, r,
+				true, true, chunkIndex, textBuffer.String(), r,
 			)
 			if filterErr != nil {
 				log.Error().Err(filterErr).Int("chunk", chunkIndex).Msg("Response filter error on Bedrock stream chunk")
