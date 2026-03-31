@@ -24,7 +24,9 @@
       "Bash(docker manifest inspect tykio/tyk-ai-studio-ent:v2.0.0-rc7.1)",
       "Bash(docker manifest inspect tykio/tyk-microgateway-ent:v2.0.0-rc7.1)",
       "Bash(git remote:*)",
-      "Bash(gh issue:*)"
+      "Bash(gh issue:*)",
+      "Bash(gh repo:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
