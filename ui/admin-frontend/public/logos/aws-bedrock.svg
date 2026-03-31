@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+  <rect width="80" height="80" rx="8" fill="#232F3E"/>
+  <path d="M40 16L56 24V40L40 48L24 40V24L40 16Z" fill="#FF9900"/>
+  <path d="M40 48L56 40V56L40 64L24 56V40L40 48Z" fill="#FF9900" opacity="0.6"/>
+  <text x="40" y="74" text-anchor="middle" font-family="Arial" font-size="7" fill="#FF9900">BEDROCK</text>
+</svg>

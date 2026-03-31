@@ -394,6 +394,12 @@ func (s *Service) IsModelAllowed(id uint, modelName string) (bool, error) {
 	return false, nil
 }
 
+// UpdateLLMMetadata updates only the metadata field of an LLM.
+// Used by the API to persist vendor-specific configuration (e.g., AWS credentials for Bedrock).
+func (s *Service) UpdateLLMMetadata(id uint, metadata models.JSONMap) error {
+	return s.DB.Model(&models.LLM{}).Where("id = ?", id).Update("metadata", metadata).Error
+}
+
 // The following functions remain unchanged
 func (s *Service) DeleteLLM(id uint) error {
 	llm, err := s.GetLLMByID(id)

@@ -90,6 +90,20 @@ func (a *API) createLLM(c *gin.Context) {
 		return
 	}
 
+	// Set metadata if provided (used by Bedrock for AWS credentials)
+	if input.Data.Attributes.Metadata != nil {
+		if err := a.service.UpdateLLMMetadata(llm.ID, models.JSONMap(input.Data.Attributes.Metadata)); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: fmt.Sprintf("LLM created but failed to save metadata: %v", err)}},
+			})
+			return
+		}
+		llm.Metadata = models.JSONMap(input.Data.Attributes.Metadata)
+	}
+
 	if llm.Active {
 		if a.proxy != nil {
 			a.proxy.Reload()
@@ -216,17 +230,33 @@ func (a *API) updateLLM(c *gin.Context) {
 		return
 	}
 
+	// Set metadata if provided (used by Bedrock for AWS credentials)
+	if input.Data.Attributes.Metadata != nil {
+		if err := a.service.UpdateLLMMetadata(llm.ID, models.JSONMap(input.Data.Attributes.Metadata)); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: fmt.Sprintf("LLM updated but failed to save metadata: %v", err)}},
+			})
+			return
+		}
+		llm.Metadata = models.JSONMap(input.Data.Attributes.Metadata)
+	}
+
 	// Reload proxy if:
 	// 1. Active state changed (either way)
 	// 2. LLM is active and any other attributes changed
 	if a.proxy != nil {
 		activeStateChanged := thisLLM.Active != input.Data.Attributes.Active
+		metadataChanged := input.Data.Attributes.Metadata != nil
 		hasChanges := (thisLLM.Name != input.Data.Attributes.Name ||
 			thisLLM.APIKey != input.Data.Attributes.APIKey ||
 			thisLLM.APIEndpoint != input.Data.Attributes.APIEndpoint ||
 			thisLLM.DefaultModel != input.Data.Attributes.DefaultModel ||
 			!sliceEqual(thisLLM.AllowedModels, input.Data.Attributes.AllowedModels) ||
-			len(thisLLM.Filters) != len(filters))
+			len(thisLLM.Filters) != len(filters) ||
+			metadataChanged)
 
 		if activeStateChanged || (input.Data.Attributes.Active && hasChanges) {
 			a.proxy.Reload()
@@ -552,8 +582,9 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			AllowedModels    []string         `json:"allowed_models"`
 			MonthlyBudget    *float64         `json:"monthly_budget"`
 			BudgetStartDate  *time.Time       `json:"budget_start_date"`
-			Namespace        string           `json:"namespace"`
-			Plugins          []PluginResponse `json:"plugins"`
+			Namespace        string                 `json:"namespace"`
+			Plugins          []PluginResponse       `json:"plugins"`
+			Metadata         map[string]interface{} `json:"metadata,omitempty"`
 		}{
 			Name:             llm.Name,
 			APIKey:           services.REDACTED_VALUE,
@@ -572,8 +603,34 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			BudgetStartDate:  llm.BudgetStartDate,
 			Namespace:        llm.Namespace,
 			Plugins:          plugins,
+			Metadata:         redactMetadataSecrets(llm.Metadata),
 		},
 	}
+}
+
+// redactMetadataSecrets returns a copy of metadata with sensitive values redacted.
+// Keys containing "secret" or "token" are redacted to "[redacted]" in API responses,
+// while showing the $SECRET/ reference format if present.
+func redactMetadataSecrets(metadata models.JSONMap) map[string]interface{} {
+	if metadata == nil {
+		return nil
+	}
+	result := make(map[string]interface{}, len(metadata))
+	for k, v := range metadata {
+		if strVal, ok := v.(string); ok {
+			if strings.Contains(strings.ToLower(k), "secret") || strings.Contains(strings.ToLower(k), "token") {
+				// Show $SECRET/ references as-is, redact plain values
+				if strings.HasPrefix(strVal, "$SECRET/") || strings.HasPrefix(strVal, "$ENV/") {
+					result[k] = strVal
+				} else if strVal != "" {
+					result[k] = services.REDACTED_VALUE
+				}
+				continue
+			}
+		}
+		result[k] = v
+	}
+	return result
 }
 
 func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
@@ -636,8 +693,9 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				AllowedModels    []string         `json:"allowed_models"`
 				MonthlyBudget    *float64         `json:"monthly_budget"`
 				BudgetStartDate  *time.Time       `json:"budget_start_date"`
-				Namespace        string           `json:"namespace"`
-				Plugins          []PluginResponse `json:"plugins"`
+				Namespace        string                 `json:"namespace"`
+				Plugins          []PluginResponse       `json:"plugins"`
+				Metadata         map[string]interface{} `json:"metadata,omitempty"`
 			}{
 				Name:             llm.Name,
 				APIKey:           services.REDACTED_VALUE,
@@ -656,6 +714,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				BudgetStartDate:  llm.BudgetStartDate,
 				Namespace:        llm.Namespace,
 				Plugins:          plugins,
+				Metadata:         redactMetadataSecrets(llm.Metadata),
 			},
 		}
 	}

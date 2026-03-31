@@ -94,6 +94,14 @@ const LLMForm = () => {
     severity: "success",
   });
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showAwsSecretKey, setShowAwsSecretKey] = useState(false);
+
+  // AWS Bedrock credential fields (stored in metadata on save)
+  const [awsCreds, setAwsCreds] = useState({
+    aws_access_key_id: "",
+    aws_secret_access_key: "",
+    aws_session_token: "",
+  });
 
   // Plugin configuration dialog state
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -186,6 +194,15 @@ const LLMForm = () => {
         plugins: pluginsData.map((plugin) => plugin.id.toString()),
       });
       setOriginalName(llmData.name);
+
+      // Extract AWS Bedrock credentials from metadata if vendor is bedrock
+      if (llmData.vendor === "bedrock" && llmData.metadata) {
+        setAwsCreds({
+          aws_access_key_id: llmData.metadata.aws_access_key_id || "",
+          aws_secret_access_key: llmData.metadata.aws_secret_access_key || "",
+          aws_session_token: llmData.metadata.aws_session_token || "",
+        });
+      }
     } catch (error) {
       console.error("Error fetching LLM", error);
       setSnackbar({
@@ -305,7 +322,22 @@ const LLMForm = () => {
   const saveLLM = async () => {
     // Remove plugins from the main LLM data since they're managed separately
     const { plugins, ...llmDataWithoutPlugins } = llm;
-    
+
+    // For Bedrock: pack AWS credentials into metadata and clear api_key
+    let metadata = llmDataWithoutPlugins.metadata || {};
+    if (llm.vendor === "bedrock") {
+      metadata = {
+        ...metadata,
+        aws_access_key_id: awsCreds.aws_access_key_id,
+        aws_secret_access_key: awsCreds.aws_secret_access_key,
+        aws_session_token: awsCreds.aws_session_token || undefined,
+      };
+      // Remove session token key entirely if empty
+      if (!metadata.aws_session_token) {
+        delete metadata.aws_session_token;
+      }
+    }
+
     const llmData = {
       data: {
         type: "LLM",
@@ -314,6 +346,7 @@ const LLMForm = () => {
           privacy_score: Number(llm.privacy_score),
           active: Boolean(llm.active),
           filters: llm.filters.map((filterId) => parseInt(filterId, 10)),
+          metadata: metadata,
         },
       },
     };
@@ -576,45 +609,107 @@ const LLMForm = () => {
               <Typography>Access Details</Typography>
             </AccordionSummary>
             <AccordionDetails>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Some LLMs do not require an API Key for access, or have a
-                default URL (for example Anthropic and OpenAI). If enabling an
-                LLM for the AI Gateway, the endpoint is required for proper
-                functioning.
-              </Typography>
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="API Endpoint"
-                    name="api_endpoint"
-                    value={llm.api_endpoint}
-                    onChange={handleChange}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="API Key"
-                    name="api_key"
-                    type={showApiKey ? "text" : "password"}
-                    value={llm.api_key}
-                    onChange={handleChange}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            edge="end"
-                          >
-                            {showApiKey ? <VisibilityOff /> : <Visibility />}
-                          </IconButton>
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-              </Grid>
+              {llm.vendor === "bedrock" ? (
+                <>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    AWS Bedrock requires an AWS region endpoint and IAM credentials.
+                    Credentials are stored securely and used to sign API requests with SigV4.
+                  </Typography>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Bedrock Endpoint"
+                        name="api_endpoint"
+                        value={llm.api_endpoint}
+                        onChange={handleChange}
+                        helperText="e.g., https://bedrock-runtime.us-east-1.amazonaws.com"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="AWS Access Key ID"
+                        value={awsCreds.aws_access_key_id}
+                        onChange={(e) => setAwsCreds({ ...awsCreds, aws_access_key_id: e.target.value })}
+                        placeholder="AKIA..."
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="AWS Secret Access Key"
+                        type={showAwsSecretKey ? "text" : "password"}
+                        value={awsCreds.aws_secret_access_key}
+                        onChange={(e) => setAwsCreds({ ...awsCreds, aws_secret_access_key: e.target.value })}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => setShowAwsSecretKey(!showAwsSecretKey)}
+                                edge="end"
+                              >
+                                {showAwsSecretKey ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="AWS Session Token (optional)"
+                        value={awsCreds.aws_session_token}
+                        onChange={(e) => setAwsCreds({ ...awsCreds, aws_session_token: e.target.value })}
+                        helperText="Required only for temporary credentials (assumed roles, SSO)"
+                      />
+                    </Grid>
+                  </Grid>
+                </>
+              ) : (
+                <>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Some LLMs do not require an API Key for access, or have a
+                    default URL (for example Anthropic and OpenAI). If enabling an
+                    LLM for the AI Gateway, the endpoint is required for proper
+                    functioning.
+                  </Typography>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="API Endpoint"
+                        name="api_endpoint"
+                        value={llm.api_endpoint}
+                        onChange={handleChange}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="API Key"
+                        name="api_key"
+                        type={showApiKey ? "text" : "password"}
+                        value={llm.api_key}
+                        onChange={handleChange}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => setShowApiKey(!showApiKey)}
+                                edge="end"
+                              >
+                                {showApiKey ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Grid>
+                  </Grid>
+                </>
+              )}
             </AccordionDetails>
           </StyledAccordion>
 
