@@ -223,7 +223,7 @@ func (h *MarketplaceHandlers) SyncMarketplace(c *gin.Context) {
 	// Run sync in background with a new context (not tied to HTTP request)
 	go func() {
 		ctx := context.Background()
-		if err := h.marketplaceService.SyncAll(ctx); err != nil {
+		if err := h.marketplaceService.SyncAll(ctx, true); err != nil {
 			log.Error().Err(err).Msg("Manual marketplace sync failed")
 		} else {
 			log.Info().Msg("Manual marketplace sync completed successfully")

@@ -62,7 +62,7 @@ func (s *MarketplaceService) Start(ctx context.Context) {
 		Msg("Starting marketplace service")
 
 	// Initial sync
-	if err := s.SyncAll(ctx); err != nil {
+	if err := s.SyncAll(ctx, false); err != nil {
 		log.Error().Err(err).Msg("Initial marketplace sync failed")
 	}
 
@@ -73,7 +73,7 @@ func (s *MarketplaceService) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			if err := s.SyncAll(ctx); err != nil {
+			if err := s.SyncAll(ctx, false); err != nil {
 				log.Error().Err(err).Msg("Marketplace sync failed")
 			}
 		case <-s.stopCh:
@@ -91,8 +91,9 @@ func (s *MarketplaceService) Stop() {
 	close(s.stopCh)
 }
 
-// SyncAll syncs all active marketplace indexes
-func (s *MarketplaceService) SyncAll(ctx context.Context) error {
+// SyncAll syncs all active marketplace indexes.
+// When forceRefresh is true, CDN caches are bypassed via cache-busting query params.
+func (s *MarketplaceService) SyncAll(ctx context.Context, forceRefresh bool) error {
 	log.Debug().Msg("Syncing all marketplace indexes")
 
 	indexes, err := models.GetAllActiveMarketplaceIndexes(s.db)
@@ -124,7 +125,7 @@ func (s *MarketplaceService) SyncAll(ctx context.Context) error {
 	// Sync each index
 	var lastErr error
 	for _, idx := range indexes {
-		if err := s.SyncIndex(ctx, idx); err != nil {
+		if err := s.SyncIndex(ctx, idx, forceRefresh); err != nil {
 			log.Error().
 				Err(err).
 				Str("source_url", idx.SourceURL).
@@ -142,8 +143,9 @@ func (s *MarketplaceService) SyncAll(ctx context.Context) error {
 	return lastErr
 }
 
-// SyncIndex syncs a single marketplace index
-func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.MarketplaceIndex) error {
+// SyncIndex syncs a single marketplace index.
+// When forceRefresh is true, CDN caches are bypassed via cache-busting query params.
+func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.MarketplaceIndex, forceRefresh bool) error {
 	startTime := time.Now()
 
 	log.Debug().
@@ -164,6 +166,7 @@ func (s *MarketplaceService) SyncIndex(ctx context.Context, idx *models.Marketpl
 		idx.SourceURL,
 		idx.ETag,
 		idx.LastModified,
+		forceRefresh,
 	)
 
 	if err != nil {

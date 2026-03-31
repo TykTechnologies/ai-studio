@@ -575,7 +575,7 @@ func TestMarketplaceService_SyncAll(t *testing.T) {
 		ms, db := setupMarketplaceTest(t)
 
 		// Note: This will fail to fetch from the real URL, but we can test the logic
-		err := ms.SyncAll(context.Background())
+		err := ms.SyncAll(context.Background(), false)
 		// Expected to fail fetching from fake URL
 		assert.Error(t, err)
 
@@ -591,7 +591,7 @@ func TestMarketplaceService_SyncAll(t *testing.T) {
 
 		ms := NewMarketplaceService(db, nil, nil, nil, "./cache", "", 1*time.Hour)
 
-		err := ms.SyncAll(context.Background())
+		err := ms.SyncAll(context.Background(), false)
 		// Should return nil when no indexes exist and no default URL
 		assert.NoError(t, err)
 	})
