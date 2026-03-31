@@ -411,7 +411,7 @@ func (w *pluginServerWrapper) Call(ctx context.Context, req *pb.CallRequest) (*p
 
 	return &pb.CallResponse{
 		Success: true,
-		Data:    string(response),
+		Data:    SanitizeUTF8(response),
 	}, nil
 }
 
@@ -464,7 +464,7 @@ func (w *pluginServerWrapper) PortalCall(ctx context.Context, req *pb.PortalCall
 
 	return &pb.PortalCallResponse{
 		Success: true,
-		Data:    string(response),
+		Data:    SanitizeUTF8(response),
 	}, nil
 }
 
