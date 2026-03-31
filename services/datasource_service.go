@@ -249,6 +249,20 @@ func (s *Service) GetDatasourceByID(id uint) (*models.Datasource, error) {
 	return datasource, nil
 }
 
+// GetDatasourceByIDResolved returns a datasource with all secret references
+// resolved to their actual values. Use this for internal operations (embedding,
+// vector store access) where the actual API keys are needed.
+func (s *Service) GetDatasourceByIDResolved(id uint) (*models.Datasource, error) {
+	datasource := models.NewDatasource()
+	if err := datasource.Get(s.DB, id); err != nil {
+		return nil, err
+	}
+
+	datasource.DBConnAPIKey = secrets.GetValue(datasource.DBConnAPIKey, false) // resolve actual value for internal use
+	datasource.EmbedAPIKey = secrets.GetValue(datasource.EmbedAPIKey, false)   // resolve actual value for internal use
+	return datasource, nil
+}
+
 func (s *Service) DeleteDatasource(id uint) error {
 	datasource, err := s.GetDatasourceByID(id)
 	if err != nil {
