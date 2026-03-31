@@ -161,6 +161,7 @@ func TestLLMServicePagination(t *testing.T) {
 			nil,
 			nil,
 			false,
+			nil,
 		)
 		assert.NoError(t, err)
 	}

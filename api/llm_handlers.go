@@ -62,6 +62,7 @@ func (a *API) createLLM(c *gin.Context) {
 			parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 			input.Data.Attributes.Namespace,
 			input.Data.Attributes.DontLogBodies,
+			models.JSONMap(input.Data.Attributes.Metadata),
 		)
 	} else {
 		llm, err = a.service.CreateLLM(
@@ -80,6 +81,7 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.MonthlyBudget,
 			parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 			input.Data.Attributes.DontLogBodies,
+			models.JSONMap(input.Data.Attributes.Metadata),
 		)
 	}
 	if err != nil {
@@ -90,20 +92,6 @@ func (a *API) createLLM(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
-	}
-
-	// Set metadata if provided (used by Bedrock for AWS credentials)
-	if input.Data.Attributes.Metadata != nil {
-		if err := a.service.UpdateLLMMetadata(llm.ID, models.JSONMap(input.Data.Attributes.Metadata)); err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: fmt.Sprintf("LLM created but failed to save metadata: %v", err)}},
-			})
-			return
-		}
-		llm.Metadata = models.JSONMap(input.Data.Attributes.Metadata)
 	}
 
 	if llm.Active {
@@ -222,6 +210,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 		input.Data.Attributes.Namespace,
 		input.Data.Attributes.DontLogBodies,
+		models.JSONMap(input.Data.Attributes.Metadata),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -231,20 +220,6 @@ func (a *API) updateLLM(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
-	}
-
-	// Set metadata if provided (used by Bedrock for AWS credentials)
-	if input.Data.Attributes.Metadata != nil {
-		if err := a.service.UpdateLLMMetadata(llm.ID, models.JSONMap(input.Data.Attributes.Metadata)); err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: fmt.Sprintf("LLM updated but failed to save metadata: %v", err)}},
-			})
-			return
-		}
-		llm.Metadata = models.JSONMap(input.Data.Attributes.Metadata)
 	}
 
 	// Reload proxy if:
@@ -614,8 +589,8 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 }
 
 // redactMetadataSecrets returns a copy of metadata with sensitive values redacted.
-// Keys containing "secret" or "token" are redacted to "[redacted]" in API responses,
-// while showing the $SECRET/ reference format if present.
+// Keys containing "secret", "token", or "key" are redacted to "[redacted]" in API
+// responses, while showing the $SECRET/ or $ENV/ reference format if present.
 func redactMetadataSecrets(metadata models.JSONMap) map[string]interface{} {
 	if metadata == nil {
 		return nil
@@ -623,7 +598,8 @@ func redactMetadataSecrets(metadata models.JSONMap) map[string]interface{} {
 	result := make(map[string]interface{}, len(metadata))
 	for k, v := range metadata {
 		if strVal, ok := v.(string); ok {
-			if strings.Contains(strings.ToLower(k), "secret") || strings.Contains(strings.ToLower(k), "token") {
+			lk := strings.ToLower(k)
+			if strings.Contains(lk, "secret") || strings.Contains(lk, "token") || strings.Contains(lk, "key") {
 				// Show $SECRET/ references as-is, redact plain values
 				if strings.HasPrefix(strVal, "$SECRET/") || strings.HasPrefix(strVal, "$ENV/") {
 					result[k] = strVal

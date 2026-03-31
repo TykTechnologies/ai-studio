@@ -643,10 +643,23 @@ const LLMForm = () => {
                       <TextField
                         fullWidth
                         label="AWS Secret Access Key"
+                        type={showAwsSecretKey ? "text" : "password"}
                         value={awsCreds.aws_secret_access_key}
                         onChange={(e) => setAwsCreds({ ...awsCreds, aws_secret_access_key: e.target.value })}
                         placeholder="$SECRET/aws-secret-access-key"
                         helperText="Recommended: use $SECRET/name to reference a stored secret rather than entering the key directly"
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => setShowAwsSecretKey(!showAwsSecretKey)}
+                                edge="end"
+                              >
+                                {showAwsSecretKey ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
                       />
                     </Grid>
                     <Grid item xs={12}>
