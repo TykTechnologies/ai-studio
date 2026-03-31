@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -10,23 +11,23 @@ import (
 // AnalyticsHandler defines the interface for analytics implementations
 type AnalyticsHandler interface {
 	// RecordChatRecord records LLM chat/proxy usage
-	RecordChatRecord(record *models.LLMChatRecord)
+	RecordChatRecord(ctx context.Context, record *models.LLMChatRecord)
 
 	// RecordChatLogEntry records detailed chat log entries
-	RecordChatLogEntry(log *models.LLMChatLogEntry)
+	RecordChatLogEntry(ctx context.Context, log *models.LLMChatLogEntry)
 
 	// RecordProxyLog records proxy request/response logs
-	RecordProxyLog(log *models.ProxyLog)
+	RecordProxyLog(ctx context.Context, log *models.ProxyLog)
 
 	// RecordToolCall records tool call execution
-	RecordToolCall(name string, timestamp time.Time, execTime int, toolID uint)
+	RecordToolCall(ctx context.Context, name string, timestamp time.Time, execTime int, toolID uint)
 
 	// SetAsGlobalHandler sets this handler as the global analytics handler
 	SetAsGlobalHandler()
 
 	// Batch processing methods for improved performance
-	RecordChatRecordsBatch(records []*models.LLMChatRecord)
-	RecordProxyLogsBatch(logs []*models.ProxyLog)
+	RecordChatRecordsBatch(ctx context.Context, records []*models.LLMChatRecord)
+	RecordProxyLogsBatch(ctx context.Context, logs []*models.ProxyLog)
 }
 
 var (

@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -19,13 +20,13 @@ type captureHandler struct {
 	lastChatLogEntry *models.LLMChatLogEntry
 }
 
-func (h *captureHandler) RecordProxyLog(log *models.ProxyLog)                { h.lastProxyLog = log }
-func (h *captureHandler) RecordChatLogEntry(log *models.LLMChatLogEntry)     { h.lastChatLogEntry = log }
-func (h *captureHandler) RecordChatRecord(record *models.LLMChatRecord)      {}
-func (h *captureHandler) RecordToolCall(name string, t time.Time, execTime int, toolID uint) {}
-func (h *captureHandler) SetAsGlobalHandler()                                { analytics.SetHandler(h) }
-func (h *captureHandler) RecordChatRecordsBatch(records []*models.LLMChatRecord) {}
-func (h *captureHandler) RecordProxyLogsBatch(logs []*models.ProxyLog)       {}
+func (h *captureHandler) RecordProxyLog(_ context.Context, log *models.ProxyLog)            { h.lastProxyLog = log }
+func (h *captureHandler) RecordChatLogEntry(_ context.Context, log *models.LLMChatLogEntry) { h.lastChatLogEntry = log }
+func (h *captureHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord)  {}
+func (h *captureHandler) RecordToolCall(_ context.Context, name string, t time.Time, execTime int, toolID uint) {}
+func (h *captureHandler) SetAsGlobalHandler()                                               { analytics.SetHandler(h) }
+func (h *captureHandler) RecordChatRecordsBatch(_ context.Context, records []*models.LLMChatRecord) {}
+func (h *captureHandler) RecordProxyLogsBatch(_ context.Context, logs []*models.ProxyLog)   {}
 
 // TestProxyLogBodySuppression_Unit is a synchronous unit test that verifies body
 // suppression at the ProxyLog construction level without relying on the async
@@ -86,7 +87,7 @@ func TestProxyLogBodySuppression_Unit(t *testing.T) {
 				l.ResponseBody = ""
 			}
 
-			analytics.RecordProxyLog(l)
+			analytics.RecordProxyLog(context.Background(), l)
 
 			assert.NotNil(t, handler.lastProxyLog)
 			if tt.wantReqEmpty {

@@ -114,7 +114,7 @@ func TestDatabaseHandler_Cancellation(t *testing.T) {
 
 	// This should not panic and should return immediately
 	assert.NotPanics(t, func() {
-		h.RecordChatRecord(&models.LLMChatRecord{Name: "test-record"})
+		h.RecordChatRecord(context.Background(), &models.LLMChatRecord{Name: "test-record"})
 	})
 
 	var count int64

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
@@ -518,6 +519,15 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusNotFound, fmt.Sprintf("[rest] LLM not found: %s", llmSlug), nil, false)
 		return
 	}
+
+	// Metrics: track in-flight requests and request duration
+	metrics.IncrementInflight(r.Context(), string(llm.Vendor))
+	requestStart := time.Now()
+	defer func() {
+		metrics.DecrementInflight(r.Context(), string(llm.Vendor))
+		metrics.ObserveRequestDuration(r.Context(), string(llm.Vendor), llm.Name, false, time.Since(requestStart).Seconds())
+	}()
+
 	reqBody, err := helpers.CopyRequestBody(r)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err, false)
@@ -534,12 +544,14 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
+		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
 		// Error body for analytics should be constructed carefully if needed
 		go p.analyzeResponse(llm, app, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, r)
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded", err, false)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
+		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
 		go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
@@ -622,6 +634,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 				logger.Errorf("Response filter execution failed: %v", err)
 				// Fail open on error - allow response through
 			} else if blocked {
+				metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
 				// Response was blocked by filter - return error instead
 				respondWithError(w, http.StatusBadRequest, blockMsg, nil, false)
 				// Log with 400 status and include both the block reason and original LLM response for audit trail
@@ -806,11 +819,11 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 	result, err := p.gatewayService.CallToolOperation(tool.ID, input.OperationID, input.Parameters, input.Payload, input.Headers)
 	t1 := time.Now()
 	if err != nil {
-		analytics.RecordToolCall(input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
+		analytics.RecordToolCall(r.Context(), input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
 		respondWithError(w, http.StatusInternalServerError, "failed to call tool operation", err, false)
 		return
 	}
-	analytics.RecordToolCall(input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
+	analytics.RecordToolCall(r.Context(), input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if str, ok := result.(string); ok && (strings.HasPrefix(str, "{") || strings.HasPrefix(str, "[")) {
@@ -1071,6 +1084,15 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusNotFound, "[streaming] LLM not found", nil, false)
 		return
 	}
+
+	// Metrics: track in-flight requests and request duration
+	metrics.IncrementInflight(r.Context(), string(llm.Vendor))
+	streamingRequestStart := time.Now()
+	defer func() {
+		metrics.DecrementInflight(r.Context(), string(llm.Vendor))
+		metrics.ObserveRequestDuration(r.Context(), string(llm.Vendor), llm.Name, true, time.Since(streamingRequestStart).Seconds())
+	}()
+
 	reqBody, err := helpers.CopyRequestBody(r)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to read streaming request body", err, false)
@@ -1087,11 +1109,13 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
+		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
 		go p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded for streaming", err, false)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
+		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
 		go p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
@@ -1198,6 +1222,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					logger.Errorf("Response filter execution error on chunk %d: %v", chunkIndex, filterErr)
 					// Fail open on error - continue streaming
 				} else if blocked {
+					metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
 					// Response blocked mid-stream - send error chunk and stop
 					logger.Warnf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
 					errorChunk := []byte(fmt.Sprintf(`{"error":"Response blocked by filter: %s"}`, blockMsg))
@@ -1840,6 +1865,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 			if err != nil {
 				// Record failed tool call
 				analytics.RecordToolCall(
+					ctx,
 					operationID,
 					time.Now(),
 					int(t1.Sub(t0).Milliseconds()),
@@ -1850,6 +1876,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 
 			// Record successful tool call
 			analytics.RecordToolCall(
+				ctx,
 				operationID,
 				time.Now(),
 				int(t1.Sub(t0).Milliseconds()),

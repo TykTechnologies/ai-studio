@@ -96,6 +96,7 @@ type RouterConfig struct {
 	ModelRouterService        *services.ModelRouterService // Enterprise: Model router service
 	EnableSwagger             bool
 	EnableMetrics             bool
+	MetricsHandler            http.Handler
 	PluginEndpointMaxBodySize    int64         // Max request body for custom plugin endpoints (default 1MB)
 	PluginEndpointStreamTimeout time.Duration // Timeout for streaming plugin endpoints (default 5m)
 	Version                     string
@@ -298,8 +299,8 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 	}
 
 	// Metrics endpoint if enabled
-	if config.EnableMetrics {
-		router.GET("/metrics", handlers.PrometheusMetrics())
+	if config.EnableMetrics && config.MetricsHandler != nil {
+		router.GET("/metrics", gin.WrapH(config.MetricsHandler))
 	}
 
 	// Swagger documentation if enabled

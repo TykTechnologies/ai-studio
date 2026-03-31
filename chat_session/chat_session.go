@@ -1510,6 +1510,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			toolResult.Parts = append(toolResult.Parts, toolResp)
 
 			analytics.RecordToolCall(
+				context.Background(),
 				t.FunctionCall.Name,
 				time.Now(),
 				int(t1.Sub(t0).Milliseconds()), toolDef.ID)

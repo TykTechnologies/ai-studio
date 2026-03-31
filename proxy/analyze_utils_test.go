@@ -168,7 +168,7 @@ func TestAnalyzeCompletionResponse_Currency(t *testing.T) {
 			req = req.WithContext(ctx)
 
 			// Run the test
-			AnalyzeCompletionResponse(mockService, llm, app, response, req, time.Now())
+			AnalyzeCompletionResponse(mockService, llm, app, response, req.Context(), req, time.Now())
 
 			// Wait for and verify the record
 			record, err := waitForRecord[models.LLMChatRecord](db, "currency = ?", tt.expectedCurrency)
