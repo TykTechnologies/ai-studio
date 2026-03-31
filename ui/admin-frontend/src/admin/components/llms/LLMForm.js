@@ -615,7 +615,8 @@ const LLMForm = () => {
                 <>
                   <Typography variant="body2" color="text.secondary" paragraph>
                     AWS Bedrock requires an AWS region endpoint and IAM credentials.
-                    Credentials are stored securely and used to sign API requests with SigV4.
+                    For security, store sensitive credentials using the Secrets Manager
+                    and reference them here as <strong>$SECRET/your-secret-name</strong> or <strong>$ENV/YOUR_ENV_VAR</strong>.
                   </Typography>
                   <Grid container spacing={3}>
                     <Grid item xs={12}>
@@ -634,28 +635,18 @@ const LLMForm = () => {
                         label="AWS Access Key ID"
                         value={awsCreds.aws_access_key_id}
                         onChange={(e) => setAwsCreds({ ...awsCreds, aws_access_key_id: e.target.value })}
-                        placeholder="AKIA..."
+                        placeholder="AKIA... or $SECRET/aws-access-key-id"
+                        helperText="Enter directly or use $SECRET/name to reference a stored secret"
                       />
                     </Grid>
                     <Grid item xs={12}>
                       <TextField
                         fullWidth
                         label="AWS Secret Access Key"
-                        type={showAwsSecretKey ? "text" : "password"}
                         value={awsCreds.aws_secret_access_key}
                         onChange={(e) => setAwsCreds({ ...awsCreds, aws_secret_access_key: e.target.value })}
-                        InputProps={{
-                          endAdornment: (
-                            <InputAdornment position="end">
-                              <IconButton
-                                onClick={() => setShowAwsSecretKey(!showAwsSecretKey)}
-                                edge="end"
-                              >
-                                {showAwsSecretKey ? <VisibilityOff /> : <Visibility />}
-                              </IconButton>
-                            </InputAdornment>
-                          ),
-                        }}
+                        placeholder="$SECRET/aws-secret-access-key"
+                        helperText="Recommended: use $SECRET/name to reference a stored secret rather than entering the key directly"
                       />
                     </Grid>
                     <Grid item xs={12}>
@@ -664,7 +655,8 @@ const LLMForm = () => {
                         label="AWS Session Token (optional)"
                         value={awsCreds.aws_session_token}
                         onChange={(e) => setAwsCreds({ ...awsCreds, aws_session_token: e.target.value })}
-                        helperText="Required only for temporary credentials (assumed roles, SSO)"
+                        placeholder="$SECRET/aws-session-token"
+                        helperText="Required only for temporary credentials (assumed roles, SSO). Use $SECRET/name for secure storage."
                       />
                     </Grid>
                   </Grid>
