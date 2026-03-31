@@ -71,7 +71,7 @@ func TestProxy_Reload(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		_, err = service.CreateLLM("Reload LLM", "Test LLM", "gpt-4", 5, "", "", "", models.OPENAI, true, nil, "", nil, nil, nil, false)
+		_, err = service.CreateLLM("Reload LLM", "Test LLM", "gpt-4", 5, "", "", "", models.OPENAI, true, nil, "", nil, nil, nil, false, nil)
 		assert.NoError(t, err)
 
 		// Reload proxy

@@ -31,8 +31,12 @@ const vendorData = {
     logo: "/logos/ollama.png",
     requiresAccessDetails: false,
   },
-
-  // Add more vendors as needed
+  bedrock: {
+    name: "AWS Bedrock",
+    logo: "/logos/aws-bedrock.svg",
+    requiresAccessDetails: true,
+    defaultEndpoint: "https://bedrock-runtime.us-east-1.amazonaws.com",
+  },
 };
 
 export const getVendorName = (vendorCode) =>

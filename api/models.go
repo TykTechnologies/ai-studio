@@ -116,10 +116,11 @@ type LLMInput struct {
 			Filters          []uint   `json:"filters"`
 			DefaultModel     string   `json:"default_model"`
 			AllowedModels    []string `json:"allowed_models"`
-			MonthlyBudget    *float64 `json:"monthly_budget"`
-			BudgetStartDate  *string  `json:"budget_start_date"`
-			Namespace        string   `json:"namespace,omitempty"`
-			DontLogBodies    bool     `json:"dont_log_bodies"`
+			MonthlyBudget    *float64               `json:"monthly_budget"`
+			BudgetStartDate  *string                `json:"budget_start_date"`
+			Namespace        string                 `json:"namespace,omitempty"`
+			DontLogBodies    bool                   `json:"dont_log_bodies"`
+			Metadata         map[string]interface{} `json:"metadata,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -167,9 +168,10 @@ type LLMResponse struct {
 		AllowedModels    []string         `json:"allowed_models"`
 		MonthlyBudget    *float64         `json:"monthly_budget"`
 		BudgetStartDate  *time.Time       `json:"budget_start_date"`
-		Namespace        string           `json:"namespace"`
-		DontLogBodies    bool             `json:"dont_log_bodies"`
-		Plugins          []PluginResponse `json:"plugins"`
+		Namespace        string                 `json:"namespace"`
+		DontLogBodies    bool                   `json:"dont_log_bodies"`
+		Plugins          []PluginResponse       `json:"plugins"`
+		Metadata         map[string]interface{} `json:"metadata,omitempty"`
 	} `json:"attributes"`
 }
 

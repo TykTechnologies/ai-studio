@@ -15,6 +15,21 @@ import (
 // This matches the value used by secrets.FilterSensitiveFields() for consistency
 const REDACTED_VALUE = "[redacted]"
 
+// resolveMetadataSecrets resolves $SECRET/ and $ENV/ references in LLM Metadata string values.
+// When preserveRef is true, references are preserved (for API responses); when false, they are
+// resolved to actual values (for internal use by vendor drivers).
+func resolveMetadataSecrets(metadata models.JSONMap, preserveRef bool) models.JSONMap {
+	if metadata == nil {
+		return nil
+	}
+	for key, val := range metadata {
+		if strVal, ok := val.(string); ok {
+			metadata[key] = secrets.GetValue(strVal, preserveRef)
+		}
+	}
+	return metadata
+}
+
 func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	llm := models.NewLLM()
 	if err := llm.Get(s.DB, id); err != nil {
@@ -23,6 +38,7 @@ func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 
 	llm.APIKey = secrets.GetValue(llm.APIKey, true) // preserve reference for API responses
 	llm.APIEndpoint = secrets.GetValue(llm.APIEndpoint, true)
+	llm.Metadata = resolveMetadataSecrets(llm.Metadata, true)
 	return llm, nil
 }
 
@@ -30,7 +46,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 	shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time, dontLogBodies bool) (*models.LLM, error) {
+	budgetStartDate *time.Time, dontLogBodies bool, metadata models.JSONMap) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -48,6 +64,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 		BudgetStartDate:  budgetStartDate,
 		Namespace:        "", // Default to global namespace
 		DontLogBodies:    dontLogBodies,
+		Metadata:         metadata,
 	}
 
 	// Execute "before_create" hooks
@@ -119,7 +136,7 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 	shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time, namespace string, dontLogBodies bool) (*models.LLM, error) {
+	budgetStartDate *time.Time, namespace string, dontLogBodies bool, metadata models.JSONMap) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -137,6 +154,7 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 		BudgetStartDate:  budgetStartDate,
 		Namespace:        namespace,
 		DontLogBodies:    dontLogBodies,
+		Metadata:         metadata,
 	}
 
 	// Execute "before_create" hooks
@@ -207,7 +225,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	privacyScore int, shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time, namespace string, dontLogBodies bool) (*models.LLM, error) {
+	budgetStartDate *time.Time, namespace string, dontLogBodies bool, metadata models.JSONMap) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -238,6 +256,9 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	llm.BudgetStartDate = budgetStartDate
 	llm.Namespace = namespace
 	llm.DontLogBodies = dontLogBodies
+	if metadata != nil {
+		llm.Metadata = metadata
+	}
 
 	// Execute "before_update" hooks
 	if s.HookManager != nil {
@@ -381,6 +402,12 @@ func (s *Service) IsModelAllowed(id uint, modelName string) (bool, error) {
 	return false, nil
 }
 
+// UpdateLLMMetadata updates only the metadata field of an LLM.
+// Used by the API to persist vendor-specific configuration (e.g., AWS credentials for Bedrock).
+func (s *Service) UpdateLLMMetadata(id uint, metadata models.JSONMap) error {
+	return s.DB.Model(&models.LLM{}).Where("id = ?", id).Update("metadata", metadata).Error
+}
+
 // The following functions remain unchanged
 func (s *Service) DeleteLLM(id uint) error {
 	llm, err := s.GetLLMByID(id)
@@ -463,6 +490,7 @@ func (s *Service) GetActiveLLMs() ([]models.LLM, error) {
 	for i := range llms {
 		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false) // false to resolve the actual value
 		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+		llms[i].Metadata = resolveMetadataSecrets(llms[i].Metadata, false)
 	}
 
 	return []models.LLM(llms), nil
@@ -496,6 +524,7 @@ func (s *Service) GetLLMsInNamespace(namespace string) ([]models.LLM, error) {
 	for i := range llms {
 		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)
 		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+		llms[i].Metadata = resolveMetadataSecrets(llms[i].Metadata, false)
 	}
 
 	return []models.LLM(llms), nil
@@ -521,6 +550,7 @@ func (s *Service) GetActiveLLMsInNamespace(namespace string) ([]models.LLM, erro
 	for i := range llms {
 		llms[i].APIKey = secrets.GetValue(llms[i].APIKey, false)
 		llms[i].APIEndpoint = secrets.GetValue(llms[i].APIEndpoint, false)
+		llms[i].Metadata = resolveMetadataSecrets(llms[i].Metadata, false)
 	}
 
 	return []models.LLM(llms), nil

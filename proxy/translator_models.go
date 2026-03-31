@@ -410,15 +410,15 @@ func NewChatCompletionResponse(llmResponse *llms.ContentResponse, model string) 
 
 // Helper to convert finish reasons
 func convertFinishReason(reason string) string {
-	// Map langchaingo stop reasons to OpenAI format
+	// Map langchaingo/vendor stop reasons to OpenAI format
 	switch reason {
-	case "stop":
+	case "stop", "end_turn":
 		return "stop"
-	case "length":
+	case "length", "max_tokens":
 		return "length"
-	case "tool_calls":
+	case "tool_calls", "tool_use":
 		return "tool_calls"
-	case "content_filter":
+	case "content_filter", "content_filtered":
 		return "content_filter"
 	default:
 		return "stop"

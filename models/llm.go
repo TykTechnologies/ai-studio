@@ -44,6 +44,7 @@ const (
 	GOOGLEAI    Vendor = "google_ai"
 	HUGGINGFACE Vendor = "huggingface"
 	OLLAMA      Vendor = "ollama"
+	BEDROCK     Vendor = "bedrock"
 	MOCK_VENDOR Vendor = "mock"
 )
 

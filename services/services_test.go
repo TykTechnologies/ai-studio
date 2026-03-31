@@ -833,7 +833,7 @@ func TestLLMService(t *testing.T) {
 	service := NewService(db)
 
 	// Test CreateLLM
-	llm, err := service.CreateLLM("TestLLM", "test-api-key", "https://api.test.com", 75, "Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
+	llm, err := service.CreateLLM("TestLLM", "test-api-key", "https://api.test.com", 75, "Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, llm)
 	assert.NotZero(t, llm.ID)
@@ -858,7 +858,7 @@ func TestLLMService(t *testing.T) {
 
 	// Test UpdateLLM
 	updatedLLM, err := service.UpdateLLM(llm.ID, "UpdatedLLM", "updated-api-key", "https://updated-api.test.com", 80,
-		"Updated short", "Updated long", "https://updated-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "", false)
+		"Updated short", "Updated long", "https://updated-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, "", false, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "UpdatedLLM", updatedLLM.Name)
 	assert.Equal(t, "updated-api-key", updatedLLM.APIKey)
@@ -895,9 +895,9 @@ func TestLLMService(t *testing.T) {
 	assert.Error(t, err)
 
 	// Test creating multiple LLMs and searching
-	llm1, _ := service.CreateLLM("GPT-3", "key1", "https://api1.com", 70, "GPT-3 short", "GPT-3 long", "https://gpt3-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
-	llm2, _ := service.CreateLLM("GPT-4", "key2", "https://api2.com", 85, "GPT-4 short", "GPT-4 long", "https://gpt4-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
-	service.CreateLLM("BERT", "key3", "https://api3.com", 60, "BERT short", "BERT long", "https://bert-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
+	llm1, _ := service.CreateLLM("GPT-3", "key1", "https://api1.com", 70, "GPT-3 short", "GPT-3 long", "https://gpt3-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false, nil)
+	llm2, _ := service.CreateLLM("GPT-4", "key2", "https://api2.com", 85, "GPT-4 short", "GPT-4 long", "https://gpt4-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false, nil)
+	service.CreateLLM("BERT", "key3", "https://api3.com", 60, "BERT short", "BERT long", "https://bert-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false, nil)
 
 	allLLMs, _, _, err = service.GetAllLLMs(10, 1, true)
 	assert.NoError(t, err)
@@ -1057,7 +1057,7 @@ func TestCatalogueService(t *testing.T) {
 	assert.Equal(t, "Updated Catalogue", searchedCatalogues[0].Name)
 
 	// Test AddLLMToCatalogue
-	llm, err := service.CreateLLM("TestLLM", "test-api-key", "https://api.test.com", 70, "Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
+	llm, err := service.CreateLLM("TestLLM", "test-api-key", "https://api.test.com", 70, "Short desc", "Long desc", "https://logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false, nil)
 	assert.NoError(t, err)
 
 	err = service.AddLLMToCatalogue(llm.ID, catalogue.ID)
@@ -1112,8 +1112,8 @@ func TestCatalogueService_MultipleCatalogues(t *testing.T) {
 	assert.Equal(t, catalogue2.ID, mlCatalogues[0].ID)
 
 	// Test adding multiple LLMs to a catalogue
-	llm1, _ := service.CreateLLM("GPT-3", "key1", "https://api1.com", 80, "GPT-3 short", "GPT-3 long", "https://gpt3-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
-	llm2, _ := service.CreateLLM("BERT", "key2", "https://api2.com", 70, "BERT short", "BERT long", "https://bert-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false)
+	llm1, _ := service.CreateLLM("GPT-3", "key1", "https://api1.com", 80, "GPT-3 short", "GPT-3 long", "https://gpt3-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false, nil)
+	llm2, _ := service.CreateLLM("BERT", "key2", "https://api2.com", 70, "BERT short", "BERT long", "https://bert-logo.com", models.OPENAI, true, nil, "", []string{}, nil, nil, false, nil)
 
 	err = service.AddLLMToCatalogue(llm1.ID, catalogue3.ID)
 	assert.NoError(t, err)
@@ -1420,28 +1420,28 @@ func TestSmartAPIKeyUpdateLogic(t *testing.T) {
 		// Create an LLM with an initial API key
 		llm, err := service.CreateLLM("Test LLM", "initial-api-key", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
-			"gpt-4", []string{}, nil, nil, false)
+			"gpt-4", []string{}, nil, nil, false, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "initial-api-key", llm.APIKey)
 
 		// Test 1: Update with [redacted] should preserve existing key
 		updatedLLM1, err := service.UpdateLLM(llm.ID, "Test LLM", "[redacted]", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
-			"gpt-4", []string{}, nil, nil, "", false)
+			"gpt-4", []string{}, nil, nil, "", false, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "initial-api-key", updatedLLM1.APIKey, "API key should be preserved when [redacted] is sent")
 
 		// Test 2: Update with empty string should clear the key
 		updatedLLM2, err := service.UpdateLLM(llm.ID, "Test LLM", "", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
-			"gpt-4", []string{}, nil, nil, "", false)
+			"gpt-4", []string{}, nil, nil, "", false, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "", updatedLLM2.APIKey, "API key should be cleared when empty string is sent")
 
 		// Test 3: Update with new key should update the key
 		updatedLLM3, err := service.UpdateLLM(llm.ID, "Test LLM", "new-api-key", "https://api.test.com", 75,
 			"Short desc", "Long desc", "logo.png", models.OPENAI, true, nil,
-			"gpt-4", []string{}, nil, nil, "", false)
+			"gpt-4", []string{}, nil, nil, "", false, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, "new-api-key", updatedLLM3.APIKey, "API key should be updated when new value is sent")
 	})

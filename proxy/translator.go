@@ -142,6 +142,16 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Bedrock uses direct AWS SDK calls (no internal routing)
+	if conf.Vendor == models.BEDROCK {
+		if req.Stream != nil && *req.Stream {
+			p.handleBedrockChatCompletionStream(w, r, conf, &req, reqBody)
+		} else {
+			p.handleBedrockChatCompletion(w, r, conf, &req, reqBody)
+		}
+		return
+	}
+
 	// Handle streaming if requested
 	if req.Stream != nil && *req.Stream {
 		// Fall back to non-streaming if tools are present (tool streaming is complex)

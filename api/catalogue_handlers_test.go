@@ -102,27 +102,29 @@ func TestCatalogueEndpoints(t *testing.T) {
 				MonthlyBudget    *float64 `json:"monthly_budget"`
 				BudgetStartDate  *string  `json:"budget_start_date"`
 				Namespace        string   `json:"namespace,omitempty"`
-				DontLogBodies    bool     `json:"dont_log_bodies"`
+				DontLogBodies    bool                   `json:"dont_log_bodies"`
+				Metadata         map[string]interface{} `json:"metadata,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
 			Attributes: struct {
-				Name             string   `json:"name"`
-				APIKey           string   `json:"api_key"`
-				APIEndpoint      string   `json:"api_endpoint"`
-				PrivacyScore     int      `json:"privacy_score"`
-				ShortDescription string   `json:"short_description"`
-				LongDescription  string   `json:"long_description"`
-				LogoURL          string   `json:"logo_url"`
-				Vendor           string   `json:"vendor"`
-				Active           bool     `json:"active"`
-				Filters          []uint   `json:"filters"`
-				DefaultModel     string   `json:"default_model"`
-				AllowedModels    []string `json:"allowed_models"`
-				MonthlyBudget    *float64 `json:"monthly_budget"`
-				BudgetStartDate  *string  `json:"budget_start_date"`
-				Namespace        string   `json:"namespace,omitempty"`
-				DontLogBodies    bool     `json:"dont_log_bodies"`
+				Name             string                 `json:"name"`
+				APIKey           string                 `json:"api_key"`
+				APIEndpoint      string                 `json:"api_endpoint"`
+				PrivacyScore     int                    `json:"privacy_score"`
+				ShortDescription string                 `json:"short_description"`
+				LongDescription  string                 `json:"long_description"`
+				LogoURL          string                 `json:"logo_url"`
+				Vendor           string                 `json:"vendor"`
+				Active           bool                   `json:"active"`
+				Filters          []uint                 `json:"filters"`
+				DefaultModel     string                 `json:"default_model"`
+				AllowedModels    []string               `json:"allowed_models"`
+				MonthlyBudget    *float64               `json:"monthly_budget"`
+				BudgetStartDate  *string                `json:"budget_start_date"`
+				Namespace        string                 `json:"namespace,omitempty"`
+				DontLogBodies    bool                   `json:"dont_log_bodies"`
+				Metadata         map[string]interface{} `json:"metadata,omitempty"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",
