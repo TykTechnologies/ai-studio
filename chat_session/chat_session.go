@@ -16,6 +16,7 @@ import (
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -157,6 +158,10 @@ func (cs *ChatSession) AddDatasource(id uint) error {
 	if !entitlements.HasDataSourceAccess(ds.ID) {
 		return fmt.Errorf("user does not have access to datasource %s", ds.Name)
 	}
+
+	// Resolve secret references for embedding and DB connection API keys
+	ds.EmbedAPIKey = secrets.GetValue(ds.EmbedAPIKey, false)
+	ds.DBConnAPIKey = secrets.GetValue(ds.DBConnAPIKey, false)
 
 	cs.datasources[id] = &ds
 
