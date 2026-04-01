@@ -896,7 +896,8 @@ stop-dev:
 #   make dev-ent      - Start enterprise dev env
 #   make dev-full-ent - Start full enterprise stack
 #
-# All services have hot reloading enabled via Air (Go) and React HMR (frontend).
+# Go services rebuild on container restart. Use 'make dev-restart-<service>' to rebuild.
+# Frontend uses React HMR for live updates.
 
 .PHONY: dev dev-full dev-ent dev-full-ent dev-down dev-logs dev-clean dev-status dev-rebuild
 
@@ -1011,9 +1012,13 @@ dev-logs-%:
 dev-shell-%:
 	cd dev && docker compose exec $* sh
 
-# Rebuild a specific service (usage: make dev-rebuild-studio)
+# Rebuild a specific service's Docker image (usage: make dev-rebuild-studio)
 dev-rebuild-%:
 	cd dev && docker compose up --build -d $*
+
+# Restart a service to trigger a code rebuild (usage: make dev-restart-studio)
+dev-restart-%:
+	cd dev && docker compose restart $*
 
 # Clean development environment (stops containers and removes volumes including postgres data)
 dev-clean: dev-down

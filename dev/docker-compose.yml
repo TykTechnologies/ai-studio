@@ -2,7 +2,7 @@
 #
 # This compose file provides a minimal development setup with:
 #   - PostgreSQL database
-#   - AI Studio backend (with hot reloading via Air)
+#   - AI Studio backend (rebuild on container restart)
 #   - React frontend (with HMR)
 #
 # Usage:
@@ -11,7 +11,7 @@
 #
 # Services:
 #   - postgres:  PostgreSQL 17 database (port 5432)
-#   - studio:    AI Studio backend with Air hot reload (ports 8080, 9090, 50051)
+#   - studio:    AI Studio backend (ports 8080, 9090, 50051)
 #   - frontend:  React development server (port 3000)
 #
 # For full stack with Gateway, use:
@@ -38,7 +38,7 @@ services:
     networks:
       - midsommar-dev
 
-  # AI Studio - Control Plane (with Air hot reloading)
+  # AI Studio - Control Plane (rebuild on container restart)
   studio:
     build:
       context: ..
@@ -46,12 +46,25 @@ services:
       args:
         EDITION: ${EDITION:-ce}
     container_name: midsommar-studio
+    command: >
+      sh -c '
+        echo "Building AI Studio...";
+        if [ "$$EDITION" = "ent" ] && [ -d /app/enterprise ]; then
+          echo "Building Enterprise Edition...";
+          CGO_ENABLED=1 go build -tags enterprise -o /app/tmp/studio . || exit 1;
+        else
+          echo "Building Community Edition...";
+          CGO_ENABLED=1 go build -o /app/tmp/studio . || exit 1;
+        fi;
+        echo "Starting AI Studio...";
+        exec /app/tmp/studio -env=/app/dev/.env
+      '
     volumes:
-      # Mount source code for hot reloading
+      # Mount source code
       - ..:/app
       # Preserve node_modules to avoid conflicts with host
       - /app/ui/admin-frontend/node_modules
-      # Separate tmp directory for Air builds
+      # Separate tmp directory for builds
       - studio_tmp:/app/tmp
       # Share Go module cache between containers
       - go_cache:/root/go/pkg/mod

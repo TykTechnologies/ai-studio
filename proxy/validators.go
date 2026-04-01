@@ -103,3 +103,31 @@ func HuggingFaceValidator(r *http.Request) (string, error) {
 
 	return split[1], nil
 }
+
+// BedrockValidator extracts the gateway app API key from the AWS SigV4 Authorization header.
+// Clients set their gateway app API key as the AWS_ACCESS_KEY_ID; the gateway extracts it
+// from the Credential field of the SigV4 header.
+// Format: AWS4-HMAC-SHA256 Credential=ACCESS_KEY_ID/date/region/service/aws4_request, ...
+func BedrockValidator(r *http.Request) (string, error) {
+	h := r.Header.Get("Authorization")
+	if h == "" {
+		return "", fmt.Errorf("missing Authorization header")
+	}
+	if !strings.HasPrefix(h, "AWS4-HMAC-SHA256 ") {
+		return "", fmt.Errorf("invalid Authorization header: expected AWS4-HMAC-SHA256 signature")
+	}
+	credIdx := strings.Index(h, "Credential=")
+	if credIdx == -1 {
+		return "", fmt.Errorf("missing Credential in Authorization header")
+	}
+	credVal := h[credIdx+len("Credential="):]
+	slashIdx := strings.Index(credVal, "/")
+	if slashIdx == -1 {
+		return "", fmt.Errorf("malformed Credential in Authorization header")
+	}
+	accessKeyID := credVal[:slashIdx]
+	if accessKeyID == "" {
+		return "", fmt.Errorf("empty Access Key ID in Authorization header")
+	}
+	return accessKeyID, nil
+}

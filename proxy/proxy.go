@@ -211,6 +211,7 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	val.RegisterValidator(strings.ToLower(string(models.VERTEX)), VertexValidator)
 	val.RegisterValidator(strings.ToLower(string(models.HUGGINGFACE)), HuggingFaceValidator)
 	val.RegisterValidator(strings.ToLower(string(models.OLLAMA)), OpenAIValidator)
+	val.RegisterValidator(strings.ToLower(string(models.BEDROCK)), BedrockValidator)
 	val.RegisterValidator(strings.ToLower(string(models.MOCK_VENDOR)), MockValidator)
 	val.RegisterValidator("dummy", DummyValidator)
 	p.credValidator = val
@@ -222,6 +223,7 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 	modelVal.RegisterExtractor(strings.ToLower(string(models.VERTEX)), VertexModelExtractor)
 	modelVal.RegisterExtractor(strings.ToLower(string(models.HUGGINGFACE)), HuggingFaceModelExtractor)
 	modelVal.RegisterExtractor(strings.ToLower(string(models.OLLAMA)), OpenAIModelExtractor)
+	modelVal.RegisterExtractor(strings.ToLower(string(models.BEDROCK)), BedrockModelExtractor)
 	modelVal.RegisterExtractor(strings.ToLower(string(models.MOCK_VENDOR)), OpenAIModelExtractor)
 	p.modelValidator = modelVal
 

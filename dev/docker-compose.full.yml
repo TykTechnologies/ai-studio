@@ -1,7 +1,7 @@
 # Tyk AI Studio - Full Development Environment
 #
 # This compose file extends the minimal setup with:
-#   - Microgateway (edge proxy with hot reloading)
+#   - Microgateway (edge proxy, rebuild on container restart)
 #   - Plugin watcher (auto-rebuilds plugins on change)
 #
 # Usage:
@@ -18,7 +18,7 @@ services:
     volumes:
       - plugin_builds:/app/bin/plugins
 
-  # Microgateway - Edge Proxy (with Air hot reloading)
+  # Microgateway - Edge Proxy (rebuild on container restart)
   gateway:
     build:
       context: ..
@@ -26,8 +26,20 @@ services:
       args:
         EDITION: ${EDITION:-ce}
     container_name: midsommar-gateway
-    # Override command to use gateway Air config
-    command: ["air", "-c", "/app/dev/air/.air.gateway.toml"]
+    command: >
+      sh -c '
+        echo "Building Microgateway...";
+        mkdir -p /app/tmp/gateway;
+        if [ "$$EDITION" = "ent" ] && [ -d /app/enterprise ]; then
+          echo "Building Microgateway (Enterprise)...";
+          cd /app/microgateway && CGO_ENABLED=1 go build -tags enterprise -o /app/tmp/gateway/microgateway ./cmd/microgateway || exit 1;
+        else
+          echo "Building Microgateway (Community)...";
+          cd /app/microgateway && CGO_ENABLED=1 go build -o /app/tmp/gateway/microgateway ./cmd/microgateway || exit 1;
+        fi;
+        echo "Starting Microgateway...";
+        exec /app/tmp/gateway/microgateway -env=/app/dev/.env.gateway
+      '
     volumes:
       # Mount source code
       - ..:/app
@@ -85,39 +97,52 @@ services:
         echo '  - tyk-internal/plugins/ (if present)';
         echo '';
 
-        build_plugins() {
-          echo 'Building all plugins...';
+        # Build a single plugin given its go.mod directory
+        build_one_plugin() {
+          plugin_dir=\"\$$1\";
+          plugin_name=\$$(basename \"\$$plugin_dir\");
+          if [ \"\$$plugin_name\" = 'server' ]; then
+            plugin_name=\$$(basename \$$(dirname \"\$$plugin_dir\"));
+          fi;
+          if echo \"\$$plugin_dir\" | grep -q 'enterprise/'; then
+            build_tags='-tags enterprise';
+          else
+            build_tags='';
+          fi;
+          echo \"Building: \$$plugin_name\";
+          mkdir -p /app/bin/plugins;
+          (cd \"\$$plugin_dir\" && CGO_ENABLED=0 go build \$$build_tags -o /app/bin/plugins/\$$plugin_name .) && echo \"  ✓ \$$plugin_name\" || echo \"  ✗ \$$plugin_name\";
+        };
 
-          # Build from all plugin directories that exist
+        build_all_plugins() {
+          echo 'Building all plugins...';
           for plugin_root in examples/plugins community/plugins enterprise/plugins tyk-internal/plugins; do
             if [ -d \"\$$plugin_root\" ]; then
               echo \"Scanning \$$plugin_root...\";
               find \"\$$plugin_root\" -name 'go.mod' 2>/dev/null | while read modfile; do
-                plugin_dir=\$$(dirname \"\$$modfile\");
-                plugin_name=\$$(basename \"\$$plugin_dir\");
-                # If go.mod is in a 'server' subdir, use parent dir name instead
-                if [ \"\$$plugin_name\" = 'server' ]; then
-                  plugin_name=\$$(basename \$$(dirname \"\$$plugin_dir\"));
-                fi;
-                # Enterprise plugins need -tags enterprise
-                if echo \"\$$plugin_dir\" | grep -q 'enterprise/'; then
-                  build_tags='-tags enterprise';
-                else
-                  build_tags='';
-                fi;
-                echo \"Building: \$$plugin_name\";
-                mkdir -p /app/bin/plugins;
-                (cd \"\$$plugin_dir\" && CGO_ENABLED=0 go build \$$build_tags -o /app/bin/plugins/\$$plugin_name .) && echo \"  ✓ \$$plugin_name\" || echo \"  ✗ \$$plugin_name\";
+                build_one_plugin \$$(dirname \"\$$modfile\");
               done;
             fi;
           done;
-
           echo '✅ Plugin build complete';
         };
 
-        # Initial build
+        # Find the nearest go.mod ancestor for a changed file
+        find_plugin_dir() {
+          dir=\"\$$1\";
+          while [ \"\$$dir\" != '.' ] && [ \"\$$dir\" != '/' ]; do
+            if [ -f \"\$$dir/go.mod\" ]; then
+              echo \"\$$dir\";
+              return 0;
+            fi;
+            dir=\$$(dirname \"\$$dir\");
+          done;
+          return 1;
+        };
+
+        # Initial build of all plugins
         echo 'Performing initial plugin build...';
-        build_plugins;
+        build_all_plugins;
         echo '';
 
         # Build watch paths - only include directories that exist
@@ -127,14 +152,33 @@ services:
         [ -d /app/enterprise/plugins ] && watch_paths=\"\$$watch_paths /app/enterprise/plugins\";
         [ -d /app/tyk-internal/plugins ] && watch_paths=\"\$$watch_paths /app/tyk-internal/plugins\";
 
-        # Watch for changes and rebuild
-        while true; do
-          echo \"Waiting for changes in:\$$watch_paths\";
-          inotifywait -r -e modify,create,delete,move \$$watch_paths 2>/dev/null;
-          echo '';
-          echo '>>> Change detected, rebuilding plugins...';
-          build_plugins;
-          echo '';
+        # Watch for changes and rebuild only the affected plugin
+        # Uses monitor mode (-m) to get the changed file path
+        last_built='';
+        last_built_time=0;
+        echo \"Watching for changes in:\$$watch_paths\";
+        inotifywait -r -m -e modify,create,delete,move --format '%w%f' \$$watch_paths 2>/dev/null | while read changed_file; do
+          # Skip non-Go/mod files to avoid unnecessary rebuilds
+          case \"\$$changed_file\" in
+            *.go|*/go.mod|*/go.sum) ;;
+            *) continue ;;
+          esac;
+          # Strip /app/ prefix to get relative path
+          rel_path=\$$(echo \"\$$changed_file\" | sed 's|^/app/||');
+          plugin_dir=\$$(find_plugin_dir \"\$$rel_path\");
+          if [ -n \"\$$plugin_dir\" ]; then
+            # Simple debounce: skip if same plugin rebuilt within last 2 seconds
+            now=\$$(date +%s);
+            if [ \"\$$plugin_dir\" = \"\$$last_built\" ] && [ \$$(( now - last_built_time )) -lt 2 ]; then
+              continue;
+            fi;
+            last_built=\"\$$plugin_dir\";
+            last_built_time=\$$now;
+            echo '';
+            echo \">>> Change detected in \$$rel_path\";
+            build_one_plugin \"\$$plugin_dir\";
+            echo '';
+          fi;
         done
       "
     volumes:

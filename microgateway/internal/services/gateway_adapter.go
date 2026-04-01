@@ -928,6 +928,14 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		}
 	}
 
+	// Convert metadata from JSON
+	var metadata models.JSONMap
+	if len(dbLLM.Metadata) > 0 {
+		if err := json.Unmarshal(dbLLM.Metadata, &metadata); err != nil {
+			log.Error().Err(err).Uint("llm_id", dbLLM.ID).Msg("Failed to unmarshal LLM metadata")
+		}
+	}
+
 	llm := models.LLM{
 		ID:            dbLLM.ID,
 		Name:          dbLLM.Slug, // Use slug as name for AI Gateway routing
@@ -939,6 +947,8 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		MonthlyBudget: &dbLLM.MonthlyBudget,
 		Filters:       filters,
 		AllowedModels: allowedModels,
+		DontLogBodies: dbLLM.DontLogBodies,
+		Metadata:      metadata,
 	}
 
 	log.Debug().
