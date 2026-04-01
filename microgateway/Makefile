@@ -226,7 +226,7 @@ coverage: test ## Generate coverage report
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 
 lint: ## Run linter
-	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
+	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8)
 	golangci-lint run
 
 deps: ## Download dependencies
@@ -255,7 +255,7 @@ run: build ## Build and run
 	./$(DIST_DIR)/$(BINARY_NAME)
 
 dev: ## Run with hot reload (requires air)
-	@which air > /dev/null || (echo "Installing air..." && go install github.com/cosmtrek/air@latest)
+	@which air > /dev/null || (echo "Installing air..." && go install github.com/cosmtrek/air@v1.61.7)
 	air
 
 fmt: ## Format code
@@ -265,7 +265,7 @@ vet: ## Vet code
 	$(GOCMD) vet ./...
 
 security: ## Run security scanner
-	@which gosec > /dev/null || (echo "Installing gosec..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest)
+	@which gosec > /dev/null || (echo "Installing gosec..." && go install github.com/securecodewarrior/gosec/v2/cmd/gosec@v2.21.4)
 	gosec ./...
 
 install: build ## Install binary to GOPATH

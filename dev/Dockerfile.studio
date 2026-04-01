@@ -5,7 +5,7 @@
 #   docker build -f dev/Dockerfile.studio -t midsommar-studio-dev .
 #   docker build -f dev/Dockerfile.studio --build-arg EDITION=ent -t midsommar-studio-dev-ent .
 
-FROM golang:1.25-bookworm AS base
+FROM golang:1.25-bookworm@sha256:7fb09d8804035fbde8a84ed59ca9f46dd68c6f160f9d193e98d795d8d9e002ec AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -22,15 +22,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20 LTS
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+# SECURITY: curl|bash pattern - pinned to nodesource setup script; verify integrity before updating
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/nodesource_setup.sh \
+    && bash /tmp/nodesource_setup.sh \
     && apt-get install -y nodejs \
+    && rm -f /tmp/nodesource_setup.sh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Air for Go hot reloading
-RUN go install github.com/air-verse/air@latest
+# Install Air for Go hot reloading (pinned to v1.61.7)
+RUN go install github.com/air-verse/air@v1.61.7
 
-# Install cosign for OCI plugin signature verification
-RUN curl -fsSL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-$(dpkg --print-architecture) -o /usr/local/bin/cosign \
+# Install cosign for OCI plugin signature verification (pinned to v2.4.1)
+RUN curl -fsSL https://github.com/sigstore/cosign/releases/download/v2.4.1/cosign-linux-$(dpkg --print-architecture) -o /usr/local/bin/cosign \
     && chmod +x /usr/local/bin/cosign
 
 # Set working directory

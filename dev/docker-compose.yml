@@ -109,7 +109,7 @@ services:
     image: node:20-alpine
     container_name: midsommar-frontend
     working_dir: /app/ui/admin-frontend
-    command: sh -c "npm install && npm start"
+    command: sh -c "npm install --ignore-scripts && npm start"
     volumes:
       - ../ui/admin-frontend:/app/ui/admin-frontend
       # Preserve node_modules
