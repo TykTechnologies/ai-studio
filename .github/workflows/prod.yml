@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 env:
   GOPRIVATE: github.com/TykTechnologies
 
@@ -13,12 +16,12 @@ jobs:
   build-frontend:
     runs-on: warp-ubuntu-latest-x64-2x
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: "npm"
@@ -28,7 +31,8 @@ jobs:
         run: |
           cd ui/admin-frontend
           echo "Installing dependencies..."
-          npm ci
+          npm ci --ignore-scripts
+          npm rebuild
           echo "Building UI..."
           PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
           echo "Checking build output..."
@@ -38,7 +42,7 @@ jobs:
           cd ../..
 
       - name: Upload Frontend Build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
@@ -49,18 +53,18 @@ jobs:
     needs: build-frontend
     runs-on: warp-ubuntu-latest-x64-2x
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4 # v4
         with:
           go-version: "1.25"
           cache-dependency-path: go.sum
 
       - name: Download Frontend Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
@@ -72,7 +76,7 @@ jobs:
 
       - name: Build docs site
         run: |
-          cd docs/site && npm install && NODE_ENV=production npm run docs:build
+          cd docs/site && npm ci --ignore-scripts && npm rebuild && NODE_ENV=production npm run docs:build
 
       - name: Remove enterprise module references for CE
         run: |
@@ -95,7 +99,7 @@ jobs:
           ls -lh tyk-ai-studio-ce-*
 
       - name: Upload CE Binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ce-binaries
           path: tyk-ai-studio-ce-*
@@ -106,39 +110,42 @@ jobs:
     needs: [build-frontend, build-ce-binaries]
     runs-on: warp-ubuntu-latest-x64-2x
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Download Frontend Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
 
       - name: Download CE Binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ce-binaries
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build and Push CE Images
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          # Push output images pinned to commit SHA and latest for deploy
           tags: |
+            tykio/tyk-ai-studio:${{ github.sha }}
             tykio/tyk-ai-studio:latest
+            tykio/midsommar:${{ github.sha }}
             tykio/midsommar:latest
           build-args: |
             EDITION=ce
@@ -150,7 +157,7 @@ jobs:
     needs: build-frontend
     runs-on: warp-ubuntu-latest-x64-2x
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
           submodules: true
@@ -164,19 +171,19 @@ jobs:
         run: |
           git submodule update --init --recursive
           if [ ! -f enterprise/.git ]; then
-            echo "❌ ERROR: Enterprise submodule not initialized"
+            echo "ERROR: Enterprise submodule not initialized"
             exit 1
           fi
-          echo "✅ Enterprise submodule initialized"
+          echo "Enterprise submodule initialized"
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@7b8cf10d4e4a01d4992d18a89f4d7dc5a3e6d6f4 # v4
         with:
           go-version: "1.25"
           cache-dependency-path: go.sum
 
       - name: Download Frontend Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
@@ -188,7 +195,7 @@ jobs:
 
       - name: Build docs site
         run: |
-          cd docs/site && npm install && NODE_ENV=production npm run docs:build
+          cd docs/site && npm ci --ignore-scripts && npm rebuild && NODE_ENV=production npm run docs:build
 
       - name: Build ENT Binaries
         run: |
@@ -207,7 +214,7 @@ jobs:
           ls -lh tyk-ai-studio-ent-*
 
       - name: Upload ENT Binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ent-binaries
           path: tyk-ai-studio-ent-*
@@ -218,42 +225,45 @@ jobs:
     needs: [build-frontend, build-ent-binaries]
     runs-on: warp-ubuntu-latest-x64-2x
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: true
           token: ${{ secrets.ORG_GH_TOKEN }}
 
       - name: Download Frontend Build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: frontend-build
           path: ui/admin-frontend/build/
 
       - name: Download ENT Binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ent-binaries
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@465a07811f14bebb1938fbed4728c6a1ff8901fc # v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build and Push ENT Images
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          # Push output images pinned to commit SHA and latest for deploy
           tags: |
+            tykio/tyk-ai-studio-enterprise:${{ github.sha }}
             tykio/tyk-ai-studio-enterprise:latest
+            tykio/midsommar-enterprise:${{ github.sha }}
             tykio/midsommar-enterprise:latest
           build-args: |
             EDITION=ent

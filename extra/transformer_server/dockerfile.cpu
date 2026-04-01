@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-slim
+FROM python:3.11-slim@sha256:9358444059ed78e2975ada2c189f1c1a3144a5dab6f35bff8c981afb38946634
 
 # Set the working directory in the container to /app
 WORKDIR /app
@@ -8,8 +8,8 @@ WORKDIR /app
 ADD . /app
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir --no-deps --upgrade pip
+RUN pip install --no-cache-dir --no-deps -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Make port 5000 available for the app
 EXPOSE 8000

@@ -17,6 +17,9 @@ concurrency:
 on:
   workflow_dispatch:  # Only manual trigger
 
+permissions:
+  contents: read
+
 env:
   GOPRIVATE: github.com/TykTechnologies
 
@@ -27,13 +30,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: true
           token: ${{ secrets.CI_SUBMODULE_PAT }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
@@ -42,7 +45,8 @@ jobs:
       - name: Build Frontend
         run: |
           cd ui/admin-frontend
-          npm ci
+          npm ci --ignore-scripts
+          npm rebuild
           CI=false npm run build
 
       - name: Create docs placeholder
@@ -71,7 +75,8 @@ jobs:
       - name: Install Playwright
         working-directory: tests/ui
         run: |
-          npm ci
+          npm ci --ignore-scripts
+          npm rebuild
           npx playwright install --with-deps chromium
 
       - name: Wait for AI Studio
@@ -119,7 +124,7 @@ jobs:
         run: npx playwright test --project='chromium' --reporter=list --reporter=html --timeout=60000
 
       - name: Upload Playwright Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: playwright-report
@@ -151,7 +156,7 @@ jobs:
           docker compose -f tests/compose.yml logs > docker-compose.log 2>&1
 
       - name: Upload Docker Logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
           name: docker-compose-logs

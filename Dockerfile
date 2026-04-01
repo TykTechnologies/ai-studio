@@ -1,7 +1,7 @@
 # Dockerfile
 
 # Build stage
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-alpine@sha256:8e02eb337d9e0ea459e041f1ee5eece41cbb61f1d83e7d883a3e2fb4862063fa AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make ca-certificates tzdata gcc musl-dev sqlite-dev npm nodejs
@@ -24,10 +24,10 @@ RUN sed -i 's|replace github.com/tmc/langchaingo => /Users/martinbuhr/apps/lonel
     sed -i 's|replace github.com/tmc/langchaingo => /Users/martinbuhr/apps/lonelycode/langchaingo|replace github.com/tmc/langchaingo => /build/langchaingo|g' microgateway/go.mod
 
 # Build frontend
-RUN cd ui/admin-frontend && npm ci && PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
+RUN cd ui/admin-frontend && npm ci --ignore-scripts && PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
 
 # Build documentation site
-RUN cd docs/site && npm ci && npm run docs:build
+RUN cd docs/site && npm ci --ignore-scripts && npm run docs:build
 
 # Build arguments for version information and edition
 ARG EDITION=ce
@@ -60,7 +60,7 @@ RUN if [ "$EDITION" = "ent" ]; then \
         .
 
 # Runtime stage
-FROM alpine:3.21
+FROM alpine:3.21@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709
 
 RUN apk add --no-cache \
     ca-certificates \
