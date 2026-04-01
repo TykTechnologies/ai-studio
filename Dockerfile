@@ -24,10 +24,10 @@ RUN sed -i 's|replace github.com/tmc/langchaingo => /Users/martinbuhr/apps/lonel
     sed -i 's|replace github.com/tmc/langchaingo => /Users/martinbuhr/apps/lonelycode/langchaingo|replace github.com/tmc/langchaingo => /build/langchaingo|g' microgateway/go.mod
 
 # Build frontend
-RUN cd ui/admin-frontend && npm ci && PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
+RUN cd ui/admin-frontend && npm ci --ignore-scripts && PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
 
 # Build documentation site
-RUN cd docs/site && npm ci && npm run docs:build
+RUN cd docs/site && npm ci --ignore-scripts && npm run docs:build
 
 # Build arguments for version information and edition
 ARG EDITION=ce

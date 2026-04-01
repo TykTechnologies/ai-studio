@@ -141,8 +141,11 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          # Push output images pinned to commit SHA and latest for deploy
           tags: |
+            tykio/tyk-ai-studio:${{ github.sha }}
             tykio/tyk-ai-studio:latest
+            tykio/midsommar:${{ github.sha }}
             tykio/midsommar:latest
           build-args: |
             EDITION=ce
@@ -256,8 +259,11 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          # Push output images pinned to commit SHA and latest for deploy
           tags: |
+            tykio/tyk-ai-studio-enterprise:${{ github.sha }}
             tykio/tyk-ai-studio-enterprise:latest
+            tykio/midsommar-enterprise:${{ github.sha }}
             tykio/midsommar-enterprise:latest
           build-args: |
             EDITION=ent
