@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -129,9 +131,23 @@ func (f *Fetcher) FetchManifest(ctx context.Context, manifestURL string) (*Plugi
 	return &manifest, nil
 }
 
-// FetchIndexConditional fetches the index only if it has been modified
-func (f *Fetcher) FetchIndexConditional(ctx context.Context, indexURL, etag string, lastModified time.Time) (*MarketplaceIndex, *FetchMetadata, bool, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", indexURL, nil)
+// FetchIndexConditional fetches the index only if it has been modified.
+// When forceRefresh is true, a cache-busting query parameter is appended and
+// conditional headers are skipped to bypass CDN caches (e.g. GitHub's).
+func (f *Fetcher) FetchIndexConditional(ctx context.Context, indexURL, etag string, lastModified time.Time, forceRefresh bool) (*MarketplaceIndex, *FetchMetadata, bool, error) {
+	fetchURL := indexURL
+	if forceRefresh {
+		u, err := url.Parse(indexURL)
+		if err != nil {
+			return nil, nil, false, fmt.Errorf("failed to parse index URL: %w", err)
+		}
+		q := u.Query()
+		q.Set("_cb", strconv.FormatInt(time.Now().UnixNano(), 10))
+		u.RawQuery = q.Encode()
+		fetchURL = u.String()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", fetchURL, nil)
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -139,12 +155,14 @@ func (f *Fetcher) FetchIndexConditional(ctx context.Context, indexURL, etag stri
 	req.Header.Set("User-Agent", f.userAgent)
 	req.Header.Set("Accept", "application/x-yaml, text/yaml, application/yaml")
 
-	// Add conditional headers
-	if etag != "" {
-		req.Header.Set("If-None-Match", etag)
-	}
-	if !lastModified.IsZero() {
-		req.Header.Set("If-Modified-Since", lastModified.Format(http.TimeFormat))
+	// Add conditional headers (skipped on force-refresh to bypass CDN caches)
+	if !forceRefresh {
+		if etag != "" {
+			req.Header.Set("If-None-Match", etag)
+		}
+		if !lastModified.IsZero() {
+			req.Header.Set("If-Modified-Since", lastModified.Format(http.TimeFormat))
+		}
 	}
 
 	resp, err := f.httpClient.Do(req)

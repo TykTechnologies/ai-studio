@@ -287,12 +287,12 @@ func (h *MarketplaceAdminHandlers) SyncMarketplace(c *gin.Context) {
 	// Trigger sync for this specific marketplace if MarketplaceService is available
 	if h.marketplaceService != nil {
 		if ms, ok := h.marketplaceService.(interface {
-			SyncIndex(ctx context.Context, idx *models.MarketplaceIndex) error
+			SyncIndex(ctx context.Context, idx *models.MarketplaceIndex, forceRefresh bool) error
 		}); ok {
 			// Run sync in background
 			go func() {
 				ctx := context.Background()
-				if err := ms.SyncIndex(ctx, marketplace); err != nil {
+				if err := ms.SyncIndex(ctx, marketplace, true); err != nil {
 					log.Error().Err(err).Uint("id", marketplace.ID).Msg("Manual marketplace sync failed")
 				} else {
 					log.Info().Uint("id", marketplace.ID).Msg("Manual marketplace sync completed successfully")
