@@ -6,10 +6,26 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 env:
   GOPRIVATE: github.com/TykTechnologies
 
 jobs:
+  # ==========================================================================
+  # Dependency Review (PR only)
+  # ==========================================================================
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Dependency Review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+
   # ==========================================================================
   # Go Linting (disabled for now)
   # ==========================================================================
@@ -18,7 +34,7 @@ jobs:
     runs-on: warp-ubuntu-latest-arm64-4x
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 2
 
@@ -28,12 +44,12 @@ jobs:
 
       - name: golangci-lint
         if: ${{ github.event_name == 'pull_request' }}
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3
         with:
           version: latest
           args: --out-format=checkstyle:golanglint.xml --timeout=600s --max-issues-per-linter=0 --max-same-issues=0 --new-from-rev=origin/${{ github.base_ref }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: golangcilint
           retention-days: 1
@@ -48,10 +64,10 @@ jobs:
     runs-on: warp-ubuntu-latest-arm64-2x
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
@@ -62,7 +78,8 @@ jobs:
           CI: true
         run: |
           cd ui/admin-frontend
-          npm ci
+          npm ci --ignore-scripts
+          npm rebuild
           npm test -- --forceExit
 
       - name: Build Frontend
@@ -82,7 +99,7 @@ jobs:
         edition: [ce, ent]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 2
           submodules: ${{ matrix.edition == 'ent' }}
@@ -99,13 +116,13 @@ jobs:
           EOF
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
       - name: Go Cache
-        uses: WarpBuilds/cache@v1
+        uses: WarpBuilds/cache@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
         with:
           path: |
             ~/.cache/go-build
@@ -149,7 +166,7 @@ jobs:
             -covermode=atomic ./...
 
       - name: Upload Coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-${{ matrix.edition }}
           path: coverage-*.out
@@ -163,17 +180,17 @@ jobs:
     runs-on: warp-ubuntu-latest-arm64-2x
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: "docs/site/package-lock.json"
 
       - name: Cache VitePress
-        uses: WarpBuilds/cache@v1
+        uses: WarpBuilds/cache@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
         with:
           path: docs/site/.vitepress/cache
           key: ${{ runner.os }}-vitepress-${{ hashFiles('docs/site/package-lock.json') }}
@@ -184,7 +201,8 @@ jobs:
         run: |
           cp .env.example .env
           cd docs/site
-          npm install
+          npm ci --ignore-scripts
+          npm rebuild
           NODE_ENV=production npm run docs:build
 
   # ==========================================================================
@@ -197,7 +215,7 @@ jobs:
     if: always()
     steps:
       - name: Download Coverage Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: coverage-*
           merge-multiple: true
@@ -218,7 +236,7 @@ jobs:
           ls -la coverage-*.out 2>/dev/null || echo "No coverage files found"
 
       - name: Upload Combined Coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-combined
           path: coverage-*.out

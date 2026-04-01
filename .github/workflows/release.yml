@@ -90,7 +90,7 @@ jobs:
       -
         name: Free disk space
         if: matrix.component == 'studio'
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
         with:
           tool-cache: true
           android: true
@@ -100,7 +100,7 @@ jobs:
           swap-storage: false
       -
         name: Checkout of midsommar
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
           path: midsommar
@@ -108,7 +108,7 @@ jobs:
       -
         name: Checkout enterprise submodule
         if: matrix.edition == 'ent'
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: TykTechnologies/ai-studio-enterprise
           path: midsommar/enterprise
@@ -116,7 +116,7 @@ jobs:
 
       -
         name: Checkout langchaingo repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           repository: lonelycode/langchaingo
           path: langchaingo
@@ -132,18 +132,18 @@ jobs:
           echo "commit_author=$(git show -s --format='%ae' HEAD)" >> $GITHUB_OUTPUT
           echo "branch=${HEAD_REF##*/}" >> $GITHUB_OUTPUT
       -
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       -
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       -
         name: Login to DockerHub
         if: startsWith(github.ref, 'refs/tags')
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
       -
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cache/go-build
@@ -156,7 +156,7 @@ jobs:
       -
         name: Use Node.js
         if: matrix.component == 'studio'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: "npm"
@@ -168,7 +168,8 @@ jobs:
         run: |
           cd ui/admin-frontend
           echo "Installing dependencies..."
-          npm ci
+          npm ci --ignore-scripts
+          npm rebuild
           echo "Building UI..."
           PUBLIC_URL="/" REACT_APP_API_URL="" CI=false npm run build
           echo "Checking build output..."
@@ -186,7 +187,8 @@ jobs:
         if: matrix.component == 'studio'
         run: |
           cd docs/site
-          npm install
+          npm ci --ignore-scripts
+          npm rebuild
           NODE_ENV=production npm run docs:build
           cd ../..
 
@@ -241,7 +243,7 @@ jobs:
       -
         name: Docker metadata for tag push
         id: tag_metadata
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: |
             ${{ matrix.docker_image }}
@@ -254,7 +256,7 @@ jobs:
           labels: "org.opencontainers.image.title=${{ matrix.component }} (${{ matrix.edition }})\norg.opencontainers.image.description=Tyk AI ${{ matrix.component == 'studio' && 'Studio' || 'Microgateway' }} (${{ matrix.edition }})\norg.opencontainers.image.vendor=tyk.io\norg.opencontainers.image.version=${{ github.ref_name }}\n"
       -
         name: push image to prod
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: "midsommar/dist"
           platforms: linux/amd64,linux/arm64
@@ -267,7 +269,7 @@ jobs:
           labels: ${{ steps.tag_metadata.outputs.labels }}
       -
         name: save deb
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: deb-${{ matrix.component }}-${{ matrix.edition }}
           retention-days: 1
@@ -277,7 +279,7 @@ jobs:
             !dist/*fips*.deb
       -
         name: save rpm
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rpm-${{ matrix.component }}-${{ matrix.edition }}
           retention-days: 1

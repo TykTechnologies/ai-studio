@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-slim-buster
+FROM python:3.11-slim-buster@sha256:c46b0ae5728c2247b99903098ade3176a58e274d9c7d2efeaaab3e0621a53935
 
 # Set the working directory in the container to /app
 WORKDIR /app
@@ -9,8 +9,8 @@ ADD requirements.txt /app
 ADD reranker.py /app
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --no-deps --upgrade pip
+RUN pip install --no-cache-dir --no-deps -r requirements.txt
 
 # Make port 80 available to the world outside this container
 EXPOSE 80
