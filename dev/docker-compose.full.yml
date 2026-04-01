@@ -95,6 +95,10 @@ services:
               find \"\$$plugin_root\" -name 'go.mod' 2>/dev/null | while read modfile; do
                 plugin_dir=\$$(dirname \"\$$modfile\");
                 plugin_name=\$$(basename \"\$$plugin_dir\");
+                # If go.mod is in a 'server' subdir, use parent dir name instead
+                if [ \"\$$plugin_name\" = 'server' ]; then
+                  plugin_name=\$$(basename \$$(dirname \"\$$plugin_dir\"));
+                fi;
                 # Enterprise plugins need -tags enterprise
                 if echo \"\$$plugin_dir\" | grep -q 'enterprise/'; then
                   build_tags='-tags enterprise';
