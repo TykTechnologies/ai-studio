@@ -1151,10 +1151,18 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedAPIKey = resolvedAPIKey // Fallback to plaintext
 		}
 
-		// Serialize metadata to JSON string
+		// Resolve secret references in metadata and serialize to JSON string
 		var metadataJSON string
 		if llm.Metadata != nil {
-			if metadataBytes, err := json.Marshal(llm.Metadata); err == nil {
+			resolvedMetadata := make(models.JSONMap, len(llm.Metadata))
+			for k, v := range llm.Metadata {
+				if strVal, ok := v.(string); ok {
+					resolvedMetadata[k] = secrets.GetValue(strVal, false)
+				} else {
+					resolvedMetadata[k] = v
+				}
+			}
+			if metadataBytes, err := json.Marshal(resolvedMetadata); err == nil {
 				metadataJSON = string(metadataBytes)
 			}
 		}

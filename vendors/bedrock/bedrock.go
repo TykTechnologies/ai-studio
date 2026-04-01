@@ -90,7 +90,18 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	client := bedrockruntime.NewFromConfig(cfg)
+	// Use the configured endpoint if provided (e.g. cross-region bedrock-mantle endpoints),
+	// otherwise let the SDK use the default bedrock-runtime endpoint for the region.
+	var opts []func(*bedrockruntime.Options)
+	endpoint := strings.TrimSuffix(llm.APIEndpoint, "/v1")
+	endpoint = strings.TrimSuffix(endpoint, "/")
+	if endpoint != "" && !strings.Contains(endpoint, "bedrock-runtime") {
+		opts = append(opts, func(o *bedrockruntime.Options) {
+			o.BaseEndpoint = &endpoint
+		})
+	}
+
+	client := bedrockruntime.NewFromConfig(cfg, opts...)
 	clientCache.Store(llm.ID, &clientCacheEntry{client: client, fingerprint: fp})
 	return client, nil
 }
@@ -119,13 +130,21 @@ func ParseRegionFromEndpoint(endpoint string) (string, error) {
 		return "", fmt.Errorf("invalid bedrock endpoint URL: %s", endpoint)
 	}
 
-	// Parse region from hostname: bedrock-runtime.{region}.amazonaws.com
-	parts := strings.Split(parsed.Hostname(), ".")
+	// Parse region from hostname
+	hostname := parsed.Hostname()
+	parts := strings.Split(hostname, ".")
+
+	// Standard format: bedrock-runtime.{region}.amazonaws.com
 	if len(parts) >= 3 && parts[0] == "bedrock-runtime" {
 		return parts[1], nil
 	}
 
-	return "", fmt.Errorf("cannot extract region from endpoint: %s (expected bedrock-runtime.{region}.amazonaws.com)", endpoint)
+	// Cross-region/mantle format: bedrock-mantle.{region}.api.aws
+	if len(parts) >= 3 && parts[0] == "bedrock-mantle" {
+		return parts[1], nil
+	}
+
+	return "", fmt.Errorf("cannot extract region from endpoint: %s (expected bedrock-runtime.{region}.amazonaws.com or bedrock-mantle.{region}.api.aws)", endpoint)
 }
 
 // GetModelID returns the model ID to use, preferring the override if non-empty.
@@ -423,6 +442,7 @@ func extractAWSCredentials(llm *models.LLM) (accessKeyID, secretAccessKey, sessi
 	accessKeyID = metadataString(llm.Metadata, "aws_access_key_id")
 	secretAccessKey = metadataString(llm.Metadata, "aws_secret_access_key")
 	sessionToken = metadataString(llm.Metadata, "aws_session_token") // optional
+
 
 	if accessKeyID == "" {
 		return "", "", "", fmt.Errorf("bedrock: AWS Access Key ID is required (set metadata.aws_access_key_id)")

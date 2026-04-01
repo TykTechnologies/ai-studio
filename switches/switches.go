@@ -290,7 +290,12 @@ func DetectStreamingIntent(vendor models.Vendor, r *http.Request) (bool, error) 
 		})
 
 	case models.BEDROCK:
-		// Bedrock uses the "stream" field in request body (same as OpenAI/Anthropic)
+		// Native Bedrock Converse API uses URL path to indicate streaming:
+		// /converse-stream for streaming, /converse for non-streaming.
+		// Also check for "stream" field in body for OpenAI-compatible requests.
+		if containsCaseInsensitive(r.URL.Path, "converse-stream") {
+			return true, nil
+		}
 		return detectStreamFromBody(r, func(data []byte) (bool, error) {
 			var req struct {
 				Stream bool `json:"stream"`

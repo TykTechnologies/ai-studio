@@ -281,3 +281,25 @@ func HuggingFaceModelExtractor(r *http.Request, body []byte) (string, error) {
 
 	return "", &BadRequestError{"model not found in URL path or request body"}
 }
+
+// BedrockModelExtractor extracts the model ID from a Bedrock Converse API request.
+// The model ID is sent in the URL path (e.g., /model/{modelId}/converse) or request body.
+func BedrockModelExtractor(r *http.Request, body []byte) (string, error) {
+	// Check URL path for model ID
+	parts := strings.Split(r.URL.Path, "/")
+	for i, part := range parts {
+		if part == "model" && i+1 < len(parts) {
+			return parts[i+1], nil
+		}
+	}
+
+	// Check request body for modelId field
+	var req struct {
+		ModelId string `json:"modelId"`
+	}
+	if err := json.Unmarshal(body, &req); err == nil && req.ModelId != "" {
+		return req.ModelId, nil
+	}
+
+	return "", &BadRequestError{"model ID not found in URL path or request body"}
+}

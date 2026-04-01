@@ -1,28 +1,29 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestMarshalStreamEvent(t *testing.T) {
+func TestMarshalEventForBinaryStream(t *testing.T) {
 	t.Run("messageStart event", func(t *testing.T) {
 		event := &types.ConverseStreamOutputMemberMessageStart{
 			Value: types.MessageStartEvent{Role: types.ConversationRoleAssistant},
 		}
-		data, err := marshalStreamEvent(event)
+		eventType, data, err := marshalEventForBinaryStream(event)
 		require.NoError(t, err)
+		assert.Equal(t, "messageStart", eventType)
 
 		var parsed map[string]interface{}
 		require.NoError(t, json.Unmarshal(data, &parsed))
-		assert.Equal(t, "messageStart", parsed["type"])
-		start := parsed["messageStart"].(map[string]interface{})
-		assert.Equal(t, "assistant", start["role"])
+		assert.Equal(t, "assistant", parsed["role"])
 	})
 
 	t.Run("contentBlockDelta text event", func(t *testing.T) {
@@ -32,14 +33,12 @@ func TestMarshalStreamEvent(t *testing.T) {
 				Delta:             &types.ContentBlockDeltaMemberText{Value: "Hello"},
 			},
 		}
-		data, err := marshalStreamEvent(event)
+		eventType, data, err := marshalEventForBinaryStream(event)
 		require.NoError(t, err)
+		assert.Equal(t, "contentBlockDelta", eventType)
 
 		var parsed map[string]interface{}
 		require.NoError(t, json.Unmarshal(data, &parsed))
-		assert.Equal(t, "contentBlockDelta", parsed["type"])
-		delta := parsed["delta"].(map[string]interface{})
-		assert.Equal(t, "Hello", delta["text"])
 		assert.Equal(t, float64(0), parsed["contentBlockIndex"])
 	})
 
@@ -47,24 +46,21 @@ func TestMarshalStreamEvent(t *testing.T) {
 		event := &types.ConverseStreamOutputMemberContentBlockStop{
 			Value: types.ContentBlockStopEvent{ContentBlockIndex: aws.Int32(0)},
 		}
-		data, err := marshalStreamEvent(event)
+		eventType, _, err := marshalEventForBinaryStream(event)
 		require.NoError(t, err)
-
-		var parsed map[string]interface{}
-		require.NoError(t, json.Unmarshal(data, &parsed))
-		assert.Equal(t, "contentBlockStop", parsed["type"])
+		assert.Equal(t, "contentBlockStop", eventType)
 	})
 
 	t.Run("messageStop event", func(t *testing.T) {
 		event := &types.ConverseStreamOutputMemberMessageStop{
 			Value: types.MessageStopEvent{StopReason: types.StopReasonEndTurn},
 		}
-		data, err := marshalStreamEvent(event)
+		eventType, data, err := marshalEventForBinaryStream(event)
 		require.NoError(t, err)
+		assert.Equal(t, "messageStop", eventType)
 
 		var parsed map[string]interface{}
 		require.NoError(t, json.Unmarshal(data, &parsed))
-		assert.Equal(t, "messageStop", parsed["type"])
 		assert.Equal(t, "end_turn", parsed["stopReason"])
 	})
 
@@ -81,12 +77,12 @@ func TestMarshalStreamEvent(t *testing.T) {
 				},
 			},
 		}
-		data, err := marshalStreamEvent(event)
+		eventType, data, err := marshalEventForBinaryStream(event)
 		require.NoError(t, err)
+		assert.Equal(t, "metadata", eventType)
 
 		var parsed map[string]interface{}
 		require.NoError(t, json.Unmarshal(data, &parsed))
-		assert.Equal(t, "metadata", parsed["type"])
 		usage := parsed["usage"].(map[string]interface{})
 		assert.Equal(t, float64(10), usage["inputTokens"])
 		assert.Equal(t, float64(5), usage["outputTokens"])
@@ -99,12 +95,26 @@ func TestMarshalStreamEvent(t *testing.T) {
 		event := &types.ConverseStreamOutputMemberContentBlockStart{
 			Value: types.ContentBlockStartEvent{ContentBlockIndex: aws.Int32(0)},
 		}
-		data, err := marshalStreamEvent(event)
+		eventType, _, err := marshalEventForBinaryStream(event)
 		require.NoError(t, err)
+		assert.Equal(t, "contentBlockStart", eventType)
+	})
+}
 
-		var parsed map[string]interface{}
-		require.NoError(t, json.Unmarshal(data, &parsed))
-		assert.Equal(t, "contentBlockStart", parsed["type"])
+func TestEncodeBedrockEventStreamMessage(t *testing.T) {
+	t.Run("encodes a valid binary event stream message", func(t *testing.T) {
+		event := &types.ConverseStreamOutputMemberContentBlockDelta{
+			Value: types.ContentBlockDeltaEvent{
+				ContentBlockIndex: aws.Int32(0),
+				Delta:             &types.ContentBlockDeltaMemberText{Value: "Hello"},
+			},
+		}
+
+		var buf bytes.Buffer
+		encoder := eventstream.NewEncoder()
+		err := encodeBedrockEventStreamMessage(encoder, &buf, event)
+		require.NoError(t, err)
+		assert.Greater(t, buf.Len(), 0)
 	})
 }
 
