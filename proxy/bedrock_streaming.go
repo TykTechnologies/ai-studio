@@ -34,7 +34,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 
 	// Determine model ID: check URL path first (native Bedrock sends /model/{modelId}/converse-stream),
 	// then request body, then fall back to LLM default.
-	modelID := extractModelIDFromPath(r.URL.Path)
+	modelID := ExtractBedrockModelIDFromPath(r.URL.Path)
 	if modelID == "" {
 		modelID = converseReq.ModelId
 	}
@@ -301,9 +301,9 @@ type bedrockToolConfig struct {
 	Tools []json.RawMessage `json:"tools,omitempty"`
 }
 
-// extractModelIDFromPath extracts the model ID from a Bedrock URL path.
+// ExtractBedrockModelIDFromPath extracts the model ID from a Bedrock URL path.
 // Native Bedrock API paths contain /model/{modelId}/converse or /model/{modelId}/converse-stream.
-func extractModelIDFromPath(path string) string {
+func ExtractBedrockModelIDFromPath(path string) string {
 	parts := strings.Split(path, "/")
 	for i, part := range parts {
 		if part == "model" && i+1 < len(parts) {
