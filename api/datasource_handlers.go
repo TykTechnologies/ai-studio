@@ -502,8 +502,8 @@ func (a *API) ProcessFileEmbeddingHandler(c *gin.Context) {
 		return
 	}
 
-	// Get datasource to verify it exists
-	datasource, err := a.service.GetDatasourceByID(uint(id))
+	// Get datasource with resolved secrets for embedding operations
+	datasource, err := a.service.GetDatasourceByIDResolved(uint(id))
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {

@@ -309,8 +309,8 @@ func (s *DatasourcesServer) ProcessDatasourceEmbeddings(ctx context.Context, req
 		return nil, status.Errorf(codes.InvalidArgument, "datasource_id is required")
 	}
 
-	// Get datasource with files to verify it exists and has content
-	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	// Get datasource with resolved secrets for embedding operations
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(datasourceID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
@@ -422,8 +422,8 @@ func convertDatasourceToPB(datasource *models.Datasource) *pb.DatasourceInfo {
 
 // GenerateEmbedding generates embeddings for text using the datasource's embedder configuration
 func (s *DatasourcesServer) GenerateEmbedding(ctx context.Context, req *pb.GenerateEmbeddingRequest) (*pb.GenerateEmbeddingResponse, error) {
-	// Validate datasource exists
-	datasource, err := s.service.GetDatasourceByID(uint(req.DatasourceId))
+	// Validate datasource exists and resolve secrets for embedding operations
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(req.DatasourceId))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %v", err)
@@ -477,8 +477,8 @@ func (s *DatasourcesServer) GenerateEmbedding(ctx context.Context, req *pb.Gener
 // StoreDocuments stores pre-vectorized documents in the datasource's vector store
 // This method uses pre-computed embeddings and bypasses the embedder to allow custom chunking
 func (s *DatasourcesServer) StoreDocuments(ctx context.Context, req *pb.StoreDocumentsRequest) (*pb.StoreDocumentsResponse, error) {
-	// Validate datasource exists
-	datasource, err := s.service.GetDatasourceByID(uint(req.DatasourceId))
+	// Validate datasource exists and resolve secrets for vector store access
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(req.DatasourceId))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %v", err)
@@ -536,8 +536,8 @@ func (s *DatasourcesServer) StoreDocuments(ctx context.Context, req *pb.StoreDoc
 
 // ProcessAndStoreDocuments generates embeddings and stores documents in one step
 func (s *DatasourcesServer) ProcessAndStoreDocuments(ctx context.Context, req *pb.ProcessAndStoreRequest) (*pb.ProcessAndStoreResponse, error) {
-	// Validate datasource exists
-	datasource, err := s.service.GetDatasourceByID(uint(req.DatasourceId))
+	// Validate datasource exists and resolve secrets for embedding/vector store operations
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(req.DatasourceId))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %v", err)
@@ -597,8 +597,8 @@ func (s *DatasourcesServer) ProcessAndStoreDocuments(ctx context.Context, req *p
 
 // QueryDatasourceByVector performs similarity search using a pre-computed embedding vector
 func (s *DatasourcesServer) QueryDatasourceByVector(ctx context.Context, req *pb.QueryByVectorRequest) (*pb.QueryDatasourceResponse, error) {
-	// Validate datasource exists
-	datasource, err := s.service.GetDatasourceByID(uint(req.DatasourceId))
+	// Validate datasource exists and resolve secrets for vector store access
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(req.DatasourceId))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %v", err)
@@ -687,8 +687,8 @@ func (s *DatasourcesServer) DeleteDocumentsByMetadata(ctx context.Context, req *
 		return nil, status.Errorf(codes.InvalidArgument, "metadata_filter cannot be empty")
 	}
 
-	// Get datasource
-	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	// Get datasource with resolved secrets for vector store access
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(datasourceID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
@@ -751,8 +751,8 @@ func (s *DatasourcesServer) QueryByMetadataOnly(ctx context.Context, req *pb.Que
 		return nil, status.Errorf(codes.InvalidArgument, "metadata_filter cannot be empty")
 	}
 
-	// Get datasource
-	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	// Get datasource with resolved secrets for vector store access
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(datasourceID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
@@ -842,8 +842,8 @@ func (s *DatasourcesServer) ListNamespaces(ctx context.Context, req *pb.ListName
 		return nil, status.Errorf(codes.InvalidArgument, "datasource_id is required")
 	}
 
-	// Get datasource
-	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	// Get datasource with resolved secrets for vector store access
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(datasourceID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)
@@ -899,8 +899,8 @@ func (s *DatasourcesServer) DeleteNamespace(ctx context.Context, req *pb.DeleteN
 		return nil, status.Errorf(codes.InvalidArgument, "confirm must be true to delete namespace (safety check)")
 	}
 
-	// Get datasource
-	datasource, err := s.service.GetDatasourceByID(uint(datasourceID))
+	// Get datasource with resolved secrets for vector store access
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(datasourceID))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "datasource not found: %d", datasourceID)

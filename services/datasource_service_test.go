@@ -1,9 +1,11 @@
 package services
 
 import (
+	"os"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -203,4 +205,49 @@ func TestDatasourceService_MultipleDatasourcesScenario(t *testing.T) {
 	userDatasources, err := service.GetDatasourcesByUserID(user.ID)
 	assert.NoError(t, err)
 	assert.Len(t, userDatasources, 3)
+}
+
+func TestGetDatasourceByIDResolved_ResolvesSecrets(t *testing.T) {
+	os.Setenv("TYK_AI_SECRET_KEY", "test-encryption-key-for-secrets")
+	defer os.Unsetenv("TYK_AI_SECRET_KEY")
+
+	db := setupTestDBForDatasources(t)
+	service := NewService(db)
+	secrets.SetDBRef(db)
+
+	// Create secrets
+	embedSecret := &secrets.Secret{VarName: "EMBED_KEY", Value: "sk-embed-real-key"}
+	err := secrets.CreateSecret(db, embedSecret)
+	assert.NoError(t, err)
+
+	dbConnSecret := &secrets.Secret{VarName: "DBCONN_KEY", Value: "dbconn-real-key"}
+	err = secrets.CreateSecret(db, dbConnSecret)
+	assert.NoError(t, err)
+
+	user, _ := service.CreateUser(UserDTO{Email: "test@example.com", Name: "Test User", Password: "password123", IsAdmin: true, ShowChat: true, ShowPortal: true, EmailVerified: true, NotificationsEnabled: true, AccessToSSOConfig: true, Groups: []uint{}})
+
+	// Create datasource with secret references
+	datasource, err := service.CreateDatasource(
+		"Secret DS", "Short", "Long", "icon.png", "https://example.com", 75, user.ID,
+		[]string{}, "conn_string", "source_type",
+		"$SECRET/DBCONN_KEY", "db1", "openai", "https://api.openai.com",
+		"$SECRET/EMBED_KEY", "text-embedding-3-small", true,
+	)
+	assert.NoError(t, err)
+
+	// GetDatasourceByID should preserve references (for API responses)
+	preserved, err := service.GetDatasourceByID(datasource.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "$SECRET/EMBED_KEY", preserved.EmbedAPIKey,
+		"GetDatasourceByID should preserve secret references")
+	assert.Equal(t, "$SECRET/DBCONN_KEY", preserved.DBConnAPIKey,
+		"GetDatasourceByID should preserve secret references")
+
+	// GetDatasourceByIDResolved should resolve to actual values
+	resolved, err := service.GetDatasourceByIDResolved(datasource.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "sk-embed-real-key", resolved.EmbedAPIKey,
+		"GetDatasourceByIDResolved should resolve EmbedAPIKey to actual secret value")
+	assert.Equal(t, "dbconn-real-key", resolved.DBConnAPIKey,
+		"GetDatasourceByIDResolved should resolve DBConnAPIKey to actual secret value")
 }

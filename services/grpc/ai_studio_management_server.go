@@ -900,9 +900,9 @@ func (s *AIStudioManagementServer) QueryDatasource(ctx context.Context, req *pb.
 	}
 	// If RecordNotFound, this is a non-agent plugin (like service-api-test) - allow access
 
-	// Load the datasource for RAG query
-	var datasource models.Datasource
-	if err := s.service.GetDB().First(&datasource, datasourceID).Error; err != nil {
+	// Load the datasource with resolved secrets for RAG query
+	datasource, err := s.service.GetDatasourceByIDResolved(uint(datasourceID))
+	if err != nil {
 		log.Error().Err(err).Uint32("datasource_id", datasourceID).Msg("Failed to load datasource")
 		return &pb.QueryDatasourceResponse{
 			Success:      false,
@@ -913,7 +913,7 @@ func (s *AIStudioManagementServer) QueryDatasource(ctx context.Context, req *pb.
 	// Create data session for RAG query
 	// This uses the same approach as the proxy's handleDatasourceRequest
 	dataSession := dataSession.NewDataSession(map[uint]*models.Datasource{
-		datasource.ID: &datasource,
+		datasource.ID: datasource,
 	})
 
 	// Perform similarity search
