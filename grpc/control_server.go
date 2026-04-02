@@ -818,6 +818,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				AppID:        uint(event.AppId),
 				UserID:       uint(event.UserId), // User ID synced from edge (via config sync)
 				Vendor:       vendor,
+				ModelName:    modelName,
 				RequestBody:  event.RequestBody,  // Now included from pulse if configured
 				ResponseBody: event.ResponseBody, // Now included from pulse if configured
 				ResponseCode: int(event.StatusCode),

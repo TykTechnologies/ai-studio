@@ -379,17 +379,19 @@ func (p *Proxy) createHandler() http.Handler {
 	// Wrap authenticated routes with credential validator
 	authenticatedHandler := p.credValidator.Middleware(r)
 
-	// OpenAI-compatible translation endpoints - these are PURE BRIDGE HANDLERS
-	// They do NOT need auth/plugins/filters - all of that happens on the internal /llm/call/ hop
-	// These handlers route through /llm/call/ internally where auth is performed
+	// OpenAI-compatible translation endpoints
+	// For most vendors these are PURE BRIDGE HANDLERS that route internally through /llm/call/
+	// where auth/plugins/filters run. However, Bedrock uses direct AWS SDK calls and bypasses
+	// internal routing, so auth must also run here to populate the app context.
 	aiRouter := mux.NewRouter()
 	aiRouter.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
 	aiRouter.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
+	authenticatedAIHandler := p.credValidator.Middleware(aiRouter)
 
-	// Combine routers: /ai/ routes bypass auth, everything else goes through auth
+	// Combine routers: both go through auth, but /ai/ routes are separated for routing
 	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if strings.HasPrefix(req.URL.Path, "/ai/") {
-			aiRouter.ServeHTTP(w, req)
+			authenticatedAIHandler.ServeHTTP(w, req)
 		} else {
 			authenticatedHandler.ServeHTTP(w, req)
 		}

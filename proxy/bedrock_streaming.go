@@ -107,12 +107,13 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 			}
 		}
 
+		// Extract text from stream events for logging and filter evaluation
+		if text := extractTextFromStreamEvent(event); text != "" {
+			textBuffer.WriteString(text)
+		}
+
 		// Execute response filters per-chunk if configured
 		if hasResponseFilters {
-			if text := extractTextFromStreamEvent(event); text != "" {
-				textBuffer.WriteString(text)
-			}
-
 			// For filter evaluation, serialize to JSON
 			filterJSON, _ := marshalEventPayload(event)
 			blocked, blockMsg, filterErr := ExecuteResponseFilters(
@@ -142,13 +143,25 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := stream.Err(); err != nil {
-		log.Error().Err(err).Msg("Bedrock stream ended with error")
-		isErr = true
+		// Context cancellation after stream completion is expected - the client closes the
+		// connection after receiving all data. Only treat non-cancellation errors as failures.
+		if r.Context().Err() == nil {
+			log.Error().Err(err).Msg("Bedrock stream ended with error")
+			isErr = true
+		} else {
+			log.Debug().Err(err).Msg("Bedrock stream context canceled (client disconnected after completion)")
+		}
 	}
 
-	// Record analytics using token counts captured on-the-fly from the metadata event
-	if !isErr {
-		go recordBedrockChatRecord(p, llm, app, modelID, int(inputTokens), int(outputTokens), r, startTime)
+	// Record analytics if we have token usage data (metadata event was received).
+	// Even if context was canceled after stream completion, we still want to record analytics.
+	// ProxyLog must be recorded first to create the skeleton event that ChatRecord enriches.
+	if !isErr && (inputTokens > 0 || outputTokens > 0) {
+		responseText := textBuffer.String()
+		go func() {
+			recordBedrockProxyLog(p, llm, app, modelID, reqBody, responseText, r, startTime)
+			recordBedrockChatRecord(p, llm, app, modelID, int(inputTokens), int(outputTokens), r, startTime)
+		}()
 	}
 }
 

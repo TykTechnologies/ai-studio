@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -231,9 +232,11 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 
 		case *types.ConverseStreamOutputMemberContentBlockDelta:
 			if textDelta, ok := v.Value.Delta.(*types.ContentBlockDeltaMemberText); ok {
+				// Accumulate text for logging
+				textBuffer.WriteString(textDelta.Value)
+
 				// Execute response filters on text content
 				if hasResponseFilters {
-					textBuffer.WriteString(textDelta.Value)
 					chunkBytes, _ := json.Marshal(textDelta.Value)
 					blocked, blockMsg, filterErr := ExecuteResponseFilters(
 						conf, p.gatewayService, chunkBytes, http.StatusOK,
@@ -309,8 +312,13 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
 
-	// Record analytics
-	go recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), r, timestamp)
+	// Record proxy log and analytics in a single goroutine to ensure correct ordering:
+	// ProxyLog must be recorded first to create the skeleton event that ChatRecord enriches.
+	responseText := textBuffer.String()
+	go func() {
+		recordBedrockProxyLog(p, conf, app, modelID, reqBody, responseText, r, timestamp)
+		recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), r, timestamp)
+	}()
 }
 
 // --- Helper functions ---
@@ -418,6 +426,7 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID 
 		UserID:       app.UserID,
 		TimeStamp:    timestamp,
 		Vendor:       string(llm.Vendor),
+		ModelName:    modelID,
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
 		ResponseBody: truncateString(string(respBody), maxBodySize),
 		ResponseCode: http.StatusOK,
@@ -426,7 +435,8 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID 
 		proxyLog.RequestBody = ""
 		proxyLog.ResponseBody = ""
 	}
-	analytics.RecordProxyLog(r.Context(), proxyLog)
+	ctx := context.WithoutCancel(r.Context())
+	analytics.RecordProxyLog(ctx, proxyLog)
 
 	// Record chat analytics
 	if output.Usage != nil {
@@ -435,6 +445,29 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID 
 			int(aws.ToInt32(output.Usage.OutputTokens)),
 			r, timestamp)
 	}
+}
+
+// recordBedrockProxyLog records a proxy log entry for Bedrock streaming paths where
+// recordBedrockAnalytics (which expects a ConverseOutput) cannot be used.
+func recordBedrockProxyLog(p *Proxy, llm *models.LLM, app *models.App, modelID string, reqBody []byte, responseText string, r *http.Request, timestamp time.Time) {
+	const maxBodySize = 65535
+
+	proxyLog := &models.ProxyLog{
+		AppID:        app.ID,
+		UserID:       app.UserID,
+		TimeStamp:    timestamp,
+		Vendor:       string(llm.Vendor),
+		ModelName:    modelID,
+		RequestBody:  truncateString(string(reqBody), maxBodySize),
+		ResponseBody: truncateString(responseText, maxBodySize),
+		ResponseCode: http.StatusOK,
+	}
+	if llm.DontLogBodies {
+		proxyLog.RequestBody = ""
+		proxyLog.ResponseBody = ""
+	}
+	ctx := context.WithoutCancel(r.Context())
+	analytics.RecordProxyLog(ctx, proxyLog)
 }
 
 // recordBedrockChatRecord is the single place that calculates cost and records an LLMChatRecord
@@ -467,6 +500,10 @@ func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID
 		UserID:          app.UserID,
 		InteractionType: models.ProxyInteraction,
 	}
-	analytics.RecordChatRecord(r.Context(), record)
+	ctx := context.WithoutCancel(r.Context())
+	analytics.RecordChatRecord(ctx, record)
+
+	// Trigger budget analysis
+	p.budgetService.AnalyzeBudgetUsage(app, llm)
 }
 
