@@ -2,6 +2,12 @@ name: CI Tests
 
 on:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - labeled
   push:
     branches:
       - main
@@ -14,22 +20,18 @@ env:
 
 jobs:
   # ==========================================================================
-  # Dependency Review (PR only)
+  # Dependency Guard (PR only)
   # ==========================================================================
-  dependency-review:
-    name: Dependency Review
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - name: Dependency Review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+  dep-guard:
+    uses: TykTechnologies/github-actions/.github/workflows/dependency-guard.yml@42304edda365365e0a887cf018d8edc34b960b82  # main
+    permissions:
+      contents: read
 
   # ==========================================================================
   # Go Linting (disabled for now)
   # ==========================================================================
   golangci-lint:
+    needs: [dep-guard]
     if: false
     runs-on: warp-ubuntu-latest-arm64-4x
     steps:
@@ -60,6 +62,7 @@ jobs:
   # Frontend Tests (Jest)
   # ==========================================================================
   frontend-tests:
+    needs: [dep-guard]
     name: Frontend Tests
     runs-on: warp-ubuntu-latest-arm64-2x
     steps:
@@ -91,6 +94,7 @@ jobs:
   # Go Unit Tests (Studio + Microgateway) - Matrix for CE/ENT
   # ==========================================================================
   go-unit-tests:
+    needs: [dep-guard]
     name: Go Unit Tests (${{ matrix.edition }})
     runs-on: warp-ubuntu-latest-arm64-4x
     strategy:
@@ -181,6 +185,7 @@ jobs:
   # Documentation Build
   # ==========================================================================
   docs-build:
+    needs: [dep-guard]
     name: Documentation Build
     runs-on: warp-ubuntu-latest-arm64-2x
     steps:
