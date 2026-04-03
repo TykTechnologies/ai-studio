@@ -146,6 +146,15 @@ type GatewayServices interface {
 	// ValidateCredential validates an API credential (Gateway-only feature)
 	ValidateCredential(ctx context.Context, secret string) (interface{}, error)
 
+	// StoreApp writes an App from the control plane into the local gateway database.
+	// Used by auth plugins that need to provision apps dynamically without waiting
+	// for periodic config sync. Uses upsert semantics (creates if not exists, updates if exists).
+	// The request should contain the full app configuration including resource associations.
+	// Requires "apps.write" scope in the plugin manifest.
+	StoreApp(ctx context.Context, appID uint32, name, description string, isActive bool,
+		userID uint32, metadata string, namespace string,
+		llmIDs, toolIDs, datasourceIDs []uint32) error
+
 	// SendToControl queues a payload to be sent to the AI Studio control plane
 	// This is used by plugins running on edge (microgateway) instances to send
 	// data back to the control plane for aggregation or processing.

@@ -57,6 +57,12 @@ func (g *gatewayServicesImpl) ValidateCredential(ctx context.Context, secret str
 	return nil, fmt.Errorf("gateway services not available in this context")
 }
 
+func (g *gatewayServicesImpl) StoreApp(ctx context.Context, appID uint32, name, description string, isActive bool,
+	userID uint32, metadata string, namespace string,
+	llmIDs, toolIDs, datasourceIDs []uint32) error {
+	return fmt.Errorf("gateway services not available in this context")
+}
+
 func (g *gatewayServicesImpl) SendToControl(ctx context.Context, payload []byte, correlationID string, metadata map[string]string) (int64, error) {
 	return 0, fmt.Errorf("gateway services not available in this context")
 }

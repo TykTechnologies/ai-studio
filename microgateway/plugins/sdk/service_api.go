@@ -262,6 +262,21 @@ func GetApp(ctx context.Context, appID uint32) (*pb.GetAppResponse, error) {
 	})
 }
 
+// StoreApp writes an App into the local gateway database using upsert semantics.
+// Used by auth plugins that dynamically provision apps from the control plane.
+func StoreApp(ctx context.Context, req *pb.StoreAppRequest) (*pb.StoreAppResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	if req.Context == nil {
+		req.Context = createPluginContext("apps.write")
+	}
+
+	return client.StoreApp(ctx, req)
+}
+
 // Budget Functions
 
 // GetBudgetStatus returns budget status for an app
