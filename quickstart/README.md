@@ -31,10 +31,9 @@ This directory contains Docker Compose configurations to quickly spin up a demo 
 ## Services
 
 Once running, the following services are available:
-
 | Service | Port | Description |
 |---------|------|-------------|
-| AI Studio UI | 8585 | Main web interface |
+| AI Studio UI | 3000 (CE) / 8585 (ENT) | Main web interface |
 | AI Studio API | 9595 | REST API |
 | Microgateway | 9091 | LLM proxy gateway |
 
