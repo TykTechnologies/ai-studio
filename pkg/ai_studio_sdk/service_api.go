@@ -936,6 +936,34 @@ func DeleteModelPrice(ctx context.Context, modelPriceID uint32) error {
 	return nil
 }
 
+// ListModelPrices lists model prices with optional vendor filter and pagination
+func ListModelPrices(ctx context.Context, vendor string, page, limit int32) (*mgmtpb.ListModelPricesResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.ListModelPrices(ctx, &mgmtpb.ListModelPricesRequest{
+		Context: createPluginContext(AvailableScopes.PricingRead),
+		Vendor:  vendor,
+		Page:    page,
+		Limit:   limit,
+	})
+}
+
+// GetModelPricesByVendor retrieves all model prices for a specific vendor
+func GetModelPricesByVendor(ctx context.Context, vendor string) (*mgmtpb.GetModelPricesByVendorResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.GetModelPricesByVendor(ctx, &mgmtpb.GetModelPricesByVendorRequest{
+		Context: createPluginContext(AvailableScopes.PricingRead),
+		Vendor:  vendor,
+	})
+}
+
 // === Datasource CRUD Operations ===
 
 // ListDatasources retrieves all datasources with optional filtering and pagination
