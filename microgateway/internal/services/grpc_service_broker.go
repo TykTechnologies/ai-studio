@@ -330,7 +330,7 @@ func (s *MicrogatewayManagementServer) StoreApp(ctx context.Context, req *pb.Sto
 
 		// Rebuild Tool associations
 		if clearErr := tx.Exec("DELETE FROM app_tools WHERE app_id = ?", req.AppId).Error; clearErr != nil {
-			log.Warn().Err(clearErr).Uint32("app_id", req.AppId).Msg("Failed to clear app_tools")
+			return fmt.Errorf("failed to clear app_tools: %w", clearErr)
 		}
 		for _, toolID := range req.ToolIds {
 			if createErr := tx.Create(&database.AppTool{
@@ -342,7 +342,7 @@ func (s *MicrogatewayManagementServer) StoreApp(ctx context.Context, req *pb.Sto
 
 		// Rebuild Datasource associations
 		if clearErr := tx.Exec("DELETE FROM app_datasources WHERE app_id = ?", req.AppId).Error; clearErr != nil {
-			log.Warn().Err(clearErr).Uint32("app_id", req.AppId).Msg("Failed to clear app_datasources")
+			return fmt.Errorf("failed to clear app_datasources: %w", clearErr)
 		}
 		for _, dsID := range req.DatasourceIds {
 			if createErr := tx.Create(&database.AppDatasource{
