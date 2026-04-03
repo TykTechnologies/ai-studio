@@ -7,6 +7,7 @@ import (
 	"time"
 
 	mgwsdk "github.com/TykTechnologies/midsommar/microgateway/plugins/sdk"
+	mgwpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
 	goplugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
 )
@@ -49,6 +50,24 @@ func (g *gatewayServicesImpl) ListModelPrices(ctx context.Context, vendor string
 
 func (g *gatewayServicesImpl) ValidateCredential(ctx context.Context, secret string) (interface{}, error) {
 	return mgwsdk.ValidateCredential(ctx, secret)
+}
+
+func (g *gatewayServicesImpl) StoreApp(ctx context.Context, appID uint32, name, description string, isActive bool,
+	userID uint32, metadata string, namespace string,
+	llmIDs, toolIDs, datasourceIDs []uint32) error {
+	_, err := mgwsdk.StoreApp(ctx, &mgwpb.StoreAppRequest{
+		AppId:         appID,
+		Name:          name,
+		Description:   description,
+		IsActive:      isActive,
+		UserId:        userID,
+		Metadata:      metadata,
+		Namespace:     namespace,
+		LlmIds:        llmIDs,
+		ToolIds:       toolIDs,
+		DatasourceIds: datasourceIDs,
+	})
+	return err
 }
 
 func (g *gatewayServicesImpl) SendToControl(ctx context.Context, payload []byte, correlationID string, metadata map[string]string) (int64, error) {

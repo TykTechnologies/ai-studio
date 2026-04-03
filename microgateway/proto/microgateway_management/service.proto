@@ -13,9 +13,14 @@ service MicrogatewayManagementService {
     rpc ListLLMs(ListLLMsRequest) returns (ListLLMsResponse);
     rpc GetLLM(GetLLMRequest) returns (GetLLMResponse);
 
-    // App Management Operations (Read-Only)
+    // App Management Operations
     rpc ListApps(ListAppsRequest) returns (ListAppsResponse);
     rpc GetApp(GetAppRequest) returns (GetAppResponse);
+
+    // StoreApp writes an App into the local gateway database (upsert semantics).
+    // Used by auth plugins that dynamically provision apps from the control plane.
+    // Requires "apps.write" scope in the plugin manifest.
+    rpc StoreApp(StoreAppRequest) returns (StoreAppResponse);
 
     // Budget Operations (Read-Only)
     rpc GetBudgetStatus(GetBudgetStatusRequest) returns (GetBudgetStatusResponse);
@@ -133,6 +138,37 @@ message AppInfo {
     google.protobuf.Timestamp created_at = 10;
     google.protobuf.Timestamp updated_at = 11;
     string metadata = 12; // JSON string
+}
+
+// StoreApp Messages - for dynamic app provisioning by auth plugins
+
+message StoreAppRequest {
+    PluginContext context = 1;
+
+    // Full app configuration (mirrors common.proto AppConfig)
+    uint32 app_id = 2;                        // Required: App ID from control plane
+    string name = 3;
+    string description = 4;
+    string owner_email = 5;
+    bool is_active = 6;
+    double monthly_budget = 7;
+    string budget_start_date = 8;             // ISO timestamp
+    int32 rate_limit_rpm = 9;
+    string metadata = 10;                     // JSON string
+    string namespace = 11;
+    uint32 user_id = 12;                      // Owner user ID
+    google.protobuf.Timestamp created_at = 13;
+    google.protobuf.Timestamp updated_at = 14;
+
+    // Resource associations
+    repeated uint32 llm_ids = 20;             // LLMs this app can access
+    repeated uint32 tool_ids = 21;            // Tools this app can use
+    repeated uint32 datasource_ids = 22;      // Datasources this app can access
+}
+
+message StoreAppResponse {
+    bool success = 1;
+    string message = 2;
 }
 
 // Budget Messages

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"gorm.io/datatypes"
 	pb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
@@ -242,6 +243,134 @@ func (s *MicrogatewayManagementServer) GetApp(ctx context.Context, req *pb.GetAp
 
 	return &pb.GetAppResponse{
 		App: s.convertAppToPB(app),
+	}, nil
+}
+
+// StoreApp writes an App into the local gateway database using upsert semantics.
+// This allows auth plugins to dynamically provision apps from the control plane
+// without waiting for the periodic config sync.
+func (s *MicrogatewayManagementServer) StoreApp(ctx context.Context, req *pb.StoreAppRequest) (*pb.StoreAppResponse, error) {
+	_, err := s.validatePluginScope(ctx, req.Context, "apps.write")
+	if err != nil {
+		return nil, err
+	}
+
+	if req.AppId == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "app_id is required")
+	}
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		// Build App record from request
+		app := &database.App{
+			Model: gorm.Model{
+				ID: uint(req.AppId),
+			},
+			Name:         req.Name,
+			Description:  req.Description,
+			OwnerEmail:   req.OwnerEmail,
+			UserID:       uint(req.UserId),
+			IsActive:     req.IsActive,
+			MonthlyBudget: req.MonthlyBudget,
+			RateLimitRPM: int(req.RateLimitRpm),
+			Namespace:    req.Namespace,
+		}
+
+		// Handle budget start date
+		if req.BudgetStartDate != "" {
+			if startDate, parseErr := time.Parse(time.RFC3339, req.BudgetStartDate); parseErr == nil {
+				app.BudgetStartDate = &startDate
+			}
+		}
+
+		// Handle timestamps
+		if req.CreatedAt != nil {
+			app.CreatedAt = req.CreatedAt.AsTime()
+		}
+		if req.UpdatedAt != nil {
+			app.UpdatedAt = req.UpdatedAt.AsTime()
+		} else {
+			app.UpdatedAt = time.Now()
+		}
+
+		// Handle metadata
+		if req.Metadata != "" {
+			app.Metadata = datatypes.JSON(req.Metadata)
+		}
+
+		// Upsert the app record
+		if upsertErr := tx.Where("id = ?", req.AppId).
+			Assign(map[string]interface{}{
+				"name":              app.Name,
+				"description":       app.Description,
+				"owner_email":       app.OwnerEmail,
+				"user_id":           app.UserID,
+				"is_active":         app.IsActive,
+				"monthly_budget":    app.MonthlyBudget,
+				"budget_start_date": app.BudgetStartDate,
+				"rate_limit_rpm":    app.RateLimitRPM,
+				"namespace":         app.Namespace,
+				"metadata":          app.Metadata,
+				"updated_at":        app.UpdatedAt,
+			}).
+			FirstOrCreate(app).Error; upsertErr != nil {
+			return fmt.Errorf("failed to upsert app: %w", upsertErr)
+		}
+
+		// Rebuild LLM associations
+		if clearErr := tx.Exec("DELETE FROM app_llms WHERE app_id = ?", req.AppId).Error; clearErr != nil {
+			return fmt.Errorf("failed to clear app_llms: %w", clearErr)
+		}
+		for _, llmID := range req.LlmIds {
+			if createErr := tx.Create(&database.AppLLM{
+				AppID: uint(req.AppId), LLMID: uint(llmID), IsActive: true, CreatedAt: time.Now(),
+			}).Error; createErr != nil {
+				return fmt.Errorf("failed to create app_llm (app=%d, llm=%d): %w", req.AppId, llmID, createErr)
+			}
+		}
+
+		// Rebuild Tool associations
+		if clearErr := tx.Exec("DELETE FROM app_tools WHERE app_id = ?", req.AppId).Error; clearErr != nil {
+			return fmt.Errorf("failed to clear app_tools: %w", clearErr)
+		}
+		for _, toolID := range req.ToolIds {
+			if createErr := tx.Create(&database.AppTool{
+				AppID: uint(req.AppId), ToolID: uint(toolID), CreatedAt: time.Now(),
+			}).Error; createErr != nil {
+				return fmt.Errorf("failed to create app_tool (app=%d, tool=%d): %w", req.AppId, toolID, createErr)
+			}
+		}
+
+		// Rebuild Datasource associations
+		if clearErr := tx.Exec("DELETE FROM app_datasources WHERE app_id = ?", req.AppId).Error; clearErr != nil {
+			return fmt.Errorf("failed to clear app_datasources: %w", clearErr)
+		}
+		for _, dsID := range req.DatasourceIds {
+			if createErr := tx.Create(&database.AppDatasource{
+				AppID: uint(req.AppId), DatasourceID: uint(dsID), CreatedAt: time.Now(),
+			}).Error; createErr != nil {
+				return fmt.Errorf("failed to create app_datasource (app=%d, ds=%d): %w", req.AppId, dsID, createErr)
+			}
+		}
+
+		log.Info().
+			Uint32("app_id", req.AppId).
+			Str("app_name", req.Name).
+			Int("llm_count", len(req.LlmIds)).
+			Int("tool_count", len(req.ToolIds)).
+			Int("ds_count", len(req.DatasourceIds)).
+			Msg("Stored App via plugin StoreApp")
+
+		return nil
+	})
+
+	if err != nil {
+		log.Error().Err(err).Uint32("app_id", req.AppId).Msg("StoreApp failed")
+		return nil, status.Errorf(codes.Internal, "failed to store app: %v", err)
+	}
+
+	return &pb.StoreAppResponse{
+		Success: true,
+		Message: fmt.Sprintf("App %d stored successfully", req.AppId),
 	}, nil
 }
 

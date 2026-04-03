@@ -23,6 +23,7 @@ const (
 	MicrogatewayManagementService_GetLLM_FullMethodName              = "/microgateway_management.MicrogatewayManagementService/GetLLM"
 	MicrogatewayManagementService_ListApps_FullMethodName            = "/microgateway_management.MicrogatewayManagementService/ListApps"
 	MicrogatewayManagementService_GetApp_FullMethodName              = "/microgateway_management.MicrogatewayManagementService/GetApp"
+	MicrogatewayManagementService_StoreApp_FullMethodName            = "/microgateway_management.MicrogatewayManagementService/StoreApp"
 	MicrogatewayManagementService_GetBudgetStatus_FullMethodName     = "/microgateway_management.MicrogatewayManagementService/GetBudgetStatus"
 	MicrogatewayManagementService_ListModelPrices_FullMethodName     = "/microgateway_management.MicrogatewayManagementService/ListModelPrices"
 	MicrogatewayManagementService_GetModelPrice_FullMethodName       = "/microgateway_management.MicrogatewayManagementService/GetModelPrice"
@@ -44,9 +45,13 @@ type MicrogatewayManagementServiceClient interface {
 	// LLM Management Operations (Read-Only)
 	ListLLMs(ctx context.Context, in *ListLLMsRequest, opts ...grpc.CallOption) (*ListLLMsResponse, error)
 	GetLLM(ctx context.Context, in *GetLLMRequest, opts ...grpc.CallOption) (*GetLLMResponse, error)
-	// App Management Operations (Read-Only)
+	// App Management Operations
 	ListApps(ctx context.Context, in *ListAppsRequest, opts ...grpc.CallOption) (*ListAppsResponse, error)
 	GetApp(ctx context.Context, in *GetAppRequest, opts ...grpc.CallOption) (*GetAppResponse, error)
+	// StoreApp writes an App into the local gateway database (upsert semantics).
+	// Used by auth plugins that dynamically provision apps from the control plane.
+	// Requires "apps.write" scope in the plugin manifest.
+	StoreApp(ctx context.Context, in *StoreAppRequest, opts ...grpc.CallOption) (*StoreAppResponse, error)
 	// Budget Operations (Read-Only)
 	GetBudgetStatus(ctx context.Context, in *GetBudgetStatusRequest, opts ...grpc.CallOption) (*GetBudgetStatusResponse, error)
 	// Model Price Management Operations (Read-Only)
@@ -106,6 +111,16 @@ func (c *microgatewayManagementServiceClient) GetApp(ctx context.Context, in *Ge
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetAppResponse)
 	err := c.cc.Invoke(ctx, MicrogatewayManagementService_GetApp_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *microgatewayManagementServiceClient) StoreApp(ctx context.Context, in *StoreAppRequest, opts ...grpc.CallOption) (*StoreAppResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StoreAppResponse)
+	err := c.cc.Invoke(ctx, MicrogatewayManagementService_StoreApp_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -212,9 +227,13 @@ type MicrogatewayManagementServiceServer interface {
 	// LLM Management Operations (Read-Only)
 	ListLLMs(context.Context, *ListLLMsRequest) (*ListLLMsResponse, error)
 	GetLLM(context.Context, *GetLLMRequest) (*GetLLMResponse, error)
-	// App Management Operations (Read-Only)
+	// App Management Operations
 	ListApps(context.Context, *ListAppsRequest) (*ListAppsResponse, error)
 	GetApp(context.Context, *GetAppRequest) (*GetAppResponse, error)
+	// StoreApp writes an App into the local gateway database (upsert semantics).
+	// Used by auth plugins that dynamically provision apps from the control plane.
+	// Requires "apps.write" scope in the plugin manifest.
+	StoreApp(context.Context, *StoreAppRequest) (*StoreAppResponse, error)
 	// Budget Operations (Read-Only)
 	GetBudgetStatus(context.Context, *GetBudgetStatusRequest) (*GetBudgetStatusResponse, error)
 	// Model Price Management Operations (Read-Only)
@@ -251,6 +270,9 @@ func (UnimplementedMicrogatewayManagementServiceServer) ListApps(context.Context
 }
 func (UnimplementedMicrogatewayManagementServiceServer) GetApp(context.Context, *GetAppRequest) (*GetAppResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetApp not implemented")
+}
+func (UnimplementedMicrogatewayManagementServiceServer) StoreApp(context.Context, *StoreAppRequest) (*StoreAppResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StoreApp not implemented")
 }
 func (UnimplementedMicrogatewayManagementServiceServer) GetBudgetStatus(context.Context, *GetBudgetStatusRequest) (*GetBudgetStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBudgetStatus not implemented")
@@ -369,6 +391,24 @@ func _MicrogatewayManagementService_GetApp_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MicrogatewayManagementServiceServer).GetApp(ctx, req.(*GetAppRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MicrogatewayManagementService_StoreApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StoreAppRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MicrogatewayManagementServiceServer).StoreApp(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MicrogatewayManagementService_StoreApp_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MicrogatewayManagementServiceServer).StoreApp(ctx, req.(*StoreAppRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -557,6 +597,10 @@ var MicrogatewayManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetApp",
 			Handler:    _MicrogatewayManagementService_GetApp_Handler,
+		},
+		{
+			MethodName: "StoreApp",
+			Handler:    _MicrogatewayManagementService_StoreApp_Handler,
 		},
 		{
 			MethodName: "GetBudgetStatus",
