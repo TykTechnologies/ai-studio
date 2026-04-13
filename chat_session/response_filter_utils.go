@@ -1,6 +1,7 @@
 package chat_session
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -69,6 +70,9 @@ func ExecuteResponseFilters(
 			// On error, allow response through (fail open for safety)
 			return false, "", fmt.Errorf("filter '%s' error: %w", filter.Name, err)
 		}
+
+		// Record any compliance events reported by the script
+		scripting.RecordComplianceEvents(context.Background(), output, filter.Name, "chat_response", 0, userID, 0, vendor, modelName)
 
 		// Check if filter blocks the response
 		if output.Block {

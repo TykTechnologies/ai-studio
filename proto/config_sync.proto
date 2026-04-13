@@ -224,6 +224,7 @@ message AnalyticsPulse {
   repeated AnalyticsEvent analytics_events = 7;   // Analytics/token usage events
   repeated BudgetUsageEvent budget_events = 8;    // Budget usage events
   repeated ProxyLogSummary proxy_summaries = 9;   // Summarized proxy logs (not full payloads)
+  repeated ComplianceEventProto compliance_events = 13; // Script-reported compliance events
 
   // Pulse metadata
   bool is_compressed = 10;        // Whether data is compressed
@@ -332,6 +333,23 @@ message ProxyLogSummary {
   repeated string unique_models = 12; // List of unique model names called
   uint32 total_tokens = 13;       // Total tokens across all requests
   double total_cost = 14;         // Total cost as cents (dollars * 10000, providing 4 decimal precision)
+}
+
+// ComplianceEventProto represents a compliance event reported by a filter script
+// Used for transmitting compliance events from edge gateways to the control plane
+message ComplianceEventProto {
+  uint32 app_id = 1;
+  uint32 user_id = 2;
+  uint32 llm_id = 3;
+  string filter_name = 4;
+  string filter_scope = 5;           // "proxy_request", "proxy_response", etc.
+  string event_type = 6;             // Free-form: "pii_redacted", "content_rewritten", etc.
+  string severity = 7;               // "info", "warning", "critical"
+  string description = 8;
+  string metadata = 9;               // JSON blob
+  string vendor = 10;
+  string model_name = 11;
+  google.protobuf.Timestamp timestamp = 12;
 }
 
 // Plugin Control Payload Messages

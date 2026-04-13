@@ -930,6 +930,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/compliance/access-issues", a.getAccessIssues)
 	v1.GET("/compliance/policy-violations", a.getPolicyViolations)
 	v1.GET("/compliance/violations", a.getViolationRecords)
+	v1.GET("/compliance/events", a.getComplianceEvents)
 	v1.GET("/compliance/budget-alerts", a.getBudgetAlerts)
 	v1.GET("/compliance/errors", a.getComplianceErrors)
 	v1.GET("/compliance/app/:id/risk-profile", a.getAppRiskProfile)

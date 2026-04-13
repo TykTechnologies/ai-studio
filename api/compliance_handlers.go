@@ -587,3 +587,88 @@ func (a *API) getViolationRecords(c *gin.Context) {
 
 	c.JSON(http.StatusOK, records)
 }
+
+// getComplianceEvents godoc
+// @Summary Get script-reported compliance events
+// @Description Get compliance events reported by filter scripts, with filtering and aggregation
+// @Tags Compliance
+// @Accept json
+// @Produce json
+// @Param start_date query string false "Start date (YYYY-MM-DD), defaults to 7 days ago"
+// @Param end_date query string false "End date (YYYY-MM-DD), defaults to today"
+// @Param app_id query int false "Filter by app ID"
+// @Param event_type query string false "Filter by event type"
+// @Param severity query string false "Filter by severity (info, warning, critical)"
+// @Param limit query int false "Maximum number of records, defaults to 100"
+// @Param offset query int false "Pagination offset, defaults to 0"
+// @Success 200 {object} compliance.ComplianceEventsData
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 403 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /compliance/events [get]
+func (a *API) getComplianceEvents(c *gin.Context) {
+	startDate, endDate, err := getComplianceDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	var appID *uint
+	if appIDStr := c.Query("app_id"); appIDStr != "" {
+		if parsed, err := strconv.ParseUint(appIDStr, 10, 32); err == nil {
+			id := uint(parsed)
+			appID = &id
+		}
+	}
+
+	var eventType *string
+	if et := c.Query("event_type"); et != "" {
+		eventType = &et
+	}
+
+	var severity *string
+	if sev := c.Query("severity"); sev != "" {
+		severity = &sev
+	}
+
+	limit := 100
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if parsed, err := strconv.Atoi(offsetStr); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	data, err := complianceService.GetComplianceEvents(startDate, endDate, appID, eventType, severity, limit, offset)
+	if err != nil {
+		if err == compliance.ErrEnterpriseFeature {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Enterprise Feature", Detail: err.Error()}},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to get compliance events"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}

@@ -23,8 +23,9 @@ type DatabaseHandler struct {
 	toolCallChan   chan *models.ToolCallRecord
 	proxyLogChan   chan *models.ProxyLog
 	// Batch processing channels for async non-blocking batch operations
-	chatRecordBatchChan chan []*models.LLMChatRecord
-	proxyLogBatchChan   chan []*models.ProxyLog
+	chatRecordBatchChan    chan []*models.LLMChatRecord
+	proxyLogBatchChan      chan []*models.ProxyLog
+	complianceEventChan    chan []*models.ComplianceEvent
 	recStarted          bool
 	recMutex            sync.RWMutex
 	ctx                 context.Context
@@ -113,6 +114,7 @@ func (h *DatabaseHandler) start() {
 	}
 	h.chatRecordBatchChan = make(chan []*models.LLMChatRecord, batchBufferSize)
 	h.proxyLogBatchChan = make(chan []*models.ProxyLog, batchBufferSize)
+	h.complianceEventChan = make(chan []*models.ComplianceEvent, batchBufferSize)
 
 	// Start background workers
 	go h.startWorker()
@@ -207,6 +209,13 @@ func (h *DatabaseHandler) startWorker() {
 					Time("timestamp", logs[0].TimeStamp).
 					Msg("Created proxy log batch")
 			}
+		case events := <-h.complianceEventChan:
+			err := h.createRecordWithRetry(func() error {
+				return h.db.CreateInBatches(events, 100).Error
+			})
+			if err != nil {
+				logger.Warnf("Error creating compliance events: %s", sanitizeError(err))
+			}
 		case <-h.ctx.Done():
 			logger.Info("shutting down database analytics handler")
 			h.recMutex.Lock()
@@ -218,6 +227,7 @@ func (h *DatabaseHandler) startWorker() {
 			close(h.proxyLogChan)
 			close(h.chatRecordBatchChan)
 			close(h.proxyLogBatchChan)
+			close(h.complianceEventChan)
 			return
 		}
 	}
@@ -409,6 +419,29 @@ func (h *DatabaseHandler) RecordProxyLogsBatch(_ context.Context, logs []*models
 	}
 }
 
+// RecordComplianceEvents records filter script compliance events asynchronously
+func (h *DatabaseHandler) RecordComplianceEvents(_ context.Context, events []*models.ComplianceEvent) {
+	if len(events) == 0 {
+		return
+	}
+
+	h.recMutex.RLock()
+	if !h.recStarted {
+		h.recMutex.RUnlock()
+		return
+	}
+	h.recMutex.RUnlock()
+
+	select {
+	case <-h.ctx.Done():
+		logger.Warnf("dropping compliance events due to cancellation: %s", h.ctx.Err())
+		return
+	case h.complianceEventChan <- events:
+	default:
+		logger.Warn("compliance event buffer full, dropping events")
+	}
+}
+
 // SetAsGlobalHandler sets this handler as the global analytics handler
 func (h *DatabaseHandler) SetAsGlobalHandler() {
 	SetHandler(h)
@@ -421,6 +454,7 @@ func initDB(db *gorm.DB) {
 		&models.LLMChatLogEntry{},
 		&models.ToolCallRecord{},
 		&models.ProxyLog{},
+		&models.ComplianceEvent{},
 	)
 
 	if err != nil {

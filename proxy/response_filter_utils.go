@@ -102,6 +102,9 @@ func ExecuteResponseFilters(
 			return false, "", fmt.Errorf("filter '%s' error: %w", filter.Name, err)
 		}
 
+		// Record any compliance events reported by the script
+		scripting.RecordComplianceEvents(r.Context(), output, filter.Name, "proxy_response", uint(appID), 0, llm.ID, string(llm.Vendor), modelName)
+
 		// Check if filter blocks the response
 		if output.Block {
 			msg := output.Message

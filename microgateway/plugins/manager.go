@@ -1736,6 +1736,25 @@ func (pm *PluginManager) ExecuteDataCollectionPlugins(hookType string, data inte
 	return nil
 }
 
+// BufferComplianceEvents forwards compliance events to the built-in analytics pulse plugin
+// for batch transmission to the control plane during the next pulse.
+func (pm *PluginManager) BufferComplianceEvents(events []plugins.ComplianceEventBuffer) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	for _, globalPlugin := range pm.globalDataPlugins {
+		if globalPlugin.LoadedPlugin.BuiltinPlugin == nil {
+			continue
+		}
+		if pulsePlugin, ok := globalPlugin.LoadedPlugin.BuiltinPlugin.(*plugins.AnalyticsPulsePlugin); ok {
+			pulsePlugin.BufferComplianceEvents(events)
+			return
+		}
+	}
+
+	log.Debug().Int("count", len(events)).Msg("No analytics pulse plugin found for compliance events - events dropped")
+}
+
 // executeDataCollectionPlugin executes a specific plugin for the given data type
 func (pm *PluginManager) executeDataCollectionPlugin(ctx context.Context, plugin *GlobalPlugin, hookType string, data interface{}) error {
 	// Check if this is a built-in plugin

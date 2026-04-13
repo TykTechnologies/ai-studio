@@ -23,7 +23,7 @@ func setupComplianceTestAPI(t *testing.T) (*API, *gin.Engine) {
 	db := apitest.SetupTestDB(t)
 
 	// Create additional tables needed for compliance tests
-	err := db.AutoMigrate(&models.ProxyLog{}, &models.LLMChatRecord{})
+	err := db.AutoMigrate(&models.ProxyLog{}, &models.LLMChatRecord{}, &models.ComplianceEvent{})
 	assert.NoError(t, err)
 
 	service := apitest.SetupTestService(db)
@@ -43,6 +43,7 @@ func setupComplianceTestAPI(t *testing.T) (*API, *gin.Engine) {
 	v1.GET("/compliance/access-issues", api.getAccessIssues)
 	v1.GET("/compliance/policy-violations", api.getPolicyViolations)
 	v1.GET("/compliance/violations", api.getViolationRecords)
+	v1.GET("/compliance/events", api.getComplianceEvents)
 	v1.GET("/compliance/budget-alerts", api.getBudgetAlerts)
 	v1.GET("/compliance/errors", api.getComplianceErrors)
 	v1.GET("/compliance/app/:id/risk-profile", api.getAppRiskProfile)
@@ -367,6 +368,7 @@ func TestComplianceEnterprise_DateRangeDefaults(t *testing.T) {
 		"/api/v1/compliance/access-issues",
 		"/api/v1/compliance/policy-violations",
 		"/api/v1/compliance/violations",
+		"/api/v1/compliance/events",
 		"/api/v1/compliance/budget-alerts",
 		"/api/v1/compliance/errors",
 	}
@@ -378,4 +380,156 @@ func TestComplianceEnterprise_DateRangeDefaults(t *testing.T) {
 			assert.Equal(t, http.StatusOK, w.Code, "Endpoint %s should return OK with default date range", endpoint)
 		})
 	}
+}
+
+func TestComplianceEnterprise_GetComplianceEvents(t *testing.T) {
+	api, r := setupComplianceTestAPI(t)
+
+	t.Run("Returns empty events with default date range", func(t *testing.T) {
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response compliance.ComplianceEventsData
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.NotNil(t, response.Events)
+		assert.Equal(t, int64(0), response.TotalCount)
+		assert.NotNil(t, response.BySeverity)
+		assert.NotNil(t, response.ByType)
+		assert.NotNil(t, response.ByFilter)
+	})
+
+	t.Run("Returns events after inserting data", func(t *testing.T) {
+		now := time.Now()
+
+		// Insert test compliance events
+		events := []models.ComplianceEvent{
+			{
+				AppID:       1,
+				UserID:      10,
+				LLMID:       5,
+				FilterName:  "pii-filter",
+				FilterScope: "proxy_request",
+				EventType:   "pii_redacted",
+				Severity:    "warning",
+				Description: "SSN pattern redacted",
+				Metadata:    `{"pattern":"ssn","count":2}`,
+				Vendor:      "openai",
+				ModelName:   "gpt-4",
+				TimeStamp:   now,
+			},
+			{
+				AppID:       1,
+				UserID:      10,
+				LLMID:       5,
+				FilterName:  "tone-filter",
+				FilterScope: "chat_request",
+				EventType:   "content_rewritten",
+				Severity:    "info",
+				Description: "Tone adjusted to professional",
+				Vendor:      "anthropic",
+				ModelName:   "claude-3",
+				TimeStamp:   now,
+			},
+			{
+				AppID:       2,
+				UserID:      20,
+				LLMID:       8,
+				FilterName:  "pii-filter",
+				FilterScope: "proxy_request",
+				EventType:   "pii_redacted",
+				Severity:    "critical",
+				Description: "Credit card number blocked",
+				Vendor:      "openai",
+				ModelName:   "gpt-4",
+				TimeStamp:   now,
+			},
+		}
+
+		for _, e := range events {
+			err := api.service.DB.Create(&e).Error
+			assert.NoError(t, err)
+		}
+
+		// Test: get all events
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response compliance.ComplianceEventsData
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), response.TotalCount)
+		assert.Len(t, response.Events, 3)
+
+		// Verify aggregation
+		assert.Equal(t, 1, response.BySeverity["warning"])
+		assert.Equal(t, 1, response.BySeverity["info"])
+		assert.Equal(t, 1, response.BySeverity["critical"])
+		assert.Equal(t, 2, response.ByType["pii_redacted"])
+		assert.Equal(t, 1, response.ByType["content_rewritten"])
+		assert.Equal(t, 2, response.ByFilter["pii-filter"])
+		assert.Equal(t, 1, response.ByFilter["tone-filter"])
+	})
+
+	t.Run("Filters by severity", func(t *testing.T) {
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?severity=critical", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response compliance.ComplianceEventsData
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), response.TotalCount)
+		assert.Len(t, response.Events, 1)
+		assert.Equal(t, "critical", response.Events[0].Severity)
+	})
+
+	t.Run("Filters by event_type", func(t *testing.T) {
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?event_type=pii_redacted", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response compliance.ComplianceEventsData
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), response.TotalCount)
+		for _, e := range response.Events {
+			assert.Equal(t, "pii_redacted", e.EventType)
+		}
+	})
+
+	t.Run("Filters by app_id", func(t *testing.T) {
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?app_id=2", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response compliance.ComplianceEventsData
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), response.TotalCount)
+		assert.Equal(t, uint(2), response.Events[0].AppID)
+	})
+
+	t.Run("Respects limit and offset", func(t *testing.T) {
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?limit=1&offset=0", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response compliance.ComplianceEventsData
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Len(t, response.Events, 1)
+		assert.Equal(t, int64(3), response.TotalCount) // total is still 3
+	})
+
+	t.Run("Returns metadata as parsed JSON", func(t *testing.T) {
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?event_type=pii_redacted&app_id=1", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response compliance.ComplianceEventsData
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.GreaterOrEqual(t, len(response.Events), 1)
+
+		// The metadata should be a parsed map
+		meta := response.Events[0].Metadata
+		assert.NotNil(t, meta)
+		assert.Equal(t, "ssn", meta["pattern"])
+	})
 }

@@ -28,6 +28,9 @@ type AnalyticsHandler interface {
 	// Batch processing methods for improved performance
 	RecordChatRecordsBatch(ctx context.Context, records []*models.LLMChatRecord)
 	RecordProxyLogsBatch(ctx context.Context, logs []*models.ProxyLog)
+
+	// RecordComplianceEvents records filter script compliance events
+	RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEvent)
 }
 
 var (

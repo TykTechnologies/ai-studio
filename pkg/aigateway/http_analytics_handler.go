@@ -179,6 +179,10 @@ func (h *HTTPAnalyticsHandler) RecordProxyLogsBatch(_ context.Context, logs []*m
 	h.postJSON("/analytics/batch", batchData)
 }
 
+// RecordComplianceEvents implements analytics.AnalyticsHandler (no-op for HTTP handler)
+func (h *HTTPAnalyticsHandler) RecordComplianceEvents(_ context.Context, events []*models.ComplianceEvent) {
+}
+
 // SetAsGlobalHandler sets this handler as the global analytics handler
 func (h *HTTPAnalyticsHandler) SetAsGlobalHandler() {
 	analytics.SetHandler(h)

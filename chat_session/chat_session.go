@@ -381,6 +381,9 @@ func (cs *ChatSession) Start() error {
 						break
 					}
 
+					// Record any compliance events reported by the script
+					scripting.RecordComplianceEvents(context.Background(), output, filter.Name, "chat_request", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
+
 					if output.Block {
 						blockMsg := output.Message
 						if blockMsg == "" {
@@ -690,6 +693,9 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 				if err != nil {
 					return fmt.Sprintf("filter error in %s: %v", refs[i], err), false
 				}
+
+				// Record any compliance events reported by the script
+				scripting.RecordComplianceEvents(context.Background(), output, cs.filters[i2].Name, "file_reference", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
 
 				if output.Block {
 					msg := output.Message
@@ -1478,6 +1484,9 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 					cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
 					continue
 				}
+
+				// Record any compliance events reported by the script
+				scripting.RecordComplianceEvents(context.Background(), output, filter.Name, "tool_response", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
 
 				// Check if tool response should be blocked (NEW capability)
 				if output.Block {

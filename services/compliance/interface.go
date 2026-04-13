@@ -139,6 +139,34 @@ type ViolationRecord struct {
 	Vendor        string    `json:"vendor"`
 }
 
+// ComplianceEventRecord represents a script-reported compliance event for API responses
+type ComplianceEventRecord struct {
+	ID          uint                   `json:"id"`
+	AppID       uint                   `json:"app_id"`
+	AppName     string                 `json:"app_name,omitempty"`
+	UserID      uint                   `json:"user_id"`
+	LLMID       uint                   `json:"llm_id"`
+	FilterName  string                 `json:"filter_name"`
+	FilterScope string                 `json:"filter_scope"`
+	EventType   string                 `json:"event_type"`
+	Severity    string                 `json:"severity"`
+	Description string                 `json:"description"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Vendor      string                 `json:"vendor"`
+	ModelName   string                 `json:"model_name"`
+	Timestamp   time.Time              `json:"timestamp"`
+}
+
+// ComplianceEventsData contains aggregated compliance event data
+type ComplianceEventsData struct {
+	Events     []ComplianceEventRecord `json:"events"`
+	TotalCount int64                   `json:"total_count"`
+	BySeverity map[string]int          `json:"by_severity"`
+	ByType     map[string]int          `json:"by_type"`
+	ByFilter   map[string]int          `json:"by_filter"`
+	Timeline   []TimelineData          `json:"timeline"`
+}
+
 // Service defines the interface for compliance management.
 // Community Edition provides stub implementations that return enterprise feature errors.
 // Enterprise Edition provides full compliance monitoring and risk analysis.
@@ -187,4 +215,9 @@ type Service interface {
 	// CE: Returns ErrEnterpriseFeature
 	// ENT: Returns individual violation records with parsed details
 	GetViolationRecords(startDate, endDate time.Time, appID *uint, limit int) ([]ViolationRecord, error)
+
+	// GetComplianceEvents returns script-reported compliance events.
+	// CE: Returns ErrEnterpriseFeature
+	// ENT: Returns compliance events with filtering and aggregation
+	GetComplianceEvents(startDate, endDate time.Time, appID *uint, eventType *string, severity *string, limit int, offset int) (*ComplianceEventsData, error)
 }
