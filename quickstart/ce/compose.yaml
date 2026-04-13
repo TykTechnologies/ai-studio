@@ -5,7 +5,7 @@ services:
   midsommar:
     networks:
       - tyk-network
-    image: tykio/tyk-ai-studio:pre-release-latest-ce
+    image: tykio/tyk-ai-studio:v2.0.0
     volumes:
       - ../confs/midsommar-ce.env:/app/.env
       - ./data/cache/plugins:/app/data/cache/plugins
@@ -13,7 +13,7 @@ services:
     env_file:
       - ../confs/midsommar-ce.env
     ports:
-      - 8585:8080
+      - 3000:8080
       - 9595:9090
     restart: always
     healthcheck:
@@ -25,7 +25,7 @@ services:
   mgw:
     networks:
       - tyk-network
-    image: tykio/microgateway:pre-release-latest-ce
+    image: tykio/microgateway:v2.0.0
     volumes:
       - ../confs/mgw-ce.env:/app/.env
       - ../confs/mgw-analytics.yaml:/app/mgw-analytics.yaml
