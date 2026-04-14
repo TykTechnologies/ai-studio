@@ -221,6 +221,24 @@ func RecordChatLogEntry(ctx context.Context, log *models.LLMChatLogEntry) {
 	}
 }
 
+// RecordComplianceEvents records filter script compliance events asynchronously
+func RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEvent) {
+	if len(events) == 0 {
+		return
+	}
+
+	handlerMu.RLock()
+	defer handlerMu.RUnlock()
+
+	if globalHandler != nil {
+		globalHandler.RecordComplianceEvents(ctx, events)
+	}
+
+	for _, event := range events {
+		metrics.RecordComplianceEvent(ctx, event.EventType, event.Severity, event.FilterName)
+	}
+}
+
 // RecordChatRecordsBatch records multiple chat records in a batch for improved performance
 func RecordChatRecordsBatch(ctx context.Context, records []*models.LLMChatRecord) {
 	handlerMu.RLock()

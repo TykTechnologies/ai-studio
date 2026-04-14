@@ -1552,9 +1552,10 @@ type AnalyticsPulse struct {
 	DataTo         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=data_to,json=dataTo,proto3" json:"data_to,omitempty"`                          // End time of data in this pulse
 	SequenceNumber uint64                 `protobuf:"varint,6,opt,name=sequence_number,json=sequenceNumber,proto3" json:"sequence_number,omitempty"` // Incremental sequence for ordering
 	// Batched analytics data
-	AnalyticsEvents []*AnalyticsEvent   `protobuf:"bytes,7,rep,name=analytics_events,json=analyticsEvents,proto3" json:"analytics_events,omitempty"` // Analytics/token usage events
-	BudgetEvents    []*BudgetUsageEvent `protobuf:"bytes,8,rep,name=budget_events,json=budgetEvents,proto3" json:"budget_events,omitempty"`          // Budget usage events
-	ProxySummaries  []*ProxyLogSummary  `protobuf:"bytes,9,rep,name=proxy_summaries,json=proxySummaries,proto3" json:"proxy_summaries,omitempty"`    // Summarized proxy logs (not full payloads)
+	AnalyticsEvents  []*AnalyticsEvent       `protobuf:"bytes,7,rep,name=analytics_events,json=analyticsEvents,proto3" json:"analytics_events,omitempty"`     // Analytics/token usage events
+	BudgetEvents     []*BudgetUsageEvent     `protobuf:"bytes,8,rep,name=budget_events,json=budgetEvents,proto3" json:"budget_events,omitempty"`              // Budget usage events
+	ProxySummaries   []*ProxyLogSummary      `protobuf:"bytes,9,rep,name=proxy_summaries,json=proxySummaries,proto3" json:"proxy_summaries,omitempty"`        // Summarized proxy logs (not full payloads)
+	ComplianceEvents []*ComplianceEventProto `protobuf:"bytes,13,rep,name=compliance_events,json=complianceEvents,proto3" json:"compliance_events,omitempty"` // Script-reported compliance events
 	// Pulse metadata
 	IsCompressed  bool   `protobuf:"varint,10,opt,name=is_compressed,json=isCompressed,proto3" json:"is_compressed,omitempty"`      // Whether data is compressed
 	TotalRecords  uint32 `protobuf:"varint,11,opt,name=total_records,json=totalRecords,proto3" json:"total_records,omitempty"`      // Total number of records in pulse
@@ -1652,6 +1653,13 @@ func (x *AnalyticsPulse) GetBudgetEvents() []*BudgetUsageEvent {
 func (x *AnalyticsPulse) GetProxySummaries() []*ProxyLogSummary {
 	if x != nil {
 		return x.ProxySummaries
+	}
+	return nil
+}
+
+func (x *AnalyticsPulse) GetComplianceEvents() []*ComplianceEventProto {
+	if x != nil {
+		return x.ComplianceEvents
 	}
 	return nil
 }
@@ -2391,6 +2399,140 @@ func (x *ProxyLogSummary) GetTotalCost() float64 {
 	return 0
 }
 
+// ComplianceEventProto represents a compliance event reported by a filter script
+// Used for transmitting compliance events from edge gateways to the control plane
+type ComplianceEventProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AppId         uint32                 `protobuf:"varint,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	UserId        uint32                 `protobuf:"varint,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	LlmId         uint32                 `protobuf:"varint,3,opt,name=llm_id,json=llmId,proto3" json:"llm_id,omitempty"`
+	FilterName    string                 `protobuf:"bytes,4,opt,name=filter_name,json=filterName,proto3" json:"filter_name,omitempty"`
+	FilterScope   string                 `protobuf:"bytes,5,opt,name=filter_scope,json=filterScope,proto3" json:"filter_scope,omitempty"` // "proxy_request", "proxy_response", etc.
+	EventType     string                 `protobuf:"bytes,6,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`       // Free-form: "pii_redacted", "content_rewritten", etc.
+	Severity      string                 `protobuf:"bytes,7,opt,name=severity,proto3" json:"severity,omitempty"`                          // "info", "warning", "critical"
+	Description   string                 `protobuf:"bytes,8,opt,name=description,proto3" json:"description,omitempty"`
+	Metadata      string                 `protobuf:"bytes,9,opt,name=metadata,proto3" json:"metadata,omitempty"` // JSON blob
+	Vendor        string                 `protobuf:"bytes,10,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	ModelName     string                 `protobuf:"bytes,11,opt,name=model_name,json=modelName,proto3" json:"model_name,omitempty"`
+	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComplianceEventProto) Reset() {
+	*x = ComplianceEventProto{}
+	mi := &file_proto_config_sync_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComplianceEventProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComplianceEventProto) ProtoMessage() {}
+
+func (x *ComplianceEventProto) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComplianceEventProto.ProtoReflect.Descriptor instead.
+func (*ComplianceEventProto) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ComplianceEventProto) GetAppId() uint32 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
+}
+
+func (x *ComplianceEventProto) GetUserId() uint32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *ComplianceEventProto) GetLlmId() uint32 {
+	if x != nil {
+		return x.LlmId
+	}
+	return 0
+}
+
+func (x *ComplianceEventProto) GetFilterName() string {
+	if x != nil {
+		return x.FilterName
+	}
+	return ""
+}
+
+func (x *ComplianceEventProto) GetFilterScope() string {
+	if x != nil {
+		return x.FilterScope
+	}
+	return ""
+}
+
+func (x *ComplianceEventProto) GetEventType() string {
+	if x != nil {
+		return x.EventType
+	}
+	return ""
+}
+
+func (x *ComplianceEventProto) GetSeverity() string {
+	if x != nil {
+		return x.Severity
+	}
+	return ""
+}
+
+func (x *ComplianceEventProto) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ComplianceEventProto) GetMetadata() string {
+	if x != nil {
+		return x.Metadata
+	}
+	return ""
+}
+
+func (x *ComplianceEventProto) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *ComplianceEventProto) GetModelName() string {
+	if x != nil {
+		return x.ModelName
+	}
+	return ""
+}
+
+func (x *ComplianceEventProto) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
 // PluginControlPayload represents a single payload from an edge plugin to control
 type PluginControlPayload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2407,7 +2549,7 @@ type PluginControlPayload struct {
 
 func (x *PluginControlPayload) Reset() {
 	*x = PluginControlPayload{}
-	mi := &file_proto_config_sync_proto_msgTypes[23]
+	mi := &file_proto_config_sync_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2419,7 +2561,7 @@ func (x *PluginControlPayload) String() string {
 func (*PluginControlPayload) ProtoMessage() {}
 
 func (x *PluginControlPayload) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[23]
+	mi := &file_proto_config_sync_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2432,7 +2574,7 @@ func (x *PluginControlPayload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginControlPayload.ProtoReflect.Descriptor instead.
 func (*PluginControlPayload) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{23}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PluginControlPayload) GetPluginId() uint32 {
@@ -2499,7 +2641,7 @@ type PluginControlBatch struct {
 
 func (x *PluginControlBatch) Reset() {
 	*x = PluginControlBatch{}
-	mi := &file_proto_config_sync_proto_msgTypes[24]
+	mi := &file_proto_config_sync_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2511,7 +2653,7 @@ func (x *PluginControlBatch) String() string {
 func (*PluginControlBatch) ProtoMessage() {}
 
 func (x *PluginControlBatch) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[24]
+	mi := &file_proto_config_sync_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2524,7 +2666,7 @@ func (x *PluginControlBatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginControlBatch.ProtoReflect.Descriptor instead.
 func (*PluginControlBatch) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{24}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PluginControlBatch) GetEdgeId() string {
@@ -2584,7 +2726,7 @@ type PluginControlBatchResponse struct {
 
 func (x *PluginControlBatchResponse) Reset() {
 	*x = PluginControlBatchResponse{}
-	mi := &file_proto_config_sync_proto_msgTypes[25]
+	mi := &file_proto_config_sync_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2596,7 +2738,7 @@ func (x *PluginControlBatchResponse) String() string {
 func (*PluginControlBatchResponse) ProtoMessage() {}
 
 func (x *PluginControlBatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[25]
+	mi := &file_proto_config_sync_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2609,7 +2751,7 @@ func (x *PluginControlBatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginControlBatchResponse.ProtoReflect.Descriptor instead.
 func (*PluginControlBatchResponse) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{25}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *PluginControlBatchResponse) GetSuccess() bool {
@@ -2666,7 +2808,7 @@ type PluginPayloadError struct {
 
 func (x *PluginPayloadError) Reset() {
 	*x = PluginPayloadError{}
-	mi := &file_proto_config_sync_proto_msgTypes[26]
+	mi := &file_proto_config_sync_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2678,7 +2820,7 @@ func (x *PluginPayloadError) String() string {
 func (*PluginPayloadError) ProtoMessage() {}
 
 func (x *PluginPayloadError) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_config_sync_proto_msgTypes[26]
+	mi := &file_proto_config_sync_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2691,7 +2833,7 @@ func (x *PluginPayloadError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginPayloadError.ProtoReflect.Descriptor instead.
 func (*PluginPayloadError) Descriptor() ([]byte, []int) {
-	return file_proto_config_sync_proto_rawDescGZIP(), []int{26}
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *PluginPayloadError) GetPluginId() uint32 {
@@ -2839,7 +2981,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\amessage\x18\x05 \x01(\tR\amessage\x122\n" +
 	"\x15config_version_before\x18\x06 \x01(\tR\x13configVersionBefore\x120\n" +
 	"\x14config_version_after\x18\a \x01(\tR\x12configVersionAfter\x128\n" +
-	"\ttimestamp\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xf4\x04\n" +
+	"\ttimestamp\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xc5\x05\n" +
 	"\x0eAnalyticsPulse\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12%\n" +
 	"\x0eedge_namespace\x18\x02 \x01(\tR\redgeNamespace\x12C\n" +
@@ -2849,7 +2991,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fsequence_number\x18\x06 \x01(\x04R\x0esequenceNumber\x12G\n" +
 	"\x10analytics_events\x18\a \x03(\v2\x1c.microgateway.AnalyticsEventR\x0fanalyticsEvents\x12C\n" +
 	"\rbudget_events\x18\b \x03(\v2\x1e.microgateway.BudgetUsageEventR\fbudgetEvents\x12F\n" +
-	"\x0fproxy_summaries\x18\t \x03(\v2\x1d.microgateway.ProxyLogSummaryR\x0eproxySummaries\x12#\n" +
+	"\x0fproxy_summaries\x18\t \x03(\v2\x1d.microgateway.ProxyLogSummaryR\x0eproxySummaries\x12O\n" +
+	"\x11compliance_events\x18\r \x03(\v2\".microgateway.ComplianceEventProtoR\x10complianceEvents\x12#\n" +
 	"\ris_compressed\x18\n" +
 	" \x01(\bR\fisCompressed\x12#\n" +
 	"\rtotal_records\x18\v \x01(\rR\ftotalRecords\x12&\n" +
@@ -2935,7 +3078,24 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\runique_models\x18\f \x03(\tR\funiqueModels\x12!\n" +
 	"\ftotal_tokens\x18\r \x01(\rR\vtotalTokens\x12\x1d\n" +
 	"\n" +
-	"total_cost\x18\x0e \x01(\x01R\ttotalCost\"\xf9\x02\n" +
+	"total_cost\x18\x0e \x01(\x01R\ttotalCost\"\x8b\x03\n" +
+	"\x14ComplianceEventProto\x12\x15\n" +
+	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\rR\x06userId\x12\x15\n" +
+	"\x06llm_id\x18\x03 \x01(\rR\x05llmId\x12\x1f\n" +
+	"\vfilter_name\x18\x04 \x01(\tR\n" +
+	"filterName\x12!\n" +
+	"\ffilter_scope\x18\x05 \x01(\tR\vfilterScope\x12\x1d\n" +
+	"\n" +
+	"event_type\x18\x06 \x01(\tR\teventType\x12\x1a\n" +
+	"\bseverity\x18\a \x01(\tR\bseverity\x12 \n" +
+	"\vdescription\x18\b \x01(\tR\vdescription\x12\x1a\n" +
+	"\bmetadata\x18\t \x01(\tR\bmetadata\x12\x16\n" +
+	"\x06vendor\x18\n" +
+	" \x01(\tR\x06vendor\x12\x1d\n" +
+	"\n" +
+	"model_name\x18\v \x01(\tR\tmodelName\x128\n" +
+	"\ttimestamp\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xf9\x02\n" +
 	"\x14PluginControlPayload\x12\x1b\n" +
 	"\tplugin_id\x18\x01 \x01(\rR\bpluginId\x12\x18\n" +
 	"\apayload\x18\x02 \x01(\fR\apayload\x12\x17\n" +
@@ -2996,7 +3156,7 @@ func file_proto_config_sync_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_config_sync_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_proto_config_sync_proto_goTypes = []any{
 	(ReloadPhase)(0),                    // 0: microgateway.ReloadPhase
 	(*EdgeRegistrationRequest)(nil),     // 1: microgateway.EdgeRegistrationRequest
@@ -3022,25 +3182,26 @@ var file_proto_config_sync_proto_goTypes = []any{
 	(*AnalyticsEvent)(nil),              // 21: microgateway.AnalyticsEvent
 	(*BudgetUsageEvent)(nil),            // 22: microgateway.BudgetUsageEvent
 	(*ProxyLogSummary)(nil),             // 23: microgateway.ProxyLogSummary
-	(*PluginControlPayload)(nil),        // 24: microgateway.PluginControlPayload
-	(*PluginControlBatch)(nil),          // 25: microgateway.PluginControlBatch
-	(*PluginControlBatchResponse)(nil),  // 26: microgateway.PluginControlBatchResponse
-	(*PluginPayloadError)(nil),          // 27: microgateway.PluginPayloadError
-	nil,                                 // 28: microgateway.EdgeRegistrationRequest.MetadataEntry
-	nil,                                 // 29: microgateway.EdgeMetrics.CustomMetricsEntry
-	nil,                                 // 30: microgateway.PluginControlPayload.MetadataEntry
-	(*HealthStatus)(nil),                // 31: microgateway.HealthStatus
-	(*ConfigurationSnapshot)(nil),       // 32: microgateway.ConfigurationSnapshot
-	(*timestamppb.Timestamp)(nil),       // 33: google.protobuf.Timestamp
-	(*ConfigurationChange)(nil),         // 34: microgateway.ConfigurationChange
-	(*AppConfig)(nil),                   // 35: microgateway.AppConfig
-	(*emptypb.Empty)(nil),               // 36: google.protobuf.Empty
+	(*ComplianceEventProto)(nil),        // 24: microgateway.ComplianceEventProto
+	(*PluginControlPayload)(nil),        // 25: microgateway.PluginControlPayload
+	(*PluginControlBatch)(nil),          // 26: microgateway.PluginControlBatch
+	(*PluginControlBatchResponse)(nil),  // 27: microgateway.PluginControlBatchResponse
+	(*PluginPayloadError)(nil),          // 28: microgateway.PluginPayloadError
+	nil,                                 // 29: microgateway.EdgeRegistrationRequest.MetadataEntry
+	nil,                                 // 30: microgateway.EdgeMetrics.CustomMetricsEntry
+	nil,                                 // 31: microgateway.PluginControlPayload.MetadataEntry
+	(*HealthStatus)(nil),                // 32: microgateway.HealthStatus
+	(*ConfigurationSnapshot)(nil),       // 33: microgateway.ConfigurationSnapshot
+	(*timestamppb.Timestamp)(nil),       // 34: google.protobuf.Timestamp
+	(*ConfigurationChange)(nil),         // 35: microgateway.ConfigurationChange
+	(*AppConfig)(nil),                   // 36: microgateway.AppConfig
+	(*emptypb.Empty)(nil),               // 37: google.protobuf.Empty
 }
 var file_proto_config_sync_proto_depIdxs = []int32{
-	28, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
-	31, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
-	32, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
-	33, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
+	29, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
+	32, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
+	33, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
+	34, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
 	1,  // 4: microgateway.EdgeMessage.registration:type_name -> microgateway.EdgeRegistrationRequest
 	7,  // 5: microgateway.EdgeMessage.heartbeat:type_name -> microgateway.HeartbeatRequest
 	3,  // 6: microgateway.EdgeMessage.config_request:type_name -> microgateway.ConfigurationRequest
@@ -3048,62 +3209,64 @@ var file_proto_config_sync_proto_depIdxs = []int32{
 	17, // 8: microgateway.EdgeMessage.reload_response:type_name -> microgateway.ConfigurationReloadResponse
 	6,  // 9: microgateway.EdgeMessage.event:type_name -> microgateway.EventFrame
 	2,  // 10: microgateway.ControlMessage.registration_response:type_name -> microgateway.EdgeRegistrationResponse
-	32, // 11: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
-	34, // 12: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
+	33, // 11: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
+	35, // 12: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
 	8,  // 13: microgateway.ControlMessage.heartbeat_response:type_name -> microgateway.HeartbeatResponse
 	11, // 14: microgateway.ControlMessage.error:type_name -> microgateway.ErrorMessage
 	16, // 15: microgateway.ControlMessage.reload_request:type_name -> microgateway.ConfigurationReloadRequest
 	6,  // 16: microgateway.ControlMessage.event:type_name -> microgateway.EventFrame
-	31, // 17: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
+	32, // 17: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
 	10, // 18: microgateway.HeartbeatRequest.metrics:type_name -> microgateway.EdgeMetrics
-	33, // 19: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
-	29, // 20: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
-	33, // 21: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
-	35, // 22: microgateway.TokenValidationResponse.app:type_name -> microgateway.AppConfig
-	33, // 23: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
+	34, // 19: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
+	30, // 20: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
+	34, // 21: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
+	36, // 22: microgateway.TokenValidationResponse.app:type_name -> microgateway.AppConfig
+	34, // 23: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
 	0,  // 24: microgateway.ConfigurationReloadResponse.phase:type_name -> microgateway.ReloadPhase
-	33, // 25: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
-	33, // 26: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
-	33, // 27: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
-	33, // 28: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
+	34, // 25: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
+	34, // 26: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
+	34, // 27: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
+	34, // 28: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
 	21, // 29: microgateway.AnalyticsPulse.analytics_events:type_name -> microgateway.AnalyticsEvent
 	22, // 30: microgateway.AnalyticsPulse.budget_events:type_name -> microgateway.BudgetUsageEvent
 	23, // 31: microgateway.AnalyticsPulse.proxy_summaries:type_name -> microgateway.ProxyLogSummary
-	33, // 32: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
-	20, // 33: microgateway.AnalyticsPulseResponse.updated_config:type_name -> microgateway.AnalyticsPulseConfig
-	33, // 34: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
-	33, // 35: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
-	33, // 36: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
-	33, // 37: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
-	33, // 38: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
-	33, // 39: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
-	33, // 40: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
-	30, // 41: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
-	24, // 42: microgateway.PluginControlBatch.payloads:type_name -> microgateway.PluginControlPayload
-	33, // 43: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
-	33, // 44: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
-	27, // 45: microgateway.PluginControlBatchResponse.errors:type_name -> microgateway.PluginPayloadError
-	1,  // 46: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
-	3,  // 47: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
-	4,  // 48: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
-	7,  // 49: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
-	9,  // 50: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
-	14, // 51: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
-	18, // 52: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
-	25, // 53: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
-	2,  // 54: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
-	32, // 55: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
-	5,  // 56: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
-	8,  // 57: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
-	36, // 58: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
-	15, // 59: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
-	19, // 60: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
-	26, // 61: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
-	54, // [54:62] is the sub-list for method output_type
-	46, // [46:54] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	24, // 32: microgateway.AnalyticsPulse.compliance_events:type_name -> microgateway.ComplianceEventProto
+	34, // 33: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
+	20, // 34: microgateway.AnalyticsPulseResponse.updated_config:type_name -> microgateway.AnalyticsPulseConfig
+	34, // 35: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
+	34, // 36: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
+	34, // 37: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
+	34, // 38: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
+	34, // 39: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
+	34, // 40: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
+	34, // 41: microgateway.ComplianceEventProto.timestamp:type_name -> google.protobuf.Timestamp
+	34, // 42: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
+	31, // 43: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
+	25, // 44: microgateway.PluginControlBatch.payloads:type_name -> microgateway.PluginControlPayload
+	34, // 45: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
+	34, // 46: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
+	28, // 47: microgateway.PluginControlBatchResponse.errors:type_name -> microgateway.PluginPayloadError
+	1,  // 48: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
+	3,  // 49: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
+	4,  // 50: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
+	7,  // 51: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
+	9,  // 52: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
+	14, // 53: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
+	18, // 54: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
+	26, // 55: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
+	2,  // 56: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
+	33, // 57: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
+	5,  // 58: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
+	8,  // 59: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
+	37, // 60: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
+	15, // 61: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
+	19, // 62: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
+	27, // 63: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
+	56, // [56:64] is the sub-list for method output_type
+	48, // [48:56] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_proto_config_sync_proto_init() }
@@ -3135,7 +3298,7 @@ func file_proto_config_sync_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_config_sync_proto_rawDesc), len(file_proto_config_sync_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   30,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

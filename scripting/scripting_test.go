@@ -843,6 +843,277 @@ func TestToolResponseFilters(t *testing.T) {
 	}
 }
 
+func TestRunScript_ComplianceEvents(t *testing.T) {
+	tests := []struct {
+		name             string
+		sourceCode       string
+		input            *ScriptInput
+		wantBlock        bool
+		wantPayload      string
+		wantEventCount   int
+		wantEventTypes   []string
+		wantSeverities   []string
+		wantDescriptions []string
+		wantMetadataKeys [][]string // per-event list of expected metadata keys
+		wantErr          bool
+	}{
+		{
+			name: "single compliance event with metadata",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: "[REDACTED]",
+					message: "",
+					compliance_events: [
+						{
+							event_type: "pii_redacted",
+							severity: "warning",
+							description: "SSN pattern found and redacted",
+							metadata: { "pattern": "ssn", "count": 3 }
+						}
+					]
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"prompt": "my ssn is 123-45-6789"}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			},
+			wantBlock:        false,
+			wantPayload:      "[REDACTED]",
+			wantEventCount:   1,
+			wantEventTypes:   []string{"pii_redacted"},
+			wantSeverities:   []string{"warning"},
+			wantDescriptions: []string{"SSN pattern found and redacted"},
+			wantMetadataKeys: [][]string{{"pattern", "count"}},
+		},
+		{
+			name: "multiple compliance events",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: input.raw_input,
+					compliance_events: [
+						{
+							event_type: "pii_detected",
+							severity: "critical",
+							description: "Email address found"
+						},
+						{
+							event_type: "content_rewritten",
+							severity: "info",
+							description: "Rewrote greeting to formal tone"
+						}
+					]
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"text": "hello"}`,
+				Messages:   []MessageContent{},
+				VendorName: "anthropic",
+				ModelName:  "claude-3",
+			},
+			wantBlock:        false,
+			wantPayload:      `{"text": "hello"}`,
+			wantEventCount:   2,
+			wantEventTypes:   []string{"pii_detected", "content_rewritten"},
+			wantSeverities:   []string{"critical", "info"},
+			wantDescriptions: []string{"Email address found", "Rewrote greeting to formal tone"},
+		},
+		{
+			name: "compliance events with block true",
+			sourceCode: `
+				output := {
+					block: true,
+					message: "Blocked due to policy violation",
+					compliance_events: [
+						{
+							event_type: "policy_violation",
+							severity: "critical",
+							description: "Prohibited content detected"
+						}
+					]
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"prompt": "bad content"}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			},
+			wantBlock:      true,
+			wantEventCount: 1,
+			wantEventTypes: []string{"policy_violation"},
+			wantSeverities: []string{"critical"},
+		},
+		{
+			name: "no compliance events",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: input.raw_input,
+					message: ""
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"test": "clean data"}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			},
+			wantBlock:      false,
+			wantPayload:    `{"test": "clean data"}`,
+			wantEventCount: 0,
+		},
+		{
+			name: "empty compliance events array",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: input.raw_input,
+					compliance_events: []
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{"test": "data"}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			},
+			wantBlock:      false,
+			wantPayload:    `{"test": "data"}`,
+			wantEventCount: 0,
+		},
+		{
+			name: "invalid severity defaults to info",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: "",
+					compliance_events: [
+						{
+							event_type: "custom_check",
+							severity: "SUPER_BAD",
+							description: "some check"
+						}
+					]
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			},
+			wantBlock:      false,
+			wantEventCount: 1,
+			wantEventTypes: []string{"custom_check"},
+			wantSeverities: []string{"info"}, // invalid severity defaults to info
+		},
+		{
+			name: "event without event_type is skipped",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: "",
+					compliance_events: [
+						{
+							severity: "warning",
+							description: "no type"
+						},
+						{
+							event_type: "valid_event",
+							severity: "warning",
+							description: "has type"
+						}
+					]
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			},
+			wantBlock:      false,
+			wantEventCount: 1, // first event skipped, second kept
+			wantEventTypes: []string{"valid_event"},
+			wantSeverities: []string{"warning"},
+		},
+		{
+			name: "missing severity defaults to info",
+			sourceCode: `
+				output := {
+					block: false,
+					payload: "",
+					compliance_events: [
+						{
+							event_type: "simple_event",
+							description: "no severity specified"
+						}
+					]
+				}
+			`,
+			input: &ScriptInput{
+				RawInput:   `{}`,
+				Messages:   []MessageContent{},
+				VendorName: "openai",
+				ModelName:  "gpt-4",
+			},
+			wantBlock:      false,
+			wantEventCount: 1,
+			wantEventTypes: []string{"simple_event"},
+			wantSeverities: []string{"info"}, // missing severity defaults to info
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := NewScriptRunner([]byte(tt.sourceCode))
+			output, err := runner.RunScript(tt.input, nil)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("RunScript() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+
+			if output.Block != tt.wantBlock {
+				t.Errorf("Block = %v, want %v", output.Block, tt.wantBlock)
+			}
+
+			if tt.wantPayload != "" && output.Payload != tt.wantPayload {
+				t.Errorf("Payload = %v, want %v", output.Payload, tt.wantPayload)
+			}
+
+			if len(output.ComplianceEvents) != tt.wantEventCount {
+				t.Fatalf("ComplianceEvents count = %d, want %d", len(output.ComplianceEvents), tt.wantEventCount)
+			}
+
+			for i, event := range output.ComplianceEvents {
+				if i < len(tt.wantEventTypes) && event.EventType != tt.wantEventTypes[i] {
+					t.Errorf("ComplianceEvents[%d].EventType = %q, want %q", i, event.EventType, tt.wantEventTypes[i])
+				}
+				if i < len(tt.wantSeverities) && event.Severity != tt.wantSeverities[i] {
+					t.Errorf("ComplianceEvents[%d].Severity = %q, want %q", i, event.Severity, tt.wantSeverities[i])
+				}
+				if i < len(tt.wantDescriptions) && event.Description != tt.wantDescriptions[i] {
+					t.Errorf("ComplianceEvents[%d].Description = %q, want %q", i, event.Description, tt.wantDescriptions[i])
+				}
+				if i < len(tt.wantMetadataKeys) {
+					for _, key := range tt.wantMetadataKeys[i] {
+						if _, ok := event.Metadata[key]; !ok {
+							t.Errorf("ComplianceEvents[%d].Metadata missing key %q", i, key)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
 func contains(s, substr string) bool {
 	// Simple substring check
 	for i := 0; i <= len(s)-len(substr); i++ {

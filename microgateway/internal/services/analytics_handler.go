@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	internalPlugins "github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/rs/zerolog/log"
@@ -688,6 +689,34 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLogsBatch(_ context.Context, lo
 	default:
 		log.Warn().Int("count", len(logs)).Msg("Proxy log batch buffer full, dropping batch")
 	}
+}
+
+// RecordComplianceEvents forwards compliance events to the analytics pulse plugin
+// for batch transmission to the control plane during the next pulse.
+func (h *MicrogatewaAnalyticsHandler) RecordComplianceEvents(_ context.Context, events []*models.ComplianceEvent) {
+	if len(events) == 0 || h.pluginManager == nil {
+		return
+	}
+
+	bufferEvents := make([]internalPlugins.ComplianceEventBuffer, len(events))
+	for i, e := range events {
+		bufferEvents[i] = internalPlugins.ComplianceEventBuffer{
+			AppID:       uint32(e.AppID),
+			UserID:      uint32(e.UserID),
+			LLMID:       uint32(e.LLMID),
+			FilterName:  e.FilterName,
+			FilterScope: e.FilterScope,
+			EventType:   e.EventType,
+			Severity:    e.Severity,
+			Description: e.Description,
+			Metadata:    e.Metadata,
+			Vendor:      e.Vendor,
+			ModelName:   e.ModelName,
+			Timestamp:   e.TimeStamp,
+		}
+	}
+
+	h.pluginManager.BufferComplianceEvents(bufferEvents)
 }
 
 // SetAsGlobalHandler sets this handler as the global midsommar analytics handler

@@ -19,10 +19,20 @@ type ScriptInput struct {
 	StatusCode    int                     `json:"status_code"`    // HTTP status code from LLM
 }
 
+// ComplianceEventOutput represents a compliance event reported by a filter script.
+// Script developers set these in the output object to flag compliance-relevant activity.
+type ComplianceEventOutput struct {
+	EventType   string                 // Free-form type: "pii_redacted", "content_rewritten", "silent_failure", etc.
+	Severity    string                 // "info", "warning", "critical"
+	Description string                 // Human-readable description of what happened
+	Metadata    map[string]interface{} // Arbitrary key-value data
+}
+
 // ScriptOutput represents the result of script execution
 type ScriptOutput struct {
-	Block    bool                     // If true, stops the request/response chain
-	Payload  string                   // Modified content (empty = no modification)
-	Messages []map[string]interface{} // Modified messages array (alternative to Payload)
-	Message  string                   // Optional blocking reason or log message
+	Block            bool                     // If true, stops the request/response chain
+	Payload          string                   // Modified content (empty = no modification)
+	Messages         []map[string]interface{} // Modified messages array (alternative to Payload)
+	Message          string                   // Optional blocking reason or log message
+	ComplianceEvents []ComplianceEventOutput  // Compliance events to record (enterprise only)
 }

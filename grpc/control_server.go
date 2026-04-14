@@ -793,6 +793,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		Int("analytics_events", len(req.AnalyticsEvents)).
 		Int("budget_events", len(req.BudgetEvents)).
 		Int("proxy_summaries", len(req.ProxySummaries)).
+		Int("compliance_events", len(req.ComplianceEvents)).
 		Msg("AI Studio control server: received analytics pulse from edge")
 
 	processedRecords := uint64(0)
@@ -866,6 +867,34 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			Str("edge_id", req.EdgeId).
 			Int("analytics_events", len(req.AnalyticsEvents)).
 			Msg("Analytics events processed via batch operations")
+	}
+
+	// Process compliance events from edge filter scripts
+	if len(req.ComplianceEvents) > 0 {
+		complianceEvents := make([]*models.ComplianceEvent, len(req.ComplianceEvents))
+		for i, ce := range req.ComplianceEvents {
+			complianceEvents[i] = &models.ComplianceEvent{
+				AppID:       uint(ce.AppId),
+				UserID:      uint(ce.UserId),
+				LLMID:       uint(ce.LlmId),
+				FilterName:  ce.FilterName,
+				FilterScope: ce.FilterScope,
+				EventType:   ce.EventType,
+				Severity:    ce.Severity,
+				Description: ce.Description,
+				Metadata:    ce.Metadata,
+				Vendor:      ce.Vendor,
+				ModelName:   ce.ModelName,
+				TimeStamp:   ce.Timestamp.AsTime(),
+			}
+		}
+		analytics.RecordComplianceEvents(ctx, complianceEvents)
+		processedRecords += uint64(len(req.ComplianceEvents))
+
+		log.Debug().
+			Str("edge_id", req.EdgeId).
+			Int("compliance_events", len(req.ComplianceEvents)).
+			Msg("Compliance events processed from edge pulse")
 	}
 
 	// Process budget events (for now just log - AI Studio budget integration would need budget service)

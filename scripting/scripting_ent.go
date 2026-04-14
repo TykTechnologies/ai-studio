@@ -34,9 +34,23 @@ func (sr *ScriptRunner) RunScript(input *ScriptInput, serviceRef services.Servic
 
 	// Convert enterprise ScriptOutput back to base ScriptOutput
 	output := &ScriptOutput{
-		Block:   entOutput.Block,
-		Payload: entOutput.Payload,
-		Message: entOutput.Message,
+		Block:    entOutput.Block,
+		Payload:  entOutput.Payload,
+		Messages: entOutput.Messages,
+		Message:  entOutput.Message,
+	}
+
+	// Convert compliance events
+	if len(entOutput.ComplianceEvents) > 0 {
+		output.ComplianceEvents = make([]ComplianceEventOutput, len(entOutput.ComplianceEvents))
+		for i, ce := range entOutput.ComplianceEvents {
+			output.ComplianceEvents[i] = ComplianceEventOutput{
+				EventType:   ce.EventType,
+				Severity:    ce.Severity,
+				Description: ce.Description,
+				Metadata:    ce.Metadata,
+			}
+		}
 	}
 
 	return output, nil

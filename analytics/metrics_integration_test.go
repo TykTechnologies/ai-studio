@@ -337,7 +337,8 @@ func TestRecordChatRecord_WithActiveHandler(t *testing.T) {
 
 // mockHandler implements AnalyticsHandler for testing dual-path behavior
 type mockHandler struct {
-	onRecordChatRecord func(*models.LLMChatRecord)
+	onRecordChatRecord       func(*models.LLMChatRecord)
+	onRecordComplianceEvents func([]*models.ComplianceEvent)
 }
 
 func (m *mockHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
@@ -349,11 +350,103 @@ func (m *mockHandler) RecordChatLogEntry(_ context.Context, log *models.LLMChatL
 func (m *mockHandler) RecordProxyLog(_ context.Context, log *models.ProxyLog)                  {}
 func (m *mockHandler) RecordToolCall(_ context.Context, name string, t time.Time, execTime int, toolID uint) {}
 func (m *mockHandler) SetAsGlobalHandler()                                                     {}
-func (m *mockHandler) RecordChatRecordsBatch(_ context.Context, records []*models.LLMChatRecord) {}
-func (m *mockHandler) RecordProxyLogsBatch(_ context.Context, logs []*models.ProxyLog)         {}
+func (m *mockHandler) RecordChatRecordsBatch(_ context.Context, records []*models.LLMChatRecord)  {}
+func (m *mockHandler) RecordProxyLogsBatch(_ context.Context, logs []*models.ProxyLog)           {}
+func (m *mockHandler) RecordComplianceEvents(_ context.Context, events []*models.ComplianceEvent) {
+	if m.onRecordComplianceEvents != nil {
+		m.onRecordComplianceEvents(events)
+	}
+}
 
 // Verify mockHandler satisfies the interface at compile time.
 var _ AnalyticsHandler = (*mockHandler)(nil)
+
+func TestRecordComplianceEvents_WithActiveHandler(t *testing.T) {
+	metrics.Init()
+
+	var capturedEvents []*models.ComplianceEvent
+	mock := &mockHandler{
+		onRecordComplianceEvents: func(events []*models.ComplianceEvent) {
+			capturedEvents = events
+		},
+	}
+
+	handlerMu.Lock()
+	oldHandler := globalHandler
+	globalHandler = mock
+	handlerMu.Unlock()
+	defer func() {
+		handlerMu.Lock()
+		globalHandler = oldHandler
+		handlerMu.Unlock()
+	}()
+
+	events := []*models.ComplianceEvent{
+		{
+			AppID:       10,
+			UserID:      5,
+			LLMID:       3,
+			FilterName:  "pii-filter",
+			FilterScope: "proxy_request",
+			EventType:   "pii_redacted",
+			Severity:    "warning",
+			Description: "SSN redacted",
+			Vendor:      "openai",
+			ModelName:   "gpt-4",
+			TimeStamp:   time.Now(),
+		},
+		{
+			AppID:       10,
+			UserID:      5,
+			LLMID:       3,
+			FilterName:  "pii-filter",
+			FilterScope: "proxy_request",
+			EventType:   "email_detected",
+			Severity:    "info",
+			Description: "Email address found",
+			Vendor:      "openai",
+			ModelName:   "gpt-4",
+			TimeStamp:   time.Now(),
+		},
+	}
+
+	RecordComplianceEvents(context.Background(), events)
+
+	// Verify the handler received the events
+	if capturedEvents == nil {
+		t.Fatal("mock handler did not receive compliance events")
+	}
+	if len(capturedEvents) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(capturedEvents))
+	}
+	if capturedEvents[0].EventType != "pii_redacted" {
+		t.Errorf("expected event type pii_redacted, got %s", capturedEvents[0].EventType)
+	}
+	if capturedEvents[0].FilterName != "pii-filter" {
+		t.Errorf("expected filter name pii-filter, got %s", capturedEvents[0].FilterName)
+	}
+	if capturedEvents[1].EventType != "email_detected" {
+		t.Errorf("expected event type email_detected, got %s", capturedEvents[1].EventType)
+	}
+
+	// Verify metrics were emitted
+	body := scrapeMetrics(t)
+	if !strings.Contains(body, `aistudio_compliance_events_total`) {
+		t.Error("aistudio_compliance_events_total metric not emitted")
+	}
+	if !strings.Contains(body, `event_type="pii_redacted"`) {
+		t.Error("metric with event_type=pii_redacted not found")
+	}
+	if !strings.Contains(body, `filter_name="pii-filter"`) {
+		t.Error("metric with filter_name=pii-filter not found")
+	}
+}
+
+func TestRecordComplianceEvents_EmptySlice(t *testing.T) {
+	// Should be a no-op, not panic
+	RecordComplianceEvents(context.Background(), nil)
+	RecordComplianceEvents(context.Background(), []*models.ComplianceEvent{})
+}
 
 func TestMetricsWithoutInit(t *testing.T) {
 	// When metrics.Init() is not called, analytics functions should still work

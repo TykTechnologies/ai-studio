@@ -1430,6 +1430,9 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 			return fmt.Errorf("script error in filter '%s': %v", filter.Name, err)
 		}
 
+		// Record any compliance events reported by the script
+		scripting.RecordComplianceEvents(r.Context(), output, filter.Name, "proxy_request", appID, 0, llm.ID, string(llm.Vendor), modelName)
+
 		// Check if request should be blocked
 		if output.Block {
 			msg := output.Message

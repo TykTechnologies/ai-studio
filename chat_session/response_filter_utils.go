@@ -1,6 +1,7 @@
 package chat_session
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -13,6 +14,7 @@ import (
 // ExecuteResponseFilters executes response-side filters on chat LLM responses
 // Returns whether the response should be blocked and an optional block message
 func ExecuteResponseFilters(
+	ctx context.Context,
 	filters []*models.Filter,
 	service services.ServiceInterface,
 	responseText string,
@@ -69,6 +71,9 @@ func ExecuteResponseFilters(
 			// On error, allow response through (fail open for safety)
 			return false, "", fmt.Errorf("filter '%s' error: %w", filter.Name, err)
 		}
+
+		// Record any compliance events reported by the script
+		scripting.RecordComplianceEvents(ctx, output, filter.Name, "chat_response", 0, userID, 0, vendor, modelName)
 
 		// Check if filter blocks the response
 		if output.Block {

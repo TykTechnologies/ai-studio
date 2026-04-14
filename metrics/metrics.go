@@ -24,7 +24,8 @@ var (
 	tokensTotal      otelmetric.Int64Counter
 	costTotal        otelmetric.Float64Counter
 	toolCallsTotal   otelmetric.Int64Counter
-	policyBlockTotal otelmetric.Int64Counter
+	policyBlockTotal      otelmetric.Int64Counter
+	complianceEventsTotal otelmetric.Int64Counter
 
 	// Histograms
 	requestDuration  otelmetric.Float64Histogram
@@ -85,6 +86,13 @@ func Init() http.Handler {
 	)
 	if err != nil {
 		panic("failed to create policyBlockTotal counter: " + err.Error())
+	}
+
+	complianceEventsTotal, err = meter.Int64Counter("aistudio_compliance_events_total",
+		otelmetric.WithDescription("Compliance events reported by filter scripts"),
+	)
+	if err != nil {
+		panic("failed to create complianceEventsTotal counter: " + err.Error())
 	}
 
 	// Register histograms
@@ -190,6 +198,20 @@ func RecordPolicyBlock(ctx context.Context, ruleName, blockType string) {
 		otelmetric.WithAttributes(
 			attribute.String("rule_name", ruleName),
 			attribute.String("block_type", blockType),
+		),
+	)
+}
+
+// RecordComplianceEvent increments the compliance events counter.
+func RecordComplianceEvent(ctx context.Context, eventType, severity, filterName string) {
+	if !initialized.Load() {
+		return
+	}
+	complianceEventsTotal.Add(ctx, 1,
+		otelmetric.WithAttributes(
+			attribute.String("event_type", eventType),
+			attribute.String("severity", severity),
+			attribute.String("filter_name", filterName),
 		),
 	)
 }

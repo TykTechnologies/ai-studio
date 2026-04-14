@@ -63,3 +63,8 @@ func (s *communityService) ExportData(startDate, endDate time.Time, view string)
 func (s *communityService) GetViolationRecords(startDate, endDate time.Time, appID *uint, limit int) ([]ViolationRecord, error) {
 	return nil, ErrEnterpriseFeature
 }
+
+// GetComplianceEvents returns an enterprise feature error in Community Edition.
+func (s *communityService) GetComplianceEvents(startDate, endDate time.Time, appID *uint, eventType *string, severity *string, limit int, offset int) (*ComplianceEventsData, error) {
+	return nil, ErrEnterpriseFeature
+}
