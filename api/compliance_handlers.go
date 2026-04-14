@@ -628,6 +628,15 @@ func (a *API) getComplianceEvents(c *gin.Context) {
 
 	var eventType *string
 	if et := c.Query("event_type"); et != "" {
+		if len(et) > 100 {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "event_type must be 100 characters or fewer"}},
+			})
+			return
+		}
 		eventType = &et
 	}
 

@@ -52,6 +52,8 @@ type ChatSession struct {
 	input               chan *models.UserMessage
 	queue               MessageQueue // NEW: Replaces llmResponses, outputMessages, outputStream, errors
 	stop                chan struct{}
+	ctx                 context.Context    // Session-scoped context, cancelled on Stop()
+	ctxCancel           context.CancelFunc // Cancels ctx
 	preProcessors       []func(*models.UserMessage) error
 	caller              llms.Model
 	mode                ChatMode
@@ -99,12 +101,16 @@ func NewChatSession(chat *models.Chat, mode ChatMode, db *gorm.DB, svc *services
 		}
 	}
 
+	ctx, ctxCancel := context.WithCancel(context.Background())
+
 	cs := &ChatSession{
 		id:            id,
 		chatRef:       chat,
 		input:         make(chan *models.UserMessage, 100),
 		queue:         queue, // Use MessageQueue interface
 		stop:          make(chan struct{}),
+		ctx:           ctx,
+		ctxCancel:     ctxCancel,
 		preProcessors: []func(*models.UserMessage) error{},
 		mode:          mode,
 		db:            db,
@@ -291,6 +297,7 @@ func (cs *ChatSession) AddPreProcessor(fn func(*models.UserMessage) error) {
 }
 
 func (cs *ChatSession) Stop() {
+	cs.ctxCancel() // Cancel session-scoped context
 	cs.stop <- struct{}{}
 	close(cs.input)
 	cs.queue.Close() // Close the queue instead of individual channels
@@ -382,7 +389,7 @@ func (cs *ChatSession) Start() error {
 					}
 
 					// Record any compliance events reported by the script
-					scripting.RecordComplianceEvents(context.Background(), output, filter.Name, "chat_request", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
+					scripting.RecordComplianceEvents(cs.ctx, output, filter.Name, "chat_request", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
 
 					if output.Block {
 						blockMsg := output.Message
@@ -695,7 +702,7 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 				}
 
 				// Record any compliance events reported by the script
-				scripting.RecordComplianceEvents(context.Background(), output, cs.filters[i2].Name, "file_reference", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
+				scripting.RecordComplianceEvents(cs.ctx, output, cs.filters[i2].Name, "file_reference", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
 
 				if output.Block {
 					msg := output.Message
@@ -889,6 +896,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 	if content != "" {
 		// Execute response filters before adding to history and sending to user
 		blocked, blockMsg, filterErr := ExecuteResponseFilters(
+			cs.ctx,
 			cs.filters,
 			cs.service,
 			content,
@@ -1486,7 +1494,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 				}
 
 				// Record any compliance events reported by the script
-				scripting.RecordComplianceEvents(context.Background(), output, filter.Name, "tool_response", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
+				scripting.RecordComplianceEvents(cs.ctx, output, filter.Name, "tool_response", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
 
 				// Check if tool response should be blocked (NEW capability)
 				if output.Block {
@@ -1552,6 +1560,7 @@ func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
 
 		if cs.chatRef != nil && cs.chatRef.LLM != nil && cs.chatRef.LLMSettings != nil {
 			blocked, blockMsg, filterErr = ExecuteResponseFilters(
+				cs.ctx,
 				cs.filters,
 				cs.service,
 				chunkText,

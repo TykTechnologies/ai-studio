@@ -14,6 +14,7 @@ import (
 // ExecuteResponseFilters executes response-side filters on chat LLM responses
 // Returns whether the response should be blocked and an optional block message
 func ExecuteResponseFilters(
+	ctx context.Context,
 	filters []*models.Filter,
 	service services.ServiceInterface,
 	responseText string,
@@ -72,7 +73,7 @@ func ExecuteResponseFilters(
 		}
 
 		// Record any compliance events reported by the script
-		scripting.RecordComplianceEvents(context.Background(), output, filter.Name, "chat_response", 0, userID, 0, vendor, modelName)
+		scripting.RecordComplianceEvents(ctx, output, filter.Name, "chat_response", 0, userID, 0, vendor, modelName)
 
 		// Check if filter blocks the response
 		if output.Block {
