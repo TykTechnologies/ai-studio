@@ -13,5 +13,13 @@ modified_payload := tyk.redact_pattern(
 output := {
     block: false,
     payload: modified_payload,
-    message: ""
+    message: "",
+    compliance_events: [
+        {
+            event_type: "pii_redacted",
+            severity: "info",
+            description: "Email addresses redacted",
+            metadata: { "pattern": "email" }
+        }
+    ]
 }

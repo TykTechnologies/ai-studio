@@ -67,5 +67,13 @@ final_payload := tyk.redact_pattern(
 output := {
     block: false,
     payload: final_payload,
-    message: "PII redacted"
+    message: "PII redacted",
+    compliance_events: [
+        {
+            event_type: "pii_redacted",
+            severity: "warning",
+            description: "Email, phone, and SSN patterns redacted",
+            metadata: { "patterns": "email,phone,ssn" }
+        }
+    ]
 }

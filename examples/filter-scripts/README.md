@@ -34,7 +34,8 @@ output := {
     block: false,           // Set true to block the request
     payload: "",            // Modified JSON payload (empty = no change)
     messages: [],           // Alternative: return modified message array
-    message: ""             // Optional reason/log message
+    message: "",            // Optional reason/log message
+    compliance_events: []   // Optional: compliance events for audit trail (see below)
 }
 ```
 
@@ -331,6 +332,91 @@ modified := tyk.redact_pattern(input, "\\d{3}-\\d{2}-\\d{4}", "[SSN]")
 6. **Use helpers for simple patterns** - `redact_pattern` handles vendor differences
 7. **Check roles before modifying** - Different logic for system, user, assistant messages
 8. **Handle empty arrays** - Check `len(input.messages)` before iterating
+
+## Compliance Event Reporting
+
+Filters can emit **compliance events** for non-blocking governance reporting. These events flow through the analytics pipeline and are stored for compliance auditing. They never affect the filter's block/allow decision.
+
+### Compliance Event Object
+
+```javascript
+{
+    event_type: "pii_redacted",           // Required - free-form string (events without this are skipped)
+    severity: "warning",                   // Optional - "info", "warning", or "critical" (defaults to "info")
+    description: "SSN pattern redacted",   // Optional - human-readable description
+    metadata: { "pattern": "ssn" }         // Optional - arbitrary key-value data
+}
+```
+
+**Validation rules:**
+- `event_type` is required. Events missing this field are silently skipped.
+- `severity` must be `"info"`, `"warning"`, or `"critical"`. Invalid values default to `"info"`.
+
+### Example: PII Redaction with Compliance Reporting
+
+```javascript
+tyk := import("tyk")
+
+// Redact email addresses
+modified_payload := tyk.redact_pattern(
+    input,
+    "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+    "[EMAIL_REDACTED]"
+)
+
+output := {
+    block: false,
+    payload: modified_payload,
+    message: "",
+    compliance_events: [
+        {
+            event_type: "pii_redacted",
+            severity: "info",
+            description: "Email addresses redacted",
+            metadata: { "pattern": "email" }
+        }
+    ]
+}
+```
+
+### Example: Conditional Compliance Events
+
+```javascript
+text := import("text")
+
+should_block := false
+found_keyword := ""
+
+for msg in input.messages {
+    if msg.role == "user" {
+        if text.contains(msg.content, "password") {
+            should_block = true
+            found_keyword = "password"
+            break
+        }
+    }
+}
+
+// Only emit a compliance event when something is detected
+compliance_events_list := []
+if should_block {
+    compliance_events_list = [
+        {
+            event_type: "sensitive_content_detected",
+            severity: "critical",
+            description: "Blocked: keyword '" + found_keyword + "' detected",
+            metadata: { "keyword": found_keyword }
+        }
+    ]
+}
+
+output := {
+    block: should_block,
+    payload: input.raw_input,
+    message: should_block ? "Blocked: contains sensitive content" : "",
+    compliance_events: compliance_events_list
+}
+```
 
 ## Debugging Tips
 
