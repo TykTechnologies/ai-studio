@@ -6,6 +6,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -495,6 +496,25 @@ func TestComplianceEnterprise_GetComplianceEvents(t *testing.T) {
 
 	t.Run("Rejects SQL injection in severity", func(t *testing.T) {
 		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?severity=info'+OR+1%3D1--", nil)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("SQL injection in event_type returns no results", func(t *testing.T) {
+		// event_type is free-form but uses parameterized queries (GORM Where("event_type = ?", val))
+		// so injection attempts are treated as literal string matches and return 0 results
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?event_type=pii_redacted'+OR+1%3D1--", nil)
+		assert.Equal(t, http.StatusOK, w.Code)
+
+		var response compliance.ComplianceEventsData
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), response.TotalCount, "SQL injection attempt should match no events")
+		assert.Empty(t, response.Events)
+	})
+
+	t.Run("Rejects oversized event_type", func(t *testing.T) {
+		longType := strings.Repeat("a", 101)
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?event_type="+longType, nil)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
