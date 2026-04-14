@@ -633,7 +633,18 @@ func (a *API) getComplianceEvents(c *gin.Context) {
 
 	var severity *string
 	if sev := c.Query("severity"); sev != "" {
-		severity = &sev
+		switch sev {
+		case "info", "warning", "critical":
+			severity = &sev
+		default:
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "severity must be one of: info, warning, critical"}},
+			})
+			return
+		}
 	}
 
 	limit := 100

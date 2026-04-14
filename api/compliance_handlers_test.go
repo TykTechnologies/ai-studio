@@ -483,6 +483,21 @@ func TestComplianceEnterprise_GetComplianceEvents(t *testing.T) {
 		assert.Equal(t, "critical", response.Events[0].Severity)
 	})
 
+	t.Run("Rejects invalid severity", func(t *testing.T) {
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?severity=INVALID", nil)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+
+		var errResp models.ErrorResponse
+		err := json.Unmarshal(w.Body.Bytes(), &errResp)
+		assert.NoError(t, err)
+		assert.Contains(t, errResp.Errors[0].Detail, "severity must be one of")
+	})
+
+	t.Run("Rejects SQL injection in severity", func(t *testing.T) {
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?severity=info'+OR+1%3D1--", nil)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
 	t.Run("Filters by event_type", func(t *testing.T) {
 		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events?event_type=pii_redacted", nil)
 		assert.Equal(t, http.StatusOK, w.Code)
