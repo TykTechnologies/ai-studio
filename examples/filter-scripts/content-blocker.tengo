@@ -32,7 +32,7 @@ if should_block {
             event_type: "sensitive_content_detected",
             severity: "critical",
             description: "Blocked: sensitive keyword '" + found_keyword + "' detected",
-            metadata: { "keyword": found_keyword }
+            metadata: { "matched_pattern": found_keyword }
         }
     ]
 }

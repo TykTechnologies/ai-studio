@@ -55,7 +55,7 @@ if !input.is_chunk || len(check_text) >= min_buffer_length {
                 event_type: "refund_promise_detected",
                 severity: "critical",
                 description: "LLM attempted to promise a refund: '" + matched_pattern + "'",
-                metadata: { "pattern": matched_pattern }
+                metadata: { "matched_pattern": matched_pattern }
             }
         ]
     }

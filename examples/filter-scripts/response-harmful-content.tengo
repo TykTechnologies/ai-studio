@@ -46,7 +46,7 @@ if !input.is_chunk || len(response_text) >= min_evaluation_length {
                 event_type: "harmful_content_detected",
                 severity: "critical",
                 description: "Harmful pattern detected: '" + detected_pattern + "'",
-                metadata: { "pattern": detected_pattern }
+                metadata: { "matched_pattern": detected_pattern }
             }
         ]
     }

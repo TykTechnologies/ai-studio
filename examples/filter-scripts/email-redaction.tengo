@@ -19,7 +19,7 @@ output := {
             event_type: "pii_redacted",
             severity: "info",
             description: "Email addresses redacted",
-            metadata: { "pattern": "email" }
+            metadata: { "redacted_types": ["email"] }
         }
     ]
 }

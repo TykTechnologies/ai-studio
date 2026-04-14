@@ -73,7 +73,7 @@ output := {
             event_type: "pii_redacted",
             severity: "warning",
             description: "Email, phone, and SSN patterns redacted",
-            metadata: { "patterns": "email,phone,ssn" }
+            metadata: { "redacted_types": ["email", "phone", "ssn"] }
         }
     ]
 }

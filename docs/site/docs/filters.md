@@ -814,7 +814,7 @@ output := {
             event_type: "pii_redacted",
             severity: "info",
             description: "Email addresses redacted from request",
-            metadata: { "pattern": "email" }
+            metadata: { "redacted_types": ["email"] }
         }
     ]
 }
@@ -847,7 +847,7 @@ if should_block {
             event_type: "sensitive_content_detected",
             severity: "critical",
             description: "Blocked: keyword '" + found_keyword + "' detected",
-            metadata: { "keyword": found_keyword }
+            metadata: { "matched_pattern": found_keyword }
         }
     ]
 }
@@ -894,7 +894,7 @@ if !input.is_chunk || len(response_text) >= 150 {
                 event_type: "harmful_content_detected",
                 severity: "critical",
                 description: "Harmful pattern detected: '" + detected + "'",
-                metadata: { "pattern": detected }
+                metadata: { "matched_pattern": detected }
             }
         ]
     }

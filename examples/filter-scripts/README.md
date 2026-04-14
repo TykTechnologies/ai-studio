@@ -373,7 +373,7 @@ output := {
             event_type: "pii_redacted",
             severity: "info",
             description: "Email addresses redacted",
-            metadata: { "pattern": "email" }
+            metadata: { "redacted_types": ["email"] }
         }
     ]
 }
@@ -405,7 +405,7 @@ if should_block {
             event_type: "sensitive_content_detected",
             severity: "critical",
             description: "Blocked: keyword '" + found_keyword + "' detected",
-            metadata: { "keyword": found_keyword }
+            metadata: { "matched_pattern": found_keyword }
         }
     ]
 }

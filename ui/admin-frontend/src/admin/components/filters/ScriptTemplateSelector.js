@@ -94,7 +94,7 @@ output := {
             event_type: "pii_redacted",
             severity: "warning",
             description: "Email, phone, and SSN patterns redacted",
-            metadata: { "patterns": "email,phone,ssn" }
+            metadata: { "redacted_types": ["email", "phone", "ssn"] }
         }
     ]
 }`,
@@ -170,7 +170,7 @@ if !input.is_chunk || len(response_text) >= min_evaluation_length {
                 event_type: "harmful_content_detected",
                 severity: is_blocked ? "critical" : "warning",
                 description: "Detected pattern: '" + detected_pattern + "'",
-                metadata: { "pattern": detected_pattern, "blocked": is_blocked ? "true" : "false" }
+                metadata: { "matched_pattern": detected_pattern, "blocked": is_blocked ? "true" : "false" }
             }
         ]
     }
