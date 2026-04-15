@@ -88,7 +88,15 @@ final_payload := tyk.redact_pattern(
 output := {
     block: false,
     payload: final_payload,
-    message: "PII redacted"
+    message: "PII redacted",
+    compliance_events: [
+        {
+            event_type: "pii_redacted",
+            severity: "warning",
+            description: "Email, phone, and SSN patterns redacted",
+            metadata: { "redacted_types": ["email", "phone", "ssn"] }
+        }
+    ]
 }`,
     },
   ],
@@ -155,9 +163,22 @@ if !input.is_chunk || len(response_text) >= min_evaluation_length {
         }
     }
 
+    compliance_events_list := []
+    if detected_pattern != "" {
+        compliance_events_list = [
+            {
+                event_type: "harmful_content_detected",
+                severity: is_blocked ? "critical" : "warning",
+                description: "Detected pattern: '" + detected_pattern + "'",
+                metadata: { "matched_pattern": detected_pattern, "blocked": is_blocked ? "true" : "false" }
+            }
+        ]
+    }
+
     output = {
         block: is_blocked,
-        message: is_blocked ? "Response blocked: Contains forbidden phrase '" + detected_pattern + "'" : ""
+        message: is_blocked ? "Response blocked: Contains forbidden phrase '" + detected_pattern + "'" : "",
+        compliance_events: compliance_events_list
     }
 }`,
     },
@@ -210,9 +231,21 @@ Text: \` + response_text
     // Check if LLM detected a violation
     violates_policy := text.contains(text.to_lower(policy_result), "yes")
 
+    compliance_events_list := []
+    if violates_policy {
+        compliance_events_list = [
+            {
+                event_type: "policy_violation_detected",
+                severity: "critical",
+                description: "LLM policy checker flagged response as violating policy"
+            }
+        ]
+    }
+
     output = {
         block: violates_policy,
-        message: violates_policy ? "Response blocked: LLM detected policy violation" : ""
+        message: violates_policy ? "Response blocked: LLM detected policy violation" : "",
+        compliance_events: compliance_events_list
     }
 }`,
     },

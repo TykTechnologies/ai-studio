@@ -39,8 +39,21 @@ Text: ` + response_text
     // Check if LLM detected a violation
     violates_policy := text.contains(text.to_lower(policy_result), "yes")
 
+    // Build compliance events for audit trail
+    compliance_events_list := []
+    if violates_policy {
+        compliance_events_list = [
+            {
+                event_type: "policy_violation_detected",
+                severity: "critical",
+                description: "LLM policy checker flagged response as violating policy"
+            }
+        ]
+    }
+
     output = {
         block: violates_policy,
-        message: violates_policy ? "Response blocked: LLM detected policy violation" : ""
+        message: violates_policy ? "Response blocked: LLM detected policy violation" : "",
+        compliance_events: compliance_events_list
     }
 }

@@ -47,9 +47,23 @@ if !input.is_chunk || len(check_text) >= min_buffer_length {
         }
     }
 
+    // Build compliance events for audit trail
+    compliance_events_list := []
+    if should_block {
+        compliance_events_list = [
+            {
+                event_type: "refund_promise_detected",
+                severity: "critical",
+                description: "LLM attempted to promise a refund: '" + matched_pattern + "'",
+                metadata: { "matched_pattern": matched_pattern }
+            }
+        ]
+    }
+
     // Update output (use = not :=)
     output = {
         block: should_block,
-        message: should_block ? "Response blocked: Contains forbidden phrase '" + matched_pattern + "'" : ""
+        message: should_block ? "Response blocked: Contains forbidden phrase '" + matched_pattern + "'" : "",
+        compliance_events: compliance_events_list
     }
 }

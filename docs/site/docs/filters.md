@@ -168,7 +168,8 @@ output := {
     block: false,           // Set true to block the request
     payload: "",            // Modified JSON payload (or empty for no change)
     messages: [],           // Alternative: modified message array
-    message: ""             // Optional reason/log message
+    message: "",            // Optional reason/log message
+    compliance_events: []   // Optional: compliance audit events (see Compliance Event Reporting)
 }
 ```
 
@@ -767,6 +768,157 @@ output := {
 
 ---
 
+## Compliance Event Reporting
+
+Filter scripts can emit **compliance events** for non-blocking governance reporting. These events are recorded in the analytics pipeline and stored for compliance auditing. Compliance events never affect the filter's block/allow decision -- they are purely informational.
+
+This is useful for tracking:
+- PII redactions performed by filters
+- Content rewrites or modifications
+- Policy violations detected (even when not blocking)
+- Silent failures or degraded processing
+
+### Compliance Event Object
+
+Each compliance event has the following fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `event_type` | string | Yes | Free-form event type (e.g., `"pii_redacted"`, `"policy_violation"`, `"content_rewritten"`) |
+| `severity` | string | No | `"info"`, `"warning"`, or `"critical"` (defaults to `"info"` if omitted or invalid) |
+| `description` | string | No | Human-readable description of what happened |
+| `metadata` | map | No | Arbitrary key-value data for additional context |
+
+**Validation rules:**
+- Events without an `event_type` are silently skipped
+- Invalid `severity` values default to `"info"`
+
+### Example: Request Filter with Compliance Events
+
+```tengo
+tyk := import("tyk")
+
+// Redact email addresses
+modified_payload := tyk.redact_pattern(
+    input,
+    "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+    "[EMAIL_REDACTED]"
+)
+
+output := {
+    block: false,
+    payload: modified_payload,
+    message: "",
+    compliance_events: [
+        {
+            event_type: "pii_redacted",
+            severity: "info",
+            description: "Email addresses redacted from request",
+            metadata: { "redacted_types": ["email"] }
+        }
+    ]
+}
+```
+
+### Example: Conditional Compliance Events
+
+When events should only be emitted under certain conditions, build the list before the output:
+
+```tengo
+text := import("text")
+
+should_block := false
+found_keyword := ""
+
+for msg in input.messages {
+    if msg.role == "user" {
+        if text.contains(msg.content, "password") {
+            should_block = true
+            found_keyword = "password"
+            break
+        }
+    }
+}
+
+compliance_events_list := []
+if should_block {
+    compliance_events_list = [
+        {
+            event_type: "sensitive_content_detected",
+            severity: "critical",
+            description: "Blocked: keyword '" + found_keyword + "' detected",
+            metadata: { "matched_pattern": found_keyword }
+        }
+    ]
+}
+
+output := {
+    block: should_block,
+    payload: input.raw_input,
+    message: should_block ? "Blocked: contains sensitive content" : "",
+    compliance_events: compliance_events_list
+}
+```
+
+### Example: Response Filter with Compliance Events
+
+Response filters also support compliance events. This is useful for logging when harmful content is detected in LLM responses:
+
+```tengo
+text := import("text")
+
+response_text := input.is_chunk ? input.current_buffer : input.raw_input
+
+output := {
+    block: false,
+    message: ""
+}
+
+if !input.is_chunk || len(response_text) >= 150 {
+    harmful := ["instructions for making", "how to build a weapon"]
+    is_harmful := false
+    detected := ""
+
+    for pattern in harmful {
+        if text.contains(text.to_lower(response_text), pattern) {
+            is_harmful = true
+            detected = pattern
+            break
+        }
+    }
+
+    compliance_events_list := []
+    if is_harmful {
+        compliance_events_list = [
+            {
+                event_type: "harmful_content_detected",
+                severity: "critical",
+                description: "Harmful pattern detected: '" + detected + "'",
+                metadata: { "matched_pattern": detected }
+            }
+        ]
+    }
+
+    output = {
+        block: is_harmful,
+        message: is_harmful ? "Response blocked: harmful content detected" : "",
+        compliance_events: compliance_events_list
+    }
+}
+```
+
+### Querying Compliance Events
+
+Compliance events are accessible via the admin API:
+
+```
+GET /api/v1/compliance/events?start_date=2025-01-01&end_date=2025-01-31&severity=critical
+```
+
+Query parameters: `start_date`, `end_date`, `app_id`, `event_type`, `severity`, `limit`, `offset`.
+
+---
+
 ## Response Filters
 
 **Response Filters** enable administrators to block LLM responses based on content analysis, providing governance controls on what LLMs can say to end users.
@@ -826,12 +978,13 @@ input := {
 **Output Object:**
 ```tengo
 output := {
-    block: false,   // Set true to block/interrupt response
-    message: ""     // Block reason (shown to user)
+    block: false,           // Set true to block/interrupt response
+    message: "",            // Block reason (shown to user)
+    compliance_events: []   // Optional: compliance audit events (supported)
 }
 ```
 
-**Note**: The `payload` and `messages` fields in output are **ignored** for response filters.
+**Note**: The `payload` and `messages` fields in output are **ignored** for response filters. However, `compliance_events` are fully supported and will be processed and stored for audit purposes.
 
 ### Example 1: Block Refund Promises (Works for Streaming and Non-Streaming)
 

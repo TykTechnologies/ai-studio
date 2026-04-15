@@ -95,6 +95,7 @@ flowchart LR
 *   **Custom Functions:**
     *   `tyk.makeHTTPRequest(method, url, body, headers)`: Makes an HTTP call.
     *   `tyk.llm(llm_id, prompt)`: Calls another LLM managed by Midsommar.
+*   **Compliance Events:** Scripts can optionally include a `compliance_events` array in the output object. Each event requires an `event_type` (string), and can include `severity` ("info"/"warning"/"critical"), `description` (string), and `metadata` (map). Events are stored in the `compliance_events` table (`models/compliance_event.go`) for audit reporting via `GET /compliance/events`. Events are non-blocking and do not affect the filter's block/allow decision.
 *   **Error Handling:** Compilation or runtime errors in the script, or a `result` of `false`, lead to request rejection (HTTP 403).
 *   **Association:** Filters are linked to LLMs and Chats via many-to-many relationships in the database, managed through the respective entity's update endpoints or specific association endpoints (like for Tools).
 *   **API Endpoints:**
@@ -123,6 +124,7 @@ flowchart LR
 *   **Security Risks:** The `makeHTTPRequest` function allows scripts to call arbitrary URLs, which could be a security risk if not carefully managed. Access control or sandboxing might be needed. Calling internal services could also be risky.
 *   **Error Reporting:** Clearer error messages from failed scripts back to the client or admin logs would be helpful.
 *   **Script Complexity:** Managing complex logic in Tengo scripts might become difficult. Versioning or testing frameworks for scripts could be beneficial.
+*   **Compliance Event Reporting:** Implemented in `models/compliance_event.go` and `scripting/compliance_recorder.go`. Scripts can emit governance events (PII redaction, policy violations, etc.) that are stored for compliance auditing. Events flow through the analytics pipeline and are queryable via `GET /compliance/events`. Prometheus metrics are tracked via `aistudio_compliance_events_total`.
 *   **Filter Ordering:** If multiple filters are applied, their execution order might matter but isn't explicitly defined in the findings.
 *   **Request/Response Filtering:** Currently, filtering seems focused on the *request* payload (`outboundRequestMiddleware`, `screenProxyRequestByVendor`). Filtering the *response* from the LLM might be a future enhancement.
 *   **Middleware Scripting:** The `scripting` package also contains `RunMiddleware`, suggesting scripts might also be usable for modifying requests/responses, not just filtering/blocking. This wasn't the focus but is related.
