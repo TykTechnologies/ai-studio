@@ -88,6 +88,14 @@ jobs:
       commit_author: ${{ steps.set_outputs.outputs.commit_author}}
     steps:
       -
+        name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.PROBE_APP_ID }}
+          private-key: ${{ secrets.PROBE_APP_PRIVATE_KEY }}
+          owner: TykTechnologies
+      -
         name: Free disk space
         if: matrix.component == 'studio'
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
@@ -112,7 +120,7 @@ jobs:
         with:
           repository: TykTechnologies/ai-studio-enterprise
           path: midsommar/enterprise
-          token: ${{ secrets.ORG_GH_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       -
         name: Checkout langchaingo repository
@@ -203,7 +211,7 @@ jobs:
           ls
           echo '#!/bin/sh
           ci/bin/unlock-agent.sh
-          git config --global url."https://${{ secrets.ORG_GH_TOKEN }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://${{ steps.app-token.outputs.token }}@github.com".insteadOf "https://github.com"
           git config --global --add safe.directory /go/src/github.com/TykTechnologies/midsommar
           if [ "$EDITION" = "ce" ]; then
             sed -i "/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d" go.mod
