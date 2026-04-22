@@ -157,15 +157,23 @@ jobs:
     needs: build-frontend
     runs-on: warp-ubuntu-latest-x64-2x
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.PROBE_APP_ID }}
+          private-key: ${{ secrets.PROBE_APP_PRIVATE_KEY }}
+          owner: TykTechnologies
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
           submodules: true
-          token: ${{ secrets.ORG_GH_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure Git for Enterprise Access
         run: |
-          git config --global url."https://${{ secrets.ORG_GH_TOKEN }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://${{ steps.app-token.outputs.token }}@github.com".insteadOf "https://github.com"
 
       - name: Initialize Enterprise Submodule
         run: |
@@ -225,10 +233,18 @@ jobs:
     needs: [build-frontend, build-ent-binaries]
     runs-on: warp-ubuntu-latest-x64-2x
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.PROBE_APP_ID }}
+          private-key: ${{ secrets.PROBE_APP_PRIVATE_KEY }}
+          owner: TykTechnologies
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: true
-          token: ${{ secrets.ORG_GH_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Download Frontend Build
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
