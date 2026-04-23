@@ -211,7 +211,7 @@ jobs:
           ls
           echo '#!/bin/sh
           ci/bin/unlock-agent.sh
-          git config --global url."https://${{ steps.app-token.outputs.token }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "https://github.com/"
           git config --global --add safe.directory /go/src/github.com/TykTechnologies/midsommar
           if [ "$EDITION" = "ce" ]; then
             sed -i "/github.com\/TykTechnologies\/midsommar\/v2\/enterprise/d" go.mod
