@@ -173,7 +173,7 @@ jobs:
 
       - name: Configure Git for Enterprise Access
         run: |
-          git config --global url."https://${{ steps.app-token.outputs.token }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/".insteadOf "https://github.com/"
 
       - name: Initialize Enterprise Submodule
         run: |
