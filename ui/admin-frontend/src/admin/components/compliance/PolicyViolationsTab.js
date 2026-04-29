@@ -142,17 +142,27 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
     <Box>
       {/* Summary Stats */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6}>
+        <Grid item xs={4}>
           <StyledPaper sx={{ p: 2, textAlign: "center" }}>
-            <Typography variant="h4" color="warning.main">
+            <Typography variant="h4" color="error.main">
               {data.total_blocks || 0}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Total Blocked Requests
+              Blocked Requests
             </Typography>
           </StyledPaper>
         </Grid>
-        <Grid item xs={6}>
+        <Grid item xs={4}>
+          <StyledPaper sx={{ p: 2, textAlign: "center" }}>
+            <Typography variant="h4" color="warning.main">
+              {data.total_flagged || 0}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Flagged Requests
+            </Typography>
+          </StyledPaper>
+        </Grid>
+        <Grid item xs={4}>
           <StyledPaper sx={{ p: 2, textAlign: "center" }}>
             <Typography variant="h4">
               {uniqueApps}

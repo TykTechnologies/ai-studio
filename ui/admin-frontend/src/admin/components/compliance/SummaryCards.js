@@ -8,6 +8,7 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import BlockIcon from "@mui/icons-material/Block";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
+import PolicyIcon from "@mui/icons-material/Policy";
 
 const SummaryCard = styled(Paper)(({ theme, severity }) => {
   const colors = {
@@ -88,6 +89,10 @@ const getSeverity = (type, value) => {
       return value > 3 ? "error" : value > 0 ? "warning" : "success";
     case "error":
       return value > 5 ? "error" : value > 1 ? "warning" : "success";
+    case "events_critical":
+      return value > 0 ? "error" : "success";
+    case "events_warning":
+      return value > 20 ? "warning" : value > 0 ? "info" : "success";
     default:
       return "info";
   }
@@ -130,6 +135,22 @@ const SummaryCards = ({ summary }) => {
       description: "5xx error percentage",
       rawValue: summary.error_rate,
     },
+    {
+      type: "events_critical",
+      title: "Critical Events",
+      value: summary.compliance_events_critical || 0,
+      trend: summary.compliance_events_critical_trend,
+      icon: PolicyIcon,
+      description: "Critical filter-script events",
+    },
+    {
+      type: "events_warning",
+      title: "Warning Events",
+      value: summary.compliance_events_warning || 0,
+      trend: summary.compliance_events_warning_trend,
+      icon: PolicyIcon,
+      description: "Warning filter-script events",
+    },
   ];
 
   return (
@@ -139,7 +160,7 @@ const SummaryCards = ({ summary }) => {
         gridTemplateColumns: {
           xs: "1fr",
           sm: "repeat(2, 1fr)",
-          md: "repeat(4, 1fr)",
+          md: "repeat(3, 1fr)",
         },
         gap: 2,
       }}

@@ -15,6 +15,12 @@ type ComplianceSummary struct {
 	ErrorRate         float64 `json:"error_rate"` // % of 5xx errors
 	ErrorTrend        float64 `json:"error_trend"`
 	TotalRequests     int64   `json:"total_requests"`
+	// Script-emitted compliance events (e.g. PII redacted, content rewritten).
+	// Distinct from PolicyViolations, which only counts request-blocking 4xx responses.
+	ComplianceEventsWarning       int     `json:"compliance_events_warning"`
+	ComplianceEventsWarningTrend  float64 `json:"compliance_events_warning_trend"`
+	ComplianceEventsCritical      int     `json:"compliance_events_critical"`
+	ComplianceEventsCriticalTrend float64 `json:"compliance_events_critical_trend"`
 }
 
 // HighRiskApp represents an app that needs compliance attention
@@ -27,10 +33,12 @@ type HighRiskApp struct {
 	RiskLevel  string   `json:"risk_level"` // HIGH, MEDIUM, LOW
 	Issues     []string `json:"issues"`     // Human-readable issue summaries
 	// Breakdown of risk factors
-	AuthFailures     int     `json:"auth_failures"`
-	PolicyViolations int     `json:"policy_violations"`
-	BudgetPercent    float64 `json:"budget_percent"`
-	ErrorCount       int     `json:"error_count"`
+	AuthFailures             int     `json:"auth_failures"`
+	PolicyViolations         int     `json:"policy_violations"`
+	BudgetPercent            float64 `json:"budget_percent"`
+	ErrorCount               int     `json:"error_count"`
+	ComplianceEventsWarning  int     `json:"compliance_events_warning"`
+	ComplianceEventsCritical int     `json:"compliance_events_critical"`
 }
 
 // AccessIssue represents an access control violation
@@ -72,7 +80,12 @@ type PolicyViolationsData struct {
 	FilterBlocks    []PolicyViolation `json:"filter_blocks"`
 	ModelViolations []PolicyViolation `json:"model_violations"`
 	Timeline        []TimelineData    `json:"timeline"`
-	TotalBlocks     int               `json:"total_blocks"`
+	// TotalBlocks counts requests that were actually blocked (4xx in proxy_logs).
+	TotalBlocks int `json:"total_blocks"`
+	// TotalFlagged counts script-emitted compliance events (warning + critical)
+	// where the request was allowed through but the filter raised a concern
+	// (e.g. PII redaction, content rewrite).
+	TotalFlagged int `json:"total_flagged"`
 }
 
 // BudgetAlert represents an app/LLM approaching or exceeding budget
@@ -121,9 +134,13 @@ type AppRiskProfile struct {
 // ViolationEvent represents a single compliance event
 type ViolationEvent struct {
 	Timestamp    time.Time `json:"timestamp"`
-	Type         string    `json:"type"` // auth_failure, policy_violation, budget_exceeded, error
+	Type         string    `json:"type"` // auth_failure, policy_violation, budget_exceeded, error, compliance_event
 	ResponseCode int       `json:"response_code,omitempty"`
 	Details      string    `json:"details"`
+	// Populated when Type is "compliance_event" (script-emitted).
+	Severity   string `json:"severity,omitempty"`
+	EventType  string `json:"event_type,omitempty"`
+	FilterName string `json:"filter_name,omitempty"`
 }
 
 // ViolationRecord represents an individual policy violation with full details

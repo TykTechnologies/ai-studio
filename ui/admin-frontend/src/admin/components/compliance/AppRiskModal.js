@@ -66,7 +66,8 @@ const AppRiskModal = ({ open, onClose, appId, startDate, endDate }) => {
     }
   };
 
-  const getViolationTypeLabel = (type) => {
+  const getViolationTypeLabel = (violation) => {
+    const type = violation?.type;
     switch (type) {
       case "auth_failure":
         return { label: "Auth Failure", color: "error" };
@@ -76,6 +77,16 @@ const AppRiskModal = ({ open, onClose, appId, startDate, endDate }) => {
         return { label: "Budget Exceeded", color: "error" };
       case "error":
         return { label: "Error", color: "default" };
+      case "compliance_event": {
+        // Script-emitted; severity drives color and event_type is the label.
+        const sevColor =
+          violation.severity === "critical"
+            ? "error"
+            : violation.severity === "warning"
+            ? "warning"
+            : "info";
+        return { label: violation.event_type || "compliance event", color: sevColor };
+      }
       default:
         return { label: type, color: "default" };
     }
@@ -127,7 +138,7 @@ const AppRiskModal = ({ open, onClose, appId, startDate, endDate }) => {
 
             {/* Summary Stats */}
             <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={3}>
+              <Grid item xs={2}>
                 <StyledPaper sx={{ p: 2, textAlign: "center" }}>
                   <Typography variant="h5" color="error.main">
                     {profile.summary?.auth_failures || 0}
@@ -137,7 +148,7 @@ const AppRiskModal = ({ open, onClose, appId, startDate, endDate }) => {
                   </Typography>
                 </StyledPaper>
               </Grid>
-              <Grid item xs={3}>
+              <Grid item xs={2}>
                 <StyledPaper sx={{ p: 2, textAlign: "center" }}>
                   <Typography variant="h5" color="warning.main">
                     {profile.summary?.policy_violations || 0}
@@ -147,7 +158,27 @@ const AppRiskModal = ({ open, onClose, appId, startDate, endDate }) => {
                   </Typography>
                 </StyledPaper>
               </Grid>
-              <Grid item xs={3}>
+              <Grid item xs={2}>
+                <StyledPaper sx={{ p: 2, textAlign: "center" }}>
+                  <Typography variant="h5" color="error.main">
+                    {profile.summary?.compliance_events_critical || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Critical Events
+                  </Typography>
+                </StyledPaper>
+              </Grid>
+              <Grid item xs={2}>
+                <StyledPaper sx={{ p: 2, textAlign: "center" }}>
+                  <Typography variant="h5" color="warning.main">
+                    {profile.summary?.compliance_events_warning || 0}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Warning Events
+                  </Typography>
+                </StyledPaper>
+              </Grid>
+              <Grid item xs={2}>
                 <StyledPaper sx={{ p: 2, textAlign: "center" }}>
                   <Typography variant="h5">
                     {profile.summary?.error_rate?.toFixed(2) || 0}%
@@ -157,7 +188,7 @@ const AppRiskModal = ({ open, onClose, appId, startDate, endDate }) => {
                   </Typography>
                 </StyledPaper>
               </Grid>
-              <Grid item xs={3}>
+              <Grid item xs={2}>
                 <StyledPaper sx={{ p: 2, textAlign: "center" }}>
                   <Typography variant="h5">
                     {profile.summary?.total_requests || 0}
@@ -216,18 +247,28 @@ const AppRiskModal = ({ open, onClose, appId, startDate, endDate }) => {
                 <TableBody>
                   {profile.recent_violations && profile.recent_violations.length > 0 ? (
                     profile.recent_violations.map((violation, idx) => {
-                      const typeInfo = getViolationTypeLabel(violation.type);
+                      const typeInfo = getViolationTypeLabel(violation);
+                      const isEvent = violation.type === "compliance_event";
                       return (
                         <StyledTableRow key={idx}>
                           <StyledTableCell>
                             {new Date(violation.timestamp).toLocaleString()}
                           </StyledTableCell>
                           <StyledTableCell>
-                            <Chip
-                              label={typeInfo.label}
-                              color={typeInfo.color}
-                              size="small"
-                            />
+                            <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+                              <Chip
+                                label={typeInfo.label}
+                                color={typeInfo.color}
+                                size="small"
+                              />
+                              {isEvent && violation.filter_name && (
+                                <Chip
+                                  label={violation.filter_name}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              )}
+                            </Box>
                           </StyledTableCell>
                           <StyledTableCell>
                             <Typography variant="body2">{violation.details}</Typography>
