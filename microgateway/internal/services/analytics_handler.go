@@ -514,6 +514,13 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(_ context.Context, proxyLog
 		// All set to zero/empty until ChatRecord enriches this event
 	}
 
+	// Attribute the event to the specific LLM entry (not just the vendor type)
+	// so the LLM detail view can isolate logs when several entries share a vendor.
+	if proxyLog.LLMID != 0 {
+		llmID := proxyLog.LLMID
+		event.LLMID = &llmID
+	}
+
 	// Check for router metadata (if request came through model router)
 	// Try multiple timestamp keys since there may be slight timing variance
 	routerMetaKey := fmt.Sprintf("router_%d_%d", 0, proxyLog.TimeStamp.Unix())

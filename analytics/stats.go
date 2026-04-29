@@ -1042,17 +1042,11 @@ func GetProxyLogsForLLM(db *gorm.DB, startDate, endDate time.Time, llmID uint, p
 	var proxyLogs []models.ProxyLog
 	var totalCount int64
 
-	// Get the LLM's vendor
-	var llm struct {
-		Vendor string
-	}
-	if err := db.Table("llms").Select("vendor").Where("id = ?", llmID).Scan(&llm).Error; err != nil {
-		return nil, 0, err
-	}
-
-	// Filter proxy_logs by vendor and date range
+	// Filter by the specific LLM entry that handled the request, not by vendor
+	// type — two LLM entries can share a vendor (e.g. two Anthropic entries
+	// with different API keys) and must remain isolated in the detail view.
 	query := db.Model(&models.ProxyLog{}).
-		Where("vendor = ? AND time_stamp BETWEEN ? AND ?", llm.Vendor, startDate, endDate)
+		Where("llm_id = ? AND time_stamp BETWEEN ? AND ?", llmID, startDate, endDate)
 
 	// Add search filter if provided
 	if search != "" {
