@@ -331,6 +331,7 @@ func (p *Proxy) recordTranslatorAnalytics(
 		AppID:        app.ID,
 		UserID:       app.UserID,
 		TimeStamp:    timestamp,
+		LLMID:        llm.ID,
 		Vendor:       string(llm.Vendor),
 		RequestBody:  truncateString(string(reqBody), maxBodySize),
 		ResponseBody: truncateString(string(respBody), maxBodySize),

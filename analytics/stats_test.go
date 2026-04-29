@@ -698,10 +698,10 @@ func TestGetProxyLogsForLLM(t *testing.T) {
 		llm := &models.LLM{Name: "Test LLM", Vendor: models.OPENAI}
 		db.Create(llm)
 
-		// Create proxy logs with matching vendor
 		now := time.Now()
 		for i := 0; i < 3; i++ {
 			db.Create(&models.ProxyLog{
+				LLMID:     llm.ID,
 				Vendor:    string(models.OPENAI),
 				TimeStamp: now,
 			})
@@ -713,7 +713,56 @@ func TestGetProxyLogsForLLM(t *testing.T) {
 		logs, total, err := GetProxyLogsForLLM(db, startDate, endDate, llm.ID, 1, 10, "")
 
 		assert.NoError(t, err)
-		assert.GreaterOrEqual(t, len(logs), 0)
-		assert.GreaterOrEqual(t, total, int64(0))
+		assert.Equal(t, 3, len(logs))
+		assert.Equal(t, int64(3), total)
+	})
+
+	// Reproduces the bug where two LLM entries share the same vendor type
+	// (e.g. one personal Anthropic key + one work Anthropic key) and the
+	// detail page for one shows proxy logs from the other.
+	t.Run("Two LLMs same vendor are isolated", func(t *testing.T) {
+		db := setupStatsTest(t)
+
+		personal := &models.LLM{Name: "Anthropic (personal)", Vendor: models.ANTHROPIC}
+		work := &models.LLM{Name: "Anthropic (work)", Vendor: models.ANTHROPIC}
+		db.Create(personal)
+		db.Create(work)
+
+		now := time.Now()
+		// 4 logs attributed to the personal LLM
+		for i := 0; i < 4; i++ {
+			db.Create(&models.ProxyLog{
+				LLMID:     personal.ID,
+				Vendor:    string(models.ANTHROPIC),
+				TimeStamp: now,
+			})
+		}
+		// 2 logs attributed to the work LLM
+		for i := 0; i < 2; i++ {
+			db.Create(&models.ProxyLog{
+				LLMID:     work.ID,
+				Vendor:    string(models.ANTHROPIC),
+				TimeStamp: now,
+			})
+		}
+
+		startDate := now.AddDate(0, 0, -1)
+		endDate := now.AddDate(0, 0, 1)
+
+		personalLogs, personalTotal, err := GetProxyLogsForLLM(db, startDate, endDate, personal.ID, 1, 50, "")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(4), personalTotal, "personal LLM should only see its own 4 logs, not the work LLM's 2")
+		assert.Equal(t, 4, len(personalLogs))
+		for _, l := range personalLogs {
+			assert.Equal(t, personal.ID, l.LLMID, "log returned for personal LLM was attributed to a different LLM")
+		}
+
+		workLogs, workTotal, err := GetProxyLogsForLLM(db, startDate, endDate, work.ID, 1, 50, "")
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), workTotal, "work LLM should only see its own 2 logs, not the personal LLM's 4")
+		assert.Equal(t, 2, len(workLogs))
+		for _, l := range workLogs {
+			assert.Equal(t, work.ID, l.LLMID, "log returned for work LLM was attributed to a different LLM")
+		}
 	})
 }

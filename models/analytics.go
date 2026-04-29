@@ -137,7 +137,11 @@ type ProxyLog struct {
 	ID           uint      `gorm:"primaryKey"`
 	AppID        uint      `gorm:"index:idx_proxy_logs_app_time,priority:1;index:idx_proxy_logs_app_code_time,priority:1"`
 	UserID       uint      `gorm:"index"`
-	TimeStamp    time.Time `gorm:"index:idx_proxy_logs_time;index:idx_proxy_logs_app_time,priority:2;index:idx_proxy_logs_app_code_time,priority:3"`
+	TimeStamp    time.Time `gorm:"index:idx_proxy_logs_time;index:idx_proxy_logs_app_time,priority:2;index:idx_proxy_logs_app_code_time,priority:3;index:idx_proxy_logs_llm_time,priority:2"`
+	// LLMID is the specific LLM vendor entry that handled the request.
+	// Required to disambiguate when several LLM entries share a Vendor type
+	// (e.g. two Anthropic entries with different API keys).
+	LLMID        uint `gorm:"index:idx_proxy_logs_llm_time,priority:1"`
 	Vendor       string
 	ModelName    string
 	RequestBody  string
