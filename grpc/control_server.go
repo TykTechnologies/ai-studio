@@ -814,10 +814,15 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				vendor = s.extractVendorFromEvent(event)
 			}
 
-			// Create ProxyLog for request/response tracking
+			// Create ProxyLog for request/response tracking.
+			// LLMID must be propagated from the pulse event so that the LLM
+			// detail view can isolate logs by specific LLM entry — without
+			// it, edge-sourced logs land with llm_id = 0 and are invisible
+			// to GetProxyLogsForLLM, which filters on llm_id directly.
 			proxyLogs[i] = &models.ProxyLog{
 				AppID:        uint(event.AppId),
 				UserID:       uint(event.UserId), // User ID synced from edge (via config sync)
+				LLMID:        uint(event.LlmId),
 				Vendor:       vendor,
 				ModelName:    modelName,
 				RequestBody:  event.RequestBody,  // Now included from pulse if configured

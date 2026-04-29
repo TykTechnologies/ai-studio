@@ -167,6 +167,16 @@ func TestSendAnalyticsPulse_BatchProcessing(t *testing.T) {
 		assert.Equal(t, models.ProxyInteraction, record.InteractionType)
 	}
 
+	// LLMID must be propagated from the pulse to the ProxyLog so that
+	// GetProxyLogsForLLM (which filters on llm_id) can return edge-sourced
+	// logs in the LLM detail view. Without this, no logs show up at all.
+	expectedLLMIDs := map[string]uint{"openai": 1, "anthropic": 2}
+	for _, pl := range proxyLogs {
+		want, ok := expectedLLMIDs[pl.Vendor]
+		require.True(t, ok, "unexpected vendor %q in proxy log", pl.Vendor)
+		assert.Equal(t, want, pl.LLMID, "ProxyLog for vendor %q should carry LLMID from pulse", pl.Vendor)
+	}
+
 	// Performance assertion: batch processing should be fast
 	assert.Less(t, processingTime.Milliseconds(), int64(500),
 		"Batch processing should complete quickly (got %v)", processingTime)
