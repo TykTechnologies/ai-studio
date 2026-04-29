@@ -79,6 +79,14 @@ const TrendIndicator = ({ value }) => {
   );
 };
 
+// Display thresholds for filter-script compliance event cards.
+// "Warning" events are advisory (e.g. PII redaction that allowed the request
+// through), so a small number is normal — only escalate the card colour once
+// they accumulate. "Critical" events represent a serious filter-flagged
+// concern; even a single one in the period warrants attention.
+const COMPLIANCE_EVENTS_WARNING_ESCALATE_AT = 20;
+const COMPLIANCE_EVENTS_CRITICAL_ESCALATE_AT = 0;
+
 const getSeverity = (type, value) => {
   switch (type) {
     case "auth":
@@ -90,9 +98,13 @@ const getSeverity = (type, value) => {
     case "error":
       return value > 5 ? "error" : value > 1 ? "warning" : "success";
     case "events_critical":
-      return value > 0 ? "error" : "success";
+      return value > COMPLIANCE_EVENTS_CRITICAL_ESCALATE_AT ? "error" : "success";
     case "events_warning":
-      return value > 20 ? "warning" : value > 0 ? "info" : "success";
+      return value > COMPLIANCE_EVENTS_WARNING_ESCALATE_AT
+        ? "warning"
+        : value > 0
+        ? "info"
+        : "success";
     default:
       return "info";
   }
