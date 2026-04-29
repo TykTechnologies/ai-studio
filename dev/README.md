@@ -71,7 +71,7 @@ That's it! The environment will automatically:
 │   (React HMR)  │  (Air reload)  │  (Air reload)  │  (watcher)   │
 │    :3000       │  :8080/:9090   │    :8081       │  (builds)    │
 ├────────────────┴────────────────┴────────────────┴──────────────┤
-│                         PostgreSQL :5432                         │
+│              PostgreSQL :5432 (host: 55432)                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -79,7 +79,7 @@ That's it! The environment will automatically:
 
 | Service | Port(s) | Description |
 |---------|---------|-------------|
-| `postgres` | 5432 | PostgreSQL 17 database |
+| `postgres` | 55432 → 5432 | PostgreSQL 17 database (host port 55432) |
 | `studio` | 8080, 9090 | AI Studio (control plane) with Air hot reload |
 | `frontend` | 3000 | React development server with HMR |
 | `gateway` | 8081 | Microgateway (data plane) - full mode only |
@@ -360,7 +360,7 @@ make dev
 | 50051 | Studio | gRPC | Control server (edge sync) |
 | 9898 | Studio | HTTP | API Documentation server |
 | 8081 | Gateway | HTTP | Gateway REST/Proxy API |
-| 5432 | PostgreSQL | TCP | Database |
+| 55432 | PostgreSQL | TCP | Database (mapped to container port 5432) |
 
 ## Volume Reference
 

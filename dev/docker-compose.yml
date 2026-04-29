@@ -10,7 +10,7 @@
 #   Or use: make dev (from project root)
 #
 # Services:
-#   - postgres:  PostgreSQL 17 database (port 5432)
+#   - postgres:  PostgreSQL 17 database (host port 55432 → container 5432)
 #   - studio:    AI Studio backend (ports 8080, 9090, 50051)
 #   - frontend:  React development server (port 3000)
 #
@@ -27,7 +27,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: midsommar
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

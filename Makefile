@@ -1075,7 +1075,7 @@ dev-help:
 	@echo "  8080  Studio REST API"
 	@echo "  50051 Studio gRPC (control server)"
 	@echo "  8081  Gateway REST API"
-	@echo "  5432  PostgreSQL"
+	@echo "  55432 PostgreSQL (host) → 5432 (container)"
 	@echo ""
 	@echo "Hot Reloading:"
 	@echo "  - Edit Go files → Air rebuilds in ~2-3 seconds"
