@@ -20,6 +20,7 @@ import HighRiskAppsTable from "../components/compliance/HighRiskAppsTable";
 import PolicyViolationsTab from "../components/compliance/PolicyViolationsTab";
 import BudgetComplianceTab from "../components/compliance/BudgetComplianceTab";
 import ErrorsTab from "../components/compliance/ErrorsTab";
+import FilterEventsTab from "../components/compliance/FilterEventsTab";
 import AppRiskModal from "../components/compliance/AppRiskModal";
 
 const ComplianceOverview = () => {
@@ -147,7 +148,7 @@ const ComplianceOverview = () => {
   };
 
   const getExportView = () => {
-    const views = ["policy", "budget", "errors"];
+    const views = ["policy", "budget", "errors", "events"];
     return views[activeTab] || "policy";
   };
 
@@ -254,12 +255,14 @@ const ComplianceOverview = () => {
               <Tab label="Policy Violations" />
               <Tab label="Budget Compliance" />
               <Tab label="Errors" />
+              <Tab label="Filter Events" />
             </Tabs>
 
             <Box sx={{ p: 3 }}>
               {activeTab === 0 && <PolicyViolationsTab data={policyViolations} onAppClick={handleAppClick} startDate={startDate} endDate={endDate} />}
               {activeTab === 1 && <BudgetComplianceTab data={budgetAlerts} />}
               {activeTab === 2 && <ErrorsTab data={errors} />}
+              {activeTab === 3 && <FilterEventsTab startDate={startDate} endDate={endDate} />}
             </Box>
           </StyledPaper>
         </Box>

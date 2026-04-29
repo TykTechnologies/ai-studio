@@ -8,6 +8,7 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import BlockIcon from "@mui/icons-material/Block";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
+import PolicyIcon from "@mui/icons-material/Policy";
 
 const SummaryCard = styled(Paper)(({ theme, severity }) => {
   const colors = {
@@ -78,6 +79,14 @@ const TrendIndicator = ({ value }) => {
   );
 };
 
+// Display thresholds for filter-script compliance event cards.
+// "Warning" events are advisory (e.g. PII redaction that allowed the request
+// through), so a small number is normal — only escalate the card colour once
+// they accumulate. "Critical" events represent a serious filter-flagged
+// concern; even a single one in the period warrants attention.
+const COMPLIANCE_EVENTS_WARNING_ESCALATE_AT = 20;
+const COMPLIANCE_EVENTS_CRITICAL_ESCALATE_AT = 0;
+
 const getSeverity = (type, value) => {
   switch (type) {
     case "auth":
@@ -88,6 +97,14 @@ const getSeverity = (type, value) => {
       return value > 3 ? "error" : value > 0 ? "warning" : "success";
     case "error":
       return value > 5 ? "error" : value > 1 ? "warning" : "success";
+    case "events_critical":
+      return value > COMPLIANCE_EVENTS_CRITICAL_ESCALATE_AT ? "error" : "success";
+    case "events_warning":
+      return value > COMPLIANCE_EVENTS_WARNING_ESCALATE_AT
+        ? "warning"
+        : value > 0
+        ? "info"
+        : "success";
     default:
       return "info";
   }
@@ -130,6 +147,22 @@ const SummaryCards = ({ summary }) => {
       description: "5xx error percentage",
       rawValue: summary.error_rate,
     },
+    {
+      type: "events_critical",
+      title: "Critical Events",
+      value: summary.compliance_events_critical || 0,
+      trend: summary.compliance_events_critical_trend,
+      icon: PolicyIcon,
+      description: "Critical filter-script events",
+    },
+    {
+      type: "events_warning",
+      title: "Warning Events",
+      value: summary.compliance_events_warning || 0,
+      trend: summary.compliance_events_warning_trend,
+      icon: PolicyIcon,
+      description: "Warning filter-script events",
+    },
   ];
 
   return (
@@ -139,7 +172,7 @@ const SummaryCards = ({ summary }) => {
         gridTemplateColumns: {
           xs: "1fr",
           sm: "repeat(2, 1fr)",
-          md: "repeat(4, 1fr)",
+          md: "repeat(3, 1fr)",
         },
         gap: 2,
       }}
