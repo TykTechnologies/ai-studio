@@ -16,16 +16,10 @@ services:
       - 3000:8080
       - 9595:9090
     restart: always
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/ready"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 15s
   mgw:
     networks:
       - tyk-network
-    image: tykio/microgateway:v2.0.0
+    image: tykio/tyk-microgateway:v2.0.0
     volumes:
       - ../confs/mgw-ce.env:/app/.env
       - ../confs/mgw-analytics.yaml:/app/mgw-analytics.yaml
@@ -39,11 +33,4 @@ services:
     restart: always
     depends_on:
       midsommar:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9091/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
-    
+        condition: service_started
