@@ -57,6 +57,7 @@ export default defineConfig({
           { text: 'Secrets Management', link: '/docs/secrets' }, // Keep secrets
           { text: 'Budget Control', link: '/docs/budgeting' }, // New
           { text: 'Analytics & Monitoring', link: '/docs/analytics' }, // New (replace dashboard)
+          { text: 'Compliance Events', link: '/docs/compliance-events' }, // v2.1
           { text: 'Notifications', link: '/docs/notifications' }, // New
           { text: 'Edge Gateways (Enterprise)', link: '/docs/edge-gateways' } // Enterprise hub-spoke management
           // Removed: apps, model-prices, call-settings (to be merged)
@@ -73,6 +74,7 @@ export default defineConfig({
           { text: 'Deployment Options', link: '/docs/plugins-deployment' },
           { text: 'Resource Provider Plugins', link: '/docs/plugins-resource-types' },
           { text: 'SDK Reference', link: '/docs/plugins-sdk' },
+          { text: 'SDK Changes in v2.1', link: '/docs/plugins-sdk-changes-v2.1' },
           { text: 'Service API Reference', link: '/docs/plugins-service-api' }
         ]
       }
