@@ -2,9 +2,9 @@
 -- Add control_payloads table for edge-to-control plugin data transmission
 
 CREATE TABLE control_payloads (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     plugin_id INTEGER NOT NULL,
-    payload BYTEA NOT NULL,
+    payload BLOB NOT NULL,
     correlation_id VARCHAR(255),
     metadata JSON,
     sent BOOLEAN DEFAULT FALSE,

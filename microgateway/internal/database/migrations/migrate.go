@@ -44,10 +44,6 @@ type Migrator struct {
 
 // NewMigrator creates a new migrator instance
 func NewMigrator(db *gorm.DB) (*Migrator, error) {
-	if db.Dialector.Name() != "postgres" {
-		return nil, fmt.Errorf("embedded SQL migrations support postgres only, got %s; use database.Migrate for dialect-portable GORM migrations", db.Dialector.Name())
-	}
-
 	migrator := &Migrator{
 		db:         db,
 		migrations: []Migration{},
