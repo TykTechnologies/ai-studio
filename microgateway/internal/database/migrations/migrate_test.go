@@ -6,7 +6,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+func TestNewMigratorRejectsSQLite(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+
+	_, err = NewMigrator(db)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "support postgres only")
+}
 
 func TestControlPayloadMigrationUsesPostgresBinaryTypes(t *testing.T) {
 	sqlBytes, err := migrationFiles.ReadFile("006_add_control_payloads.up.sql")
