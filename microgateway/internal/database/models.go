@@ -383,7 +383,7 @@ func (pkv *PluginKV) IsExpired() bool {
 type ControlPayload struct {
 	ID            uint           `gorm:"primaryKey"`
 	PluginID      uint           `gorm:"not null;index:idx_control_payload_plugin"`
-	Payload       []byte         `gorm:"type:blob;not null"`
+	Payload       []byte         `gorm:"not null"`
 	CorrelationID string         `gorm:"size:255;index:idx_control_payload_correlation"`
 	Metadata      datatypes.JSON `gorm:"type:json"`
 	Sent          bool           `gorm:"default:false;index:idx_control_payload_sent"`
