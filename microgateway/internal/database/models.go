@@ -174,7 +174,7 @@ type AnalyticsEvent struct {
 	UserID              uint   `gorm:"index:idx_analytics_user"`      // User who made the request
 	Name                string                                        // Model name (e.g., "gpt-4", "claude-3-opus")
 	Vendor              string                                        // LLM vendor (e.g., "openai", "anthropic")
-	InteractionType     string `gorm:"type:string;default:'proxy'"`  // "chat" or "proxy"
+	InteractionType     string `gorm:"type:text;default:'proxy'"`    // "chat" or "proxy"
 	Choices             int                                           // Number of choices in response
 	ToolCalls           int                                           // Number of tool calls made
 	ChatID              string                                        // Chat session identifier
