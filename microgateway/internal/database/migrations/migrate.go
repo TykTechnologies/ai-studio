@@ -127,32 +127,32 @@ func (m *Migrator) loadMigrations() error {
 func parseMigrationFilename(filename string) (int, string, string, error) {
 	// Remove .sql extension
 	name := strings.TrimSuffix(filename, ".sql")
-
+	
 	// Split by dots to get direction
 	parts := strings.Split(name, ".")
 	if len(parts) != 2 {
 		return 0, "", "", fmt.Errorf("invalid filename format, expected: version_name.direction.sql")
 	}
-
+	
 	direction := parts[1]
 	if direction != "up" && direction != "down" {
 		return 0, "", "", fmt.Errorf("invalid direction: %s, expected 'up' or 'down'", direction)
 	}
-
+	
 	// Split by underscore to get version and name
 	versionAndName := parts[0]
 	underscoreParts := strings.SplitN(versionAndName, "_", 2)
 	if len(underscoreParts) < 2 {
 		return 0, "", "", fmt.Errorf("invalid filename format, expected: version_name.direction.sql")
 	}
-
+	
 	version, err := strconv.Atoi(underscoreParts[0])
 	if err != nil {
 		return 0, "", "", fmt.Errorf("invalid version number: %s", underscoreParts[0])
 	}
-
+	
 	migrationName := underscoreParts[1]
-
+	
 	return version, migrationName, direction, nil
 }
 
@@ -174,7 +174,7 @@ func (m *Migrator) Up() error {
 		}
 
 		fmt.Printf("Applying migration %d: %s\n", migration.Version, migration.Name)
-
+		
 		err := m.db.Transaction(func(tx *gorm.DB) error {
 			// Execute migration
 			if err := tx.Exec(migration.UpSQL).Error; err != nil {

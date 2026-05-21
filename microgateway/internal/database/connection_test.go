@@ -68,6 +68,17 @@ func TestControlPayload_PostgresPayloadColumnType(t *testing.T) {
 	assert.Equal(t, "bytea", columnType)
 }
 
+func TestAnalyticsEvent_PostgresInteractionTypeColumnType(t *testing.T) {
+	modelSchema, err := schema.Parse(&AnalyticsEvent{}, &sync.Map{}, schema.NamingStrategy{})
+	require.NoError(t, err)
+
+	interactionTypeField := modelSchema.LookUpField("InteractionType")
+	require.NotNil(t, interactionTypeField)
+
+	columnType := postgres.Dialector{}.DataTypeOf(interactionTypeField)
+	assert.Equal(t, "text", columnType)
+}
+
 func TestDatabaseConfig_Validation(t *testing.T) {
 	tests := []struct {
 		name     string
