@@ -2,11 +2,14 @@
 package database
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm/schema"
 )
 
 func TestConnect_SQLite(t *testing.T) {
@@ -37,7 +40,7 @@ func TestConnect_SQLite(t *testing.T) {
 	t.Run("InvalidDSN", func(t *testing.T) {
 		invalidConfig := config
 		invalidConfig.DSN = "/invalid/path/to/db.sqlite"
-		
+
 		_, err := Connect(invalidConfig)
 		assert.Error(t, err)
 	})
@@ -54,7 +57,16 @@ func TestConnect_UnsupportedDatabase(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported database type")
 }
 
-// TestMigrate removed - GORM handles migrations automatically
+func TestControlPayload_PostgresPayloadColumnType(t *testing.T) {
+	modelSchema, err := schema.Parse(&ControlPayload{}, &sync.Map{}, schema.NamingStrategy{})
+	require.NoError(t, err)
+
+	payloadField := modelSchema.LookUpField("Payload")
+	require.NotNil(t, payloadField)
+
+	columnType := postgres.Dialector{}.DataTypeOf(payloadField)
+	assert.Equal(t, "bytea", columnType)
+}
 
 func TestDatabaseConfig_Validation(t *testing.T) {
 	tests := []struct {
@@ -90,7 +102,7 @@ func TestDatabaseConfig_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test connection (may fail due to actual DB not available, but config should be valid)
 			_, err := Connect(tt.config)
-			
+
 			if tt.hasError {
 				assert.Error(t, err)
 			} else {
