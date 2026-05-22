@@ -174,7 +174,7 @@ type AnalyticsEvent struct {
 	UserID              uint   `gorm:"index:idx_analytics_user"`      // User who made the request
 	Name                string                                        // Model name (e.g., "gpt-4", "claude-3-opus")
 	Vendor              string                                        // LLM vendor (e.g., "openai", "anthropic")
-	InteractionType     string `gorm:"type:string;default:'proxy'"`  // "chat" or "proxy"
+	InteractionType     string `gorm:"type:text;default:'proxy'"`    // "chat" or "proxy"
 	Choices             int                                           // Number of choices in response
 	ToolCalls           int                                           // Number of tool calls made
 	ChatID              string                                        // Chat session identifier
@@ -383,7 +383,7 @@ func (pkv *PluginKV) IsExpired() bool {
 type ControlPayload struct {
 	ID            uint           `gorm:"primaryKey"`
 	PluginID      uint           `gorm:"not null;index:idx_control_payload_plugin"`
-	Payload       []byte         `gorm:"type:blob;not null"`
+	Payload       []byte         `gorm:"not null"`
 	CorrelationID string         `gorm:"size:255;index:idx_control_payload_correlation"`
 	Metadata      datatypes.JSON `gorm:"type:json"`
 	Sent          bool           `gorm:"default:false;index:idx_control_payload_sent"`
