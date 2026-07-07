@@ -639,13 +639,22 @@ const AppDetails = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="headingXLarge">App details</Typography>
-        <SecondaryLinkButton
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/apps")}
-          color="inherit"
-        >
-          Back to apps
-        </SecondaryLinkButton>
+        <Box display="flex" alignItems="center" gap={2}>
+          <PrimaryButton
+            variant="contained"
+            startIcon={<EditIcon />}
+            onClick={() => navigate(`/admin/apps/edit/${id}`)}
+          >
+            Edit app
+          </PrimaryButton>
+          <SecondaryLinkButton
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate("/admin/apps")}
+            color="inherit"
+          >
+            Back to apps
+          </SecondaryLinkButton>
+        </Box>
       </TitleBox>
       <ContentBox>
         <SectionTitle>Token Usage</SectionTitle>
@@ -985,21 +994,6 @@ const AppDetails = () => {
             onPageSizeChange={handlePageSizeChange}
           />
         </StyledPaper>
-
-        <Box
-          mt={4}
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-        >
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/apps/edit/${id}`)}
-          >
-            Edit app
-          </PrimaryButton>
-        </Box>
       </ContentBox>
       <Snackbar
         open={snackbar.open}
