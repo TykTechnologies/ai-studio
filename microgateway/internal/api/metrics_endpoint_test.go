@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/metrics"
+	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,21 @@ func metricsTestRequest(router *gin.Engine, bearerToken string) *httptest.Respon
 	return rec
 }
 
+// registerTestMetricsRoute mirrors the metrics registration in SetupRouter so
+// tests can exercise it without constructing a full router config.
+func registerTestMetricsRoute(router gin.IRoutes, config *RouterConfig) bool {
+	metricsPath := config.MetricsPath
+	if metricsPath == "" {
+		metricsPath = "/metrics"
+	}
+	return middleware.RegisterMetricsEndpoint(router, middleware.MetricsEndpointConfig{
+		Path:                 metricsPath,
+		Handler:              config.MetricsHandler,
+		AuthToken:            config.MetricsAuthToken,
+		AllowUnauthenticated: config.MetricsAllowUnauthenticated,
+	})
+}
+
 func TestMetricsEndpoint_Enabled(t *testing.T) {
 	metricsHandler := metrics.Init()
 	require.NotNil(t, metricsHandler)
@@ -32,7 +48,7 @@ func TestMetricsEndpoint_Enabled(t *testing.T) {
 	router := gin.New()
 
 	// Explicitly opted in to unauthenticated scraping
-	registered := registerMetricsRoute(router, &RouterConfig{
+	registered := registerTestMetricsRoute(router, &RouterConfig{
 		MetricsHandler:              metricsHandler,
 		MetricsAllowUnauthenticated: true,
 	})
@@ -71,7 +87,7 @@ func TestMetricsEndpoint_NilHandler(t *testing.T) {
 	router := gin.New()
 
 	// When MetricsHandler is nil, the route should not be mounted
-	registered := registerMetricsRoute(router, &RouterConfig{
+	registered := registerTestMetricsRoute(router, &RouterConfig{
 		MetricsHandler:              nil,
 		MetricsAuthToken:            "s3cret-token",
 		MetricsAllowUnauthenticated: true,
@@ -91,7 +107,7 @@ func TestMetricsEndpoint_SecureByDefault(t *testing.T) {
 
 	// Metrics enabled but no auth token and no explicit unauthenticated opt-in:
 	// the endpoint must not be registered at all.
-	registered := registerMetricsRoute(router, &RouterConfig{
+	registered := registerTestMetricsRoute(router, &RouterConfig{
 		MetricsHandler: metricsHandler,
 	})
 	assert.False(t, registered)
@@ -107,7 +123,7 @@ func TestMetricsEndpoint_AuthToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	registered := registerMetricsRoute(router, &RouterConfig{
+	registered := registerTestMetricsRoute(router, &RouterConfig{
 		MetricsHandler:   metricsHandler,
 		MetricsAuthToken: "s3cret-token",
 	})
@@ -140,7 +156,7 @@ func TestMetricsEndpoint_AuthToken(t *testing.T) {
 
 	t.Run("token takes precedence over unauthenticated flag", func(t *testing.T) {
 		r2 := gin.New()
-		registered := registerMetricsRoute(r2, &RouterConfig{
+		registered := registerTestMetricsRoute(r2, &RouterConfig{
 			MetricsHandler:              metricsHandler,
 			MetricsAuthToken:            "s3cret-token",
 			MetricsAllowUnauthenticated: true,
@@ -157,7 +173,7 @@ func TestMetricsEndpoint_ContentType(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	registered := registerMetricsRoute(router, &RouterConfig{
+	registered := registerTestMetricsRoute(router, &RouterConfig{
 		MetricsHandler:              metricsHandler,
 		MetricsAllowUnauthenticated: true,
 	})

@@ -118,6 +118,27 @@ func TestRegisterMetricsEndpoint_TokenTakesPrecedenceOverUnauthenticated(t *test
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
+func TestRegisterMetricsEndpoint_CustomPath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	registered := RegisterMetricsEndpoint(router, MetricsEndpointConfig{
+		Path:                 "/internal/metrics",
+		Handler:              dummyMetricsHandler(),
+		AllowUnauthenticated: true,
+	})
+	assert.True(t, registered)
+
+	rec := performMetricsRequest(router, "")
+	assert.Equal(t, http.StatusNotFound, rec.Code, "default /metrics path should not be mounted")
+
+	req := httptest.NewRequest("GET", "/internal/metrics", nil)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "test_metric")
+}
+
 func TestRegisterMetricsEndpoint_NilHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
