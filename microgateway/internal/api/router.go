@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
+	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -97,6 +98,13 @@ type RouterConfig struct {
 	EnableSwagger             bool
 	EnableMetrics             bool
 	MetricsHandler            http.Handler
+	// MetricsPath is the route the metrics handler is mounted on; defaults to
+	// "/metrics" when empty.
+	MetricsPath string
+	// MetricsAuthToken, when set, requires "Authorization: Bearer <token>" on the
+	// metrics endpoint. When empty, it is only served if MetricsAllowUnauthenticated is true.
+	MetricsAuthToken            string
+	MetricsAllowUnauthenticated bool
 	PluginEndpointMaxBodySize    int64         // Max request body for custom plugin endpoints (default 1MB)
 	PluginEndpointStreamTimeout time.Duration // Timeout for streaming plugin endpoints (default 5m)
 	Version                     string
@@ -298,9 +306,21 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		router.Any("/plugins/*path", handlePluginEndpoint(config))
 	}
 
-	// Metrics endpoint if enabled
-	if config.EnableMetrics && config.MetricsHandler != nil {
-		router.GET("/metrics", gin.WrapH(config.MetricsHandler))
+	// Metrics endpoint if enabled. Secure by default: requires METRICS_AUTH_TOKEN
+	// (bearer auth), or an explicit METRICS_ALLOW_UNAUTHENTICATED=true opt-out
+	// (e.g. for in-cluster Prometheus scraping). Otherwise not registered.
+	if config.EnableMetrics {
+		metricsPath := config.MetricsPath
+		if metricsPath == "" {
+			metricsPath = "/metrics"
+		}
+		middleware.RegisterMetricsEndpoint(router, middleware.MetricsEndpointConfig{
+			Path:                 metricsPath,
+			Handler:              config.MetricsHandler,
+			AuthToken:            config.MetricsAuthToken,
+			AllowUnauthenticated: config.MetricsAllowUnauthenticated,
+			Warn:                 func(msg string) { log.Warn().Msg(msg) },
+		})
 	}
 
 	// Swagger documentation if enabled

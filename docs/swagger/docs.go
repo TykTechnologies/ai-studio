@@ -9553,6 +9553,91 @@ const docTemplate = `{
                 }
             }
         },
+        "/compliance/events": {
+            "get": {
+                "description": "Get compliance events reported by filter scripts, with filtering and aggregation",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Get script-reported compliance events",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD), defaults to 7 days ago",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD), defaults to today",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by app ID",
+                        "name": "app_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by event type",
+                        "name": "event_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by severity (info, warning, critical)",
+                        "name": "severity",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of records, defaults to 100",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Pagination offset, defaults to 0",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/compliance.ComplianceEventsData"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/compliance/export": {
             "get": {
                 "description": "Export compliance data in CSV format",
@@ -13910,7 +13995,7 @@ const docTemplate = `{
         },
         "/login-sso-profile": {
             "get": {
-                "description": "Get the profile that has UseInLoginPage set to true",
+                "description": "Get a sanitized view (name, provider type, login URL) of the profile that has UseInLoginPage set to true",
                 "consumes": [
                     "application/json"
                 ],
@@ -13925,7 +14010,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api.ProfileResponse"
+                            "$ref": "#/definitions/api.LoginPageProfileResponse"
                         }
                     },
                     "404": {
@@ -20252,6 +20337,9 @@ const docTemplate = `{
                                 "default_model": {
                                     "type": "string"
                                 },
+                                "dont_log_bodies": {
+                                    "type": "boolean"
+                                },
                                 "filters": {
                                     "type": "array",
                                     "items": {
@@ -20263,6 +20351,10 @@ const docTemplate = `{
                                 },
                                 "long_description": {
                                     "type": "string"
+                                },
+                                "metadata": {
+                                    "type": "object",
+                                    "additionalProperties": true
                                 },
                                 "monthly_budget": {
                                     "type": "number"
@@ -20319,6 +20411,9 @@ const docTemplate = `{
                         "default_model": {
                             "type": "string"
                         },
+                        "dont_log_bodies": {
+                            "type": "boolean"
+                        },
                         "filters": {
                             "type": "array",
                             "items": {
@@ -20333,6 +20428,10 @@ const docTemplate = `{
                         },
                         "long_description": {
                             "type": "string"
+                        },
+                        "metadata": {
+                            "type": "object",
+                            "additionalProperties": true
                         },
                         "monthly_budget": {
                             "type": "number"
@@ -20506,6 +20605,38 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "api.LoginPageProfileResponse": {
+            "description": "Sanitized login page SSO profile model",
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "type": "object",
+                    "properties": {
+                        "login_url": {
+                            "type": "string"
+                        },
+                        "name": {
+                            "type": "string"
+                        },
+                        "profile_id": {
+                            "type": "string"
+                        },
+                        "selected_provider_type": {
+                            "type": "string"
+                        },
+                        "use_in_login_page": {
+                            "type": "boolean"
+                        }
+                    }
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -21951,6 +22082,9 @@ const docTemplate = `{
                                 "$ref": "#/definitions/api.FilterResponse"
                             }
                         },
+                        "has_auth_key": {
+                            "type": "boolean"
+                        },
                         "name": {
                             "type": "string"
                         },
@@ -22492,6 +22626,92 @@ const docTemplate = `{
                 }
             }
         },
+        "compliance.ComplianceEventRecord": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "integer"
+                },
+                "app_name": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "event_type": {
+                    "type": "string"
+                },
+                "filter_name": {
+                    "type": "string"
+                },
+                "filter_scope": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "llm_id": {
+                    "type": "integer"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "model_name": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "vendor": {
+                    "type": "string"
+                }
+            }
+        },
+        "compliance.ComplianceEventsData": {
+            "type": "object",
+            "properties": {
+                "by_filter": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "by_severity": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "by_type": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/compliance.ComplianceEventRecord"
+                    }
+                },
+                "timeline": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/compliance.TimelineData"
+                    }
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
         "compliance.ComplianceSummary": {
             "type": "object",
             "properties": {
@@ -22507,6 +22727,19 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "budget_trend": {
+                    "type": "number"
+                },
+                "compliance_events_critical": {
+                    "type": "integer"
+                },
+                "compliance_events_critical_trend": {
+                    "type": "number"
+                },
+                "compliance_events_warning": {
+                    "description": "Script-emitted compliance events (e.g. PII redacted, content rewritten).\nDistinct from PolicyViolations, which only counts request-blocking 4xx responses.",
+                    "type": "integer"
+                },
+                "compliance_events_warning_trend": {
                     "type": "number"
                 },
                 "error_rate": {
@@ -22565,6 +22798,12 @@ const docTemplate = `{
                 },
                 "budget_percent": {
                     "type": "number"
+                },
+                "compliance_events_critical": {
+                    "type": "integer"
+                },
+                "compliance_events_warning": {
+                    "type": "integer"
                 },
                 "error_count": {
                     "type": "integer"
@@ -22640,6 +22879,11 @@ const docTemplate = `{
                     }
                 },
                 "total_blocks": {
+                    "description": "TotalBlocks counts requests that were actually blocked (4xx in proxy_logs).",
+                    "type": "integer"
+                },
+                "total_flagged": {
+                    "description": "TotalFlagged counts script-emitted compliance events (warning + critical)\nwhere the request was allowed through but the filter raised a concern\n(e.g. PII redaction, content rewrite).",
                     "type": "integer"
                 }
             }
@@ -22661,14 +22905,24 @@ const docTemplate = `{
                 "details": {
                     "type": "string"
                 },
+                "event_type": {
+                    "type": "string"
+                },
+                "filter_name": {
+                    "type": "string"
+                },
                 "response_code": {
                     "type": "integer"
+                },
+                "severity": {
+                    "description": "Populated when Type is \"compliance_event\" (script-emitted).",
+                    "type": "string"
                 },
                 "timestamp": {
                     "type": "string"
                 },
                 "type": {
-                    "description": "auth_failure, policy_violation, budget_exceeded, error",
+                    "description": "auth_failure, policy_violation, budget_exceeded, error, compliance_event",
                     "type": "string"
                 }
             }

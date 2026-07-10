@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
+	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
@@ -327,13 +328,22 @@ func (a *API) setupRoutes() {
 		a.router.Use(a.corsMiddleware())
 	}
 
-	// Prometheus metrics endpoint (no auth — intended for Kubernetes pod scraping)
+	// Prometheus metrics endpoint. Secure by default: requires METRICS_AUTH_TOKEN
+	// (bearer auth), or an explicit METRICS_ALLOW_UNAUTHENTICATED=true opt-out
+	// (e.g. for in-cluster Kubernetes pod scraping). Otherwise not registered.
 	if metricsHandler := metrics.Handler(); metricsHandler != nil {
-		metricsPath := config.Get("").MetricsPath
+		conf := config.Get("")
+		metricsPath := conf.MetricsPath
 		if metricsPath == "" {
 			metricsPath = "/metrics"
 		}
-		a.router.GET(metricsPath, gin.WrapH(metricsHandler))
+		middleware.RegisterMetricsEndpoint(a.router, middleware.MetricsEndpointConfig{
+			Path:                 metricsPath,
+			Handler:              metricsHandler,
+			AuthToken:            conf.MetricsAuthToken,
+			AllowUnauthenticated: conf.MetricsAllowUnauthenticated,
+			Warn:                 logger.Warn,
+		})
 	}
 
 	a.router.GET("/sun.ico", func(c *gin.Context) {

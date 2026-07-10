@@ -741,5 +741,84 @@ func TestGetLoginPageProfile(t *testing.T) {
 		assert.Equal(t, profile.Name, profileAttrs["name"])
 		assert.Equal(t, profile.ProfileID, profileAttrs["profile_id"])
 		assert.Equal(t, true, profileAttrs["use_in_login_page"])
+		assert.Equal(t, fmt.Sprintf("http://localhost:8080/auth/%s/%s", profile.ProfileID, profile.SelectedProviderType), profileAttrs["login_url"])
 	})
+
+	t.Run("Response must not leak provider credentials", func(t *testing.T) {
+		// This endpoint is public (unauthenticated): the response must be
+		// sanitized and never include provider_config or any credentials.
+		w := performRequest(r, "GET", "/api/v1/sso-profiles/login-page", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response map[string]interface{}
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		profileData := response["data"].(map[string]interface{})
+		profileAttrs := profileData["attributes"].(map[string]interface{})
+
+		for _, forbidden := range []string{
+			"provider_config",
+			"identity_handler_config",
+			"user_group_mapping",
+			"matched_policy_id",
+			"org_id",
+		} {
+			_, present := profileAttrs[forbidden]
+			assert.False(t, present, "public login profile response must not contain %q", forbidden)
+		}
+
+		// The raw body must not contain the secret values stored in ProviderConfig
+		// (createTestProfile sets Key=test-key, Secret=test-secret)
+		body := w.Body.String()
+		assert.NotContains(t, body, "test-secret")
+		assert.NotContains(t, body, "test-key")
+	})
+}
+
+func TestSerializeLoginPageProfile(t *testing.T) {
+	profile := &models.Profile{
+		Model:        gorm.Model{ID: 42},
+		Name:         "OneLogin",
+		ProfileID:    "onelogin-profile",
+		ActionType:   "auth",
+		Type:         "redirect",
+		ProviderName: "SocialProvider",
+		ProviderConfig: map[string]interface{}{
+			"CallbackBaseURL": "https://studio.example.com",
+			"UseProviders": []map[string]interface{}{
+				{
+					"Name":   "openid-connect",
+					"Key":    "super-secret-client-id",
+					"Secret": "super-secret-client-secret",
+					"DiscoverURL": "https://onelogin.example.com/oidc/2/.well-known/openid-configuration",
+				},
+			},
+		},
+		IdentityHandlerConfig: map[string]interface{}{
+			"DashboardCredential": "secret-dashboard-cred",
+		},
+		SelectedProviderType: provOpenID,
+		UseInLoginPage:       true,
+	}
+
+	resp := serializeLoginPageProfile(profile)
+
+	assert.Equal(t, "sso-profiles", resp.Type)
+	assert.Equal(t, uint(42), resp.ID)
+	assert.Equal(t, "OneLogin", resp.Attributes.Name)
+	assert.Equal(t, "onelogin-profile", resp.Attributes.ProfileID)
+	assert.Equal(t, provOpenID, resp.Attributes.SelectedProviderType)
+	assert.Equal(t, "https://studio.example.com/auth/onelogin-profile/openid-connect", resp.Attributes.LoginURL)
+	assert.True(t, resp.Attributes.UseInLoginPage)
+
+	// Serialize to JSON and verify no credential material survives
+	raw, err := json.Marshal(resp)
+	require.NoError(t, err)
+	body := string(raw)
+	assert.NotContains(t, body, "super-secret-client-id")
+	assert.NotContains(t, body, "super-secret-client-secret")
+	assert.NotContains(t, body, "secret-dashboard-cred")
+	assert.NotContains(t, body, "provider_config")
+	assert.NotContains(t, body, "identity_handler_config")
 }

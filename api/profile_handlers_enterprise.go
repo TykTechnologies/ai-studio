@@ -21,7 +21,8 @@ const (
 	userProfile = "profile for users"
 )
 
-func serializeProfile(profile *models.Profile) ProfileResponse {
+// profileCallbackBaseURL returns the profile's callback base URL with a trailing slash.
+func profileCallbackBaseURL(profile *models.Profile) string {
 	accessor := helpers.NewJSONMapAccessor(profile.ProviderConfig)
 	callbackBaseURL := accessor.GetString("CallbackBaseURL", "")
 
@@ -33,6 +34,12 @@ func serializeProfile(profile *models.Profile) ProfileResponse {
 		callbackBaseURL += "/"
 	}
 
+	return callbackBaseURL
+}
+
+func serializeProfile(profile *models.Profile) ProfileResponse {
+	accessor := helpers.NewJSONMapAccessor(profile.ProviderConfig)
+	callbackBaseURL := profileCallbackBaseURL(profile)
 	failureRedirect := accessor.GetString("FailureRedirect", "")
 
 	resp := ProfileResponse{
@@ -67,6 +74,25 @@ func serializeProfile(profile *models.Profile) ProfileResponse {
 	resp.Attributes.LoginURL = fmt.Sprintf(urlFormat, callbackBaseURL, profile.ProfileID, profile.SelectedProviderType)
 	resp.Attributes.CallbackURL = fmt.Sprintf(callbackUrlFormat, callbackBaseURL, profile.ProfileID, profile.SelectedProviderType)
 	resp.Attributes.FailureRedirectURL = failureRedirect
+	resp.Attributes.UseInLoginPage = profile.UseInLoginPage
+
+	return resp
+}
+
+// serializeLoginPageProfile returns the sanitized profile representation for the
+// public, unauthenticated /login-sso-profile endpoint. The login page only needs
+// the login URL and display metadata — provider_config (client IDs/secrets),
+// identity_handler_config, and other internals must never be exposed here.
+func serializeLoginPageProfile(profile *models.Profile) LoginPageProfileResponse {
+	resp := LoginPageProfileResponse{
+		Type: "sso-profiles",
+		ID:   profile.Model.ID,
+	}
+
+	resp.Attributes.ProfileID = profile.ProfileID
+	resp.Attributes.Name = profile.Name
+	resp.Attributes.SelectedProviderType = profile.SelectedProviderType
+	resp.Attributes.LoginURL = fmt.Sprintf("%sauth/%s/%s", profileCallbackBaseURL(profile), profile.ProfileID, profile.SelectedProviderType)
 	resp.Attributes.UseInLoginPage = profile.UseInLoginPage
 
 	return resp
@@ -375,11 +401,11 @@ func (a *API) setProfileUseInLoginPage(c *gin.Context) {
 }
 
 // @Summary Get the profile used in the login page
-// @Description Get the profile that has UseInLoginPage set to true
+// @Description Get a sanitized view (name, provider type, login URL) of the profile that has UseInLoginPage set to true
 // @Tags sso-profiles
 // @Accept json
 // @Produce json
-// @Success 200 {object} ProfileResponse
+// @Success 200 {object} LoginPageProfileResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /login-sso-profile [get]
@@ -390,5 +416,7 @@ func (a *API) getLoginPageProfile(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeProfile(profile)})
+	// This endpoint is public (unauthenticated) — return only the sanitized
+	// representation, never the full profile with provider credentials.
+	c.JSON(http.StatusOK, gin.H{"data": serializeLoginPageProfile(profile)})
 }

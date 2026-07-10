@@ -1103,6 +1103,8 @@ definitions:
                 type: string
               default_model:
                 type: string
+              dont_log_bodies:
+                type: boolean
               filters:
                 items:
                   type: integer
@@ -1111,6 +1113,9 @@ definitions:
                 type: string
               long_description:
                 type: string
+              metadata:
+                additionalProperties: true
+                type: object
               monthly_budget:
                 type: number
               name:
@@ -1147,6 +1152,8 @@ definitions:
             type: string
           default_model:
             type: string
+          dont_log_bodies:
+            type: boolean
           filters:
             items:
               $ref: '#/definitions/api.FilterResponse'
@@ -1157,6 +1164,9 @@ definitions:
             type: string
           long_description:
             type: string
+          metadata:
+            additionalProperties: true
+            type: object
           monthly_budget:
             type: number
           name:
@@ -1271,6 +1281,27 @@ definitions:
           type:
             type: string
         type: object
+    type: object
+  api.LoginPageProfileResponse:
+    description: Sanitized login page SSO profile model
+    properties:
+      attributes:
+        properties:
+          login_url:
+            type: string
+          name:
+            type: string
+          profile_id:
+            type: string
+          selected_provider_type:
+            type: string
+          use_in_login_page:
+            type: boolean
+        type: object
+      id:
+        type: integer
+      type:
+        type: string
     type: object
   api.LoginResponse:
     description: Login response model
@@ -2215,6 +2246,8 @@ definitions:
             items:
               $ref: '#/definitions/api.FilterResponse'
             type: array
+          has_auth_key:
+            type: boolean
           name:
             type: string
           namespace:
@@ -2572,6 +2605,63 @@ definitions:
         description: '>80%'
         type: integer
     type: object
+  compliance.ComplianceEventRecord:
+    properties:
+      app_id:
+        type: integer
+      app_name:
+        type: string
+      description:
+        type: string
+      event_type:
+        type: string
+      filter_name:
+        type: string
+      filter_scope:
+        type: string
+      id:
+        type: integer
+      llm_id:
+        type: integer
+      metadata:
+        additionalProperties: true
+        type: object
+      model_name:
+        type: string
+      severity:
+        type: string
+      timestamp:
+        type: string
+      user_id:
+        type: integer
+      vendor:
+        type: string
+    type: object
+  compliance.ComplianceEventsData:
+    properties:
+      by_filter:
+        additionalProperties:
+          type: integer
+        type: object
+      by_severity:
+        additionalProperties:
+          type: integer
+        type: object
+      by_type:
+        additionalProperties:
+          type: integer
+        type: object
+      events:
+        items:
+          $ref: '#/definitions/compliance.ComplianceEventRecord'
+        type: array
+      timeline:
+        items:
+          $ref: '#/definitions/compliance.TimelineData'
+        type: array
+      total_count:
+        type: integer
+    type: object
   compliance.ComplianceSummary:
     properties:
       auth_failures:
@@ -2583,6 +2673,17 @@ definitions:
         description: Apps >80% budget
         type: integer
       budget_trend:
+        type: number
+      compliance_events_critical:
+        type: integer
+      compliance_events_critical_trend:
+        type: number
+      compliance_events_warning:
+        description: |-
+          Script-emitted compliance events (e.g. PII redacted, content rewritten).
+          Distinct from PolicyViolations, which only counts request-blocking 4xx responses.
+        type: integer
+      compliance_events_warning_trend:
         type: number
       error_rate:
         description: '% of 5xx errors'
@@ -2622,6 +2723,10 @@ definitions:
         type: integer
       budget_percent:
         type: number
+      compliance_events_critical:
+        type: integer
+      compliance_events_warning:
+        type: integer
       error_count:
         type: integer
       issues:
@@ -2672,6 +2777,14 @@ definitions:
           $ref: '#/definitions/compliance.TimelineData'
         type: array
       total_blocks:
+        description: TotalBlocks counts requests that were actually blocked (4xx in
+          proxy_logs).
+        type: integer
+      total_flagged:
+        description: |-
+          TotalFlagged counts script-emitted compliance events (warning + critical)
+          where the request was allowed through but the filter raised a concern
+          (e.g. PII redaction, content rewrite).
         type: integer
     type: object
   compliance.TimelineData:
@@ -2685,12 +2798,19 @@ definitions:
     properties:
       details:
         type: string
+      event_type:
+        type: string
+      filter_name:
+        type: string
       response_code:
         type: integer
+      severity:
+        description: Populated when Type is "compliance_event" (script-emitted).
+        type: string
       timestamp:
         type: string
       type:
-        description: auth_failure, policy_violation, budget_exceeded, error
+        description: auth_failure, policy_violation, budget_exceeded, error, compliance_event
         type: string
     type: object
   compliance.ViolationRecord:
@@ -9318,6 +9438,63 @@ paths:
       summary: Get compliance errors
       tags:
       - Compliance
+  /compliance/events:
+    get:
+      consumes:
+      - application/json
+      description: Get compliance events reported by filter scripts, with filtering
+        and aggregation
+      parameters:
+      - description: Start date (YYYY-MM-DD), defaults to 7 days ago
+        in: query
+        name: start_date
+        type: string
+      - description: End date (YYYY-MM-DD), defaults to today
+        in: query
+        name: end_date
+        type: string
+      - description: Filter by app ID
+        in: query
+        name: app_id
+        type: integer
+      - description: Filter by event type
+        in: query
+        name: event_type
+        type: string
+      - description: Filter by severity (info, warning, critical)
+        in: query
+        name: severity
+        type: string
+      - description: Maximum number of records, defaults to 100
+        in: query
+        name: limit
+        type: integer
+      - description: Pagination offset, defaults to 0
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/compliance.ComplianceEventsData'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Get script-reported compliance events
+      tags:
+      - Compliance
   /compliance/export:
     get:
       consumes:
@@ -12110,14 +12287,15 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get the profile that has UseInLoginPage set to true
+      description: Get a sanitized view (name, provider type, login URL) of the profile
+        that has UseInLoginPage set to true
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ProfileResponse'
+            $ref: '#/definitions/api.LoginPageProfileResponse'
         "404":
           description: Not Found
           schema:
