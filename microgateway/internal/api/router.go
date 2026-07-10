@@ -97,6 +97,10 @@ type RouterConfig struct {
 	EnableSwagger             bool
 	EnableMetrics             bool
 	MetricsHandler            http.Handler
+	// MetricsAuthToken, when set, requires "Authorization: Bearer <token>" on /metrics.
+	// When empty, /metrics is only served if MetricsAllowUnauthenticated is true.
+	MetricsAuthToken            string
+	MetricsAllowUnauthenticated bool
 	PluginEndpointMaxBodySize    int64         // Max request body for custom plugin endpoints (default 1MB)
 	PluginEndpointStreamTimeout time.Duration // Timeout for streaming plugin endpoints (default 5m)
 	Version                     string
@@ -298,9 +302,11 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		router.Any("/plugins/*path", handlePluginEndpoint(config))
 	}
 
-	// Metrics endpoint if enabled
-	if config.EnableMetrics && config.MetricsHandler != nil {
-		router.GET("/metrics", gin.WrapH(config.MetricsHandler))
+	// Metrics endpoint if enabled. Secure by default: requires METRICS_AUTH_TOKEN
+	// (bearer auth), or an explicit METRICS_ALLOW_UNAUTHENTICATED=true opt-out
+	// (e.g. for in-cluster Prometheus scraping). Otherwise not registered.
+	if config.EnableMetrics {
+		registerMetricsRoute(router, config)
 	}
 
 	// Swagger documentation if enabled

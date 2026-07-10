@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/cli"
 	"github.com/spf13/cobra"
@@ -62,15 +63,25 @@ var systemMetricsCmd = &cobra.Command{
 		// For metrics, we want raw text output not JSON parsing
 		client := cli.GetClient()
 		u := client.BaseURL + "/metrics"
-		
-		resp, err := client.HTTPClient.Get(u)
+
+		req, err := http.NewRequest(http.MethodGet, u, nil)
+		if err != nil {
+			return fmt.Errorf("failed to build metrics request: %w", err)
+		}
+		// /metrics may be protected by METRICS_AUTH_TOKEN; send the CLI token as bearer auth
+		req.Header.Set("Authorization", "Bearer "+client.Token)
+
+		resp, err := client.HTTPClient.Do(req)
 		if err != nil {
 			return fmt.Errorf("failed to get metrics: %w", err)
 		}
 		defer resp.Body.Close()
 
+		if resp.StatusCode == http.StatusUnauthorized {
+			return fmt.Errorf("metrics endpoint returned status 401: /metrics requires the token configured via METRICS_AUTH_TOKEN on the gateway")
+		}
 		if resp.StatusCode >= 400 {
-			return fmt.Errorf("metrics endpoint returned status %d", resp.StatusCode)
+			return fmt.Errorf("metrics endpoint returned status %d (note: /metrics is not served unless METRICS_AUTH_TOKEN or METRICS_ALLOW_UNAUTHENTICATED=true is set)", resp.StatusCode)
 		}
 
 		// Read and print raw response

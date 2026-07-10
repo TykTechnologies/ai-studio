@@ -1174,6 +1174,23 @@ type ProfileResponse struct {
 	} `json:"attributes"`
 }
 
+// LoginPageProfileResponse is the sanitized SSO profile returned by the public,
+// unauthenticated /login-sso-profile endpoint. It intentionally exposes only what
+// the login page needs to render the SSO button — never provider_config,
+// identity_handler_config, or any other credential-bearing fields.
+// @Description Sanitized login page SSO profile model
+type LoginPageProfileResponse struct {
+	Type       string `json:"type"`
+	ID         uint   `json:"id"`
+	Attributes struct {
+		ProfileID            string `json:"profile_id"`
+		Name                 string `json:"name"`
+		SelectedProviderType string `json:"selected_provider_type"`
+		LoginURL             string `json:"login_url"`
+		UseInLoginPage       bool   `json:"use_in_login_page"`
+	} `json:"attributes"`
+}
+
 // ProfileListItem represents a simplified profile item for list responses
 // @Description Profile list item model
 type ProfileListItem struct {

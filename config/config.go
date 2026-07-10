@@ -100,6 +100,11 @@ type AppConf struct {
 	// Metrics Configuration
 	MetricsEnabled bool
 	MetricsPath    string
+	// MetricsAuthToken, when set, requires "Authorization: Bearer <token>" on the
+	// metrics endpoint. When empty, the endpoint is only served if
+	// MetricsAllowUnauthenticated is explicitly enabled.
+	MetricsAuthToken            string
+	MetricsAllowUnauthenticated bool
 
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
@@ -405,6 +410,9 @@ func getConfigFromEnv(envFile string) *AppConf {
 	if conf.MetricsPath == "" {
 		conf.MetricsPath = "/metrics"
 	}
+	conf.MetricsAuthToken = os.Getenv("METRICS_AUTH_TOKEN")
+	metricsAllowUnauthStr := os.Getenv("METRICS_ALLOW_UNAUTHENTICATED")
+	conf.MetricsAllowUnauthenticated = metricsAllowUnauthStr == "true" || metricsAllowUnauthStr == "1"
 
 	conf.AuthServerURL = os.Getenv("AUTH_SERVER_URL")
 	if conf.AuthServerURL == "" {

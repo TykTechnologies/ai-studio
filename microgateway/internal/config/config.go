@@ -184,6 +184,11 @@ type ObservabilityConfig struct {
 	LogFormat       string `env:"LOG_FORMAT" envDefault:"text"` // json or text
 	EnableMetrics   bool   `env:"ENABLE_METRICS" envDefault:"true"`
 	MetricsPath     string `env:"METRICS_PATH" envDefault:"/metrics"`
+	// MetricsAuthToken, when set, requires "Authorization: Bearer <token>" on the
+	// metrics endpoint. When empty, the endpoint is only served if
+	// MetricsAllowUnauthenticated is explicitly enabled.
+	MetricsAuthToken            string `env:"METRICS_AUTH_TOKEN"`
+	MetricsAllowUnauthenticated bool   `env:"METRICS_ALLOW_UNAUTHENTICATED" envDefault:"false"`
 	EnableTracing   bool   `env:"ENABLE_TRACING" envDefault:"false"`
 	TracingEndpoint string `env:"TRACING_ENDPOINT"`
 	EnableProfiling bool   `env:"ENABLE_PROFILING" envDefault:"false"`

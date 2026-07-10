@@ -14,6 +14,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func metricsTestRequest(router *gin.Engine, bearerToken string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest("GET", "/metrics", nil)
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
 func TestMetricsEndpoint_Enabled(t *testing.T) {
 	metricsHandler := metrics.Init()
 	require.NotNil(t, metricsHandler)
@@ -21,16 +31,17 @@ func TestMetricsEndpoint_Enabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	// Simulate what SetupRouter does when metrics are enabled
-	router.GET("/metrics", gin.WrapH(metricsHandler))
+	// Explicitly opted in to unauthenticated scraping
+	registered := registerMetricsRoute(router, &RouterConfig{
+		MetricsHandler:              metricsHandler,
+		MetricsAllowUnauthenticated: true,
+	})
+	require.True(t, registered)
 
 	// Record a metric so we have something to scrape
 	metrics.RecordRequest(context.Background(), "1", "openai", "gpt-4", 200)
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/metrics", nil)
-	router.ServeHTTP(rec, req)
-
+	rec := metricsTestRequest(router, "")
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	body, err := io.ReadAll(rec.Body)
@@ -48,13 +59,10 @@ func TestMetricsEndpoint_Disabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	// When EnableMetrics is false or MetricsHandler is nil, /metrics should not be registered.
-	// We do NOT register the route, simulating config.EnableMetrics = false.
+	// When EnableMetrics is false, /metrics is never registered
+	// (SetupRouter skips registerMetricsRoute entirely).
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/metrics", nil)
-	router.ServeHTTP(rec, req)
-
+	rec := metricsTestRequest(router, "")
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
@@ -62,18 +70,86 @@ func TestMetricsEndpoint_NilHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	// When MetricsHandler is nil, the route should not be mounted (matches router.go logic)
-	var nilHandler http.Handler
-	enableMetrics := true
-	if enableMetrics && nilHandler != nil {
-		router.GET("/metrics", gin.WrapH(nilHandler))
-	}
+	// When MetricsHandler is nil, the route should not be mounted
+	registered := registerMetricsRoute(router, &RouterConfig{
+		MetricsHandler:              nil,
+		MetricsAuthToken:            "s3cret-token",
+		MetricsAllowUnauthenticated: true,
+	})
+	assert.False(t, registered)
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/metrics", nil)
-	router.ServeHTTP(rec, req)
-
+	rec := metricsTestRequest(router, "s3cret-token")
 	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestMetricsEndpoint_SecureByDefault(t *testing.T) {
+	metricsHandler := metrics.Init()
+	require.NotNil(t, metricsHandler)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	// Metrics enabled but no auth token and no explicit unauthenticated opt-in:
+	// the endpoint must not be registered at all.
+	registered := registerMetricsRoute(router, &RouterConfig{
+		MetricsHandler: metricsHandler,
+	})
+	assert.False(t, registered)
+
+	rec := metricsTestRequest(router, "")
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+func TestMetricsEndpoint_AuthToken(t *testing.T) {
+	metricsHandler := metrics.Init()
+	require.NotNil(t, metricsHandler)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	registered := registerMetricsRoute(router, &RouterConfig{
+		MetricsHandler:   metricsHandler,
+		MetricsAuthToken: "s3cret-token",
+	})
+	require.True(t, registered)
+
+	t.Run("no token returns 401", func(t *testing.T) {
+		rec := metricsTestRequest(router, "")
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+		assert.NotContains(t, rec.Body.String(), "# HELP")
+	})
+
+	t.Run("wrong token returns 401", func(t *testing.T) {
+		rec := metricsTestRequest(router, "wrong-token")
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+		assert.NotContains(t, rec.Body.String(), "# HELP")
+	})
+
+	t.Run("malformed authorization header returns 401", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		req.Header.Set("Authorization", "s3cret-token") // missing "Bearer " prefix
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
+
+	t.Run("correct token returns metrics", func(t *testing.T) {
+		rec := metricsTestRequest(router, "s3cret-token")
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("token takes precedence over unauthenticated flag", func(t *testing.T) {
+		r2 := gin.New()
+		registered := registerMetricsRoute(r2, &RouterConfig{
+			MetricsHandler:              metricsHandler,
+			MetricsAuthToken:            "s3cret-token",
+			MetricsAllowUnauthenticated: true,
+		})
+		require.True(t, registered)
+
+		rec := metricsTestRequest(r2, "")
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
 }
 
 func TestMetricsEndpoint_ContentType(t *testing.T) {
@@ -81,12 +157,13 @@ func TestMetricsEndpoint_ContentType(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/metrics", gin.WrapH(metricsHandler))
+	registered := registerMetricsRoute(router, &RouterConfig{
+		MetricsHandler:              metricsHandler,
+		MetricsAllowUnauthenticated: true,
+	})
+	require.True(t, registered)
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/metrics", nil)
-	router.ServeHTTP(rec, req)
-
+	rec := metricsTestRequest(router, "")
 	assert.Equal(t, http.StatusOK, rec.Code)
 	contentType := rec.Header().Get("Content-Type")
 	assert.True(t, strings.Contains(contentType, "text/plain") || strings.Contains(contentType, "application/openmetrics"),

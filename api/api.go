@@ -327,13 +327,16 @@ func (a *API) setupRoutes() {
 		a.router.Use(a.corsMiddleware())
 	}
 
-	// Prometheus metrics endpoint (no auth — intended for Kubernetes pod scraping)
+	// Prometheus metrics endpoint. Secure by default: requires METRICS_AUTH_TOKEN
+	// (bearer auth), or an explicit METRICS_ALLOW_UNAUTHENTICATED=true opt-out
+	// (e.g. for in-cluster Kubernetes pod scraping). Otherwise not registered.
 	if metricsHandler := metrics.Handler(); metricsHandler != nil {
-		metricsPath := config.Get("").MetricsPath
+		conf := config.Get("")
+		metricsPath := conf.MetricsPath
 		if metricsPath == "" {
 			metricsPath = "/metrics"
 		}
-		a.router.GET(metricsPath, gin.WrapH(metricsHandler))
+		registerMetricsEndpoint(a.router, metricsPath, metricsHandler, conf.MetricsAuthToken, conf.MetricsAllowUnauthenticated)
 	}
 
 	a.router.GET("/sun.ico", func(c *gin.Context) {

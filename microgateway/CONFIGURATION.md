@@ -90,6 +90,8 @@ The microgateway supports multiple configuration methods in order of precedence:
 | `LOG_FORMAT` | json | Log format: json or text |
 | `ENABLE_METRICS` | true | Enable Prometheus metrics |
 | `METRICS_PATH` | /metrics | Prometheus metrics endpoint path |
+| `METRICS_AUTH_TOKEN` | - | Bearer token required to access `/metrics`. If unset (and unauthenticated access is not explicitly allowed), the endpoint is not served |
+| `METRICS_ALLOW_UNAUTHENTICATED` | false | Explicitly serve `/metrics` without authentication (only for trusted networks, e.g. in-cluster Prometheus scraping) |
 | `ENABLE_TRACING` | false | Enable distributed tracing |
 | `TRACING_ENDPOINT` | - | OpenTelemetry tracing endpoint |
 | `ENABLE_PROFILING` | false | Enable Go pprof endpoints |
@@ -321,13 +323,25 @@ ANALYTICS_RETENTION_DAYS=30   # Short-term
 - **Readiness**: `/ready` - Service ready to accept requests
 
 ### Metrics Collection
+
+The `/metrics` endpoint is secure by default: it is only served if you configure a
+bearer token (`METRICS_AUTH_TOKEN`) or explicitly opt in to unauthenticated access
+(`METRICS_ALLOW_UNAUTHENTICATED=true`).
+
 ```bash
-# Enable Prometheus metrics
+# Enable Prometheus metrics with bearer-token auth (recommended)
 ENABLE_METRICS=true
 METRICS_PATH=/metrics
+METRICS_AUTH_TOKEN=your-scrape-token
 
 # Scrape metrics
-curl http://localhost:8080/metrics
+curl -H "Authorization: Bearer your-scrape-token" http://localhost:8080/metrics
+```
+
+```bash
+# Alternative: unauthenticated scraping (only on trusted networks)
+ENABLE_METRICS=true
+METRICS_ALLOW_UNAUTHENTICATED=true
 ```
 
 ### Logging Configuration
