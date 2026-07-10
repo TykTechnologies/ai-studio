@@ -1,4 +1,4 @@
-package api
+package middleware
 
 import (
 	"net/http"
@@ -31,8 +31,14 @@ func TestRegisterMetricsEndpoint_DisabledByDefault(t *testing.T) {
 	router := gin.New()
 
 	// No auth token and no explicit unauthenticated opt-in: endpoint must not be registered
-	registered := registerMetricsEndpoint(router, "/metrics", dummyMetricsHandler(), "", false)
+	var warned string
+	registered := RegisterMetricsEndpoint(router, MetricsEndpointConfig{
+		Path:    "/metrics",
+		Handler: dummyMetricsHandler(),
+		Warn:    func(msg string) { warned = msg },
+	})
 	assert.False(t, registered)
+	assert.Contains(t, warned, "METRICS_AUTH_TOKEN")
 
 	rec := performMetricsRequest(router, "")
 	assert.Equal(t, http.StatusNotFound, rec.Code)
@@ -42,7 +48,11 @@ func TestRegisterMetricsEndpoint_WithAuthToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	registered := registerMetricsEndpoint(router, "/metrics", dummyMetricsHandler(), "s3cret-token", false)
+	registered := RegisterMetricsEndpoint(router, MetricsEndpointConfig{
+		Path:      "/metrics",
+		Handler:   dummyMetricsHandler(),
+		AuthToken: "s3cret-token",
+	})
 	assert.True(t, registered)
 
 	t.Run("no token returns 401", func(t *testing.T) {
@@ -76,7 +86,11 @@ func TestRegisterMetricsEndpoint_ExplicitUnauthenticated(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	registered := registerMetricsEndpoint(router, "/metrics", dummyMetricsHandler(), "", true)
+	registered := RegisterMetricsEndpoint(router, MetricsEndpointConfig{
+		Path:                 "/metrics",
+		Handler:              dummyMetricsHandler(),
+		AllowUnauthenticated: true,
+	})
 	assert.True(t, registered)
 
 	rec := performMetricsRequest(router, "")
@@ -89,7 +103,12 @@ func TestRegisterMetricsEndpoint_TokenTakesPrecedenceOverUnauthenticated(t *test
 	router := gin.New()
 
 	// If a token is configured, auth is enforced even if the unauthenticated flag is set
-	registered := registerMetricsEndpoint(router, "/metrics", dummyMetricsHandler(), "s3cret-token", true)
+	registered := RegisterMetricsEndpoint(router, MetricsEndpointConfig{
+		Path:                 "/metrics",
+		Handler:              dummyMetricsHandler(),
+		AuthToken:            "s3cret-token",
+		AllowUnauthenticated: true,
+	})
 	assert.True(t, registered)
 
 	rec := performMetricsRequest(router, "")
@@ -103,7 +122,11 @@ func TestRegisterMetricsEndpoint_NilHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	registered := registerMetricsEndpoint(router, "/metrics", nil, "s3cret-token", true)
+	registered := RegisterMetricsEndpoint(router, MetricsEndpointConfig{
+		Path:                 "/metrics",
+		AuthToken:            "s3cret-token",
+		AllowUnauthenticated: true,
+	})
 	assert.False(t, registered)
 
 	rec := performMetricsRequest(router, "s3cret-token")

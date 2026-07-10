@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
+	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
@@ -336,7 +337,13 @@ func (a *API) setupRoutes() {
 		if metricsPath == "" {
 			metricsPath = "/metrics"
 		}
-		registerMetricsEndpoint(a.router, metricsPath, metricsHandler, conf.MetricsAuthToken, conf.MetricsAllowUnauthenticated)
+		middleware.RegisterMetricsEndpoint(a.router, middleware.MetricsEndpointConfig{
+			Path:                 metricsPath,
+			Handler:              metricsHandler,
+			AuthToken:            conf.MetricsAuthToken,
+			AllowUnauthenticated: conf.MetricsAllowUnauthenticated,
+			Warn:                 logger.Warn,
+		})
 	}
 
 	a.router.GET("/sun.ico", func(c *gin.Context) {
