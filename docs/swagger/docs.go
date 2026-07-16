@@ -1709,7 +1709,7 @@ const docTemplate = `{
                 "tags": [
                     "catalogues"
                 ],
-                "summary": "Create a new catalogue",
+                "summary": "Create a new catalogue (Community Edition)",
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -1779,7 +1779,7 @@ const docTemplate = `{
                 "tags": [
                     "catalogues"
                 ],
-                "summary": "Search catalogues by name",
+                "summary": "Search catalogues by name (Community Edition)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -2104,7 +2104,7 @@ const docTemplate = `{
                 "tags": [
                     "data-catalogues"
                 ],
-                "summary": "Create a new data catalogue",
+                "summary": "Create a new data catalogue (Community Edition)",
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -2139,7 +2139,7 @@ const docTemplate = `{
                 "tags": [
                     "data-catalogues"
                 ],
-                "summary": "Get data catalogues by datasource",
+                "summary": "Get data catalogues by datasource (Community Edition)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -2183,7 +2183,7 @@ const docTemplate = `{
                 "tags": [
                     "data-catalogues"
                 ],
-                "summary": "Get data catalogues by tag",
+                "summary": "Get data catalogues by tag (Community Edition)",
                 "parameters": [
                     {
                         "type": "string",
@@ -2227,7 +2227,7 @@ const docTemplate = `{
                 "tags": [
                     "data-catalogues"
                 ],
-                "summary": "Search data catalogues",
+                "summary": "Search data catalogues (Community Edition)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -2671,7 +2671,9 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "array",
-                            "items": {}
+                            "items": {
+                                "type": "object"
+                            }
                         }
                     }
                 }
@@ -2869,7 +2871,7 @@ const docTemplate = `{
                 "tags": [
                     "groups"
                 ],
-                "summary": "Create a new group",
+                "summary": "Create a new group (Community Edition)",
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -3070,7 +3072,7 @@ const docTemplate = `{
                 "tags": [
                     "groups"
                 ],
-                "summary": "Update group catalogues",
+                "summary": "Update group catalogues (Community Edition)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -3511,7 +3513,7 @@ const docTemplate = `{
                 "tags": [
                     "groups"
                 ],
-                "summary": "Update group users",
+                "summary": "Update group users (Community Edition)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -4120,7 +4122,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest"
+                            "$ref": "#/definitions/services.CreatePluginRequest"
                         }
                     }
                 ],
@@ -4585,7 +4587,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest"
+                            "$ref": "#/definitions/services.UpdatePluginRequest"
                         }
                     }
                 ],
@@ -5845,7 +5847,7 @@ const docTemplate = `{
                 "tags": [
                     "tool-catalogues"
                 ],
-                "summary": "Create a new tool catalogue",
+                "summary": "Create a new tool catalogue (Community Edition)",
                 "responses": {
                     "201": {
                         "description": "Created",
@@ -5880,7 +5882,7 @@ const docTemplate = `{
                 "tags": [
                     "tool-catalogues"
                 ],
-                "summary": "Search tool catalogues",
+                "summary": "Search tool catalogues (Community Edition)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -14119,25 +14121,19 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "BearerAuth": []
                     }
                 ],
-                "description": "Get a model price by its name, creating it with default values if it doesn't exist\nUpdate an existing model price's information and recalculate all historical chat record costs",
+                "description": "Get a model price by its name, creating it with default values if it doesn't exist",
                 "consumes": [
-                    "application/json",
                     "application/json"
                 ],
                 "produces": [
-                    "application/json",
                     "application/json"
                 ],
                 "tags": [
-                    "model-prices",
                     "model-prices"
                 ],
-                "summary": "Update a model price and recalculate historical costs",
+                "summary": "Get or create a model price by name",
                 "parameters": [
                     {
                         "type": "string",
@@ -14145,15 +14141,6 @@ const docTemplate = `{
                         "name": "model_name",
                         "in": "query",
                         "required": true
-                    },
-                    {
-                        "description": "Updated model price information",
-                        "name": "modelPrice",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.ModelPriceInput"
-                        }
                     }
                 ],
                 "responses": {
@@ -14161,12 +14148,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/api.ModelPriceResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "500": {
@@ -14378,33 +14359,20 @@ const docTemplate = `{
                 "security": [
                     {
                         "BearerAuth": []
-                    },
-                    {
-                        "BearerAuth": []
                     }
                 ],
-                "description": "Get a model price by its name, creating it with default values if it doesn't exist\nUpdate an existing model price's information and recalculate all historical chat record costs",
+                "description": "Update an existing model price's information and recalculate all historical chat record costs",
                 "consumes": [
-                    "application/json",
                     "application/json"
                 ],
                 "produces": [
-                    "application/json",
                     "application/json"
                 ],
                 "tags": [
-                    "model-prices",
                     "model-prices"
                 ],
                 "summary": "Update a model price and recalculate historical costs",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Model name",
-                        "name": "model_name",
-                        "in": "query",
-                        "required": true
-                    },
                     {
                         "type": "integer",
                         "description": "Model Price ID",
@@ -22960,105 +22928,6 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest": {
-            "type": "object",
-            "required": [
-                "command",
-                "name"
-            ],
-            "properties": {
-                "checksum": {
-                    "description": "Optional",
-                    "type": "string"
-                },
-                "command": {
-                    "type": "string"
-                },
-                "config": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "description": {
-                    "type": "string"
-                },
-                "hook_type": {
-                    "description": "Optional - will be populated from manifest",
-                    "type": "string"
-                },
-                "hook_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "hook_types_customized": {
-                    "type": "boolean"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "load_immediately": {
-                    "description": "Auto-load AI Studio plugins",
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "namespace": {
-                    "type": "string"
-                },
-                "oci_reference": {
-                    "description": "OCI artifact reference",
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest": {
-            "type": "object",
-            "properties": {
-                "checksum": {
-                    "type": "string"
-                },
-                "command": {
-                    "type": "string"
-                },
-                "config": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "description": {
-                    "type": "string"
-                },
-                "hook_type": {
-                    "type": "string"
-                },
-                "hook_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "hook_types_customized": {
-                    "type": "boolean"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "load_immediately": {
-                    "description": "Auto-load AI Studio plugins",
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "namespace": {
-                    "type": "string"
-                },
-                "oci_reference": {
-                    "type": "string"
-                }
-            }
-        },
         "models.AppBudgetUsageResponse": {
             "type": "object",
             "properties": {
@@ -23475,6 +23344,105 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "oci_reference": {
+                    "type": "string"
+                }
+            }
+        },
+        "services.CreatePluginRequest": {
+            "type": "object",
+            "required": [
+                "command",
+                "name"
+            ],
+            "properties": {
+                "checksum": {
+                    "description": "Optional",
+                    "type": "string"
+                },
+                "command": {
+                    "type": "string"
+                },
+                "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "description": {
+                    "type": "string"
+                },
+                "hook_type": {
+                    "description": "Optional - will be populated from manifest",
+                    "type": "string"
+                },
+                "hook_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "hook_types_customized": {
+                    "type": "boolean"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "load_immediately": {
+                    "description": "Auto-load AI Studio plugins",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "oci_reference": {
+                    "description": "OCI artifact reference",
+                    "type": "string"
+                }
+            }
+        },
+        "services.UpdatePluginRequest": {
+            "type": "object",
+            "properties": {
+                "checksum": {
+                    "type": "string"
+                },
+                "command": {
+                    "type": "string"
+                },
+                "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "description": {
+                    "type": "string"
+                },
+                "hook_type": {
+                    "type": "string"
+                },
+                "hook_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "hook_types_customized": {
+                    "type": "boolean"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "load_immediately": {
+                    "description": "Auto-load AI Studio plugins",
                     "type": "boolean"
                 },
                 "name": {

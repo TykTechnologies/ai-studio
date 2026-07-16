@@ -326,16 +326,6 @@ func serializeModelPrices(mps models.ModelPrices) []ModelPriceResponse {
 	return result
 }
 
-// @Summary Get or create a model price by name
-// @Description Get a model price by its name, creating it with default values if it doesn't exist
-// @Tags model-prices
-// @Accept json
-// @Produce json
-// @Param model_name query string true "Model name"
-// @Success 200 {object} ModelPriceResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /model-prices/by-name [get]
-// @Security BearerAuth
 // @Summary Update a model price and recalculate historical costs
 // @Description Update an existing model price's information and recalculate all historical chat record costs
 // @Tags model-prices
@@ -403,6 +393,16 @@ func (a *API) updateModelPriceAndRecalculate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeModelPrice(modelPrice)})
 }
 
+// @Summary Get or create a model price by name
+// @Description Get a model price by its name, creating it with default values if it doesn't exist
+// @Tags model-prices
+// @Accept json
+// @Produce json
+// @Param model_name query string true "Model name"
+// @Success 200 {object} ModelPriceResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /model-prices/by-name [get]
+// @Security BearerAuth
 func (a *API) getOrCreateModelPriceByName(c *gin.Context) {
 	modelName := c.Query("model_name")
 	if modelName == "" {

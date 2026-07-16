@@ -10,7 +10,7 @@ import (
 
 // Data Catalogue management endpoints - CE: All return 402 Payment Required
 
-// @Summary Create a new data catalogue
+// @Summary Create a new data catalogue (Community Edition)
 // @Description Create a new data catalogue (Enterprise Edition only)
 // @Tags data-catalogues
 // @Accept json
@@ -78,7 +78,7 @@ func (a *API) listDataCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
 }
 
-// @Summary Search data catalogues
+// @Summary Search data catalogues (Community Edition)
 // @Description Search data catalogues (Enterprise Edition only)
 // @Tags data-catalogues
 // @Accept json
@@ -149,7 +149,7 @@ func (a *API) removeDatasourceFromDataCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
 }
 
-// @Summary Get data catalogues by tag
+// @Summary Get data catalogues by tag (Community Edition)
 // @Description Get all data catalogues with a specific tag (Enterprise Edition only)
 // @Tags data-catalogues
 // @Accept json
@@ -163,7 +163,7 @@ func (a *API) getDataCataloguesByTag(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
 }
 
-// @Summary Get data catalogues by datasource
+// @Summary Get data catalogues by datasource (Community Edition)
 // @Description Get all data catalogues containing a specific datasource (Enterprise Edition only)
 // @Tags data-catalogues
 // @Accept json
