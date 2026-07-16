@@ -2835,74 +2835,6 @@ definitions:
         description: filter_block, model_access, budget_exceeded, auth_failure
         type: string
     type: object
-  github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest:
-    properties:
-      checksum:
-        description: Optional
-        type: string
-      command:
-        type: string
-      config:
-        additionalProperties: true
-        type: object
-      description:
-        type: string
-      hook_type:
-        description: Optional - will be populated from manifest
-        type: string
-      hook_types:
-        items:
-          type: string
-        type: array
-      hook_types_customized:
-        type: boolean
-      is_active:
-        type: boolean
-      load_immediately:
-        description: Auto-load AI Studio plugins
-        type: boolean
-      name:
-        type: string
-      namespace:
-        type: string
-      oci_reference:
-        description: OCI artifact reference
-        type: string
-    required:
-    - command
-    - name
-    type: object
-  github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest:
-    properties:
-      checksum:
-        type: string
-      command:
-        type: string
-      config:
-        additionalProperties: true
-        type: object
-      description:
-        type: string
-      hook_type:
-        type: string
-      hook_types:
-        items:
-          type: string
-        type: array
-      hook_types_customized:
-        type: boolean
-      is_active:
-        type: boolean
-      load_immediately:
-        description: Auto-load AI Studio plugins
-        type: boolean
-      name:
-        type: string
-      namespace:
-        type: string
-      oci_reference:
-        type: string
-    type: object
   models.AppBudgetUsageResponse:
     properties:
       current_usage:
@@ -3192,6 +3124,74 @@ definitions:
     - hook_type
     - name
     - oci_reference
+    type: object
+  services.CreatePluginRequest:
+    properties:
+      checksum:
+        description: Optional
+        type: string
+      command:
+        type: string
+      config:
+        additionalProperties: true
+        type: object
+      description:
+        type: string
+      hook_type:
+        description: Optional - will be populated from manifest
+        type: string
+      hook_types:
+        items:
+          type: string
+        type: array
+      hook_types_customized:
+        type: boolean
+      is_active:
+        type: boolean
+      load_immediately:
+        description: Auto-load AI Studio plugins
+        type: boolean
+      name:
+        type: string
+      namespace:
+        type: string
+      oci_reference:
+        description: OCI artifact reference
+        type: string
+    required:
+    - command
+    - name
+    type: object
+  services.UpdatePluginRequest:
+    properties:
+      checksum:
+        type: string
+      command:
+        type: string
+      config:
+        additionalProperties: true
+        type: object
+      description:
+        type: string
+      hook_type:
+        type: string
+      hook_types:
+        items:
+          type: string
+        type: array
+      hook_types_customized:
+        type: boolean
+      is_active:
+        type: boolean
+      load_immediately:
+        description: Auto-load AI Studio plugins
+        type: boolean
+      name:
+        type: string
+      namespace:
+        type: string
+      oci_reference:
+        type: string
     type: object
   sso.NonceTokenRequest:
     properties:
@@ -4368,7 +4368,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a new catalogue
+      summary: Create a new catalogue (Community Edition)
       tags:
       - catalogues
   /api/v1/catalogues/{id}:
@@ -4576,7 +4576,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Search catalogues by name
+      summary: Search catalogues by name (Community Edition)
       tags:
       - catalogues
   /api/v1/data-catalogues:
@@ -4619,7 +4619,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a new data catalogue
+      summary: Create a new data catalogue (Community Edition)
       tags:
       - data-catalogues
   /api/v1/data-catalogues/{id}:
@@ -4846,7 +4846,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get data catalogues by datasource
+      summary: Get data catalogues by datasource (Community Edition)
       tags:
       - data-catalogues
   /api/v1/data-catalogues/by-tag/{tagName}:
@@ -4875,7 +4875,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Get data catalogues by tag
+      summary: Get data catalogues by tag (Community Edition)
       tags:
       - data-catalogues
   /api/v1/data-catalogues/search:
@@ -4897,7 +4897,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Search data catalogues
+      summary: Search data catalogues (Community Edition)
       tags:
       - data-catalogues
   /api/v1/edges:
@@ -5065,7 +5065,8 @@ paths:
         "200":
           description: OK
           schema:
-            items: {}
+            items:
+              type: object
             type: array
       security:
       - BearerAuth: []
@@ -5112,7 +5113,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a new group
+      summary: Create a new group (Community Edition)
       tags:
       - groups
   /api/v1/groups/{id}:
@@ -5275,7 +5276,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Update group catalogues
+      summary: Update group catalogues (Community Edition)
       tags:
       - groups
   /api/v1/groups/{id}/catalogues/{catalogueId}:
@@ -5562,7 +5563,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Update group users
+      summary: Update group users (Community Edition)
       tags:
       - groups
   /api/v1/groups/{id}/users/{userId}:
@@ -5909,7 +5910,7 @@ paths:
         name: plugin
         required: true
         schema:
-          $ref: '#/definitions/github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest'
+          $ref: '#/definitions/services.CreatePluginRequest'
       produces:
       - application/json
       responses:
@@ -6008,7 +6009,7 @@ paths:
         name: plugin
         required: true
         schema:
-          $ref: '#/definitions/github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest'
+          $ref: '#/definitions/services.UpdatePluginRequest'
       produces:
       - application/json
       responses:
@@ -7025,7 +7026,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a new tool catalogue
+      summary: Create a new tool catalogue (Community Edition)
       tags:
       - tool-catalogues
   /api/v1/tool-catalogues/{catalogueId}/tools/{toolId}/apps:
@@ -7396,7 +7397,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Search tool catalogues
+      summary: Search tool catalogues (Community Edition)
       tags:
       - tool-catalogues
   /api/v1/users/{userId}/groups:
@@ -12461,16 +12462,9 @@ paths:
     patch:
       consumes:
       - application/json
-      - application/json
-      description: |-
-        Get a model price by its name, creating it with default values if it doesn't exist
-        Update an existing model price's information and recalculate all historical chat record costs
+      description: Update an existing model price's information and recalculate all
+        historical chat record costs
       parameters:
-      - description: Model name
-        in: query
-        name: model_name
-        required: true
-        type: string
       - description: Model Price ID
         in: path
         name: id
@@ -12484,7 +12478,6 @@ paths:
           $ref: '#/definitions/api.ModelPriceInput'
       produces:
       - application/json
-      - application/json
       responses:
         "200":
           description: OK
@@ -12500,53 +12493,36 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      - BearerAuth: []
       summary: Update a model price and recalculate historical costs
       tags:
-      - model-prices
       - model-prices
   /model-prices/by-name:
     get:
       consumes:
       - application/json
-      - application/json
-      description: |-
-        Get a model price by its name, creating it with default values if it doesn't exist
-        Update an existing model price's information and recalculate all historical chat record costs
+      description: Get a model price by its name, creating it with default values
+        if it doesn't exist
       parameters:
       - description: Model name
         in: query
         name: model_name
         required: true
         type: string
-      - description: Updated model price information
-        in: body
-        name: modelPrice
-        required: true
-        schema:
-          $ref: '#/definitions/api.ModelPriceInput'
       produces:
-      - application/json
       - application/json
       responses:
         "200":
           description: OK
           schema:
             $ref: '#/definitions/api.ModelPriceResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      - BearerAuth: []
-      summary: Update a model price and recalculate historical costs
+      summary: Get or create a model price by name
       tags:
-      - model-prices
       - model-prices
   /model-prices/by-vendor:
     get:

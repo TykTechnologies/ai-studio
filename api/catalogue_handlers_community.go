@@ -10,7 +10,7 @@ import (
 
 // LLM Catalogue management endpoints - CE: All return 402 Payment Required
 
-// @Summary Create a new catalogue
+// @Summary Create a new catalogue (Community Edition)
 // @Description Create a new LLM catalogue (Enterprise Edition only)
 // @Tags catalogues
 // @Accept json
@@ -134,7 +134,7 @@ func (a *API) listCatalogueLLMs(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
 }
 
-// @Summary Search catalogues by name
+// @Summary Search catalogues by name (Community Edition)
 // @Description Search LLM catalogues by name prefix (Enterprise Edition only)
 // @Tags catalogues
 // @Accept json

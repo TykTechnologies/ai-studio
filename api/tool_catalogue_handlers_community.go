@@ -10,7 +10,7 @@ import (
 
 // Tool Catalogue management endpoints - CE: All return 402 Payment Required
 
-// @Summary Create a new tool catalogue
+// @Summary Create a new tool catalogue (Community Edition)
 // @Description Create a new tool catalogue (Enterprise Edition only)
 // @Tags tool-catalogues
 // @Accept json
@@ -78,7 +78,7 @@ func (a *API) listToolCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
 }
 
-// @Summary Search tool catalogues
+// @Summary Search tool catalogues (Community Edition)
 // @Description Search tool catalogues (Enterprise Edition only)
 // @Tags tool-catalogues
 // @Accept json

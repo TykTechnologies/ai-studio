@@ -14,7 +14,7 @@ import (
 
 // Group management endpoints - CE: All return 402 Payment Required
 
-// @Summary Create a new group
+// @Summary Create a new group (Community Edition)
 // @Description Create a new group (Enterprise Edition only)
 // @Tags groups
 // @Accept json
@@ -198,7 +198,7 @@ func (a *API) listGroupUsers(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
 }
 
-// @Summary Update group users
+// @Summary Update group users (Community Edition)
 // @Description Bulk update users in a specific group (Enterprise Edition only)
 // @Tags groups
 // @Accept json
@@ -377,7 +377,7 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
 }
 
-// @Summary Update group catalogues
+// @Summary Update group catalogues (Community Edition)
 // @Description Bulk update all catalogues (LLM, data, tool) for a group (Enterprise Edition only)
 // @Tags groups
 // @Accept json
