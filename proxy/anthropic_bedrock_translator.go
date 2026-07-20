@@ -238,9 +238,10 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 	// Record analytics after the stream completes (ProxyLog first so ChatRecord can enrich it).
 	responseText := st.textBuffer
 	inputTokens, outputTokens := st.inputTokens, st.outputTokens
+	cacheWrite, cacheRead := st.cacheWriteTokens, st.cacheReadTokens
 	go func() {
 		recordBedrockProxyLog(p, conf, app, modelID, reqBody, responseText, r, timestamp)
-		recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), r, timestamp)
+		recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), int(cacheWrite), int(cacheRead), r, timestamp)
 	}()
 }
 
@@ -371,8 +372,10 @@ func converseOutputToAnthropicResponse(output *bedrockruntime.ConverseOutput, mo
 		resp.StopReason = bedrockVendor.ConvertConverseStopReasonAnthropic(output.StopReason)
 		if output.Usage != nil {
 			resp.Usage = AnthropicUsage{
-				InputTokens:  int(aws.ToInt32(output.Usage.InputTokens)),
-				OutputTokens: int(aws.ToInt32(output.Usage.OutputTokens)),
+				InputTokens:              int(aws.ToInt32(output.Usage.InputTokens)),
+				OutputTokens:             int(aws.ToInt32(output.Usage.OutputTokens)),
+				CacheCreationInputTokens: int(aws.ToInt32(output.Usage.CacheWriteInputTokens)),
+				CacheReadInputTokens:     int(aws.ToInt32(output.Usage.CacheReadInputTokens)),
 			}
 		}
 	}
@@ -431,13 +434,15 @@ type anthropicStreamState struct {
 	msgID     string
 	echoModel string
 
-	sentStart    bool
-	started      map[int32]bool // content_block_start emitted for index
-	stopped      map[int32]bool // content_block_stop emitted for index
-	stopReason   string
-	inputTokens  int32
-	outputTokens int32
-	textBuffer   string
+	sentStart        bool
+	started          map[int32]bool // content_block_start emitted for index
+	stopped          map[int32]bool // content_block_stop emitted for index
+	stopReason       string
+	inputTokens      int32
+	outputTokens     int32
+	cacheWriteTokens int32
+	cacheReadTokens  int32
+	textBuffer       string
 
 	// filters
 	hasFilters bool
@@ -537,6 +542,8 @@ func (s *anthropicStreamState) handleEvent(event types.ConverseStreamOutput) boo
 		if v.Value.Usage != nil {
 			s.inputTokens = aws.ToInt32(v.Value.Usage.InputTokens)
 			s.outputTokens = aws.ToInt32(v.Value.Usage.OutputTokens)
+			s.cacheWriteTokens = aws.ToInt32(v.Value.Usage.CacheWriteInputTokens)
+			s.cacheReadTokens = aws.ToInt32(v.Value.Usage.CacheReadInputTokens)
 		}
 	}
 	return false
@@ -588,8 +595,10 @@ func (s *anthropicStreamState) finish() {
 			"stop_sequence": nil,
 		},
 		"usage": map[string]any{
-			"input_tokens":  s.inputTokens,
-			"output_tokens": s.outputTokens,
+			"input_tokens":                s.inputTokens,
+			"output_tokens":               s.outputTokens,
+			"cache_creation_input_tokens": s.cacheWriteTokens,
+			"cache_read_input_tokens":     s.cacheReadTokens,
 		},
 	})
 	writeAnthropicSSE(s.w, s.flusher, "message_stop", map[string]any{"type": "message_stop"})

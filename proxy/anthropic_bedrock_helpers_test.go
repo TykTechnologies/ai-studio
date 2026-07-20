@@ -13,13 +13,18 @@ import (
 )
 
 // makeConverseOutput builds a Converse response for response-mapping tests.
-func makeConverseOutput(blocks []types.ContentBlock, stop types.StopReason, in, out int32) *bedrockruntime.ConverseOutput {
+func makeConverseOutput(blocks []types.ContentBlock, stop types.StopReason, in, out, cacheWrite, cacheRead int32) *bedrockruntime.ConverseOutput {
 	return &bedrockruntime.ConverseOutput{
 		Output: &types.ConverseOutputMemberMessage{
 			Value: types.Message{Role: types.ConversationRoleAssistant, Content: blocks},
 		},
 		StopReason: stop,
-		Usage:      &types.TokenUsage{InputTokens: aws.Int32(in), OutputTokens: aws.Int32(out)},
+		Usage: &types.TokenUsage{
+			InputTokens:           aws.Int32(in),
+			OutputTokens:          aws.Int32(out),
+			CacheWriteInputTokens: aws.Int32(cacheWrite),
+			CacheReadInputTokens:  aws.Int32(cacheRead),
+		},
 	}
 }
 

@@ -98,8 +98,10 @@ type AnthropicResponseBlock struct {
 // AnthropicUsage carries token counts. input_tokens is reported in message_start,
 // output_tokens in message_delta (streaming) or both together (non-streaming).
 type AnthropicUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 }
 
 // --- Helpers ---

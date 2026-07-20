@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
+	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream/eventstreamapi"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
-	"github.com/TykTechnologies/midsommar/v2/models"
-	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/rs/zerolog/log"
 )
 
@@ -91,6 +91,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	chunkIndex := 0
 	isErr := false
 	var inputTokens, outputTokens int32
+	var cacheWriteTokens, cacheReadTokens int32
 
 	for event := range stream.Events() {
 		if err := stream.Err(); err != nil {
@@ -104,6 +105,8 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 			if metadata.Value.Usage != nil {
 				inputTokens = aws.ToInt32(metadata.Value.Usage.InputTokens)
 				outputTokens = aws.ToInt32(metadata.Value.Usage.OutputTokens)
+				cacheWriteTokens = aws.ToInt32(metadata.Value.Usage.CacheWriteInputTokens)
+				cacheReadTokens = aws.ToInt32(metadata.Value.Usage.CacheReadInputTokens)
 			}
 		}
 
@@ -160,7 +163,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		responseText := textBuffer.String()
 		go func() {
 			recordBedrockProxyLog(p, llm, app, modelID, reqBody, responseText, r, startTime)
-			recordBedrockChatRecord(p, llm, app, modelID, int(inputTokens), int(outputTokens), r, startTime)
+			recordBedrockChatRecord(p, llm, app, modelID, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, startTime)
 		}()
 	}
 }

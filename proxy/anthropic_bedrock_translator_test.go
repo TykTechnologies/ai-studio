@@ -165,7 +165,7 @@ func TestConverseOutputToAnthropicResponse(t *testing.T) {
 				Input:     lazyDoc(map[string]any{"x": 1}),
 			}},
 		},
-		types.StopReasonToolUse, 11, 22,
+		types.StopReasonToolUse, 11, 22, 33, 44,
 	)
 
 	resp := converseOutputToAnthropicResponse(output, "claude-x")
@@ -177,6 +177,10 @@ func TestConverseOutputToAnthropicResponse(t *testing.T) {
 	}
 	if resp.Usage.InputTokens != 11 || resp.Usage.OutputTokens != 22 {
 		t.Errorf("usage wrong: %+v", resp.Usage)
+	}
+	if resp.Usage.CacheCreationInputTokens != 33 || resp.Usage.CacheReadInputTokens != 44 {
+		t.Errorf("cache usage wrong: got creation=%d read=%d, want 33/44",
+			resp.Usage.CacheCreationInputTokens, resp.Usage.CacheReadInputTokens)
 	}
 	if len(resp.Content) != 2 {
 		t.Fatalf("expected 2 content blocks, got %d", len(resp.Content))
@@ -233,7 +237,10 @@ func TestAnthropicStream_TextThenToolUseSequence(t *testing.T) {
 		&types.ConverseStreamOutputMemberContentBlockStop{Value: types.ContentBlockStopEvent{ContentBlockIndex: aws.Int32(1)}},
 		&types.ConverseStreamOutputMemberMessageStop{Value: types.MessageStopEvent{StopReason: types.StopReasonToolUse}},
 		&types.ConverseStreamOutputMemberMetadata{Value: types.ConverseStreamMetadataEvent{
-			Usage: &types.TokenUsage{InputTokens: aws.Int32(10), OutputTokens: aws.Int32(5)},
+			Usage: &types.TokenUsage{
+				InputTokens: aws.Int32(10), OutputTokens: aws.Int32(5),
+				CacheWriteInputTokens: aws.Int32(70), CacheReadInputTokens: aws.Int32(80),
+			},
 		}},
 	}
 	for _, e := range events {
@@ -275,5 +282,11 @@ func TestAnthropicStream_TextThenToolUseSequence(t *testing.T) {
 	md := rec.dataFor("message_delta")[0]
 	if md["delta"].(map[string]any)["stop_reason"] != "tool_use" {
 		t.Errorf("message_delta stop_reason: %+v", md["delta"])
+	}
+	// Cache-token usage must be surfaced on message_delta (JSON numbers decode to float64).
+	usage := md["usage"].(map[string]any)
+	if usage["cache_creation_input_tokens"] != float64(70) || usage["cache_read_input_tokens"] != float64(80) {
+		t.Errorf("message_delta cache usage: got creation=%v read=%v, want 70/80",
+			usage["cache_creation_input_tokens"], usage["cache_read_input_tokens"])
 	}
 }
