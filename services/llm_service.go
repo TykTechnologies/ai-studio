@@ -30,6 +30,32 @@ func resolveMetadataSecrets(metadata models.JSONMap, preserveRef bool) models.JS
 	return metadata
 }
 
+// mergeMetadataPreservingRedacted returns the incoming metadata, except that any field
+// whose incoming value is the redaction placeholder ("[redacted]") keeps the existing
+// stored value. The edit UI receives secret metadata fields redacted (see
+// redactMetadataSecrets in api/llm_handlers.go), so without this an unchanged secret —
+// e.g. a Bedrock LLM's aws_secret_access_key — would be overwritten with the literal
+// "[redacted]" on save. Fields absent from incoming are dropped (so e.g. an
+// aws_session_token can be cleared); non-redacted fields overwrite as normal.
+func mergeMetadataPreservingRedacted(existing, incoming models.JSONMap) models.JSONMap {
+	if incoming == nil {
+		return existing
+	}
+	merged := make(models.JSONMap, len(incoming))
+	for k, v := range incoming {
+		if str, ok := v.(string); ok && str == REDACTED_VALUE {
+			// Preserve the real stored value; if there is none, drop the placeholder
+			// rather than persisting "[redacted]" as a credential.
+			if orig, has := existing[k]; has {
+				merged[k] = orig
+			}
+			continue
+		}
+		merged[k] = v
+	}
+	return merged
+}
+
 func (s *Service) GetLLMByID(id uint) (*models.LLM, error) {
 	llm := models.NewLLM()
 	if err := llm.Get(s.DB, id); err != nil {
@@ -257,7 +283,7 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	llm.Namespace = namespace
 	llm.DontLogBodies = dontLogBodies
 	if metadata != nil {
-		llm.Metadata = metadata
+		llm.Metadata = mergeMetadataPreservingRedacted(llm.Metadata, metadata)
 	}
 
 	// Execute "before_update" hooks
