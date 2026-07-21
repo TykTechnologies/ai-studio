@@ -282,6 +282,10 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/ai/*path", gin.WrapH(config.Gateway.Handler()))
+		// Anthropic Messages -> Bedrock bridge (Claude Code). Routing + auth + translation
+		// all live inside the gateway handler (proxy.createHandler); the data plane just
+		// needs to forward this path prefix, same as /ai/.
+		gateway.Any("/anthropic/*path", gin.WrapH(config.Gateway.Handler()))
 
 		// Model Router endpoints (Enterprise)
 		// Routes requests to LLM vendors based on model name patterns
