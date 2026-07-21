@@ -101,6 +101,8 @@ func (p *Proxy) handleBedrockAnthropicMessages(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// NewBedrockClient returns a cached *bedrockruntime.Client (sync.Map keyed by LLM ID
+	// + credential fingerprint) — it is not constructed per request.
 	client, err := bedrockVendor.NewBedrockClient(conf)
 	if err != nil {
 		respondWithAnthropicError(w, http.StatusInternalServerError, "api_error", "failed to create Bedrock client")
@@ -179,6 +181,8 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 		return
 	}
 
+	// NewBedrockClient returns a cached *bedrockruntime.Client (sync.Map keyed by LLM ID
+	// + credential fingerprint) — it is not constructed per request.
 	client, err := bedrockVendor.NewBedrockClient(conf)
 	if err != nil {
 		writeAnthropicSSEError(w, flusher, "api_error", "failed to create Bedrock client")
