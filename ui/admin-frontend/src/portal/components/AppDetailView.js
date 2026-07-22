@@ -768,6 +768,61 @@ const AppDetailView = () => {
                 </Box>
               </Box>
 
+              {/* Anthropic Messages Endpoint (Bedrock only) */}
+              {llm.attributes.vendor === "bedrock" && (
+                <>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{
+                      fontWeight: "bold",
+                      mt: 2,
+                      mb: 1,
+                    }}
+                  >
+                    Anthropic-Compatible Endpoint
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 2 }}>
+                    Use this endpoint with the native Anthropic Messages API. Set it as <code>ANTHROPIC_BASE_URL</code> and pass the app key as <code>ANTHROPIC_AUTH_TOKEN</code> (or <code>ANTHROPIC_API_KEY</code>). Requests are translated to your configured Bedrock model.
+                  </Typography>
+
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    <FieldLabel sx={{ minWidth: "100px" }}>Anthropic API:</FieldLabel>
+                    <Box>
+                      <Tooltip title="Native Anthropic Messages API (appends /v1/messages), translated to Bedrock Converse using the default model defined by the admin. Set this as ANTHROPIC_BASE_URL for Claude Code.">
+                        <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                      </Tooltip>
+                    </Box>
+                    <Box
+                      sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                    >
+                      <Typography
+                        variant="body2"
+                        component="code"
+                        sx={{
+                          fontFamily: "monospace",
+                          bgcolor: "background.paper",
+                          p: 1,
+                          borderRadius: 1,
+                          flexGrow: 1,
+                        }}
+                      >
+                        {generateEndpointUrl("/anthropic/", llm.attributes.name)}
+                      </Typography>
+                      <IconButton
+                        onClick={() =>
+                          copyToClipboard(
+                            generateEndpointUrl("/anthropic/", llm.attributes.name),
+                          )
+                        }
+                        size="small"
+                      >
+                        <ContentCopyIcon />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                </>
+              )}
+
               {/* Legacy Endpoints - Collapsible */}
               <Accordion
                 sx={{

@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
-	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
@@ -201,6 +201,7 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	created := time.Now().Unix()
 	isFirstChunk := true
 	var inputTokens, outputTokens int32
+	var cacheWriteTokens, cacheReadTokens int32
 	hasResponseFilters := p.hasResponseFilters(conf)
 	var textBuffer strings.Builder
 	chunkIndex := 0
@@ -285,6 +286,8 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 			if v.Value.Usage != nil {
 				inputTokens = aws.ToInt32(v.Value.Usage.InputTokens)
 				outputTokens = aws.ToInt32(v.Value.Usage.OutputTokens)
+				cacheWriteTokens = aws.ToInt32(v.Value.Usage.CacheWriteInputTokens)
+				cacheReadTokens = aws.ToInt32(v.Value.Usage.CacheReadInputTokens)
 
 				// Send final chunk with usage
 				usage := CompletionUsage{
@@ -317,7 +320,7 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	responseText := textBuffer.String()
 	go func() {
 		recordBedrockProxyLog(p, conf, app, modelID, reqBody, responseText, r, timestamp)
-		recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), r, timestamp)
+		recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, timestamp)
 	}()
 }
 
@@ -444,6 +447,8 @@ func recordBedrockAnalytics(p *Proxy, llm *models.LLM, app *models.App, modelID 
 		recordBedrockChatRecord(p, llm, app, modelID,
 			int(aws.ToInt32(output.Usage.InputTokens)),
 			int(aws.ToInt32(output.Usage.OutputTokens)),
+			int(aws.ToInt32(output.Usage.CacheWriteInputTokens)),
+			int(aws.ToInt32(output.Usage.CacheReadInputTokens)),
 			r, timestamp)
 	}
 }
@@ -474,8 +479,8 @@ func recordBedrockProxyLog(p *Proxy, llm *models.LLM, app *models.App, modelID s
 
 // recordBedrockChatRecord is the single place that calculates cost and records an LLMChatRecord
 // for all Bedrock paths (non-streaming /ai/, streaming /ai/, and streaming /llm/stream/).
-func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, r *http.Request, timestamp time.Time) {
-	if promptTokens == 0 && responseTokens == 0 {
+func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID string, promptTokens int, responseTokens int, cacheWriteTokens int, cacheReadTokens int, r *http.Request, timestamp time.Time) {
+	if promptTokens == 0 && responseTokens == 0 && cacheWriteTokens == 0 && cacheReadTokens == 0 {
 		return
 	}
 
@@ -485,22 +490,27 @@ func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID
 		price = &models.ModelPrice{}
 	}
 
-	cost := ((price.CPT * float64(responseTokens)) + (price.CPIT * float64(promptTokens))) * 10000
+	cost := ((price.CPT * float64(responseTokens)) +
+		(price.CPIT * float64(promptTokens)) +
+		(price.CacheWritePT * float64(cacheWriteTokens)) +
+		(price.CacheReadPT * float64(cacheReadTokens))) * 10000
 
 	record := &models.LLMChatRecord{
-		LLMID:           llm.ID,
-		Name:            modelID,
-		Vendor:          string(llm.Vendor),
-		PromptTokens:    promptTokens,
-		ResponseTokens:  responseTokens,
-		TotalTokens:     promptTokens + responseTokens,
-		Cost:            cost,
-		Currency:        price.Currency,
-		Choices:         1,
-		TimeStamp:       timestamp,
-		AppID:           app.ID,
-		UserID:          app.UserID,
-		InteractionType: models.ProxyInteraction,
+		LLMID:                  llm.ID,
+		Name:                   modelID,
+		Vendor:                 string(llm.Vendor),
+		PromptTokens:           promptTokens,
+		ResponseTokens:         responseTokens,
+		TotalTokens:            promptTokens + responseTokens,
+		CacheWritePromptTokens: cacheWriteTokens,
+		CacheReadPromptTokens:  cacheReadTokens,
+		Cost:                   cost,
+		Currency:               price.Currency,
+		Choices:                1,
+		TimeStamp:              timestamp,
+		AppID:                  app.ID,
+		UserID:                 app.UserID,
+		InteractionType:        models.ProxyInteraction,
 	}
 	ctx := context.WithoutCancel(r.Context())
 	analytics.RecordChatRecord(ctx, record)
@@ -508,4 +518,3 @@ func recordBedrockChatRecord(p *Proxy, llm *models.LLM, app *models.App, modelID
 	// Trigger budget analysis
 	p.budgetService.AnalyzeBudgetUsage(app, llm)
 }
-

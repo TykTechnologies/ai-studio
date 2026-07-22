@@ -235,7 +235,7 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				if len(pathParts) > 2 {
 					dsSlug = pathParts[2]
 				}
-			case "ai":
+			case "ai", "anthropic":
 				if len(pathParts) > 2 {
 					routeID = pathParts[2]
 				}
@@ -299,8 +299,17 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			if !strings.HasPrefix(authHeader, "Bearer ") && authHeader != "" {
 				apiKey = authHeader
 			} else if authHeader == "" {
-				respondWithError(w, http.StatusUnauthorized, "missing Authorization header for 'ai' route", nil, true) // true for wwwAuth
-				return
+				// The Anthropic Messages bridge (Claude Code) presents the app key via the
+				// x-api-key header (ANTHROPIC_API_KEY). Bearer tokens are handled earlier.
+				if pathParts[1] == "anthropic" {
+					if k, xerr := AnthropicValidator(r); xerr == nil {
+						apiKey = k
+					}
+				}
+				if apiKey == "" {
+					respondWithError(w, http.StatusUnauthorized, "missing credentials for route", nil, true) // true for wwwAuth
+					return
+				}
 			}
 		}
 

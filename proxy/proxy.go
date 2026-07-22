@@ -388,11 +388,21 @@ func (p *Proxy) createHandler() http.Handler {
 	aiRouter.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
 	authenticatedAIHandler := p.credValidator.Middleware(aiRouter)
 
-	// Combine routers: both go through auth, but /ai/ routes are separated for routing
+	// Anthropic Messages bridge: lets Claude Code (native Anthropic Messages API) drive
+	// Bedrock-backed LLMs. Like /ai/, it uses direct AWS SDK calls, so auth must run here
+	// to populate the app context.
+	anthropicRouter := mux.NewRouter()
+	anthropicRouter.HandleFunc("/anthropic/{routeId}/v1/messages", p.handleAnthropicMessagesEntry).Methods("POST")
+	authenticatedAnthropicHandler := p.credValidator.Middleware(anthropicRouter)
+
+	// Combine routers: all go through auth, but /ai/ and /anthropic/ routes are separated for routing
 	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if strings.HasPrefix(req.URL.Path, "/ai/") {
+		switch {
+		case strings.HasPrefix(req.URL.Path, "/ai/"):
 			authenticatedAIHandler.ServeHTTP(w, req)
-		} else {
+		case strings.HasPrefix(req.URL.Path, "/anthropic/"):
+			authenticatedAnthropicHandler.ServeHTTP(w, req)
+		default:
 			authenticatedHandler.ServeHTTP(w, req)
 		}
 	})
