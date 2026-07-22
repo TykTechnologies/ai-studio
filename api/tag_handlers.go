@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// @Summary Create a new tag
+// @Summary Create a new tag (AI Studio)
 // @Description Create a new tag with the provided information
 // @Tags tags
 // @Accept json
@@ -82,7 +82,7 @@ func (a *API) getTag(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeTag(tag)})
 }
 
-// @Summary Update a tag
+// @Summary Update a tag (AI Studio)
 // @Description Update an existing tag's information
 // @Tags tags
 // @Accept json
@@ -131,7 +131,7 @@ func (a *API) updateTag(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeTag(tag)})
 }
 
-// @Summary Delete a tag
+// @Summary Delete a tag (AI Studio)
 // @Description Delete a tag by its ID
 // @Tags tags
 // @Accept json
@@ -168,7 +168,7 @@ func (a *API) deleteTag(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary List all tags
+// @Summary List all tags (AI Studio)
 // @Description Get a list of all tags
 // @Tags tags
 // @Accept json

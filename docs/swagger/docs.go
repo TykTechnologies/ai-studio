@@ -5378,7 +5378,7 @@ const docTemplate = `{
                 "tags": [
                     "sso-profiles"
                 ],
-                "summary": "List all SSO profiles",
+                "summary": "List all SSO profiles (AI Studio)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -5436,7 +5436,7 @@ const docTemplate = `{
                 "tags": [
                     "sso-profiles"
                 ],
-                "summary": "Create a new SSO profile",
+                "summary": "Create a new SSO profile (AI Studio)",
                 "parameters": [
                     {
                         "description": "Profile information",
@@ -5534,7 +5534,7 @@ const docTemplate = `{
                 "tags": [
                     "sso-profiles"
                 ],
-                "summary": "Update an SSO profile",
+                "summary": "Update an SSO profile (AI Studio)",
                 "parameters": [
                     {
                         "type": "string",
@@ -5596,7 +5596,7 @@ const docTemplate = `{
                 "tags": [
                     "sso-profiles"
                 ],
-                "summary": "Delete an SSO profile",
+                "summary": "Delete an SSO profile (AI Studio)",
                 "parameters": [
                     {
                         "type": "string",
@@ -7700,7 +7700,7 @@ const docTemplate = `{
                 "tags": [
                     "catalogues"
                 ],
-                "summary": "List all catalogues",
+                "summary": "List all LLM catalogues",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -7735,7 +7735,7 @@ const docTemplate = `{
                 "tags": [
                     "catalogues"
                 ],
-                "summary": "Create a new catalogue",
+                "summary": "Create a new LLM catalogue",
                 "parameters": [
                     {
                         "description": "Catalogue information",
@@ -7937,7 +7937,7 @@ const docTemplate = `{
                 "tags": [
                     "catalogues"
                 ],
-                "summary": "Delete a catalogue",
+                "summary": "Delete an LLM catalogue",
                 "parameters": [
                     {
                         "type": "integer",
@@ -7981,7 +7981,7 @@ const docTemplate = `{
                 "tags": [
                     "catalogues"
                 ],
-                "summary": "Update a catalogue",
+                "summary": "Update an LLM catalogue",
                 "parameters": [
                     {
                         "type": "integer",
@@ -15678,7 +15678,7 @@ const docTemplate = `{
                 "tags": [
                     "tags"
                 ],
-                "summary": "List all tags",
+                "summary": "List all tags (AI Studio)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -15713,7 +15713,7 @@ const docTemplate = `{
                 "tags": [
                     "tags"
                 ],
-                "summary": "Create a new tag",
+                "summary": "Create a new tag (AI Studio)",
                 "parameters": [
                     {
                         "description": "Tag information",
@@ -15863,7 +15863,7 @@ const docTemplate = `{
                 "tags": [
                     "tags"
                 ],
-                "summary": "Delete a tag",
+                "summary": "Delete a tag (AI Studio)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -15907,7 +15907,7 @@ const docTemplate = `{
                 "tags": [
                     "tags"
                 ],
-                "summary": "Update a tag",
+                "summary": "Update a tag (AI Studio)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -18032,7 +18032,7 @@ const docTemplate = `{
                 "tags": [
                     "users"
                 ],
-                "summary": "Create a new user",
+                "summary": "Create a new user (AI Studio)",
                 "parameters": [
                     {
                         "description": "User information",
@@ -18130,7 +18130,7 @@ const docTemplate = `{
                 "tags": [
                     "users"
                 ],
-                "summary": "Delete a user",
+                "summary": "Delete a user (AI Studio)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -18174,7 +18174,7 @@ const docTemplate = `{
                 "tags": [
                     "users"
                 ],
-                "summary": "Update a user",
+                "summary": "Update a user (AI Studio)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -19782,6 +19782,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         },
                         "namespace": {
+                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "session_id": {

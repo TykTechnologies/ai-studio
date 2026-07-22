@@ -759,6 +759,7 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
+            description: Always "default" in CE
             type: string
           session_id:
             type: string
@@ -6744,7 +6745,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: List all SSO profiles
+      summary: List all SSO profiles (AI Studio)
       tags:
       - sso-profiles
     post:
@@ -6775,7 +6776,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a new SSO profile
+      summary: Create a new SSO profile (AI Studio)
       tags:
       - sso-profiles
   /api/v1/sso-profiles/{id}:
@@ -6808,7 +6809,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Delete an SSO profile
+      summary: Delete an SSO profile (AI Studio)
       tags:
       - sso-profiles
     get:
@@ -6878,7 +6879,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Update an SSO profile
+      summary: Update an SSO profile (AI Studio)
       tags:
       - sso-profiles
   /api/v1/sso-profiles/{profile_id}/use-in-login-page:
@@ -8224,7 +8225,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: List all catalogues
+      summary: List all LLM catalogues
       tags:
       - catalogues
     post:
@@ -8255,7 +8256,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a new catalogue
+      summary: Create a new LLM catalogue
       tags:
       - catalogues
   /catalogues/{id}:
@@ -8284,7 +8285,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Delete a catalogue
+      summary: Delete an LLM catalogue
       tags:
       - catalogues
     get:
@@ -8350,7 +8351,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Update a catalogue
+      summary: Update an LLM catalogue
       tags:
       - catalogues
   /catalogues/{id}/llms:
@@ -13390,7 +13391,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: List all tags
+      summary: List all tags (AI Studio)
       tags:
       - tags
     post:
@@ -13421,7 +13422,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a new tag
+      summary: Create a new tag (AI Studio)
       tags:
       - tags
   /tags/{id}:
@@ -13450,7 +13451,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Delete a tag
+      summary: Delete a tag (AI Studio)
       tags:
       - tags
     get:
@@ -13516,7 +13517,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Update a tag
+      summary: Update a tag (AI Studio)
       tags:
       - tags
   /tags/search:
@@ -14922,7 +14923,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Create a new user
+      summary: Create a new user (AI Studio)
       tags:
       - users
   /users/{id}:
@@ -14951,7 +14952,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Delete a user
+      summary: Delete a user (AI Studio)
       tags:
       - users
     get:
@@ -15017,7 +15018,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Update a user
+      summary: Update a user (AI Studio)
       tags:
       - users
   /users/{id}/catalogues:

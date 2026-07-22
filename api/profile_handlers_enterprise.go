@@ -148,7 +148,7 @@ func serializeProfiles(profiles models.Profiles) []ProfileListItem {
 	return result
 }
 
-// @Summary Create a new SSO profile
+// @Summary Create a new SSO profile (AI Studio)
 // @Description Create a new SSO profile with the provided information
 // @Tags sso-profiles
 // @Accept json
@@ -237,7 +237,7 @@ func (a *API) getProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeProfile(profile)})
 }
 
-// @Summary Update an SSO profile
+// @Summary Update an SSO profile (AI Studio)
 // @Description Update an existing SSO profile's information
 // @Tags sso-profiles
 // @Accept json
@@ -302,7 +302,7 @@ func (a *API) updateProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeProfile(profile)})
 }
 
-// @Summary Delete an SSO profile
+// @Summary Delete an SSO profile (AI Studio)
 // @Description Delete an SSO profile by its ID
 // @Tags sso-profiles
 // @Accept json
@@ -329,7 +329,7 @@ func (a *API) deleteProfile(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary List all SSO profiles
+// @Summary List all SSO profiles (AI Studio)
 // @Description Get a list of all SSO profiles with pagination
 // @Tags sso-profiles
 // @Accept json

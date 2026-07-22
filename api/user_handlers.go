@@ -41,7 +41,7 @@ func (a *API) validateUserInput(userInput UserInput, userId uint) error {
 	return nil
 }
 
-// @Summary Create a new user
+// @Summary Create a new user (AI Studio)
 // @Description Create a new user with the provided information
 // @Tags users
 // @Accept json
@@ -128,7 +128,7 @@ func (a *API) getUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeUser(user)})
 }
 
-// @Summary Update a user
+// @Summary Update a user (AI Studio)
 // @Description Update an existing user's information
 // @Tags users
 // @Accept json
@@ -193,7 +193,7 @@ func (a *API) updateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeUser(updatedUser)})
 }
 
-// @Summary Delete a user
+// @Summary Delete a user (AI Studio)
 // @Description Delete a user by their ID
 // @Tags users
 // @Accept json

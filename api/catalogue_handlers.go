@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// @Summary Create a new catalogue
+// @Summary Create a new LLM catalogue
 // @Description Create a new catalogue with the provided information
 // @Tags catalogues
 // @Accept json
@@ -86,7 +86,7 @@ func (a *API) getCatalogue(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogue(catalogue)})
 }
 
-// @Summary Update a catalogue
+// @Summary Update an LLM catalogue
 // @Description Update an existing catalogue's information
 // @Tags catalogues
 // @Accept json
@@ -135,7 +135,7 @@ func (a *API) updateCatalogue(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogue(catalogue)})
 }
 
-// @Summary Delete a catalogue
+// @Summary Delete an LLM catalogue
 // @Description Delete a catalogue by its ID
 // @Tags catalogues
 // @Accept json
@@ -184,7 +184,7 @@ func (a *API) deleteCatalogue(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// @Summary List all catalogues
+// @Summary List all LLM catalogues
 // @Description Get a list of all catalogues with their associated LLM names
 // @Tags catalogues
 // @Accept json
