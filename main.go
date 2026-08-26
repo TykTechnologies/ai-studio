@@ -65,6 +65,9 @@ func main() {
 	logger.Init(appConf.LogLevel)
 	logger.Infof("Log level set to: %s", appConf.LogLevel)
 
+	// Warn loudly at startup if secrets encryption is not configured
+	secrets.WarnIfEncryptionUnconfigured()
+
 	// Perform connectivity tests before proceeding with initialization
 	if err := startup.TestConnectivity(appConf); err != nil {
 		logger.FatalErr("Connectivity tests failed", err)
