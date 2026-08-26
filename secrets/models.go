@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -107,6 +108,27 @@ func decrypt(keyString string, stringToDecrypt string) (string, error) {
 	return string(ciphertext), nil
 }
 
+// plaintextFallbackWarnOnce ensures the loud missing-key warning is emitted
+// once per process rather than on every call.
+var plaintextFallbackWarnOnce sync.Once
+
+// EncryptionKeyConfigured reports whether the secrets encryption key
+// environment variable is set.
+func EncryptionKeyConfigured() bool {
+	return os.Getenv(midsommarSecret) != ""
+}
+
+// WarnIfEncryptionUnconfigured emits a prominent startup warning when the
+// encryption key is not configured, so operators know stored secrets will be
+// persisted as plaintext. Returns true when the key is configured.
+func WarnIfEncryptionUnconfigured() bool {
+	if EncryptionKeyConfigured() {
+		return true
+	}
+	log.Errorf("SECURITY WARNING: %s is not set — secrets and credentials will be stored as PLAINTEXT. Set %s to enable encryption at rest.", midsommarSecret, midsommarSecret)
+	return false
+}
+
 // EncryptValue encrypts a plaintext string using the application's AES key.
 // Returns the encrypted value or the original if encryption fails or is not configured.
 func EncryptValue(plaintext string) string {
@@ -115,10 +137,17 @@ func EncryptValue(plaintext string) string {
 	}
 	key := os.Getenv(midsommarSecret)
 	if key == "" {
-		return plaintext // No encryption key configured
+		// No encryption key configured: the value is stored as plaintext.
+		// Warn loudly once, and at debug level on subsequent calls.
+		plaintextFallbackWarnOnce.Do(func() {
+			log.Errorf("SECURITY WARNING: %s is not set — value stored as plaintext without encryption. This warning is logged once per process.", midsommarSecret)
+		})
+		log.Debugf("%s not set; storing value as plaintext", midsommarSecret)
+		return plaintext
 	}
 	encrypted, err := encrypt(key, plaintext)
 	if err != nil {
+		log.Errorf("SECURITY WARNING: encryption failed (%v) — value stored as plaintext", err)
 		return plaintext // Graceful fallback
 	}
 	return "$ENC/" + encrypted
