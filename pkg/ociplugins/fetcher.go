@@ -17,7 +17,16 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
+
+// registryHTTPClient is the shared HTTP client for OCI registry requests,
+// used by every authentication path. Its transport applies the full URL
+// policy (scheme + host allowlist) to each request and enforces the
+// internal-network policy at dial time (post-DNS), so a rebinding DNS answer
+// cannot bypass the SSRF protection.
+var registryHTTPClient = &http.Client{Transport: netguard.ValidatingHTTPTransport()}
 
 // ORASFetcher handles OCI artifact fetching using oras-go
 type ORASFetcher struct {
@@ -206,6 +215,8 @@ func (f *ORASFetcher) configureAuth(repo *remote.Repository, registry, authConfi
 
 	if !exists {
 		fmt.Printf("[OCI Auth] NO auth found for registry %q - using anonymous access\n", registry)
+		// Anonymous access still goes through the SSRF-guarded client
+		repo.Client = &auth.Client{Client: registryHTTPClient}
 		return nil
 	}
 
@@ -272,11 +283,12 @@ func (f *ORASFetcher) configureAuth(repo *remote.Repository, registry, authConfi
 		repo.Client = &basicAuthHTTPClient{
 			username: creds.Username,
 			password: creds.Password,
-			inner:    http.DefaultClient,
+			inner:    registryHTTPClient,
 		}
 	} else {
 		// Standard Docker token exchange for username/password and token auth
 		repo.Client = &auth.Client{
+			Client: registryHTTPClient,
 			Credential: func(ctx context.Context, hostport string) (auth.Credential, error) {
 				return creds, nil
 			},
@@ -296,6 +308,9 @@ type basicAuthHTTPClient struct {
 	inner    *http.Client
 }
 
+// Do injects Basic auth; SSRF policy enforcement (URL validation and
+// dial-time IP guarding) lives in the inner client's transport, which is
+// shared by every registry auth path.
 func (c *basicAuthHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	req.SetBasicAuth(c.username, c.password)
 	return c.inner.Do(req)
