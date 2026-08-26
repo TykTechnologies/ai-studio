@@ -109,7 +109,8 @@ func FilterSensitiveFields(obj interface{}) interface{} {
 func FilterSesitiveFieldsArr(in interface{}) interface{} {
 	s := reflect.ValueOf(in)
 	if s.Kind() != reflect.Slice {
-		panic("given a non-slice type")
+		log.Printf("FilterSesitiveFieldsArr: given a non-slice type %T, returning input unchanged", in)
+		return in
 	}
 
 	if s.Len() == 0 {

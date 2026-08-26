@@ -100,13 +100,14 @@ func TestEncryptDecrypt(t *testing.T) {
 			assert.NotEqual(t, tt.value, encrypted, "encrypted value should be different from original")
 
 			// Test decryption
-			decrypted := decrypt(tt.key, encrypted)
+			decrypted, err := decrypt(tt.key, encrypted)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.value, decrypted, "decrypted value should match original")
 
 			// Test that different keys produce different results, except for empty values
 			if tt.value != "" {
 				differentKey := tt.key + "-different"
-				differentDecrypted := decrypt(differentKey, encrypted)
+				differentDecrypted, _ := decrypt(differentKey, encrypted)
 				assert.NotEqual(t, tt.value, differentDecrypted, "decryption with wrong key should not match original")
 			}
 		})
