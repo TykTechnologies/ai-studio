@@ -83,18 +83,16 @@ func (t Tool) ToLangchainTool() llms.Tool {
 func (r *ChatCompletionRequest) ToLangchainOptions(conf *models.LLM) []llms.CallOption {
 	options := make([]llms.CallOption, 0)
 
-	// OpenAI interface can state model, but upstream might be different
-	if conf.Vendor != models.OPENAI {
-		// force model if not OpenAI upstream
-		if conf.DefaultModel != "" {
-			options = append(options, llms.WithModel(conf.DefaultModel))
-		}
-	} else {
-		// it's OpenAI, so we can use the model from the request
-		r.Model = conf.DefaultModel
-		if r.Model != "" {
-			options = append(options, llms.WithModel(r.Model))
-		}
+	// The request model has already been validated against the config's
+	// AllowedModels by the shim handler, so it wins; DefaultModel is only a
+	// fallback when the request omits the field. Do not mutate r.Model - the
+	// handler echoes it back in the response body.
+	model := r.Model
+	if model == "" {
+		model = conf.DefaultModel
+	}
+	if model != "" {
+		options = append(options, llms.WithModel(model))
 	}
 
 	if r.MaxCompletionTokens != nil {

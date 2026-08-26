@@ -207,18 +207,18 @@ func TestChatCompletionRequest_ToLangchainOptions(t *testing.T) {
 		assert.NotNil(t, opts)
 	})
 
-	t.Run("Non-OpenAI vendor uses default model", func(t *testing.T) {
+	t.Run("Non-OpenAI vendor respects request model", func(t *testing.T) {
 		anthropicConfig := &models.LLM{
 			Vendor:       models.ANTHROPIC,
 			DefaultModel: "claude-3",
 		}
 
 		req := &ChatCompletionRequest{
-			Model: "gpt-4", // This should be ignored for non-OpenAI
+			Model: "claude-3-5-haiku-20241022",
 		}
 
 		opts := req.ToLangchainOptions(anthropicConfig)
-		assert.NotNil(t, opts)
+		assert.Equal(t, "claude-3-5-haiku-20241022", resolveModelOption(opts))
 	})
 }
 
