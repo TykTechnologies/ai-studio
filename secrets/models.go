@@ -11,9 +11,11 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/scrypt"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
@@ -47,8 +49,16 @@ func deriveKey(input string) []byte {
 // exceeds the capacity.
 var derivedKeyCache = newKeyCache(4096)
 
+// deriveGroup coalesces concurrent derivations of the same key so a burst of
+// cache misses runs scrypt once instead of once per caller.
+var deriveGroup singleflight.Group
+
+// scryptComputations counts actual scrypt executions (test observability).
+var scryptComputations atomic.Int64
+
 // deriveKeyScrypt derives a 32-byte AES-256 key from the configured secret
-// and a per-value salt using scrypt.
+// and a per-value salt using scrypt. Concurrent calls for the same
+// (secret, salt) pair share a single computation.
 func deriveKeyScrypt(input string, salt []byte) ([]byte, error) {
 	cacheKey := input + "\x00" + string(salt)
 
@@ -56,13 +66,26 @@ func deriveKeyScrypt(input string, salt []byte) ([]byte, error) {
 		return k, nil
 	}
 
-	key, err := scrypt.Key([]byte(input), salt, scryptN, scryptR, scryptP, 32)
-	if err != nil {
-		return nil, fmt.Errorf("scrypt key derivation failed: %w", err)
-	}
+	v, err, _ := deriveGroup.Do(cacheKey, func() (interface{}, error) {
+		// Re-check under the flight: a caller that queued behind the leader
+		// may arrive after the result has already been cached.
+		if k, ok := derivedKeyCache.get(cacheKey); ok {
+			return k, nil
+		}
 
-	derivedKeyCache.put(cacheKey, key)
-	return key, nil
+		scryptComputations.Add(1)
+		key, err := scrypt.Key([]byte(input), salt, scryptN, scryptR, scryptP, 32)
+		if err != nil {
+			return nil, fmt.Errorf("scrypt key derivation failed: %w", err)
+		}
+
+		derivedKeyCache.put(cacheKey, key)
+		return key, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]byte), nil
 }
 
 type Secret struct {
