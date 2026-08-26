@@ -6,25 +6,78 @@ package plugin_security
 import (
 	"context"
 	"log"
+	"net"
+	"os"
+	"strings"
 )
 
-// communityService is the Community Edition stub implementation
-// All security checks are no-ops, allowing plugin operations to proceed
-// This maintains plugin functionality while reserving advanced security for ENT
+// communityService is the Community Edition implementation.
+// It provides basic internal-network blocking for plugin hosts (CIDR-based),
+// while advanced controls (OCI signature verification, host whitelisting) are
+// no-ops reserved for the Enterprise Edition.
 type communityService struct {
 	config        *Config
 	warningLogged bool
 }
 
-// ValidateGRPCHost always returns nil in CE (allows all hosts)
+// ValidateGRPCHost blocks hosts that resolve to internal/private networks.
+// The check can be bypassed for local development via the
+// AllowInternalNetworkAccess config option or the
+// ALLOW_INTERNAL_NETWORK_ACCESS=true environment variable.
 func (s *communityService) ValidateGRPCHost(host string) error {
-	s.logSecurityWarning("GRPC host whitelisting")
+	if s.IsInternalIP(host) && !s.allowInternalAccess() {
+		return ErrInternalNetworkBlocked
+	}
 	return nil
 }
 
-// IsInternalIP always returns false in CE
+// IsInternalIP checks if a hostname/IP is internal/private using CIDR validation
 func (s *communityService) IsInternalIP(host string) bool {
+	// Handle localhost variations
+	lowerHost := strings.ToLower(host)
+	if lowerHost == "localhost" || lowerHost == "::1" {
+		return true
+	}
+
+	// Parse the IP address
+	ip := net.ParseIP(host)
+	if ip == nil {
+		// If not an IP, could be a hostname - check for localhost patterns
+		return strings.Contains(lowerHost, "localhost")
+	}
+
+	// Private and special-use IP CIDR ranges
+	privateCIDRs := []string{
+		"10.0.0.0/8",     // Private Class A
+		"172.16.0.0/12",  // Private Class B
+		"192.168.0.0/16", // Private Class C
+		"127.0.0.0/8",    // IPv4 loopback
+		"169.254.0.0/16", // IPv4 link-local (incl. cloud metadata endpoints)
+		"::1/128",        // IPv6 loopback
+		"fc00::/7",       // IPv6 unique local addresses
+		"fe80::/10",      // IPv6 link-local
+	}
+
+	for _, cidrStr := range privateCIDRs {
+		_, cidr, err := net.ParseCIDR(cidrStr)
+		if err != nil {
+			continue
+		}
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+
 	return false
+}
+
+// allowInternalAccess reports whether the development bypass for internal
+// network access is enabled via config or environment variable.
+func (s *communityService) allowInternalAccess() bool {
+	if s.config != nil && s.config.AllowInternalNetworkAccess {
+		return true
+	}
+	return os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true"
 }
 
 // VerifySignature always returns nil in CE (no verification)

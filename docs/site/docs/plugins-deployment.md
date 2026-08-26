@@ -322,6 +322,8 @@ Both runtimes use the same `OCI_PLUGINS_REGISTRY_*` environment variables for au
 
 #### Signature Verification
 
+> **Community Edition limitation**: OCI signature verification is an Enterprise Edition feature. In Community Edition, `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGNATURE` have **no effect** — plugin signatures are never verified, and a prominent warning is logged at startup if the flag is set. Internal-network blocking for plugin hosts, however, is enforced in both editions (bypass with `ALLOW_INTERNAL_NETWORK_ACCESS=true` for local development).
+
 When signature verification is enabled (Enterprise Edition), the `cosign` tool verifies plugin signatures against the registry. Cosign uses the standard Docker credential store (`~/.docker/config.json`) for registry authentication — it does **not** use the `OCI_PLUGINS_REGISTRY_*` environment variables.
 
 To configure cosign auth in containerized environments:
