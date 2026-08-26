@@ -27,6 +27,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -585,6 +586,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL", err, false)
 		return
 	}
+
+	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
+		logger.Errorf("Upstream URL blocked by SSRF policy: %v", err)
+		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
+		return
+	}
+	logger.Debugf("LLM proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
 
 	proxyDirector := func(req *http.Request) {
 		req.URL.Scheme = upstreamURL.Scheme
@@ -1155,6 +1163,13 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL for streaming", err, false)
 		return
 	}
+
+	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
+		logger.Errorf("Streaming upstream URL blocked by SSRF policy: %v", err)
+		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
+		return
+	}
+	logger.Debugf("LLM streaming proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
 
 	// Strip the gateway prefix to get the remaining path
 	remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))

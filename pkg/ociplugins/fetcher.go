@@ -17,6 +17,8 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
 // ORASFetcher handles OCI artifact fetching using oras-go
@@ -297,6 +299,9 @@ type basicAuthHTTPClient struct {
 }
 
 func (c *basicAuthHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	if err := netguard.ValidateUpstreamURL(req.URL); err != nil {
+		return nil, fmt.Errorf("OCI registry request blocked: %w", err)
+	}
 	req.SetBasicAuth(c.username, c.password)
 	return c.inner.Do(req)
 }
