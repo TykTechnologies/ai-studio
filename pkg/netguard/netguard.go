@@ -199,3 +199,25 @@ func HTTPTransport() *http.Transport {
 	transport.DialContext = NewDialer().DialContext
 	return transport
 }
+
+// validatingTransport applies ValidateUpstreamURL to every request before
+// delegating to an inner (dial-guarded) transport.
+type validatingTransport struct {
+	inner http.RoundTripper
+}
+
+func (t validatingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if err := ValidateUpstreamURL(req.URL); err != nil {
+		return nil, err
+	}
+	return t.inner.RoundTrip(req)
+}
+
+// ValidatingHTTPTransport returns a RoundTripper that applies the full URL
+// policy (scheme + host allowlist) to every request — including redirects and
+// any request issued by wrapping clients — on top of HTTPTransport's
+// dial-time internal-IP guard. Use it for clients where per-request URL
+// validation cannot be guaranteed at the call sites.
+func ValidatingHTTPTransport() http.RoundTripper {
+	return validatingTransport{inner: HTTPTransport()}
+}

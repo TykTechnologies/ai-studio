@@ -190,3 +190,41 @@ func TestHTTPTransportBlocksInternalDialsPostDNS(t *testing.T) {
 		resp.Body.Close()
 	})
 }
+
+func TestValidatingHTTPTransportAppliesURLPolicyPerRequest(t *testing.T) {
+	t.Setenv(EnvBlockInternal, "")
+	t.Setenv(EnvAllowInternal, "")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := &http.Client{Transport: ValidatingHTTPTransport(), Timeout: 5 * time.Second}
+
+	t.Run("allowlisted request succeeds", func(t *testing.T) {
+		u := mustURL(t, srv.URL)
+		t.Setenv(EnvAllowedHosts, u.Hostname())
+		resp, err := client.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("allowlisted host should succeed: %v", err)
+		}
+		resp.Body.Close()
+	})
+
+	t.Run("non-allowlisted request rejected before connecting", func(t *testing.T) {
+		t.Setenv(EnvAllowedHosts, "registry.example.com")
+		if _, err := client.Get(srv.URL); err == nil {
+			t.Fatal("expected non-allowlisted host to be rejected")
+		}
+	})
+
+	t.Run("no allowlist preserves default behavior", func(t *testing.T) {
+		t.Setenv(EnvAllowedHosts, "")
+		resp, err := client.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("expected success without an allowlist: %v", err)
+		}
+		resp.Body.Close()
+	})
+}
