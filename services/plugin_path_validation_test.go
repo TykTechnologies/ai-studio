@@ -26,10 +26,28 @@ func TestValidatePluginExecutablePathBasics(t *testing.T) {
 	dir := t.TempDir()
 	exe := writeExecutable(t, dir, "plugin-bin")
 
-	t.Run("valid executable passes", func(t *testing.T) {
+	t.Run("valid executable passes and returns the resolved path", func(t *testing.T) {
 		got, err := validatePluginExecutablePath(exe)
 		require.NoError(t, err)
-		assert.Equal(t, exe, got)
+		want, err := filepath.EvalSymlinks(exe)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, "the returned path must be the fully resolved path that was validated")
+		assert.True(t, filepath.IsAbs(got))
+	})
+
+	t.Run("bare command name resolves via PATH like exec.Command", func(t *testing.T) {
+		t.Setenv("PATH", dir)
+		got, err := validatePluginExecutablePath("plugin-bin")
+		require.NoError(t, err)
+		want, err := filepath.EvalSymlinks(exe)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, "bare names must be resolved through PATH, matching exec.Command semantics")
+	})
+
+	t.Run("bare command name not on PATH rejected", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		_, err := validatePluginExecutablePath("plugin-bin")
+		assert.Error(t, err)
 	})
 
 	t.Run("empty path rejected", func(t *testing.T) {
@@ -67,7 +85,9 @@ func TestValidatePluginExecutablePathAllowedDirs(t *testing.T) {
 	t.Run("inside allowed dir passes", func(t *testing.T) {
 		got, err := validatePluginExecutablePath(inside)
 		require.NoError(t, err)
-		assert.Equal(t, inside, got)
+		want, err := filepath.EvalSymlinks(inside)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	})
 
 	t.Run("outside allowed dir rejected", func(t *testing.T) {
@@ -92,7 +112,9 @@ func TestValidatePluginExecutablePathAllowedDirs(t *testing.T) {
 		t.Setenv(pluginAllowedDirsEnv, outside+string(os.PathListSeparator)+allowed)
 		got, err := validatePluginExecutablePath(escaped)
 		require.NoError(t, err)
-		assert.Equal(t, escaped, got)
+		want, err := filepath.EvalSymlinks(escaped)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
 	})
 }
 
