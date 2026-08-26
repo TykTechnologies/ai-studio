@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -164,4 +165,44 @@ func TestReencryptLegacySecrets(t *testing.T) {
 	var f Secret
 	require.NoError(t, db.Where("var_name = ?", "FRESH").First(&f).Error)
 	assert.Equal(t, newVal, f.Value)
+}
+
+func TestReencryptLegacySecretsInBatches(t *testing.T) {
+	t.Setenv(midsommarSecret, "batch-key")
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&Secret{}))
+
+	// Use a small batch size so the test exercises multiple batches without
+	// paying for hundreds of scrypt derivations.
+	orig := reencryptBatchSize
+	reencryptBatchSize = 4
+	defer func() { reencryptBatchSize = orig }()
+
+	// Seed more legacy secrets than one batch holds so the batched path is
+	// exercised end to end.
+	total := reencryptBatchSize*2 + 3
+	for i := 0; i < total; i++ {
+		val := legacyCFBEncrypt(t, "batch-key", fmt.Sprintf("value-%d", i))
+		require.NoError(t, db.Create(&Secret{VarName: fmt.Sprintf("S%d", i), Value: val}).Error)
+	}
+
+	migrated, err := ReencryptLegacySecrets(db)
+	require.NoError(t, err)
+	assert.Equal(t, total, migrated)
+
+	// Every row is now v2 format and still decrypts to its original value
+	var remaining int64
+	require.NoError(t, db.Model(&Secret{}).Where("value NOT LIKE ?", encVersionPrefix+"%").Count(&remaining).Error)
+	assert.Zero(t, remaining, "no legacy-format rows should remain")
+
+	got, err := GetSecretByVarName(db, fmt.Sprintf("S%d", total-1), false)
+	require.NoError(t, err)
+	assert.Equal(t, fmt.Sprintf("value-%d", total-1), got.Value)
+
+	// Second run is a no-op
+	migrated, err = ReencryptLegacySecrets(db)
+	require.NoError(t, err)
+	assert.Zero(t, migrated)
 }

@@ -226,44 +226,52 @@ func decryptCFBLegacy(keyString string, stringToDecrypt string) (string, error) 
 	return string(ciphertext), nil
 }
 
+// reencryptBatchSize bounds how many Secret rows are held in memory at once
+// during migration. Variable so tests can exercise multi-batch runs cheaply.
+var reencryptBatchSize = 100
+
 // ReencryptLegacySecrets rewrites stored Secret rows that still use the
 // legacy AES-CFB format to the current scrypt+AES-GCM scheme. Rows that are
 // empty, already migrated, or fail to decrypt (e.g. written under a
-// different key) are left untouched. Returns the number of migrated rows.
+// different key) are left untouched. Rows are processed in batches to bound
+// memory usage, with each batch's updates applied in a single transaction.
+// Returns the number of migrated rows.
 func ReencryptLegacySecrets(db *gorm.DB) (int, error) {
 	key := os.Getenv(midsommarSecret)
 	if key == "" {
 		return 0, nil // nothing to do without a key
 	}
 
-	var all []Secret
-	if err := db.Find(&all).Error; err != nil {
-		return 0, fmt.Errorf("failed to list secrets for migration: %w", err)
-	}
-
 	migrated := 0
-	for i := range all {
-		s := &all[i]
-		if s.Value == "" || strings.HasPrefix(s.Value, encVersionPrefix) {
-			continue
-		}
+	var batch []Secret
+	err := db.Where("value <> '' AND value NOT LIKE ?", encVersionPrefix+"%").
+		FindInBatches(&batch, reencryptBatchSize, func(_ *gorm.DB, _ int) error {
+			return db.Transaction(func(tx *gorm.DB) error {
+				for i := range batch {
+					s := &batch[i]
 
-		plaintext, err := decryptCFBLegacy(key, s.Value)
-		if err != nil {
-			log.Warnf("skipping secret %q during re-encryption: %v", s.VarName, err)
-			continue
-		}
+					plaintext, err := decryptCFBLegacy(key, s.Value)
+					if err != nil {
+						log.Warnf("skipping secret %q during re-encryption: %v", s.VarName, err)
+						continue
+					}
 
-		reencrypted, err := encrypt(key, plaintext)
-		if err != nil {
-			log.Warnf("failed to re-encrypt secret %q: %v", s.VarName, err)
-			continue
-		}
+					reencrypted, err := encrypt(key, plaintext)
+					if err != nil {
+						log.Warnf("failed to re-encrypt secret %q: %v", s.VarName, err)
+						continue
+					}
 
-		if err := db.Model(&Secret{}).Where("id = ?", s.ID).Update("value", reencrypted).Error; err != nil {
-			return migrated, fmt.Errorf("failed to save re-encrypted secret %q: %w", s.VarName, err)
-		}
-		migrated++
+					if err := tx.Model(&Secret{}).Where("id = ?", s.ID).Update("value", reencrypted).Error; err != nil {
+						return fmt.Errorf("failed to save re-encrypted secret %q: %w", s.VarName, err)
+					}
+					migrated++
+				}
+				return nil
+			})
+		}).Error
+	if err != nil {
+		return migrated, fmt.Errorf("failed to re-encrypt legacy secrets: %w", err)
 	}
 
 	if migrated > 0 {
