@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -611,11 +612,8 @@ func (a *API) handleRegisterOAuthClient(c *gin.Context) {
 // @Failure 404 {object} ErrorResponse "Client not found"
 // @Router /oauth/authorize [get]
 func (a *API) handleOAuthAuthorize(c *gin.Context) {
-	// Set explicit CORS headers to allow * origins
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
-	c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-	c.Header("Access-Control-Max-Age", "43200") // 12 hours
+	// Apply CORS policy (wildcard unless CORS_ALLOWED_ORIGINS is configured)
+	corsutil.SetCORSHeaders(c.Writer.Header(), c.GetHeader("Origin"), "GET, OPTIONS")
 
 	// Handle preflight requests
 	if c.Request.Method == "OPTIONS" {
@@ -742,11 +740,8 @@ func (a *API) handleOAuthAuthorize(c *gin.Context) {
 // @Router /oauth/consent_details [get]
 // @Security BearerAuth
 func (a *API) handleGetConsentDetails(c *gin.Context) {
-	// Set explicit CORS headers to allow * origins
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
-	c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-	c.Header("Access-Control-Max-Age", "43200") // 12 hours
+	// Apply CORS policy (wildcard unless CORS_ALLOWED_ORIGINS is configured)
+	corsutil.SetCORSHeaders(c.Writer.Header(), c.GetHeader("Origin"), "GET, OPTIONS")
 
 	// Handle preflight requests
 	if c.Request.Method == "OPTIONS" {
@@ -888,11 +883,8 @@ type SubmitConsentInput struct {
 // @Router /oauth/submit_consent [post]
 // @Security BearerAuth
 func (a *API) handleSubmitConsent(c *gin.Context) {
-	// Set explicit CORS headers to allow * origins
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Methods", "POST, OPTIONS")
-	c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-	c.Header("Access-Control-Max-Age", "43200") // 12 hours
+	// Apply CORS policy (wildcard unless CORS_ALLOWED_ORIGINS is configured)
+	corsutil.SetCORSHeaders(c.Writer.Header(), c.GetHeader("Origin"), "POST, OPTIONS")
 
 	// Handle preflight requests
 	if c.Request.Method == "OPTIONS" {
@@ -1053,11 +1045,8 @@ func (a *API) handleSubmitConsent(c *gin.Context) {
 // @Failure 401 {object} OAuthErrorResponse "e.g., invalid_client"
 // @Router /oauth/token [post]
 func (a *API) handleOAuthToken(c *gin.Context) {
-	// Set explicit CORS headers to allow * origins
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Methods", "POST, OPTIONS")
-	c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-	c.Header("Access-Control-Max-Age", "43200") // 12 hours
+	// Apply CORS policy (wildcard unless CORS_ALLOWED_ORIGINS is configured)
+	corsutil.SetCORSHeaders(c.Writer.Header(), c.GetHeader("Origin"), "POST, OPTIONS")
 
 	// Handle preflight requests
 	if c.Request.Method == "OPTIONS" {
@@ -1241,11 +1230,8 @@ type OAuthServerMetadata struct {
 // @Success 200 {object} OAuthServerMetadata
 // @Router /.well-known/oauth-authorization-server [get]
 func (a *API) handleOAuthMetadata(c *gin.Context) {
-	// Set explicit CORS headers to allow * origins
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
-	c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-	c.Header("Access-Control-Max-Age", "43200") // 12 hours
+	// Apply CORS policy (wildcard unless CORS_ALLOWED_ORIGINS is configured)
+	corsutil.SetCORSHeaders(c.Writer.Header(), c.GetHeader("Origin"), "GET, OPTIONS")
 
 	// Handle preflight requests
 	if c.Request.Method == "OPTIONS" {

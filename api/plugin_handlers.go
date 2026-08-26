@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -1774,7 +1775,12 @@ func (a *API) servePluginAsset(c *gin.Context) {
 	// Serve the asset content with proper MIME type and CORS headers for dynamic import
 	c.Header("Content-Type", mimeType)
 	c.Header("Content-Length", fmt.Sprintf("%d", len(content)))
-	c.Header("Access-Control-Allow-Origin", "*")
+	if origin, configured := corsutil.AllowOrigin(c.GetHeader("Origin")); origin != "" {
+		c.Header("Access-Control-Allow-Origin", origin)
+		if configured {
+			c.Writer.Header().Add("Vary", "Origin")
+		}
+	}
 	c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
 	c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	c.Header("Cross-Origin-Resource-Policy", "cross-origin")
