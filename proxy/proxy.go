@@ -27,6 +27,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -413,6 +414,13 @@ func (p *Proxy) createHandler() http.Handler {
 	return p.cloudflareHeadersMiddleware(combinedHandler)
 }
 
+// upstreamGuardedTransport is the shared transport for all upstream LLM
+// requests. Its dialer enforces the internal-network policy on the exact IP
+// being connected (post-DNS), so a DNS answer that changes between validation
+// and connection cannot bypass the SSRF protection. Shared so connection
+// pooling behaves like the default transport it replaces.
+var upstreamGuardedTransport = netguard.HTTPTransport()
+
 func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	// Set CORS headers to allow * origins
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -586,6 +594,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
+		logger.Errorf("Upstream URL blocked by SSRF policy: %v", err)
+		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
+		return
+	}
+	logger.Debugf("LLM proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
+
 	proxyDirector := func(req *http.Request) {
 		req.URL.Scheme = upstreamURL.Scheme
 		req.URL.Host = upstreamURL.Host
@@ -609,7 +624,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			// Cannot write http error from director. This needs robust handling or pre-flight check.
 		}
 	}
-	httpProxy := &httputil.ReverseProxy{Director: proxyDirector} // Renamed variable
+	// upstreamGuardedTransport enforces the internal-network policy at dial
+	// time (post-DNS), closing the DNS-rebinding TOCTOU window.
+	httpProxy := &httputil.ReverseProxy{Director: proxyDirector, Transport: upstreamGuardedTransport}
 
 	// Apply LLM timeout to the request context for the reverse proxy
 	llmCtx, llmCancel := context.WithTimeout(r.Context(), p.config.llmTimeout())
@@ -1156,6 +1173,13 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
+		logger.Errorf("Streaming upstream URL blocked by SSRF policy: %v", err)
+		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
+		return
+	}
+	logger.Debugf("LLM streaming proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
+
 	// Strip the gateway prefix to get the remaining path
 	remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
 	// Only combine with upstream base path if remaining path doesn't already include it
@@ -1186,7 +1210,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	client := &http.Client{
-		Timeout: p.config.llmTimeout(),
+		Timeout:   p.config.llmTimeout(),
+		Transport: upstreamGuardedTransport,
 	}
 	resp, err := client.Do(upstreamReq)
 	if err != nil {

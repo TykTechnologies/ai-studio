@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strings"
 
 	chromago "github.com/amikos-tech/chroma-go/pkg/api/v2"
@@ -657,9 +658,15 @@ func (ds *DataSession) deletePGVectorByMetadata(ctx context.Context, d *models.D
 	}
 
 	tableName := d.DBName
+	if err := validatePGTableName(tableName); err != nil {
+		return 0, err
+	}
 
 	// Build WHERE clause from metadata filter
-	whereClause, args := ds.buildPGVectorWhereClause(filter, filterMode)
+	whereClause, args, err := ds.buildPGVectorWhereClause(filter, filterMode)
+	if err != nil {
+		return 0, err
+	}
 
 	if dryRun {
 		// Count matching documents
@@ -699,9 +706,15 @@ func (ds *DataSession) queryPGVectorByMetadata(ctx context.Context, d *models.Da
 	}
 
 	tableName := d.DBName
+	if err := validatePGTableName(tableName); err != nil {
+		return nil, 0, err
+	}
 
 	// Build WHERE clause
-	whereClause, args := ds.buildPGVectorWhereClause(filter, filterMode)
+	whereClause, args, err := ds.buildPGVectorWhereClause(filter, filterMode)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	// Get total count
 	var totalCount int64
@@ -820,6 +833,10 @@ func (ds *DataSession) deletePGVectorTable(ctx context.Context, d *models.Dataso
 		return fmt.Errorf("failed to connect to postgres: %w", err)
 	}
 
+	if err := validatePGTableName(namespace); err != nil {
+		return err
+	}
+
 	// Drop the table (with CASCADE to remove dependencies)
 	query := fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", namespace)
 	err = db.Exec(query).Error
@@ -831,10 +848,49 @@ func (ds *DataSession) deletePGVectorTable(ctx context.Context, d *models.Dataso
 	return nil
 }
 
+// metadataFilterKeyPattern restricts metadata filter keys to a safe identifier
+// character set so they can be interpolated into a quoted SQL literal without
+// risk of injection (no quotes, backslashes, or SQL metacharacters).
+var metadataFilterKeyPattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,128}$`)
+
+// pgIdentifierPattern matches a single unquoted PostgreSQL identifier
+// (letters, digits, underscore; must not start with a digit; max 63 bytes).
+var pgIdentifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
+
+// validateMetadataFilterKey rejects metadata filter keys that contain
+// characters outside a safe allowlist. Filter keys arrive from gRPC clients
+// and are interpolated into SQL, so anything beyond alphanumerics,
+// underscore, dot, and dash is refused.
+func validateMetadataFilterKey(key string) error {
+	if !metadataFilterKeyPattern.MatchString(key) {
+		return fmt.Errorf("invalid metadata filter key %q: keys must match %s", key, metadataFilterKeyPattern.String())
+	}
+	return nil
+}
+
+// validatePGTableName rejects table names that are not plain (optionally
+// schema-qualified) PostgreSQL identifiers, preventing SQL injection via the
+// datasource table name.
+func validatePGTableName(name string) error {
+	if name == "" {
+		return fmt.Errorf("table name cannot be empty")
+	}
+	parts := strings.Split(name, ".")
+	if len(parts) > 2 {
+		return fmt.Errorf("invalid table name %q: expected [schema.]table", name)
+	}
+	for _, part := range parts {
+		if !pgIdentifierPattern.MatchString(part) {
+			return fmt.Errorf("invalid table name %q: identifiers must match %s", name, pgIdentifierPattern.String())
+		}
+	}
+	return nil
+}
+
 // buildPGVectorWhereClause builds a PostgreSQL WHERE clause for JSON metadata filtering
-func (ds *DataSession) buildPGVectorWhereClause(filter map[string]string, filterMode string) (string, []interface{}) {
+func (ds *DataSession) buildPGVectorWhereClause(filter map[string]string, filterMode string) (string, []interface{}, error) {
 	if len(filter) == 0 {
-		return "1=1", []interface{}{}
+		return "1=1", []interface{}{}, nil
 	}
 
 	var clauses []string
@@ -842,6 +898,9 @@ func (ds *DataSession) buildPGVectorWhereClause(filter map[string]string, filter
 	argIndex := 1
 
 	for key, value := range filter {
+		if err := validateMetadataFilterKey(key); err != nil {
+			return "", nil, err
+		}
 		// Use JSON operators to query metadata column
 		// metadata->>'key' = value
 		clause := fmt.Sprintf("metadata->>'%s' = $%d", key, argIndex)
@@ -856,7 +915,7 @@ func (ds *DataSession) buildPGVectorWhereClause(filter map[string]string, filter
 		operator = " OR "
 	}
 
-	return strings.Join(clauses, operator), args
+	return strings.Join(clauses, operator), args, nil
 }
 
 // Weaviate implementations
