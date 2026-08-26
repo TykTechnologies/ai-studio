@@ -414,6 +414,13 @@ func (p *Proxy) createHandler() http.Handler {
 	return p.cloudflareHeadersMiddleware(combinedHandler)
 }
 
+// upstreamGuardedTransport is the shared transport for all upstream LLM
+// requests. Its dialer enforces the internal-network policy on the exact IP
+// being connected (post-DNS), so a DNS answer that changes between validation
+// and connection cannot bypass the SSRF protection. Shared so connection
+// pooling behaves like the default transport it replaces.
+var upstreamGuardedTransport = netguard.HTTPTransport()
+
 func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	// Set CORS headers to allow * origins
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -617,7 +624,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			// Cannot write http error from director. This needs robust handling or pre-flight check.
 		}
 	}
-	httpProxy := &httputil.ReverseProxy{Director: proxyDirector} // Renamed variable
+	// upstreamGuardedTransport enforces the internal-network policy at dial
+	// time (post-DNS), closing the DNS-rebinding TOCTOU window.
+	httpProxy := &httputil.ReverseProxy{Director: proxyDirector, Transport: upstreamGuardedTransport}
 
 	// Apply LLM timeout to the request context for the reverse proxy
 	llmCtx, llmCancel := context.WithTimeout(r.Context(), p.config.llmTimeout())
@@ -1201,7 +1210,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	client := &http.Client{
-		Timeout: p.config.llmTimeout(),
+		Timeout:   p.config.llmTimeout(),
+		Transport: upstreamGuardedTransport,
 	}
 	resp, err := client.Do(upstreamReq)
 	if err != nil {

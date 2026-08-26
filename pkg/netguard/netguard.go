@@ -3,25 +3,36 @@
 // OCI registries). Enforcement is opt-in via environment variables so that
 // deployments proxying to internal LLMs (a first-class use case) keep working
 // unchanged.
+//
+// Internal-range blocking is enforced at dial time, on the exact IP address
+// being connected (via net.Dialer.Control). This closes the DNS-rebinding
+// TOCTOU window: there is no separate validate-then-resolve step for an
+// attacker-controlled DNS server to exploit — the address that is checked is
+// the address that is dialed.
 package netguard
 
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"syscall"
+	"time"
 )
 
 const (
 	// EnvBlockInternal ("LLM_UPSTREAM_BLOCK_INTERNAL") enables blocking of
-	// upstream hosts that resolve to internal/reserved IP ranges.
+	// connections to internal/reserved IP ranges at dial time.
 	EnvBlockInternal = "LLM_UPSTREAM_BLOCK_INTERNAL"
 
 	// EnvAllowedHosts ("LLM_UPSTREAM_ALLOWED_HOSTS") is a comma-separated
-	// allowlist of upstream hostnames. Entries starting with '.' match any
-	// subdomain (".anthropic.com" matches "api.anthropic.com"). When set,
-	// upstream hosts not on the list are refused.
+	// allowlist of upstream hostnames. Entries starting with '.' match the
+	// apex domain and any subdomain on a label boundary (".anthropic.com"
+	// matches "anthropic.com" and "api.anthropic.com", never
+	// "evil-anthropic.com"). When set, upstream hosts not on the list are
+	// refused.
 	EnvAllowedHosts = "LLM_UPSTREAM_ALLOWED_HOSTS"
 
 	// EnvAllowInternal is the existing development flag that disables
@@ -68,17 +79,25 @@ func IsInternalIP(ip net.IP) bool {
 	return false
 }
 
+// blockInternalEnabled reports whether internal-range blocking is active.
+func blockInternalEnabled() bool {
+	return os.Getenv(EnvBlockInternal) == "true" && os.Getenv(EnvAllowInternal) != "true"
+}
+
 // ValidateUpstreamURL validates an outbound upstream URL against the
 // configured policy:
 //
 //  1. Scheme must be http or https.
 //  2. If LLM_UPSTREAM_ALLOWED_HOSTS is set, the hostname must match an entry
-//     (exact, case-insensitive; ".suffix" entries match subdomains).
-//  3. If LLM_UPSTREAM_BLOCK_INTERNAL=true (and ALLOW_INTERNAL_NETWORK_ACCESS
-//     is not "true"), the host must not resolve to an internal IP range.
+//     (exact, case-insensitive; ".suffix" entries match the apex and
+//     subdomains on a label boundary).
+//  3. If internal blocking is enabled and the host is an IP literal, it must
+//     not be an internal address (an early, clear error; hostnames are
+//     enforced at dial time by DialControl/HTTPTransport, which also covers
+//     DNS-rebinding).
 //
-// With neither variable set only the scheme check applies, preserving
-// existing behavior for deployments that proxy to internal LLMs.
+// This function performs no DNS resolution, so it is cheap on the request
+// path and cannot be raced against a later lookup.
 func ValidateUpstreamURL(u *url.URL) error {
 	if u == nil {
 		return fmt.Errorf("upstream URL is nil")
@@ -101,15 +120,9 @@ func ValidateUpstreamURL(u *url.URL) error {
 		return nil
 	}
 
-	if os.Getenv(EnvBlockInternal) == "true" && os.Getenv(EnvAllowInternal) != "true" {
-		ips, err := resolveHost(host)
-		if err != nil {
-			return fmt.Errorf("cannot resolve upstream host %q: %w", host, err)
-		}
-		for _, ip := range ips {
-			if IsInternalIP(ip) {
-				return fmt.Errorf("upstream host %q resolves to internal address %s — blocked by %s", host, ip, EnvBlockInternal)
-			}
+	if blockInternalEnabled() {
+		if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil && IsInternalIP(ip) {
+			return fmt.Errorf("upstream host %q is an internal address — blocked by %s", host, EnvBlockInternal)
 		}
 	}
 
@@ -117,7 +130,9 @@ func ValidateUpstreamURL(u *url.URL) error {
 }
 
 // hostMatchesAllowlist checks host against a comma-separated allowlist.
-// Entries beginning with '.' match any subdomain on a label boundary.
+// Entries beginning with '.' match the apex domain and any subdomain on a
+// label boundary: ".example.com" matches "example.com" and "a.b.example.com",
+// but never "evil-example.com" or "fooexample.com".
 func hostMatchesAllowlist(host, allowlist string) bool {
 	for _, entry := range strings.Split(allowlist, ",") {
 		entry = strings.ToLower(strings.TrimSpace(entry))
@@ -125,7 +140,14 @@ func hostMatchesAllowlist(host, allowlist string) bool {
 			continue
 		}
 		if strings.HasPrefix(entry, ".") {
-			if strings.HasSuffix(host, entry) || host == strings.TrimPrefix(entry, ".") {
+			apex := strings.TrimPrefix(entry, ".")
+			if host == apex {
+				return true
+			}
+			// Require the character before the suffix to be part of the
+			// suffix's own leading dot — i.e. the host ends in ".apex" —
+			// which is exactly a label boundary.
+			if len(host) > len(entry) && strings.HasSuffix(host, entry) {
 				return true
 			}
 			continue
@@ -137,11 +159,43 @@ func hostMatchesAllowlist(host, allowlist string) bool {
 	return false
 }
 
-// resolveHost returns the IPs for a hostname; IP literals are returned
-// directly without a DNS lookup.
-func resolveHost(host string) ([]net.IP, error) {
-	if ip := net.ParseIP(host); ip != nil {
-		return []net.IP{ip}, nil
+// DialControl is a net.Dialer Control hook that rejects connections to
+// internal IP ranges when blocking is enabled. It runs after DNS resolution,
+// once per connection attempt, on the exact address being dialed — so a DNS
+// answer that changes between validation and connection cannot bypass it.
+func DialControl(network, address string, _ syscall.RawConn) error {
+	if !blockInternalEnabled() {
+		return nil
 	}
-	return net.LookupIP(host)
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		host = address
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("refusing to dial unparseable address %q", address)
+	}
+	if IsInternalIP(ip) {
+		return fmt.Errorf("connection to internal address %s blocked by %s", ip, EnvBlockInternal)
+	}
+	return nil
+}
+
+// NewDialer returns a net.Dialer whose connections are guarded by
+// DialControl.
+func NewDialer() *net.Dialer {
+	return &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   DialControl,
+	}
+}
+
+// HTTPTransport returns an *http.Transport (based on
+// http.DefaultTransport) whose dials are guarded by DialControl. Use it for
+// any HTTP client whose destination comes from stored configuration.
+func HTTPTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = NewDialer().DialContext
+	return transport
 }

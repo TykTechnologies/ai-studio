@@ -21,6 +21,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
+// registryHTTPClient is the shared HTTP client for OCI registry requests.
+// Its transport enforces the internal-network policy at dial time (post-DNS),
+// so a rebinding DNS answer cannot bypass the SSRF protection.
+var registryHTTPClient = &http.Client{Transport: netguard.HTTPTransport()}
+
 // ORASFetcher handles OCI artifact fetching using oras-go
 type ORASFetcher struct {
 	config *OCIConfig
@@ -274,11 +279,12 @@ func (f *ORASFetcher) configureAuth(repo *remote.Repository, registry, authConfi
 		repo.Client = &basicAuthHTTPClient{
 			username: creds.Username,
 			password: creds.Password,
-			inner:    http.DefaultClient,
+			inner:    registryHTTPClient,
 		}
 	} else {
 		// Standard Docker token exchange for username/password and token auth
 		repo.Client = &auth.Client{
+			Client: registryHTTPClient,
 			Credential: func(ctx context.Context, hostport string) (auth.Credential, error) {
 				return creds, nil
 			},

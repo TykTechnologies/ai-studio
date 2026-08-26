@@ -2,8 +2,11 @@ package netguard
 
 import (
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func mustURL(t *testing.T, raw string) *url.URL {
@@ -88,6 +91,15 @@ func TestValidateUpstreamURLAllowedHosts(t *testing.T) {
 	if err := ValidateUpstreamURL(mustURL(t, "https://notanthropic.com/v1")); err == nil {
 		t.Error("suffix must match on label boundary, not substring")
 	}
+	if err := ValidateUpstreamURL(mustURL(t, "https://evil-anthropic.com/v1")); err == nil {
+		t.Error("dash-joined lookalike domain must be rejected")
+	}
+	if err := ValidateUpstreamURL(mustURL(t, "https://anthropic.com/v1")); err != nil {
+		t.Errorf("a '.suffix' entry should match the bare apex domain: %v", err)
+	}
+	if err := ValidateUpstreamURL(mustURL(t, "https://sub.api.anthropic.com/v1")); err != nil {
+		t.Errorf("nested subdomains should match a '.suffix' entry: %v", err)
+	}
 }
 
 func TestValidateUpstreamURLBlockInternal(t *testing.T) {
@@ -125,4 +137,56 @@ func TestValidateUpstreamURLBlockInternalDisabledByDefault(t *testing.T) {
 	if err := ValidateUpstreamURL(mustURL(t, "http://127.0.0.1:11434")); err != nil {
 		t.Errorf("internal upstreams must be allowed by default: %v", err)
 	}
+}
+
+func TestHTTPTransportBlocksInternalDialsPostDNS(t *testing.T) {
+	t.Setenv(EnvAllowedHosts, "")
+	t.Setenv(EnvAllowInternal, "")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	client := &http.Client{Transport: HTTPTransport(), Timeout: 5 * time.Second}
+
+	t.Run("blocking disabled allows internal", func(t *testing.T) {
+		t.Setenv(EnvBlockInternal, "")
+		resp, err := client.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("expected success with blocking disabled: %v", err)
+		}
+		resp.Body.Close()
+	})
+
+	t.Run("blocking enabled rejects internal IP literal", func(t *testing.T) {
+		t.Setenv(EnvBlockInternal, "true")
+		client.CloseIdleConnections() // force a fresh dial
+		if _, err := client.Get(srv.URL); err == nil {
+			t.Fatal("expected dial to an internal IP to be blocked")
+		}
+	})
+
+	t.Run("blocking enabled rejects hostname resolving to internal IP", func(t *testing.T) {
+		// The decisive DNS-rebinding case: validating the hostname up front is
+		// not enough — the IP actually dialed (post-resolution) must be checked.
+		t.Setenv(EnvBlockInternal, "true")
+		u, err := url.Parse(srv.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.Get("http://localhost:" + u.Port()); err == nil {
+			t.Fatal("expected dial to a hostname resolving to an internal IP to be blocked")
+		}
+	})
+
+	t.Run("dev override allows internal", func(t *testing.T) {
+		t.Setenv(EnvBlockInternal, "true")
+		t.Setenv(EnvAllowInternal, "true")
+		resp, err := client.Get(srv.URL)
+		if err != nil {
+			t.Fatalf("expected success with dev override: %v", err)
+		}
+		resp.Body.Close()
+	})
 }
