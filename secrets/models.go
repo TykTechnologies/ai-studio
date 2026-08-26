@@ -76,20 +76,25 @@ func encrypt(keyString string, stringToEncrypt string) (encryptedString string, 
 	return base64.URLEncoding.EncodeToString(ciphertext), nil
 }
 
-// decrypt from base64 to decrypted string
-func decrypt(keyString string, stringToDecrypt string) string {
+// decrypt from base64 to decrypted string. Malformed input (bad base64,
+// truncated ciphertext) is reported as an error rather than a panic, since
+// stored values can be tampered with or truncated outside our control.
+func decrypt(keyString string, stringToDecrypt string) (string, error) {
 	key := deriveKey(keyString)
-	ciphertext, _ := base64.URLEncoding.DecodeString(stringToDecrypt)
+	ciphertext, err := base64.URLEncoding.DecodeString(stringToDecrypt)
+	if err != nil {
+		return "", fmt.Errorf("failed to base64-decode ciphertext: %w", err)
+	}
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
 
 	// The IV needs to be unique, but not secure. Therefore it's common to
 	// include it at the beginning of the ciphertext.
 	if len(ciphertext) < aes.BlockSize {
-		panic("ciphertext too short")
+		return "", fmt.Errorf("ciphertext too short: %d bytes", len(ciphertext))
 	}
 	iv := ciphertext[:aes.BlockSize]
 	ciphertext = ciphertext[aes.BlockSize:]
@@ -99,7 +104,7 @@ func decrypt(keyString string, stringToDecrypt string) string {
 	// XORKeyStream can work in-place if the two arguments are the same.
 	stream.XORKeyStream(ciphertext, ciphertext)
 
-	return fmt.Sprintf("%s", ciphertext)
+	return string(ciphertext), nil
 }
 
 // EncryptValue encrypts a plaintext string using the application's AES key.
@@ -130,7 +135,12 @@ func DecryptValue(value string) string {
 		return value // No key to decrypt with
 	}
 	encrypted := strings.TrimPrefix(value, "$ENC/")
-	return decrypt(key, encrypted)
+	decrypted, err := decrypt(key, encrypted)
+	if err != nil {
+		log.Errorf("failed to decrypt stored value: %v", err)
+		return value // Return stored value untouched rather than crashing
+	}
+	return decrypted
 }
 
 // GetSecretByID retrieves a Secret record from the database by ID.
@@ -147,7 +157,11 @@ func GetSecretByID(db *gorm.DB, id uint, preserveRef bool) (*Secret, error) {
 	}
 
 	key := os.Getenv(midsommarSecret)
-	settings.Value = decrypt(key, settings.Value)
+	decrypted, err := decrypt(key, settings.Value)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt secret %d: %w", settings.ID, err)
+	}
+	settings.Value = decrypted
 	return &settings, nil
 }
 
@@ -165,7 +179,11 @@ func GetSecretByVarName(db *gorm.DB, name string, preserveRef bool) (*Secret, er
 	}
 
 	key := os.Getenv(midsommarSecret)
-	settings.Value = decrypt(key, settings.Value)
+	decrypted, err := decrypt(key, settings.Value)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt secret %q: %w", settings.VarName, err)
+	}
+	settings.Value = decrypted
 	return &settings, nil
 }
 
