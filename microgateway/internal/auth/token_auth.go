@@ -48,6 +48,16 @@ func (p *TokenAuthProvider) ValidateToken(token string) (*AuthResult, error) {
 		return nil, fmt.Errorf("token validation failed: %w", err)
 	}
 
+	// Constant-time re-verification of the DB match. Defends against timing
+	// side channels and lax database collations (e.g. case-insensitive
+	// comparisons) accepting a near-miss token.
+	if !SecureTokenEquals(apiToken.Token, token) {
+		return &AuthResult{
+			Valid: false,
+			Error: "Invalid token",
+		}, nil
+	}
+
 	// Check expiration
 	if apiToken.ExpiresAt != nil && apiToken.ExpiresAt.Before(time.Now()) {
 		return &AuthResult{

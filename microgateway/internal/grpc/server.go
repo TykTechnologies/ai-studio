@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	internalauth "github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -217,13 +218,13 @@ func (s *ControlServer) authenticate(ctx context.Context) error {
 
 	token := tokens[0]
 
-	// Check current token
-	if s.config.HubSpoke.AuthToken != "" && token == "Bearer "+s.config.HubSpoke.AuthToken {
+	// Check current token (constant-time comparison to avoid timing side channels)
+	if s.config.HubSpoke.AuthToken != "" && internalauth.SecureTokenEquals(token, "Bearer "+s.config.HubSpoke.AuthToken) {
 		return nil
 	}
 
 	// Check next token (for rotation)
-	if s.config.HubSpoke.NextAuthToken != "" && token == "Bearer "+s.config.HubSpoke.NextAuthToken {
+	if s.config.HubSpoke.NextAuthToken != "" && internalauth.SecureTokenEquals(token, "Bearer "+s.config.HubSpoke.NextAuthToken) {
 		log.Debug().Msg("Edge authenticated with next token (rotation in progress)")
 		return nil
 	}

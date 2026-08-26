@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	internalauth "github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
@@ -203,6 +204,12 @@ func (s *DatabaseGatewayService) ValidateAPIToken(token string) (*TokenValidatio
 			return nil, fmt.Errorf("invalid or expired token")
 		}
 		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
+
+	// Constant-time re-verification of the DB match. Defends against timing
+	// side channels and lax database collations accepting a near-miss token.
+	if !internalauth.SecureTokenEquals(apiToken.Token, token) {
+		return nil, fmt.Errorf("invalid or expired token")
 	}
 
 	// Check expiration
