@@ -13,13 +13,68 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/scrypt"
 	"gorm.io/gorm"
 )
 
-// deriveKey takes any string and returns a 32-byte key suitable for AES-256
+const (
+	// encVersionPrefix marks values encrypted with the current scheme
+	// (scrypt KDF + AES-GCM). Values without it are legacy AES-CFB with a
+	// bare-SHA256-derived key. The ':' character cannot appear in legacy
+	// base64url output, so the prefix is an unambiguous discriminator.
+	encVersionPrefix = "v2:"
+
+	// saltLength is the per-value random scrypt salt size in bytes.
+	saltLength = 16
+
+	// scrypt parameters (interactive-grade, per the x/crypto/scrypt docs)
+	scryptN = 32768
+	scryptR = 8
+	scryptP = 1
+)
+
+// deriveKey takes any string and returns a 32-byte key suitable for AES-256.
+// Retained solely to decrypt legacy AES-CFB values; new values use
+// deriveKeyScrypt.
 func deriveKey(input string) []byte {
 	hash := sha256.Sum256([]byte(input))
 	return hash[:]
+}
+
+// derivedKeyCache memoizes scrypt outputs per (secret, salt) pair — scrypt is
+// deliberately expensive, and decryption of the same stored value is frequent.
+var (
+	derivedKeyCacheMu sync.Mutex
+	derivedKeyCache   = map[string][]byte{}
+)
+
+const derivedKeyCacheMax = 4096
+
+// deriveKeyScrypt derives a 32-byte AES-256 key from the configured secret
+// and a per-value salt using scrypt.
+func deriveKeyScrypt(input string, salt []byte) ([]byte, error) {
+	cacheKey := input + "\x00" + string(salt)
+
+	derivedKeyCacheMu.Lock()
+	if k, ok := derivedKeyCache[cacheKey]; ok {
+		derivedKeyCacheMu.Unlock()
+		return k, nil
+	}
+	derivedKeyCacheMu.Unlock()
+
+	key, err := scrypt.Key([]byte(input), salt, scryptN, scryptR, scryptP, 32)
+	if err != nil {
+		return nil, fmt.Errorf("scrypt key derivation failed: %w", err)
+	}
+
+	derivedKeyCacheMu.Lock()
+	if len(derivedKeyCache) >= derivedKeyCacheMax {
+		derivedKeyCache = map[string][]byte{}
+	}
+	derivedKeyCache[cacheKey] = key
+	derivedKeyCacheMu.Unlock()
+
+	return key, nil
 }
 
 type Secret struct {
@@ -47,40 +102,103 @@ func (s *Secret) GetValue() string {
 
 var midsommarSecret = "TYK_AI_SECRET_KEY"
 
+// encrypt encrypts a value with the current scheme: a 32-byte key derived
+// from the configured secret via scrypt with a random per-value salt, then
+// AES-256-GCM (authenticated encryption). Output layout:
+//
+//	"v2:" + base64url(salt[16] || nonce[12] || gcmCiphertext)
 func encrypt(keyString string, stringToEncrypt string) (encryptedString string, err error) {
-	// Derive a proper 32-byte key from the input string
-	log.Printf("[DEBUG] Deriving key from input of length: %d", len(keyString))
-	key := deriveKey(keyString)
-	log.Printf("[DEBUG] Successfully derived key, length: %d", len(key))
+	salt := make([]byte, saltLength)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return "", fmt.Errorf("failed to generate salt: %w", err)
+	}
 
-	plaintext := []byte(stringToEncrypt)
+	key, err := deriveKeyScrypt(keyString, salt)
+	if err != nil {
+		return "", err
+	}
 
-	// Create a new Cipher Block from the derived key
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		log.Errorf("[DEBUG] Failed to create cipher block: %v", err)
-		return "", err
+		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
 
-	// The IV needs to be unique, but not secure. Therefore it's common to
-	// include it at the beginning of the ciphertext.
-	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
-	iv := ciphertext[:aes.BlockSize]
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		return "", err
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 
-	stream := cipher.NewCFBEncrypter(block, iv)
-	stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", fmt.Errorf("failed to generate nonce: %w", err)
+	}
 
-	// convert to base64
-	return base64.URLEncoding.EncodeToString(ciphertext), nil
+	sealed := gcm.Seal(nil, nonce, []byte(stringToEncrypt), nil)
+
+	payload := make([]byte, 0, len(salt)+len(nonce)+len(sealed))
+	payload = append(payload, salt...)
+	payload = append(payload, nonce...)
+	payload = append(payload, sealed...)
+
+	return encVersionPrefix + base64.URLEncoding.EncodeToString(payload), nil
 }
 
-// decrypt from base64 to decrypted string. Malformed input (bad base64,
-// truncated ciphertext) is reported as an error rather than a panic, since
-// stored values can be tampered with or truncated outside our control.
+// decrypt decrypts a stored value. Values with the "v2:" prefix use
+// scrypt+AES-GCM; anything else is treated as a legacy AES-CFB value.
+// Malformed input is reported as an error rather than a panic, since stored
+// values can be tampered with or truncated outside our control.
 func decrypt(keyString string, stringToDecrypt string) (string, error) {
+	if strings.HasPrefix(stringToDecrypt, encVersionPrefix) {
+		return decryptGCM(keyString, strings.TrimPrefix(stringToDecrypt, encVersionPrefix))
+	}
+	return decryptCFBLegacy(keyString, stringToDecrypt)
+}
+
+// decryptGCM decrypts a value produced by encrypt (current scheme).
+func decryptGCM(keyString string, encoded string) (string, error) {
+	payload, err := base64.URLEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", fmt.Errorf("failed to base64-decode ciphertext: %w", err)
+	}
+
+	if len(payload) < saltLength {
+		return "", fmt.Errorf("ciphertext too short: %d bytes", len(payload))
+	}
+	salt := payload[:saltLength]
+
+	key, err := deriveKeyScrypt(keyString, salt)
+	if err != nil {
+		return "", err
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	rest := payload[saltLength:]
+	if len(rest) < gcm.NonceSize() {
+		return "", fmt.Errorf("ciphertext too short: %d bytes", len(payload))
+	}
+	nonce := rest[:gcm.NonceSize()]
+	sealed := rest[gcm.NonceSize():]
+
+	plaintext, err := gcm.Open(nil, nonce, sealed, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt value (wrong key or tampered ciphertext): %w", err)
+	}
+
+	return string(plaintext), nil
+}
+
+// decryptCFBLegacy decrypts values written before the GCM scheme
+// (SHA256-derived key + AES-CFB). Retained for migration of stored values.
+func decryptCFBLegacy(keyString string, stringToDecrypt string) (string, error) {
 	key := deriveKey(keyString)
 	ciphertext, err := base64.URLEncoding.DecodeString(stringToDecrypt)
 	if err != nil {
@@ -100,12 +218,58 @@ func decrypt(keyString string, stringToDecrypt string) (string, error) {
 	iv := ciphertext[:aes.BlockSize]
 	ciphertext = ciphertext[aes.BlockSize:]
 
-	stream := cipher.NewCFBDecrypter(block, iv)
+	stream := cipher.NewCFBDecrypter(block, iv) //nolint:staticcheck // legacy format support only; new values use AES-GCM
 
 	// XORKeyStream can work in-place if the two arguments are the same.
 	stream.XORKeyStream(ciphertext, ciphertext)
 
 	return string(ciphertext), nil
+}
+
+// ReencryptLegacySecrets rewrites stored Secret rows that still use the
+// legacy AES-CFB format to the current scrypt+AES-GCM scheme. Rows that are
+// empty, already migrated, or fail to decrypt (e.g. written under a
+// different key) are left untouched. Returns the number of migrated rows.
+func ReencryptLegacySecrets(db *gorm.DB) (int, error) {
+	key := os.Getenv(midsommarSecret)
+	if key == "" {
+		return 0, nil // nothing to do without a key
+	}
+
+	var all []Secret
+	if err := db.Find(&all).Error; err != nil {
+		return 0, fmt.Errorf("failed to list secrets for migration: %w", err)
+	}
+
+	migrated := 0
+	for i := range all {
+		s := &all[i]
+		if s.Value == "" || strings.HasPrefix(s.Value, encVersionPrefix) {
+			continue
+		}
+
+		plaintext, err := decryptCFBLegacy(key, s.Value)
+		if err != nil {
+			log.Warnf("skipping secret %q during re-encryption: %v", s.VarName, err)
+			continue
+		}
+
+		reencrypted, err := encrypt(key, plaintext)
+		if err != nil {
+			log.Warnf("failed to re-encrypt secret %q: %v", s.VarName, err)
+			continue
+		}
+
+		if err := db.Model(&Secret{}).Where("id = ?", s.ID).Update("value", reencrypted).Error; err != nil {
+			return migrated, fmt.Errorf("failed to save re-encrypted secret %q: %w", s.VarName, err)
+		}
+		migrated++
+	}
+
+	if migrated > 0 {
+		log.Infof("re-encrypted %d legacy secret(s) to authenticated encryption format", migrated)
+	}
+	return migrated, nil
 }
 
 // plaintextFallbackWarnOnce ensures the loud missing-key warning is emitted
