@@ -42,38 +42,26 @@ func deriveKey(input string) []byte {
 }
 
 // derivedKeyCache memoizes scrypt outputs per (secret, salt) pair — scrypt is
-// deliberately expensive, and decryption of the same stored value is frequent.
-var (
-	derivedKeyCacheMu sync.Mutex
-	derivedKeyCache   = map[string][]byte{}
-)
-
-const derivedKeyCacheMax = 4096
+// deliberately expensive, and decryption of the same stored value is
+// frequent. LRU eviction keeps performance stable when the working set
+// exceeds the capacity.
+var derivedKeyCache = newKeyCache(4096)
 
 // deriveKeyScrypt derives a 32-byte AES-256 key from the configured secret
 // and a per-value salt using scrypt.
 func deriveKeyScrypt(input string, salt []byte) ([]byte, error) {
 	cacheKey := input + "\x00" + string(salt)
 
-	derivedKeyCacheMu.Lock()
-	if k, ok := derivedKeyCache[cacheKey]; ok {
-		derivedKeyCacheMu.Unlock()
+	if k, ok := derivedKeyCache.get(cacheKey); ok {
 		return k, nil
 	}
-	derivedKeyCacheMu.Unlock()
 
 	key, err := scrypt.Key([]byte(input), salt, scryptN, scryptR, scryptP, 32)
 	if err != nil {
 		return nil, fmt.Errorf("scrypt key derivation failed: %w", err)
 	}
 
-	derivedKeyCacheMu.Lock()
-	if len(derivedKeyCache) >= derivedKeyCacheMax {
-		derivedKeyCache = map[string][]byte{}
-	}
-	derivedKeyCache[cacheKey] = key
-	derivedKeyCacheMu.Unlock()
-
+	derivedKeyCache.put(cacheKey, key)
 	return key, nil
 }
 
