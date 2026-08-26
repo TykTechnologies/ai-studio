@@ -254,12 +254,23 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	return api
 }
 
+// newHTTPServer builds the API http.Server with hardening timeouts.
+// ReadHeaderTimeout bounds slow-header (Slowloris) attacks and IdleTimeout
+// reaps idle keep-alive connections. ReadTimeout/WriteTimeout are left unset
+// deliberately: the API serves long-lived streaming responses (chat/SSE)
+// that a global write deadline would sever.
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+}
+
 func (a *API) Run(addr string, certFile string, keyFile string) error {
 	// Create http.Server for graceful shutdown support
-	a.server = &http.Server{
-		Addr:    addr,
-		Handler: a.router,
-	}
+	a.server = newHTTPServer(addr, a.router)
 
 	if certFile != "" && keyFile != "" {
 		return a.server.ListenAndServeTLS(certFile, keyFile)
