@@ -1,7 +1,7 @@
 # Dockerfile
 
 # Build stage
-FROM golang:1.25-alpine@sha256:8e02eb337d9e0ea459e041f1ee5eece41cbb61f1d83e7d883a3e2fb4862063fa AS builder
+FROM golang:1.26-alpine@sha256:28d89ee9cc0ff9fec75c82ca201e6bf7fdf9a679d4b7b24dfa04f2bb766bb468 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make ca-certificates tzdata gcc musl-dev sqlite-dev npm nodejs
