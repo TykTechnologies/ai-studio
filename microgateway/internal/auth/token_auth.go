@@ -51,6 +51,13 @@ func (p *TokenAuthProvider) ValidateToken(token string) (*AuthResult, error) {
 	// Constant-time re-verification of the DB match. Defends against timing
 	// side channels and lax database collations (e.g. case-insensitive
 	// comparisons) accepting a near-miss token.
+	//
+	// NOTE: this provider queries the api_tokens table directly (see p.db
+	// above) — it does NOT route through providers.DatabaseProvider, so this
+	// is the only verification on this path, not a repeat of one performed
+	// elsewhere. Each of the three independent DB-lookup paths
+	// (TokenAuthProvider, DatabaseGatewayService, DatabaseProvider) verifies
+	// exactly once per request.
 	if !SecureTokenEquals(apiToken.Token, token) {
 		return &AuthResult{
 			Valid: false,

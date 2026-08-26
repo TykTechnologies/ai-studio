@@ -208,6 +208,11 @@ func (s *DatabaseGatewayService) ValidateAPIToken(token string) (*TokenValidatio
 
 	// Constant-time re-verification of the DB match. Defends against timing
 	// side channels and lax database collations accepting a near-miss token.
+	//
+	// NOTE: this service queries the api_tokens table directly (see s.db
+	// above) — it is an alternative implementation of
+	// GatewayServiceInterface, not a layer over providers.DatabaseProvider.
+	// A request served by this path is verified exactly once, here.
 	if !internalauth.SecureTokenEquals(apiToken.Token, token) {
 		return nil, fmt.Errorf("invalid or expired token")
 	}
