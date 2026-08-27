@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,9 +54,9 @@ func TestParseUnifiedModel(t *testing.T) {
 	}
 }
 
-// newUnifiedTestHandler builds a UnifiedRouterHandler whose route table contains
-// the given slugs and whose downstream records the request it receives.
-func newUnifiedTestHandler(routes ...string) (http.Handler, *unifiedRecordedRequest) {
+// newUnifiedTestHandler builds a UnifiedRouterHandler whose downstream records
+// the request it receives.
+func newUnifiedTestHandler() (http.Handler, *unifiedRecordedRequest) {
 	rec := &unifiedRecordedRequest{}
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec.called = true
@@ -69,11 +70,7 @@ func newUnifiedTestHandler(routes ...string) (http.Handler, *unifiedRecordedRequ
 		rec.contentLength = r.ContentLength
 		w.WriteHeader(http.StatusOK)
 	})
-	routeSet := make(map[string]bool, len(routes))
-	for _, s := range routes {
-		routeSet[s] = true
-	}
-	h := NewUnifiedRouterHandler(func(slug string) bool { return routeSet[slug] }, next)
+	h := NewUnifiedRouterHandler(next)
 	return h, rec
 }
 
@@ -104,7 +101,7 @@ func oaiErrorMessage(t *testing.T, body []byte) string {
 }
 
 func TestUnifiedRouterHandler_RewritesChatCompletions(t *testing.T) {
-	h, rec := newUnifiedTestHandler("openai")
+	h, rec := newUnifiedTestHandler()
 
 	w := postJSON(t, h, "/v1/chat/completions",
 		`{"model":"openai/gpt-4o","messages":[{"role":"user","content":"hi"}]}`)
@@ -121,7 +118,7 @@ func TestUnifiedRouterHandler_RewritesChatCompletions(t *testing.T) {
 }
 
 func TestUnifiedRouterHandler_RewritesCompletions(t *testing.T) {
-	h, rec := newUnifiedTestHandler("my-llm")
+	h, rec := newUnifiedTestHandler()
 
 	w := postJSON(t, h, "/v1/completions", `{"model":"my-llm/gpt-3.5-turbo-instruct","prompt":"hi"}`)
 
@@ -130,7 +127,7 @@ func TestUnifiedRouterHandler_RewritesCompletions(t *testing.T) {
 }
 
 func TestUnifiedRouterHandler_PreservesUnrelatedFieldsVerbatim(t *testing.T) {
-	h, rec := newUnifiedTestHandler("openai")
+	h, rec := newUnifiedTestHandler()
 
 	// Values chosen so any lossy decode/re-encode (float64 round-trip) would corrupt them.
 	body := `{"model":"openai/gpt-4o","messages":[],"temperature":0.30000000000000004,"seed":9007199254740993,"stream":true}`
@@ -145,7 +142,7 @@ func TestUnifiedRouterHandler_PreservesUnrelatedFieldsVerbatim(t *testing.T) {
 }
 
 func TestUnifiedRouterHandler_ModelWithoutVendorPrefix(t *testing.T) {
-	h, rec := newUnifiedTestHandler("openai")
+	h, rec := newUnifiedTestHandler()
 
 	w := postJSON(t, h, "/v1/chat/completions", `{"model":"gpt-4o","messages":[]}`)
 
@@ -158,7 +155,7 @@ func TestUnifiedRouterHandler_ModelWithoutVendorPrefix(t *testing.T) {
 }
 
 func TestUnifiedRouterHandler_EmptyVendorOrModelPart(t *testing.T) {
-	h, _ := newUnifiedTestHandler("openai")
+	h, _ := newUnifiedTestHandler()
 
 	for _, model := range []string{"/gpt-4o", "openai/", "/", ""} {
 		t.Run("model="+model, func(t *testing.T) {
@@ -170,7 +167,7 @@ func TestUnifiedRouterHandler_EmptyVendorOrModelPart(t *testing.T) {
 }
 
 func TestUnifiedRouterHandler_MissingModelField(t *testing.T) {
-	h, rec := newUnifiedTestHandler("openai")
+	h, rec := newUnifiedTestHandler()
 
 	w := postJSON(t, h, "/v1/chat/completions", `{"messages":[]}`)
 
@@ -180,7 +177,7 @@ func TestUnifiedRouterHandler_MissingModelField(t *testing.T) {
 }
 
 func TestUnifiedRouterHandler_ModelNotAString(t *testing.T) {
-	h, _ := newUnifiedTestHandler("openai")
+	h, _ := newUnifiedTestHandler()
 
 	w := postJSON(t, h, "/v1/chat/completions", `{"model":42,"messages":[]}`)
 
@@ -188,7 +185,7 @@ func TestUnifiedRouterHandler_ModelNotAString(t *testing.T) {
 }
 
 func TestUnifiedRouterHandler_InvalidJSON(t *testing.T) {
-	h, rec := newUnifiedTestHandler("openai")
+	h, rec := newUnifiedTestHandler()
 
 	w := postJSON(t, h, "/v1/chat/completions", `{not json`)
 
@@ -196,22 +193,83 @@ func TestUnifiedRouterHandler_InvalidJSON(t *testing.T) {
 	assert.False(t, rec.called)
 }
 
-func TestUnifiedRouterHandler_UnknownVendor(t *testing.T) {
-	h, rec := newUnifiedTestHandler("openai")
+func TestUnifiedRouterHandler_UnknownVendorForwardsToAuthChain(t *testing.T) {
+	// The handler does NOT resolve the vendor itself: every well-formed request
+	// is forwarded so authentication runs first (an unauthenticated caller must
+	// not be able to enumerate route slugs from 404-vs-401 responses). The /ai/
+	// shim produces the vendor-not-found 404 after auth.
+	h, rec := newUnifiedTestHandler()
 
 	w := postJSON(t, h, "/v1/chat/completions", `{"model":"anthropic/claude-sonnet-5","messages":[]}`)
 
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.True(t, rec.called)
+	assert.Equal(t, "/ai/anthropic/v1/chat/completions", rec.path)
+}
+
+func TestUnifiedRouterHandler_RejectsUnsafeRouteSlugs(t *testing.T) {
+	// Defense-in-depth: the route prefix becomes a path segment, so it must
+	// never contain traversal sequences or other unsafe characters.
+	h, rec := newUnifiedTestHandler()
+
+	for _, model := range []string{"../etc/passwd", "..%2F/x", "a b/model", "route?/model", "ro#ute/model"} {
+		t.Run("model="+model, func(t *testing.T) {
+			rec.called = false
+			body, err := json.Marshal(map[string]any{"model": model, "messages": []any{}})
+			require.NoError(t, err)
+			w := postJSON(t, h, "/v1/chat/completions", string(body))
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.False(t, rec.called, "unsafe route slug must never be forwarded")
+			assert.Contains(t, oaiErrorMessage(t, w.Body.Bytes()), "<vendor>/<model>")
+		})
+	}
+}
+
+func TestUnifiedRouterHandler_OversizedBodyRejected(t *testing.T) {
+	h, rec := newUnifiedTestHandler()
+
+	// Just over the cap; the padding field keeps it valid JSON in shape.
+	padding := strings.Repeat("x", maxUnifiedRouterBodyBytes+1)
+	body := `{"model":"openai/gpt-4o","padding":"` + padding + `"}`
+	w := postJSON(t, h, "/v1/chat/completions", body)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
 	assert.False(t, rec.called)
-	msg := oaiErrorMessage(t, w.Body.Bytes())
-	assert.Contains(t, msg, "anthropic")
-	assert.Contains(t, msg, "not found or not supported by your access rights")
+}
+
+func TestShimHandlers_UnknownRouteMessage(t *testing.T) {
+	// After auth, the /ai/ shims produce the unified router's vendor-not-found
+	// error; the wording must not reveal whether the route exists for others.
+	p := &Proxy{llms: map[string]*models.LLM{}}
+
+	t.Run("chat completions", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/ai/nope/v1/chat/completions", strings.NewReader(`{}`))
+		req = mux.SetURLVars(req, map[string]string{"routeId": "nope"})
+		w := httptest.NewRecorder()
+		p.CreateChatCompletionHandler(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		msg := oaiErrorMessage(t, w.Body.Bytes())
+		assert.Contains(t, msg, "nope")
+		assert.Contains(t, msg, "not found or not supported by your access rights")
+	})
+
+	t.Run("completions", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/ai/nope/v1/completions", strings.NewReader(`{}`))
+		req = mux.SetURLVars(req, map[string]string{"routeId": "nope"})
+		w := httptest.NewRecorder()
+		p.CreateCompletionHandler(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Contains(t, oaiErrorMessage(t, w.Body.Bytes()), "not found or not supported by your access rights")
+	})
 }
 
 func TestUnifiedRouterHandler_NonPOSTPassesThrough(t *testing.T) {
 	// Non-completion requests (e.g. GET /v1/models) are not model-routed; they
 	// pass through untouched so the authenticated chain can serve them.
-	h, rec := newUnifiedTestHandler("openai")
+	h, rec := newUnifiedTestHandler()
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	w := httptest.NewRecorder()
@@ -224,7 +282,7 @@ func TestUnifiedRouterHandler_NonPOSTPassesThrough(t *testing.T) {
 }
 
 func TestUnifiedRouterHandler_POSTNonCompletionPathPassesThrough(t *testing.T) {
-	h, rec := newUnifiedTestHandler("openai")
+	h, rec := newUnifiedTestHandler()
 
 	w := postJSON(t, h, "/v1/embeddings", `{"model":"openai/text-embedding-3-small","input":"x"}`)
 
@@ -319,9 +377,11 @@ func TestUnifiedRouter_ProxyWiring(t *testing.T) {
 	require.NoError(t, p.Reload())
 	handler := p.Handler()
 
-	t.Run("unknown vendor 404s before auth", func(t *testing.T) {
+	t.Run("unknown vendor without credentials gets 401, not 404", func(t *testing.T) {
+		// Auth runs before route resolution: an anonymous caller must not be able
+		// to distinguish existing route slugs from unknown ones.
 		w := postJSON(t, handler, "/v1/chat/completions", `{"model":"nope/gpt-4o","messages":[]}`)
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
 	t.Run("prefixless model 400s with format guidance", func(t *testing.T) {

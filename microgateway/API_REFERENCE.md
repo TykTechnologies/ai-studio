@@ -571,9 +571,13 @@ direct per-route call. This lets clients hot-swap vendor and model per request
 with one base URL (`https://<gateway>/v1`) and one credential, OpenRouter-style.
 
 **Errors:**
-- `400` — `model` has no route prefix (message explains the `<vendor>/<model>` format)
-- `404` — route prefix does not match a configured LLM route
+- `401` — missing/invalid credentials (checked before route resolution, so
+  unauthenticated callers cannot enumerate route slugs)
+- `400` — `model` has no route prefix or an unsafe one (message explains the
+  `<vendor>/<model>` format)
+- `404` — authenticated, but the route prefix does not match a configured LLM route
 - `403` — model not in the route's `allowed_models` (returned by the downstream shim)
+- `413` — request body exceeds the 10 MB routing limit
 
 **Example:**
 ```bash

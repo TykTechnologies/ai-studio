@@ -400,10 +400,11 @@ func (p *Proxy) createHandler() http.Handler {
 	anthropicRouter.HandleFunc("/anthropic/{routeId}/v1/messages", p.handleAnthropicMessagesEntry).Methods("POST")
 	authenticatedAnthropicHandler := p.credValidator.Middleware(anthropicRouter)
 
-	// Unified router: fixed OpenRouter-style ingress (/v1/...) that resolves a
-	// "vendor/model" model string to an LLM route slug and rewrites the request to
-	// /ai/{slug}/v1/... BEFORE auth, so the existing /ai/ chain runs unchanged.
-	unifiedRouterHandler := NewUnifiedRouterHandler(p.hasLLMRoute, authenticatedAIHandler)
+	// Unified router: fixed OpenRouter-style ingress (/v1/...) that rewrites a
+	// "vendor/model" model string to /ai/{slug}/v1/... BEFORE auth, so the
+	// existing /ai/ chain runs unchanged. Route resolution happens downstream,
+	// after authentication (see NewUnifiedRouterHandler).
+	unifiedRouterHandler := NewUnifiedRouterHandler(authenticatedAIHandler)
 
 	// Combine routers: all go through auth, but /ai/ and /anthropic/ routes are separated for routing
 	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -1451,13 +1452,6 @@ func (p *Proxy) GetLLM(name string) (*models.LLM, bool) {
 	defer p.mu.RUnlock()
 	llm, ok := p.llms[name]
 	return llm, ok
-}
-
-// hasLLMRoute reports whether an LLM route with the given slug is loaded; used by
-// the unified router to resolve "vendor/model" prefixes.
-func (p *Proxy) hasLLMRoute(slug string) bool {
-	_, ok := p.GetLLM(slug)
-	return ok
 }
 func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
 	bodyBytes, err := helpers.CopyRequestBody(r)
