@@ -23,12 +23,31 @@ func NewSignatureVerifier(config *OCIConfig) (*SignatureVerifier, error) {
 	}, nil
 }
 
+// validateCosignArg rejects values that would be interpreted by the cosign
+// subprocess as flags rather than positional arguments (argument injection).
+func validateCosignArg(name, value string) error {
+	if value == "" {
+		return fmt.Errorf("cosign argument %s is empty", name)
+	}
+	if strings.HasPrefix(value, "-") {
+		return fmt.Errorf("invalid cosign argument %s: %q must not start with '-'", name, value)
+	}
+	return nil
+}
+
 // Verify checks the cosign signature of an OCI artifact using cosign CLI
 func (v *SignatureVerifier) Verify(ctx context.Context, ref *OCIReference, pubKeyID string) error {
 	// Get public key path for verification
 	pubKeyPath, err := v.getPublicKeyPath(pubKeyID)
 	if err != nil {
 		return fmt.Errorf("failed to get public key path: %w", err)
+	}
+
+	if err := validateCosignArg("public key path", pubKeyPath); err != nil {
+		return err
+	}
+	if err := validateCosignArg("reference", ref.FullReference()); err != nil {
+		return err
 	}
 
 	// Build cosign verify command
@@ -183,6 +202,10 @@ func isAlphaNumeric(s string) bool {
 
 // VerifyBundle verifies a signature bundle for keyless signing
 func (v *SignatureVerifier) VerifyBundle(ctx context.Context, ref *OCIReference, issuer, subject string) error {
+	if err := validateCosignArg("reference", ref.FullReference()); err != nil {
+		return err
+	}
+
 	// Build cosign verify command for keyless verification
 	// cosign verify --certificate-identity=<subject> --certificate-oidc-issuer=<issuer> <ref>
 	args := []string{
@@ -208,6 +231,13 @@ func (v *SignatureVerifier) VerifyBundle(ctx context.Context, ref *OCIReference,
 
 // VerifyWithPolicy verifies a signature using a policy file
 func (v *SignatureVerifier) VerifyWithPolicy(ctx context.Context, ref *OCIReference, policyPath string) error {
+	if err := validateCosignArg("policy path", policyPath); err != nil {
+		return err
+	}
+	if err := validateCosignArg("reference", ref.FullReference()); err != nil {
+		return err
+	}
+
 	// Build cosign verify command with policy
 	// cosign verify --policy=<policy> <ref>
 	cmd := exec.CommandContext(ctx, "cosign", "verify", "--policy", policyPath, ref.FullReference())
