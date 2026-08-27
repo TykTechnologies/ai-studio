@@ -50,7 +50,9 @@ func TestCreatePluginClient_RejectsDangerousCommands(t *testing.T) {
 func TestCreatePluginClient_AllowsSafeLocalCommand(t *testing.T) {
 	m := NewAIStudioPluginManager(nil, nil)
 
-	exe := filepath.Join(t.TempDir(), "test-plugin")
+	dir := t.TempDir()
+	t.Setenv(pluginAllowedDirsEnv, dir) // temp dir is outside the built-in safe dirs
+	exe := filepath.Join(dir, "test-plugin")
 	if err := os.WriteFile(exe, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +89,9 @@ func TestCreateConfigOnlyPluginClient_RejectsDangerousCommands(t *testing.T) {
 func TestValidateCommandForLoad_NoDataRace(t *testing.T) {
 	m := NewAIStudioPluginManager(nil, nil)
 
-	exe := filepath.Join(t.TempDir(), "race-plugin")
+	dir := t.TempDir()
+	t.Setenv(pluginAllowedDirsEnv, dir)
+	exe := filepath.Join(dir, "race-plugin")
 	if err := os.WriteFile(exe, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}

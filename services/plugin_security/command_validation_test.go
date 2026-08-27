@@ -53,6 +53,12 @@ func TestValidateCommand_RejectsDangerousCommands(t *testing.T) {
 		{"file outside safe dirs", "file:///etc/passwd"},
 		{"file relative outside plugins", "file://secret/binary"},
 		{"disallowed scheme", "ftp://example.com/plugin"},
+		// Plain paths must obey the same safe-directory policy as file://
+		// URIs — the plugin manager executes both forms identically.
+		{"plain path outside safe dirs", "/tmp/evil-plugin"},
+		{"plain path in home", "/home/attacker/payload"},
+		{"plain relative path outside plugins", "secret/binary"},
+		{"bare command name", "evil-binary"},
 	}
 
 	for _, tc := range cases {
@@ -73,6 +79,8 @@ func TestValidateCommand_AllowsSafeCommands(t *testing.T) {
 	}{
 		{"relative plugins path", "./plugins/my-plugin"},
 		{"plugins path no dot", "plugins/my-plugin"},
+		{"plain path in opt plugins", "/opt/plugins/my-plugin"},
+		{"plain path in usr bin", "/usr/bin/my-plugin"},
 		{"file in opt plugins", "file:///opt/plugins/my-plugin"},
 		{"file in usr local bin", "file:///usr/local/bin/my-plugin"},
 		{"oci reference", "oci://registry.example.com/plugins/my-plugin:1.0.0"},
@@ -85,6 +93,37 @@ func TestValidateCommand_AllowsSafeCommands(t *testing.T) {
 				t.Errorf("expected %q to be allowed, got error: %v", tc.command, err)
 			}
 		})
+	}
+}
+
+// TestValidateCommand_AllowedDirsEnvExtendsSafeDirs verifies that operators
+// can extend the safe-directory allowlist via AI_STUDIO_PLUGIN_ALLOWED_DIRS
+// (the same variable the plugin manager uses for executable scoping), for
+// both plain paths and file:// URIs.
+func TestValidateCommand_AllowedDirsEnvExtendsSafeDirs(t *testing.T) {
+	svc := &allowingService{}
+
+	// Without the env, a custom location is rejected in both forms
+	t.Setenv(allowedDirsEnv, "")
+	if err := ValidateCommand("/custom/plugin-dir/my-plugin", svc); err == nil {
+		t.Error("expected custom-dir plain path to be rejected without the allowlist env")
+	}
+	if err := ValidateCommand("file:///custom/plugin-dir/my-plugin", svc); err == nil {
+		t.Error("expected custom-dir file:// path to be rejected without the allowlist env")
+	}
+
+	// With the env, both forms are allowed
+	t.Setenv(allowedDirsEnv, "/custom/plugin-dir")
+	if err := ValidateCommand("/custom/plugin-dir/my-plugin", svc); err != nil {
+		t.Errorf("expected allowlisted plain path to be accepted, got: %v", err)
+	}
+	if err := ValidateCommand("file:///custom/plugin-dir/my-plugin", svc); err != nil {
+		t.Errorf("expected allowlisted file:// path to be accepted, got: %v", err)
+	}
+
+	// The allowlist must match on a directory boundary
+	if err := ValidateCommand("/custom/plugin-dir-evil/payload", svc); err == nil {
+		t.Error("expected sibling-prefix directory to be rejected")
 	}
 }
 

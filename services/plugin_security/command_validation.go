@@ -3,6 +3,7 @@ package plugin_security
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -43,47 +44,17 @@ func ValidateCommand(command string, securityService Service) error {
 		}
 	}
 
-	// Validate file:// schemes for proper path format
+	// Apply the safe-directory policy to executable paths. Both forms reach
+	// exec.Command identically (the plugin manager strips the file:// prefix),
+	// so a plain path must not bypass checks a file:// URI would fail.
 	if strings.HasPrefix(command, "file://") {
-		filePath := strings.TrimPrefix(command, "file://")
-
-		// Check for path traversal in file paths
-		if strings.Contains(filePath, "..") {
-			return fmt.Errorf("🔒 SECURITY: file:// command contains path traversal: %s", sanitizeForLogging(command))
+		if err := validatePathInSafeDirs(strings.TrimPrefix(command, "file://"), command); err != nil {
+			return err
 		}
-
-		// Canonicalize path to check for directory traversal
-		cleanPath := filepath.Clean(filePath)
-		if !strings.HasPrefix(cleanPath, "/") && !strings.Contains(cleanPath, ":") { // Allow Windows drive letters
-			// Relative path that could escape intended directory
-			if strings.Contains(cleanPath, "..") {
-				return fmt.Errorf("🔒 SECURITY: file:// command resolves to unsafe path: %s", sanitizeForLogging(command))
-			}
-		}
-
-		// Restrict to safe directories by default (can be overridden by service layer config)
-		safeDirs := []string{
-			"/usr/bin/", "/bin/", "/usr/local/bin/",
-			"./plugins/", "plugins/", "/opt/plugins/",
-		}
-
-		isSafePath := false
-		absPath := cleanPath
-		if !filepath.IsAbs(cleanPath) {
-			// For relative paths, they should be in allowed directories
-			isSafePath = strings.HasPrefix(cleanPath, "plugins/") || strings.HasPrefix(cleanPath, "./plugins/")
-		} else {
-			// For absolute paths, check against safe directories
-			for _, safeDir := range safeDirs {
-				if strings.HasPrefix(absPath, safeDir) {
-					isSafePath = true
-					break
-				}
-			}
-		}
-
-		if !isSafePath {
-			return fmt.Errorf("🔒 SECURITY: file:// command path not in allowed directories: %s", sanitizeForLogging(command))
+	} else if !strings.Contains(command, "://") {
+		// Plain executable path (no URI scheme)
+		if err := validatePathInSafeDirs(command, command); err != nil {
+			return err
 		}
 	}
 
@@ -124,6 +95,55 @@ func ValidateCommand(command string, securityService Service) error {
 	}
 
 	return nil
+}
+
+// allowedDirsEnv lets operators extend the safe-directory allowlist for
+// plugin executables. Shared with the plugin manager's executable-path
+// scoping so one variable governs both layers.
+const allowedDirsEnv = "AI_STUDIO_PLUGIN_ALLOWED_DIRS"
+
+// validatePathInSafeDirs enforces the safe-directory policy on a plugin
+// executable path. Relative paths must live under plugins/; absolute paths
+// must be inside a built-in safe directory or one listed in
+// AI_STUDIO_PLUGIN_ALLOWED_DIRS. Applied identically to file:// URIs and
+// plain paths.
+func validatePathInSafeDirs(filePath, command string) error {
+	// Check for path traversal in file paths
+	if strings.Contains(filePath, "..") {
+		return fmt.Errorf("🔒 SECURITY: plugin command contains path traversal: %s", sanitizeForLogging(command))
+	}
+
+	cleanPath := filepath.Clean(filePath)
+
+	// Restrict to safe directories by default; operators extend the list via
+	// AI_STUDIO_PLUGIN_ALLOWED_DIRS
+	safeDirs := []string{
+		"/usr/bin/", "/bin/", "/usr/local/bin/", "/opt/plugins/",
+	}
+	for _, dir := range filepath.SplitList(os.Getenv(allowedDirsEnv)) {
+		if dir == "" {
+			continue
+		}
+		if !strings.HasSuffix(dir, string(filepath.Separator)) {
+			dir += string(filepath.Separator)
+		}
+		safeDirs = append(safeDirs, dir)
+	}
+
+	if !filepath.IsAbs(cleanPath) {
+		// Relative paths must live in the plugins directory
+		if strings.HasPrefix(cleanPath, "plugins/") || strings.HasPrefix(cleanPath, "./plugins/") {
+			return nil
+		}
+		return fmt.Errorf("🔒 SECURITY: plugin command path not in allowed directories (set %s to extend): %s", allowedDirsEnv, sanitizeForLogging(command))
+	}
+
+	for _, safeDir := range safeDirs {
+		if strings.HasPrefix(cleanPath, safeDir) {
+			return nil
+		}
+	}
+	return fmt.Errorf("🔒 SECURITY: plugin command path not in allowed directories (set %s to extend): %s", allowedDirsEnv, sanitizeForLogging(command))
 }
 
 // sanitizeForLogging sanitizes strings for safe logging by escaping control
