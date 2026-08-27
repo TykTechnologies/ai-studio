@@ -31,21 +31,46 @@ func (s *communityService) ValidateGRPCHost(host string) error {
 	return nil
 }
 
-// IsInternalIP checks if a hostname/IP is internal/private using CIDR validation
+// lookupIPFunc resolves hostnames to IPs. A variable so tests can stub DNS
+// and stay hermetic.
+var lookupIPFunc = net.LookupIP
+
+// IsInternalIP checks if a hostname/IP is internal/private using CIDR
+// validation. Hostnames are resolved via DNS and classified by their resolved
+// addresses; resolution failures fail closed (treated as internal) so an
+// unresolvable host cannot slip past the block.
 func (s *communityService) IsInternalIP(host string) bool {
-	// Handle localhost variations
+	// Handle localhost variations: the bare name and the reserved
+	// *.localhost domain (RFC 6761), which resolve to loopback.
 	lowerHost := strings.ToLower(host)
-	if lowerHost == "localhost" || lowerHost == "::1" {
+	if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".localhost") || lowerHost == "::1" {
 		return true
 	}
 
-	// Parse the IP address
-	ip := net.ParseIP(host)
-	if ip == nil {
-		// If not an IP, could be a hostname - check for localhost patterns
-		return strings.Contains(lowerHost, "localhost")
+	// IP literal: classify directly
+	if ip := net.ParseIP(host); ip != nil {
+		return ipIsPrivate(ip)
 	}
 
+	// Hostname: resolve and classify every returned address. Any internal
+	// address taints the host, and a resolution failure fails closed —
+	// otherwise a name that resolves to a private IP (or refuses to resolve
+	// for the validator but resolves for the dialer) would bypass the block.
+	ips, err := lookupIPFunc(host)
+	if err != nil {
+		return true
+	}
+	for _, ip := range ips {
+		if ipIsPrivate(ip) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// ipIsPrivate reports whether ip falls in a private or special-use range.
+func ipIsPrivate(ip net.IP) bool {
 	// Private and special-use IP CIDR ranges
 	privateCIDRs := []string{
 		"10.0.0.0/8",     // Private Class A
