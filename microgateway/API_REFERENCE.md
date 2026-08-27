@@ -557,6 +557,43 @@ Authorization: Bearer <app-token>
 
 Proxies streaming requests to the specified LLM provider.
 
+### Unified Router (OpenAI-compatible)
+**POST** `/v1/chat/completions`
+**POST** `/v1/completions`
+
+A single fixed ingress for all configured LLM routes. The request body is OpenAI
+format, and the `model` field selects the route: it must be
+`{llmSlug}/{model}` (e.g. `openai/gpt-4o`, split on the first `/`). The gateway
+strips the slug prefix and dispatches to the matching `/ai/{llmSlug}/v1/...`
+shim in-process, so auth, model allow-lists, and analytics behave exactly like a
+direct per-route call. This lets clients hot-swap vendor and model per request
+with one base URL (`https://<gateway>/v1`) and one credential, OpenRouter-style.
+
+**Errors:**
+- `400` — `model` has no route prefix (message explains the `<vendor>/<model>` format)
+- `404` — route prefix does not match a configured LLM route
+- `403` — model not in the route's `allowed_models` (returned by the downstream shim)
+
+**Example:**
+```bash
+POST /v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer <app-token>
+
+{
+  "model": "openai/gpt-4o",
+  "messages": [
+    {"role": "user", "content": "Hello, world!"}
+  ]
+}
+```
+
+Note: the per-route OpenAI shim (`/ai/{llmSlug}/v1/...`) and SDK-native
+passthrough (`/llm/...`) expect a **bare** model name with no route prefix;
+the `vendor/model` form is only understood by `/v1/...`. This differs from the
+Enterprise Model Router, which registers its own `/router/{routerSlug}/v1/...`
+URLs with pool-based selection.
+
 ### Tool Operations
 **ANY** `/tools/{toolSlug}/*path`
 

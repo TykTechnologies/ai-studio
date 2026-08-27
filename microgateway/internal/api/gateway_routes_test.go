@@ -19,6 +19,7 @@ func mountGatewayRoutes(router *gin.Engine, h http.Handler) {
 	gateway.Any("/datasource/*path", gin.WrapH(h))
 	gateway.Any("/ai/*path", gin.WrapH(h))
 	gateway.Any("/anthropic/*path", gin.WrapH(h))
+	gateway.Any("/v1/*path", gin.WrapH(h))
 }
 
 // TestGatewayRoutes_ForwardAnthropicBridge verifies the microgateway forwards the
@@ -45,6 +46,8 @@ func TestGatewayRoutes_ForwardAnthropicBridge(t *testing.T) {
 		{"anthropic bridge", "/anthropic/aws-bedrock/v1/messages", http.StatusOK, true},
 		{"openai-compatible", "/ai/aws-bedrock/v1/chat/completions", http.StatusOK, true},
 		{"llm passthrough", "/llm/call/aws-bedrock/v1/messages", http.StatusOK, true},
+		{"unified router chat", "/v1/chat/completions", http.StatusOK, true},
+		{"unified router completions", "/v1/completions", http.StatusOK, true},
 		{"unmounted path", "/nope/x", http.StatusNotFound, false},
 	}
 	for _, tc := range cases {

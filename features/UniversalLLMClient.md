@@ -90,6 +90,11 @@ graph LR
     *   `POST /ai/{routeId}/v1/chat/completions`: Handles OpenAI chat completion requests. Mapped to `proxy.CreateChatCompletionHandler`.
     *   `POST /ai/{routeId}/v1/completions`: Handles legacy OpenAI completion requests. Mapped to `proxy.CreateCompletionHandler` (deprecated).
     *   `{routeId}`: A path parameter identifying the specific `llm` configuration in the database to use for this request. This determines the *actual* backend vendor, allowed models, etc.
+*   **Unified Router (fixed endpoint):**
+    *   `POST /v1/chat/completions` and `POST /v1/completions`: A single OpenRouter-style ingress with no route in the path. The route is taken from the request body's `model` field instead, which must be `"{routeId}/{model}"` (e.g. `"openai/gpt-4o"`); the prefix is the LLM route slug, split on the first `/` so model names containing slashes survive.
+    *   Implemented in `proxy/unified_router.go` (`NewUnifiedRouterHandler`, `ParseUnifiedModel`). The handler strips the route prefix from `model` (the per-route shims expect bare model names), rewrites the path to `/ai/{routeId}/v1/...`, and dispatches to the existing `/ai/` chain in-process — auth, app→LLM access, `AllowedModels`, and analytics run exactly as for a direct `/ai/` call. Wired in `proxy.createHandler` *before* the credential middleware; the microgateway forwards the `/v1/` prefix in `microgateway/internal/api/router.go` like `/ai/`.
+    *   Errors: a `model` without a route prefix → 400 explaining the `<vendor>/<model>` format; an unknown prefix → 404 "vendor not found or not supported by your access rights"; model-level access rejections are left to the downstream shim (403).
+    *   Distinct from the Enterprise Model Router, which registers per-router `/router/{routerSlug}/v1/...` URLs and does pool-based selection; the unified router is a fixed path with direct slug matching.
 *   **Authentication:** Expects a Midsommar App credential passed as a Bearer token (`Authorization: Bearer <app_key>`). Validated by `CredentialValidator` against the `apps` table.
 *   **Request Parsing:** Uses structs in `proxy/translator_models.go` (e.g., `ChatCompletionRequest`) that mirror the OpenAI JSON structure.
 *   **Translation to Langchain:**
