@@ -45,9 +45,10 @@ func (p *Proxy) CreateCompletionHandler(w http.ResponseWriter, r *http.Request) 
 	routeID := vars["routeId"]
 
 	// get the route ID from the DB to find out what back-end LLM to use
-	conf, ok := p.llms[routeID]
+	// (GetLLM takes the read lock; Reload writes this map concurrently)
+	conf, ok := p.GetLLM(routeID)
 	if !ok {
-		http.Error(w, "Route not found", http.StatusNotFound)
+		respondWithOAIError(w, http.StatusNotFound, fmt.Sprintf("vendor '%s' not found or not supported by your access rights", routeID), nil, false)
 		return
 	}
 
@@ -106,9 +107,10 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	routeID := vars["routeId"]
 
 	// get the route ID from the DB to find out what back-end LLM to use
-	conf, ok := p.llms[routeID]
+	// (GetLLM takes the read lock; Reload writes this map concurrently)
+	conf, ok := p.GetLLM(routeID)
 	if !ok {
-		respondWithOAIError(w, http.StatusNotFound, "vendor not found", nil, false)
+		respondWithOAIError(w, http.StatusNotFound, fmt.Sprintf("vendor '%s' not found or not supported by your access rights", routeID), nil, false)
 		return
 	}
 

@@ -25,7 +25,8 @@ func (p *Proxy) handleAnthropicMessagesEntry(w http.ResponseWriter, r *http.Requ
 	vars := mux.Vars(r)
 	routeID := vars["routeId"]
 
-	conf, ok := p.llms[routeID]
+	// GetLLM takes the read lock; Reload writes this map concurrently.
+	conf, ok := p.GetLLM(routeID)
 	if !ok {
 		respondWithAnthropicError(w, http.StatusNotFound, "not_found_error", "route not found")
 		return

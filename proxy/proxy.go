@@ -388,6 +388,9 @@ func (p *Proxy) createHandler() http.Handler {
 	aiRouter := mux.NewRouter()
 	aiRouter.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
 	aiRouter.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
+	// Unified router model discovery: behind the same credential middleware, and
+	// scoped to the authenticated app's LLM associations by the handler.
+	aiRouter.HandleFunc("/v1/models", p.handleUnifiedListModels).Methods("GET")
 	authenticatedAIHandler := p.credValidator.Middleware(aiRouter)
 
 	// Anthropic Messages bridge: lets Claude Code (native Anthropic Messages API) drive
@@ -397,11 +400,19 @@ func (p *Proxy) createHandler() http.Handler {
 	anthropicRouter.HandleFunc("/anthropic/{routeId}/v1/messages", p.handleAnthropicMessagesEntry).Methods("POST")
 	authenticatedAnthropicHandler := p.credValidator.Middleware(anthropicRouter)
 
+	// Unified router: fixed OpenRouter-style ingress (/v1/...) that rewrites a
+	// "vendor/model" model string to /ai/{slug}/v1/... BEFORE auth, so the
+	// existing /ai/ chain runs unchanged. Route resolution happens downstream,
+	// after authentication (see NewUnifiedRouterHandler).
+	unifiedRouterHandler := NewUnifiedRouterHandler(authenticatedAIHandler)
+
 	// Combine routers: all go through auth, but /ai/ and /anthropic/ routes are separated for routing
 	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch {
 		case strings.HasPrefix(req.URL.Path, "/ai/"):
 			authenticatedAIHandler.ServeHTTP(w, req)
+		case strings.HasPrefix(req.URL.Path, "/v1/"):
+			unifiedRouterHandler.ServeHTTP(w, req)
 		case strings.HasPrefix(req.URL.Path, "/anthropic/"):
 			authenticatedAnthropicHandler.ServeHTTP(w, req)
 		default:
