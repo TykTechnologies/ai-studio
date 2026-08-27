@@ -5,17 +5,16 @@ import (
 )
 
 // Service defines the interface for plugin security operations
-// CE provides stub implementations that allow all operations
+// CE provides basic internal-network blocking; OCI signature verification is
+// a no-op in CE
 // ENT provides full security enforcement
 type Service interface {
 	// ValidateGRPCHost validates that a GRPC host is not targeting internal networks
-	// CE: Always returns nil (allows all hosts)
-	// ENT: Blocks internal IP addresses unless development override is enabled
+	// CE and ENT: Blocks internal IP addresses unless development override is enabled
 	ValidateGRPCHost(host string) error
 
 	// IsInternalIP checks if a host resolves to an internal/private IP address
-	// CE: Always returns false
-	// ENT: Checks against private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, etc.)
+	// CE and ENT: Checks against private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, etc.)
 	IsInternalIP(host string) bool
 
 	// VerifySignature verifies the signature of an OCI artifact using a public key
