@@ -1,6 +1,8 @@
 package services
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -41,12 +43,18 @@ func TestCreatePluginClient_RejectsDangerousCommands(t *testing.T) {
 }
 
 // TestCreatePluginClient_AllowsSafeLocalCommand verifies that a legitimate
-// local plugin command still produces a client (the binary is not executed
-// until the client connects, so a nonexistent path is fine here).
+// local plugin command still produces a client. The target must be a real
+// executable: since #397/#410 the load path also validates that the binary
+// exists, is a regular file, and is executable before a client is created.
 func TestCreatePluginClient_AllowsSafeLocalCommand(t *testing.T) {
 	m := NewAIStudioPluginManager(nil, nil)
 
-	client, err := m.createPluginClient("./plugins/test-plugin")
+	exe := filepath.Join(t.TempDir(), "test-plugin")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	client, err := m.createPluginClient(exe)
 	if err != nil {
 		t.Fatalf("expected safe command to be accepted, got: %v", err)
 	}

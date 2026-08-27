@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	internalauth "github.com/TykTechnologies/midsommar/microgateway/internal/auth"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/rs/zerolog/log"
@@ -186,7 +187,13 @@ func (p *DatabaseProvider) ValidateToken(token string) (*database.APIToken, erro
 	if err != nil {
 		return nil, err
 	}
-	
+
+	// Constant-time re-verification of the DB match. Defends against timing
+	// side channels and lax database collations accepting a near-miss token.
+	if !internalauth.SecureTokenEquals(apiToken.Token, token) {
+		return nil, fmt.Errorf("invalid token")
+	}
+
 	// Check if token is active
 	if !apiToken.IsActive {
 		return nil, fmt.Errorf("token is inactive")
