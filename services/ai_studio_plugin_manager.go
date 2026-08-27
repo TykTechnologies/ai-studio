@@ -72,8 +72,12 @@ type AIStudioPluginManager struct {
 	// Event server for plugin pub/sub
 	eventServer *PluginEventServer
 
-	// Security service for load-time command validation and OCI verification
-	securityService plugin_security.Service
+	// Security service for load-time command validation and OCI verification.
+	// Guarded by its own mutex — NOT m.mu — because validateCommandForLoad
+	// runs while LoadPlugin holds m.mu in write mode, and sync.RWMutex is not
+	// reentrant.
+	securityServiceMu sync.RWMutex
+	securityService   plugin_security.Service
 
 	// Session management for long-lived broker connections
 	pluginSessions map[uint]context.CancelFunc // plugin_id -> session cancel function
@@ -125,12 +129,23 @@ func (m *AIStudioPluginManager) SetManifestService(manifestService *PluginManife
 // SetSecurityService sets the security service used for OCI signature
 // verification and load-time command validation
 func (m *AIStudioPluginManager) SetSecurityService(service plugin_security.Service) {
+	m.securityServiceMu.Lock()
+	m.securityService = service
+	m.securityServiceMu.Unlock()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.securityService = service
 	if m.ociClient != nil {
 		m.ociClient.SetSecurityService(service)
 	}
+}
+
+// getSecurityService returns the configured security service under the
+// dedicated read lock (safe to call while m.mu is held).
+func (m *AIStudioPluginManager) getSecurityService() plugin_security.Service {
+	m.securityServiceMu.RLock()
+	defer m.securityServiceMu.RUnlock()
+	return m.securityService
 }
 
 // SetService sets the main service reference (to avoid circular dependency)
@@ -1394,7 +1409,7 @@ func (m *AIStudioPluginManager) ListResourceInstances(pluginID uint, resourceTyp
 // validation (direct DB writes, migrations, imports, replication), so this is
 // a second layer of defense applied at load time.
 func (m *AIStudioPluginManager) validateCommandForLoad(command string) error {
-	svc := m.securityService
+	svc := m.getSecurityService()
 	if svc == nil {
 		svc = plugin_security.NewService(&plugin_security.Config{
 			AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",

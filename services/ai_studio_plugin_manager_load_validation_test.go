@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -76,4 +77,36 @@ func TestCreateConfigOnlyPluginClient_RejectsDangerousCommands(t *testing.T) {
 		}
 		t.Fatal("expected load-time validation to reject the command")
 	}
+}
+
+// TestValidateCommandForLoad_NoDataRace exercises concurrent
+// SetSecurityService and load-time validation under the race detector.
+// The securityService field must be guarded by its own mutex, not m.mu:
+// LoadPlugin holds m.mu (write) across createPluginClient, so locking m.mu
+// inside validateCommandForLoad would self-deadlock.
+func TestValidateCommandForLoad_NoDataRace(t *testing.T) {
+	m := NewAIStudioPluginManager(nil, nil)
+
+	exe := filepath.Join(t.TempDir(), "race-plugin")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				m.SetSecurityService(nil)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				_ = m.validateCommandForLoad(exe)
+			}
+		}()
+	}
+	wg.Wait()
 }
