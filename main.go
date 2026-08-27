@@ -65,6 +65,9 @@ func main() {
 	logger.Init(appConf.LogLevel)
 	logger.Infof("Log level set to: %s", appConf.LogLevel)
 
+	// Warn loudly at startup if secrets encryption is not configured
+	secrets.WarnIfEncryptionUnconfigured()
+
 	// Perform connectivity tests before proceeding with initialization
 	if err := startup.TestConnectivity(appConf); err != nil {
 		logger.FatalErr("Connectivity tests failed", err)
@@ -494,6 +497,20 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
 		return fmt.Errorf("failed to create default LLM settings: %w", err)
 	}
 	logger.Info("Default LLM settings checked/initialized")
+
+	// Upgrade any legacy-format encrypted secrets to authenticated encryption.
+	// Runs in the background so scrypt's deliberate cost never delays startup;
+	// decrypt handles both formats, so reads are correct while it runs.
+	go func() {
+		logger.Info("Starting background re-encryption of legacy secrets (if any)")
+		if migrated, err := secrets.ReencryptLegacySecrets(db); err != nil {
+			logger.Errorf("Failed to re-encrypt legacy secrets: %v", err)
+		} else if migrated > 0 {
+			logger.Infof("Background migration complete: re-encrypted %d legacy secret(s) to AES-GCM format", migrated)
+		} else {
+			logger.Info("No legacy-format secrets to re-encrypt")
+		}
+	}()
 
 	// Seed default secrets and LLM configurations if not disabled
 	if !skipLLMDefaults {

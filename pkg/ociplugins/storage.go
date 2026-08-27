@@ -8,9 +8,46 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
+
+const (
+	// storageDirPerm keeps cache directories inaccessible to other users.
+	storageDirPerm = 0o750
+	// storageExecPerm allows owner/group execution of cached plugin binaries.
+	storageExecPerm = 0o750
+)
+
+// digestPattern matches a lowercase hex SHA-256 digest. Digests and
+// architectures flow in from OCI manifests, so they are validated before
+// being used to build filesystem paths.
+var digestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
+
+// archNamePattern matches a platform string after "/" has been replaced with
+// "-" (e.g. "linux-amd64").
+var archNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
+
+// validateDigest rejects digests that are not plain SHA-256 hex, preventing
+// path traversal out of the storage root.
+func validateDigest(digest string) error {
+	if !digestPattern.MatchString(digest) {
+		return fmt.Errorf("invalid content digest %q", digest)
+	}
+	return nil
+}
+
+// archFileComponent converts a platform string (e.g. "linux/amd64") to a safe
+// filename component, returning an error for values that could escape the
+// storage directory.
+func archFileComponent(arch string) (string, error) {
+	name := strings.ReplaceAll(arch, "/", "-")
+	if !archNamePattern.MatchString(name) || strings.Contains(name, "..") {
+		return "", fmt.Errorf("invalid architecture %q", arch)
+	}
+	return name, nil
+}
 
 // ContentStorage manages content-addressed storage for plugins
 type ContentStorage struct {
@@ -46,7 +83,7 @@ func (s *ContentStorage) initDirectories() error {
 	}
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, storageDirPerm); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
@@ -117,6 +154,9 @@ func (s *ContentStorage) StoreBlob(data []byte) (string, error) {
 
 // GetBlob retrieves blob data by digest
 func (s *ContentStorage) GetBlob(digest string) ([]byte, error) {
+	if err := validateDigest(digest); err != nil {
+		return nil, err
+	}
 	blobPath := filepath.Join(s.getCASDir(), digest)
 	data, err := os.ReadFile(blobPath)
 	if err != nil {
@@ -130,8 +170,16 @@ func (s *ContentStorage) GetBlob(digest string) ([]byte, error) {
 
 // StoreExecutable stores a plugin binary and returns the executable path
 func (s *ContentStorage) StoreExecutable(digest, arch string, data []byte) (string, error) {
+	if err := validateDigest(digest); err != nil {
+		return "", err
+	}
+	archName, err := archFileComponent(arch)
+	if err != nil {
+		return "", err
+	}
+
 	// Generate executable filename
-	execName := fmt.Sprintf("sha256-%s-%s", digest, strings.ReplaceAll(arch, "/", "-"))
+	execName := fmt.Sprintf("sha256-%s-%s", digest, archName)
 	execPath := filepath.Join(s.getBinsDir(), execName)
 
 	// Check if already exists
@@ -156,7 +204,7 @@ func (s *ContentStorage) StoreExecutable(digest, arch string, data []byte) (stri
 	}
 
 	// Make executable and move to final location
-	if err := os.Chmod(tempFile.Name(), 0755); err != nil {
+	if err := os.Chmod(tempFile.Name(), storageExecPerm); err != nil {
 		return "", fmt.Errorf("failed to set executable permissions: %w", err)
 	}
 
@@ -435,10 +483,13 @@ func (s *ContentStorage) cleanupOrphanedBlobs() error {
 
 // StoreMetadata stores plugin metadata
 func (s *ContentStorage) StoreMetadata(digest, arch string, metadata *PluginMetadata) error {
-	metadataFile := s.getMetadataPath(digest, arch)
+	metadataFile, err := s.metadataPath(digest, arch)
+	if err != nil {
+		return err
+	}
 
 	// Create metadata directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(metadataFile), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(metadataFile), storageDirPerm); err != nil {
 		return fmt.Errorf("failed to create metadata directory: %w", err)
 	}
 
@@ -474,7 +525,10 @@ func (s *ContentStorage) StoreMetadata(digest, arch string, metadata *PluginMeta
 
 // LoadMetadata loads plugin metadata by digest and architecture
 func (s *ContentStorage) LoadMetadata(digest, arch string) (*PluginMetadata, error) {
-	metadataFile := s.getMetadataPath(digest, arch)
+	metadataFile, err := s.metadataPath(digest, arch)
+	if err != nil {
+		return nil, err
+	}
 
 	data, err := os.ReadFile(metadataFile)
 	if err != nil {
@@ -492,16 +546,27 @@ func (s *ContentStorage) LoadMetadata(digest, arch string) (*PluginMetadata, err
 	return &metadata, nil
 }
 
-// getMetadataPath returns the path to metadata file for a plugin
-func (s *ContentStorage) getMetadataPath(digest, arch string) string {
-	filename := fmt.Sprintf("sha256-%s-%s.json", digest, strings.ReplaceAll(arch, "/", "-"))
-	return filepath.Join(s.getMetadataDir(), filename)
+// metadataPath validates digest and arch before building the metadata path,
+// confining the result to the metadata directory.
+func (s *ContentStorage) metadataPath(digest, arch string) (string, error) {
+	if err := validateDigest(digest); err != nil {
+		return "", err
+	}
+	archName, err := archFileComponent(arch)
+	if err != nil {
+		return "", err
+	}
+	filename := fmt.Sprintf("sha256-%s-%s.json", digest, archName)
+	return filepath.Join(s.getMetadataDir(), filename), nil
 }
 
 // HasMetadata checks if metadata exists for a plugin
 func (s *ContentStorage) HasMetadata(digest, arch string) bool {
-	metadataFile := s.getMetadataPath(digest, arch)
-	_, err := os.Stat(metadataFile)
+	metadataFile, err := s.metadataPath(digest, arch)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(metadataFile)
 	return err == nil
 }
 
