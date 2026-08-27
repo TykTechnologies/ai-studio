@@ -455,12 +455,15 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	}
 
 	// Get plugin client wrapper from dispense
-	clientWrapper, ok := raw.(*AIStudioPluginClient)
-	if !ok {
-		log.Fatal().
+	clientWrapper, err := asAIStudioPluginClient(raw)
+	if err != nil {
+		client.Kill()
+		log.Error().
+			Uint("plugin_id", pluginID).
 			Interface("received_type", raw).
 			Str("expected_type", "*AIStudioPluginClient").
-			Msg("FATAL: Plugin dispense type mismatch! This is the source of the plugin loading failure.")
+			Msg("Plugin dispense type mismatch - unloading plugin")
+		return nil, err
 	}
 
 	// Set service reference in client wrapper for per-request broker setup
@@ -1379,6 +1382,17 @@ func (m *AIStudioPluginManager) ListResourceInstances(pluginID uint, resourceTyp
 	return resp.Instances, nil
 }
 
+// asAIStudioPluginClient asserts that a dispensed plugin value is the expected
+// client wrapper type. A mismatch (wrong handshake, incompatible plugin binary)
+// must surface as an error to the caller, never crash the host process.
+func asAIStudioPluginClient(raw interface{}) (*AIStudioPluginClient, error) {
+	clientWrapper, ok := raw.(*AIStudioPluginClient)
+	if !ok {
+		return nil, fmt.Errorf("plugin dispense type mismatch: got %T, expected *AIStudioPluginClient", raw)
+	}
+	return clientWrapper, nil
+}
+
 // createPluginClient creates a plugin client based on command scheme (adapted from microgateway)
 func (m *AIStudioPluginManager) createPluginClient(command string) (*goplugin.Client, error) {
 	if strings.HasPrefix(command, "oci://") {
@@ -1437,6 +1451,11 @@ func (m *AIStudioPluginManager) createLocalPluginClient(command string) (*goplug
 	cmdPath := command
 	if strings.HasPrefix(command, "file://") {
 		cmdPath = strings.TrimPrefix(command, "file://")
+	}
+
+	cmdPath, err := validatePluginExecutablePath(cmdPath)
+	if err != nil {
+		return nil, fmt.Errorf("plugin executable validation failed: %w", err)
 	}
 
 	log.Debug().
@@ -1526,6 +1545,11 @@ func (m *AIStudioPluginManager) createConfigOnlyLocalPluginClient(command string
 	cmdPath := command
 	if strings.HasPrefix(command, "file://") {
 		cmdPath = strings.TrimPrefix(command, "file://")
+	}
+
+	cmdPath, err := validatePluginExecutablePath(cmdPath)
+	if err != nil {
+		return nil, fmt.Errorf("plugin executable validation failed: %w", err)
 	}
 
 	log.Debug().

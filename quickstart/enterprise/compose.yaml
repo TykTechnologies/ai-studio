@@ -7,10 +7,10 @@ services:
       - tyk-network
     image: tykio/tyk-ai-studio-ent:v2.0.0
     volumes:
-      - ../confs/midsommar-ent.env:/app/.env
-      - ./keys/plugins/plugin-live.pub:/app/keys/plugins/plugin-live.pub:ro
-      - ./data/cache/plugins:/app/data/cache/plugins
-      - ./data/midsommar/:/app/data/db
+      - ../confs/midsommar-ent.env:/opt/tyk-ai-studio/.env
+      - ./keys/plugins/plugin-live.pub:/opt/tyk-ai-studio/keys/plugins/plugin-live.pub:ro
+      - ./data/midsommar:/opt/tyk-ai-studio/data
+      - ./data/cache/plugins:/opt/tyk-ai-studio/data/cache/plugins
     env_file:
       - ../required.env
       - ../confs/midsommar-ent.env
@@ -23,8 +23,8 @@ services:
       - tyk-network
     image: tykio/tyk-microgateway-ent:v2.0.0
     volumes:
-      - ../confs/mgw-ent.env:/app/.env
-      - ../confs/mgw-analytics.yaml:/app/mgw-analytics.yaml
+      - ../confs/mgw-ent.env:/opt/tyk-microgateway/.env
+      - ../confs/mgw-analytics.yaml:/opt/tyk-microgateway/mgw-analytics.yaml
       - ./data/mgw:/app/data
       - ./data/cache/plugins:/data/cache/plugins
     env_file:
