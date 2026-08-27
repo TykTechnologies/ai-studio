@@ -54,8 +54,8 @@ func NewBrandingFileStorage(basePath string) (*BrandingFileStorage, error) {
 		basePath = DefaultBrandingStoragePath
 	}
 
-	// Create directory if it doesn't exist
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+	// Create directory if it doesn't exist (no world access)
+	if err := os.MkdirAll(basePath, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create branding storage directory: %w", err)
 	}
 
@@ -155,9 +155,24 @@ func (bfs *BrandingFileStorage) SaveFavicon(file multipart.File, header *multipa
 	return filename, nil
 }
 
-// saveFile writes the uploaded file to disk
-func (bfs *BrandingFileStorage) saveFile(file multipart.File, filepath string) error {
-	dst, err := os.Create(filepath)
+// saveFile writes the uploaded file to disk, confined to the storage base
+// path and without world-readable permissions.
+func (bfs *BrandingFileStorage) saveFile(file multipart.File, path string) error {
+	// Confine the destination to the branding storage directory
+	baseAbs, err := filepath.Abs(bfs.BasePath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve storage path: %w", err)
+	}
+	destAbs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve destination path: %w", err)
+	}
+	rel, err := filepath.Rel(baseAbs, destAbs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("destination %q is outside the branding storage directory", path)
+	}
+
+	dst, err := os.OpenFile(destAbs, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o640)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}

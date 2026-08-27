@@ -5,7 +5,7 @@
 #   docker build -f dev/Dockerfile.studio -t midsommar-studio-dev .
 #   docker build -f dev/Dockerfile.studio --build-arg EDITION=ent -t midsommar-studio-dev-ent .
 
-FROM golang:1.25-bookworm@sha256:7fb09d8804035fbde8a84ed59ca9f46dd68c6f160f9d193e98d795d8d9e002ec AS base
+FROM golang:1.26-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \

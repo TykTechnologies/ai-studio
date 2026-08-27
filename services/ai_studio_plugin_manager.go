@@ -1453,6 +1453,11 @@ func (m *AIStudioPluginManager) createLocalPluginClient(command string) (*goplug
 		cmdPath = strings.TrimPrefix(command, "file://")
 	}
 
+	cmdPath, err := validatePluginExecutablePath(cmdPath)
+	if err != nil {
+		return nil, fmt.Errorf("plugin executable validation failed: %w", err)
+	}
+
 	log.Debug().
 		Str("command", command).
 		Str("path", cmdPath).
@@ -1540,6 +1545,11 @@ func (m *AIStudioPluginManager) createConfigOnlyLocalPluginClient(command string
 	cmdPath := command
 	if strings.HasPrefix(command, "file://") {
 		cmdPath = strings.TrimPrefix(command, "file://")
+	}
+
+	cmdPath, err := validatePluginExecutablePath(cmdPath)
+	if err != nil {
+		return nil, fmt.Errorf("plugin executable validation failed: %w", err)
 	}
 
 	log.Debug().
