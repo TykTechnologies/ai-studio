@@ -27,6 +27,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -422,11 +423,8 @@ func (p *Proxy) createHandler() http.Handler {
 var upstreamGuardedTransport = netguard.HTTPTransport()
 
 func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers to allow * origins
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-	w.Header().Set("Access-Control-Max-Age", "43200") // 12 hours
+	// Apply CORS policy (wildcard unless CORS_ALLOWED_ORIGINS is configured)
+	corsutil.SetCORSHeaders(w.Header(), r.Header.Get("Origin"), "GET, OPTIONS")
 
 	// Handle preflight requests
 	if r.Method == "OPTIONS" {
@@ -1270,15 +1268,14 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
 					// Response blocked mid-stream - send error chunk and stop
 					logger.Warnf("Streaming response blocked by filter at chunk %d: %s", chunkIndex, blockMsg)
-					errorChunk := []byte(fmt.Sprintf(`{"error":"Response blocked by filter: %s"}`, blockMsg))
+					errorChunk := buildFilterBlockedErrorChunk(blockMsg)
 					w.Write(errorChunk)
 					if f, ok := w.(http.Flusher); ok {
 						f.Flush()
 					}
 					isErr = true
 					// Log with 400 status and include both the block reason and partial LLM response for audit trail
-					blockedResponseBody := []byte(fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"chunk_index":%d,"partial_response":%s}`,
-						blockMsg, chunkIndex, fullResponse.String()))
+					blockedResponseBody := buildFilterBlockedAnalyticsBody(blockMsg, chunkIndex, fullResponse.String())
 					go p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 					return
 				}
@@ -1310,6 +1307,35 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			go p.executeOnStreamComplete(r, resp, llm, app, fullResponse.Bytes(), reqBody, chunkIndex)
 		}
 	}
+}
+
+// buildFilterBlockedErrorChunk builds the JSON error chunk sent to the client
+// when a response filter blocks a stream. Constructed via encoding/json so
+// filter messages containing quotes cannot break the payload.
+func buildFilterBlockedErrorChunk(blockMsg string) []byte {
+	chunk, err := json.Marshal(map[string]string{
+		"error": "Response blocked by filter: " + blockMsg,
+	})
+	if err != nil {
+		return []byte(`{"error":"Response blocked by filter"}`)
+	}
+	return chunk
+}
+
+// buildFilterBlockedAnalyticsBody builds the analytics/audit payload recorded
+// when a streaming response is blocked mid-stream. The partial response is
+// encoded as a JSON string — it is usually raw SSE text, not JSON.
+func buildFilterBlockedAnalyticsBody(blockMsg string, chunkIndex int, partialResponse string) []byte {
+	body, err := json.Marshal(map[string]interface{}{
+		"filter_blocked":   true,
+		"block_reason":     blockMsg,
+		"chunk_index":      chunkIndex,
+		"partial_response": partialResponse,
+	})
+	if err != nil {
+		return []byte(`{"filter_blocked":true}`)
+	}
+	return body
 }
 
 // executeOnStreamComplete calls the OnStreamComplete hook for streaming responses

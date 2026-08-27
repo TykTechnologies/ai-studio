@@ -135,6 +135,13 @@ type HubSpokeConfig struct {
 	MaxMessageSize int `env:"GRPC_MAX_MESSAGE_SIZE" envDefault:"16777216"` // 16MB
 }
 
+// IsTLSVerificationDisabled reports whether the hub-spoke client will use TLS
+// with certificate verification disabled (EDGE_SKIP_TLS_VERIFY=true while TLS
+// is enabled). Plaintext connections are covered by a separate warning path.
+func (h HubSpokeConfig) IsTLSVerificationDisabled() bool {
+	return h.ClientTLSEnabled && h.SkipTLSVerify
+}
+
 // ControlPayloadConfig holds configuration for edge-to-control plugin data transmission
 type ControlPayloadConfig struct {
 	// Enabled controls whether plugin control payloads are sent to control
@@ -268,6 +275,15 @@ func (c *Config) Validate() error {
 
 	if c.Security.EncryptionKey == "change-me-in-production" {
 		fmt.Println("Warning: Using default encryption key. Change this in production!")
+	}
+
+	// Warn prominently at startup when TLS certificate verification is
+	// disabled on the hub-spoke client — operator-controlled, but must never
+	// be enabled accidentally in production.
+	if c.HubSpoke.IsTLSVerificationDisabled() {
+		fmt.Println("⚠️  SECURITY WARNING: EDGE_SKIP_TLS_VERIFY=true — TLS certificate verification is DISABLED for the hub-spoke gRPC connection.")
+		fmt.Println("⚠️  The control-plane connection is vulnerable to man-in-the-middle attacks in this mode.")
+		fmt.Println("⚠️  This setting is intended for development only. Remove EDGE_SKIP_TLS_VERIFY (default: false) for production.")
 	}
 
 	// Validate gRPC TLS configuration (security warning)
