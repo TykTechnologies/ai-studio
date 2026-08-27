@@ -67,6 +67,23 @@ func TestSetupRouter_UnifiedRouterRoute(t *testing.T) {
 		}
 	})
 
+	t.Run("model router keeps its own /router/ dispatch", func(t *testing.T) {
+		// A /router/{slug}/ request must be handled by the Model Router handler
+		// (here: its own 404, since no routers are loaded), never fall through to
+		// the gateway handler where the unified /v1/ router lives.
+		stub.gotPath = ""
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/router/my-router/v1/chat/completions",
+			strings.NewReader(`{"model":"gpt-4o"}`)))
+
+		if stub.gotPath != "" {
+			t.Fatalf("model router request leaked to gateway handler: %q", stub.gotPath)
+		}
+		if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "Router not found") {
+			t.Fatalf("expected Model Router's own 'Router not found' response, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
 	t.Run("management API under /api/v1 is not forwarded to the gateway", func(t *testing.T) {
 		stub.gotPath = ""
 		w := httptest.NewRecorder()
