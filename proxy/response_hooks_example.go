@@ -3,6 +3,8 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 )
 
 // ExampleResponseHook demonstrates how to create a custom response hook
@@ -108,8 +110,13 @@ func (h *CORSResponseHook) OnBeforeWriteHeaders(ctx context.Context, req *Header
 		modifiedHeaders[key] = value
 	}
 	
-	// Add CORS headers
-	modifiedHeaders["Access-Control-Allow-Origin"] = "*"
+	// Add CORS headers, honoring the configured CORS_ALLOWED_ORIGINS policy.
+	// The hook has no access to the request Origin, so it only emits a
+	// wildcard when the policy is wildcard; with a configured origin list it
+	// leaves CORS to the endpoint handlers.
+	if origin, configured := corsutil.AllowOrigin(""); origin != "" && !configured {
+		modifiedHeaders["Access-Control-Allow-Origin"] = origin
+	}
 	modifiedHeaders["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
 	modifiedHeaders["Access-Control-Allow-Headers"] = "Origin, Content-Type, Accept, Authorization"
 	

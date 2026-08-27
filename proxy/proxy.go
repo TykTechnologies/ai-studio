@@ -27,6 +27,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -422,11 +423,8 @@ func (p *Proxy) createHandler() http.Handler {
 var upstreamGuardedTransport = netguard.HTTPTransport()
 
 func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers to allow * origins
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
-	w.Header().Set("Access-Control-Max-Age", "43200") // 12 hours
+	// Apply CORS policy (wildcard unless CORS_ALLOWED_ORIGINS is configured)
+	corsutil.SetCORSHeaders(w.Header(), r.Header.Get("Origin"), "GET, OPTIONS")
 
 	// Handle preflight requests
 	if r.Method == "OPTIONS" {
