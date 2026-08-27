@@ -560,6 +560,7 @@ Proxies streaming requests to the specified LLM provider.
 ### Unified Router (OpenAI-compatible)
 **POST** `/v1/chat/completions`
 **POST** `/v1/completions`
+**GET** `/v1/models`
 
 A single fixed ingress for all configured LLM routes. The request body is OpenAI
 format, and the `model` field selects the route: it must be
@@ -587,6 +588,25 @@ Authorization: Bearer <app-token>
   ]
 }
 ```
+
+**Model discovery:** `GET /v1/models` (authenticated) returns an
+OpenAI-format model list **scoped to the calling app's LLM associations** —
+routes the app has no access to are never listed. Each id is ready to send
+back to the completion endpoints:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {"id": "openai-prod/gpt-4o", "object": "model", "owned_by": "openai"},
+    {"id": "openai-prod/gpt-4o-mini", "object": "model", "owned_by": "openai"}
+  ]
+}
+```
+
+Model names come from each route's `allowed_models` plus its `default_model`;
+a route configured with neither is omitted (its valid model names are unknown
+to the gateway).
 
 Note: the per-route OpenAI shim (`/ai/{llmSlug}/v1/...`) and SDK-native
 passthrough (`/llm/...`) expect a **bare** model name with no route prefix;

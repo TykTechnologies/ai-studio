@@ -99,6 +99,18 @@ func setupTrafficTest(t *testing.T) (string, *mockllm.MockLLMBackend) {
 	}
 	require.NoError(t, db.Create(llm).Error)
 
+	// A second active LLM the test app is deliberately NOT associated with:
+	// it must never appear in the app's /v1/models listing.
+	hiddenLLM := &mgwdb.LLM{
+		Name:         "Hidden LLM",
+		Slug:         "hidden-llm",
+		Vendor:       "openai",
+		Endpoint:     backend.URL,
+		DefaultModel: "gpt-secret",
+		IsActive:     true,
+	}
+	require.NoError(t, db.Create(hiddenLLM).Error)
+
 	app := &mgwdb.App{Name: "Traffic Test App", IsActive: true}
 	require.NoError(t, db.Create(app).Error)
 	require.NoError(t, db.Create(&mgwdb.AppLLM{AppID: app.ID, LLMID: llm.ID, IsActive: true}).Error)
@@ -146,6 +158,21 @@ func gatewayPost(t *testing.T, url, token, body string) (int, []byte) {
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(body)))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode, respBody
+}
+
+func gatewayGet(t *testing.T, url, token string) (int, []byte) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -229,5 +256,39 @@ func TestGatewayTraffic_EndToEnd(t *testing.T) {
 			`{"model":"mock-openai/gpt-4","messages":[{"role":"user","content":"hello"}]}`)
 		assert.Equal(t, http.StatusUnauthorized, status)
 		assert.Equal(t, before, backend.GetRequestCount(), "unauthenticated request must not reach the upstream")
+	})
+
+	t.Run("GET /v1/models lists only the app's accessible routes", func(t *testing.T) {
+		status, body := gatewayGet(t, baseURL+"/v1/models", trafficTestToken)
+		require.Equal(t, http.StatusOK, status, "body: %s", body)
+
+		var resp struct {
+			Object string `json:"object"`
+			Data   []struct {
+				ID      string `json:"id"`
+				Object  string `json:"object"`
+				OwnedBy string `json:"owned_by"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(body, &resp))
+		assert.Equal(t, "list", resp.Object)
+
+		ids := make([]string, 0, len(resp.Data))
+		for _, m := range resp.Data {
+			ids = append(ids, m.ID)
+		}
+		assert.Contains(t, ids, "mock-openai/gpt-4")
+		// The scoping requirement: an active LLM the app is not associated with
+		// must be invisible.
+		for _, id := range ids {
+			assert.NotContains(t, id, "hidden-llm", "model list leaked a route the app cannot access")
+			assert.NotContains(t, id, "gpt-secret", "model list leaked a model the app cannot access")
+		}
+	})
+
+	t.Run("GET /v1/models without a token is rejected", func(t *testing.T) {
+		status, body := gatewayGet(t, baseURL+"/v1/models", "")
+		assert.NotEqual(t, http.StatusOK, status)
+		assert.NotContains(t, string(body), "mock-openai")
 	})
 }

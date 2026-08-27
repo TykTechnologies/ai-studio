@@ -19,7 +19,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
 // ParseUnifiedModel splits an OpenRouter-style model string into its vendor route
@@ -39,8 +42,12 @@ func ParseUnifiedModel(model string) (route string, bareModel string, err error)
 // middleware included).
 func NewUnifiedRouterHandler(hasRoute func(slug string) bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			respondWithOAIError(w, http.StatusMethodNotAllowed, "only POST is supported on the unified router endpoint", nil, false)
+		// Only the completion endpoints carry a routable model field. Everything
+		// else under /v1/ (e.g. GET /v1/models) passes through untouched so the
+		// authenticated chain can serve or reject it.
+		if r.Method != http.MethodPost ||
+			(r.URL.Path != "/v1/chat/completions" && r.URL.Path != "/v1/completions") {
+			next.ServeHTTP(w, r)
 			return
 		}
 
@@ -107,4 +114,61 @@ func NewUnifiedRouterHandler(hasRoute func(slug string) bool, next http.Handler)
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// unifiedModelInfo is one entry of the OpenAI-compatible model list.
+type unifiedModelInfo struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	OwnedBy string `json:"owned_by"`
+}
+
+type unifiedModelList struct {
+	Object string             `json:"object"`
+	Data   []unifiedModelInfo `json:"data"`
+}
+
+// handleUnifiedListModels serves GET /v1/models. It is registered BEHIND the
+// credential middleware and lists only the routes the authenticated app is
+// associated with, as "{routeSlug}/{model}" ids ready to send back to the
+// unified router. Model names come from each route's AllowedModels plus its
+// DefaultModel; a route with neither is omitted (its model names are unknown).
+func (p *Proxy) handleUnifiedListModels(w http.ResponseWriter, r *http.Request) {
+	app, ok := r.Context().Value("app").(*models.App)
+	if !ok || app == nil {
+		respondWithOAIError(w, http.StatusUnauthorized, "authentication required", nil, true)
+		return
+	}
+
+	accessible := make(map[uint]bool, len(app.LLMs))
+	for _, l := range app.LLMs {
+		accessible[l.ID] = true
+	}
+
+	entries := make([]unifiedModelInfo, 0)
+	p.mu.RLock()
+	for routeSlug, conf := range p.llms {
+		if !accessible[conf.ID] {
+			continue
+		}
+		seen := make(map[string]bool, len(conf.AllowedModels)+1)
+		for _, m := range append(append([]string{}, conf.AllowedModels...), conf.DefaultModel) {
+			if m == "" || seen[m] {
+				continue
+			}
+			seen[m] = true
+			entries = append(entries, unifiedModelInfo{
+				ID:      routeSlug + "/" + m,
+				Object:  "model",
+				OwnedBy: string(conf.Vendor),
+			})
+		}
+	}
+	p.mu.RUnlock()
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(unifiedModelList{Object: "list", Data: entries})
 }

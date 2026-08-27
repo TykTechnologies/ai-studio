@@ -388,6 +388,9 @@ func (p *Proxy) createHandler() http.Handler {
 	aiRouter := mux.NewRouter()
 	aiRouter.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
 	aiRouter.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
+	// Unified router model discovery: behind the same credential middleware, and
+	// scoped to the authenticated app's LLM associations by the handler.
+	aiRouter.HandleFunc("/v1/models", p.handleUnifiedListModels).Methods("GET")
 	authenticatedAIHandler := p.credValidator.Middleware(aiRouter)
 
 	// Anthropic Messages bridge: lets Claude Code (native Anthropic Messages API) drive

@@ -8,6 +8,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -207,15 +208,96 @@ func TestUnifiedRouterHandler_UnknownVendor(t *testing.T) {
 	assert.Contains(t, msg, "not found or not supported by your access rights")
 }
 
-func TestUnifiedRouterHandler_NonPOSTRejected(t *testing.T) {
+func TestUnifiedRouterHandler_NonPOSTPassesThrough(t *testing.T) {
+	// Non-completion requests (e.g. GET /v1/models) are not model-routed; they
+	// pass through untouched so the authenticated chain can serve them.
 	h, rec := newUnifiedTestHandler("openai")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
-	assert.False(t, rec.called)
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.True(t, rec.called)
+	assert.Equal(t, "/v1/models", rec.path, "pass-through must not rewrite the path")
+	assert.Equal(t, http.MethodGet, rec.method)
+}
+
+func TestUnifiedRouterHandler_POSTNonCompletionPathPassesThrough(t *testing.T) {
+	h, rec := newUnifiedTestHandler("openai")
+
+	w := postJSON(t, h, "/v1/embeddings", `{"model":"openai/text-embedding-3-small","input":"x"}`)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.True(t, rec.called)
+	assert.Equal(t, "/v1/embeddings", rec.path, "only the completion endpoints are model-routed")
+}
+
+// modelIDs extracts the id field of every entry in an OpenAI model-list response.
+func modelIDs(t *testing.T, body []byte) []string {
+	t.Helper()
+	var resp struct {
+		Object string `json:"object"`
+		Data   []struct {
+			ID      string `json:"id"`
+			Object  string `json:"object"`
+			OwnedBy string `json:"owned_by"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(body, &resp), "body: %s", body)
+	assert.Equal(t, "list", resp.Object)
+	ids := make([]string, 0, len(resp.Data))
+	for _, m := range resp.Data {
+		assert.Equal(t, "model", m.Object)
+		ids = append(ids, m.ID)
+	}
+	return ids
+}
+
+func TestHandleUnifiedListModels_ScopedToAppAccess(t *testing.T) {
+	p := &Proxy{llms: map[string]*models.LLM{
+		"openai": {ID: 1, Vendor: models.OPENAI, DefaultModel: "gpt-4o", AllowedModels: []string{"gpt-4o", "gpt-4o-mini"}},
+		"claude": {ID: 2, Vendor: models.ANTHROPIC, DefaultModel: "claude-sonnet-5"},
+	}}
+
+	app := &models.App{ID: 10, LLMs: []models.LLM{{ID: 1}}} // access to "openai" only
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req = req.WithContext(context.WithValue(req.Context(), "app", app))
+	w := httptest.NewRecorder()
+	p.handleUnifiedListModels(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+	ids := modelIDs(t, w.Body.Bytes())
+	// AllowedModels + DefaultModel, deduped (gpt-4o appears in both), sorted.
+	assert.Equal(t, []string{"openai/gpt-4o", "openai/gpt-4o-mini"}, ids)
+	for _, id := range ids {
+		assert.NotContains(t, id, "claude", "inaccessible route leaked into model list")
+	}
+}
+
+func TestHandleUnifiedListModels_RouteWithNoKnownModelsOmitted(t *testing.T) {
+	p := &Proxy{llms: map[string]*models.LLM{
+		"bare": {ID: 1, Vendor: models.OPENAI}, // no AllowedModels, no DefaultModel
+	}}
+
+	app := &models.App{ID: 10, LLMs: []models.LLM{{ID: 1}}}
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	req = req.WithContext(context.WithValue(req.Context(), "app", app))
+	w := httptest.NewRecorder()
+	p.handleUnifiedListModels(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Empty(t, modelIDs(t, w.Body.Bytes()))
+}
+
+func TestHandleUnifiedListModels_NoAppInContext(t *testing.T) {
+	p := &Proxy{llms: map[string]*models.LLM{}}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	w := httptest.NewRecorder()
+	p.handleUnifiedListModels(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 // TestUnifiedRouter_ProxyWiring exercises the endpoint through the full proxy
@@ -253,5 +335,15 @@ func TestUnifiedRouter_ProxyWiring(t *testing.T) {
 		// No credentials supplied: reaching the /ai/ auth middleware (401) proves
 		// the rewrite + forward happened instead of a routing 404.
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("models listing requires authentication", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		// The route is registered behind the credential middleware: unauthenticated
+		// requests must never see the model list.
+		assert.NotEqual(t, http.StatusOK, w.Code)
+		assert.NotContains(t, w.Body.String(), "mock-llm")
 	})
 }
