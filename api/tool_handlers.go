@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
@@ -71,6 +72,16 @@ func (a *API) createTool(c *gin.Context) {
 		}
 	}
 
+	if err := validateOASSpecEncoding(input.Data.Attributes.OASSpec); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
 	// Create the tool via service layer (includes auto-assignment to Default catalogue)
 	tool, err := a.service.CreateTool(
 		input.Data.Attributes.Name,
@@ -128,6 +139,21 @@ func (a *API) createTool(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"data": serializeTool(tool, a.config.DB)})
+}
+
+// validateOASSpecEncoding checks that an oas_spec attribute is the base64 the
+// rest of the platform expects. The field is typed as a string, so raw JSON or
+// YAML binds happily and is stored as-is; the failure then surfaces much later
+// and far away, as "illegal base64 data" from /spec-operations or from a tool
+// call. Catching it here names the actual problem.
+func validateOASSpecEncoding(spec string) error {
+	if spec == "" {
+		return nil
+	}
+	if _, err := base64.StdEncoding.DecodeString(spec); err != nil {
+		return fmt.Errorf("oas_spec must be base64-encoded (got %v)", err)
+	}
+	return nil
 }
 
 // @Summary Get a tool by ID
@@ -210,6 +236,16 @@ func (a *API) updateTool(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Not Found", Detail: "Tool not found"}},
+		})
+		return
+	}
+
+	if err := validateOASSpecEncoding(input.Data.Attributes.OASSpec); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
 		return
 	}

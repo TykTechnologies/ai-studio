@@ -530,6 +530,8 @@ type ToolInput struct {
 			Name           string   `json:"name"`
 			Description    string   `json:"description"`
 			ToolType       string   `json:"tool_type"`
+			// OASSpec must be the base64 encoding of the UTF-8 OpenAPI
+			// document. Raw JSON or YAML is rejected with a 400.
 			OASSpec        string   `json:"oas_spec"`
 			PrivacyScore   int      `json:"privacy_score"`
 			AuthKey        string   `json:"auth_key"`
