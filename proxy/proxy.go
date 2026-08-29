@@ -1662,6 +1662,28 @@ func convertMCPParameterValue(val string, paramType string) interface{} {
 	}
 }
 
+// schemaRequiredNames reads a JSON Schema "required" list. The list arrives as
+// a []string when the schema was built in Go (universalclient.buildParametersSchema
+// and SchemaToMap both emit that) and as a []interface{} when it came back
+// through a JSON round trip. Asserting only one of the two silently dropped
+// every required marker, so an MCP client saw no required parameters at all.
+func schemaRequiredNames(value interface{}) []string {
+	switch list := value.(type) {
+	case []string:
+		return list
+	case []interface{}:
+		names := make([]string, 0, len(list))
+		for _, item := range list {
+			if name, ok := item.(string); ok {
+				names = append(names, name)
+			}
+		}
+		return names
+	default:
+		return nil
+	}
+}
+
 func flattenSchemaProperties(properties map[string]interface{}, required []string, prefix string) (map[string]map[string]interface{}, []string) {
 	flattened := make(map[string]map[string]interface{})
 	flattenedRequired := []string{}
@@ -1684,14 +1706,7 @@ func flattenSchemaProperties(properties map[string]interface{}, required []strin
 			if paramType == "object" {
 				// Recursively flatten nested objects
 				if nestedProps, ok := paramDefMap["properties"].(map[string]interface{}); ok {
-					var nestedRequired []string
-					if reqList, ok := paramDefMap["required"].([]interface{}); ok {
-						for _, req := range reqList {
-							if reqStr, ok := req.(string); ok {
-								nestedRequired = append(nestedRequired, reqStr)
-							}
-						}
-					}
+					nestedRequired := schemaRequiredNames(paramDefMap["required"])
 
 					nestedFlattened, nestedFlattenedRequired := flattenSchemaProperties(nestedProps, nestedRequired, paramName)
 					for k, v := range nestedFlattened {
@@ -1720,32 +1735,59 @@ func flattenSchemaProperties(properties map[string]interface{}, required []strin
 	return flattened, flattenedRequired
 }
 
+// mcpParameterOptions turns the JSON Schema an llms.Tool carries into MCP tool
+// options, flattening nested objects and preserving which parameters the
+// OpenAPI document marks required.
+func mcpParameterOptions(parameters interface{}) []mcp.ToolOption {
+	parametersSchema, ok := parameters.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	properties, ok := parametersSchema["properties"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	required := schemaRequiredNames(parametersSchema["required"])
+
+	// Flatten all properties (including nested objects) for MCP exposure
+	flattenedParams, flattenedRequired := flattenSchemaProperties(properties, required, "")
+	flattenedRequiredSet := make(map[string]bool, len(flattenedRequired))
+	for _, req := range flattenedRequired {
+		flattenedRequiredSet[req] = true
+	}
+
+	options := make([]mcp.ToolOption, 0, len(flattenedParams))
+	for paramName, paramSchema := range flattenedParams {
+		options = append(options, addMCPToolParameter(paramName, paramSchema, flattenedRequiredSet[paramName]))
+	}
+	return options
+}
+
 func addMCPToolParameter(paramName string, paramSchema map[string]interface{}, isRequired bool) mcp.ToolOption {
 	paramType, _ := paramSchema["type"].(string)
 	description, _ := paramSchema["description"].(string)
 
+	// mcp.Description sets the key unconditionally, so passing an empty string
+	// would publish `"description": ""` on every parameter that has none.
+	opts := []mcp.PropertyOption{}
+	if isRequired {
+		opts = append(opts, mcp.Required())
+	}
+	if description != "" {
+		opts = append(opts, mcp.Description(description))
+	}
+
 	switch paramType {
-	case "string":
-		if isRequired {
-			return mcp.WithString(paramName, mcp.Required(), mcp.Description(description))
-		}
-		return mcp.WithString(paramName, mcp.Description(description))
 	case "number", "integer":
-		if isRequired {
-			return mcp.WithNumber(paramName, mcp.Required(), mcp.Description(description))
-		}
-		return mcp.WithNumber(paramName, mcp.Description(description))
+		return mcp.WithNumber(paramName, opts...)
 	case "boolean":
-		if isRequired {
-			return mcp.WithBoolean(paramName, mcp.Required(), mcp.Description(description))
-		}
-		return mcp.WithBoolean(paramName, mcp.Description(description))
+		return mcp.WithBoolean(paramName, opts...)
+	case "string":
+		return mcp.WithString(paramName, opts...)
 	default:
 		// Default to string
-		if isRequired {
-			return mcp.WithString(paramName, mcp.Required(), mcp.Description(description))
-		}
-		return mcp.WithString(paramName, mcp.Description(description))
+		return mcp.WithString(paramName, opts...)
 	}
 }
 
@@ -1860,33 +1902,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 		toolOptions := []mcp.ToolOption{
 			mcp.WithDescription(llmsTool.Function.Description),
 		}
-
-		// Add parameters based on the function definition
-		if parametersSchema, ok := llmsTool.Function.Parameters.(map[string]interface{}); ok {
-			if properties, ok := parametersSchema["properties"].(map[string]interface{}); ok {
-				var required []string
-				if reqList, ok := parametersSchema["required"].([]interface{}); ok {
-					for _, req := range reqList {
-						if reqStr, ok := req.(string); ok {
-							required = append(required, reqStr)
-						}
-					}
-				}
-
-				// Flatten all properties (including nested objects) for MCP exposure
-				flattenedParams, flattenedRequired := flattenSchemaProperties(properties, required, "")
-				flattenedRequiredSet := make(map[string]bool)
-				for _, req := range flattenedRequired {
-					flattenedRequiredSet[req] = true
-				}
-
-				// Add each flattened parameter to MCP tool options
-				for paramName, paramSchema := range flattenedParams {
-					isRequired := flattenedRequiredSet[paramName]
-					toolOptions = append(toolOptions, addMCPToolParameter(paramName, paramSchema, isRequired))
-				}
-			}
-		}
+		toolOptions = append(toolOptions, mcpParameterOptions(llmsTool.Function.Parameters)...)
 
 		mcpTool := mcp.NewTool(llmsTool.Function.Name, toolOptions...)
 
