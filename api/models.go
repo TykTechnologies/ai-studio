@@ -571,7 +571,8 @@ type OperationsResponse struct {
 	Operations []string `json:"operations"`
 }
 
-// OperationInput represents the input for adding or removing operations from a tool
+// OperationInput represents the input for adding or removing operations from a tool.
+// The bare form {"operation": "<operationId>"} is accepted as well.
 // @Description Operation input model
 type OperationInput struct {
 	Data struct {
@@ -580,6 +581,8 @@ type OperationInput struct {
 			Operation string `json:"operation"`
 		} `json:"attributes"`
 	} `json:"data"`
+	// Operation is the bare-form alternative to the data envelope above.
+	Operation string `json:"operation,omitempty"`
 }
 
 // ModelPriceInput represents the input for model price-related operations
