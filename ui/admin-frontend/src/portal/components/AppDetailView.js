@@ -609,7 +609,9 @@ const AppDetailView = () => {
             <FieldLabel>Key ID:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
-            <FieldValue>{app.attributes.credential.keyID}</FieldValue>
+            {/* The API serialises this as key_id (CredentialDetail); keyID
+                read as undefined and the field rendered blank. */}
+            <FieldValue>{app.attributes.credential.key_id}</FieldValue>
           </Grid>
           <Grid item xs={3}>
             <FieldLabel>Secret:</FieldLabel>
@@ -1147,7 +1149,10 @@ const AppDetailView = () => {
               <CardContent>
                 <Typography variant="h6">{tool.attributes.name}</Typography>
                 <Typography variant="body2" color="text.secondary" mb={2}>
-                  {tool.attributes.short_description || "No description available"}
+                  {/* A Tool is serialised with `description`; only datasources
+                      carry `short_description`, so every tool showed the
+                      placeholder even when it had a description. */}
+                  {tool.attributes.short_description || tool.attributes.description || "No description available"}
                 </Typography>
 
                 <Typography

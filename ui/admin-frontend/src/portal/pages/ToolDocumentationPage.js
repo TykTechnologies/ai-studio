@@ -28,138 +28,105 @@ import pubClient from '../../admin/utils/pubClient';
 import { getConfig } from '../../config';
 
 // Helper function to generate example curl commands
-const generateCurlExample = (operation, toolDetails, selectedApiToken = null) => {
+//
+// The tool endpoint is the bare POST /tools/{slug}: the operation and its
+// parameters are selected in the request body, never in the URL. Appending the
+// OpenAPI path template (or the operation's own HTTP method) produces a request
+// that matches no route, so neither is used here.
+export const generateCurlExample = (operation, toolDetails, selectedApiToken = null) => {
   if (!operation || !toolDetails) return 'curl example not available';
-  
+
   // Generate slug from tool name for the URL
   const toolSlug = toolDetails.attributes.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const operationId = operation.operation_id;
-  const method = operation.method.toUpperCase();
-  
-  // Build parts of the curl command as separate lines
+
+  // Build parts of the curl command as separate lines. Every tool call is a
+  // POST with a JSON body, whatever method the underlying operation uses.
   const parts = [];
-  parts.push(`curl -X ${method}`);
-  
-  // Add content type header if there's a request body
-  if (operation.request_body && operation.request_body.content_type) {
-    parts.push(`  -H "Content-Type: ${operation.request_body.content_type}"`);
-  }
-  
+  parts.push('curl -X POST');
+  parts.push('  -H "Content-Type: application/json"');
+
   // Add authorization header with selected API token or placeholder
   const apiKey = selectedApiToken || 'YOUR_API_KEY';
   parts.push(`  -H "Authorization: Bearer ${apiKey}"`);
-  
-  // Build the URL - correct format for the proxy endpoint with proper gateway URL
+
+  // Build the URL with the proper gateway URL
   const config = getConfig();
   const currentHost = window.location.hostname;
   const protocol = window.location.protocol; // Get the current protocol (http: or https:)
   // Use toolDisplayURL from config if available, otherwise fall back to proxyURL, then default gateway
   const baseUrl = config.toolDisplayURL || config.proxyURL || `${protocol}//${currentHost}:9090`;
-  // The correct URL format is just /tools/{toolSlug} - the operation ID goes in the request body
-  let url = `${baseUrl}/tools/${toolSlug}`;
-  
-  // Add path parameters if any
+  parts.push(`  ${baseUrl}/tools/${toolSlug}`);
+
+  // Generate an example request body with only the required operation_id
+  const exampleBody = {
+    // Always include the operation_id in the request body for tool proxy
+    operation_id: operationId
+  };
+
+  // Only add parameters section if we have URL or query parameters
   if (operation.parameters && operation.parameters.length > 0) {
-    const pathParams = operation.parameters.filter(p => p.in === 'path');
-    if (pathParams.length > 0) {
-      pathParams.forEach(param => {
-        const paramValue = `{${param.name}}`;
-        url += `/${paramValue}`;
-      });
-    }
-  }
-  
-  // Add query parameters if any
-  if (operation.parameters && operation.parameters.length > 0) {
-    const queryParams = operation.parameters.filter(p => p.in === 'query');
-    if (queryParams.length > 0) {
-      url += '?';
-      queryParams.forEach((param, index) => {
-        const paramValue = param.schema?.type === 'number' ? '1' : 
-                          param.schema?.type === 'boolean' ? 'true' : 
-                          param.schema?.enum?.length > 0 ? param.schema.enum[0] : 
-                          `{${param.name}}`;
-        url += `${param.name}=${paramValue}${index < queryParams.length - 1 ? '&' : ''}`;
-      });
-    }
-  }
-  
-  // Add URL to parts
-  parts.push(`  ${url}`);
-  
-  // Add request body if applicable
-  if ((method === 'POST' || method === 'PUT' || method === 'PATCH')) {
-    
-    // Generate an example request body with only the required operation_id
-    const exampleBody = {
-      // Always include the operation_id in the request body for tool proxy
-      operation_id: operationId
-    };
-    
-    // Only add parameters section if we have URL or query parameters
-    if (operation.parameters && operation.parameters.length > 0) {
-      const paramData = {};
-      operation.parameters.forEach(param => {
-        if (param.in === 'query' || param.in === 'path') {
-          if (param.example) {
-            paramData[param.name] = [param.example.toString()];
-          } else if (param.schema && param.schema.type === 'string') {
-            paramData[param.name] = [`example_${param.name}`];
-          } else if (param.schema && (param.schema.type === 'number' || param.schema.type === 'integer')) {
-            paramData[param.name] = ['42'];
-          } else if (param.schema && param.schema.type === 'boolean') {
-            paramData[param.name] = ['true'];
-          }
+    const paramData = {};
+    operation.parameters.forEach(param => {
+      if (param.in === 'query' || param.in === 'path') {
+        if (param.example) {
+          paramData[param.name] = [param.example.toString()];
+        } else if (param.schema && param.schema.type === 'string') {
+          paramData[param.name] = [`example_${param.name}`];
+        } else if (param.schema && (param.schema.type === 'number' || param.schema.type === 'integer')) {
+          paramData[param.name] = ['42'];
+        } else if (param.schema && param.schema.type === 'boolean') {
+          paramData[param.name] = ['true'];
         }
-      });
-      
-      // Only add parameters if we have any
-      if (Object.keys(paramData).length > 0) {
-        exampleBody.parameters = paramData;
       }
+    });
+
+    // Only add parameters if we have any
+    if (Object.keys(paramData).length > 0) {
+      exampleBody.parameters = paramData;
     }
-    
-    // If there's a schema defined, add example payload properties
-    if (operation.request_body && operation.request_body.schema && operation.request_body.schema.properties) {
-      const payloadData = {};
-      Object.entries(operation.request_body.schema.properties).forEach(([propName, propSchema]) => {
-        if (propSchema.example) {
-          payloadData[propName] = propSchema.example;
-        } else if (propSchema.type === 'string') {
-          payloadData[propName] = `example_${propName}`;
-        } else if (propSchema.type === 'number' || propSchema.type === 'integer') {
-          payloadData[propName] = 42;
-        } else if (propSchema.type === 'boolean') {
-          payloadData[propName] = true;
-        } else if (propSchema.type === 'array') {
-          payloadData[propName] = [];
-        } else if (propSchema.type === 'object') {
-          payloadData[propName] = {};
-        }
-      });
-      
-      // Only add payload if we have properties
-      if (Object.keys(payloadData).length > 0) {
-        exampleBody.payload = payloadData;
-      }
-    }
-    
-    // Add example headers if needed (currently not populated)
-    // Only add if we actually have custom headers
-    if (operation.headers && operation.headers.length > 0) {
-      const headerData = {};
-      operation.headers.forEach(header => {
-        headerData[header.name] = [header.example || `example_${header.name}`];
-      });
-      
-      if (Object.keys(headerData).length > 0) {
-        exampleBody.headers = headerData;
-      }
-    }
-    
-    const bodyJson = JSON.stringify(exampleBody, null, 2).replace(/'/g, "\\'");
-    parts.push(`  -d '${bodyJson}'`);
   }
+
+  // If there's a schema defined, add example payload properties
+  if (operation.request_body && operation.request_body.schema && operation.request_body.schema.properties) {
+    const payloadData = {};
+    Object.entries(operation.request_body.schema.properties).forEach(([propName, propSchema]) => {
+      if (propSchema.example) {
+        payloadData[propName] = propSchema.example;
+      } else if (propSchema.type === 'string') {
+        payloadData[propName] = `example_${propName}`;
+      } else if (propSchema.type === 'number' || propSchema.type === 'integer') {
+        payloadData[propName] = 42;
+      } else if (propSchema.type === 'boolean') {
+        payloadData[propName] = true;
+      } else if (propSchema.type === 'array') {
+        payloadData[propName] = [];
+      } else if (propSchema.type === 'object') {
+        payloadData[propName] = {};
+      }
+    });
+    
+    // Only add payload if we have properties
+    if (Object.keys(payloadData).length > 0) {
+      exampleBody.payload = payloadData;
+    }
+  }
+  
+  // Add example headers if needed (currently not populated)
+  // Only add if we actually have custom headers
+  if (operation.headers && operation.headers.length > 0) {
+    const headerData = {};
+    operation.headers.forEach(header => {
+      headerData[header.name] = [header.example || `example_${header.name}`];
+    });
+    
+    if (Object.keys(headerData).length > 0) {
+      exampleBody.headers = headerData;
+    }
+  }
+  
+  const bodyJson = JSON.stringify(exampleBody, null, 2).replace(/'/g, "\\'");
+  parts.push(`  -d '${bodyJson}'`);
   
   // Join parts with newlines and backslashes for continuation
   return parts.join(' \\\n');
