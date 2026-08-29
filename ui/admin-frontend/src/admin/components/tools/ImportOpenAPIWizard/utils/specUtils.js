@@ -49,8 +49,21 @@ export const encodeSpec = (spec) => {
   try {
     // If spec is an object, stringify it
     const specString = typeof spec === "string" ? spec : JSON.stringify(spec);
-    // Convert to base64
-    return btoa(specString);
+    // btoa() operates on Latin-1: it throws on any code point above U+00FF
+    // (curly quotes, em dashes, CJK) and silently writes U+0080-U+00FF as a
+    // single byte, which produces base64 the server cannot read back as UTF-8.
+    // Encode to UTF-8 bytes first so any valid spec round-trips.
+    const bytes = new TextEncoder().encode(specString);
+    // Chunked so a large spec does not blow the argument limit of apply().
+    const chunkSize = 0x8000;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(
+        null,
+        bytes.subarray(i, i + chunkSize)
+      );
+    }
+    return btoa(binary);
   } catch (error) {
     console.error("Failed to encode spec:", error);
     throw new Error("Failed to encode OpenAPI specification");

@@ -316,6 +316,31 @@ The Tool System provides native integration with the Model Context Protocol (MCP
   * Request parameters are mapped to MCP tool arguments with proper typing.
   * Tool responses are formatted as MCP text content with JSON serialization when appropriate.
 
+* **Tool Annotations:**
+  * Each operation's MCP annotations are derived from its HTTP method:
+
+    | Method | `readOnlyHint` | `destructiveHint` | `idempotentHint` |
+    |---|---|---|---|
+    | `GET`, `HEAD`, `OPTIONS` | `true` | `false` | `true` |
+    | `PUT`, `DELETE` | `false` | `true` | `true` |
+    | `POST`, `PATCH` | `false` | `true` | `false` |
+
+  * `openWorldHint` is `true` for every operation: they all reach a third-party API.
+  * The HTTP method only approximates what an operation does, so a spec can
+    override any hint per operation with a boolean extension:
+
+    ```yaml
+    paths:
+      /search:
+        post:
+          operationId: searchRates
+          x-mcp-read-only: true      # a POST that only reads
+          x-mcp-destructive: false
+          # x-mcp-idempotent, x-mcp-open-world are also honoured
+    ```
+
+  * A non-boolean extension value is ignored and the method-derived hint stands.
+
 **7. Potential Considerations & Future Enhancements**
 
 * **Additional Tool Types:** Support for non-REST tool types (e.g., database queries, custom functions).
@@ -324,4 +349,12 @@ The Tool System provides native integration with the Model Context Protocol (MCP
 * **Advanced Dependency Management:** Versioning of tools and dependencies and conditional dependencies based on context.
 * **Improved Documentation:** Structured documentation format for better LLM understanding and automatic example generation.
 * **Analytics Integration:** Tracking of tool usage patterns and performance metrics for tool operations.
+  Tool calls are recorded per operation wherever they are served. On an edge
+  Microgateway, `MicrogatewaAnalyticsHandler.RecordToolCall` queues the call to
+  the analytics pulse plugin's buffer; the next pulse (every 30 seconds by
+  default) batches it into the gRPC `AnalyticsPulse` message as a
+  `ToolCallProto`, and the control server's `SendAnalyticsPulse` handler
+  records it exactly as it would a locally served call. `tool-usage-statistics`,
+  `tool-operations-usage-over-time` and `tool-calls-per-day` therefore count
+  edge and embedded-gateway traffic alike.
 * **Enhanced Security:** More authentication methods, request signing and verification, and rate limiting.

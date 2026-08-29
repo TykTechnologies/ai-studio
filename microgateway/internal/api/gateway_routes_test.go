@@ -14,6 +14,7 @@ import (
 // SetupRouter.
 func mountGatewayRoutes(router *gin.Engine, h http.Handler) {
 	gateway := router.Group("/")
+	gateway.Any("/.well-known/*path", gin.WrapH(h))
 	gateway.Any("/llm/*path", gin.WrapH(h))
 	gateway.Any("/tools/*path", gin.WrapH(h))
 	gateway.Any("/datasource/*path", gin.WrapH(h))
@@ -64,6 +65,48 @@ func TestGatewayRoutes_ForwardAnthropicBridge(t *testing.T) {
 			}
 			if !tc.wantForward && gotPath != "" {
 				t.Errorf("did not expect forward, but handler saw %q", gotPath)
+			}
+		})
+	}
+}
+
+// TestGatewayRoutes_ServeOAuthProtectedResourceMetadata covers the discovery
+// document an unauthenticated MCP request advertises in its WWW-Authenticate
+// header. Before it was mounted, the edge pointed clients at a URL that gin
+// answered with a 404, so a browser client could complete no handshake.
+func TestGatewayRoutes_ServeOAuthProtectedResourceMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var gotPath string
+	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	})
+
+	router := gin.New()
+	mountGatewayRoutes(router, stub)
+
+	cases := []struct {
+		name        string
+		method      string
+		path        string
+		wantStatus  int
+		wantForward bool
+	}{
+		{"metadata", http.MethodGet, "/.well-known/oauth-protected-resource", http.StatusOK, true},
+		{"metadata preflight", http.MethodOptions, "/.well-known/oauth-protected-resource", http.StatusOK, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotPath = ""
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status: got %d, want %d", w.Code, tc.wantStatus)
+			}
+			if tc.wantForward && gotPath != tc.path {
+				t.Errorf("expected forward to handler with path %q, got %q", tc.path, gotPath)
 			}
 		})
 	}

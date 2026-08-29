@@ -794,6 +794,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		Int("budget_events", len(req.BudgetEvents)).
 		Int("proxy_summaries", len(req.ProxySummaries)).
 		Int("compliance_events", len(req.ComplianceEvents)).
+		Int("tool_calls", len(req.ToolCalls)).
 		Msg("AI Studio control server: received analytics pulse from edge")
 
 	processedRecords := uint64(0)
@@ -900,6 +901,25 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			Str("edge_id", req.EdgeId).
 			Int("compliance_events", len(req.ComplianceEvents)).
 			Msg("Compliance events processed from edge pulse")
+	}
+
+	// Process per-operation tool calls served by the edge. Without these the
+	// tool analytics endpoints only ever counted calls served by the control
+	// plane's embedded gateway, so the figures under-reported by whatever
+	// share of traffic a distributed deployment routes through its edges.
+	for _, tc := range req.ToolCalls {
+		timestamp := time.Now()
+		if tc.Timestamp != nil {
+			timestamp = tc.Timestamp.AsTime()
+		}
+		analytics.RecordToolCall(ctx, tc.OperationId, timestamp, int(tc.ExecTimeMs), uint(tc.ToolId))
+		processedRecords++
+	}
+	if len(req.ToolCalls) > 0 {
+		log.Debug().
+			Str("edge_id", req.EdgeId).
+			Int("tool_calls", len(req.ToolCalls)).
+			Msg("Tool calls processed from edge pulse")
 	}
 
 	// Process budget events (for now just log - AI Studio budget integration would need budget service)

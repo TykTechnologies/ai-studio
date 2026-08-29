@@ -653,11 +653,23 @@ func (h *MicrogatewaAnalyticsHandler) RecordToolCall(_ context.Context, name str
 		Str("tool_name", name).
 		Uint("tool_id", toolID).
 		Int("exec_time_ms", execTimeMs).
-		Msg("Recording standalone tool call analytics (AI Studio compatibility)")
+		Msg("Recording standalone tool call analytics")
 
-	// Note: In microgateway, tool calls are tracked as part of LLM analytics
-	// This method is here for AI Studio interface compatibility
-	// Standalone tool call tracking may not be applicable in proxy-only mode
+	if h.pluginManager == nil {
+		return
+	}
+
+	// Forward to the pulse plugin so the control plane can attribute the call
+	// to a tool and an operation. The aggregate ToolCalls counter that rides on
+	// an analytics event carries no operation, so without this an edge-served
+	// tool call is invisible to the control plane's tool analytics, and every
+	// chart under-reports by whatever share of traffic the edges handle.
+	h.pluginManager.BufferToolCalls([]internalPlugins.ToolCallBuffer{{
+		ToolID:      uint32(toolID),
+		OperationID: name,
+		ExecTimeMs:  int32(execTimeMs),
+		Timestamp:   timestamp,
+	}})
 }
 
 // RecordChatRecordsBatch implements batch recording for microgateway analytics

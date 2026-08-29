@@ -21,7 +21,15 @@ func setupPulseTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
-	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.ProxyLog{}, &models.EdgeInstance{}, &models.ComplianceEvent{})
+	// A sqlite ":memory:" database belongs to its connection, so a pooled
+	// second connection opens an empty one and the analytics worker writes
+	// into a database with no tables. Pin the pool to a single connection.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+
+	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.ProxyLog{}, &models.EdgeInstance{},
+		&models.ComplianceEvent{}, &models.ToolCallRecord{})
 	require.NoError(t, err)
 
 	return db

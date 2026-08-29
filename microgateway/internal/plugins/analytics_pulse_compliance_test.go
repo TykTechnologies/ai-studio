@@ -116,7 +116,7 @@ func TestAnalyticsPulsePlugin_BuildPulseMessage_WithComplianceEvents(t *testing.
 		},
 	}
 
-	pulse := plugin.buildPulseMessage(nil, nil, nil, nil, complianceData, 42)
+	pulse := plugin.buildPulseMessage(nil, nil, nil, nil, complianceData, nil, 42)
 
 	require.NotNil(t, pulse)
 	assert.Equal(t, "test-edge", pulse.EdgeId)
@@ -209,13 +209,13 @@ func TestAnalyticsPulsePlugin_BuildPulseMessage_EmptyComplianceData(t *testing.T
 	}
 
 	// Empty compliance data should produce nil ComplianceEvents (not empty slice)
-	pulse := plugin.buildPulseMessage(nil, nil, nil, nil, nil, 1)
+	pulse := plugin.buildPulseMessage(nil, nil, nil, nil, nil, nil, 1)
 	require.NotNil(t, pulse)
 	assert.Nil(t, pulse.ComplianceEvents)
 	assert.Equal(t, uint32(0), pulse.TotalRecords)
 
 	// Empty slice should also produce nil
-	pulse = plugin.buildPulseMessage(nil, nil, nil, nil, []ComplianceEventBuffer{}, 2)
+	pulse = plugin.buildPulseMessage(nil, nil, nil, nil, []ComplianceEventBuffer{}, nil, 2)
 	require.NotNil(t, pulse)
 	assert.Nil(t, pulse.ComplianceEvents)
 }
@@ -256,7 +256,7 @@ func TestAnalyticsPulsePlugin_BuildPulseMessage_ComplianceWithMissingFields(t *t
 		},
 	}
 
-	pulse := plugin.buildPulseMessage(nil, nil, nil, nil, complianceData, 1)
+	pulse := plugin.buildPulseMessage(nil, nil, nil, nil, complianceData, nil, 1)
 	require.NotNil(t, pulse)
 	require.Len(t, pulse.ComplianceEvents, 2)
 
@@ -295,7 +295,7 @@ func TestAnalyticsPulsePlugin_BuildPulseMessage_MixedData(t *testing.T) {
 		},
 	}
 
-	pulse := plugin.buildPulseMessage(nil, nil, budgetData, nil, complianceData, 1)
+	pulse := plugin.buildPulseMessage(nil, nil, budgetData, nil, complianceData, nil, 1)
 
 	require.NotNil(t, pulse)
 	assert.Equal(t, uint32(2), pulse.TotalRecords) // 1 budget + 1 compliance
