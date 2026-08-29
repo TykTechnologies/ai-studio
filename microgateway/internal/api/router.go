@@ -278,6 +278,12 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		gateway := router.Group("/")
 
 		log.Debug().Msg("Mounting AI Gateway handler (plugins integrated via hooks)")
+		// An unauthenticated MCP request to the edge answers with
+		// WWW-Authenticate: Bearer ... resource_metadata_uri="<edge>/.well-known/
+		// oauth-protected-resource". Without this mount the edge advertised a
+		// document it did not serve, and a client following the metadata got a
+		// 404 from gin. The gateway handler already implements the endpoint.
+		gateway.Any("/.well-known/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/llm/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/tools/*path", gin.WrapH(config.Gateway.Handler()))
 		gateway.Any("/datasource/*path", gin.WrapH(config.Gateway.Handler()))

@@ -41,9 +41,22 @@ func AllowOrigin(requestOrigin string) (string, bool) {
 	return "", true
 }
 
+// DefaultAllowHeaders is the Access-Control-Allow-Headers value used by
+// SetCORSHeaders.
+const DefaultAllowHeaders = "Origin, Content-Type, Accept, Authorization"
+
 // SetCORSHeaders applies the CORS policy to a response header set.
 // methods is the value for Access-Control-Allow-Methods.
 func SetCORSHeaders(h http.Header, requestOrigin, methods string) {
+	SetCORSHeadersFor(h, requestOrigin, methods, DefaultAllowHeaders, "")
+}
+
+// SetCORSHeadersFor applies the CORS policy with explicit allowed and exposed
+// header lists. Protocols carried over HTTP need more than the default set:
+// MCP's StreamableHTTP transport sends Mcp-Session-Id and MCP-Protocol-Version
+// on requests and returns Mcp-Session-Id, which a browser client cannot read
+// unless it is exposed. exposeHeaders may be empty.
+func SetCORSHeadersFor(h http.Header, requestOrigin, methods, allowHeaders, exposeHeaders string) {
 	origin, configured := AllowOrigin(requestOrigin)
 	if origin != "" {
 		h.Set("Access-Control-Allow-Origin", origin)
@@ -52,6 +65,12 @@ func SetCORSHeaders(h http.Header, requestOrigin, methods string) {
 		h.Add("Vary", "Origin")
 	}
 	h.Set("Access-Control-Allow-Methods", methods)
-	h.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
+	if allowHeaders == "" {
+		allowHeaders = DefaultAllowHeaders
+	}
+	h.Set("Access-Control-Allow-Headers", allowHeaders)
+	if exposeHeaders != "" {
+		h.Set("Access-Control-Expose-Headers", exposeHeaders)
+	}
 	h.Set("Access-Control-Max-Age", "43200") // 12 hours
 }
