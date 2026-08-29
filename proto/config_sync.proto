@@ -225,6 +225,7 @@ message AnalyticsPulse {
   repeated BudgetUsageEvent budget_events = 8;    // Budget usage events
   repeated ProxyLogSummary proxy_summaries = 9;   // Summarized proxy logs (not full payloads)
   repeated ComplianceEventProto compliance_events = 13; // Script-reported compliance events
+  repeated ToolCallProto tool_calls = 14;         // Per-operation tool call records
 
   // Pulse metadata
   bool is_compressed = 10;        // Whether data is compressed
@@ -350,6 +351,17 @@ message ComplianceEventProto {
   string vendor = 10;
   string model_name = 11;
   google.protobuf.Timestamp timestamp = 12;
+}
+
+// ToolCallProto represents a single tool operation call served by an edge
+// gateway. The aggregate ToolCalls counter on AnalyticsEvent says how many
+// calls a request made, but carries no operation to attribute them to, so
+// tool analytics on the control plane cannot count edge traffic without this.
+message ToolCallProto {
+  uint32 tool_id = 1;                            // Tool ID (matches the control plane's)
+  string operation_id = 2;                       // OpenAPI operationId that was called
+  int32 exec_time_ms = 3;                        // Wall-clock duration of the call
+  google.protobuf.Timestamp timestamp = 4;       // When the call completed
 }
 
 // Plugin Control Payload Messages
