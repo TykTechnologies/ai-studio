@@ -10,7 +10,11 @@ import (
 // blockingService is a Service stub whose host validation always rejects,
 // simulating the enterprise internal-network block.
 type blockingService struct {
-	communityService
+	// Embed the interface, not the CE concrete type: communityService is
+	// built only under !enterprise, and these stubs must compile in both
+	// editions. ValidateCommand only ever calls ValidateGRPCHost, which
+	// both stubs override, so the nil embedded Service is never invoked.
+	Service
 }
 
 func (s *blockingService) ValidateGRPCHost(host string) error {
@@ -21,7 +25,7 @@ func (s *blockingService) IsInternalIP(host string) bool { return true }
 
 // allowingService is a Service stub whose host validation always passes.
 type allowingService struct {
-	communityService
+	Service
 }
 
 func (s *allowingService) ValidateGRPCHost(host string) error { return nil }

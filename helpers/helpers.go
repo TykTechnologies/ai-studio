@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/gin-gonic/gin"
@@ -155,9 +156,15 @@ func DecodeToUTF8(s string) (string, error) {
 		return "", fmt.Errorf("base64 decoding failed: %v", err)
 	}
 
-	// Step 2 & 3: Convert to UTF-8
-	// This example assumes the original encoding was Windows-1252 (a common encoding)
-	// Replace this with the correct encoding if known
+	// Step 2: Payloads written by the UI (and by anything base64-encoding UTF-8
+	// bytes) are already UTF-8 — re-decoding them as Windows-1252 turns every
+	// non-ASCII character into mojibake, so hand them back untouched.
+	if utf8.Valid(decodedBytes) {
+		return string(decodedBytes), nil
+	}
+
+	// Step 3: Not valid UTF-8. Historically the import wizard used btoa(), which
+	// writes U+0080-U+00FF as single bytes, so fall back to Windows-1252.
 	reader := transform.NewReader(strings.NewReader(string(decodedBytes)), charmap.Windows1252.NewDecoder())
 	utf8Bytes, err := io.ReadAll(reader)
 	if err != nil {

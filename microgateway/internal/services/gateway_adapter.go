@@ -937,6 +937,7 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 	}
 
 	llm := models.LLM{
+		Model:         gorm.Model{ID: dbLLM.ID, CreatedAt: dbLLM.CreatedAt, UpdatedAt: dbLLM.UpdatedAt},
 		ID:            dbLLM.ID,
 		Name:          dbLLM.Slug, // Use slug as name for AI Gateway routing
 		Vendor:        models.Vendor(dbLLM.Vendor),
@@ -966,6 +967,7 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 
 func (a *GatewayServiceAdapter) convertDatabaseCredentialToModel(dbCred *database.Credential) models.Credential {
 	return models.Credential{
+		Model:  gorm.Model{ID: dbCred.ID, CreatedAt: dbCred.CreatedAt, UpdatedAt: dbCred.UpdatedAt},
 		ID:     dbCred.ID,
 		KeyID:  dbCred.KeyID,
 		Secret: dbCred.SecretHash, // Note: this is the hashed version
@@ -1009,6 +1011,7 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 	}
 
 	modelApp := models.App{
+		Model:           gorm.Model{ID: dbApp.ID, CreatedAt: dbApp.CreatedAt, UpdatedAt: dbApp.UpdatedAt},
 		ID:              dbApp.ID,
 		Name:            dbApp.Name,
 		Description:     dbApp.Description,
@@ -1059,6 +1062,10 @@ func (a *GatewayServiceAdapter) convertDatabaseToolToModel(dbTool *database.Tool
 	}
 
 	return models.Tool{
+		// Timestamps matter: the gateway's MCP server and parsed-spec caches
+		// are keyed on the tool's version, and a zero UpdatedAt makes every
+		// comparison match, so the caches would never invalidate on an edge.
+		Model:               gorm.Model{ID: dbTool.ID, CreatedAt: dbTool.CreatedAt, UpdatedAt: dbTool.UpdatedAt},
 		ID:                  dbTool.ID,
 		Name:                dbTool.Name,
 		Slug:                dbTool.Slug,
@@ -1106,6 +1113,7 @@ func (a *GatewayServiceAdapter) convertDatabaseDatasourceToModel(dbDS *database.
 	}
 
 	return models.Datasource{
+		Model:            gorm.Model{ID: dbDS.ID, CreatedAt: dbDS.CreatedAt, UpdatedAt: dbDS.UpdatedAt},
 		ID:               dbDS.ID,
 		Name:             dbDS.Name,
 		ShortDescription: dbDS.ShortDescription,
