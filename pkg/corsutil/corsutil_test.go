@@ -81,3 +81,46 @@ func TestSetCORSHeaders(t *testing.T) {
 		}
 	})
 }
+
+func TestSetCORSHeadersFor(t *testing.T) {
+	t.Run("custom allow and expose header lists", func(t *testing.T) {
+		t.Setenv(EnvAllowedOrigins, "")
+		w := httptest.NewRecorder()
+		SetCORSHeadersFor(w.Header(), "https://x.example.com",
+			"GET, POST, DELETE, OPTIONS",
+			DefaultAllowHeaders+", Mcp-Session-Id",
+			"Mcp-Session-Id")
+
+		if got := w.Header().Get("Access-Control-Allow-Headers"); got != DefaultAllowHeaders+", Mcp-Session-Id" {
+			t.Errorf("unexpected allow-headers: %q", got)
+		}
+		if got := w.Header().Get("Access-Control-Expose-Headers"); got != "Mcp-Session-Id" {
+			t.Errorf("unexpected expose-headers: %q", got)
+		}
+		if got := w.Header().Get("Access-Control-Allow-Methods"); got != "GET, POST, DELETE, OPTIONS" {
+			t.Errorf("unexpected allow-methods: %q", got)
+		}
+	})
+
+	t.Run("empty allow list falls back to the default", func(t *testing.T) {
+		t.Setenv(EnvAllowedOrigins, "")
+		w := httptest.NewRecorder()
+		SetCORSHeadersFor(w.Header(), "https://x.example.com", "GET, OPTIONS", "", "")
+
+		if got := w.Header().Get("Access-Control-Allow-Headers"); got != DefaultAllowHeaders {
+			t.Errorf("unexpected allow-headers: %q", got)
+		}
+		if w.Header().Get("Access-Control-Expose-Headers") != "" {
+			t.Error("expose-headers must be omitted when empty")
+		}
+	})
+
+	t.Run("origin policy still applies", func(t *testing.T) {
+		t.Setenv(EnvAllowedOrigins, "https://app.example.com")
+		w := httptest.NewRecorder()
+		SetCORSHeadersFor(w.Header(), "https://evil.example.com", "GET, OPTIONS", "", "")
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Errorf("expected no allow-origin header, got %q", got)
+		}
+	})
+}

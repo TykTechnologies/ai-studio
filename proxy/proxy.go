@@ -422,8 +422,49 @@ func (p *Proxy) createHandler() http.Handler {
 
 	// Middleware chain (innermost to outermost):
 	// 1. combinedHandler - Route /ai/ separately from authenticated routes
-	// 2. cloudflareHeadersMiddleware - Add Cloudflare headers
-	return p.cloudflareHeadersMiddleware(combinedHandler)
+	// 2. toolCORSMiddleware - CORS + preflight for /tools/, ahead of auth
+	// 3. cloudflareHeadersMiddleware - Add Cloudflare headers
+	return p.cloudflareHeadersMiddleware(toolCORSMiddleware(combinedHandler))
+}
+
+// Header names the MCP StreamableHTTP transport relies on. A browser client
+// sends the session id and negotiated protocol version on every request after
+// initialize, and reads the session id off the initialize response, so both
+// have to be allowed and the response one exposed. Last-Event-ID is how a
+// resumed SSE stream says where it left off.
+const (
+	mcpCORSAllowHeaders  = corsutil.DefaultAllowHeaders + ", Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID"
+	mcpCORSExposeHeaders = "Mcp-Session-Id, MCP-Protocol-Version, WWW-Authenticate"
+	mcpCORSAllowMethods  = "GET, POST, DELETE, OPTIONS"
+)
+
+// toolCORSMiddleware makes the tool and MCP endpoints reachable from a browser.
+//
+// pkg/corsutil was applied to the OAuth and metadata handlers but never to
+// /tools/{slug} or its MCP transports, and the preflight never reached a
+// handler that could have added the headers: OPTIONS carries no credentials,
+// so the credential middleware answered it with a 401 and no
+// Access-Control-Allow-Origin. The effect was that MCP Inspector - the
+// protocol's reference client, which talks to HTTP servers directly from the
+// browser - could not connect at all. Running ahead of authentication is what
+// the CORS preflight requires: it is an unauthenticated probe by design.
+func toolCORSMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/tools/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		corsutil.SetCORSHeadersFor(w.Header(), r.Header.Get("Origin"),
+			mcpCORSAllowMethods, mcpCORSAllowHeaders, mcpCORSExposeHeaders)
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // upstreamGuardedTransport is the shared transport for all upstream LLM
