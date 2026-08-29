@@ -589,6 +589,47 @@ func (c *Client) parseXMLResponse(data []byte, schema *base.SchemaProxy) (interf
 	return result, nil
 }
 
+// OperationBinding describes how an operation is bound to HTTP, along with the
+// scalar vendor extensions declared on it. Callers that need to reason about an
+// operation's effects - the MCP bridge derives its tool annotations this way -
+// need the method, which is otherwise only visible inside findOperation.
+type OperationBinding struct {
+	OperationID string
+	Method      string // upper-case HTTP method, e.g. "GET"
+	Path        string // templated path, e.g. "/rate/{base}/{quote}"
+
+	// Extensions holds the operation's x-* extensions whose value is a scalar,
+	// keyed by the lower-cased extension name including the "x-" prefix.
+	Extensions map[string]string
+}
+
+// GetOperationBinding returns the HTTP binding for an operation ID.
+func (c *Client) GetOperationBinding(operationId string) (*OperationBinding, error) {
+	operation, path, method, err := c.findOperation(operationId)
+	if err != nil {
+		return nil, err
+	}
+
+	binding := &OperationBinding{
+		OperationID: operationId,
+		Method:      strings.ToUpper(method),
+		Path:        path,
+		Extensions:  map[string]string{},
+	}
+
+	if operation.Extensions != nil {
+		for pair := operation.Extensions.First(); pair != nil; pair = pair.Next() {
+			node := pair.Value()
+			if node == nil || node.Kind != yaml.ScalarNode {
+				continue
+			}
+			binding.Extensions[strings.ToLower(pair.Key())] = node.Value
+		}
+	}
+
+	return binding, nil
+}
+
 func (c *Client) ListOperations() ([]string, error) {
 	model, err := c.spec.BuildV3Model()
 	if err != nil {
