@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -397,8 +398,49 @@ func (a *API) searchTools(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools, a.config.DB)})
 }
 
+// bindOperationName reads the operation name from the request body, accepting
+// either the JSON:API envelope or the bare form:
+//
+//	{"data": {"attributes": {"operation": "getExchangeRate"}}}
+//	{"operation": "getExchangeRate"}
+//
+// The bare form is the natural reading of the endpoint name and what most
+// people reach for when scripting the API. It used to bind to an empty
+// OperationInput, and the handler then returned 200 with the serialised tool
+// having changed nothing — leaving a Tool with no enabled operations, which is
+// inert but looks fine until AsTool errors or getMCPServerForTool reports
+// "tool has no whitelisted operations", neither of which points back here.
+func bindOperationName(c *gin.Context) (string, error) {
+	var body struct {
+		// Bare form.
+		Operation string `json:"operation"`
+		// JSON:API envelope.
+		Data *struct {
+			Type       string `json:"type"`
+			Attributes struct {
+				Operation string `json:"operation"`
+			} `json:"attributes"`
+		} `json:"data"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		return "", err
+	}
+
+	operation := body.Operation
+	if body.Data != nil && body.Data.Attributes.Operation != "" {
+		operation = body.Data.Attributes.Operation
+	}
+
+	if operation == "" {
+		return "", errors.New(`operation is required: send {"operation":"<operationId>"} ` +
+			`or {"data":{"attributes":{"operation":"<operationId>"}}}`)
+	}
+	return operation, nil
+}
+
 // @Summary Add operation to tool
-// @Description Add an operation to a specific tool
+// @Description Add an operation to a specific tool. The body may use the JSON:API envelope ({"data":{"attributes":{"operation":"..."}}}) or the bare form ({"operation":"..."}).
 // @Tags tools
 // @Accept json
 // @Produce json
@@ -422,8 +464,8 @@ func (a *API) addOperationToTool(c *gin.Context) {
 		return
 	}
 
-	var input OperationInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	operation, err := bindOperationName(c)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -433,7 +475,7 @@ func (a *API) addOperationToTool(c *gin.Context) {
 		return
 	}
 
-	err = a.service.AddOperationToTool(uint(id), input.Data.Attributes.Operation)
+	err = a.service.AddOperationToTool(uint(id), operation)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -459,7 +501,7 @@ func (a *API) addOperationToTool(c *gin.Context) {
 }
 
 // @Summary Remove operation from tool
-// @Description Remove an operation from a specific tool
+// @Description Remove an operation from a specific tool. The body may use the JSON:API envelope ({"data":{"attributes":{"operation":"..."}}}) or the bare form ({"operation":"..."}).
 // @Tags tools
 // @Accept json
 // @Produce json
@@ -483,8 +525,8 @@ func (a *API) removeOperationFromTool(c *gin.Context) {
 		return
 	}
 
-	var input OperationInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	operation, err := bindOperationName(c)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -494,7 +536,7 @@ func (a *API) removeOperationFromTool(c *gin.Context) {
 		return
 	}
 
-	err = a.service.RemoveOperationFromTool(uint(id), input.Data.Attributes.Operation)
+	err = a.service.RemoveOperationFromTool(uint(id), operation)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
