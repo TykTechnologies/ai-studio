@@ -839,7 +839,29 @@ func (c *Client) buildParametersSchema(operation *v3.Operation) map[string]inter
 	required := []string{}
 
 	for _, param := range operation.Parameters {
-		properties[param.Name] = c.SchemaToMap(param.Schema.Schema())
+		if param == nil {
+			continue
+		}
+
+		var schemaMap map[string]interface{}
+		if param.Schema != nil {
+			schemaMap = c.SchemaToMap(param.Schema.Schema())
+		}
+		if schemaMap == nil {
+			// A parameter can describe its payload with `content` instead of
+			// `schema`, and SchemaToMap returns nil for a nil schema.
+			schemaMap = map[string]interface{}{}
+		}
+
+		// Authors normally put the guidance on the parameter object, not on
+		// its schema, so prefer it and keep the schema description as the
+		// fallback. Without this the description is lost and every parameter
+		// reaches an MCP client with no explanation of what it is for.
+		if param.Description != "" {
+			schemaMap["description"] = param.Description
+		}
+
+		properties[param.Name] = schemaMap
 		if param.Required == nil {
 			continue
 		}

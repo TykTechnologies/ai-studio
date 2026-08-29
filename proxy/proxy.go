@@ -110,7 +110,7 @@ type EmbeddingResponse struct {
 type OpenAPICache struct {
 	Document    libopenapi.Document
 	Operations  []string
-	ToolVersion int64
+	ToolVersion string
 	CreatedAt   time.Time
 }
 
@@ -118,7 +118,7 @@ type MCPServerCache struct {
 	SSEServer        *server.SSEServer
 	StreamableServer *server.StreamableHTTPServer
 	MCPServer        *server.MCPServer
-	ToolVersion      int64
+	ToolVersion      string
 	OperationHash    string
 }
 
@@ -1575,7 +1575,7 @@ func (p *Proxy) getParsedOpenAPISpec(toolModel *models.Tool) (*universalclient.C
 
 	// Check if cache is valid (tool version matches and cache is recent)
 	cacheExpiry := 30 * time.Minute
-	if exists && cache.ToolVersion == toolModel.UpdatedAt.UnixNano() &&
+	if exists && cache.ToolVersion == p.toolCacheVersion(toolModel) &&
 		time.Since(cache.CreatedAt) < cacheExpiry {
 		// Create client from cached document
 		decodedSpec, err := base64.StdEncoding.DecodeString(toolModel.OASSpec)
@@ -1611,12 +1611,27 @@ func (p *Proxy) getParsedOpenAPISpec(toolModel *models.Tool) (*universalclient.C
 	p.openAPICacheMu.Lock()
 	p.openAPICache[cacheKey] = &OpenAPICache{
 		Operations:  operations,
-		ToolVersion: toolModel.UpdatedAt.UnixNano(),
+		ToolVersion: p.toolCacheVersion(toolModel),
 		CreatedAt:   time.Now(),
 	}
 	p.openAPICacheMu.Unlock()
 
 	return client, operations, nil
+}
+
+// toolCacheVersion fingerprints everything the cached MCP server and parsed
+// spec are derived from. UpdatedAt alone is not enough: a data plane builds
+// models.Tool by hand from local SQLite, and any converter that forgets the
+// timestamps leaves it at the zero time, in which case a timestamp comparison
+// always matches and the entry is never invalidated. Hashing the spec and the
+// whitelisted operations makes the check correct regardless.
+func (p *Proxy) toolCacheVersion(toolModel *models.Tool) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "%d\x00%d\x00", toolModel.ID, toolModel.UpdatedAt.UnixNano())
+	h.Write([]byte(toolModel.OASSpec))
+	h.Write([]byte("\x00"))
+	h.Write([]byte(strings.Join(toolModel.GetOperations(), ",")))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func (p *Proxy) generateOperationHash(toolModel *models.Tool) string {
@@ -1628,7 +1643,7 @@ func (p *Proxy) generateOperationHash(toolModel *models.Tool) string {
 	}
 
 	// Create hash from tool version + allowed operations
-	hashData := fmt.Sprintf("%d:%s", toolModel.UpdatedAt.UnixNano(), strings.Join(allowedOps, ","))
+	hashData := fmt.Sprintf("%s:%s", p.toolCacheVersion(toolModel), strings.Join(allowedOps, ","))
 	h := sha256.New()
 	h.Write([]byte(hashData))
 	return fmt.Sprintf("%x", h.Sum(nil))
@@ -1662,6 +1677,28 @@ func convertMCPParameterValue(val string, paramType string) interface{} {
 	}
 }
 
+// schemaRequiredNames reads a JSON Schema "required" list. The list arrives as
+// a []string when the schema was built in Go (universalclient.buildParametersSchema
+// and SchemaToMap both emit that) and as a []interface{} when it came back
+// through a JSON round trip. Asserting only one of the two silently dropped
+// every required marker, so an MCP client saw no required parameters at all.
+func schemaRequiredNames(value interface{}) []string {
+	switch list := value.(type) {
+	case []string:
+		return list
+	case []interface{}:
+		names := make([]string, 0, len(list))
+		for _, item := range list {
+			if name, ok := item.(string); ok {
+				names = append(names, name)
+			}
+		}
+		return names
+	default:
+		return nil
+	}
+}
+
 func flattenSchemaProperties(properties map[string]interface{}, required []string, prefix string) (map[string]map[string]interface{}, []string) {
 	flattened := make(map[string]map[string]interface{})
 	flattenedRequired := []string{}
@@ -1684,14 +1721,7 @@ func flattenSchemaProperties(properties map[string]interface{}, required []strin
 			if paramType == "object" {
 				// Recursively flatten nested objects
 				if nestedProps, ok := paramDefMap["properties"].(map[string]interface{}); ok {
-					var nestedRequired []string
-					if reqList, ok := paramDefMap["required"].([]interface{}); ok {
-						for _, req := range reqList {
-							if reqStr, ok := req.(string); ok {
-								nestedRequired = append(nestedRequired, reqStr)
-							}
-						}
-					}
+					nestedRequired := schemaRequiredNames(paramDefMap["required"])
 
 					nestedFlattened, nestedFlattenedRequired := flattenSchemaProperties(nestedProps, nestedRequired, paramName)
 					for k, v := range nestedFlattened {
@@ -1720,32 +1750,59 @@ func flattenSchemaProperties(properties map[string]interface{}, required []strin
 	return flattened, flattenedRequired
 }
 
+// mcpParameterOptions turns the JSON Schema an llms.Tool carries into MCP tool
+// options, flattening nested objects and preserving which parameters the
+// OpenAPI document marks required.
+func mcpParameterOptions(parameters interface{}) []mcp.ToolOption {
+	parametersSchema, ok := parameters.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	properties, ok := parametersSchema["properties"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	required := schemaRequiredNames(parametersSchema["required"])
+
+	// Flatten all properties (including nested objects) for MCP exposure
+	flattenedParams, flattenedRequired := flattenSchemaProperties(properties, required, "")
+	flattenedRequiredSet := make(map[string]bool, len(flattenedRequired))
+	for _, req := range flattenedRequired {
+		flattenedRequiredSet[req] = true
+	}
+
+	options := make([]mcp.ToolOption, 0, len(flattenedParams))
+	for paramName, paramSchema := range flattenedParams {
+		options = append(options, addMCPToolParameter(paramName, paramSchema, flattenedRequiredSet[paramName]))
+	}
+	return options
+}
+
 func addMCPToolParameter(paramName string, paramSchema map[string]interface{}, isRequired bool) mcp.ToolOption {
 	paramType, _ := paramSchema["type"].(string)
 	description, _ := paramSchema["description"].(string)
 
+	// mcp.Description sets the key unconditionally, so passing an empty string
+	// would publish `"description": ""` on every parameter that has none.
+	opts := []mcp.PropertyOption{}
+	if isRequired {
+		opts = append(opts, mcp.Required())
+	}
+	if description != "" {
+		opts = append(opts, mcp.Description(description))
+	}
+
 	switch paramType {
-	case "string":
-		if isRequired {
-			return mcp.WithString(paramName, mcp.Required(), mcp.Description(description))
-		}
-		return mcp.WithString(paramName, mcp.Description(description))
 	case "number", "integer":
-		if isRequired {
-			return mcp.WithNumber(paramName, mcp.Required(), mcp.Description(description))
-		}
-		return mcp.WithNumber(paramName, mcp.Description(description))
+		return mcp.WithNumber(paramName, opts...)
 	case "boolean":
-		if isRequired {
-			return mcp.WithBoolean(paramName, mcp.Required(), mcp.Description(description))
-		}
-		return mcp.WithBoolean(paramName, mcp.Description(description))
+		return mcp.WithBoolean(paramName, opts...)
+	case "string":
+		return mcp.WithString(paramName, opts...)
 	default:
 		// Default to string
-		if isRequired {
-			return mcp.WithString(paramName, mcp.Required(), mcp.Description(description))
-		}
-		return mcp.WithString(paramName, mcp.Description(description))
+		return mcp.WithString(paramName, opts...)
 	}
 }
 
@@ -1855,12 +1912,40 @@ func mcpAnnotationsForOperation(client *universalclient.Client, operationID stri
 	return applyMCPAnnotationOverrides(mcpAnnotationsForMethod(binding.Method), binding.Extensions)
 }
 
+// mcpToolResultFromValue renders a tool operation result as MCP text content.
+//
+// universalclient.parseResponse returns a string when the operation documents
+// no response schema for the status code, and a map or slice when it does. The
+// map/slice case used to go through fmt's %v, which prints Go's map syntax:
+// not JSON, not documented anywhere, and in map-iteration order, so it was not
+// even stable between calls. Anything that is not already a string is now
+// marshalled as JSON, so MCP clients see the same payload the REST endpoint
+// returns for the same operation.
+func mcpToolResultFromValue(operationID string, result interface{}) *mcp.CallToolResult {
+	if str, ok := result.(string); ok {
+		return mcp.NewToolResultText(str)
+	}
+
+	jsonData, err := json.Marshal(result)
+	if err != nil {
+		logger.Warnf("MCP operation %s: could not marshal result as JSON, falling back to Go formatting: %v", operationID, err)
+		return mcp.NewToolResultText(fmt.Sprintf("%v", result))
+	}
+	return mcp.NewToolResultText(string(jsonData))
+}
+
 func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*MCPServerCache, error) {
 	// Create a hash of the tool operations to detect changes
 	currentOpHash := p.generateOperationHash(toolModel)
+	currentVersion := p.toolCacheVersion(toolModel)
 
-	// Use slug.Make to create cache key from tool name
-	cacheKey := slug.Make(toolModel.Name)
+	// The slug is the public path segment (/tools/{slug}/mcp), so the SSE
+	// server's base path is built from it. The cache is keyed on the tool ID
+	// instead: a slug is not stable across a delete and recreate, and the
+	// cached handler closures capture the tool ID, so a slug-keyed entry could
+	// outlive its tool and keep calling an ID that no longer exists.
+	toolSlug := slug.Make(toolModel.Name)
+	cacheKey := fmt.Sprintf("%d", toolModel.ID)
 
 	p.mcpServersMu.RLock()
 	cache, exists := p.mcpServers[cacheKey]
@@ -1868,8 +1953,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 
 	// Check if we have a valid cached server
 	if exists {
-		// Compare cache.ToolVersion with toolModel.UpdatedAt.UnixNano() to fix type mismatch
-		if cache.ToolVersion == toolModel.UpdatedAt.UnixNano() && cache.OperationHash == currentOpHash {
+		if cache.ToolVersion == currentVersion && cache.OperationHash == currentOpHash {
 			// Tool hasn't changed, return cached server
 			return cache, nil
 		}
@@ -1883,7 +1967,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 
 	// Check again in case another goroutine updated it
 	cache, exists = p.mcpServers[cacheKey]
-	if exists && cache.ToolVersion == toolModel.UpdatedAt.UnixNano() && cache.OperationHash == currentOpHash {
+	if exists && cache.ToolVersion == currentVersion && cache.OperationHash == currentOpHash {
 		return cache, nil
 	}
 
@@ -1939,33 +2023,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 			mcp.WithDescription(llmsTool.Function.Description),
 			mcp.WithToolAnnotation(mcpAnnotationsForOperation(client, operationID)),
 		}
-
-		// Add parameters based on the function definition
-		if parametersSchema, ok := llmsTool.Function.Parameters.(map[string]interface{}); ok {
-			if properties, ok := parametersSchema["properties"].(map[string]interface{}); ok {
-				var required []string
-				if reqList, ok := parametersSchema["required"].([]interface{}); ok {
-					for _, req := range reqList {
-						if reqStr, ok := req.(string); ok {
-							required = append(required, reqStr)
-						}
-					}
-				}
-
-				// Flatten all properties (including nested objects) for MCP exposure
-				flattenedParams, flattenedRequired := flattenSchemaProperties(properties, required, "")
-				flattenedRequiredSet := make(map[string]bool)
-				for _, req := range flattenedRequired {
-					flattenedRequiredSet[req] = true
-				}
-
-				// Add each flattened parameter to MCP tool options
-				for paramName, paramSchema := range flattenedParams {
-					isRequired := flattenedRequiredSet[paramName]
-					toolOptions = append(toolOptions, addMCPToolParameter(paramName, paramSchema, isRequired))
-				}
-			}
-		}
+		toolOptions = append(toolOptions, mcpParameterOptions(llmsTool.Function.Parameters)...)
 
 		mcpTool := mcp.NewTool(llmsTool.Function.Name, toolOptions...)
 
@@ -2048,26 +2106,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 			)
 
 			// Convert the result to MCP format
-			switch res := result.(type) {
-			case string:
-				return mcp.NewToolResultText(res), nil
-			case map[string]interface{}, []interface{}:
-				return mcp.NewToolResultText(fmt.Sprintf("%v", res)), nil
-			default:
-				// Try to marshal any other type to JSON
-				jsonData, err := json.Marshal(result)
-				if err != nil {
-					return mcp.NewToolResultText(fmt.Sprintf("%v", result)), nil
-				}
-				// Check if it's a JSON object or array
-				if len(jsonData) > 0 && (jsonData[0] == '{' || jsonData[0] == '[') {
-					var obj interface{}
-					if err := json.Unmarshal(jsonData, &obj); err == nil {
-						return mcp.NewToolResultText(string(jsonData)), nil
-					}
-				}
-				return mcp.NewToolResultText(string(jsonData)), nil
-			}
+			return mcpToolResultFromValue(operationID, result), nil
 		})
 	}
 
@@ -2086,7 +2125,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 		server.WithBaseURL(baseURL),
 		server.WithDynamicBasePath(func(req *http.Request, sessionID string) string {
 			// This tells the server that its base path is /tools/{toolSlug}/mcp
-			return fmt.Sprintf("/tools/%s/mcp", cacheKey)
+			return fmt.Sprintf("/tools/%s/mcp", toolSlug)
 		}),
 	)
 
@@ -2098,7 +2137,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 		SSEServer:        sseServer,
 		StreamableServer: streamableServer,
 		MCPServer:        mcpServer,
-		ToolVersion:      toolModel.UpdatedAt.UnixNano(),
+		ToolVersion:      currentVersion,
 		OperationHash:    currentOpHash,
 	}
 

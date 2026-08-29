@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 )
+
+// testOASSpec encodes a spec the way the API requires. oas_spec is typed as a
+// string but must carry base64; raw JSON is rejected with a 400.
+func testOASSpec(spec string) string {
+	return base64.StdEncoding.EncodeToString([]byte(spec))
+}
 
 func TestToolEndpoints(t *testing.T) {
 	api, _ := setupTestAPI(t)
@@ -44,7 +51,7 @@ func TestToolEndpoints(t *testing.T) {
 				Name:         "Test Tool",
 				Description:  "A test tool",
 				ToolType:     models.ToolTypeREST,
-				OASSpec:      `{"openapi": "3.0.0"}`,
+				OASSpec:      testOASSpec(`{"openapi": "3.0.0"}`),
 				PrivacyScore: 8,
 				Operations:   []string{"operation1", "operation2"},
 			},
@@ -96,7 +103,7 @@ func TestToolEndpoints(t *testing.T) {
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
 				ToolType:     models.ToolTypeREST,
-				OASSpec:      `{"openapi": "3.0.1"}`,
+				OASSpec:      testOASSpec(`{"openapi": "3.0.1"}`),
 				PrivacyScore: 9,
 				Operations:   []string{"operation1", "operation2", "operation3"},
 			},
@@ -179,7 +186,7 @@ func TestToolAuthKeyRedaction(t *testing.T) {
 					Name:     name,
 					AuthKey:  authKey,
 					ToolType: models.ToolTypeREST,
-					OASSpec:  `{"openapi": "3.0.0"}`,
+					OASSpec:  testOASSpec(`{"openapi": "3.0.0"}`),
 				},
 			},
 		}
@@ -271,7 +278,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
 				ToolType:     models.ToolTypeREST,
-				OASSpec:      `{"openapi": "3.0.1"}`,
+				OASSpec:      testOASSpec(`{"openapi": "3.0.1"}`),
 				PrivacyScore: 9,
 				Operations:   []string{"operation1", "operation2", "operation3"},
 			},

@@ -427,6 +427,41 @@ func TestGatewayAdapterToolMethods(t *testing.T) {
 		assert.Error(t, err)
 	})
 
+	// The gateway's MCP server cache invalidates on the tool's version. When
+	// the adapter dropped the timestamps, every edge-served tool carried the
+	// zero time, the comparison always matched, and the cache was never
+	// rebuilt — so a deleted-and-recreated tool kept calling the old tool's ID.
+	t.Run("GetToolByID_PreservesTimestamps", func(t *testing.T) {
+		var dbTool database.Tool
+		require.NoError(t, db.First(&dbTool, 1).Error)
+
+		tool, err := adapter.GetToolByID(1)
+		require.NoError(t, err)
+		assert.False(t, tool.UpdatedAt.IsZero(), "UpdatedAt must be carried over from SQLite")
+		assert.True(t, dbTool.UpdatedAt.Equal(tool.UpdatedAt))
+		assert.True(t, dbTool.CreatedAt.Equal(tool.CreatedAt))
+	})
+
+	t.Run("GetToolBySlug_PreservesTimestamps", func(t *testing.T) {
+		tool, err := adapter.GetToolBySlug("weather-api")
+		require.NoError(t, err)
+		assert.False(t, tool.UpdatedAt.IsZero(), "UpdatedAt must be carried over from SQLite")
+	})
+
+	t.Run("GetActiveDatasources_PreservesTimestamps", func(t *testing.T) {
+		datasources, err := adapter.GetActiveDatasources()
+		require.NoError(t, err)
+		require.NotEmpty(t, datasources)
+		assert.False(t, datasources[0].UpdatedAt.IsZero())
+	})
+
+	t.Run("GetActiveLLMs_PreservesTimestamps", func(t *testing.T) {
+		llms, err := adapter.GetActiveLLMs()
+		require.NoError(t, err)
+		require.NotEmpty(t, llms)
+		assert.False(t, llms[0].UpdatedAt.IsZero())
+	})
+
 	t.Run("GetActiveDatasources", func(t *testing.T) {
 		datasources, err := adapter.GetActiveDatasources()
 		require.NoError(t, err)
