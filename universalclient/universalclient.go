@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pb33f/libopenapi"
@@ -92,6 +93,12 @@ type Client struct {
 	httpClient     *http.Client
 	responseFormat ResponseFormat
 	authConfig     AuthConfig
+
+	// The spec is fixed for the lifetime of a client, so the operation index
+	// is built once on first use. See operationLocations.
+	operationIndexOnce sync.Once
+	operationIndex     map[string]*operationLocation
+	operationIndexErr  error
 }
 
 // ClientOption is a function that configures a Client
@@ -383,37 +390,87 @@ func (c *Client) CallOperation(operationId string, params map[string][]string, p
 	return c.parseResponse(resp, operation)
 }
 
-func (c *Client) findOperation(operationId string) (*v3.Operation, string, string, error) {
-	model, err := c.spec.BuildV3Model()
-	if err != nil {
-		return nil, "", "", fmt.Errorf("failed to build V3 model: %v", err)
+// operationLocation records where an operation lives in the spec, so a lookup
+// by operation ID does not have to walk the document.
+type operationLocation struct {
+	operation *v3.Operation
+	path      string
+	method    string // upper-case HTTP method, e.g. "GET"
+}
+
+// pathItemOperations returns a path item's operations paired with their HTTP
+// method. The order is fixed rather than map iteration order so that a spec
+// which reuses an operation ID resolves to the same operation on every run.
+func pathItemOperations(pathItem *v3.PathItem) []operationLocation {
+	return []operationLocation{
+		{operation: pathItem.Get, method: http.MethodGet},
+		{operation: pathItem.Post, method: http.MethodPost},
+		{operation: pathItem.Put, method: http.MethodPut},
+		{operation: pathItem.Delete, method: http.MethodDelete},
+		{operation: pathItem.Options, method: http.MethodOptions},
+		{operation: pathItem.Head, method: http.MethodHead},
+		{operation: pathItem.Patch, method: http.MethodPatch},
+		{operation: pathItem.Trace, method: http.MethodTrace},
 	}
+}
 
-	pathItems := model.Model.Paths.PathItems
-
-	for pair := pathItems.First(); pair != nil; pair = pair.Next() {
-		path := pair.Key()
-		pathItem := pair.Value()
-
-		methods := map[string]*v3.Operation{
-			"GET":     pathItem.Get,
-			"POST":    pathItem.Post,
-			"PUT":     pathItem.Put,
-			"DELETE":  pathItem.Delete,
-			"OPTIONS": pathItem.Options,
-			"HEAD":    pathItem.Head,
-			"PATCH":   pathItem.Patch,
-			"TRACE":   pathItem.Trace,
+// operationLocations returns the operation-ID index, building it on first use.
+//
+// This used to be a scan of every path item on every lookup. Both AsTool and
+// the MCP annotation lookup call findOperation once per operation, so building
+// an MCP server for a tool with N operations over an M-operation spec walked
+// the document O(N*M) times. The spec cannot change after NewClient, so one
+// pass is enough and every later lookup is a map hit.
+//
+// The returned map is shared and must be treated as read-only by callers.
+func (c *Client) operationLocations() (map[string]*operationLocation, error) {
+	c.operationIndexOnce.Do(func() {
+		model, err := c.spec.BuildV3Model()
+		if err != nil {
+			c.operationIndexErr = fmt.Errorf("failed to build V3 model: %v", err)
+			return
 		}
 
-		for method, op := range methods {
-			if op != nil && op.OperationId == operationId {
-				return op, path, method, nil
+		index := make(map[string]*operationLocation)
+		for pair := model.Model.Paths.PathItems.First(); pair != nil; pair = pair.Next() {
+			path := pair.Key()
+
+			for _, entry := range pathItemOperations(pair.Value()) {
+				if entry.operation == nil || entry.operation.OperationId == "" {
+					continue
+				}
+				// Operation IDs are unique within a spec. If one is duplicated
+				// anyway, the first occurrence wins, as the old scan did.
+				if _, exists := index[entry.operation.OperationId]; exists {
+					continue
+				}
+
+				index[entry.operation.OperationId] = &operationLocation{
+					operation: entry.operation,
+					path:      path,
+					method:    entry.method,
+				}
 			}
 		}
+
+		c.operationIndex = index
+	})
+
+	return c.operationIndex, c.operationIndexErr
+}
+
+func (c *Client) findOperation(operationId string) (*v3.Operation, string, string, error) {
+	index, err := c.operationLocations()
+	if err != nil {
+		return nil, "", "", err
 	}
 
-	return nil, "", "", fmt.Errorf("operation not found: %s", operationId)
+	location, ok := index[operationId]
+	if !ok {
+		return nil, "", "", fmt.Errorf("operation not found: %s", operationId)
+	}
+
+	return location.operation, location.path, location.method, nil
 }
 
 func (c *Client) constructURL(path string, params map[string][]string) (string, error) {
@@ -587,6 +644,47 @@ func (c *Client) parseXMLResponse(data []byte, schema *base.SchemaProxy) (interf
 	}
 
 	return result, nil
+}
+
+// OperationBinding describes how an operation is bound to HTTP, along with the
+// scalar vendor extensions declared on it. Callers that need to reason about an
+// operation's effects - the MCP bridge derives its tool annotations this way -
+// need the method, which is otherwise only visible inside findOperation.
+type OperationBinding struct {
+	OperationID string
+	Method      string // upper-case HTTP method, e.g. "GET"
+	Path        string // templated path, e.g. "/rate/{base}/{quote}"
+
+	// Extensions holds the operation's x-* extensions whose value is a scalar,
+	// keyed by the lower-cased extension name including the "x-" prefix.
+	Extensions map[string]string
+}
+
+// GetOperationBinding returns the HTTP binding for an operation ID.
+func (c *Client) GetOperationBinding(operationId string) (*OperationBinding, error) {
+	operation, path, method, err := c.findOperation(operationId)
+	if err != nil {
+		return nil, err
+	}
+
+	binding := &OperationBinding{
+		OperationID: operationId,
+		Method:      strings.ToUpper(method),
+		Path:        path,
+		Extensions:  map[string]string{},
+	}
+
+	if operation.Extensions != nil {
+		for pair := operation.Extensions.First(); pair != nil; pair = pair.Next() {
+			node := pair.Value()
+			if node == nil || node.Kind != yaml.ScalarNode {
+				continue
+			}
+			binding.Extensions[strings.ToLower(pair.Key())] = node.Value
+		}
+	}
+
+	return binding, nil
 }
 
 func (c *Client) ListOperations() ([]string, error) {
