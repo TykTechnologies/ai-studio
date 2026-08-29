@@ -3,6 +3,7 @@ package helpers
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -338,6 +339,32 @@ func TestDecodeToUTF8(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDecodeToUTF8_Encodings(t *testing.T) {
+	t.Run("UTF-8 payload is returned unchanged", func(t *testing.T) {
+		// What the import wizard now produces: base64 of UTF-8 bytes.
+		const spec = `{"info":{"title":"Canada\u2019s holidays \u2014 jours f\u00e9ri\u00e9s"}}`
+		decoded, err := DecodeToUTF8(base64.StdEncoding.EncodeToString([]byte(spec)))
+		assert.NoError(t, err)
+		assert.Equal(t, spec, decoded)
+	})
+
+	t.Run("multi-byte scripts survive the round trip", func(t *testing.T) {
+		const spec = "祝日 \U0001F341"
+		decoded, err := DecodeToUTF8(base64.StdEncoding.EncodeToString([]byte(spec)))
+		assert.NoError(t, err)
+		assert.Equal(t, spec, decoded)
+	})
+
+	t.Run("legacy Windows-1252 payload is still transcoded", func(t *testing.T) {
+		// What btoa() produced for Latin-1 input: one byte per code point,
+		// which is not valid UTF-8 and needs the charmap fallback.
+		latin1 := []byte{'c', 'a', 'f', 0xE9} // "café" as Windows-1252
+		decoded, err := DecodeToUTF8(base64.StdEncoding.EncodeToString(latin1))
+		assert.NoError(t, err)
+		assert.Equal(t, "café", decoded)
+	})
 }
 
 func TestSendErrorResponse(t *testing.T) {
