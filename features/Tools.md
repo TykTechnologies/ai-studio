@@ -316,6 +316,31 @@ The Tool System provides native integration with the Model Context Protocol (MCP
   * Request parameters are mapped to MCP tool arguments with proper typing.
   * Tool responses are formatted as MCP text content with JSON serialization when appropriate.
 
+* **Tool Annotations:**
+  * Each operation's MCP annotations are derived from its HTTP method:
+
+    | Method | `readOnlyHint` | `destructiveHint` | `idempotentHint` |
+    |---|---|---|---|
+    | `GET`, `HEAD`, `OPTIONS` | `true` | `false` | `true` |
+    | `PUT`, `DELETE` | `false` | `true` | `true` |
+    | `POST`, `PATCH` | `false` | `true` | `false` |
+
+  * `openWorldHint` is `true` for every operation: they all reach a third-party API.
+  * The HTTP method only approximates what an operation does, so a spec can
+    override any hint per operation with a boolean extension:
+
+    ```yaml
+    paths:
+      /search:
+        post:
+          operationId: searchRates
+          x-mcp-read-only: true      # a POST that only reads
+          x-mcp-destructive: false
+          # x-mcp-idempotent, x-mcp-open-world are also honoured
+    ```
+
+  * A non-boolean extension value is ignored and the method-derived hint stands.
+
 **7. Potential Considerations & Future Enhancements**
 
 * **Additional Tool Types:** Support for non-REST tool types (e.g., database queries, custom functions).
