@@ -324,4 +324,12 @@ The Tool System provides native integration with the Model Context Protocol (MCP
 * **Advanced Dependency Management:** Versioning of tools and dependencies and conditional dependencies based on context.
 * **Improved Documentation:** Structured documentation format for better LLM understanding and automatic example generation.
 * **Analytics Integration:** Tracking of tool usage patterns and performance metrics for tool operations.
+  Tool calls are recorded per operation wherever they are served. On an edge
+  Microgateway, `MicrogatewaAnalyticsHandler.RecordToolCall` queues the call to
+  the analytics pulse plugin's buffer; the next pulse (every 30 seconds by
+  default) batches it into the gRPC `AnalyticsPulse` message as a
+  `ToolCallProto`, and the control server's `SendAnalyticsPulse` handler
+  records it exactly as it would a locally served call. `tool-usage-statistics`,
+  `tool-operations-usage-over-time` and `tool-calls-per-day` therefore count
+  edge and embedded-gateway traffic alike.
 * **Enhanced Security:** More authentication methods, request signing and verification, and rate limiting.

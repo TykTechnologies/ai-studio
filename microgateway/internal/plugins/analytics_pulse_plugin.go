@@ -29,6 +29,7 @@ type AnalyticsPulsePlugin struct {
 	budgetBuffer       []BudgetUsageBuffer
 	proxyBuffer        []ProxyLogBuffer
 	complianceBuffer   []ComplianceEventBuffer
+	toolCallBuffer     []ToolCallBuffer
 	bufferMutex        sync.RWMutex
 
 	// Pulse management
@@ -113,6 +114,17 @@ type ComplianceEventBuffer struct {
 	Metadata    string // JSON blob
 	Vendor      string
 	ModelName   string
+	Timestamp   time.Time
+}
+
+// ToolCallBuffer holds a single tool operation call for batching in pulses.
+// The aggregate ToolCalls counter on an analytics event says how many calls a
+// request made but not which operations they were, so tool analytics on the
+// control plane has nothing to attribute edge traffic to without these.
+type ToolCallBuffer struct {
+	ToolID      uint32
+	OperationID string
+	ExecTimeMs  int32
 	Timestamp   time.Time
 }
 
@@ -395,6 +407,25 @@ func (p *AnalyticsPulsePlugin) BufferComplianceEvents(events []ComplianceEventBu
 		Msg("Compliance events buffered for pulse")
 }
 
+// BufferToolCalls adds tool operation calls to the buffer for pulse
+// transmission. Called by the microgateway analytics handler whenever a tool
+// operation is served by this edge, over REST or over MCP.
+func (p *AnalyticsPulsePlugin) BufferToolCalls(calls []ToolCallBuffer) {
+	if len(calls) == 0 {
+		return
+	}
+
+	p.bufferMutex.Lock()
+	defer p.bufferMutex.Unlock()
+
+	p.toolCallBuffer = append(p.toolCallBuffer, calls...)
+
+	log.Debug().
+		Int("count", len(calls)).
+		Int("buffer_size", len(p.toolCallBuffer)).
+		Msg("Tool calls buffered for pulse")
+}
+
 // schedulePulse schedules the next pulse
 func (p *AnalyticsPulsePlugin) schedulePulse() {
 	if p.pulseTimer != nil {
@@ -426,7 +457,8 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 	p.bufferMutex.Lock()
 
 	// Check if there's any data to send
-	if len(p.analyticsBuffer) == 0 && len(p.budgetBuffer) == 0 && len(p.proxyBuffer) == 0 && len(p.complianceBuffer) == 0 {
+	if len(p.analyticsBuffer) == 0 && len(p.budgetBuffer) == 0 && len(p.proxyBuffer) == 0 &&
+		len(p.complianceBuffer) == 0 && len(p.toolCallBuffer) == 0 {
 		p.bufferMutex.Unlock()
 		log.Debug().Msg("No analytics data to pulse - skipping")
 		return
@@ -453,13 +485,17 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 	copy(complianceSnapshot, p.complianceBuffer)
 	p.complianceBuffer = p.complianceBuffer[:0]
 
+	toolCallSnapshot := make([]ToolCallBuffer, len(p.toolCallBuffer))
+	copy(toolCallSnapshot, p.toolCallBuffer)
+	p.toolCallBuffer = p.toolCallBuffer[:0]
+
 	sequenceNum := p.sequenceNumber
 	p.sequenceNumber++
 
 	p.bufferMutex.Unlock()
 
 	// Build and send pulse
-	pulse := p.buildPulseMessage(analyticsSnapshot, metadataSnapshot, budgetSnapshot, proxySnapshot, complianceSnapshot, sequenceNum)
+	pulse := p.buildPulseMessage(analyticsSnapshot, metadataSnapshot, budgetSnapshot, proxySnapshot, complianceSnapshot, toolCallSnapshot, sequenceNum)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.config.TimeoutSeconds)*time.Second)
 	defer cancel()
@@ -470,6 +506,7 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 		Int("budget_events", len(budgetSnapshot)).
 		Int("proxy_summaries", len(proxySnapshot)).
 		Int("compliance_events", len(complianceSnapshot)).
+		Int("tool_calls", len(toolCallSnapshot)).
 		Uint32("total_records", pulse.TotalRecords).
 		Msg("Sending analytics pulse to control server")
 
@@ -508,6 +545,7 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 	budgetData []BudgetUsageBuffer,
 	proxyData []ProxyLogBuffer,
 	complianceData []ComplianceEventBuffer,
+	toolCallData []ToolCallBuffer,
 	sequenceNum uint64,
 ) *pb.AnalyticsPulse {
 	now := time.Now()
@@ -631,7 +669,18 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 		})
 	}
 
-	totalRecords := uint32(len(analyticsEvents) + len(budgetEvents) + len(proxySummaries) + len(complianceEvents))
+	// Convert tool calls
+	var toolCalls []*pb.ToolCallProto
+	for _, tc := range toolCallData {
+		toolCalls = append(toolCalls, &pb.ToolCallProto{
+			ToolId:      tc.ToolID,
+			OperationId: tc.OperationID,
+			ExecTimeMs:  tc.ExecTimeMs,
+			Timestamp:   timestamppb.New(tc.Timestamp),
+		})
+	}
+
+	totalRecords := uint32(len(analyticsEvents) + len(budgetEvents) + len(proxySummaries) + len(complianceEvents) + len(toolCalls))
 
 	return &pb.AnalyticsPulse{
 		EdgeId:           p.edgeID,
@@ -644,6 +693,7 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 		BudgetEvents:     budgetEvents,
 		ProxySummaries:   proxySummaries,
 		ComplianceEvents: complianceEvents,
+		ToolCalls:        toolCalls,
 		IsCompressed:     p.config.CompressionEnabled,
 		TotalRecords:     totalRecords,
 		DataSizeBytes:    0, // TODO: Calculate if needed
@@ -691,10 +741,12 @@ func (p *AnalyticsPulsePlugin) GetStats() map[string]interface{} {
 	stats := map[string]interface{}{
 		"total_pulses_sent":     p.totalPulsesSent,
 		"total_records_sent":    p.totalRecordsSent,
-		"current_buffer_size":   len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer),
+		"current_buffer_size":   len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) + len(p.complianceBuffer) + len(p.toolCallBuffer),
 		"analytics_buffered":    len(p.analyticsBuffer),
 		"budget_buffered":       len(p.budgetBuffer),
 		"proxy_buffered":        len(p.proxyBuffer),
+		"compliance_buffered":   len(p.complianceBuffer),
+		"tool_calls_buffered":   len(p.toolCallBuffer),
 		"sequence_number":       p.sequenceNumber,
 		"last_pulse_time":       p.lastPulseTime,
 		"pulse_interval_seconds": p.config.IntervalSeconds,

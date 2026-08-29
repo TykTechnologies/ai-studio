@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -147,17 +148,31 @@ func (a *API) getChatRecordsPerUser(c *gin.Context) {
 	c.JSON(http.StatusOK, chartData)
 }
 
+// parseDateParam reads a required YYYY-MM-DD query parameter. Returning
+// time.Parse's error verbatim surfaced a raw Go format string to API callers
+// (`parsing time "" as "2006-01-02": cannot parse "" as "2006"`), which says
+// nothing about which parameter was wrong or what it wanted.
+func parseDateParam(c *gin.Context, name string) (time.Time, error) {
+	raw := c.Query(name)
+	if raw == "" {
+		return time.Time{}, fmt.Errorf("%s is required, in YYYY-MM-DD format", name)
+	}
+
+	value, err := time.Parse("2006-01-02", raw)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%s must be in YYYY-MM-DD format, got %q", name, raw)
+	}
+	return value, nil
+}
+
 // Helper function to parse date range from query parameters
 func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
-	startDateStr := c.Query("start_date")
-	endDateStr := c.Query("end_date")
-
-	startDate, err := time.Parse("2006-01-02", startDateStr)
+	startDate, err := parseDateParam(c, "start_date")
 	if err != nil {
 		return time.Time{}, time.Time{}, err
 	}
 
-	endDate, err := time.Parse("2006-01-02", endDateStr)
+	endDate, err := parseDateParam(c, "end_date")
 	if err != nil {
 		return time.Time{}, time.Time{}, err
 	}
