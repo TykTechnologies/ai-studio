@@ -1777,6 +1777,28 @@ func reconstructNestedObject(request mcp.CallToolRequest, prefix string, schema 
 	return result
 }
 
+// mcpToolResultFromValue renders a tool operation result as MCP text content.
+//
+// universalclient.parseResponse returns a string when the operation documents
+// no response schema for the status code, and a map or slice when it does. The
+// map/slice case used to go through fmt's %v, which prints Go's map syntax:
+// not JSON, not documented anywhere, and in map-iteration order, so it was not
+// even stable between calls. Anything that is not already a string is now
+// marshalled as JSON, so MCP clients see the same payload the REST endpoint
+// returns for the same operation.
+func mcpToolResultFromValue(operationID string, result interface{}) *mcp.CallToolResult {
+	if str, ok := result.(string); ok {
+		return mcp.NewToolResultText(str)
+	}
+
+	jsonData, err := json.Marshal(result)
+	if err != nil {
+		logger.Warnf("MCP operation %s: could not marshal result as JSON, falling back to Go formatting: %v", operationID, err)
+		return mcp.NewToolResultText(fmt.Sprintf("%v", result))
+	}
+	return mcp.NewToolResultText(string(jsonData))
+}
+
 func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*MCPServerCache, error) {
 	// Create a hash of the tool operations to detect changes
 	currentOpHash := p.generateOperationHash(toolModel)
@@ -1969,26 +1991,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 			)
 
 			// Convert the result to MCP format
-			switch res := result.(type) {
-			case string:
-				return mcp.NewToolResultText(res), nil
-			case map[string]interface{}, []interface{}:
-				return mcp.NewToolResultText(fmt.Sprintf("%v", res)), nil
-			default:
-				// Try to marshal any other type to JSON
-				jsonData, err := json.Marshal(result)
-				if err != nil {
-					return mcp.NewToolResultText(fmt.Sprintf("%v", result)), nil
-				}
-				// Check if it's a JSON object or array
-				if len(jsonData) > 0 && (jsonData[0] == '{' || jsonData[0] == '[') {
-					var obj interface{}
-					if err := json.Unmarshal(jsonData, &obj); err == nil {
-						return mcp.NewToolResultText(string(jsonData)), nil
-					}
-				}
-				return mcp.NewToolResultText(string(jsonData)), nil
-			}
+			return mcpToolResultFromValue(operationID, result), nil
 		})
 	}
 
