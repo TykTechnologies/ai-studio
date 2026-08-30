@@ -1,51 +1,126 @@
+# UI E2E test environment.
+#
+# Mirrors the maintained dev stack (see dev/docker-compose.yml) so the tests run
+# against the same image and topology developers use:
+#
+#   postgres  -> database (ephemeral, no host volume)
+#   studio    -> Go backend + embedded gateway, built from dev/Dockerfile.studio
+#   frontend  -> React dev server on :3000, proxies /api to studio
+#
+# The Playwright suite targets the frontend on :3000, which is also the default
+# in tests/ui/config.ts. That origin matters: when DEVMODE is on, the backend's
+# CSRF middleware only trusts localhost:3000 (see api/api.go), so driving the
+# backend port directly will be rejected.
+#
+# Usage:
+#   docker compose -f tests/compose.yml up -d --build
+#   cd tests/ui && npx playwright test --project=chromium --workers=1
 
 services:
-  ai_studio:
-    platform: linux/${TARGETARCH:-amd64}
-    build:
-      context: ../.
-      dockerfile: Dockerfile.dev
-    volumes:
-      - ../.:/app
-      # Note: Uses host's node_modules (installed by workflow before docker compose up)
-      # .env is created by entrypoint from .env.example if not present
-    ports:
-      - "8081:8080" # Backend API + embedded frontend
-      - "9090:9090" # Proxy
-    environment:
-      - CI=false
-      - SKIP_FRONTEND_DEV=true
-      - ALLOW_REGISTRATIONS=true
-      - CHOKIDAR_USEPOLLING=true
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
-      - DATABASE_TYPE=postgres
-      - TYK_AI_LICENSE=${TYK_AI_LICENSE:-}
-      - TYK_AI_SECRET_KEY=${TYK_AI_SECRET_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_AI_KEY=${ANTHROPIC_AI_KEY:-}
-      - GOFLAGS=-buildvcs=false
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - DEVMODE=true
-      - PROXY_URL=http://localhost:9090
-      # Build edition: enterprise (default) or community
-      - BUILD_EDITION=${BUILD_EDITION:-enterprise}
-
-    stdin_open: true
-    tty: true
-    depends_on:
-      postgres:
-        condition: service_healthy
   postgres:
-    image: postgres:17
+    image: postgres:17-alpine
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
-    volumes:
-      - ./postgres_data_ci:/var/lib/postgresql/data
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: midsommar
+    # Ephemeral storage: every run starts from a clean database.
+    tmpfs:
+      - /var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
+  studio:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.studio
+      args:
+        EDITION: ${BUILD_EDITION:-ent}
+    command: >
+      sh -c '
+        # dev/.env is gitignored and normally created by the Makefile; CI runs
+        # compose directly, so seed it from the tracked template when absent.
+        if [ ! -f /app/dev/.env ]; then
+          echo "Seeding dev/.env from dev/.env.dev";
+          cp /app/dev/.env.dev /app/dev/.env;
+        fi;
+        # Accept both spellings: the dev stack uses ce/ent, the CI workflow
+        # passes BUILD_EDITION=enterprise. Never fall through to a CE build
+        # silently -- an enterprise suite running against a CE binary fails far
+        # away from the cause (enterprise-gated UI controls render disabled).
+        case "$$EDITION" in
+          ent|enterprise) TARGET_EDITION=enterprise ;;
+          ce|community)   TARGET_EDITION=community ;;
+          *) echo "ERROR: unrecognised EDITION \"$$EDITION\" (want ce|community|ent|enterprise)"; exit 1 ;;
+        esac;
+        if [ "$$TARGET_EDITION" = "enterprise" ] && [ ! -d /app/enterprise ]; then
+          echo "ERROR: EDITION=$$EDITION but /app/enterprise is missing.";
+          echo "Initialise the submodule (make init-enterprise) or set BUILD_EDITION=ce.";
+          exit 1;
+        fi;
+        echo "Building AI Studio ($$TARGET_EDITION edition)...";
+        if [ "$$TARGET_EDITION" = "enterprise" ]; then
+          CGO_ENABLED=1 go build -tags enterprise -o /app/tmp/studio . || exit 1;
+        else
+          CGO_ENABLED=1 go build -o /app/tmp/studio . || exit 1;
+        fi;
+        echo "Starting AI Studio...";
+        exec /app/tmp/studio -env=/app/dev/.env
+      '
+    volumes:
+      - ..:/app
+      - /app/ui/admin-frontend/node_modules
+      - studio_tmp:/app/tmp
+      - go_cache:/root/go/pkg/mod
+      - studio_data:/app/data
+    ports:
+      - "8081:8080" # backend API (kept for debugging; tests use the frontend)
+      - "9090:9090" # embedded gateway / proxy
+    environment:
+      EDITION: ${BUILD_EDITION:-ent}
+      DATABASE_TYPE: postgres
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/midsommar?sslmode=disable
+      DEVMODE: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: text
+      SITE_URL: http://localhost:3000
+      PROXY_URL: http://localhost:9090
+      # The suite registers its own admin and users through the UI.
+      ALLOW_REGISTRATIONS: "true"
+      GOFLAGS: -buildvcs=false
+      TYK_AI_SECRET_KEY: ${TYK_AI_SECRET_KEY:-dev-secret-key-change-in-production}
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_AI_KEY: ${ANTHROPIC_AI_KEY:-}
+      ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app/ui/admin-frontend
+    # npm ci (not install) so the test run is reproducible and does not
+    # rewrite the tracked package-lock.json via the mounted source dir.
+    command: sh -c "npm ci --ignore-scripts && npm start"
+    volumes:
+      - ../ui/admin-frontend:/app/ui/admin-frontend
+      - /app/ui/admin-frontend/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      CI: "false"
+      BROWSER: "none"
+      CHOKIDAR_USEPOLLING: "true"
+      PROXY_TARGET: http://studio:8080
+      REACT_APP_API_URL: http://localhost:8081
+      WDS_SOCKET_PORT: 3000
+    depends_on:
+      - studio
+
+volumes:
+  studio_tmp:
+  studio_data:
+  go_cache:

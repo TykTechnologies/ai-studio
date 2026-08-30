@@ -506,7 +506,7 @@ test:
 # Editions: ce, ent
 
 # Test configuration variables (can be overridden)
-TEST_COMPONENTS ?= studio microgateway frontend plugins
+TEST_COMPONENTS ?= studio microgateway frontend plugins enterprise
 TEST_TYPES ?= unit integration
 TEST_EDITION ?= $(EDITION)
 TEST_VERBOSE ?= false
@@ -593,7 +593,7 @@ test-studio-unit: ## Run AI Studio unit tests
 test-studio-integration: ## Run AI Studio integration tests
 	@echo "Running AI Studio integration tests ($(TEST_EDITION))..."
 	go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) \
-		-timeout $(TEST_TIMEOUT) -count=1 -run "Integration|TestOAuth" ./tests/... || true
+		-timeout $(TEST_TIMEOUT) -count=1 ./tests/...
 
 # ============================================================================
 # Microgateway Tests
@@ -609,7 +609,7 @@ test-microgateway-unit: ## Run Microgateway unit tests
 test-microgateway-integration: ## Run Microgateway integration tests
 	@echo "Running Microgateway integration tests ($(TEST_EDITION))..."
 	cd microgateway && go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) \
-		-timeout $(TEST_TIMEOUT) -count=1 -run Integration ./tests/integration/... || true
+		-timeout $(TEST_TIMEOUT) -count=1 ./tests/integration/...
 
 # ============================================================================
 # Frontend Tests
@@ -625,13 +625,41 @@ test-frontend-unit: ## Run frontend Jest tests
 # ============================================================================
 
 .PHONY: test-plugins-unit
-test-plugins-unit: ## Run plugin unit tests
-	@echo "Running plugin unit tests..."
-	@# Community plugins
-	@if [ -d "community/plugins/llm-cache" ]; then \
-		echo ">>> community/plugins/llm-cache"; \
-		cd community/plugins/llm-cache && go test $(TEST_VERBOSE_FLAG) ./... || true; \
+test-plugins-unit: ## Run plugin unit tests (all community + enterprise plugin modules)
+	@echo "Running plugin unit tests ($(TEST_EDITION))..."
+	@failed=""; \
+	for mod in $$(find community/plugins -name go.mod 2>/dev/null | sort); do \
+		dir=$$(dirname $$mod); \
+		echo ""; echo ">>> $$dir"; \
+		( cd $$dir && go test $(TEST_VERBOSE_FLAG) -timeout $(TEST_TIMEOUT) ./... ) \
+			|| failed="$$failed $$dir"; \
+	done; \
+	if [ "$(TEST_EDITION)" = "ent" ]; then \
+		for mod in $$(find enterprise/plugins -name go.mod 2>/dev/null | sort); do \
+			dir=$$(dirname $$mod); \
+			echo ""; echo ">>> $$dir (enterprise)"; \
+			( cd $$dir && go test -tags enterprise $(TEST_VERBOSE_FLAG) -timeout $(TEST_TIMEOUT) ./... ) \
+				|| failed="$$failed $$dir"; \
+		done; \
+	else \
+		echo "Skipping enterprise plugin unit tests (set EDITION=ent to enable)"; \
+	fi; \
+	if [ -n "$$failed" ]; then \
+		echo ""; echo "FAILED plugin modules:$$failed"; exit 1; \
 	fi
+
+# ============================================================================
+# Enterprise Module Tests
+# ============================================================================
+
+.PHONY: test-enterprise-unit
+test-enterprise-unit: ## Run enterprise module unit tests (features/, scripting/, ...)
+	@if [ "$(TEST_EDITION)" != "ent" ] || [ ! -f enterprise/go.mod ]; then \
+		echo "Skipping enterprise module unit tests (set EDITION=ent to enable)"; \
+		exit 0; \
+	fi; \
+	echo "Running enterprise module unit tests..."; \
+	cd enterprise && go test -tags enterprise $(TEST_VERBOSE_FLAG) -timeout $(TEST_TIMEOUT) ./...
 
 .PHONY: test-plugins-integration
 test-plugins-integration: ## Run plugin integration tests (requires Docker)
@@ -679,27 +707,28 @@ test-ui-e2e: ## Run UI E2E tests (requires Docker Compose environment)
 
 .PHONY: test-ui-e2e-with-env
 test-ui-e2e-with-env: ## Start test env and run UI E2E tests
-	@echo "Starting test environment..."
-	@if [ ! -f .env ]; then cp .env.example .env; fi
-	@mkdir -p ./tests/postgres_data_temp
-	@cp -r tests/postgres_data ./tests/postgres_data_temp 2>/dev/null || true
-	docker compose --env-file .env -f tests/compose.yml up -d
+	@echo "Starting test environment (postgres + studio + frontend)..."
+	docker compose -f tests/compose.yml up -d --build
 	@echo "Waiting for test environment to be ready..."
 	@attempts=0; \
-	max_attempts=60; \
-	while [ "$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/common/api/v1/notifications/unread/count 2>/dev/null)" != "401" ]; do \
+	max_attempts=120; \
+	while true; do \
+		backend=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/login 2>/dev/null); \
+		frontend=$$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000 2>/dev/null); \
+		if [ "$$backend" = "200" ] && [ "$$frontend" = "200" ]; then break; fi; \
 		attempts=$$((attempts+1)); \
-		echo "Waiting for AI Studio... ($$attempts/$$max_attempts)"; \
+		echo "Waiting for AI Studio (backend=$$backend frontend=$$frontend) ($$attempts/$$max_attempts)"; \
 		if [ $$attempts -ge $$max_attempts ]; then \
-			echo "Timed out waiting for AI Studio"; \
-			docker compose --env-file .env -f tests/compose.yml down; \
+			echo "Timed out waiting for test environment"; \
+			docker compose -f tests/compose.yml logs --tail=100; \
+			docker compose -f tests/compose.yml down -v; \
 			exit 1; \
 		fi; \
 		sleep 5; \
 	done
-	@echo "AI Studio is ready, running tests..."
-	$(MAKE) test-ui-e2e || (docker compose --env-file .env -f tests/compose.yml down && exit 1)
-	docker compose --env-file .env -f tests/compose.yml down
+	@echo "Test environment is ready, running tests..."
+	$(MAKE) test-ui-e2e || (docker compose -f tests/compose.yml down -v && exit 1)
+	docker compose -f tests/compose.yml down -v
 
 # ============================================================================
 # Test Help and Discovery

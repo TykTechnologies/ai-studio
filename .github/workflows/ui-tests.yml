@@ -4,18 +4,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Temporarily disabled - uncomment to re-enable UI E2E tests
-# on:
-#   pull_request:
-#   push:
-#     branches:
-#       - main
-#       - release-**
-#       - QA-**
-#     tags:
-#       - "v*"
 on:
-  workflow_dispatch:  # Only manual trigger
+  pull_request:
+  push:
+    branches:
+      - main
+      - release-**
+      - QA-**
+    tags:
+      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -99,7 +97,23 @@ jobs:
             fi
             sleep 5
           done
-          echo "AI Studio is ready!"
+          echo "AI Studio backend is ready!"
+
+          # The Playwright suite drives the React dev server on :3000
+          # (tests/ui/config.ts default), so wait for that to compile too.
+          echo "Waiting for frontend dev server..."
+          attempts=0
+          while [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000)" != "200" ]; do
+            attempts=$((attempts+1))
+            echo "Attempt $attempts/$max_attempts - Waiting for frontend..."
+            if [ $attempts -ge $max_attempts ]; then
+              echo "Timed out waiting for frontend."
+              docker compose -f tests/compose.yml logs --tail=200 frontend
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "Frontend is ready!"
 
       - name: Debug UI Response
         run: |
