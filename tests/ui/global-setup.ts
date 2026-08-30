@@ -42,66 +42,106 @@ async function globalSetup(playwrightConfig: FullConfig) {
   const page = await context.newPage();
 
   try {
-    // Strategy 1: Check if test admin already exists (try login via UI)
-    const canLogin = await tryLoginViaBrowser(page, config.admin_email, config.password);
-    if (canLogin) {
-      console.log('Test admin user already exists and can login');
-      // Ensure permissions are correct and dev user exists
+    await ensureUsersExist(page);
+    // Runs last: /common/system requires an authenticated session, which the
+    // step above establishes.
+    await assertEnterpriseEdition(page);
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * Ensure the test admin and dev users exist, using whichever strategy the
+ * current database state allows.
+ */
+async function ensureUsersExist(page: Page): Promise<void> {
+  // Strategy 1: Check if test admin already exists (try login via UI)
+  const canLogin = await tryLoginViaBrowser(page, config.admin_email, config.password);
+  if (canLogin) {
+    console.log('Test admin user already exists and can login');
+    // Ensure permissions are correct and dev user exists
+    await ensureTestAdminPermissions(page);
+    await ensureDevUserExists(page);
+    return;
+  }
+
+  // Strategy 2: Register via UI (first user = admin + verified)
+  console.log('Attempting UI registration...');
+  const registered = await registerViaBrowser(page);
+  if (registered) {
+    console.log('Test admin created via UI registration (first user)');
+    // Login to set up session, then create dev user
+    const loggedIn = await tryLoginViaBrowser(page, config.admin_email, config.password);
+    if (loggedIn) {
       await ensureTestAdminPermissions(page);
+      await ensureDevUserExists(page);
+    } else {
+      console.warn('Warning: Could not login after registration');
+    }
+    return;
+  }
+
+  // Strategy 3: Use bootstrap admin to create test admin
+  console.log('UI registration failed. Trying bootstrap admin approach...');
+  const bootstrapLogin = await tryLoginViaBrowser(
+    page,
+    config.bootstrap_admin_email,
+    config.bootstrap_admin_password
+  );
+  if (bootstrapLogin) {
+    const created = await createUserViaAPI(page, {
+      email: config.admin_email,
+      name: config.admin_name,
+      password: config.password,
+      is_admin: true,
+      show_chat: true,
+      show_portal: true,
+      email_verified: true,
+      notifications_enabled: true,
+    });
+    if (created) {
+      console.log('Test admin created via bootstrap admin');
+      // Re-login as test admin to create dev user
+      await tryLoginViaBrowser(page, config.admin_email, config.password);
       await ensureDevUserExists(page);
       return;
     }
+  }
 
-    // Strategy 2: Register via UI (first user = admin + verified)
-    console.log('Attempting UI registration...');
-    const registered = await registerViaBrowser(page);
-    if (registered) {
-      console.log('Test admin created via UI registration (first user)');
-      // Login to set up session, then create dev user
-      const loggedIn = await tryLoginViaBrowser(page, config.admin_email, config.password);
-      if (loggedIn) {
-        await ensureTestAdminPermissions(page);
-        await ensureDevUserExists(page);
-      } else {
-        console.warn('Warning: Could not login after registration');
-      }
-      return;
-    }
+  throw new Error(
+    'Failed to create test admin user. ' +
+      'Ensure bootstrap admin exists (set BOOTSTRAP_ADMIN_EMAIL/BOOTSTRAP_ADMIN_PASSWORD env vars) ' +
+      'or start with a clean database.'
+  );
+}
 
-    // Strategy 3: Use bootstrap admin to create test admin
-    console.log('UI registration failed. Trying bootstrap admin approach...');
-    const bootstrapLogin = await tryLoginViaBrowser(
-      page,
-      config.bootstrap_admin_email,
-      config.bootstrap_admin_password
-    );
-    if (bootstrapLogin) {
-      const created = await createUserViaAPI(page, {
-        email: config.admin_email,
-        name: config.admin_name,
-        password: config.password,
-        is_admin: true,
-        show_chat: true,
-        show_portal: true,
-        email_verified: true,
-        notifications_enabled: true,
-      });
-      if (created) {
-        console.log('Test admin created via bootstrap admin');
-        // Re-login as test admin to create dev user
-        await tryLoginViaBrowser(page, config.admin_email, config.password);
-        await ensureDevUserExists(page);
-        return;
-      }
-    }
+/**
+ * Fail fast if the backend under test is not the Enterprise build.
+ *
+ * Several specs exercise enterprise-gated controls (e.g. the app "Monthly
+ * Budget" field, which AppForm renders disabled unless /common/system reports
+ * edition=enterprise). Against a CE build those specs fail deep in a page
+ * object with "element is not enabled", which says nothing about the cause.
+ * Check it once, up front, and say so plainly.
+ */
+async function assertEnterpriseEdition(page: Page): Promise<void> {
+  const response = await page.request.get(`${config.api_url}/common/system`);
+  if (!response.ok()) {
+    console.warn(`Warning: could not read /common/system (${response.status()})`);
+    return;
+  }
 
+  const { edition, version } = await response.json();
+  console.log(`Backend edition: ${edition} (version: ${version || 'unknown'})`);
+
+  if (edition !== 'enterprise') {
     throw new Error(
-      'Failed to create test admin user. ' +
-        'Ensure bootstrap admin exists (set BOOTSTRAP_ADMIN_EMAIL/BOOTSTRAP_ADMIN_PASSWORD env vars) ' +
-        'or start with a clean database.'
+      `This suite requires the Enterprise build, but the backend reports edition="${edition}".\n` +
+        'Enterprise-gated controls render disabled on CE and the specs will fail.\n' +
+        'Start the environment with BUILD_EDITION=ent (or enterprise) and an initialised ' +
+        'enterprise submodule.'
     );
-  } finally {
-    await browser.close();
   }
 }
 

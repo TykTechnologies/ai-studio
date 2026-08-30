@@ -46,8 +46,22 @@ services:
           echo "Seeding dev/.env from dev/.env.dev";
           cp /app/dev/.env.dev /app/dev/.env;
         fi;
-        echo "Building AI Studio...";
-        if [ "$$EDITION" = "ent" ] && [ -d /app/enterprise ]; then
+        # Accept both spellings: the dev stack uses ce/ent, the CI workflow
+        # passes BUILD_EDITION=enterprise. Never fall through to a CE build
+        # silently -- an enterprise suite running against a CE binary fails far
+        # away from the cause (enterprise-gated UI controls render disabled).
+        case "$$EDITION" in
+          ent|enterprise) TARGET_EDITION=enterprise ;;
+          ce|community)   TARGET_EDITION=community ;;
+          *) echo "ERROR: unrecognised EDITION \"$$EDITION\" (want ce|community|ent|enterprise)"; exit 1 ;;
+        esac;
+        if [ "$$TARGET_EDITION" = "enterprise" ] && [ ! -d /app/enterprise ]; then
+          echo "ERROR: EDITION=$$EDITION but /app/enterprise is missing.";
+          echo "Initialise the submodule (make init-enterprise) or set BUILD_EDITION=ce.";
+          exit 1;
+        fi;
+        echo "Building AI Studio ($$TARGET_EDITION edition)...";
+        if [ "$$TARGET_EDITION" = "enterprise" ]; then
           CGO_ENABLED=1 go build -tags enterprise -o /app/tmp/studio . || exit 1;
         else
           CGO_ENABLED=1 go build -o /app/tmp/studio . || exit 1;
