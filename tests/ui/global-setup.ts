@@ -226,19 +226,46 @@ async function registerViaBrowser(page: Page): Promise<boolean> {
 }
 
 /**
+ * Headers required by the backend's CSRF middleware (gorilla/csrf, see
+ * api/api.go) for state-changing requests.
+ *
+ * page.request.* issues requests outside the page context, so Playwright sends
+ * neither Origin nor Referer. The middleware validates those against its
+ * trusted origins and otherwise rejects the call with
+ * "Forbidden - referer not supplied". Send them explicitly, matching the origin
+ * the suite is driving.
+ */
+function csrfOriginHeaders(): Record<string, string> {
+  const origin = new URL(config.base_url).origin;
+  return { Origin: origin, Referer: `${origin}/` };
+}
+
+/**
+ * Fetch a CSRF token, returning the full header set to use on follow-up calls.
+ */
+async function csrfRequestHeaders(page: Page): Promise<Record<string, string>> {
+  const originHeaders = csrfOriginHeaders();
+  const csrfResponse = await page.request.get(`${config.api_url}/csrf-token`, {
+    headers: originHeaders,
+  });
+  return {
+    ...originHeaders,
+    'X-CSRF-Token': csrfResponse.headers()['x-csrf-token'] || '',
+  };
+}
+
+/**
  * Ensure test admin has correct permissions using the browser's session.
  */
 async function ensureTestAdminPermissions(page: Page): Promise<void> {
   console.log('Ensuring test admin has correct permissions...');
 
   try {
-    // Get CSRF token
-    const csrfResponse = await page.request.get(`${config.api_url}/csrf-token`);
-    const csrfToken = csrfResponse.headers()['x-csrf-token'] || '';
+    const headers = await csrfRequestHeaders(page);
 
     // List users to find test admin
     const listResponse = await page.request.get(`${config.api_url}/api/v1/users`, {
-      headers: { 'X-CSRF-Token': csrfToken },
+      headers,
     });
 
     if (!listResponse.ok()) {
@@ -271,7 +298,7 @@ async function ensureTestAdminPermissions(page: Page): Promise<void> {
 
     // Update user permissions
     const updateResponse = await page.request.patch(`${config.api_url}/api/v1/users/${userId}`, {
-      headers: { 'X-CSRF-Token': csrfToken },
+      headers,
       data: {
         data: {
           type: 'users',
@@ -305,11 +332,10 @@ async function ensureDevUserExists(page: Page): Promise<void> {
 
   // Check if dev user already exists by trying to find them
   try {
-    const csrfResponse = await page.request.get(`${config.api_url}/csrf-token`);
-    const csrfToken = csrfResponse.headers()['x-csrf-token'] || '';
+    const headers = await csrfRequestHeaders(page);
 
     const listResponse = await page.request.get(`${config.api_url}/api/v1/users`, {
-      headers: { 'X-CSRF-Token': csrfToken },
+      headers,
     });
 
     if (listResponse.ok()) {
@@ -322,7 +348,7 @@ async function ensureDevUserExists(page: Page): Promise<void> {
         console.log('Dev user already exists');
         // Update to ensure correct settings
         const updateResponse = await page.request.patch(`${config.api_url}/api/v1/users/${devUser.id}`, {
-          headers: { 'X-CSRF-Token': csrfToken },
+          headers,
           data: {
             data: {
               type: 'users',
@@ -380,11 +406,10 @@ async function createUserViaAPI(
   }
 ): Promise<boolean> {
   try {
-    const csrfResponse = await page.request.get(`${config.api_url}/csrf-token`);
-    const csrfToken = csrfResponse.headers()['x-csrf-token'] || '';
+    const headers = await csrfRequestHeaders(page);
 
     const createResponse = await page.request.post(`${config.api_url}/api/v1/users`, {
-      headers: { 'X-CSRF-Token': csrfToken },
+      headers,
       data: {
         data: {
           type: 'users',

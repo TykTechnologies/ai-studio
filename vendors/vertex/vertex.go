@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -107,7 +106,10 @@ func setupVertexDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 	project := split[0]
 	location := split[1]
 
-	ctx, _ := context.WithTimeout(context.Background(), 240*time.Second)
+	// The returned client is long-lived and its context is retained by the
+	// underlying Google credential/token source for refreshes, so it must not
+	// be bound to a short timeout.
+	ctx := context.Background()
 
 	llm, err := vertex.New(
 		ctx,
@@ -131,7 +133,10 @@ func setupVertexEmbedClient(d *models.Datasource) (embeddings.EmbedderClient, er
 
 	project := split[0]
 	location := split[1]
-	ctx, _ := context.WithTimeout(context.Background(), 240*time.Second)
+	// The returned client is long-lived and its context is retained by the
+	// underlying Google credential/token source for refreshes, so it must not
+	// be bound to a short timeout.
+	ctx := context.Background()
 
 	llm, err := vertex.New(
 		ctx,
