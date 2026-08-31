@@ -645,7 +645,7 @@ const LLMDetails = () => {
         <SectionTitle>Access Details</SectionTitle>
         <Typography variant="body2" color="text.secondary" paragraph>
           Some LLMs do not require an API Key for access, or have a default URL
-          (for example Anthropic and OopenAI). If you have an LLM provider that
+          (for example Anthropic and OpenAI). If you have an LLM provider that
           is not on the list, but provides an OpenAPI compatible API, you can
           use the compatible vendor setting and override the default URL.
         </Typography>
