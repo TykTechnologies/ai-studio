@@ -5,6 +5,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // assignSubmissionCatalogues puts a newly approved resource into the catalogues
@@ -20,6 +21,10 @@ import (
 //
 // Runs inside the approval transaction, so a failure here rolls the approval
 // back rather than leaving a resource stranded.
+//
+// The catalogues are loaded in one query and the resource appended to all of
+// them in one statement. Fetching and appending per id cost 2N queries inside
+// the approval transaction, which holds locks for as long as it runs.
 func (s *Service) assignSubmissionCatalogues(tx *gorm.DB, submission *models.Submission, resourceID uint) error {
 	ids := catalogueIDsFrom(submission.AssignedCatalogues)
 	if len(ids) == 0 {
@@ -28,29 +33,89 @@ func (s *Service) assignSubmissionCatalogues(tx *gorm.DB, submission *models.Sub
 
 	switch submission.ResourceType {
 	case models.SubmissionResourceTypeTool:
-		for _, id := range ids {
-			catalogue := &models.ToolCatalogue{ID: id}
-			if err := tx.First(catalogue, id).Error; err != nil {
-				return fmt.Errorf("tool catalogue %d not found: %w", id, err)
-			}
-			if err := tx.Model(catalogue).Association("Tools").
-				Append(&models.Tool{ID: resourceID}); err != nil {
-				return fmt.Errorf("failed to add tool to catalogue %d: %w", id, err)
-			}
+		var catalogues []models.ToolCatalogue
+		if err := tx.Where("id IN ?", ids).Find(&catalogues).Error; err != nil {
+			return fmt.Errorf("failed to load tool catalogues: %w", err)
+		}
+		found := make([]uint, len(catalogues))
+		for i, c := range catalogues {
+			found[i] = c.ID
+		}
+		if err := assertCataloguesFound(ids, found, "tool catalogue"); err != nil {
+			return err
+		}
+		if err := appendMemberships(tx, "tool_catalogue_tools", "tool_catalogue_id", "tool_id", ids, resourceID); err != nil {
+			return fmt.Errorf("failed to add tool to catalogues: %w", err)
 		}
 	case models.SubmissionResourceTypeDatasource:
-		for _, id := range ids {
-			catalogue := &models.DataCatalogue{ID: id}
-			if err := tx.First(catalogue, id).Error; err != nil {
-				return fmt.Errorf("data catalogue %d not found: %w", id, err)
-			}
-			if err := tx.Model(catalogue).Association("Datasources").
-				Append(&models.Datasource{ID: resourceID}); err != nil {
-				return fmt.Errorf("failed to add datasource to catalogue %d: %w", id, err)
-			}
+		var catalogues []models.DataCatalogue
+		if err := tx.Where("id IN ?", ids).Find(&catalogues).Error; err != nil {
+			return fmt.Errorf("failed to load data catalogues: %w", err)
+		}
+		found := make([]uint, len(catalogues))
+		for i, c := range catalogues {
+			found[i] = c.ID
+		}
+		if err := assertCataloguesFound(ids, found, "data catalogue"); err != nil {
+			return err
+		}
+		if err := appendMemberships(tx, "data_catalogue_data_sources", "data_catalogue_id", "datasource_id", ids, resourceID); err != nil {
+			return fmt.Errorf("failed to add datasource to catalogues: %w", err)
 		}
 	default:
 		return fmt.Errorf("cannot assign catalogues for resource type %q", submission.ResourceType)
+	}
+
+	return nil
+}
+
+// appendMemberships writes the join rows for every chosen catalogue in one
+// statement.
+//
+// The obvious spelling, tx.Model(&catalogues).Association(...).Append(...),
+// is worse than the per-id loop it replaces: association mode pairs values
+// with rows positionally, so it needs the resource repeated once per
+// catalogue, and it then issues an upsert of the resource row and an
+// updated_at touch of the catalogue for each one -- 3N+1 statements, and a
+// write to a resource this function has no business modifying. The join table
+// is the only thing that actually needs a row, so it is written directly, the
+// way ensureToolInDefaultCatalogueTx already reads it.
+//
+// ON CONFLICT DO NOTHING keeps a re-approval idempotent, which is what
+// association append gave us before.
+func appendMemberships(tx *gorm.DB, table, catalogueColumn, resourceColumn string, catalogueIDs []uint, resourceID uint) error {
+	rows := make([]map[string]interface{}, 0, len(catalogueIDs))
+	for _, id := range catalogueIDs {
+		rows = append(rows, map[string]interface{}{
+			catalogueColumn: id,
+			resourceColumn:  resourceID,
+		})
+	}
+
+	return tx.Table(table).Clauses(clause.OnConflict{DoNothing: true}).Create(rows).Error
+}
+
+// assertCataloguesFound reports a requested catalogue that does not exist.
+//
+// Find() returns the rows it has rather than failing on a missing one, so
+// without this a reviewer naming a catalogue id that no longer exists would
+// have the resource quietly published to the others and the bad id ignored --
+// the per-id version this replaced returned an error, and so does this. The
+// requested order is walked rather than the returned order so the id named is
+// the same one the caller would have hit first.
+func assertCataloguesFound(requested, found []uint, kind string) error {
+	if len(found) == len(requested) {
+		return nil
+	}
+
+	present := make(map[uint]struct{}, len(found))
+	for _, id := range found {
+		present[id] = struct{}{}
+	}
+	for _, id := range requested {
+		if _, ok := present[id]; !ok {
+			return fmt.Errorf("%s %d not found", kind, id)
+		}
 	}
 
 	return nil
