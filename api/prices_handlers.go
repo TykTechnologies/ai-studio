@@ -9,6 +9,32 @@ import (
 	"gorm.io/gorm"
 )
 
+// validatePricePlausibility rejects prices that are almost certainly per-million
+// figures submitted into per-token fields. Without this the mistake is silent,
+// and every cost figure, budget calculation and budget alert downstream is
+// wrong by a factor of a million.
+func validatePricePlausibility(attrs struct {
+	CPT          float64
+	CPIT         float64
+	CacheWritePT float64
+	CacheReadPT  float64
+}) (bool, string) {
+	for _, f := range []struct {
+		name  string
+		value float64
+	}{
+		{"cpt (price per output token)", attrs.CPT},
+		{"cpit (price per input token)", attrs.CPIT},
+		{"cache_write_pt", attrs.CacheWritePT},
+		{"cache_read_pt", attrs.CacheReadPT},
+	} {
+		if bad, msg := models.ImplausiblePerTokenPrice(f.name, f.value); bad {
+			return true, msg
+		}
+	}
+	return false, ""
+}
+
 // @Summary Create a new model price
 // @Description Create a new model price with the provided information
 // @Tags model-prices
@@ -58,6 +84,26 @@ func (a *API) createModelPrice(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: "CPT must be greater than or equal to 0.0"}},
+		})
+		return
+	}
+
+	if bad, detail := validatePricePlausibility(struct {
+		CPT          float64
+		CPIT         float64
+		CacheWritePT float64
+		CacheReadPT  float64
+	}{
+		input.Data.Attributes.CPT,
+		input.Data.Attributes.CPIT,
+		input.Data.Attributes.CacheWritePT,
+		input.Data.Attributes.CacheReadPT,
+	}); bad {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Implausible Price", Detail: detail}},
 		})
 		return
 	}
@@ -157,6 +203,26 @@ func (a *API) updateModelPrice(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	if bad, detail := validatePricePlausibility(struct {
+		CPT          float64
+		CPIT         float64
+		CacheWritePT float64
+		CacheReadPT  float64
+	}{
+		input.Data.Attributes.CPT,
+		input.Data.Attributes.CPIT,
+		input.Data.Attributes.CacheWritePT,
+		input.Data.Attributes.CacheReadPT,
+	}); bad {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Implausible Price", Detail: detail}},
 		})
 		return
 	}
