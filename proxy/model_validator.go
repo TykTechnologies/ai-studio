@@ -46,6 +46,21 @@ func (mv *ModelValidator) RegisterExtractor(vendor string, extractor ModelNameEx
 	mv.extractors[strings.ToLower(vendor)] = extractor
 }
 
+// IsModelAllowed reports whether a model name is permitted by the configured
+// patterns.
+//
+// Two behaviours worth stating plainly, because both surprise people:
+//
+//  1. An empty pattern list allows EVERY model. An empty Allowed Models field
+//     is not a deny-all.
+//  2. Patterns are matched UNANCHORED, i.e. anywhere within the model name. So
+//     "gpt-4.*" -- the example the UI itself suggests -- also matches
+//     "legacy-gpt-4o" and "not-really-gpt-4". Anchor explicitly with ^ and $
+//     if you mean the whole name.
+//
+// The unanchored behaviour is kept deliberately: existing configurations rely
+// on substring matching, and silently anchoring them would start rejecting
+// models that are allowed today.
 func (mv *ModelValidator) IsModelAllowed(modelName string) bool {
 	if len(mv.allowedModels) == 0 {
 		return true // If no models specified, allow all

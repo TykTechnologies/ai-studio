@@ -744,7 +744,8 @@ const LLMDetails = () => {
                 ))}
               </Box>
             ) : (
-              <FieldValue>No model patterns specified</FieldValue>
+              // An empty list is not a deny-all: it permits everything.
+              <FieldValue>All models allowed (no patterns specified)</FieldValue>
             )}
             <Typography
               variant="caption"
@@ -752,7 +753,9 @@ const LLMDetails = () => {
               sx={{ display: "block", mt: 1 }}
             >
               These patterns use regex matching to determine which models are
-              allowed. For example, "gpt-4.*" allows all GPT-4 models.
+              allowed, matched anywhere in the model name. For example,
+              "gpt-4.*" allows all GPT-4 models — and also matches
+              "legacy-gpt-4o". Anchor with ^ and $ to match the whole name.
             </Typography>
           </Grid>
         </Grid>

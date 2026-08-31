@@ -564,8 +564,11 @@ const LLMForm = () => {
                 Allowed Models
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Add regex patterns to whitelist specific models (e.g., "gpt-4.*"
-                for all GPT-4 models)
+                Add regex patterns to whitelist specific models. Patterns are
+                matched <strong>anywhere in the model name</strong>, so
+                "gpt-4.*" also matches "legacy-gpt-4o" — anchor with ^ and $
+                (e.g. "^gpt-4.*$") to match the whole name. Leaving this empty
+                allows <strong>all</strong> models.
               </Typography>
               <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
                 <TextField
