@@ -16,6 +16,7 @@ import {
   InputLabel
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { commitPendingSelection } from "../../utils/pendingSelection";
 import {
   SecondaryLinkButton,
   TitleBox,
@@ -97,6 +98,23 @@ const ToolCatalogueForm = () => {
     e.preventDefault();
     setLoading(true);
 
+    // The + buttons are accelerators, not the commit. Fold in anything left in
+    // either picker rather than silently saving a catalogue without it.
+    const desiredTools = commitPendingSelection(
+      tools,
+      selectedTool,
+      availableTools,
+    );
+    const desiredTags = commitPendingSelection(tags, selectedTag, availableTags);
+    if (desiredTools !== tools) {
+      setTools(desiredTools);
+      setSelectedTool("");
+    }
+    if (desiredTags !== tags) {
+      setTags(desiredTags);
+      setSelectedTag("");
+    }
+
     const catalogueData = {
       data: {
         type: "ToolCatalogue",
@@ -126,8 +144,8 @@ const ToolCatalogueForm = () => {
       const newCatalogueId = response.data.data.id;
 
       // Update tools and tags
-      await updateTools(newCatalogueId);
-      await updateTags(newCatalogueId);
+      await updateTools(newCatalogueId, desiredTools);
+      await updateTags(newCatalogueId, desiredTags);
 
       setSnackbar({
         open: true,
@@ -148,7 +166,9 @@ const ToolCatalogueForm = () => {
     }
   };
 
-  const updateTools = async (catalogueId) => {
+  // Takes the desired list explicitly so the caller can include a selection the
+  // user picked but never added with the + button.
+  const updateTools = async (catalogueId, desiredTools) => {
     try {
       // Remove tools
       for (const toolId of removedTools) {
@@ -158,7 +178,7 @@ const ToolCatalogueForm = () => {
       }
 
       // Add new tools
-      for (const tool of tools) {
+      for (const tool of desiredTools) {
         if (!tool.id.startsWith("temp_")) {
           await apiClient.post(`/tool-catalogues/${catalogueId}/tools`, {
             data: { id: tool.id, type: "Tool" },
@@ -171,7 +191,7 @@ const ToolCatalogueForm = () => {
     }
   };
 
-  const updateTags = async (catalogueId) => {
+  const updateTags = async (catalogueId, desiredTags) => {
     try {
       // Remove tags
       for (const tagId of removedTags) {
@@ -179,7 +199,7 @@ const ToolCatalogueForm = () => {
       }
 
       // Add new tags
-      for (const tag of tags) {
+      for (const tag of desiredTags) {
         if (!tag.id.startsWith("temp_")) {
           await apiClient.post(`/tool-catalogues/${catalogueId}/tags`, {
             data: { id: tag.id, type: "Tag" },
@@ -193,9 +213,9 @@ const ToolCatalogueForm = () => {
   };
 
   const handleAddTool = () => {
-    if (selectedTool) {
-      const toolToAdd = availableTools.find((t) => t.id === selectedTool);
-      setTools([...tools, toolToAdd]);
+    const next = commitPendingSelection(tools, selectedTool, availableTools);
+    if (next !== tools) {
+      setTools(next);
       setSelectedTool("");
     }
   };
@@ -208,9 +228,9 @@ const ToolCatalogueForm = () => {
   };
 
   const handleAddTag = () => {
-    if (selectedTag) {
-      const tagToAdd = availableTags.find((t) => t.id === selectedTag);
-      setTags([...tags, tagToAdd]);
+    const next = commitPendingSelection(tags, selectedTag, availableTags);
+    if (next !== tags) {
+      setTags(next);
       setSelectedTag("");
     }
   };
