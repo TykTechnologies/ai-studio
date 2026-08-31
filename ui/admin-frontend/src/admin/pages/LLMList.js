@@ -18,6 +18,7 @@ import {
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+import { CredentialStatusDot } from "../components/llms/CredentialStatusIndicator";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import {
   TitleBox,
@@ -247,10 +248,13 @@ const LLMList = () => {
                       </StyledTableCell>
                       <StyledTableCell>{llm.attributes.privacy_score}</StyledTableCell>
                       <StyledTableCell>
-                        <FiberManualRecordIcon
-                          sx={{
-                            color: llm.attributes.active ? "green" : "red",
-                          }}
+                        {/* The dot alone said "Proxied" even when the provider
+                            pointed at an empty secret, so a fresh instance
+                            looked fully configured and the first call failed. */}
+                        <CredentialStatusDot
+                          active={llm.attributes.active}
+                          status={llm.attributes.credential_status}
+                          reference={llm.attributes.credential_ref}
                         />
                       </StyledTableCell>
                       <StyledTableCell align="right">
