@@ -368,7 +368,12 @@ func TestCreateAppPrivacyScoreMismatch(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
 	assert.Len(t, errorResponse.Errors, 1)
-	assert.Contains(t, errorResponse.Errors[0].Detail, "Datasources have higher privacy requirements than the selected LLMs")
+	// The refusal must name the offending pair and both numbers: "Please try
+	// again" was unactionable because nothing about the request had changed.
+	detail := errorResponse.Errors[0].Detail
+	assert.Contains(t, detail, "High Privacy DS", "must name the offending resource")
+	assert.Contains(t, detail, "Low Privacy LLM", "must name the provider compared against")
+	assert.Contains(t, detail, "5", "must state the required privacy level")
 }
 
 func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
@@ -431,7 +436,12 @@ func TestUpdateAppPrivacyScoreMismatch(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err)
 	assert.Len(t, errorResponse.Errors, 1)
-	assert.Contains(t, errorResponse.Errors[0].Detail, "Datasources have higher privacy requirements than the selected LLMs")
+	// The refusal must name the offending pair and both numbers: "Please try
+	// again" was unactionable because nothing about the request had changed.
+	detail := errorResponse.Errors[0].Detail
+	assert.Contains(t, detail, "High Privacy DS", "must name the offending resource")
+	assert.Contains(t, detail, "Low Privacy LLM", "must name the provider compared against")
+	assert.Contains(t, detail, "5", "must state the required privacy level")
 }
 
 // performRequest is removed as it's defined in api_test.go

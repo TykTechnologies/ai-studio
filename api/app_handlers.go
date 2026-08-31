@@ -103,12 +103,12 @@ func (a *API) createApp(c *gin.Context) {
 		)
 	}
 	if err != nil {
-		if err == services.ERRPrivacyScoreMismatch {
+		if errors.Is(err, services.ERRPrivacyScoreMismatch) {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
-				}{{Title: "Privacy Score Mismatch", Detail: "Datasources have higher privacy requirements than the selected LLMs. Please select LLMs with equal or higher privacy scores."}},
+				}{{Title: "Privacy Score Mismatch", Detail: err.Error()}},
 			})
 			return
 		}
@@ -250,12 +250,12 @@ func (a *API) updateApp(c *gin.Context) {
 			})
 			return
 		}
-		if err == services.ERRPrivacyScoreMismatch {
+		if errors.Is(err, services.ERRPrivacyScoreMismatch) {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
-				}{{Title: "Privacy Score Mismatch", Detail: "Datasources have higher privacy requirements than the selected LLMs. Please select LLMs with equal or higher privacy scores."}},
+				}{{Title: "Privacy Score Mismatch", Detail: err.Error()}},
 			})
 			return
 		}
