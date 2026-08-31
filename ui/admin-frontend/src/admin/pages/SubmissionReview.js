@@ -145,7 +145,10 @@ const SubmissionReview = () => {
       });
       setSnackbar({
         open: true,
-        message: "Submission approved — resource created",
+        // Say what approval actually did: it publishes into Default, and the
+        // resource is not live until an administrator activates it.
+        message:
+          "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
         severity: "success",
       });
       setApproveDialogOpen(false);

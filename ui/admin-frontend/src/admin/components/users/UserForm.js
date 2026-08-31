@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Switch, FormControlLabel } from "@mui/material";
+import { Switch, FormControlLabel, Link as MuiLink } from "@mui/material";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -171,7 +171,9 @@ const UserForm = () => {
 
       setSnackbar({
         open: true,
-        message: id ? "User updated successfully" : "User created successfully",
+        message: id
+          ? "User updated successfully"
+          : "User created and added to the Default team. They cannot sign in until their email is verified.",
         severity: "success",
       });
 
@@ -310,6 +312,29 @@ const UserForm = () => {
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
+            {!id && (
+              <Grid item xs={12}>
+                {/* This form has no Teams field, so every user created here
+                    joins Default -- which owns catalogues holding every
+                    provider, tool and data source on the instance. That was
+                    invisible, and team membership is additive, so assigning a
+                    narrow team later changes nothing until Default is also
+                    removed by hand. Say it up front. */}
+                <Alert severity="info">
+                  New users always join the <strong>Default</strong> team, which
+                  grants access to everything in the Default catalogs. That is
+                  deliberate: Community Edition has no teams, so Default
+                  membership is what keeps the two editions consistent. Team
+                  membership is additive, so adding a narrower team from the{" "}
+                  <MuiLink component={Link} to="/admin/groups">
+                    Teams
+                  </MuiLink>{" "}
+                  page grants access on top rather than restricting it — change
+                  what Default grants to narrow what everyone can see. The user
+                  cannot sign in until their email is verified.
+                </Alert>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <TextField
                 fullWidth
