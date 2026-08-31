@@ -23,6 +23,7 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { commitPendingSelection } from "../../utils/pendingSelection";
 import {
   SecondaryLinkButton,
   TitleBox,
@@ -96,6 +97,23 @@ const DataCatalogForm = () => {
     e.preventDefault();
     setLoading(true);
 
+    // The + buttons are accelerators, not the commit. Fold in anything left in
+    // either picker rather than silently saving a catalog without it.
+    const desiredDatasources = commitPendingSelection(
+      datasources,
+      selectedDatasource,
+      availableDatasources,
+    );
+    const desiredTags = commitPendingSelection(tags, selectedTag, availableTags);
+    if (desiredDatasources !== datasources) {
+      setDatasources(desiredDatasources);
+      setSelectedDatasource("");
+    }
+    if (desiredTags !== tags) {
+      setTags(desiredTags);
+      setSelectedTag("");
+    }
+
     const catalogData = {
       data: {
         type: "DataCatalogue",
@@ -114,8 +132,8 @@ const DataCatalogForm = () => {
       }
 
       // Update datasources and tags
-      await updateDatasources(catalogId);
-      await updateTags(catalogId);
+      await updateDatasources(catalogId, desiredDatasources);
+      await updateTags(catalogId, desiredTags);
 
       setSnackbar({
         open: true,
@@ -135,12 +153,14 @@ const DataCatalogForm = () => {
     }
   };
 
-  const updateDatasources = async (catalogId) => {
+  // Takes the desired list explicitly so the caller can include a selection the
+  // user picked but never added with the + button.
+  const updateDatasources = async (catalogId, desiredDatasources) => {
     const originalDatasources = catalog.datasources || [];
 
     // Remove datasources
     for (let ds of originalDatasources) {
-      if (!datasources.find((d) => d.id === ds.id)) {
+      if (!desiredDatasources.find((d) => d.id === ds.id)) {
         await apiClient.delete(
           `/data-catalogues/${catalogId}/datasources/${ds.id}`,
         );
@@ -148,7 +168,7 @@ const DataCatalogForm = () => {
     }
 
     // Add new datasources
-    for (let ds of datasources) {
+    for (let ds of desiredDatasources) {
       if (!originalDatasources.find((d) => d.id === ds.id)) {
         await apiClient.post(`/data-catalogues/${catalogId}/datasources`, {
           data: { id: ds.id, type: "Datasource" },
@@ -157,18 +177,18 @@ const DataCatalogForm = () => {
     }
   };
 
-  const updateTags = async (catalogId) => {
+  const updateTags = async (catalogId, desiredTags) => {
     const originalTags = catalog.tags || [];
 
     // Remove tags
     for (let tag of originalTags) {
-      if (!tags.find((t) => t.id === tag.id)) {
+      if (!desiredTags.find((t) => t.id === tag.id)) {
         await apiClient.delete(`/data-catalogues/${catalogId}/tags/${tag.id}`);
       }
     }
 
     // Add new tags
-    for (let tag of tags) {
+    for (let tag of desiredTags) {
       if (!originalTags.find((t) => t.id === tag.id)) {
         await apiClient.post(`/data-catalogues/${catalogId}/tags`, {
           data: { id: tag.id, type: "Tag" },
@@ -178,14 +198,13 @@ const DataCatalogForm = () => {
   };
 
   const handleAddDatasource = () => {
-    if (
-      selectedDatasource &&
-      !datasources.find((ds) => ds.id === selectedDatasource)
-    ) {
-      const dsToAdd = availableDatasources.find(
-        (ds) => ds.id === selectedDatasource,
-      );
-      setDatasources([...datasources, dsToAdd]);
+    const next = commitPendingSelection(
+      datasources,
+      selectedDatasource,
+      availableDatasources,
+    );
+    if (next !== datasources) {
+      setDatasources(next);
       setSelectedDatasource("");
     }
   };
@@ -195,9 +214,9 @@ const DataCatalogForm = () => {
   };
 
   const handleAddTag = () => {
-    if (selectedTag && !tags.find((t) => t.id === selectedTag)) {
-      const tagToAdd = availableTags.find((t) => t.id === selectedTag);
-      setTags([...tags, tagToAdd]);
+    const next = commitPendingSelection(tags, selectedTag, availableTags);
+    if (next !== tags) {
+      setTags(next);
       setSelectedTag("");
     }
   };
