@@ -13,16 +13,24 @@ jest.mock("../utils/apiClient", () => ({
   },
 }));
 
+// The mock must return the SAME callbacks on every render. Returning fresh
+// jest.fn()s made updatePaginationData a new identity each time, so the
+// component's fetchSubmissions useCallback never stabilised, its effect
+// re-ran forever and the queue stayed in its loading state -- which made the
+// empty-state assertion pass or fail depending on which other suite had run
+// first.
+const mockPagination = {
+  page: 1,
+  pageSize: 20,
+  totalPages: 1,
+  handlePageChange: jest.fn(),
+  handlePageSizeChange: jest.fn(),
+  updatePaginationData: jest.fn(),
+};
+
 jest.mock("../hooks/usePagination", () => ({
   __esModule: true,
-  default: () => ({
-    page: 1,
-    pageSize: 20,
-    totalPages: 1,
-    handlePageChange: jest.fn(),
-    handlePageSizeChange: jest.fn(),
-    updatePaginationData: jest.fn(),
-  }),
+  default: () => mockPagination,
 }));
 
 jest.mock("../components/common/PaginationControls", () => ({
