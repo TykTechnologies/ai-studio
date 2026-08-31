@@ -56,7 +56,7 @@ const SubmissionForm = () => {
   const [resourceType, setResourceType] = useState("");
   const [payload, setPayload] = useState({});
   const [meta, setMeta] = useState({
-    suggested_privacy: 50,
+    suggested_privacy: 0,
     privacy_justification: "",
     primary_contact: "",
     secondary_contact: "",
@@ -103,7 +103,7 @@ const SubmissionForm = () => {
       setResourceType(data.resource_type);
       setPayload(data.resource_payload || {});
       setMeta({
-        suggested_privacy: data.suggested_privacy || 50,
+        suggested_privacy: data.suggested_privacy ?? 0,
         privacy_justification: data.privacy_justification || "",
         primary_contact: data.primary_contact || "",
         secondary_contact: data.secondary_contact || "",

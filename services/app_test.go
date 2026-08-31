@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -65,10 +66,15 @@ func createTestAppDatasource(t *testing.T, service *Service, name string, privac
 
 // Helper to create test Tool
 func createTestAppTool(t *testing.T, service *Service, name string) *models.Tool {
+	return createTestAppToolWithPrivacy(t, service, name, 0)
+}
+
+func createTestAppToolWithPrivacy(t *testing.T, service *Service, name string, privacyScore int) *models.Tool {
 	tool := &models.Tool{
-		Name:        name,
-		Description: "Test Tool",
-		ToolType:    "REST",
+		Name:         name,
+		Description:  "Test Tool",
+		ToolType:     "REST",
+		PrivacyScore: privacyScore,
 	}
 	err := tool.Create(service.DB)
 	assert.NoError(t, err)
@@ -130,7 +136,7 @@ func TestCreateApp(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, app)
-		assert.Equal(t, ERRPrivacyScoreMismatch, err)
+		assert.ErrorIs(t, err, ERRPrivacyScoreMismatch)
 	})
 
 	t.Run("Create app with non-existent datasource", func(t *testing.T) {
@@ -319,7 +325,7 @@ func TestUpdateApp(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, updated)
-		assert.Equal(t, ERRPrivacyScoreMismatch, err)
+		assert.ErrorIs(t, err, ERRPrivacyScoreMismatch)
 	})
 }
 
@@ -860,53 +866,133 @@ func TestValidatePrivacyScores(t *testing.T) {
 	ds3 := createTestAppDatasource(t, service, "privacy-ds3", 10)
 
 	t.Run("Valid privacy scores", func(t *testing.T) {
-		err := service.validatePrivacyScores([]uint{ds1.ID}, []uint{llm1.ID})
+		err := service.validatePrivacyScores([]uint{ds1.ID}, []uint{llm1.ID}, nil)
 		assert.NoError(t, err)
 	})
 
 	t.Run("Datasource privacy score equals LLM privacy score", func(t *testing.T) {
-		err := service.validatePrivacyScores([]uint{ds1.ID}, []uint{llm1.ID})
+		err := service.validatePrivacyScores([]uint{ds1.ID}, []uint{llm1.ID}, nil)
 		assert.NoError(t, err)
 	})
 
 	t.Run("Datasource privacy score higher than LLM", func(t *testing.T) {
-		err := service.validatePrivacyScores([]uint{ds3.ID}, []uint{llm1.ID})
+		err := service.validatePrivacyScores([]uint{ds3.ID}, []uint{llm1.ID}, nil)
 		assert.Error(t, err)
-		assert.Equal(t, ERRPrivacyScoreMismatch, err)
+		assert.ErrorIs(t, err, ERRPrivacyScoreMismatch)
 	})
 
 	t.Run("Multiple datasources and LLMs - valid", func(t *testing.T) {
 		// ds2(6) < llm2(8)
-		err := service.validatePrivacyScores([]uint{ds1.ID, ds2.ID}, []uint{llm1.ID, llm2.ID})
+		err := service.validatePrivacyScores([]uint{ds1.ID, ds2.ID}, []uint{llm1.ID, llm2.ID}, nil)
 		assert.NoError(t, err)
 	})
 
 	t.Run("Multiple datasources and LLMs - invalid", func(t *testing.T) {
 		// ds3(10) > llm2(8)
-		err := service.validatePrivacyScores([]uint{ds1.ID, ds3.ID}, []uint{llm1.ID, llm2.ID})
+		err := service.validatePrivacyScores([]uint{ds1.ID, ds3.ID}, []uint{llm1.ID, llm2.ID}, nil)
 		assert.Error(t, err)
-		assert.Equal(t, ERRPrivacyScoreMismatch, err)
+		assert.ErrorIs(t, err, ERRPrivacyScoreMismatch)
 	})
 
 	t.Run("Empty datasources", func(t *testing.T) {
-		err := service.validatePrivacyScores([]uint{}, []uint{llm1.ID})
+		err := service.validatePrivacyScores([]uint{}, []uint{llm1.ID}, nil)
 		assert.NoError(t, err)
 	})
 
 	t.Run("Empty LLMs", func(t *testing.T) {
-		err := service.validatePrivacyScores([]uint{ds1.ID}, []uint{})
+		err := service.validatePrivacyScores([]uint{ds1.ID}, []uint{}, nil)
 		assert.Error(t, err) // Datasource privacy score > -1 (no LLMs)
 	})
 
 	t.Run("Non-existent LLM", func(t *testing.T) {
-		err := service.validatePrivacyScores([]uint{ds1.ID}, []uint{99999})
+		err := service.validatePrivacyScores([]uint{ds1.ID}, []uint{99999}, nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("Non-existent datasource", func(t *testing.T) {
-		err := service.validatePrivacyScores([]uint{99999}, []uint{llm1.ID})
+		err := service.validatePrivacyScores([]uint{99999}, []uint{llm1.ID}, nil)
 		assert.Error(t, err)
 	})
+}
+
+// Tools were exempt from privacy validation entirely: a privacy-80 tool paired
+// with a privacy-0 provider was accepted and a credential minted, while the
+// same user pairing that provider with a privacy-80 datasource was refused.
+// The mismatch then surfaced at chat time by failing the whole session.
+func TestValidatePrivacyScores_Tools(t *testing.T) {
+	service, _ := setupAppTest(t)
+
+	lowLLM := createTestAppLLM(t, service, "tool-privacy-llm-low", 0)
+	highLLM := createTestAppLLM(t, service, "tool-privacy-llm-high", 80)
+	strictTool := createTestAppToolWithPrivacy(t, service, "tool-privacy-strict", 80)
+	openTool := createTestAppToolWithPrivacy(t, service, "tool-privacy-open", 0)
+
+	t.Run("Tool privacy score higher than LLM is refused", func(t *testing.T) {
+		err := service.validatePrivacyScores(nil, []uint{lowLLM.ID}, []uint{strictTool.ID})
+		assert.ErrorIs(t, err, ERRPrivacyScoreMismatch)
+	})
+
+	t.Run("Tool privacy score within the LLM's is allowed", func(t *testing.T) {
+		err := service.validatePrivacyScores(nil, []uint{highLLM.ID}, []uint{strictTool.ID})
+		assert.NoError(t, err)
+	})
+
+	t.Run("Tool at the same score as the LLM is allowed", func(t *testing.T) {
+		err := service.validatePrivacyScores(nil, []uint{lowLLM.ID}, []uint{openTool.ID})
+		assert.NoError(t, err)
+	})
+
+	// An app with tools and no providers cannot invoke them, and refusing here
+	// would break "create the app, add a provider later". The check runs again
+	// when a provider is added.
+	t.Run("Tool with no providers yet is allowed", func(t *testing.T) {
+		err := service.validatePrivacyScores(nil, nil, []uint{strictTool.ID})
+		assert.NoError(t, err)
+	})
+
+	t.Run("Adding a low-privacy provider later catches the mismatch", func(t *testing.T) {
+		err := service.validatePrivacyScores(nil, []uint{lowLLM.ID}, []uint{strictTool.ID})
+		assert.ErrorIs(t, err, ERRPrivacyScoreMismatch)
+	})
+
+	t.Run("Non-existent tool", func(t *testing.T) {
+		err := service.validatePrivacyScores(nil, []uint{lowLLM.ID}, []uint{99999})
+		assert.Error(t, err)
+	})
+}
+
+// "Failed to create app. Please try again." was the whole message on a privacy
+// refusal, and retrying could never succeed. The error must name the offending
+// pair and both numbers.
+func TestPrivacyScoreMismatch_MessageNamesTheOffendingPair(t *testing.T) {
+	service, _ := setupAppTest(t)
+
+	llm := createTestAppLLM(t, service, "msg-llm", 0)
+	ds := createTestAppDatasource(t, service, "Customer records", 80)
+
+	err := service.validatePrivacyScores([]uint{ds.ID}, []uint{llm.ID}, nil)
+	assert.ErrorIs(t, err, ERRPrivacyScoreMismatch)
+
+	msg := err.Error()
+	assert.Contains(t, msg, "Customer records", "must name the offending resource")
+	assert.Contains(t, msg, "msg-llm", "must name the provider it was compared against")
+	assert.Contains(t, msg, "80", "must state the required level")
+	assert.Contains(t, msg, "0", "must state the available level")
+
+	var mismatch *PrivacyScoreMismatch
+	assert.True(t, errors.As(err, &mismatch))
+	assert.Equal(t, "Data source", mismatch.ResourceKind)
+	assert.Equal(t, 80, mismatch.ResourceScore)
+	assert.Equal(t, 0, mismatch.MaxLLMScore)
+}
+
+func TestPrivacyScoreMismatch_NoProvidersMessage(t *testing.T) {
+	service, _ := setupAppTest(t)
+	ds := createTestAppDatasource(t, service, "Sensitive records", 40)
+
+	err := service.validatePrivacyScores([]uint{ds.ID}, nil, nil)
+	assert.ErrorIs(t, err, ERRPrivacyScoreMismatch)
+	assert.Contains(t, err.Error(), "no LLM providers")
 }
 
 func TestPatchAppMetadata(t *testing.T) {

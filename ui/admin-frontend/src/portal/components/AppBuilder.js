@@ -160,7 +160,12 @@ const AppBuilder = () => {
       setIsSubmitted(true);
     } catch (err) {
       console.error("Error creating app:", err);
-      setError("Failed to create app. Please try again.");
+      // The API already explains a privacy refusal -- which resource, which
+      // provider, and the two numbers. Discarding that for "Please try again"
+      // was actively misleading: nothing about the request has changed, so
+      // retrying can never succeed.
+      const detail = err?.response?.data?.errors?.[0]?.detail;
+      setError(detail || "Failed to create app. Please try again.");
     }
   };
 
