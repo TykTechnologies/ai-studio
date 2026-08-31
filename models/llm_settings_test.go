@@ -142,3 +142,41 @@ func TestLLMSettings_SearchByModelStub(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, fetchedSettings, 0)
 }
+
+// The seeded providers used to point at gpt-4o and claude-sonnet-4-20250514,
+// both end-of-life. A new user who filled in their API key -- already the
+// second stumble, after the empty bootstrap secret -- then hit model-not-found
+// on their first call. Nothing caught the drift.
+//
+// This is the anti-rot mechanism: a default that is not in this build's model
+// catalogue fails here rather than on a customer's first request.
+func TestDefaultBootstrapModelsAreInCatalogue(t *testing.T) {
+	catalogue := make(map[string]bool)
+	for _, s := range DefaultLLMSettings() {
+		catalogue[s.ModelName] = true
+	}
+
+	assert.NotEmpty(t, DefaultBootstrapModels, "every seeded provider needs a default model")
+
+	for vendor, model := range DefaultBootstrapModels {
+		assert.True(t, catalogue[model],
+			"default model %q for vendor %q is not in DefaultLLMSettings; it will fail with model-not-found on first use",
+			model, vendor)
+	}
+}
+
+// The seeded providers must actually use the centralised defaults, or the two
+// can drift apart again.
+func TestDefaultLLMsUseBootstrapModels(t *testing.T) {
+	db := setupTestDB(t)
+
+	err := GetOrCreateDefaultLLMs(db)
+	assert.NoError(t, err)
+
+	for vendor, want := range DefaultBootstrapModels {
+		var llm LLM
+		err := db.Where("vendor = ?", vendor).First(&llm).Error
+		assert.NoError(t, err, "expected a seeded provider for vendor %q", vendor)
+		assert.Equal(t, want, llm.DefaultModel)
+	}
+}

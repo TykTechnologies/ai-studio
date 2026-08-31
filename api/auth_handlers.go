@@ -24,7 +24,30 @@ import (
 	"gorm.io/gorm"
 )
 
-const appVersion = "v1.0" // Imported from version.go
+// appVersion is injected from package main at startup via SetBuildInfo.
+//
+// It used to be a const "v1.0" with a comment claiming it came from
+// version.go. It did not, and could not: version.go is package main, so this
+// package cannot import it. Every instance reported v1.0 regardless of build.
+var (
+	appVersion   = "dev"
+	appBuildHash = "unknown"
+	appBuildTime = "unknown"
+)
+
+// SetBuildInfo lets package main hand this package the build-time values set
+// via -ldflags. Called once, before the server starts.
+func SetBuildInfo(version, buildHash, buildTime string) {
+	if version != "" {
+		appVersion = version
+	}
+	if buildHash != "" {
+		appBuildHash = buildHash
+	}
+	if buildTime != "" {
+		appBuildTime = buildTime
+	}
+}
 
 // @Summary Get system feature set
 // @Description Returns the current system feature set from licensing
@@ -70,9 +93,11 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	}
 
 	response := gin.H{
-		"features": featureSet,
-		"edition":  edition,
-		"version":  appVersion,
+		"features":   featureSet,
+		"edition":    edition,
+		"version":    appVersion,
+		"build_hash": appBuildHash,
+		"build_time": appBuildTime,
 	}
 
 	// License expiry warning

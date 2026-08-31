@@ -175,7 +175,7 @@ func GetOrCreateDefaultLLMs(db *gorm.DB) error {
 			Vendor:       OPENAI,
 			APIEndpoint:  "https://api.openai.com/v1",
 			APIKey:       "$SECRET/OPENAI_KEY",
-			DefaultModel: "gpt-4o",
+			DefaultModel: DefaultBootstrapModels[OPENAI],
 			Active:       true,
 		},
 		{
@@ -183,7 +183,7 @@ func GetOrCreateDefaultLLMs(db *gorm.DB) error {
 			Vendor:       ANTHROPIC,
 			APIEndpoint:  "https://api.anthropic.com/v1",
 			APIKey:       "$SECRET/ANTHROPIC_KEY",
-			DefaultModel: "claude-sonnet-4-20250514",
+			DefaultModel: DefaultBootstrapModels[ANTHROPIC],
 			Active:       true,
 		},
 	}
