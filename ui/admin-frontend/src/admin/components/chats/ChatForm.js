@@ -421,8 +421,9 @@ const ChatForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth required error={!!errors.llm_settings_id}>
-                <InputLabel>LLM Settings</InputLabel>
+                <InputLabel id="chatform-llm-settings-label">LLM Settings</InputLabel>
                 <Select
+                  labelId="chatform-llm-settings-label"
                   name="llm_settings_id"
                   value={chat.llm_settings_id}
                   onChange={handleChange}
@@ -443,8 +444,9 @@ const ChatForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth required error={!!errors.llm_id}>
-                <InputLabel>LLM</InputLabel>
+                <InputLabel id="chatform-llm-label">LLM</InputLabel>
                 <Select
+                  labelId="chatform-llm-label"
                   name="llm_id"
                   value={chat.llm_id}
                   onChange={handleChange}
@@ -463,8 +465,9 @@ const ChatForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth error={!!errors.groups} required>
-                <InputLabel>Teams</InputLabel>
+                <InputLabel id="chatform-teams-label">Teams</InputLabel>
                 <Select
+                  labelId="chatform-teams-label"
                   multiple
                   value={chat.groups}
                   onChange={handleGroupChange}
@@ -495,8 +498,9 @@ const ChatForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>
-                <InputLabel>Filters</InputLabel>
+                <InputLabel id="chatform-filters-label">Filters</InputLabel>
                 <Select
+                  labelId="chatform-filters-label"
                   multiple
                   value={chat.filters}
                   onChange={handleFilterChange}
@@ -569,8 +573,9 @@ const ChatForm = () => {
                 the model to reference its contents when generating responses.
               </Alert>
               <FormControl fullWidth>
-                <InputLabel>Default Data Source</InputLabel>
+                <InputLabel id="chatform-default-data-source-label">Default Data Source</InputLabel>
                 <Select
+                  labelId="chatform-default-data-source-label"
                   name="default_data_source_id"
                   value={chat.default_data_source_id}
                   onChange={handleChange}
@@ -594,8 +599,9 @@ const ChatForm = () => {
                 responding to user queries.
               </Alert>
               <FormControl fullWidth>
-                <InputLabel>Default Tools</InputLabel>
+                <InputLabel id="chatform-default-tools-label">Default Tools</InputLabel>
                 <Select
+                  labelId="chatform-default-tools-label"
                   multiple
                   value={chat.default_tool_ids}
                   onChange={handleToolChange}

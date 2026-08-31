@@ -225,8 +225,9 @@ const EdgeGatewayList = () => {
         {features.hub_spoke_multi_tenant && (
           <Box mb={3}>
             <FormControl size="small" style={{ minWidth: 200 }}>
-              <InputLabel>Filter by Namespace</InputLabel>
+              <InputLabel id="edgegatewaylist-filter-by-namespace-label">Filter by Namespace</InputLabel>
               <Select
+                labelId="edgegatewaylist-filter-by-namespace-label"
                 value={selectedNamespace}
                 label="Filter by Namespace"
                 onChange={handleNamespaceChange}

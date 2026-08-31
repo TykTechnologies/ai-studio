@@ -247,8 +247,9 @@ const CatalogueForm = () => {
 
           <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
             <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel>Add LLM</InputLabel>
+              <InputLabel id="catalogueform-add-llm-label">Add LLM</InputLabel>
               <Select
+                labelId="catalogueform-add-llm-label"
                 value={selectedLLM}
                 onChange={(e) => setSelectedLLM(e.target.value)}
                 label="Add LLM"
@@ -267,6 +268,7 @@ const CatalogueForm = () => {
               color="secondary"
               onClick={handleAddLLM}
               disabled={!selectedLLM}
+              aria-label="Add LLM provider to catalog"
             >
               <AddIcon />
             </Button>

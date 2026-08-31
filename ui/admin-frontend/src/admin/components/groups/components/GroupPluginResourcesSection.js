@@ -109,11 +109,15 @@ const GroupPluginResourcesSection = ({ groupId, onChange }) => {
         const key = `${rt.plugin_id}:${rt.slug}`;
         const typeInstances = instances[key] || [];
         const selected = selections[key] || [];
+        // One label id per resource type -- see AppForm: a literal id inside a
+        // map repeats on every row and breaks the association it exists for.
+        const labelId = `grouppluginresourcessection-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}-label`;
 
         return (
           <FormControl fullWidth key={key} sx={{ mb: 2 }}>
-            <InputLabel>{rt.name}</InputLabel>
+            <InputLabel id={labelId}>{rt.name}</InputLabel>
             <Select
+              labelId={labelId}
               multiple
               value={selected}
               onChange={(e) => {

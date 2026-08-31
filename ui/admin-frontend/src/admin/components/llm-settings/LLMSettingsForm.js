@@ -315,8 +315,9 @@ const LLMSettingsForm = () => {
           <Grid container spacing={3}>
             <Grid item xs={12}>
               <FormControl fullWidth>
-                <InputLabel>Model Preset</InputLabel>
+                <InputLabel id="llmsettingsform-model-preset-label">Model Preset</InputLabel>
                 <Select
+                  labelId="llmsettingsform-model-preset-label"
                   value={selectedPreset}
                   onChange={handlePresetChange}
                   label="Model Preset"
@@ -471,8 +472,9 @@ const LLMSettingsForm = () => {
             margin="normal"
           />
           <FormControl fullWidth margin="normal">
-            <InputLabel>Vendor</InputLabel>
+            <InputLabel id="llmsettingsform-vendor-label">Vendor</InputLabel>
             <Select
+              labelId="llmsettingsform-vendor-label"
               name="vendor"
               value={modelPrice.vendor}
               onChange={handleModelPriceChange}

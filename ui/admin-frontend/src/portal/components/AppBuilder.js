@@ -263,8 +263,9 @@ const AppBuilder = () => {
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                 <FormControl fullWidth sx={{ mr: 1 }}>
-                  <InputLabel>Select Data Source</InputLabel>
+                  <InputLabel id="appbuilder-select-data-source-label">Select Data Source</InputLabel>
                   <Select
+                    labelId="appbuilder-select-data-source-label"
                     value={currentDataSource}
                     onChange={(e) => setCurrentDataSource(e.target.value)}
                     label="Select Data Source"
@@ -296,8 +297,9 @@ const AppBuilder = () => {
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                 <FormControl fullWidth sx={{ mr: 1 }}>
-                  <InputLabel>Select LLM</InputLabel>
+                  <InputLabel id="appbuilder-select-llm-label">Select LLM</InputLabel>
                   <Select
+                    labelId="appbuilder-select-llm-label"
                     value={currentLLM}
                     onChange={(e) => setCurrentLLM(e.target.value)}
                     label="Select LLM"
@@ -329,8 +331,9 @@ const AppBuilder = () => {
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                 <FormControl fullWidth sx={{ mr: 1 }}>
-                  <InputLabel>Select Tool</InputLabel>
+                  <InputLabel id="appbuilder-select-tool-label">Select Tool</InputLabel>
                   <Select
+                    labelId="appbuilder-select-tool-label"
                     value={currentTool}
                     onChange={(e) => setCurrentTool(e.target.value)}
                     label="Select Tool"
@@ -362,6 +365,7 @@ const AppBuilder = () => {
               const instances = rt.instances || [];
               const selected = pluginResourceSelections[key] || [];
               const currentVal = currentPluginResource[key] || "";
+              const labelId = `appbuilder-plugin-resource-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}-label`;
 
               if (instances.length === 0) return null;
 
@@ -372,8 +376,9 @@ const AppBuilder = () => {
                   </Typography>
                   <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                     <FormControl fullWidth sx={{ mr: 1 }}>
-                      <InputLabel>Select {rt.name}</InputLabel>
+                      <InputLabel id={labelId}>Select {rt.name}</InputLabel>
                       <Select
+                        labelId={labelId}
                         value={currentVal}
                         onChange={(e) =>
                           setCurrentPluginResource((prev) => ({

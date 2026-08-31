@@ -121,8 +121,9 @@ const SubmissionReviewQueue = () => {
         {/* Filters */}
         <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
           <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel>Status</InputLabel>
+            <InputLabel id="submissionreviewqueue-status-label">Status</InputLabel>
             <Select
+              labelId="submissionreviewqueue-status-label"
               value={statusFilter}
               label="Status"
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -136,8 +137,9 @@ const SubmissionReviewQueue = () => {
             </Select>
           </FormControl>
           <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel>Resource Type</InputLabel>
+            <InputLabel id="submissionreviewqueue-resource-type-label">Resource Type</InputLabel>
             <Select
+              labelId="submissionreviewqueue-resource-type-label"
               value={typeFilter}
               label="Resource Type"
               onChange={(e) => setTypeFilter(e.target.value)}

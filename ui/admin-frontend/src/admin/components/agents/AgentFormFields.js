@@ -69,8 +69,9 @@ const AgentFormFields = ({
 
       {showPluginField && (
         <FormControl fullWidth required>
-          <InputLabel>Plugin</InputLabel>
+          <InputLabel id="agentformfields-plugin-label">Plugin</InputLabel>
           <Select
+            labelId="agentformfields-plugin-label"
             value={formData.pluginId || ''}
             label="Plugin"
             onChange={(e) => handleChange('pluginId', e.target.value)}
@@ -99,8 +100,9 @@ const AgentFormFields = ({
       )}
 
       <FormControl fullWidth required>
-        <InputLabel>App</InputLabel>
+        <InputLabel id="agentformfields-app-label">App</InputLabel>
         <Select
+          labelId="agentformfields-app-label"
           value={formData.appId || ''}
           label="App"
           onChange={(e) => handleChange('appId', e.target.value)}
@@ -155,8 +157,9 @@ const AgentFormFields = ({
       <Typography variant="headingMedium">Access Control</Typography>
 
       <FormControl fullWidth>
-        <InputLabel>Teams</InputLabel>
+        <InputLabel id="agentformfields-teams-label">Teams</InputLabel>
         <Select
+          labelId="agentformfields-teams-label"
           multiple
           value={formData.groupIds || []}
           onChange={(e) => handleChange('groupIds', e.target.value)}

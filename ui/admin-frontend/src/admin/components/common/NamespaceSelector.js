@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   FormControl,
   InputLabel,
@@ -25,6 +25,11 @@ const NamespaceSelector = ({
   onlyWithEdges = true,
   ...props
 }) => {
+  // NamespaceSelector is a shared field, so a page can hold more than one of
+  // them. A literal label id would repeat in the DOM and leave every instance
+  // after the first with a label pointing at the wrong select, which is the
+  // association this component is supposed to provide.
+  const labelId = useId();
   const { 
     namespaces, 
     loading, 
@@ -96,8 +101,9 @@ const NamespaceSelector = ({
 
   return (
     <FormControl fullWidth required={required} error={error} disabled={disabled} {...props}>
-      <InputLabel>{label}</InputLabel>
+      <InputLabel id={labelId}>{label}</InputLabel>
       <Select
+        labelId={labelId}
         multiple
         value={selectedNamespaces}
         onChange={handleChange}

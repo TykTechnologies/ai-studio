@@ -208,8 +208,9 @@ const Marketplace = () => {
           </Grid>
           <Grid item xs={12} sm={6} md={2}>
             <FormControl fullWidth>
-              <InputLabel>Category</InputLabel>
+              <InputLabel id="marketplace-category-label">Category</InputLabel>
               <Select
+                labelId="marketplace-category-label"
                 value={category}
                 label="Category"
                 onChange={(e) => {
@@ -228,8 +229,9 @@ const Marketplace = () => {
           </Grid>
           <Grid item xs={12} sm={6} md={2}>
             <FormControl fullWidth>
-              <InputLabel>Publisher</InputLabel>
+              <InputLabel id="marketplace-publisher-label">Publisher</InputLabel>
               <Select
+                labelId="marketplace-publisher-label"
                 value={publisher}
                 label="Publisher"
                 onChange={(e) => {
@@ -248,8 +250,9 @@ const Marketplace = () => {
           </Grid>
           <Grid item xs={12} sm={6} md={2}>
             <FormControl fullWidth>
-              <InputLabel>Maturity</InputLabel>
+              <InputLabel id="marketplace-maturity-label">Maturity</InputLabel>
               <Select
+                labelId="marketplace-maturity-label"
                 value={maturity}
                 label="Maturity"
                 onChange={(e) => {

@@ -301,7 +301,6 @@ const ScriptTemplateSelector = ({ onTemplateSelect, currentScript, filterType })
         <InputLabel id="template-select-label">Load Template</InputLabel>
         <Select
           labelId="template-select-label"
-          id="template-select"
           value={selectedTemplate}
           label="Load Template"
           onChange={handleTemplateChange}

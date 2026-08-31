@@ -502,8 +502,9 @@ const UserForm = () => {
             </StyledPaper>
             <Box display="flex" alignItems="center" mt={3}>
               <FormControl fullWidth>
-                <InputLabel>Add to Team</InputLabel>
+                <InputLabel id="userform-add-to-team-label">Add to Team</InputLabel>
                 <Select
+                  labelId="userform-add-to-team-label"
                   value={selectedGroup}
                   onChange={(e) => setSelectedGroup(e.target.value)}
                 >

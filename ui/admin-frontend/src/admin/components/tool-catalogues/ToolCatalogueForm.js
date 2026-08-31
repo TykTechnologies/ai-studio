@@ -318,8 +318,9 @@ const ToolCatalogueForm = () => {
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
             <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel>Add Tool</InputLabel>
+              <InputLabel id="toolcatalogueform-add-tool-label">Add Tool</InputLabel>
               <Select
+                labelId="toolcatalogueform-add-tool-label"
                 value={selectedTool}
                 onChange={(e) => setSelectedTool(e.target.value)}
                 label="Add Tool"
@@ -333,7 +334,11 @@ const ToolCatalogueForm = () => {
                   ))}
               </Select>
             </FormControl>
-            <Button variant="contained" onClick={handleAddTool}>
+            <Button
+              variant="contained"
+              onClick={handleAddTool}
+              aria-label="Add tool to catalogue"
+            >
               Add
             </Button>
           </Box>
@@ -352,8 +357,9 @@ const ToolCatalogueForm = () => {
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
             <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel>Add Tag</InputLabel>
+              <InputLabel id="toolcatalogueform-add-tag-label">Add Tag</InputLabel>
               <Select
+                labelId="toolcatalogueform-add-tag-label"
                 value={selectedTag}
                 onChange={(e) => setSelectedTag(e.target.value)}
                 label="Add Tag"
@@ -367,7 +373,11 @@ const ToolCatalogueForm = () => {
                   ))}
               </Select>
             </FormControl>
-            <Button variant="contained" onClick={handleAddTag}>
+            <Button
+              variant="contained"
+              onClick={handleAddTag}
+              aria-label="Add tag to catalogue"
+            >
               Add
             </Button>
           </Box>
