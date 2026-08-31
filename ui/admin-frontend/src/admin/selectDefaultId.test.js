@@ -34,6 +34,9 @@ describe("Select labelling must not clobber MUI's default id", () => {
 
   it("keeps the mui-component-select-{name} id the E2E suite selects on", () => {
     const { container } = renderSelect();
+    // Querying by DOM id is the point here: the Playwright suite selects on
+    // this exact id, and no Testing Library query can assert an id's presence.
+    // eslint-disable-next-line testing-library/no-container, testing-library/no-node-access
     expect(container.querySelector("#mui-component-select-user_id")).toBeInTheDocument();
   });
 

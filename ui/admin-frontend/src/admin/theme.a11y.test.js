@@ -30,6 +30,10 @@ it("the asterisk is still rendered for sighted users", () => {
       <TextField label="Catalog Name" required />
     </ThemeProvider>
   );
+  // The asterisk is deliberately hidden from the accessibility tree, so it has
+  // no accessible representation for a Testing Library query to find -- the
+  // DOM node is the only way to assert it is still rendered and still hidden.
+  // eslint-disable-next-line testing-library/no-container, testing-library/no-node-access
   const asterisk = container.querySelector(".MuiFormLabel-asterisk");
   expect(asterisk).toBeInTheDocument();
   expect(asterisk).toHaveAttribute("aria-hidden", "true");
