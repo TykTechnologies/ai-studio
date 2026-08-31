@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -164,8 +166,21 @@ func (a *API) updateLLM(c *gin.Context) {
 		return
 	}
 
+	// Read the body once so it can be bound twice: into the typed input, and
+	// into a key probe that says which attributes were actually supplied.
+	rawBody, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "could not read request body"}},
+		})
+		return
+	}
+
 	var input LLMInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := json.Unmarshal(rawBody, &input); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -185,6 +200,12 @@ func (a *API) updateLLM(c *gin.Context) {
 		})
 		return
 	}
+
+	// PATCH is a partial update: anything the body did not mention keeps its
+	// current value. Binding straight onto LLMInput, whose attributes are plain
+	// values rather than pointers, meant an omitted field arrived as its zero
+	// value and was written -- so {"filters":[3]} wiped the provider.
+	mergeLLMPatch(&input, thisLLM, llmPatchAttributeKeys(rawBody))
 
 	filters := []*models.Filter{}
 	for _, f := range input.Data.Attributes.Filters {
