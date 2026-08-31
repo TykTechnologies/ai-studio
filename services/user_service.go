@@ -25,7 +25,20 @@ type UserDTO struct {
 	Groups               []uint
 }
 
-func (s *Service) addDefaultGroupIfNotExists(groups []uint) ([]uint, error) {
+// applyDefaultGroup gives every new user the Default team, in addition to any
+// teams the caller asked for.
+//
+// This is deliberate and load-bearing, not an oversight: Community Edition has
+// no teams at all, Enterprise does, and universal Default membership is what
+// keeps the two editions behaving the same way. Do not make it conditional --
+// a user outside Default has no equivalent in CE.
+//
+// The consequence is worth understanding, and is why the admin user form now
+// says so out loud: Default owns catalogues, membership is additive and never
+// subtractive, so adding a narrower team grants access on top rather than
+// narrowing anything. Restricting what someone can see is done by changing
+// what Default grants, not by moving them out of it.
+func (s *Service) applyDefaultGroup(groups []uint) ([]uint, error) {
 	// Get or create default group by name (safe for any DB state)
 	defaultGroup, err := models.GetOrCreateDefaultGroup(s.DB)
 	if err != nil {
@@ -87,7 +100,7 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		return nil, err
 	}
 
-	groups, err := s.addDefaultGroupIfNotExists(dto.Groups)
+	groups, err := s.applyDefaultGroup(dto.Groups)
 	if err != nil {
 		return nil, err
 	}

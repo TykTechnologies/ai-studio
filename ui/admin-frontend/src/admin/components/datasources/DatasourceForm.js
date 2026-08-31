@@ -357,7 +357,7 @@ const DatasourceForm = () => {
         open: true,
         message: id
           ? "Datasource updated successfully"
-          : "Datasource created successfully",
+          : "Data source created and added to the Default data catalog. It is inactive until you activate it.",
         severity: "success",
       });
 
@@ -401,6 +401,23 @@ const DatasourceForm = () => {
         <Box component="form" onSubmit={handleSubmit}>
           <SectionTitle>Basic Information</SectionTitle>
           <Grid container spacing={3}>
+            {!id && (
+              <Grid item xs={12}>
+                {/* ensureDatasourceInDefaultCatalogue adds any datasource that
+                    ends up in no catalogue to Default, which every user on the
+                    instance can see. Nothing on this form said so, so creating
+                    a sensitive data source put it on everyone's menu at that
+                    instant. */}
+                <Alert severity="info">
+                  A data source that is not assigned to a catalog is added to
+                  the <strong>Default</strong> data catalog, which every user on
+                  this instance can see. It stays <strong>inactive</strong>
+                  until you activate it, so being listed is not the same as
+                  being usable. Assign it to a specific catalog if it should not
+                  be in Default.
+                </Alert>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <TextField
                 id="datasource-field-name"
