@@ -21,6 +21,8 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Alert,
+  AlertTitle,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -604,7 +606,27 @@ const AppDetailView = () => {
         <Divider sx={{ my: 3 }} />
 
         <SectionTitle>Credential Information</SectionTitle>
-        <Grid container spacing={2}>
+        {/* A portal-created App's credential is minted inactive and an
+            administrator has to approve the App before the key works. The
+            portal said "submitted for approval" once, on the previous screen,
+            and then showed a secret you could copy with nothing indicating it
+            was not yet live -- so the state was discovered as a 401. */}
+        {!app.attributes.credential.active && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <AlertTitle>Waiting for approval</AlertTitle>
+            This credential is not active yet. An administrator has to approve
+            this app before the key below will work — requests made with it
+            will be rejected with <strong>401 Unauthorized</strong> until then.
+          </Alert>
+        )}
+        <Grid
+          container
+          spacing={2}
+          sx={{
+            // Greyed while pending, so the credential does not read as usable.
+            opacity: app.attributes.credential.active ? 1 : 0.6,
+          }}
+        >
           <Grid item xs={3}>
             <FieldLabel>Key ID:</FieldLabel>
           </Grid>
@@ -637,12 +659,19 @@ const AppDetailView = () => {
             </Box>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Active:</FieldLabel>
+            <FieldLabel>Status:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
-            <FieldValue>
-              {app.attributes.credential.active ? "Yes" : "No"}
-            </FieldValue>
+            <Chip
+              size="small"
+              label={
+                app.attributes.credential.active
+                  ? "Active"
+                  : "Pending approval"
+              }
+              color={app.attributes.credential.active ? "success" : "warning"}
+              variant="outlined"
+            />
           </Grid>
         </Grid>
 

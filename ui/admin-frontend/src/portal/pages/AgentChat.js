@@ -292,8 +292,11 @@ const AgentChat = () => {
               startIcon={<PrintIcon />}
               onClick={handlePrint}
               disabled={!canPrint}
+              title="Opens your browser's print dialog, where you can save the conversation as a PDF"
             >
-              Export
+              {/* window.print() with an injected header -- browser
+                  print-to-PDF, not server-side generation. */}
+              Print
             </Button>
             <Button
               variant="outlined"

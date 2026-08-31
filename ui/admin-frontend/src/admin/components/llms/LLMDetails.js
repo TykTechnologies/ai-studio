@@ -23,6 +23,7 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { CredentialStatusNotice } from "./CredentialStatusIndicator";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -692,6 +693,14 @@ const LLMDetails = () => {
                   </IconButton>
                 </Tooltip>
               )}
+            </Box>
+            {/* Says whether the key can actually resolve. A provider pointing
+                at an empty bootstrap secret used to render as fully healthy. */}
+            <Box sx={{ mt: 1 }}>
+              <CredentialStatusNotice
+                status={llm.attributes.credential_status}
+                reference={llm.attributes.credential_ref}
+              />
             </Box>
           </Grid>
         </Grid>
