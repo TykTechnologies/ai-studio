@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
@@ -20,7 +21,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 	// toolIDs is already of type []uint, no conversion needed
 
 	// Check if datasources have higher privacy score than LLMs
-	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
+	if err := s.validatePrivacyScores(datasourceIDs, llmIDs, toolIDs); err != nil {
 		return nil, err
 	}
 
@@ -135,7 +136,7 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 	// toolIDs is already of type []uint, no conversion needed
 
 	// Check if datasources have higher privacy score than LLMs
-	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
+	if err := s.validatePrivacyScores(datasourceIDs, llmIDs, toolIDs); err != nil {
 		return nil, err
 	}
 
@@ -224,7 +225,7 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	// toolIDs is already of type []uint, no conversion needed
 
 	// Check if datasources have higher privacy score than LLMs
-	if err := s.validatePrivacyScores(datasourceIDs, llmIDs); err != nil {
+	if err := s.validatePrivacyScores(datasourceIDs, llmIDs, toolIDs); err != nil {
 		return nil, err
 	}
 
@@ -330,17 +331,68 @@ func (s *Service) convertIDs(idStrings []string) ([]uint, error) {
 	return ids, nil
 }
 
-// validatePrivacyScores checks if any datasource has a higher privacy score than any LLM
-func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs []uint) error {
-	return s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, nil)
+// PrivacyScoreMismatch describes exactly which resource was refused and why.
+//
+// The bare sentinel produced "Failed to create app. Please try again." at the
+// portal, which is the least useful thing it could have said: nothing about the
+// request has changed, so retrying can never succeed. Carry the offending pair
+// and the two numbers so the caller can name them.
+//
+// It unwraps to ERRPrivacyScoreMismatch, so existing errors.Is checks still
+// classify it as a privacy refusal.
+type PrivacyScoreMismatch struct {
+	ResourceKind  string // "Data source", "Tool", "Plugin resource"
+	ResourceName  string
+	ResourceScore int
+	LLMName       string
+	MaxLLMScore   int // -1 when the app carries no providers at all
+}
+
+func (e *PrivacyScoreMismatch) Error() string {
+	subject := e.ResourceKind
+	if e.ResourceName != "" {
+		subject = fmt.Sprintf("%s %q", e.ResourceKind, e.ResourceName)
+	}
+
+	if e.MaxLLMScore < 0 {
+		return fmt.Sprintf(
+			"%s requires privacy level %d, but this app has no LLM providers to compare against. Add a provider with a privacy level of at least %d.",
+			subject, e.ResourceScore, e.ResourceScore,
+		)
+	}
+
+	provider := "the highest-privacy provider on this app"
+	if e.LLMName != "" {
+		provider = fmt.Sprintf("the highest-privacy provider on this app (%q)", e.LLMName)
+	}
+
+	return fmt.Sprintf(
+		"%s requires privacy level %d, but %s is at %d. Select a provider with a privacy level of at least %d, or remove the %s.",
+		subject, e.ResourceScore, provider, e.MaxLLMScore, e.ResourceScore,
+		strings.ToLower(e.ResourceKind),
+	)
+}
+
+func (e *PrivacyScoreMismatch) Unwrap() error { return ERRPrivacyScoreMismatch }
+
+// validatePrivacyScores checks that no attached resource requires a higher
+// privacy level than the app's providers can offer.
+func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs, toolIDs []uint) error {
+	return s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, nil)
 }
 
 // validatePrivacyScoresWithPluginResources extends privacy validation to include
-// plugin resource scores. The generalized rule: no resource score (datasource or
-// plugin resource) may exceed the max LLM privacy score in the app.
-func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs []uint, pluginResourceScores []int) error {
-	var maxLLMScore int = -1        // Default to -1 if no LLMs
-	var maxDatasourceScore int = -1 // Default to -1 if no datasources
+// plugin resource scores. The generalized rule: no resource score (datasource,
+// tool or plugin resource) may exceed the max LLM privacy score in the app.
+//
+// Tools were previously exempt, so a privacy-80 tool paired with a privacy-0
+// provider was accepted and a credential minted, while the same user pairing
+// that provider with a privacy-80 datasource was refused. The mismatch then
+// surfaced at chat time, where it does not skip the offending tool -- it fails
+// the entire chat session, presenting as a composer that never enables.
+func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs []uint, pluginResourceScores []int) error {
+	var maxLLMScore int = -1 // Default to -1 if no LLMs
+	var maxLLMName string
 
 	for _, llmID := range llmIDs {
 		llm, err := s.GetLLMByID(llmID)
@@ -349,6 +401,7 @@ func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs
 		}
 		if llm.PrivacyScore > maxLLMScore {
 			maxLLMScore = llm.PrivacyScore
+			maxLLMName = llm.Name
 		}
 	}
 
@@ -357,20 +410,53 @@ func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs
 		if err != nil {
 			return err
 		}
-		if ds.PrivacyScore > maxDatasourceScore {
-			maxDatasourceScore = ds.PrivacyScore
+		if ds.PrivacyScore > maxLLMScore {
+			return &PrivacyScoreMismatch{
+				ResourceKind:  "Data source",
+				ResourceName:  ds.Name,
+				ResourceScore: ds.PrivacyScore,
+				LLMName:       maxLLMName,
+				MaxLLMScore:   maxLLMScore,
+			}
 		}
 	}
 
-	// Check if datasources have higher privacy score than LLMs
-	if maxDatasourceScore > maxLLMScore {
-		return ERRPrivacyScoreMismatch
+	// Tools are only compared once the app actually has a provider. An app with
+	// tools and no providers cannot invoke them -- there is nothing to leak to --
+	// and refusing here would newly break "create the app, add a provider later".
+	// Adding a provider re-runs this check with both sides present.
+	//
+	// Note this is deliberately more lenient than the datasource rule above,
+	// which has always refused when the app carries no providers (score > -1).
+	// Which of the two is right is a product decision; see #503.
+	for _, toolID := range toolIDs {
+		if maxLLMScore < 0 {
+			break
+		}
+		tool, err := s.GetToolByID(toolID)
+		if err != nil {
+			return err
+		}
+		if tool.PrivacyScore > maxLLMScore {
+			return &PrivacyScoreMismatch{
+				ResourceKind:  "Tool",
+				ResourceName:  tool.Name,
+				ResourceScore: tool.PrivacyScore,
+				LLMName:       maxLLMName,
+				MaxLLMScore:   maxLLMScore,
+			}
+		}
 	}
 
 	// Check plugin resource scores against max LLM score
 	for _, score := range pluginResourceScores {
 		if score > maxLLMScore {
-			return fmt.Errorf("plugin resource has higher privacy requirements (%d) than the selected LLMs (max %d)", score, maxLLMScore)
+			return &PrivacyScoreMismatch{
+				ResourceKind:  "Plugin resource",
+				ResourceScore: score,
+				LLMName:       maxLLMName,
+				MaxLLMScore:   maxLLMScore,
+			}
 		}
 	}
 
@@ -872,7 +958,7 @@ func (s *Service) CreateAppWithResources(
 	}
 
 	// Validate privacy scores (built-in + plugin)
-	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, pluginScores); err != nil {
+	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, pluginScores); err != nil {
 		return nil, err
 	}
 
@@ -932,7 +1018,7 @@ func (s *Service) UpdateAppWithResources(
 	}
 
 	// Validate privacy scores (built-in + plugin)
-	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, pluginScores); err != nil {
+	if err := s.validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs, pluginScores); err != nil {
 		return nil, err
 	}
 

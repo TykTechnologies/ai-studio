@@ -47,7 +47,7 @@ const SubmissionReview = () => {
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [changesDialogOpen, setChangesDialogOpen] = useState(false);
-  const [finalPrivacyScore, setFinalPrivacyScore] = useState(50);
+  const [finalPrivacyScore, setFinalPrivacyScore] = useState(0);
   const [reviewNotes, setReviewNotes] = useState("");
   const [feedback, setFeedback] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -68,7 +68,7 @@ const SubmissionReview = () => {
       const response = await apiClient.get(`/submissions/${id}`);
       const data = response.data.data;
       setSubmission(data);
-      setFinalPrivacyScore(data.suggested_privacy || 50);
+      setFinalPrivacyScore(data.suggested_privacy ?? 0);
 
       // Fetch versions if resource exists
       if (data.resource_id) {

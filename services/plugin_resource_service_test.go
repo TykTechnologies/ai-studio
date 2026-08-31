@@ -323,6 +323,7 @@ func TestPrivacyValidationWithPluginResources(t *testing.T) {
 		err := service.validatePrivacyScoresWithPluginResources(
 			nil,
 			[]uint{llm.ID},
+			nil,
 			[]int{50, 70},
 		)
 		assert.NoError(t, err)
@@ -334,10 +335,15 @@ func TestPrivacyValidationWithPluginResources(t *testing.T) {
 		err := service.validatePrivacyScoresWithPluginResources(
 			nil,
 			[]uint{llm.ID},
+			nil,
 			[]int{50},
 		)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin resource has higher privacy requirements")
+		// Now classified as a privacy refusal (400) rather than a bare error
+		// (500), and the message names the provider and both numbers.
+		assert.ErrorIs(t, err, ERRPrivacyScoreMismatch)
+		assert.Contains(t, err.Error(), "Plugin resource requires privacy level 50")
+		assert.Contains(t, err.Error(), "low-llm")
 	})
 
 	t.Run("mixed datasource and plugin resource scores", func(t *testing.T) {
@@ -348,6 +354,7 @@ func TestPrivacyValidationWithPluginResources(t *testing.T) {
 		err := service.validatePrivacyScoresWithPluginResources(
 			[]uint{ds.ID},
 			[]uint{llm.ID},
+			nil,
 			[]int{50},
 		)
 		assert.NoError(t, err)
@@ -356,6 +363,7 @@ func TestPrivacyValidationWithPluginResources(t *testing.T) {
 		err = service.validatePrivacyScoresWithPluginResources(
 			[]uint{ds.ID},
 			[]uint{llm.ID},
+			nil,
 			[]int{70},
 		)
 		assert.Error(t, err)
@@ -368,6 +376,7 @@ func TestPrivacyValidationWithPluginResources(t *testing.T) {
 		err := service.validatePrivacyScoresWithPluginResources(
 			[]uint{ds.ID},
 			[]uint{llm.ID},
+			nil,
 			nil,
 		)
 		assert.NoError(t, err)
