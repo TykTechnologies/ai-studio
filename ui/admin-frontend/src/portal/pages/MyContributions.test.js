@@ -51,7 +51,11 @@ describe("MyContributions", () => {
 
     renderWithProviders(<MyContributions />);
     expect(screen.getByText("All")).toBeInTheDocument();
-    expect(screen.getByText("Published")).toBeInTheDocument();
+    // "Published" was wrong twice over: the cards under this tab read
+    // "Approved", and approval publishes nothing until an administrator
+    // assigns a catalogue.
+    expect(screen.getByText("Approved")).toBeInTheDocument();
+    expect(screen.queryByText("Published")).not.toBeInTheDocument();
     expect(screen.getByText("Pending Review")).toBeInTheDocument();
     expect(screen.getByText("Drafts")).toBeInTheDocument();
     expect(screen.getByText("Rejected")).toBeInTheDocument();

@@ -1,7 +1,12 @@
 import React from "react";
 import { Chip } from "@mui/material";
 
-const statusConfig = {
+// Exported so anything else naming a submission status -- the contributions
+// tabs, for one -- reads from the same place. The tabs used to say "Published"
+// where this chip said "Approved", and "published" was wrong either way:
+// approval creates the resource but puts it in no catalogue, so nothing is
+// published until an administrator assigns one.
+export const statusConfig = {
   draft: { color: "#757575", bg: "#f5f5f5", label: "Draft" },
   submitted: { color: "#1565c0", bg: "#e3f2fd", label: "Pending Review" },
   in_review: { color: "#e65100", bg: "#fff3e0", label: "In Review" },
@@ -13,6 +18,9 @@ const statusConfig = {
     label: "Changes Requested",
   },
 };
+
+export const statusLabel = (status) =>
+  statusConfig[status]?.label || status || "Unknown";
 
 const StatusChip = ({ status, size = "small" }) => {
   const config = statusConfig[status] || {
