@@ -72,9 +72,10 @@ const RemoveEdgeModal = ({ open, onClose, edge, onSuccess }) => {
         </Box>
 
         <Alert severity="info" sx={{ mb: 2 }}>
-          This entry will be permanently removed from the database, but the edge gateway can
-          re-register automatically if it reconnects. This is safe to do for disconnected or
-          stale edge gateways.
+          This removes the entry from the database. It does <strong>not</strong>{' '}
+          deregister or revoke the gateway: if that gateway is still running it
+          will re-register itself on its next heartbeat and reappear here.
+          Use this to tidy up entries for gateways that are genuinely gone.
         </Alert>
 
         {error && (
