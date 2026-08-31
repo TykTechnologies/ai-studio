@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import WarningBanner from './WarningBanner';
 import { useSyncStatus } from '../../context/SyncStatusContext';
+import PushConfigurationModal from '../edge-gateways/PushConfigurationModal';
 
 /**
  * SyncStatusBanner displays a warning banner when edge gateways are out of sync
@@ -19,6 +20,7 @@ const SyncStatusBanner = () => {
   const { syncStatus, hasPendingSync, pendingCount } = useSyncStatus();
   const [dismissed, setDismissed] = useState(false);
   const [lastPendingCount, setLastPendingCount] = useState(0);
+  const [pushOpen, setPushOpen] = useState(false);
 
   // If there are new pending syncs, undismiss the banner
   useEffect(() => {
@@ -48,18 +50,30 @@ const SyncStatusBanner = () => {
   } else if (pendingNamespaces.length === 1 && pendingNamespaces[0].namespace) {
     message += ` in namespace "${pendingNamespaces[0].namespace || 'default'}"`;
   }
-  message += '. Push configuration to sync.';
+  message +=
+    '. Changes you have saved are not live on those gateways until you push.';
 
+  // The banner named the problem and then sent the user two nav sections away
+  // to do something about it, which is most of the distance between "I saved
+  // it" and "why did nothing happen". Push from here.
   return (
-    <WarningBanner
-      title="Configuration Sync Pending"
-      message={message}
-      onClose={() => setDismissed(true)}
-      showCloseButton={true}
-      buttonText="View Edge Gateways"
-      onButtonClick={() => navigate('/admin/edge-gateways')}
-      sx={{ marginBottom: 2 }}
-    />
+    <>
+      <WarningBanner
+        title="Configuration Sync Pending"
+        message={message}
+        onClose={() => setDismissed(true)}
+        showCloseButton={true}
+        primaryButtonText="Push Configuration"
+        onPrimaryButtonClick={() => setPushOpen(true)}
+        buttonText="View Edge Gateways"
+        onButtonClick={() => navigate('/admin/edge-gateways')}
+        sx={{ marginBottom: 2 }}
+      />
+      <PushConfigurationModal
+        open={pushOpen}
+        onClose={() => setPushOpen(false)}
+      />
+    </>
   );
 };
 

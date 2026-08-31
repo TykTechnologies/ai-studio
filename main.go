@@ -53,6 +53,11 @@ func printWelcome() {
 func main() {
 	printWelcome()
 
+	// version.go is package main, so the api package cannot import it. Hand the
+	// build-time values over explicitly rather than letting /common/system
+	// report a hardcoded v1.0 forever.
+	api.SetBuildInfo(Version, BuildHash, BuildTime)
+
 	// Parse command-line flags
 	envFile := flag.String("env", "", "Path to environment file (default: .env in current directory)")
 	noLLMDefaults := flag.Bool("no-llm-defaults", false, "Disable automatic creation of default LLM configurations and secrets")
