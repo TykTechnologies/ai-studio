@@ -39,6 +39,18 @@ import {
   StyledTableRow,
 } from "../styles/sharedStyles";
 
+// The single source of truth for the applies_to_type vocabulary: the create
+// form's options and the table's chip both read from here, so the table can
+// never again print the raw enum ("all") where the form offered a label.
+const APPLIES_TO_OPTIONS = [
+  { value: "all", label: "All resource types" },
+  { value: "datasource", label: "Data sources only" },
+  { value: "tool", label: "Tools only" },
+];
+
+const appliesToLabel = (value) =>
+  APPLIES_TO_OPTIONS.find((option) => option.value === value)?.label || value;
+
 const emptyTemplate = {
   name: "",
   text: "",
@@ -239,7 +251,7 @@ const AttestationTemplates = () => {
                       </StyledTableCell>
                       <StyledTableCell>
                         <Chip
-                          label={template.applies_to_type}
+                          label={appliesToLabel(template.applies_to_type)}
                           size="small"
                           variant="outlined"
                         />
@@ -337,9 +349,11 @@ const AttestationTemplates = () => {
                 setFormData({ ...formData, applies_to_type: e.target.value })
               }
             >
-              <MenuItem value="all">All resource types</MenuItem>
-              <MenuItem value="datasource">Data sources only</MenuItem>
-              <MenuItem value="tool">Tools only</MenuItem>
+              {APPLIES_TO_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
           <TextField

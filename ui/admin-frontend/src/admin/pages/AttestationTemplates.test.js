@@ -79,6 +79,19 @@ describe("AttestationTemplates", () => {
     });
   });
 
+  // The table used to print the raw enum ("all") where the create form offered
+  // "All resource types"; both now read from the same option list.
+  it("renders the applies-to scope as a label, not the raw enum", async () => {
+    apiClient.get.mockResolvedValue({ data: { data: mockTemplates } });
+    renderWithProviders(<AttestationTemplates />);
+    await waitFor(() => {
+      expect(screen.getByText("All resource types")).toBeInTheDocument();
+      expect(screen.getByText("Data sources only")).toBeInTheDocument();
+      expect(screen.queryByText("all")).not.toBeInTheDocument();
+      expect(screen.queryByText("datasource")).not.toBeInTheDocument();
+    });
+  });
+
   it("shows empty state when no templates", async () => {
     renderWithProviders(<AttestationTemplates />);
     await waitFor(() => {

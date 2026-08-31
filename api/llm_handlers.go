@@ -541,6 +541,8 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 		}
 	}
 
+	llmCredentialStatus, llmCredentialRef := credentialStatus(llm.APIKey)
+
 	return LLMResponse{
 		Type: "llms",
 		ID:   strconv.FormatUint(uint64(llm.ID), 10),
@@ -548,6 +550,8 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			Name             string           `json:"name"`
 			APIKey           string           `json:"api_key"`
 			HasAPIKey        bool             `json:"has_api_key"`
+			CredentialStatus string           `json:"credential_status"`
+			CredentialRef    string           `json:"credential_ref,omitempty"`
 			APIEndpoint      string           `json:"api_endpoint"`
 			PrivacyScore     int              `json:"privacy_score"`
 			ShortDescription string           `json:"short_description"`
@@ -568,6 +572,8 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			Name:             llm.Name,
 			APIKey:           services.REDACTED_VALUE,
 			HasAPIKey:        llm.APIKey != "",
+			CredentialStatus: llmCredentialStatus,
+			CredentialRef:    llmCredentialRef,
 			APIEndpoint:      llm.APIEndpoint,
 			PrivacyScore:     llm.PrivacyScore,
 			ShortDescription: llm.ShortDescription,
@@ -655,6 +661,8 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 			}
 		}
 
+		itemCredentialStatus, itemCredentialRef := credentialStatus(llm.APIKey)
+
 		result[i] = LLMResponse{
 			Type: "llms",
 			ID:   strconv.FormatUint(uint64(llm.ID), 10),
@@ -662,6 +670,8 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				Name             string           `json:"name"`
 				APIKey           string           `json:"api_key"`
 				HasAPIKey        bool             `json:"has_api_key"`
+				CredentialStatus string           `json:"credential_status"`
+				CredentialRef    string           `json:"credential_ref,omitempty"`
 				APIEndpoint      string           `json:"api_endpoint"`
 				PrivacyScore     int              `json:"privacy_score"`
 				ShortDescription string           `json:"short_description"`
@@ -682,6 +692,8 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				Name:             llm.Name,
 				APIKey:           services.REDACTED_VALUE,
 				HasAPIKey:        llm.APIKey != "",
+				CredentialStatus: itemCredentialStatus,
+				CredentialRef:    itemCredentialRef,
 				APIEndpoint:      llm.APIEndpoint,
 				PrivacyScore:     llm.PrivacyScore,
 				ShortDescription: llm.ShortDescription,
