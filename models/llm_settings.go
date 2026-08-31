@@ -83,6 +83,22 @@ func (ls *LLMSettingsSlice) SearchByModelStub(db *gorm.DB, modelStub string) err
 	return db.Where("model_name LIKE ?", modelStub+"%").Find(ls).Error
 }
 
+// DefaultBootstrapModels names the model each seeded provider points at on a
+// brand-new instance.
+//
+// These live beside DefaultLLMSettings deliberately. They used to be written
+// inline in GetOrCreateDefaultLLMs, drifted onto end-of-life models (gpt-4o and
+// claude-sonnet-4-20250514, both since marked Legacy in the catalogue below),
+// and nothing caught it -- so a new user who filled in their API key still hit
+// model-not-found on their very first call. Keeping them next to the catalogue
+// means there is one place to update when models turn over, and
+// TestDefaultBootstrapModelsAreInCatalogue fails if a default is ever pointed
+// at a model this build does not know about.
+var DefaultBootstrapModels = map[Vendor]string{
+	OPENAI:    "gpt-5",
+	ANTHROPIC: "claude-sonnet-4-5-20250929",
+}
+
 // DefaultLLMSettings returns a slice of default LLM settings for popular SOTA models.
 // These settings are based on official vendor documentation as of December 2025.
 func DefaultLLMSettings() []LLMSettings {

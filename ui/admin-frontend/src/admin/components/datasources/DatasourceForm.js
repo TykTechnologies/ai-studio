@@ -5,6 +5,7 @@ import {
   Button,
   Box,
   FormControl,
+  FormHelperText,
   InputLabel,
   Select,
   MenuItem,
@@ -300,12 +301,36 @@ const DatasourceForm = () => {
       newErrors.privacy_score = "Privacy level must be between 0 and 100";
     if (!datasource.user_id) newErrors.user_id = "User is required";
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return newErrors;
+  };
+
+  // Fields in the order they appear, so a failed submit scrolls to the first
+  // thing the user actually needs to fix. Without this the submit button sits
+  // below the fold and a validation failure looks like a button that does
+  // nothing at all.
+  const FIELD_ORDER = [
+    "name",
+    "user_id",
+    "db_source_type",
+    "embed_vendor",
+    "privacy_score",
+  ];
+
+  const focusFirstError = (fieldErrors) => {
+    const firstField = FIELD_ORDER.find((field) => fieldErrors[field]);
+    if (!firstField) return;
+    document
+      .getElementById(`datasource-field-${firstField}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    const fieldErrors = validateForm();
+    if (Object.keys(fieldErrors).length > 0) {
+      focusFirstError(fieldErrors);
+      return;
+    }
 
     const datasourceData = {
       data: {
@@ -395,6 +420,7 @@ const DatasourceForm = () => {
             )}
             <Grid item xs={12}>
               <TextField
+                id="datasource-field-name"
                 fullWidth
                 label="Name"
                 name="name"
@@ -417,13 +443,20 @@ const DatasourceForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth error={!!errors.user_id}>
+              {/* `required` belongs on the FormControl: on the Select it
+                  validates but renders no asterisk, so this field read as
+                  optional while silently blocking every submit. */}
+              <FormControl
+                id="datasource-field-user_id"
+                fullWidth
+                required
+                error={!!errors.user_id}
+              >
                 <InputLabel>User</InputLabel>
                 <Select
                   name="user_id"
                   value={datasource.user_id}
                   onChange={handleChange}
-                  required
                 >
                   {users.map((user) => (
                     <MenuItem key={user.id} value={user.id}>
@@ -432,12 +465,17 @@ const DatasourceForm = () => {
                   ))}
                 </Select>
                 {errors.user_id && (
-                  <Typography color="error">{errors.user_id}</Typography>
+                  <FormHelperText>{errors.user_id}</FormHelperText>
                 )}
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth required error={!!errors.db_source_type}>
+              <FormControl
+                id="datasource-field-db_source_type"
+                fullWidth
+                required
+                error={!!errors.db_source_type}
+              >
                 <InputLabel>Vector Database Type</InputLabel>
                 <Select
                   name="db_source_type"
@@ -465,6 +503,9 @@ const DatasourceForm = () => {
                     );
                   })}
                 </Select>
+                {errors.db_source_type && (
+                  <FormHelperText>{errors.db_source_type}</FormHelperText>
+                )}
               </FormControl>
               {vectorStoreHelpText && (
                 <Paper
@@ -484,7 +525,12 @@ const DatasourceForm = () => {
               )}
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth required error={!!errors.embed_vendor}>
+              <FormControl
+                id="datasource-field-embed_vendor"
+                fullWidth
+                required
+                error={!!errors.embed_vendor}
+              >
                 <InputLabel>Embedding Service Vendor</InputLabel>
                 <Select
                   name="embed_vendor"
@@ -512,6 +558,9 @@ const DatasourceForm = () => {
                     );
                   })}
                 </Select>
+                {errors.embed_vendor && (
+                  <FormHelperText>{errors.embed_vendor}</FormHelperText>
+                )}
               </FormControl>
               {embedderHelpText && (
                 <Paper

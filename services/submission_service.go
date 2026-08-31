@@ -377,6 +377,7 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 	activity := &models.SubmissionActivity{
 		SubmissionID: submissionID,
 		ActorID:      reviewerID,
+		ActorName:    s.ResolveActorName(reviewerID, ""),
 		ActivityType: models.ActivityTypeApproved,
 		InternalNote: reviewNotes,
 	}

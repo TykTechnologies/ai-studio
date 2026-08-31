@@ -23,6 +23,7 @@ import {
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { CredentialStatusNotice } from "./CredentialStatusIndicator";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -644,7 +645,7 @@ const LLMDetails = () => {
         <SectionTitle>Access Details</SectionTitle>
         <Typography variant="body2" color="text.secondary" paragraph>
           Some LLMs do not require an API Key for access, or have a default URL
-          (for example Anthropic and OopenAI). If you have an LLM provider that
+          (for example Anthropic and OpenAI). If you have an LLM provider that
           is not on the list, but provides an OpenAPI compatible API, you can
           use the compatible vendor setting and override the default URL.
         </Typography>
@@ -692,6 +693,14 @@ const LLMDetails = () => {
                   </IconButton>
                 </Tooltip>
               )}
+            </Box>
+            {/* Says whether the key can actually resolve. A provider pointing
+                at an empty bootstrap secret used to render as fully healthy. */}
+            <Box sx={{ mt: 1 }}>
+              <CredentialStatusNotice
+                status={llm.attributes.credential_status}
+                reference={llm.attributes.credential_ref}
+              />
             </Box>
           </Grid>
         </Grid>

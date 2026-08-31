@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import syncStatusService from '../services/syncStatusService';
+import { registerSyncStatusRefresh } from '../utils/configSyncNotifier';
 
 const SyncStatusContext = createContext();
 
@@ -69,6 +70,11 @@ export const SyncStatusProvider = ({ children }) => {
   const refreshSyncStatus = useCallback(async () => {
     return await fetchSyncStatus();
   }, [fetchSyncStatus]);
+
+  // Let the API client refresh sync status right after a save that the edge
+  // gateways care about, so the pending banner appears while the user is still
+  // looking at the thing they just saved.
+  useEffect(() => registerSyncStatusRefresh(refreshSyncStatus), [refreshSyncStatus]);
 
   // Calculate derived values
   const hasPendingSync = syncStatus?.has_pending || false;

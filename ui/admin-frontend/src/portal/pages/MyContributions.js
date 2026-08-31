@@ -30,15 +30,20 @@ import AddIcon from "@mui/icons-material/Add";
 import StorageIcon from "@mui/icons-material/Storage";
 import BuildIcon from "@mui/icons-material/Build";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
-import StatusChip from "../../admin/components/submissions/StatusChip";
+import StatusChip, {
+  statusLabel,
+} from "../../admin/components/submissions/StatusChip";
 
+// Labels come from StatusChip so a tab and the badge on the cards beneath it
+// can never disagree again. The "approved" tab used to read "Published" while
+// every card in it read "Approved".
 const statusTabs = [
   { label: "All", value: "" },
-  { label: "Published", value: "approved" },
-  { label: "Pending Review", value: "submitted" },
-  { label: "Changes Requested", value: "changes_requested" },
+  { label: statusLabel("approved"), value: "approved" },
+  { label: statusLabel("submitted"), value: "submitted" },
+  { label: statusLabel("changes_requested"), value: "changes_requested" },
   { label: "Drafts", value: "draft" },
-  { label: "Rejected", value: "rejected" },
+  { label: statusLabel("rejected"), value: "rejected" },
 ];
 
 const MyContributions = () => {

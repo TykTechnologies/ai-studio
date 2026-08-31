@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { fetchCSRFToken } from './urlUtils';
+import { affectsGatewayConfig, notifyConfigChanged } from './configSyncNotifier';
 
 let apiClientInstance = null;
 
@@ -23,7 +24,16 @@ const createApiClient = () => {
   );
 
   instance.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      // Saving something the edge gateways care about does not take effect
+      // until a config push. Refresh sync status now rather than leaving the
+      // banner up to a 30-second poll, which is the window in which people
+      // conclude their change did nothing.
+      if (affectsGatewayConfig(response?.config?.method, response?.config?.url)) {
+        notifyConfigChanged();
+      }
+      return response;
+    },
     (error) => {
       if (error.response?.status === 401) {
         // Handle unauthorized access

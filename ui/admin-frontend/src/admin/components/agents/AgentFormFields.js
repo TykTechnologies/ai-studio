@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -12,6 +13,7 @@ import {
   Chip,
   OutlinedInput,
   Divider,
+  Link as MuiLink,
 } from '@mui/material';
 
 /**
@@ -83,7 +85,14 @@ const AgentFormFields = ({
           </Select>
           {plugins.length === 0 && (
             <Typography variant="bodySmallDefault" color="text.secondary" sx={{ mt: 1 }}>
-              No agent plugins available. Please install an agent plugin first.
+              {/* "Install an agent plugin first" was the whole guidance, with no
+                  indication of where installing one happens. */}
+              No agent plugins available. An Agent needs an agent-capability
+              plugin installed before it can be created &mdash; add one from{' '}
+              <MuiLink component={RouterLink} to="/admin/plugins">
+                Plugins
+              </MuiLink>
+              , then return here.
             </Typography>
           )}
         </FormControl>

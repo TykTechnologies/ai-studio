@@ -18,6 +18,10 @@ import {
   DialogContent,
   DialogActions,
   Slider,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -42,6 +46,9 @@ const SubmissionReview = () => {
   const [testing, setTesting] = useState(false);
   const [versions, setVersions] = useState([]);
   const [activities, setActivities] = useState([]);
+  // Attestation templates, so the review panel can show the text the submitter
+  // accepted rather than a bare template_id.
+  const [attestationTemplates, setAttestationTemplates] = useState([]);
 
   // Dialog state
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
@@ -80,6 +87,14 @@ const SubmissionReview = () => {
         } catch (e) {
           // Versions may not exist
         }
+      }
+
+      // Attestation templates, to resolve accepted template_ids to their text.
+      try {
+        const templatesResponse = await apiClient.get("/attestation-templates");
+        setAttestationTemplates(templatesResponse.data.data || []);
+      } catch (e) {
+        // Non-fatal: the panel falls back to showing the template id.
       }
 
       // Fetch activity audit trail
@@ -231,6 +246,12 @@ const SubmissionReview = () => {
     }
   };
 
+  // attestations is stored as {accepted: [{template_id, accepted_at}]}. Older or
+  // partial rows may carry neither, so normalise before rendering.
+  const acceptedAttestations = Array.isArray(submission?.attestations?.accepted)
+    ? submission.attestations.accepted
+    : [];
+
   if (loading) {
     return (
       <ContentBox
@@ -337,6 +358,72 @@ const SubmissionReview = () => {
 
               <Divider sx={{ my: 2 }} />
 
+              {/* The whole point of a legal sign-off gate is that the reviewer
+                  can see the sign-off. The data was stored and returned by the
+                  API and simply never rendered, so approvals happened without
+                  the reviewer ever seeing the gate they had configured. */}
+              <Typography variant="h6" gutterBottom>
+                Attestations
+              </Typography>
+              {acceptedAttestations.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  The submitter accepted no attestations.
+                </Typography>
+              ) : (
+                <List dense disablePadding>
+                  {acceptedAttestations.map((accepted) => {
+                    const template = attestationTemplates.find(
+                      (t) => String(t.id) === String(accepted.template_id)
+                    );
+                    return (
+                      <ListItem
+                        key={accepted.template_id}
+                        disableGutters
+                        alignItems="flex-start"
+                      >
+                        <ListItemIcon sx={{ minWidth: 32, mt: 0.5 }}>
+                          <CheckCircleIcon fontSize="small" color="success" />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={
+                            template?.name ||
+                            `Attestation #${accepted.template_id}`
+                          }
+                          secondary={
+                            <>
+                              {template?.text && (
+                                <Typography
+                                  variant="body2"
+                                  component="span"
+                                  display="block"
+                                >
+                                  {template.text}
+                                </Typography>
+                              )}
+                              <Typography
+                                variant="caption"
+                                component="span"
+                                display="block"
+                                color="text.secondary"
+                              >
+                                Accepted{" "}
+                                {accepted.accepted_at
+                                  ? new Date(
+                                      accepted.accepted_at
+                                    ).toLocaleString()
+                                  : "at an unrecorded time"}
+                              </Typography>
+                            </>
+                          }
+                        />
+                      </ListItem>
+                    );
+                  })}
+                </List>
+              )}
+
+              <Divider sx={{ my: 2 }} />
+
               <Typography variant="h6" gutterBottom>
                 Support
               </Typography>
@@ -398,7 +485,13 @@ const SubmissionReview = () => {
                   disabled={testing}
                   size="small"
                 >
-                  Test Connection
+                  {/* A tool submission only re-validates its spec; only a
+                      datasource actually reaches the upstream. One label for
+                      both promised the stronger guarantee, so a reviewer could
+                      approve a tool whose server block points nowhere. */}
+                  {submission.resource_type === "tool"
+                    ? "Validate specification"
+                    : "Test connection"}
                 </PrimaryOutlineButton>
               </Box>
 
@@ -469,8 +562,21 @@ const SubmissionReview = () => {
                 <Box sx={{ mt: 2 }}>
                   <Divider sx={{ mb: 2 }} />
                   <Typography variant="subtitle2" gutterBottom>
-                    Test Results
+                    {testResult.check_label ||
+                      (submission.resource_type === "tool"
+                        ? "Specification validated"
+                        : "Connection tested")}
                   </Typography>
+                  {testResult.check_detail && !testResult.error && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      display="block"
+                      sx={{ mb: 1 }}
+                    >
+                      {testResult.check_detail}
+                    </Typography>
+                  )}
                   {testResult.error ? (
                     <Alert severity="error">{testResult.error}</Alert>
                   ) : testResult.type === "tool" &&

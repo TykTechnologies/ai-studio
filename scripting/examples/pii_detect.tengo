@@ -1,3 +1,8 @@
+// LEGACY EXAMPLE -- DOES NOT RUN AS WRITTEN.
+// This targets an older script contract (`payload` in / `result` out).
+// The current contract reads `input` and assigns `output`; see README.md
+// in this directory. Kept for reference while it is ported.
+
 text := import("text")
 
 // regexes for various PII
