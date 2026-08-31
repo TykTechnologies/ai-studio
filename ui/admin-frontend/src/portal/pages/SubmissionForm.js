@@ -198,7 +198,17 @@ const SubmissionForm = () => {
           oas_spec: payload.oas_spec,
         }
       );
-      setSpecValidation(response.data.data);
+      const validation = response.data.data;
+      setSpecValidation(validation);
+
+      // Start with every operation exposed and let the contributor narrow.
+      // Starting empty meant a contributor who never touched the chips
+      // submitted `available_operations: ""` -- a Tool that can never work,
+      // discovered only after a review and an approval.
+      const operations = validation?.extracted?.operations || [];
+      if (validation?.valid && operations.length > 0 && !payload.available_operations) {
+        handlePayloadChange("available_operations", operations.join(","));
+      }
     } catch (error) {
       setSpecValidation({
         valid: false,
@@ -247,9 +257,21 @@ const SubmissionForm = () => {
 
     if (resourceType === "tool") {
       if (!payload.oas_spec) newErrors.oas_spec = "OAS spec is required";
-      // Default tool_type is set via setPayload, not by mutating state directly
-      if (!payload.tool_type) {
-        setPayload((prev) => ({ ...prev, tool_type: "REST" }));
+      // tool_type is defaulted in buildResourcePayload rather than here: a
+      // setPayload during validation does not land before handleSave reads
+      // `payload`, which is why submitted tools arrived with tool_type "" and
+      // rendered as less capable than an identical admin-created tool.
+
+      // An empty operation set produces a Tool that can never work, and it
+      // would travel through a review and an approval before anybody found
+      // out. Catch it at the front door.
+      if (
+        submitForReview &&
+        specValidation?.extracted?.operations?.length > 0 &&
+        !(payload.available_operations || "").split(",").filter(Boolean).length
+      ) {
+        newErrors.available_operations =
+          "Select at least one operation to expose, or this tool will be approved unable to do anything";
       }
     }
 
@@ -289,12 +311,19 @@ const SubmissionForm = () => {
 
     setSaving(true);
     try {
+      // Defaults are applied here, on the value actually sent, rather than via
+      // a setPayload that has not landed by the time this runs.
+      const resourcePayload =
+        resourceType === "tool" && !payload.tool_type
+          ? { ...payload, tool_type: "REST" }
+          : payload;
+
       const submissionData = {
         data: {
           attributes: {
             resource_type: resourceType,
             status: submitForReview ? "submitted" : "draft",
-            resource_payload: payload,
+            resource_payload: resourcePayload,
             attestations: {
               accepted: Object.entries(attestationChecks)
                 .filter(([, checked]) => checked)
@@ -740,6 +769,11 @@ const SubmissionForm = () => {
                             >
                               Select operations to expose:
                             </Typography>
+                            {errors.available_operations && (
+                              <Alert severity="error" sx={{ mb: 1 }}>
+                                {errors.available_operations}
+                              </Alert>
+                            )}
                             <Box
                               sx={{
                                 display: "flex",
