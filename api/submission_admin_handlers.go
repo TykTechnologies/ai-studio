@@ -114,8 +114,28 @@ func (a *API) testDatasourceConnectivity(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
+// Check kinds reported by adminTestSubmission.
+//
+// The endpoint does two materially different things depending on resource type,
+// and the UI presented both as "Test Connection" -- so a reviewer could approve
+// a tool whose server block points nowhere, believing the upstream had been
+// reached. The response now states which guarantee it actually provides.
+const (
+	// CheckSpecValidation means the OpenAPI document was parsed and validated.
+	// Nothing was contacted.
+	CheckSpecValidation = "spec_validation"
+	// CheckConnectivity means the upstream service was actually contacted.
+	CheckConnectivity = "connectivity"
+)
+
 // adminTestSubmission handles POST /api/v1/submissions/:id/test
-// Runs validation appropriate to the submission's resource type
+// Runs validation appropriate to the submission's resource type.
+//
+// Note the asymmetry: a datasource submission genuinely reaches out to the
+// embedding service, while a tool submission only re-validates its spec
+// server-side. Callers must read check_kind rather than assuming the stronger
+// guarantee. Actually probing a tool's upstream would mean an outbound request
+// to a URL taken from user-supplied content and needs SSRF review first.
 func (a *API) adminTestSubmission(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -171,7 +191,13 @@ func (a *API) adminTestSubmission(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"type": "tool", "spec_validation": result}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"type":            "tool",
+			"check_kind":      CheckSpecValidation,
+			"check_label":     "Specification validated",
+			"check_detail":    "The OpenAPI document was parsed and validated. The tool's upstream server was not contacted.",
+			"spec_validation": result,
+		}})
 
 	case "datasource":
 		dsResult, err := a.service.TestDatasourceConnectivity(
@@ -189,7 +215,13 @@ func (a *API) adminTestSubmission(c *gin.Context) {
 			})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"type": "datasource", "connectivity": dsResult}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"type":         "datasource",
+			"check_kind":   CheckConnectivity,
+			"check_label":  "Connection tested",
+			"check_detail": "The embedding service was contacted and responded.",
+			"connectivity": dsResult,
+		}})
 
 	default:
 		c.JSON(http.StatusBadRequest, ErrorResponse{

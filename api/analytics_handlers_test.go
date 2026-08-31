@@ -124,10 +124,18 @@ func TestGetBudgetUsage(t *testing.T) {
 	api, router := setupAnalyticsTestAPI(db)
 	router.GET("/analytics/budget-usage", api.getBudgetUsage)
 
-	// Create test app with budget
+	// Create test app with budget.
+	//
+	// Dates are computed in UTC to match analytics.GetBudgetUsage, which builds
+	// its month window from time.Now().UTC(). Using local time here made the
+	// test depend on the machine's offset: in UTC+12 the local date rolls over
+	// a day early, so on the 1st of a month the seeded records were written
+	// with a +12 offset, sorted into the *next* month against SQLite's string
+	// comparison, and fell outside the handler's window -- an empty response
+	// and a failing test, reliably, but only on one day in thirty.
 	budget := 100.0
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	now := time.Now().UTC()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	app := &models.App{
 		Name:            "Test App",
 		MonthlyBudget:   &budget,
@@ -144,13 +152,20 @@ func TestGetBudgetUsage(t *testing.T) {
 	}
 	db.Create(llm)
 
-	// Create test records
+	// Create test records.
+	//
+	// The timestamp must fall inside the window the handler queries, which is
+	// [BudgetStartDate, time.Now()]. Dating this startOfMonth+24h put it in the
+	// FUTURE whenever the test ran on the 1st of a month, so the spend was
+	// excluded, the response came back empty and the test failed -- reliably,
+	// but only on one day in thirty. Use now, which is always within the
+	// window and never ahead of the handler's own clock.
 	records := []models.LLMChatRecord{
 		{
 			AppID:     app.ID,
 			LLMID:     llm.ID,
 			Cost:      500000.0, // 50.0 * 10000
-			TimeStamp: startOfMonth.Add(24 * time.Hour),
+			TimeStamp: now,
 		},
 	}
 	for _, record := range records {

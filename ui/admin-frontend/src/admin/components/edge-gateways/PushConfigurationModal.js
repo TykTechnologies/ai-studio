@@ -29,8 +29,12 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
   const { features } = useSystemFeatures();
   const { refreshSyncStatus } = useSyncStatus();
 
-  // CE: Default to 'all' since namespace selection is enterprise-only
-  const [targetType, setTargetType] = useState(features.hub_spoke_multi_tenant ? 'namespace' : 'all');
+  // Default to 'all' on every edition. On Enterprise this used to open on
+  // 'namespace' with nothing selected, so the modal appeared with its submit
+  // button already disabled and no indication of why -- the user had to work
+  // out that a namespace still had to be chosen. Narrowing to one namespace is
+  // the deliberate act; pushing everything is the ordinary one.
+  const [targetType, setTargetType] = useState('all');
   const [selectedNamespace, setSelectedNamespace] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -40,7 +44,7 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
 
   const handleClose = () => {
     if (!loading) {
-      setTargetType(features.hub_spoke_multi_tenant ? 'namespace' : 'all');
+      setTargetType('all');
       setSelectedNamespace('');
       setError(null);
       setSuccess(null);
@@ -97,7 +101,12 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
     }
   };
 
-  const isValid = targetType === 'all' || selectedNamespace;
+  const isValid = targetType === 'all' || Boolean(selectedNamespace);
+  // A disabled control must say why it is disabled.
+  const disabledReason =
+    !isValid && targetType === 'namespace'
+      ? 'Select a namespace to push to, or choose All Namespaces.'
+      : '';
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
@@ -188,6 +197,15 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
       </DialogContent>
 
       <DialogActions>
+        {disabledReason && (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ mr: 'auto', ml: 1 }}
+          >
+            {disabledReason}
+          </Typography>
+        )}
         <Button onClick={handleClose} disabled={loading}>
           {success ? 'Close' : 'Cancel'}
         </Button>

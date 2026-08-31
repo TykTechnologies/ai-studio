@@ -343,6 +343,21 @@ func (a *API) testFilter(c *gin.Context) {
 		if len(result.output.Messages) > 0 {
 			outputMap["messages"] = result.output.Messages
 		}
+		// Compliance events were collected and then dropped here, so a filter
+		// that raises them looked completely silent in the test panel -- which
+		// is the one place a filter author can see what their script did.
+		if len(result.output.ComplianceEvents) > 0 {
+			events := make([]map[string]interface{}, len(result.output.ComplianceEvents))
+			for i, e := range result.output.ComplianceEvents {
+				events[i] = map[string]interface{}{
+					"event_type":  e.EventType,
+					"severity":    e.Severity,
+					"description": e.Description,
+					"metadata":    e.Metadata,
+				}
+			}
+			outputMap["compliance_events"] = events
+		}
 
 		c.JSON(http.StatusOK, FilterTestOutput{
 			Success: true,

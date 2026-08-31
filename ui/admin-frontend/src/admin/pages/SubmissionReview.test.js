@@ -107,11 +107,67 @@ describe("SubmissionReview", () => {
     expect(screen.queryByText("Approve")).not.toBeInTheDocument();
   });
 
-  it("shows test connection button", async () => {
+  // The endpoint does two materially different things: a datasource submission
+  // genuinely contacts the embedding service, a tool submission only re-parses
+  // its spec. One label for both promised the stronger guarantee, so a reviewer
+  // could approve a tool whose server block points nowhere.
+  it("offers to test the connection for a datasource", async () => {
     apiClient.get.mockResolvedValueOnce({ data: { data: mockSubmission } });
     renderWithRoute();
     await waitFor(() => {
-      expect(screen.getByText("Test Connection")).toBeInTheDocument();
+      expect(screen.getByText("Test connection")).toBeInTheDocument();
+    });
+  });
+
+  it("offers only to validate the specification for a tool", async () => {
+    apiClient.get.mockResolvedValueOnce({
+      data: { data: { ...mockSubmission, resource_type: "tool" } },
+    });
+    renderWithRoute();
+    await waitFor(() => {
+      expect(screen.getByText("Validate specification")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Test connection")).not.toBeInTheDocument();
+  });
+
+  it("renders the attestations the submitter accepted", async () => {
+    // Stored and returned by the API all along, and never rendered -- so the
+    // reviewer approved without ever seeing the legal gate they configured.
+    apiClient.get
+      .mockResolvedValueOnce({
+        data: {
+          data: {
+            ...mockSubmission,
+            attestations: {
+              accepted: [
+                { template_id: 3, accepted_at: "2024-01-15T10:00:00Z" },
+              ],
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: { data: [{ id: 3, name: "Data Authority", text: "I have the right to share this data." }] },
+      });
+
+    renderWithRoute();
+
+    await waitFor(() => {
+      expect(screen.getByText("Attestations")).toBeInTheDocument();
+      expect(screen.getByText("Data Authority")).toBeInTheDocument();
+      expect(
+        screen.getByText("I have the right to share this data.")
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("says so plainly when no attestations were accepted", async () => {
+    apiClient.get.mockResolvedValueOnce({ data: { data: mockSubmission } });
+    renderWithRoute();
+    await waitFor(() => {
+      expect(
+        screen.getByText("The submitter accepted no attestations.")
+      ).toBeInTheDocument();
     });
   });
 
