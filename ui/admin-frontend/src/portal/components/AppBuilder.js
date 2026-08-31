@@ -365,6 +365,7 @@ const AppBuilder = () => {
               const instances = rt.instances || [];
               const selected = pluginResourceSelections[key] || [];
               const currentVal = currentPluginResource[key] || "";
+              const labelId = `appbuilder-plugin-resource-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}-label`;
 
               if (instances.length === 0) return null;
 
@@ -375,9 +376,9 @@ const AppBuilder = () => {
                   </Typography>
                   <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                     <FormControl fullWidth sx={{ mr: 1 }}>
-                      <InputLabel id="appbuilder-select-label">Select {rt.name}</InputLabel>
+                      <InputLabel id={labelId}>Select {rt.name}</InputLabel>
                       <Select
-                        labelId="appbuilder-select-label"
+                        labelId={labelId}
                         value={currentVal}
                         onChange={(e) =>
                           setCurrentPluginResource((prev) => ({

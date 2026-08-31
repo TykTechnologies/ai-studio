@@ -567,9 +567,14 @@ const ModelRouterForm = () => {
 
                     <Grid item xs={12} md={2}>
                       <FormControl fullWidth size="small">
-                        <InputLabel id="modelrouterform-algorithm-label">Algorithm</InputLabel>
+                        {/* One per pool: this is inside the pools map. */}
+                        <InputLabel
+                          id={`modelrouterform-algorithm-${poolIndex}-label`}
+                        >
+                          Algorithm
+                        </InputLabel>
                         <Select
-                          labelId="modelrouterform-algorithm-label"
+                          labelId={`modelrouterform-algorithm-${poolIndex}-label`}
                           value={pool.selection_algorithm}
                           onChange={(e) => updatePool(poolIndex, "selection_algorithm", e.target.value)}
                           label="Algorithm"
@@ -628,9 +633,15 @@ const ModelRouterForm = () => {
                                 }}
                               >
                                 <FormControl sx={{ minWidth: 200 }} size="small">
-                                  <InputLabel id="modelrouterform-llm-label">LLM</InputLabel>
+                                  {/* Nested map (pool x vendor), so the id
+                                      carries both indices to stay unique. */}
+                                  <InputLabel
+                                    id={`modelrouterform-llm-${poolIndex}-${vendorIndex}-label`}
+                                  >
+                                    LLM
+                                  </InputLabel>
                                   <Select
-                                    labelId="modelrouterform-llm-label"
+                                    labelId={`modelrouterform-llm-${poolIndex}-${vendorIndex}-label`}
                                     value={vendor.llm_id || ""}
                                     onChange={(e) => updateVendor(poolIndex, vendorIndex, "llm_id", e.target.value)}
                                     label="LLM"

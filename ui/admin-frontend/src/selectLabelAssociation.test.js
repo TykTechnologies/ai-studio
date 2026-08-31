@@ -39,6 +39,52 @@ const openingTagEnd = (source, start) => {
   return -1;
 };
 
+/**
+ * Spans of source covered by a `.map(` callback.
+ *
+ * A literal label id inside one of these is written once but rendered once per
+ * item, so the id repeats in the DOM and every label after the first points at
+ * the first control -- invalid HTML, and it undoes the association this file
+ * exists to enforce. The per-file uniqueness check above cannot see it: the id
+ * appears once in the source. Quoted text is skipped so brackets in ordinary
+ * prose ("(see docs)") do not throw the bracket matching off.
+ */
+const mapCallbackSpans = (source) => {
+  const spans = [];
+  const re = /\.map\(/g;
+  let match;
+
+  while ((match = re.exec(source)) !== null) {
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let quote = null;
+
+    for (let i = start; i < source.length; i += 1) {
+      const ch = source[i];
+
+      if (quote) {
+        if (ch === "\\") i += 1;
+        else if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        quote = ch;
+        continue;
+      }
+      if (ch === "(" || ch === "{" || ch === "[") depth += 1;
+      else if (ch === ")" || ch === "}" || ch === "]") {
+        depth -= 1;
+        if (depth === 0) {
+          spans.push([start, i]);
+          break;
+        }
+      }
+    }
+  }
+
+  return spans;
+};
+
 describe("Select label association", () => {
   const files = collectFiles(SRC);
 
@@ -81,5 +127,33 @@ describe("Select label association", () => {
     }
 
     expect(collisions).toEqual([]);
+  });
+
+  it("has no literal label id inside a .map() callback", () => {
+    const offenders = [];
+
+    for (const file of files) {
+      const source = fs.readFileSync(file, "utf8");
+      const spans = mapCallbackSpans(source);
+      if (spans.length === 0) continue;
+
+      // labelId on the Select, and the InputLabel id it points at. Other ids
+      // are left alone: only these two have to be unique per rendered row for
+      // the label association to survive.
+      const re = /\blabelId="([^"]+)"|<InputLabel\b[^>]*?\sid="([^"]+)"/g;
+      let match;
+      while ((match = re.exec(source)) !== null) {
+        const inLoop = spans.some(
+          ([start, end]) => match.index > start && match.index < end,
+        );
+        if (!inLoop) continue;
+        const line = source.slice(0, match.index).split("\n").length;
+        offenders.push(
+          `${path.relative(SRC, file)}:${line} ${match[1] || match[2]}`,
+        );
+      }
+    }
+
+    expect(offenders).toEqual([]);
   });
 });

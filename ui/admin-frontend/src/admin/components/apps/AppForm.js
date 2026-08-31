@@ -593,13 +593,17 @@ const AppForm = () => {
               const key = `${rt.plugin_id}:${rt.slug}`;
               const instances = pluginResourceInstances[key] || [];
               const selected = pluginResourceSelections[key] || [];
+              // This renders inside a map, so a literal label id would repeat
+              // once per resource type and leave every label after the first
+              // pointing at the first select.
+              const labelId = `appform-plugin-resource-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}-label`;
 
               return (
                 <Grid item xs={12} key={key}>
                   <FormControl fullWidth>
-                    <InputLabel id="appform-select-label">{rt.name}</InputLabel>
+                    <InputLabel id={labelId}>{rt.name}</InputLabel>
                     <Select
-                      labelId="appform-select-label"
+                      labelId={labelId}
                       multiple
                       value={selected}
                       onChange={(e) => {
