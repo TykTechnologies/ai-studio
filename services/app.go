@@ -391,30 +391,37 @@ func (s *Service) validatePrivacyScores(datasourceIDs, llmIDs, toolIDs []uint) e
 // surfaced at chat time, where it does not skip the offending tool -- it fails
 // the entire chat session, presenting as a composer that never enables.
 func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs, toolIDs []uint, pluginResourceScores []int) error {
+	// Loaded in bulk: one query per resource kind rather than one per id.
+	// See privacy_score_lookup.go for the behaviours this preserves.
+	llms, err := s.loadLLMPrivacyScores(llmIDs)
+	if err != nil {
+		return err
+	}
+
 	var maxLLMScore int = -1 // Default to -1 if no LLMs
 	var maxLLMName string
-
 	for _, llmID := range llmIDs {
-		llm, err := s.GetLLMByID(llmID)
-		if err != nil {
-			return err
-		}
-		if llm.PrivacyScore > maxLLMScore {
-			maxLLMScore = llm.PrivacyScore
+		llm := llms[llmID]
+		if llm.Score > maxLLMScore {
+			maxLLMScore = llm.Score
 			maxLLMName = llm.Name
 		}
 	}
 
+	datasources, err := s.loadDatasourcePrivacyScores(datasourceIDs)
+	if err != nil {
+		return err
+	}
+
+	// Iterated in the order the caller supplied, so a refusal names the same
+	// resource it always did.
 	for _, dsID := range datasourceIDs {
-		ds, err := s.GetDatasourceByID(dsID)
-		if err != nil {
-			return err
-		}
-		if ds.PrivacyScore > maxLLMScore {
+		ds := datasources[dsID]
+		if ds.Score > maxLLMScore {
 			return &PrivacyScoreMismatch{
 				ResourceKind:  "Data source",
 				ResourceName:  ds.Name,
-				ResourceScore: ds.PrivacyScore,
+				ResourceScore: ds.Score,
 				LLMName:       maxLLMName,
 				MaxLLMScore:   maxLLMScore,
 			}
@@ -429,21 +436,25 @@ func (s *Service) validatePrivacyScoresWithPluginResources(datasourceIDs, llmIDs
 	// Note this is deliberately more lenient than the datasource rule above,
 	// which has always refused when the app carries no providers (score > -1).
 	// Which of the two is right is a product decision; see #503.
-	for _, toolID := range toolIDs {
-		if maxLLMScore < 0 {
-			break
-		}
-		tool, err := s.GetToolByID(toolID)
+	//
+	// The tool query is skipped entirely when there is no provider to compare
+	// against, so the lenient path costs nothing.
+	if maxLLMScore >= 0 && len(toolIDs) > 0 {
+		tools, err := s.loadToolPrivacyScores(toolIDs)
 		if err != nil {
 			return err
 		}
-		if tool.PrivacyScore > maxLLMScore {
-			return &PrivacyScoreMismatch{
-				ResourceKind:  "Tool",
-				ResourceName:  tool.Name,
-				ResourceScore: tool.PrivacyScore,
-				LLMName:       maxLLMName,
-				MaxLLMScore:   maxLLMScore,
+
+		for _, toolID := range toolIDs {
+			tool := tools[toolID]
+			if tool.Score > maxLLMScore {
+				return &PrivacyScoreMismatch{
+					ResourceKind:  "Tool",
+					ResourceName:  tool.Name,
+					ResourceScore: tool.Score,
+					LLMName:       maxLLMName,
+					MaxLLMScore:   maxLLMScore,
+				}
 			}
 		}
 	}
