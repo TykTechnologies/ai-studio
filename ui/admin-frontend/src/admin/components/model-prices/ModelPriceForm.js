@@ -260,8 +260,7 @@ const ModelPriceForm = () => {
               <FormControl fullWidth error={!!errors.vendor}>
                 <InputLabel id="modelpriceform-vendor-label">Vendor</InputLabel>
                 <Select
-              labelId="modelpriceform-vendor-label"
-              id="modelpriceform-vendor"
+                  labelId="modelpriceform-vendor-label"
                   name="vendor"
                   value={price.vendor}
                   onChange={handleChange}

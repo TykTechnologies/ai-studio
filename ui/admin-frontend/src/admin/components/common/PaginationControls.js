@@ -21,7 +21,6 @@ const PaginationControls = ({
       {/* This control has no visible label, so it carries its own name. */}
       <Select
         aria-label="Results per page"
-        id="pagination-page-size"
         value={pageSize}
         onChange={onPageSizeChange}
         className="MuiSelect-pagination"

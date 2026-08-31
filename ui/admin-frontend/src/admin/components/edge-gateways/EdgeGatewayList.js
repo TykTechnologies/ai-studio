@@ -227,8 +227,7 @@ const EdgeGatewayList = () => {
             <FormControl size="small" style={{ minWidth: 200 }}>
               <InputLabel id="edgegatewaylist-filter-by-namespace-label">Filter by Namespace</InputLabel>
               <Select
-              labelId="edgegatewaylist-filter-by-namespace-label"
-              id="edgegatewaylist-filter-by-namespace"
+                labelId="edgegatewaylist-filter-by-namespace-label"
                 value={selectedNamespace}
                 label="Filter by Namespace"
                 onChange={handleNamespaceChange}

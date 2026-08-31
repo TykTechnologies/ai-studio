@@ -344,7 +344,6 @@ const AttestationTemplates = () => {
             <InputLabel id="attestationtemplates-applies-to-label">Applies To</InputLabel>
             <Select
               labelId="attestationtemplates-applies-to-label"
-              id="attestationtemplates-applies-to"
               value={formData.applies_to_type}
               label="Applies To"
               onChange={(e) =>

@@ -320,8 +320,7 @@ const ToolCatalogueForm = () => {
             <FormControl fullWidth sx={{ mr: 1 }}>
               <InputLabel id="toolcatalogueform-add-tool-label">Add Tool</InputLabel>
               <Select
-              labelId="toolcatalogueform-add-tool-label"
-              id="toolcatalogueform-add-tool"
+                labelId="toolcatalogueform-add-tool-label"
                 value={selectedTool}
                 onChange={(e) => setSelectedTool(e.target.value)}
                 label="Add Tool"
@@ -360,8 +359,7 @@ const ToolCatalogueForm = () => {
             <FormControl fullWidth sx={{ mr: 1 }}>
               <InputLabel id="toolcatalogueform-add-tag-label">Add Tag</InputLabel>
               <Select
-              labelId="toolcatalogueform-add-tag-label"
-              id="toolcatalogueform-add-tag"
+                labelId="toolcatalogueform-add-tag-label"
                 value={selectedTag}
                 onChange={(e) => setSelectedTag(e.target.value)}
                 label="Add Tag"

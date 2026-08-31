@@ -423,8 +423,7 @@ const ChatForm = () => {
               <FormControl fullWidth required error={!!errors.llm_settings_id}>
                 <InputLabel id="chatform-llm-settings-label">LLM Settings</InputLabel>
                 <Select
-              labelId="chatform-llm-settings-label"
-              id="chatform-llm-settings"
+                  labelId="chatform-llm-settings-label"
                   name="llm_settings_id"
                   value={chat.llm_settings_id}
                   onChange={handleChange}
@@ -447,8 +446,7 @@ const ChatForm = () => {
               <FormControl fullWidth required error={!!errors.llm_id}>
                 <InputLabel id="chatform-llm-label">LLM</InputLabel>
                 <Select
-              labelId="chatform-llm-label"
-              id="chatform-llm"
+                  labelId="chatform-llm-label"
                   name="llm_id"
                   value={chat.llm_id}
                   onChange={handleChange}
@@ -469,8 +467,7 @@ const ChatForm = () => {
               <FormControl fullWidth error={!!errors.groups} required>
                 <InputLabel id="chatform-teams-label">Teams</InputLabel>
                 <Select
-              labelId="chatform-teams-label"
-              id="chatform-teams"
+                  labelId="chatform-teams-label"
                   multiple
                   value={chat.groups}
                   onChange={handleGroupChange}
@@ -503,8 +500,7 @@ const ChatForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="chatform-filters-label">Filters</InputLabel>
                 <Select
-              labelId="chatform-filters-label"
-              id="chatform-filters"
+                  labelId="chatform-filters-label"
                   multiple
                   value={chat.filters}
                   onChange={handleFilterChange}
@@ -579,8 +575,7 @@ const ChatForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="chatform-default-data-source-label">Default Data Source</InputLabel>
                 <Select
-              labelId="chatform-default-data-source-label"
-              id="chatform-default-data-source"
+                  labelId="chatform-default-data-source-label"
                   name="default_data_source_id"
                   value={chat.default_data_source_id}
                   onChange={handleChange}
@@ -606,8 +601,7 @@ const ChatForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="chatform-default-tools-label">Default Tools</InputLabel>
                 <Select
-              labelId="chatform-default-tools-label"
-              id="chatform-default-tools"
+                  labelId="chatform-default-tools-label"
                   multiple
                   value={chat.default_tool_ids}
                   onChange={handleToolChange}

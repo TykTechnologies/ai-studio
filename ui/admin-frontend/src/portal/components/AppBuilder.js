@@ -265,8 +265,7 @@ const AppBuilder = () => {
                 <FormControl fullWidth sx={{ mr: 1 }}>
                   <InputLabel id="appbuilder-select-data-source-label">Select Data Source</InputLabel>
                   <Select
-              labelId="appbuilder-select-data-source-label"
-              id="appbuilder-select-data-source"
+                    labelId="appbuilder-select-data-source-label"
                     value={currentDataSource}
                     onChange={(e) => setCurrentDataSource(e.target.value)}
                     label="Select Data Source"
@@ -300,8 +299,7 @@ const AppBuilder = () => {
                 <FormControl fullWidth sx={{ mr: 1 }}>
                   <InputLabel id="appbuilder-select-llm-label">Select LLM</InputLabel>
                   <Select
-              labelId="appbuilder-select-llm-label"
-              id="appbuilder-select-llm"
+                    labelId="appbuilder-select-llm-label"
                     value={currentLLM}
                     onChange={(e) => setCurrentLLM(e.target.value)}
                     label="Select LLM"
@@ -335,8 +333,7 @@ const AppBuilder = () => {
                 <FormControl fullWidth sx={{ mr: 1 }}>
                   <InputLabel id="appbuilder-select-tool-label">Select Tool</InputLabel>
                   <Select
-              labelId="appbuilder-select-tool-label"
-              id="appbuilder-select-tool"
+                    labelId="appbuilder-select-tool-label"
                     value={currentTool}
                     onChange={(e) => setCurrentTool(e.target.value)}
                     label="Select Tool"
@@ -380,8 +377,7 @@ const AppBuilder = () => {
                     <FormControl fullWidth sx={{ mr: 1 }}>
                       <InputLabel id="appbuilder-select-label">Select {rt.name}</InputLabel>
                       <Select
-              labelId="appbuilder-select-label"
-              id="appbuilder-select"
+                        labelId="appbuilder-select-label"
                         value={currentVal}
                         onChange={(e) =>
                           setCurrentPluginResource((prev) => ({

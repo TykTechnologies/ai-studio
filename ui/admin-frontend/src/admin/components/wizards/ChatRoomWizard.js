@@ -213,8 +213,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                   <FormControl fullWidth margin="normal">
                     <InputLabel id="chatroomwizard-vendor-label">Vendor</InputLabel>
                     <Select
-              labelId="chatroomwizard-vendor-label"
-              id="chatroomwizard-vendor"
+                      labelId="chatroomwizard-vendor-label"
                       name="vendor"
                       value={formData.vendor}
                       onChange={handleInputChange}
@@ -294,8 +293,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                   <FormControl fullWidth margin="normal">
                     <InputLabel id="chatroomwizard-model-preset-label">Model Preset</InputLabel>
                     <Select
-              labelId="chatroomwizard-model-preset-label"
-              id="chatroomwizard-model-preset"
+                      labelId="chatroomwizard-model-preset-label"
                       name="modelPreset"
                       value={formData.modelPreset}
                       onChange={handleInputChange}

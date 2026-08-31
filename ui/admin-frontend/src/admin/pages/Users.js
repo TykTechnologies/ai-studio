@@ -437,8 +437,7 @@ const Users = memo(() => {
                 <FormControl fullWidth sx={{ mt: 2 }}>
                   <InputLabel id="users-team-label">Team</InputLabel>
                   <Select
-              labelId="users-team-label"
-              id="users-team"
+                    labelId="users-team-label"
                     value={selectedGroup}
                     onChange={(e) => setSelectedGroup(e.target.value)}
                   >

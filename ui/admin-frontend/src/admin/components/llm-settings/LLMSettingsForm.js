@@ -317,8 +317,7 @@ const LLMSettingsForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="llmsettingsform-model-preset-label">Model Preset</InputLabel>
                 <Select
-              labelId="llmsettingsform-model-preset-label"
-              id="llmsettingsform-model-preset"
+                  labelId="llmsettingsform-model-preset-label"
                   value={selectedPreset}
                   onChange={handlePresetChange}
                   label="Model Preset"
@@ -476,7 +475,6 @@ const LLMSettingsForm = () => {
             <InputLabel id="llmsettingsform-vendor-label">Vendor</InputLabel>
             <Select
               labelId="llmsettingsform-vendor-label"
-              id="llmsettingsform-vendor"
               name="vendor"
               value={modelPrice.vendor}
               onChange={handleModelPriceChange}

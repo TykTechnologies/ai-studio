@@ -210,8 +210,7 @@ const Marketplace = () => {
             <FormControl fullWidth>
               <InputLabel id="marketplace-category-label">Category</InputLabel>
               <Select
-              labelId="marketplace-category-label"
-              id="marketplace-category"
+                labelId="marketplace-category-label"
                 value={category}
                 label="Category"
                 onChange={(e) => {
@@ -232,8 +231,7 @@ const Marketplace = () => {
             <FormControl fullWidth>
               <InputLabel id="marketplace-publisher-label">Publisher</InputLabel>
               <Select
-              labelId="marketplace-publisher-label"
-              id="marketplace-publisher"
+                labelId="marketplace-publisher-label"
                 value={publisher}
                 label="Publisher"
                 onChange={(e) => {
@@ -254,8 +252,7 @@ const Marketplace = () => {
             <FormControl fullWidth>
               <InputLabel id="marketplace-maturity-label">Maturity</InputLabel>
               <Select
-              labelId="marketplace-maturity-label"
-              id="marketplace-maturity"
+                labelId="marketplace-maturity-label"
                 value={maturity}
                 label="Maturity"
                 onChange={(e) => {

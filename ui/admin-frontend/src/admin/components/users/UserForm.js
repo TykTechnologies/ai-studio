@@ -479,8 +479,7 @@ const UserForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="userform-add-to-team-label">Add to Team</InputLabel>
                 <Select
-              labelId="userform-add-to-team-label"
-              id="userform-add-to-team"
+                  labelId="userform-add-to-team-label"
                   value={selectedGroup}
                   onChange={(e) => setSelectedGroup(e.target.value)}
                 >

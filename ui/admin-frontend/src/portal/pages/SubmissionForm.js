@@ -411,8 +411,7 @@ const SubmissionForm = () => {
         <FormControl fullWidth sx={{ mb: 3 }} error={!!errors.resource_type}>
           <InputLabel id="submissionform-resource-type-label">Resource Type</InputLabel>
           <Select
-              labelId="submissionform-resource-type-label"
-              id="submissionform-resource-type"
+            labelId="submissionform-resource-type-label"
             value={resourceType}
             label="Resource Type"
             onChange={(e) => {
@@ -508,8 +507,7 @@ const SubmissionForm = () => {
                       >
                         <InputLabel id="submissionform-vector-database-type-label">Vector Database Type</InputLabel>
                         <Select
-              labelId="submissionform-vector-database-type-label"
-              id="submissionform-vector-database-type"
+                          labelId="submissionform-vector-database-type-label"
                           value={payload.db_source_type || ""}
                           label="Vector Database Type"
                           onChange={(e) =>
@@ -610,8 +608,7 @@ const SubmissionForm = () => {
                       >
                         <InputLabel id="submissionform-embedder-vendor-label">Embedder Vendor</InputLabel>
                         <Select
-              labelId="submissionform-embedder-vendor-label"
-              id="submissionform-embedder-vendor"
+                          labelId="submissionform-embedder-vendor-label"
                           value={payload.embed_vendor || ""}
                           label="Embedder Vendor"
                           onChange={(e) =>

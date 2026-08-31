@@ -437,8 +437,7 @@ const DatasourceForm = () => {
               >
                 <InputLabel id="datasourceform-user-label">User</InputLabel>
                 <Select
-              labelId="datasourceform-user-label"
-              id="datasourceform-user"
+                  labelId="datasourceform-user-label"
                   name="user_id"
                   value={datasource.user_id}
                   onChange={handleChange}
@@ -465,8 +464,7 @@ const DatasourceForm = () => {
                   Vector Database Type
                 </InputLabel>
                 <Select
-              labelId="datasourceform-vector-database-type-label"
-              id="datasourceform-vector-database-type"
+                  labelId="datasourceform-vector-database-type-label"
                   name="db_source_type"
                   value={datasource.db_source_type || ""}
                   onChange={handleChange}
@@ -524,8 +522,7 @@ const DatasourceForm = () => {
                   Embedding Service Vendor
                 </InputLabel>
                 <Select
-              labelId="datasourceform-embedding-service-vendor-label"
-              id="datasourceform-embedding-service-vendor"
+                  labelId="datasourceform-embedding-service-vendor-label"
                   name="embed_vendor"
                   value={datasource.embed_vendor}
                   onChange={handleChange}

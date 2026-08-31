@@ -323,7 +323,6 @@ const ToolDocumentationPage = () => {
             {/* No InputLabel here, so associate with the visible caption. */}
             <Select
               aria-labelledby="tool-docs-authorize-label"
-              id="tool-docs-authorize"
               value={selectedApp}
               onChange={handleAppSelection}
               displayEmpty

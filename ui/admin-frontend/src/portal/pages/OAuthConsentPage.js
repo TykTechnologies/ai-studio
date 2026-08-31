@@ -199,7 +199,6 @@ function OAuthConsentPage() {
                   above rather than leaving an unnamed combobox. */}
               <Select
                 aria-labelledby="oauth-consent-app-label"
-                id="oauth-consent-app"
                 value={selectedAppId}
                 onChange={(e) => setSelectedAppId(e.target.value)}
                 displayEmpty

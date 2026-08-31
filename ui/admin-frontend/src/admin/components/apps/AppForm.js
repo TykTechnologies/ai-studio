@@ -401,8 +401,7 @@ const AppForm = () => {
               <FormControl fullWidth error={!!errors.user_id}>
                 <InputLabel id="appform-user-label">User</InputLabel>
                 <Select
-              labelId="appform-user-label"
-              id="appform-user"
+                  labelId="appform-user-label"
                   name="user_id"
                   value={app.user_id}
                   onChange={handleChange}
@@ -423,8 +422,7 @@ const AppForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="appform-llms-label">LLMs</InputLabel>
                 <Select
-              labelId="appform-llms-label"
-              id="appform-llms"
+                  labelId="appform-llms-label"
                   multiple
                   name="llm_ids"
                   value={app.llm_ids}
@@ -517,8 +515,7 @@ const AppForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="appform-datasources-label">Datasources</InputLabel>
                 <Select
-              labelId="appform-datasources-label"
-              id="appform-datasources"
+                  labelId="appform-datasources-label"
                   multiple
                   name="datasource_ids"
                   value={app.datasource_ids}
@@ -556,8 +553,7 @@ const AppForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="appform-tools-label">Tools</InputLabel>
                 <Select
-              labelId="appform-tools-label"
-              id="appform-tools"
+                  labelId="appform-tools-label"
                   multiple
                   name="tool_ids"
                   value={app.tool_ids}
@@ -603,8 +599,7 @@ const AppForm = () => {
                   <FormControl fullWidth>
                     <InputLabel id="appform-select-label">{rt.name}</InputLabel>
                     <Select
-              labelId="appform-select-label"
-              id="appform-select"
+                      labelId="appform-select-label"
                       multiple
                       value={selected}
                       onChange={(e) => {

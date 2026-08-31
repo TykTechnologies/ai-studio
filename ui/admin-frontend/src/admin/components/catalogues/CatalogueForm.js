@@ -249,8 +249,7 @@ const CatalogueForm = () => {
             <FormControl fullWidth sx={{ mr: 1 }}>
               <InputLabel id="catalogueform-add-llm-label">Add LLM</InputLabel>
               <Select
-              labelId="catalogueform-add-llm-label"
-              id="catalogueform-add-llm"
+                labelId="catalogueform-add-llm-label"
                 value={selectedLLM}
                 onChange={(e) => setSelectedLLM(e.target.value)}
                 label="Add LLM"

@@ -393,8 +393,7 @@ const PluginForm = ({ mode = 'create' }) => {
               <FormControl fullWidth required error={!!errors.hookType}>
                 <InputLabel id="pluginform-primary-hook-type-label">Primary Hook Type</InputLabel>
                 <Select
-              labelId="pluginform-primary-hook-type-label"
-              id="pluginform-primary-hook-type"
+                  labelId="pluginform-primary-hook-type-label"
                   name="hookType"
                   value={formData.hookType}
                   label="Primary Hook Type"
@@ -483,8 +482,7 @@ const PluginForm = ({ mode = 'create' }) => {
                   <FormControl fullWidth>
                     <InputLabel id="pluginform-additional-hook-types-label">Additional Hook Types</InputLabel>
                     <Select
-              labelId="pluginform-additional-hook-types-label"
-              id="pluginform-additional-hook-types"
+                      labelId="pluginform-additional-hook-types-label"
                       multiple
                       value={formData.hookTypes}
                       onChange={(e) => {

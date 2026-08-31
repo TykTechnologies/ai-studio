@@ -115,7 +115,6 @@ const GroupPluginResourcesSection = ({ groupId, onChange }) => {
             <InputLabel id="grouppluginresourcessection-select-label">{rt.name}</InputLabel>
             <Select
               labelId="grouppluginresourcessection-select-label"
-              id="grouppluginresourcessection-select"
               multiple
               value={selected}
               onChange={(e) => {

@@ -124,7 +124,6 @@ const SubmissionReviewQueue = () => {
             <InputLabel id="submissionreviewqueue-status-label">Status</InputLabel>
             <Select
               labelId="submissionreviewqueue-status-label"
-              id="submissionreviewqueue-status"
               value={statusFilter}
               label="Status"
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -141,7 +140,6 @@ const SubmissionReviewQueue = () => {
             <InputLabel id="submissionreviewqueue-resource-type-label">Resource Type</InputLabel>
             <Select
               labelId="submissionreviewqueue-resource-type-label"
-              id="submissionreviewqueue-resource-type"
               value={typeFilter}
               label="Resource Type"
               onChange={(e) => setTypeFilter(e.target.value)}

@@ -458,8 +458,7 @@ const LLMForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="llmform-vendor-label">Vendor</InputLabel>
                 <Select
-              labelId="llmform-vendor-label"
-              id="llmform-vendor"
+                  labelId="llmform-vendor-label"
                   name="vendor"
                   value={llm.vendor}
                   onChange={handleChange}
@@ -797,8 +796,7 @@ const LLMForm = () => {
                   <FormControl fullWidth>
                     <InputLabel id="llmform-filters-label">Filters</InputLabel>
                     <Select
-              labelId="llmform-filters-label"
-              id="llmform-filters"
+                      labelId="llmform-filters-label"
                       multiple
                       name="filters"
                       value={llm.filters || []}
@@ -847,8 +845,7 @@ const LLMForm = () => {
               <FormControl fullWidth>
                 <InputLabel id="llmform-plugins-label">Plugins</InputLabel>
                 <Select
-              labelId="llmform-plugins-label"
-              id="llmform-plugins"
+                  labelId="llmform-plugins-label"
                   multiple
                   value={llm.plugins}
                   onChange={handlePluginChange}

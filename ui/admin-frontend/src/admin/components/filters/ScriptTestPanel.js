@@ -184,8 +184,7 @@ const ScriptTestPanel = ({ script, filterType }) => {
             <FormControl fullWidth>
               <InputLabel id="scripttestpanel-vendor-label">Vendor</InputLabel>
               <Select
-              labelId="scripttestpanel-vendor-label"
-              id="scripttestpanel-vendor"
+                labelId="scripttestpanel-vendor-label"
                 name="vendor_name"
                 value={testInput.vendor_name}
                 onChange={handleInputChange}

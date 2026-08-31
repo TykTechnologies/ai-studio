@@ -457,8 +457,7 @@ const ModelRouterForm = () => {
             <FormControl fullWidth>
               <InputLabel id="modelrouterform-api-compatibility-label">API Compatibility</InputLabel>
               <Select
-              labelId="modelrouterform-api-compatibility-label"
-              id="modelrouterform-api-compatibility"
+                labelId="modelrouterform-api-compatibility-label"
                 name="api_compat"
                 value={router.api_compat}
                 onChange={handleChange}
@@ -570,8 +569,7 @@ const ModelRouterForm = () => {
                       <FormControl fullWidth size="small">
                         <InputLabel id="modelrouterform-algorithm-label">Algorithm</InputLabel>
                         <Select
-              labelId="modelrouterform-algorithm-label"
-              id="modelrouterform-algorithm"
+                          labelId="modelrouterform-algorithm-label"
                           value={pool.selection_algorithm}
                           onChange={(e) => updatePool(poolIndex, "selection_algorithm", e.target.value)}
                           label="Algorithm"
@@ -632,8 +630,7 @@ const ModelRouterForm = () => {
                                 <FormControl sx={{ minWidth: 200 }} size="small">
                                   <InputLabel id="modelrouterform-llm-label">LLM</InputLabel>
                                   <Select
-              labelId="modelrouterform-llm-label"
-              id="modelrouterform-llm"
+                                    labelId="modelrouterform-llm-label"
                                     value={vendor.llm_id || ""}
                                     onChange={(e) => updateVendor(poolIndex, vendorIndex, "llm_id", e.target.value)}
                                     label="LLM"

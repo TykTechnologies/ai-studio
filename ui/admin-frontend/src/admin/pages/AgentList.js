@@ -204,7 +204,6 @@ const AgentList = () => {
             <InputLabel id="agentlist-status-label">Status</InputLabel>
             <Select
               labelId="agentlist-status-label"
-              id="agentlist-status"
               value={statusFilter}
               label="Status"
               onChange={(e) => setStatusFilter(e.target.value)}

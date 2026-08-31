@@ -238,7 +238,6 @@ const PluginList = () => {
             <InputLabel id="pluginlist-hook-type-label">Hook Type</InputLabel>
             <Select
               labelId="pluginlist-hook-type-label"
-              id="pluginlist-hook-type"
               value={hookTypeFilter}
               label="Hook Type"
               onChange={handleHookTypeFilterChange}
@@ -256,7 +255,6 @@ const PluginList = () => {
             <InputLabel id="pluginlist-status-label">Status</InputLabel>
             <Select
               labelId="pluginlist-status-label"
-              id="pluginlist-status"
               value={statusFilter}
               label="Status"
               onChange={handleStatusFilterChange}

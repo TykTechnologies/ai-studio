@@ -167,8 +167,7 @@ const Step3Configuration = ({ pluginId, pluginData, configSchema, onComplete, on
                 <FormControl fullWidth>
                   <InputLabel id="step3configuration-hook-types-label">Hook Types</InputLabel>
                   <Select
-              labelId="step3configuration-hook-types-label"
-              id="step3configuration-hook-types"
+                    labelId="step3configuration-hook-types-label"
                     multiple
                     value={customHookTypes}
                     onChange={handleHookTypesChange}
