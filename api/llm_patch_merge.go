@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -70,6 +71,18 @@ func mergeLLMPatch(input *LLMInput, existing *models.LLM, present map[string]jso
 	}
 	if !has("monthly_budget") {
 		attrs.MonthlyBudget = existing.MonthlyBudget
+	}
+	if !has("budget_start_date") {
+		// Round-trips through the same RFC3339 form parseBudgetStartDate reads.
+		// Left unhandled, an omitted budget_start_date arrived as a nil
+		// *string, became a nil *time.Time and was written -- reintroducing
+		// exactly the data loss this merge exists to prevent, for one field.
+		if existing.BudgetStartDate != nil {
+			formatted := existing.BudgetStartDate.Format(time.RFC3339)
+			attrs.BudgetStartDate = &formatted
+		} else {
+			attrs.BudgetStartDate = nil
+		}
 	}
 	if !has("filters") {
 		attrs.Filters = make([]uint, 0, len(existing.Filters))
