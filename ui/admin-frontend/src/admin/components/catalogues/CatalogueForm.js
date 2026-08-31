@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
+import { commitPendingSelection } from "../../utils/pendingSelection";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
   SecondaryLinkButton,
@@ -84,6 +85,15 @@ const CatalogueForm = () => {
     e.preventDefault();
     setLoading(true);
 
+    // The + button is an accelerator, not the commit. A selection the user made
+    // and left in the picker is still something they asked for, so fold it in
+    // rather than silently saving a catalog without it.
+    const desiredLLMs = commitPendingSelection(llms, selectedLLM, availableLLMs);
+    if (desiredLLMs !== llms) {
+      setLLMs(desiredLLMs);
+      setSelectedLLM("");
+    }
+
     const catalogueData = {
       data: {
         type: "Catalogue",
@@ -108,7 +118,7 @@ const CatalogueForm = () => {
       });
 
       // Now handle LLM additions/removals
-      await updateCatalogueLLMs(catalogueId);
+      await updateCatalogueLLMs(catalogueId, desiredLLMs);
 
       setTimeout(() => navigate("/admin/catalogs/llms"), 2000);
     } catch (error) {
@@ -122,7 +132,10 @@ const CatalogueForm = () => {
     }
   };
 
-  const updateCatalogueLLMs = async (catalogueId) => {
+  // Takes the desired LLM list explicitly rather than reading `llms` from the
+  // closure, so the caller can include a selection the user picked but never
+  // added with the + button.
+  const updateCatalogueLLMs = async (catalogueId, desiredLLMs) => {
     try {
       const currentLLMs = id
         ? (await apiClient.get(`/catalogues/${catalogueId}/llms`)).data.data
@@ -130,13 +143,13 @@ const CatalogueForm = () => {
 
       // Remove LLMs that are no longer in the list
       for (let llm of currentLLMs) {
-        if (!llms.find((l) => l.id === llm.id)) {
+        if (!desiredLLMs.find((l) => l.id === llm.id)) {
           await apiClient.delete(`/catalogues/${catalogueId}/llms/${llm.id}`);
         }
       }
 
       // Add new LLMs
-      for (let llm of llms) {
+      for (let llm of desiredLLMs) {
         if (!currentLLMs.find((l) => l.id === llm.id)) {
           await apiClient.post(`/catalogues/${catalogueId}/llms`, {
             data: { id: llm.id, type: "LLM" },
@@ -160,9 +173,9 @@ const CatalogueForm = () => {
   };
 
   const handleAddLLM = () => {
-    if (selectedLLM && !llms.find((llm) => llm.id === selectedLLM)) {
-      const llmToAdd = availableLLMs.find((llm) => llm.id === selectedLLM);
-      setLLMs([...llms, llmToAdd]);
+    const next = commitPendingSelection(llms, selectedLLM, availableLLMs);
+    if (next !== llms) {
+      setLLMs(next);
       setSelectedLLM("");
     }
   };

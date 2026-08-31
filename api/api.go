@@ -225,29 +225,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 			csrfOpts...,
 		)
 
-		api.router.Use(func(c *gin.Context) {
-			// Skip API calls
-			if c.GetHeader("Authorization") != "" {
-				c.Next()
-				return
-			}
-
-			// Skip OAuth endpoints - they don't need CSRF protection
-			if strings.HasPrefix(c.Request.URL.Path, "/oauth/") {
-				c.Next()
-				return
-			}
-
-			csrfMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				c.Request = r
-				c.Next()
-			})).ServeHTTP(c.Writer, c.Request)
-
-			// If CSRF middleware rejected the request, abort the gin chain
-			if c.Writer.Status() == http.StatusForbidden {
-				c.Abort()
-			}
-		})
+		api.router.Use(csrfGuard(csrfMiddleware))
 	}
 
 	api.setupRoutes()

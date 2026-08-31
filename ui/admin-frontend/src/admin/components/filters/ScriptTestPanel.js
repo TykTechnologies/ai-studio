@@ -29,12 +29,18 @@ const ScriptTestPanel = ({ script, filterType }) => {
     vendor_name: "openai",
     model_name: "gpt-4",
     is_response: filterType === "response",
-    is_chat: true,
+    // The proxy hardcodes IsChat: false on both the request and response
+    // filter paths, so defaulting this to true tested a case that never runs.
+    is_chat: false,
     is_chunk: false,
     chunk_index: 0,
     current_buffer: "",
     status_code: 200,
-    context: '{"app_id": 1, "user_id": 5}',
+    // The shape the proxy actually supplies (see proxy.go and
+    // response_filter_utils.go): llm_id, app_id and request_id, and no
+    // user_id at all. The panel used to suggest {"app_id": 1, "user_id": 5},
+    // so a filter written against it read undefined in production.
+    context: '{"llm_id": 1, "app_id": 1, "request_id": "test-request-id"}',
   });
 
   const [testing, setTesting] = useState(false);
@@ -78,6 +84,21 @@ const ScriptTestPanel = ({ script, filterType }) => {
         }
       }
 
+      // tyk.redact_pattern switches behaviour on whether raw_input parses as
+      // JSON, so pasting a real request body -- the obvious thing to paste --
+      // used to come back with the messages stripped out, because this was
+      // hardcoded to []. That looks like a catastrophic redaction failure and
+      // is nothing of the sort. Derive them from the body instead.
+      let derivedMessages = [];
+      try {
+        const parsed = JSON.parse(testInput.raw_input);
+        if (parsed && Array.isArray(parsed.messages)) {
+          derivedMessages = parsed.messages;
+        }
+      } catch (e) {
+        // raw_input is plain text, which is a legitimate way to use the panel.
+      }
+
       // Build script input
       const scriptInput = {
         raw_input: testInput.raw_input,
@@ -90,7 +111,7 @@ const ScriptTestPanel = ({ script, filterType }) => {
         current_buffer: testInput.current_buffer,
         status_code: parseInt(testInput.status_code, 10),
         context: contextObj,
-        messages: [], // Empty for now - could be enhanced
+        messages: derivedMessages,
       };
 
       const response = await apiClient.post("/filters/test", {
@@ -309,9 +330,33 @@ const ScriptTestPanel = ({ script, filterType }) => {
                 </Typography>
 
                 {testResult.success ? (
-                  <Box component="pre" sx={{ fontSize: 12, overflow: "auto", m: 0 }}>
-                    {JSON.stringify(testResult.output, null, 2)}
-                  </Box>
+                  <>
+                    {/* Compliance events used to be collected server-side and
+                        dropped from the response, so a filter that raised them
+                        looked silent here. Call them out rather than leaving
+                        them buried in the JSON below. */}
+                    {testResult.output?.compliance_events?.length > 0 && (
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                          Compliance events raised:
+                        </Typography>
+                        {testResult.output.compliance_events.map((event, i) => (
+                          <Typography
+                            key={i}
+                            variant="caption"
+                            display="block"
+                            sx={{ ml: 1 }}
+                          >
+                            [{event.severity}] {event.event_type}
+                            {event.description ? ` — ${event.description}` : ""}
+                          </Typography>
+                        ))}
+                      </Box>
+                    )}
+                    <Box component="pre" sx={{ fontSize: 12, overflow: "auto", m: 0 }}>
+                      {JSON.stringify(testResult.output, null, 2)}
+                    </Box>
+                  </>
                 ) : (
                   <Typography color="error" component="pre" sx={{ fontSize: 12, m: 0 }}>
                     {testResult.error}
