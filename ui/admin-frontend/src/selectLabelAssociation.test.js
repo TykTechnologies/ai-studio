@@ -156,4 +156,27 @@ describe("Select label association", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("has no literal label id in a shared component", () => {
+    // A component under common/ is a field other screens embed, so a page can
+    // hold several of them. A literal id there repeats in the DOM for the same
+    // reason a literal id inside a map does -- it is just the rendering that
+    // loops rather than the source. useId() gives each instance its own.
+    const offenders = [];
+
+    for (const file of files) {
+      const relative = path.relative(SRC, file);
+      if (!relative.includes(`${path.sep}common${path.sep}`)) continue;
+
+      const source = fs.readFileSync(file, "utf8");
+      const re = /\blabelId="([^"]+)"|<InputLabel\b[^>]*?\sid="([^"]+)"/g;
+      let match;
+      while ((match = re.exec(source)) !== null) {
+        const line = source.slice(0, match.index).split("\n").length;
+        offenders.push(`${relative}:${line} ${match[1] || match[2]}`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
 });
