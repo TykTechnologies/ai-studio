@@ -25,33 +25,27 @@ type UserDTO struct {
 	Groups               []uint
 }
 
-// applyDefaultGroup gives a new user the Default team when no teams were asked
-// for, and leaves an explicit choice of teams alone.
+// applyDefaultGroup gives every new user the Default team, in addition to any
+// teams the caller asked for.
 //
-// It used to add Default unconditionally, on top of whatever the caller
-// specified. Default owns catalogues holding every provider, tool and data
-// source on the instance, and team membership is additive and never
-// subtractive -- so assigning someone a narrow team granted them everything
-// anyway, and changed nothing until you also remembered to remove them from
-// Default. Everyone forgets the second half.
+// This is deliberate and load-bearing, not an oversight: Community Edition has
+// no teams at all, Enterprise does, and universal Default membership is what
+// keeps the two editions behaving the same way. Do not make it conditional --
+// a user outside Default has no equivalent in CE.
 //
-// Respecting an explicit choice fails closed, which is the right direction for
-// a governance product. Callers that specify no teams keep the existing
-// onboarding behaviour, which is every user created through the admin UI
-// today, since that form has no Teams field at all.
+// The consequence is worth understanding, and is why the admin user form now
+// says so out loud: Default owns catalogues, membership is additive and never
+// subtractive, so adding a narrower team grants access on top rather than
+// narrowing anything. Restricting what someone can see is done by changing
+// what Default grants, not by moving them out of it.
 func (s *Service) applyDefaultGroup(groups []uint) ([]uint, error) {
-	if len(groups) > 0 {
-		// The caller said which teams they wanted. Adding another silently is
-		// exactly the surprise this is here to avoid.
-		return groups, nil
-	}
-
 	// Get or create default group by name (safe for any DB state)
 	defaultGroup, err := models.GetOrCreateDefaultGroup(s.DB)
 	if err != nil {
 		return groups, err
 	}
 
+	// Check if user already has default group
 	if !slices.Contains(groups, defaultGroup.ID) {
 		groups = append(groups, defaultGroup.ID)
 	}

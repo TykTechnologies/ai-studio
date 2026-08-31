@@ -95,3 +95,39 @@ func catalogueIDsFrom(assigned models.JSONMap) []uint {
 
 	return out
 }
+
+// ensureToolInDefaultCatalogueTx puts a tool into the Default tool catalogue
+// when it is not in any catalogue yet.
+//
+// This mirrors ensureDatasourceInDefaultCatalogue. Before it, approving a tool
+// submission created a real Tool in NO catalogue at all, while a hand-created
+// data source auto-joined Default -- so the platform published the sensitive
+// thing automatically and withheld the reviewed one. Both now publish to
+// Default, and both arrive inactive so publication is not the same as going
+// live.
+//
+// Default membership is a Community/Enterprise compatibility rule: CE has no
+// catalogue management, so anything outside Default has no CE equivalent.
+func (s *Service) ensureToolInDefaultCatalogueTx(tx *gorm.DB, tool *models.Tool) error {
+	// Tool has no back-reference to ToolCatalogue -- the relation is declared
+	// only on ToolCatalogue.Tools -- so count rows in the join table directly.
+	var count int64
+	if err := tx.Table("tool_catalogue_tools").
+		Where("tool_id = ?", tool.ID).Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to check tool catalogue membership: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	defaultCatalogue, err := models.GetOrCreateDefaultToolCatalogue(tx)
+	if err != nil {
+		return fmt.Errorf("failed to get default tool catalogue: %w", err)
+	}
+
+	if err := tx.Model(defaultCatalogue).Association("Tools").Append(tool); err != nil {
+		return fmt.Errorf("failed to add tool to default catalogue: %w", err)
+	}
+
+	return nil
+}

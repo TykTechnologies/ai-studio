@@ -394,7 +394,13 @@ func TestSecurity_UserDeletion_UGCCleanupIsTransactional(t *testing.T) {
 	approved, _ := svc.ApproveSubmission(sub.ID, admin.ID, 5, nil, "")
 	dsID := *approved.ResourceID
 
-	// Verify datasource is active before deletion
+	// Approval publishes into Default but leaves the resource inactive, so an
+	// administrator activates it deliberately. Do that here: the property under
+	// test is that deleting the owner deactivates a LIVE community datasource,
+	// which is only meaningful if it was live to begin with.
+	require.NoError(t, db.Model(&models.Datasource{}).Where("id = ?", dsID).
+		Update("active", true).Error)
+
 	ds := &models.Datasource{}
 	db.First(ds, dsID)
 	assert.True(t, ds.Active)

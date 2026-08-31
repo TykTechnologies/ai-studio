@@ -332,7 +332,7 @@ const DatasourceForm = () => {
         open: true,
         message: id
           ? "Datasource updated successfully"
-          : "Datasource created successfully",
+          : "Data source created and added to the Default data catalog. It is inactive until you activate it.",
         severity: "success",
       });
 
@@ -385,9 +385,11 @@ const DatasourceForm = () => {
                     instant. */}
                 <Alert severity="info">
                   A data source that is not assigned to a catalog is added to
-                  the <strong>Default</strong> data catalog, which is visible to
-                  every user on this instance. Assign it to a specific catalog
-                  afterwards if it should not be.
+                  the <strong>Default</strong> data catalog, which every user on
+                  this instance can see. It stays <strong>inactive</strong>
+                  until you activate it, so being listed is not the same as
+                  being usable. Assign it to a specific catalog if it should not
+                  be in Default.
                 </Alert>
               </Grid>
             )}

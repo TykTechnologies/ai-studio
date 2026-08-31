@@ -356,13 +356,7 @@ func TestUserService(t *testing.T) {
 		// Get the user with groups preloaded to verify group assignments
 		userWithGroups, err := service.GetUserByID(user.ID, "Groups")
 		assert.NoError(t, err)
-
-		// An explicit choice of teams is respected exactly. Default used to be
-		// added on top, which granted the user every provider, tool and data
-		// source on the instance regardless of the narrow teams chosen -- and
-		// because membership is additive and never subtractive, the narrow
-		// assignment changed nothing until Default was also removed by hand.
-		assert.Len(t, userWithGroups.Groups, 2)
+		assert.Len(t, userWithGroups.Groups, 3) // 2 assigned groups + default group
 
 		// Extract group IDs for easier assertion
 		var groupIDs []uint
@@ -371,8 +365,7 @@ func TestUserService(t *testing.T) {
 		}
 		assert.Contains(t, groupIDs, group1.ID)
 		assert.Contains(t, groupIDs, group2.ID)
-		assert.NotContains(t, groupIDs, models.DefaultGroupID,
-			"specifying teams explicitly must not silently add Default as well")
+		assert.Contains(t, groupIDs, models.DefaultGroupID)
 
 		// Test creating a user with invalid groups
 		_, err = service.CreateUser(UserDTO{

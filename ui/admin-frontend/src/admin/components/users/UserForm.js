@@ -171,7 +171,9 @@ const UserForm = () => {
 
       setSnackbar({
         open: true,
-        message: id ? "User updated successfully" : "User created successfully",
+        message: id
+          ? "User updated successfully"
+          : "User created and added to the Default team. They cannot sign in until their email is verified.",
         severity: "success",
       });
 
@@ -319,14 +321,17 @@ const UserForm = () => {
                     narrow team later changes nothing until Default is also
                     removed by hand. Say it up front. */}
                 <Alert severity="info">
-                  New users join the <strong>Default</strong> team, which grants
-                  access to everything in the Default catalogs. To restrict what
-                  this person can see, assign them to a narrower team from the{" "}
+                  New users always join the <strong>Default</strong> team, which
+                  grants access to everything in the Default catalogs. That is
+                  deliberate: Community Edition has no teams, so Default
+                  membership is what keeps the two editions consistent. Team
+                  membership is additive, so adding a narrower team from the{" "}
                   <MuiLink component={Link} to="/admin/groups">
                     Teams
                   </MuiLink>{" "}
-                  page and remove them from Default — membership is additive, so
-                  adding a narrow team on its own grants nothing back.
+                  page grants access on top rather than restricting it — change
+                  what Default grants to narrow what everyone can see. The user
+                  cannot sign in until their email is verified.
                 </Alert>
               </Grid>
             )}

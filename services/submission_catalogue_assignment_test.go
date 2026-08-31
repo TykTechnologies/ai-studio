@@ -98,3 +98,74 @@ func TestApproveSubmission_NoCataloguesIsStillAllowed(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, approved.ResourceID)
 }
+
+
+// Approval publishes into Default and leaves the resource inactive: publishing
+// and going live are separate acts. Before this, an approved tool was created
+// active and in no catalogue at all, while a hand-created data source
+// auto-joined Default -- the platform published the sensitive thing
+// automatically and withheld the reviewed one.
+func TestApproveSubmission_PublishesToDefaultInactive(t *testing.T) {
+	db := setupTestDBForSubmissions(t)
+	service := NewService(db)
+
+	submitter := createSubmissionTestUser(t, service, "contributor3@test.com")
+	reviewer := createSubmissionTestAdmin(t, service, "reviewer3@test.com")
+
+	submission, err := service.CreateSubmission(
+		submitter.ID,
+		models.SubmissionResourceTypeTool,
+		models.SubmissionStatusSubmitted,
+		models.JSONMap{"name": "Weather", "tool_type": "REST", "active": true},
+		nil, 0, "public data",
+		"contributor3@test.com", "", "", nil, "", "",
+	)
+	assert.NoError(t, err)
+
+	approved, err := service.ApproveSubmission(submission.ID, reviewer.ID, 0, nil, "")
+	assert.NoError(t, err)
+	assert.NotNil(t, approved.ResourceID)
+
+	tool, err := service.GetToolByID(*approved.ResourceID)
+	assert.NoError(t, err)
+	assert.False(t, tool.Active,
+		"an approved tool is published but not live until an administrator activates it")
+
+	defaultCatalogue, err := models.GetOrCreateDefaultToolCatalogue(db)
+	assert.NoError(t, err)
+
+	var count int64
+	err = db.Table("tool_catalogue_tools").
+		Where("tool_catalogue_id = ? AND tool_id = ?", defaultCatalogue.ID, tool.ID).
+		Count(&count).Error
+	assert.NoError(t, err)
+	assert.EqualValues(t, 1, count,
+		"an approved tool joins the Default catalogue, the way a datasource does")
+}
+
+func TestApproveSubmission_DatasourceIsInactiveRegardlessOfPayload(t *testing.T) {
+	db := setupTestDBForSubmissions(t)
+	service := NewService(db)
+
+	submitter := createSubmissionTestUser(t, service, "contributor4@test.com")
+	reviewer := createSubmissionTestAdmin(t, service, "reviewer4@test.com")
+
+	submission, err := service.CreateSubmission(
+		submitter.ID,
+		models.SubmissionResourceTypeDatasource,
+		models.SubmissionStatusSubmitted,
+		// A contributor asking for active must not decide this.
+		models.JSONMap{"name": "Vectors", "db_source_type": "pgvector", "active": true},
+		nil, 0, "public data",
+		"contributor4@test.com", "", "", nil, "", "",
+	)
+	assert.NoError(t, err)
+
+	approved, err := service.ApproveSubmission(submission.ID, reviewer.ID, 0, nil, "")
+	assert.NoError(t, err)
+
+	ds, err := service.GetDatasourceByID(*approved.ResourceID)
+	assert.NoError(t, err)
+	assert.False(t, ds.Active,
+		"approving a contribution is not the same as putting it live")
+}

@@ -23,15 +23,6 @@ func (s *Service) createResourceFromSubmissionTx(tx *gorm.DB, submission *models
 		}
 		return ""
 	}
-	getBool := func(key string) bool {
-		if v, ok := payload[key]; ok {
-			if b, ok := v.(bool); ok {
-				return b
-			}
-		}
-		return false
-	}
-
 	var tagNames []string
 	if tags, ok := payload["tags"]; ok {
 		if tagList, ok := tags.([]interface{}); ok {
@@ -50,7 +41,12 @@ func (s *Service) createResourceFromSubmissionTx(tx *gorm.DB, submission *models
 			getString("icon"), getString("url"), privacyScore, submission.SubmitterID, tagNames,
 			getString("db_conn_string"), getString("db_source_type"), getString("db_conn_api_key"),
 			getString("db_name"), getString("embed_vendor"), getString("embed_url"),
-			getString("embed_api_key"), getString("embed_model"), getBool("active"),
+			getString("embed_api_key"), getString("embed_model"),
+			// Approved resources are published into the Default catalogue but
+			// arrive INACTIVE: an administrator activates them deliberately.
+			// The contributor's own `active` flag is not trusted for this --
+			// approving a contribution is not the same as putting it live.
+			false,
 		)
 		if err != nil {
 			return 0, err
@@ -70,16 +66,30 @@ func (s *Service) createResourceFromSubmissionTx(tx *gorm.DB, submission *models
 		if err != nil {
 			return 0, err
 		}
-		// Set operations, community flag, owner, and active
+		// Set operations, community flag, owner, and active.
+		//
+		// Inactive on purpose, matching datasources: approval publishes the
+		// tool into the Default catalogue, and an administrator activates it
+		// deliberately. It used to be created active and in no catalogue at
+		// all, which was the opposite of both.
 		updates := map[string]interface{}{
 			"community_submitted":  true,
 			"user_id":              submission.SubmitterID,
-			"active":               true,
+			"active":               false,
 			"available_operations": getString("available_operations"),
 		}
 		if err := tx.Model(tool).Updates(updates).Error; err != nil {
 			return 0, err
 		}
+
+		// Publish into the Default tool catalogue, the way a datasource is
+		// published into the Default data catalogue. CE has no catalogue
+		// management, so Default membership is what keeps the editions
+		// behaving alike.
+		if err := s.ensureToolInDefaultCatalogueTx(tx, tool); err != nil {
+			return 0, err
+		}
+
 		return tool.ID, nil
 
 	default:
