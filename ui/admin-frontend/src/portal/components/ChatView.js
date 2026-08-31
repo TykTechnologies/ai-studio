@@ -732,8 +732,12 @@ const ChatView = () => {
             startIcon={<PrintIcon />}
             onClick={handlePrint}
             disabled={!canPrint}
+            title="Opens your browser's print dialog, where you can save the conversation as a PDF"
           >
-            Export
+            {/* This opens window.print() with a header injected -- it is
+                browser print-to-PDF, not server-side document generation.
+                "Export" promised more than it does. */}
+            Print
           </Button>
           <Button
             variant="outlined"
