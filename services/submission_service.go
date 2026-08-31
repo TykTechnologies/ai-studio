@@ -358,6 +358,13 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 	submission.ResourceID = &resourceID
 	submission.FinalPrivacyScore = &finalPrivacyScore
 	submission.AssignedCatalogues = catalogueIDs
+
+	// Actually put the resource in the catalogues the reviewer chose. This
+	// field was accepted, stored and returned, and never acted upon.
+	if err := s.assignSubmissionCatalogues(tx, submission, resourceID); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
 	submission.ReviewNotes = reviewNotes
 	submission.ReviewCompletedAt = &now
 

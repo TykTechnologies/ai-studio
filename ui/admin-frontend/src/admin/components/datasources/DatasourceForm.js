@@ -376,6 +376,21 @@ const DatasourceForm = () => {
         <Box component="form" onSubmit={handleSubmit}>
           <SectionTitle>Basic Information</SectionTitle>
           <Grid container spacing={3}>
+            {!id && (
+              <Grid item xs={12}>
+                {/* ensureDatasourceInDefaultCatalogue adds any datasource that
+                    ends up in no catalogue to Default, which every user on the
+                    instance can see. Nothing on this form said so, so creating
+                    a sensitive data source put it on everyone's menu at that
+                    instant. */}
+                <Alert severity="info">
+                  A data source that is not assigned to a catalog is added to
+                  the <strong>Default</strong> data catalog, which is visible to
+                  every user on this instance. Assign it to a specific catalog
+                  afterwards if it should not be.
+                </Alert>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <TextField
                 fullWidth

@@ -25,14 +25,33 @@ type UserDTO struct {
 	Groups               []uint
 }
 
-func (s *Service) addDefaultGroupIfNotExists(groups []uint) ([]uint, error) {
+// applyDefaultGroup gives a new user the Default team when no teams were asked
+// for, and leaves an explicit choice of teams alone.
+//
+// It used to add Default unconditionally, on top of whatever the caller
+// specified. Default owns catalogues holding every provider, tool and data
+// source on the instance, and team membership is additive and never
+// subtractive -- so assigning someone a narrow team granted them everything
+// anyway, and changed nothing until you also remembered to remove them from
+// Default. Everyone forgets the second half.
+//
+// Respecting an explicit choice fails closed, which is the right direction for
+// a governance product. Callers that specify no teams keep the existing
+// onboarding behaviour, which is every user created through the admin UI
+// today, since that form has no Teams field at all.
+func (s *Service) applyDefaultGroup(groups []uint) ([]uint, error) {
+	if len(groups) > 0 {
+		// The caller said which teams they wanted. Adding another silently is
+		// exactly the surprise this is here to avoid.
+		return groups, nil
+	}
+
 	// Get or create default group by name (safe for any DB state)
 	defaultGroup, err := models.GetOrCreateDefaultGroup(s.DB)
 	if err != nil {
 		return groups, err
 	}
 
-	// Check if user already has default group
 	if !slices.Contains(groups, defaultGroup.ID) {
 		groups = append(groups, defaultGroup.ID)
 	}
@@ -87,7 +106,7 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		return nil, err
 	}
 
-	groups, err := s.addDefaultGroupIfNotExists(dto.Groups)
+	groups, err := s.applyDefaultGroup(dto.Groups)
 	if err != nil {
 		return nil, err
 	}

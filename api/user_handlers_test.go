@@ -115,12 +115,16 @@ func TestUserEndpoints(t *testing.T) {
 	assert.Equal(t, "test@example.com", response["data"].Attributes.Email)
 
 	userID := response["data"].ID
-	// Verify user has the correct groups assigned
-	// Note: Users are auto-assigned to "Default" group if they don't have one
+	// Verify user has the correct groups assigned.
+	// Users are auto-assigned to the "Default" group only when they ask for no
+	// groups at all. Adding Default on top of an explicit choice granted access
+	// nobody granted: Default owns catalogues holding everything on the
+	// instance, and membership is additive, so the narrow assignment changed
+	// nothing until Default was also removed by hand.
 	id, _ := strconv.ParseUint(userID, 10, 64)
 	createdUser, err := api.service.GetUserByID(uint(id), "Groups")
 	assert.NoError(t, err)
-	assert.Len(t, createdUser.Groups, 3) // 2 requested groups + Default group
+	assert.Len(t, createdUser.Groups, 2, "an explicit group choice is respected exactly")
 	// Test attempting to create a user with a non-existent group
 	nonExistentGroupID := uint(9999) // Using a high number that's unlikely to exist
 	createUserWithBadGroupInput := UserInput{

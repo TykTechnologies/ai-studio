@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Switch, FormControlLabel } from "@mui/material";
+import { Switch, FormControlLabel, Link as MuiLink } from "@mui/material";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -310,6 +310,26 @@ const UserForm = () => {
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
+            {!id && (
+              <Grid item xs={12}>
+                {/* This form has no Teams field, so every user created here
+                    joins Default -- which owns catalogues holding every
+                    provider, tool and data source on the instance. That was
+                    invisible, and team membership is additive, so assigning a
+                    narrow team later changes nothing until Default is also
+                    removed by hand. Say it up front. */}
+                <Alert severity="info">
+                  New users join the <strong>Default</strong> team, which grants
+                  access to everything in the Default catalogs. To restrict what
+                  this person can see, assign them to a narrower team from the{" "}
+                  <MuiLink component={Link} to="/admin/groups">
+                    Teams
+                  </MuiLink>{" "}
+                  page and remove them from Default — membership is additive, so
+                  adding a narrow team on its own grants nothing back.
+                </Alert>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <TextField
                 fullWidth
