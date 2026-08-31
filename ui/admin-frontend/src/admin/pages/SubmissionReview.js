@@ -734,16 +734,35 @@ const SubmissionReview = () => {
       >
         <DialogTitle>Approve Submission</DialogTitle>
         <DialogContent>
-          <Typography gutterBottom sx={{ mt: 1 }}>
-            Set final privacy score: {finalPrivacyScore}
+          <Typography id="final-privacy-label" gutterBottom sx={{ mt: 1 }}>
+            Set final privacy score
           </Typography>
-          <Slider
-            value={finalPrivacyScore}
-            onChange={(e, val) => setFinalPrivacyScore(val)}
-            min={0}
-            max={100}
-            valueLabelDisplay="auto"
-          />
+          {/* Unlabelled, and drag-only, for the value that decides whether the
+              resource can ever be paired with a provider. */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Slider
+              aria-labelledby="final-privacy-label"
+              value={finalPrivacyScore}
+              onChange={(e, val) => setFinalPrivacyScore(val)}
+              min={0}
+              max={100}
+              valueLabelDisplay="auto"
+              sx={{ flexGrow: 1 }}
+            />
+            <TextField
+              type="number"
+              size="small"
+              label="Score"
+              value={finalPrivacyScore}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (Number.isNaN(v)) return;
+                setFinalPrivacyScore(Math.min(100, Math.max(0, v)));
+              }}
+              inputProps={{ min: 0, max: 100, "aria-label": "Final privacy score" }}
+              sx={{ width: 96 }}
+            />
+          </Box>
           <TextField
             fullWidth
             label="Review Notes (internal)"

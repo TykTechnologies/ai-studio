@@ -263,8 +263,10 @@ const AppBuilder = () => {
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                 <FormControl fullWidth sx={{ mr: 1 }}>
-                  <InputLabel>Select Data Source</InputLabel>
+                  <InputLabel id="appbuilder-select-data-source-label">Select Data Source</InputLabel>
                   <Select
+              labelId="appbuilder-select-data-source-label"
+              id="appbuilder-select-data-source"
                     value={currentDataSource}
                     onChange={(e) => setCurrentDataSource(e.target.value)}
                     label="Select Data Source"
@@ -296,8 +298,10 @@ const AppBuilder = () => {
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                 <FormControl fullWidth sx={{ mr: 1 }}>
-                  <InputLabel>Select LLM</InputLabel>
+                  <InputLabel id="appbuilder-select-llm-label">Select LLM</InputLabel>
                   <Select
+              labelId="appbuilder-select-llm-label"
+              id="appbuilder-select-llm"
                     value={currentLLM}
                     onChange={(e) => setCurrentLLM(e.target.value)}
                     label="Select LLM"
@@ -329,8 +333,10 @@ const AppBuilder = () => {
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                 <FormControl fullWidth sx={{ mr: 1 }}>
-                  <InputLabel>Select Tool</InputLabel>
+                  <InputLabel id="appbuilder-select-tool-label">Select Tool</InputLabel>
                   <Select
+              labelId="appbuilder-select-tool-label"
+              id="appbuilder-select-tool"
                     value={currentTool}
                     onChange={(e) => setCurrentTool(e.target.value)}
                     label="Select Tool"
@@ -372,8 +378,10 @@ const AppBuilder = () => {
                   </Typography>
                   <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                     <FormControl fullWidth sx={{ mr: 1 }}>
-                      <InputLabel>Select {rt.name}</InputLabel>
+                      <InputLabel id="appbuilder-select-label">Select {rt.name}</InputLabel>
                       <Select
+              labelId="appbuilder-select-label"
+              id="appbuilder-select"
                         value={currentVal}
                         onChange={(e) =>
                           setCurrentPluginResource((prev) => ({

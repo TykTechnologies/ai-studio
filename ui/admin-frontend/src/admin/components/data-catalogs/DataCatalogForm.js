@@ -315,8 +315,10 @@ const DataCatalogForm = () => {
 
           <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
             <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel>Add Data Source</InputLabel>
+              <InputLabel id="datacatalogform-add-data-source-label">Add Data Source</InputLabel>
               <Select
+              labelId="datacatalogform-add-data-source-label"
+              id="datacatalogform-add-data-source"
                 value={selectedDatasource}
                 onChange={(e) => setSelectedDatasource(e.target.value)}
                 label="Add Data Source"
@@ -335,6 +337,7 @@ const DataCatalogForm = () => {
               color="secondary"
               onClick={handleAddDatasource}
               disabled={!selectedDatasource}
+              aria-label="Add data source to catalog"
             >
               <AddIcon />
             </Button>
@@ -355,8 +358,10 @@ const DataCatalogForm = () => {
 
           <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
             <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel>Add Tag</InputLabel>
+              <InputLabel id="datacatalogform-add-tag-label">Add Tag</InputLabel>
               <Select
+              labelId="datacatalogform-add-tag-label"
+              id="datacatalogform-add-tag"
                 value={selectedTag}
                 onChange={(e) => setSelectedTag(e.target.value)}
                 label="Add Tag"
@@ -375,6 +380,7 @@ const DataCatalogForm = () => {
               color="secondary"
               onClick={handleAddTag}
               disabled={!selectedTag}
+              aria-label="Add tag to catalog"
             >
               <AddIcon />
             </Button>

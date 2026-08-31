@@ -152,14 +152,14 @@ const ScriptTestPanel = ({ script, filterType }) => {
         aria-controls="test-panel-content"
         id="test-panel-header"
       >
-        <Typography variant="h6">Test Script</Typography>
+        <Typography variant="h6">Test</Typography>
       </AccordionSummary>
       <AccordionDetails>
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Typography variant="body2" color="text.secondary" gutterBottom>
               Test your filter script with sample input before saving. Configure the input
-              parameters below and click "Test Script" to see the output.
+              parameters below and click "Run script" to see the output.
             </Typography>
           </Grid>
 
@@ -182,8 +182,10 @@ const ScriptTestPanel = ({ script, filterType }) => {
 
           <Grid item xs={6}>
             <FormControl fullWidth>
-              <InputLabel>Vendor</InputLabel>
+              <InputLabel id="scripttestpanel-vendor-label">Vendor</InputLabel>
               <Select
+              labelId="scripttestpanel-vendor-label"
+              id="scripttestpanel-vendor"
                 name="vendor_name"
                 value={testInput.vendor_name}
                 onChange={handleInputChange}
@@ -311,7 +313,7 @@ const ScriptTestPanel = ({ script, filterType }) => {
               disabled={testing || !script}
               startIcon={testing && <CircularProgress size={20} />}
             >
-              {testing ? "Testing..." : "Test Script"}
+              {testing ? "Running..." : "Run script"}
             </Button>
           </Grid>
 

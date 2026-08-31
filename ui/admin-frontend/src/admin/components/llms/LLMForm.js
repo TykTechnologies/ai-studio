@@ -456,8 +456,10 @@ const LLMForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>
-                <InputLabel>Vendor</InputLabel>
+                <InputLabel id="llmform-vendor-label">Vendor</InputLabel>
                 <Select
+              labelId="llmform-vendor-label"
+              id="llmform-vendor"
                   name="vendor"
                   value={llm.vendor}
                   onChange={handleChange}
@@ -793,8 +795,10 @@ const LLMForm = () => {
                   <Typography>No filters available.</Typography>
                 ) : (
                   <FormControl fullWidth>
-                    <InputLabel>Filters</InputLabel>
+                    <InputLabel id="llmform-filters-label">Filters</InputLabel>
                     <Select
+              labelId="llmform-filters-label"
+              id="llmform-filters"
                       multiple
                       name="filters"
                       value={llm.filters || []}
@@ -841,8 +845,10 @@ const LLMForm = () => {
               </Typography>
               
               <FormControl fullWidth>
-                <InputLabel>Plugins</InputLabel>
+                <InputLabel id="llmform-plugins-label">Plugins</InputLabel>
                 <Select
+              labelId="llmform-plugins-label"
+              id="llmform-plugins"
                   multiple
                   value={llm.plugins}
                   onChange={handlePluginChange}

@@ -18,8 +18,11 @@ const PaginationControls = ({
         borderTop: theme => `1px solid ${theme.palette.border.neutralDefault}`
       }}
     >
-      <Select 
-        value={pageSize} 
+      {/* This control has no visible label, so it carries its own name. */}
+      <Select
+        aria-label="Results per page"
+        id="pagination-page-size"
+        value={pageSize}
         onChange={onPageSizeChange}
         className="MuiSelect-pagination"
       >

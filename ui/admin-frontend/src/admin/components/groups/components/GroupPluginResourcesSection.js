@@ -112,8 +112,10 @@ const GroupPluginResourcesSection = ({ groupId, onChange }) => {
 
         return (
           <FormControl fullWidth key={key} sx={{ mb: 2 }}>
-            <InputLabel>{rt.name}</InputLabel>
+            <InputLabel id="grouppluginresourcessection-select-label">{rt.name}</InputLabel>
             <Select
+              labelId="grouppluginresourcessection-select-label"
+              id="grouppluginresourcessection-select"
               multiple
               value={selected}
               onChange={(e) => {

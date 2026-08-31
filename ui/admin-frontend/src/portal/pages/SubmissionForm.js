@@ -409,8 +409,10 @@ const SubmissionForm = () => {
       {/* Resource type selector */}
       {!isEdit && (
         <FormControl fullWidth sx={{ mb: 3 }} error={!!errors.resource_type}>
-          <InputLabel>Resource Type</InputLabel>
+          <InputLabel id="submissionform-resource-type-label">Resource Type</InputLabel>
           <Select
+              labelId="submissionform-resource-type-label"
+              id="submissionform-resource-type"
             value={resourceType}
             label="Resource Type"
             onChange={(e) => {
@@ -504,8 +506,10 @@ const SubmissionForm = () => {
                         fullWidth
                         error={!!errors.db_source_type}
                       >
-                        <InputLabel>Vector Database Type</InputLabel>
+                        <InputLabel id="submissionform-vector-database-type-label">Vector Database Type</InputLabel>
                         <Select
+              labelId="submissionform-vector-database-type-label"
+              id="submissionform-vector-database-type"
                           value={payload.db_source_type || ""}
                           label="Vector Database Type"
                           onChange={(e) =>
@@ -604,8 +608,10 @@ const SubmissionForm = () => {
                         fullWidth
                         error={!!errors.embed_vendor}
                       >
-                        <InputLabel>Embedder Vendor</InputLabel>
+                        <InputLabel id="submissionform-embedder-vendor-label">Embedder Vendor</InputLabel>
                         <Select
+              labelId="submissionform-embedder-vendor-label"
+              id="submissionform-embedder-vendor"
                           value={payload.embed_vendor || ""}
                           label="Embedder Vendor"
                           onChange={(e) =>
@@ -871,18 +877,41 @@ const SubmissionForm = () => {
             <AccordionDetails>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
-                  <Typography gutterBottom>
-                    Suggested Privacy Score: {meta.suggested_privacy}
+                  <Typography id="suggested-privacy-label" gutterBottom>
+                    Suggested Privacy Score
                   </Typography>
-                  <Slider
-                    value={meta.suggested_privacy}
-                    onChange={(e, val) =>
-                      handleMetaChange("suggested_privacy", val)
-                    }
-                    min={0}
-                    max={100}
-                    valueLabelDisplay="auto"
-                  />
+                  {/* The slider carried no accessible name, and a value that
+                      decides whether the resource can ever be used deserves a
+                      typable input, not only a drag target. */}
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <Slider
+                      aria-labelledby="suggested-privacy-label"
+                      value={meta.suggested_privacy}
+                      onChange={(e, val) =>
+                        handleMetaChange("suggested_privacy", val)
+                      }
+                      min={0}
+                      max={100}
+                      valueLabelDisplay="auto"
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <TextField
+                      type="number"
+                      size="small"
+                      label="Score"
+                      value={meta.suggested_privacy}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        if (Number.isNaN(v)) return;
+                        handleMetaChange(
+                          "suggested_privacy",
+                          Math.min(100, Math.max(0, v))
+                        );
+                      }}
+                      inputProps={{ min: 0, max: 100, "aria-label": "Suggested privacy score" }}
+                      sx={{ width: 96 }}
+                    />
+                  </Box>
                   <Typography variant="caption" color="text.secondary">
                     0 = public data, 100 = highly sensitive. Admin will set the
                     final score.
@@ -908,11 +937,16 @@ const SubmissionForm = () => {
             </AccordionDetails>
           </Accordion>
 
-          {/* Support metadata */}
-          <Accordion sx={{ mt: 2 }}>
+          {/* Support metadata.
+              Collapsed by default, but its fields render into the DOM anyway --
+              so they were invisible to the contributor, who skipped them, and
+              the reviewer was then left with nobody to contact. The primary
+              contact is the field the review page most wants to have, so this
+              opens by default like every other section on the form. */}
+          <Accordion defaultExpanded sx={{ mt: 2 }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="h6">
-                Support & Documentation (Optional)
+                Support &amp; Documentation
               </Typography>
             </AccordionSummary>
             <AccordionDetails>

@@ -96,8 +96,10 @@ const NamespaceSelector = ({
 
   return (
     <FormControl fullWidth required={required} error={error} disabled={disabled} {...props}>
-      <InputLabel>{label}</InputLabel>
+      <InputLabel id="namespaceselector-select-label">{label}</InputLabel>
       <Select
+              labelId="namespaceselector-select-label"
+              id="namespaceselector-select"
         multiple
         value={selectedNamespaces}
         onChange={handleChange}

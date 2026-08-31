@@ -147,8 +147,10 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
 
             {targetType === 'namespace' && (
               <FormControl fullWidth required sx={{ mb: 3 }}>
-                <InputLabel>Select Namespace</InputLabel>
+                <InputLabel id="pushconfigurationmodal-select-namespace-label">Select Namespace</InputLabel>
                 <Select
+              labelId="pushconfigurationmodal-select-namespace-label"
+              id="pushconfigurationmodal-select-namespace"
                   value={selectedNamespace}
                   label="Select Namespace"
                   onChange={(e) => setSelectedNamespace(e.target.value)}

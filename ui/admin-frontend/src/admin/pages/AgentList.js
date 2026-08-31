@@ -201,8 +201,10 @@ const AgentList = () => {
         <Typography variant="headingXLarge">Agents</Typography>
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Status</InputLabel>
+            <InputLabel id="agentlist-status-label">Status</InputLabel>
             <Select
+              labelId="agentlist-status-label"
+              id="agentlist-status"
               value={statusFilter}
               label="Status"
               onChange={(e) => setStatusFilter(e.target.value)}

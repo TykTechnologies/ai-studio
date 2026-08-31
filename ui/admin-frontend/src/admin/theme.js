@@ -271,11 +271,26 @@ export const generateTheme = (brandingConfig = {}) => {
       }
     },
     MuiFormLabel: {
+      // MUI renders the required marker as a text node inside the label, so it
+      // becomes part of the control's accessible name: a field labelled "Name"
+      // announces as "Name *" and getByLabelText("Name") does not resolve.
+      // Hide the marker from the accessibility tree -- requiredness is already
+      // conveyed by the `required` attribute on the input itself -- while
+      // leaving it visible. One override, every form.
+      defaultProps: {
+        componentsProps: {
+          asterisk: { "aria-hidden": true },
+        },
+      },
       styleOverrides: {
         root: {
           "&.Mui-focused, &.MuiFormLabel-filled": {
             transform: "translate(2px, -16px) scale(0.75)", // Match the InputLabel
           },
+        },
+        asterisk: {
+          // Kept visible; only removed from the accessible name above.
+          "&.Mui-error": { color: "inherit" },
         },
       },
     },

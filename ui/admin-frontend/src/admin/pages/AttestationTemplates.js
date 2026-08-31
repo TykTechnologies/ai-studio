@@ -341,8 +341,10 @@ const AttestationTemplates = () => {
             helperText="Supports Markdown — use [link text](https://url) for links"
           />
           <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Applies To</InputLabel>
+            <InputLabel id="attestationtemplates-applies-to-label">Applies To</InputLabel>
             <Select
+              labelId="attestationtemplates-applies-to-label"
+              id="attestationtemplates-applies-to"
               value={formData.applies_to_type}
               label="Applies To"
               onChange={(e) =>

@@ -399,8 +399,10 @@ const AppForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth error={!!errors.user_id}>
-                <InputLabel>User</InputLabel>
+                <InputLabel id="appform-user-label">User</InputLabel>
                 <Select
+              labelId="appform-user-label"
+              id="appform-user"
                   name="user_id"
                   value={app.user_id}
                   onChange={handleChange}
@@ -419,8 +421,10 @@ const AppForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>
-                <InputLabel>LLMs</InputLabel>
+                <InputLabel id="appform-llms-label">LLMs</InputLabel>
                 <Select
+              labelId="appform-llms-label"
+              id="appform-llms"
                   multiple
                   name="llm_ids"
                   value={app.llm_ids}
@@ -511,8 +515,10 @@ const AppForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>
-                <InputLabel>Datasources</InputLabel>
+                <InputLabel id="appform-datasources-label">Datasources</InputLabel>
                 <Select
+              labelId="appform-datasources-label"
+              id="appform-datasources"
                   multiple
                   name="datasource_ids"
                   value={app.datasource_ids}
@@ -548,8 +554,10 @@ const AppForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth>
-                <InputLabel>Tools</InputLabel>
+                <InputLabel id="appform-tools-label">Tools</InputLabel>
                 <Select
+              labelId="appform-tools-label"
+              id="appform-tools"
                   multiple
                   name="tool_ids"
                   value={app.tool_ids}
@@ -593,8 +601,10 @@ const AppForm = () => {
               return (
                 <Grid item xs={12} key={key}>
                   <FormControl fullWidth>
-                    <InputLabel>{rt.name}</InputLabel>
+                    <InputLabel id="appform-select-label">{rt.name}</InputLabel>
                     <Select
+              labelId="appform-select-label"
+              id="appform-select"
                       multiple
                       value={selected}
                       onChange={(e) => {

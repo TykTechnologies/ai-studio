@@ -155,8 +155,10 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
         return (
           <>
             <FormControl fullWidth margin="normal">
-              <InputLabel>Vendor</InputLabel>
+              <InputLabel id="portalcatalogwizard-vendor-label">Vendor</InputLabel>
               <Select
+              labelId="portalcatalogwizard-vendor-label"
+              id="portalcatalogwizard-vendor"
                 name="vendor"
                 value={formData.vendor}
                 onChange={handleInputChange}
@@ -216,8 +218,10 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
         return (
           <>
             <FormControl fullWidth margin="normal">
-              <InputLabel>Model Preset</InputLabel>
+              <InputLabel id="portalcatalogwizard-model-preset-label">Model Preset</InputLabel>
               <Select
+              labelId="portalcatalogwizard-model-preset-label"
+              id="portalcatalogwizard-model-preset"
                 name="modelPreset"
                 value={formData.modelPreset}
                 onChange={handleInputChange}

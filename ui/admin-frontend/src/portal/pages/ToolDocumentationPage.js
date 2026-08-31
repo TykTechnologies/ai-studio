@@ -316,11 +316,14 @@ const ToolDocumentationPage = () => {
           borderRadius: 1,
           border: '1px solid #e0e0e0'
         }}>
-          <Typography variant="body2" sx={{ fontWeight: 500, minWidth: 'fit-content' }}>
+          <Typography id="tool-docs-authorize-label" variant="body2" sx={{ fontWeight: 500, minWidth: 'fit-content' }}>
             Authorize:
           </Typography>
           <FormControl size="small" sx={{ minWidth: 200 }}>
+            {/* No InputLabel here, so associate with the visible caption. */}
             <Select
+              aria-labelledby="tool-docs-authorize-label"
+              id="tool-docs-authorize"
               value={selectedApp}
               onChange={handleAppSelection}
               displayEmpty

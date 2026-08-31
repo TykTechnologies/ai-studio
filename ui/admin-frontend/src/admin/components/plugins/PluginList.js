@@ -235,8 +235,10 @@ const PluginList = () => {
           />
           
           <FormControl size="small" style={{ minWidth: 150 }}>
-            <InputLabel>Hook Type</InputLabel>
+            <InputLabel id="pluginlist-hook-type-label">Hook Type</InputLabel>
             <Select
+              labelId="pluginlist-hook-type-label"
+              id="pluginlist-hook-type"
               value={hookTypeFilter}
               label="Hook Type"
               onChange={handleHookTypeFilterChange}
@@ -251,8 +253,10 @@ const PluginList = () => {
           </FormControl>
 
           <FormControl size="small" style={{ minWidth: 120 }}>
-            <InputLabel>Status</InputLabel>
+            <InputLabel id="pluginlist-status-label">Status</InputLabel>
             <Select
+              labelId="pluginlist-status-label"
+              id="pluginlist-status"
               value={statusFilter}
               label="Status"
               onChange={handleStatusFilterChange}

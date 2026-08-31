@@ -258,8 +258,10 @@ const ModelPriceForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth error={!!errors.vendor}>
-                <InputLabel>Vendor</InputLabel>
+                <InputLabel id="modelpriceform-vendor-label">Vendor</InputLabel>
                 <Select
+              labelId="modelpriceform-vendor-label"
+              id="modelpriceform-vendor"
                   name="vendor"
                   value={price.vendor}
                   onChange={handleChange}

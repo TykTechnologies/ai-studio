@@ -191,11 +191,15 @@ function OAuthConsentPage() {
           </Alert>
         ) : (
           <>
-            <FormText sx={{ mt: 1, mb: 2 }}>
+            <FormText id="oauth-consent-app-label" sx={{ mt: 1, mb: 2 }}>
               Select which app to use for OAuth access:
             </FormText>
             <FormControl fullWidth sx={{ mb: 2 }}>
+              {/* No InputLabel here, so associate with the visible instruction
+                  above rather than leaving an unnamed combobox. */}
               <Select
+                aria-labelledby="oauth-consent-app-label"
+                id="oauth-consent-app"
                 value={selectedAppId}
                 onChange={(e) => setSelectedAppId(e.target.value)}
                 displayEmpty
