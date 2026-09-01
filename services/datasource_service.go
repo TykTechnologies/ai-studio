@@ -82,10 +82,15 @@ func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc,
 		return nil, err
 	}
 
-	// Auto-assign to Default data catalogue if not in any catalogue
-	if err := s.ensureDatasourceInDefaultCatalogue(datasource); err != nil {
-		// Log but don't fail - this is a convenience feature
-		logger.Warn(fmt.Sprintf("Failed to add datasource to default catalogue: %v", err))
+	// Auto-assign to Default data catalogue if not in any catalogue.
+	//
+	// Runs on `db` for the same reason the tool path does: callers pass a
+	// transaction (submission approval), and using s.DB here takes a second
+	// connection whose write blocks on the caller's uncommitted row, deadlocking
+	// the request. The error is returned rather than logged so a failure inside
+	// a transaction surfaces as itself instead of poisoning the transaction.
+	if err := s.ensureDatasourceInDefaultCatalogueTx(db, datasource); err != nil {
+		return nil, err
 	}
 
 	// Execute "after_create" hooks
@@ -481,26 +486,37 @@ func (s *Service) RemoveFileFromDatasource(dsID uint, fileStoreID uint) error {
 	return ds.RemoveFileStore(s.DB, fileStore)
 }
 
-// ensureDatasourceInDefaultCatalogue adds a datasource to the Default data catalogue if it's not in any catalogue
-func (s *Service) ensureDatasourceInDefaultCatalogue(datasource *models.Datasource) error {
-	// Check if datasource is in any catalogue
-	count := s.DB.Model(datasource).Association("DataCatalogues").Count()
-
-	if count == 0 {
-		// Get or create default data catalogue
-		defaultCatalogue, err := models.GetOrCreateDefaultDataCatalogue(s.DB)
-		if err != nil {
-			return fmt.Errorf("failed to get default data catalogue: %w", err)
-		}
-
-		// Add datasource to default catalogue
-		if err := s.DB.Model(defaultCatalogue).Association("Datasources").Append(datasource); err != nil {
-			return fmt.Errorf("failed to add datasource to default catalogue: %w", err)
-		}
-
-		logger.Infof("Auto-assigned datasource '%s' (ID: %d) to Default data catalogue", datasource.Name, datasource.ID)
+// ensureDatasourceInDefaultCatalogueTx adds a datasource to the Default data
+// catalogue when it is not in any catalogue yet, using the caller's connection.
+//
+// Takes db so it joins the caller's transaction. The previous version used
+// s.DB unconditionally, which deadlocked every submission approval: its write
+// waited on a row the caller's own open transaction had not committed.
+//
+// The membership count reads data_catalogue_data_sources directly. It used to
+// ask Association("DataCatalogues"), and models.Datasource declares no such
+// field -- the relation is only DataCatalogue.Datasources -- so the count came
+// back 0 for a datasource already in a catalogue and the guard never fired.
+func (s *Service) ensureDatasourceInDefaultCatalogueTx(db *gorm.DB, datasource *models.Datasource) error {
+	var count int64
+	if err := db.Table("data_catalogue_data_sources").
+		Where("datasource_id = ?", datasource.ID).Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to check datasource catalogue membership: %w", err)
+	}
+	if count > 0 {
+		return nil
 	}
 
+	defaultCatalogue, err := models.GetOrCreateDefaultDataCatalogue(db)
+	if err != nil {
+		return fmt.Errorf("failed to get default data catalogue: %w", err)
+	}
+
+	if err := db.Model(defaultCatalogue).Association("Datasources").Append(datasource); err != nil {
+		return fmt.Errorf("failed to add datasource to default catalogue: %w", err)
+	}
+
+	logger.Infof("Auto-assigned datasource '%s' (ID: %d) to Default data catalogue", datasource.Name, datasource.ID)
 	return nil
 }
 
