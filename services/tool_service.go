@@ -68,10 +68,21 @@ func (s *Service) CreateToolWithDB(db *gorm.DB, name, description, toolType stri
 		return nil, err
 	}
 
-	// Auto-assign to Default tool catalogue if not in any catalogue
-	if err := s.ensureToolInDefaultCatalogue(tool); err != nil {
-		// Log but don't fail - this is a convenience feature
-		logger.Warn(fmt.Sprintf("Failed to add tool to default catalogue: %v", err))
+	// Auto-assign to Default tool catalogue if not in any catalogue.
+	//
+	// Must run on `db`, not s.DB. When callers hand this a transaction (the
+	// submission approval path does), reaching for the pool instead takes a
+	// second connection, and its INSERT into tools blocks on the row the
+	// caller's transaction has not committed yet. The caller is blocked
+	// waiting for that query, so it can never commit: a deadlock that holds
+	// an open transaction until the client gives up.
+	//
+	// The error is returned rather than logged. Inside a transaction a failed
+	// statement poisons the whole transaction on Postgres, so continuing past
+	// it only turns one clear error into a confusing "current transaction is
+	// aborted" on whatever the caller does next.
+	if err := s.ensureToolInDefaultCatalogueTx(db, tool); err != nil {
+		return nil, err
 	}
 
 	// Execute "after_create" hooks
@@ -811,28 +822,13 @@ func (s *Service) GetToolOperationDetails(toolID uint) ([]ToolOperationDetail, e
 	return details, nil
 }
 
-// ensureToolInDefaultCatalogue adds a tool to the Default tool catalogue if it's not in any catalogue
-func (s *Service) ensureToolInDefaultCatalogue(tool *models.Tool) error {
-	// Check if tool is in any catalogue
-	count := s.DB.Model(tool).Association("ToolCatalogues").Count()
-
-	if count == 0 {
-		// Get or create default tool catalogue
-		defaultCatalogue, err := models.GetOrCreateDefaultToolCatalogue(s.DB)
-		if err != nil {
-			logger.Errorf("Failed to get default tool catalogue: %v", err)
-			return fmt.Errorf("failed to get default tool catalogue: %w", err)
-		}
-
-		// Add tool to default catalogue
-		if err := s.DB.Model(defaultCatalogue).Association("Tools").Append(tool); err != nil {
-			logger.Errorf("Failed to append tool to default catalogue: %v", err)
-			return fmt.Errorf("failed to add tool to default catalogue: %w", err)
-		}
-
-	} else {
-		logger.Infof("Tool '%s' already in %d catalogue(s), skipping auto-assignment", tool.Name, count)
-	}
-
-	return nil
-}
+// The connection-bound ensureToolInDefaultCatalogueTx in
+// submission_catalogue_assignment.go replaces what used to live here.
+//
+// The version this removes took no db argument and used s.DB, which deadlocked
+// whenever the caller was inside a transaction. It also asked
+// Association("ToolCatalogues") for the membership count, and models.Tool
+// declares no such field -- the relation exists only as ToolCatalogue.Tools --
+// so the count was always 0 and the "already in a catalogue" guard never
+// guarded anything. The Tx version counts rows in tool_catalogue_tools
+// directly, which is the question that was meant to be asked.
