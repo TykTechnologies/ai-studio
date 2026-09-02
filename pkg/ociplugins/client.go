@@ -112,9 +112,18 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	}
 
 	// Fetch the plugin manifest and layers
-	_, pluginConfig, binaryData, err := c.fetcher.Pull(ctx, ref, params)
+	manifestDesc, pluginConfig, binaryData, err := c.fetcher.Pull(ctx, ref, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pull plugin: %w", err)
+	}
+
+	// Tag-based references carry no digest, so pin them to the manifest digest
+	// the registry resolved the tag to; the cache is keyed by digest.
+	cacheRef := ref
+	if cacheRef.Digest == "" && manifestDesc != nil {
+		resolved := *ref
+		resolved.Digest = manifestDesc.Digest.String()
+		cacheRef = &resolved
 	}
 
 	// Verify signature if required
@@ -156,7 +165,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	}
 
 	// Store the binary data as executable
-	execPath, err := c.storage.StoreExecutable(ref.Digest, params.Architecture, binaryData)
+	execPath, err := c.storage.StoreExecutable(cacheRef.Digest, params.Architecture, binaryData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to store executable: %w", err)
 	}
@@ -172,7 +181,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	signatureVerified := c.config.RequireSignature && params.PublicKey != ""
 
 	metadata := &PluginMetadata{
-		Reference:    ref,
+		Reference:    cacheRef,
 		Params:       params,
 		FetchTime:    fetchTime,
 		Config:       pluginConfig,
@@ -182,13 +191,13 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		Version:      version,
 	}
 
-	if err := c.storage.StoreMetadata(ref.Digest, params.Architecture, metadata); err != nil {
+	if err := c.storage.StoreMetadata(cacheRef.Digest, params.Architecture, metadata); err != nil {
 		log.Warn().Err(err).Msg("Failed to store plugin metadata")
 	}
 
 	// Create local plugin info
 	localPlugin := &LocalPlugin{
-		Reference:      ref,
+		Reference:      cacheRef,
 		Params:         params,
 		ExecutablePath: execPath,
 		CacheDir:       c.config.CacheDir,

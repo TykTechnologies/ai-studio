@@ -44,7 +44,8 @@ help:
 	@echo "  make dev                - Start minimal env (Studio + Frontend + Postgres)"
 	@echo "  make dev-full           - Start full stack (+ Gateway + Plugins)"
 	@echo "  make dev-ent            - Start enterprise minimal env"
-	@echo "  make dev-full-ent       - Start enterprise full stack"
+	@echo "  make dev-full-ent       - Start enterprise full stack (no plugin builds)"
+	@echo "  make dev-full-ent-plugins - Same, plus build/watch all plugins"
 	@echo "  make dev-down           - Stop development environment"
 	@echo "  make dev-help           - Show all development commands"
 	@echo ""
@@ -923,12 +924,13 @@ stop-dev:
 #   make dev          - Start minimal dev env (Studio + Frontend + Postgres)
 #   make dev-full     - Start full stack (+ Gateway + Plugins watcher)
 #   make dev-ent      - Start enterprise dev env
-#   make dev-full-ent - Start full enterprise stack
+#   make dev-full-ent - Start full enterprise stack (no plugin builds)
+#   make dev-full-ent-plugins - Full enterprise stack + plugin builder/watcher
 #
 # Go services rebuild on container restart. Use 'make dev-restart-<service>' to rebuild.
 # Frontend uses React HMR for live updates.
 
-.PHONY: dev dev-full dev-ent dev-full-ent dev-down dev-logs dev-clean dev-status dev-rebuild
+.PHONY: dev dev-full dev-ent dev-full-ent dev-full-ent-plugins dev-start-full-ent-plugins dev-down dev-logs dev-clean dev-status dev-rebuild
 
 # Start minimal development environment (Studio + Frontend + PostgreSQL)
 dev:
@@ -958,7 +960,7 @@ dev-full:
 		cp dev/.env.gateway.dev dev/.env.gateway; \
 		echo "📝 Created dev/.env.gateway from template"; \
 	fi
-	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml up --build
+	cd dev && docker compose --profile plugins -f docker-compose.yml -f docker-compose.full.yml up --build
 
 # Start enterprise development environment (minimal)
 dev-ent:
@@ -1018,7 +1020,13 @@ dev-full-ent:
 		cp dev/.env.gateway.dev dev/.env.gateway; \
 		echo "📝 Created dev/.env.gateway from template"; \
 	fi
-	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml -f docker-compose.ent.yml -f docker-compose.full-ent.yml up --build
+	cd dev && docker compose $(PLUGIN_PROFILE) -f docker-compose.yml -f docker-compose.full.yml -f docker-compose.ent.yml -f docker-compose.full-ent.yml up --build
+
+# Start full enterprise environment including the plugin builder/watcher.
+# Reuses dev-full-ent; the target-specific variable turns the profile on, so
+# plugin builds stay an opt-in phase rather than a cost on every start.
+dev-full-ent-plugins: PLUGIN_PROFILE = --profile plugins
+dev-full-ent-plugins: dev-full-ent
 
 # Stop development environment (handles all compose file combinations)
 dev-down:
@@ -1077,13 +1085,15 @@ dev-help:
 	@echo ""
 	@echo "Enterprise Edition:"
 	@echo "  make dev-ent          Start enterprise minimal env"
-	@echo "  make dev-full-ent     Start enterprise full stack"
+	@echo "  make dev-full-ent     Start enterprise full stack (no plugin builds)"
+	@echo "  make dev-full-ent-plugins Enterprise full stack + plugin builder"
 	@echo ""
 	@echo "Detached Mode (for automation/Claude):"
 	@echo "  make dev-start        Start minimal env (detached)"
 	@echo "  make dev-start-full   Start full stack (detached)"
 	@echo "  make dev-start-ent    Start enterprise minimal (detached)"
-	@echo "  make dev-start-full-ent Start enterprise full (detached)"
+	@echo "  make dev-start-full-ent Start enterprise full (detached, no plugin builds)"
+	@echo "  make dev-start-full-ent-plugins Enterprise full + plugins (detached)"
 	@echo ""
 	@echo "Management:"
 	@echo "  make dev-down         Stop all containers"
@@ -1109,7 +1119,7 @@ dev-help:
 	@echo "Hot Reloading:"
 	@echo "  - Edit Go files → Air rebuilds in ~2-3 seconds"
 	@echo "  - Edit React files → HMR updates instantly"
-	@echo "  - Edit plugins → Auto-rebuilt by watcher (full mode)"
+	@echo "  - Edit plugins → Auto-rebuilt by watcher (full mode; *-plugins targets in ent)"
 	@echo ""
 	@echo "See dev/README.md for full documentation"
 
@@ -1140,7 +1150,7 @@ dev-start-full:
 		cp dev/.env.gateway.dev dev/.env.gateway; \
 		echo "📝 Created dev/.env.gateway from template"; \
 	fi
-	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml up --build -d
+	cd dev && docker compose --profile plugins -f docker-compose.yml -f docker-compose.full.yml up --build -d
 	@echo "✅ Environment started. Use 'make dev-status' to check."
 
 # Start enterprise dev env in detached mode
@@ -1194,8 +1204,12 @@ dev-start-full-ent:
 		cp dev/.env.gateway.dev dev/.env.gateway; \
 		echo "📝 Created dev/.env.gateway from template"; \
 	fi
-	cd dev && docker compose -f docker-compose.yml -f docker-compose.full.yml -f docker-compose.ent.yml -f docker-compose.full-ent.yml up --build -d
+	cd dev && docker compose $(PLUGIN_PROFILE) -f docker-compose.yml -f docker-compose.full.yml -f docker-compose.ent.yml -f docker-compose.full-ent.yml up --build -d
 	@echo "✅ Environment started. Use 'make dev-status' to check."
+
+# Start full enterprise environment with the plugin builder (detached)
+dev-start-full-ent-plugins: PLUGIN_PROFILE = --profile plugins
+dev-start-full-ent-plugins: dev-start-full-ent
 
 # ============================================================================
 # Non-blocking Log Commands (for automation/Claude Code)

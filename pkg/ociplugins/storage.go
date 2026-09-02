@@ -29,13 +29,17 @@ var digestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 // "-" (e.g. "linux-amd64").
 var archNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 
-// validateDigest rejects digests that are not plain SHA-256 hex, preventing
-// path traversal out of the storage root.
-func validateDigest(digest string) error {
-	if !digestPattern.MatchString(digest) {
-		return fmt.Errorf("invalid content digest %q", digest)
+// normalizeDigest rejects digests that are not SHA-256, preventing path
+// traversal out of the storage root, and returns the bare hex form used to
+// build filenames. OCI references carry the algorithm prefix
+// ("sha256:<hex>"), while blobs stored locally are keyed by hex alone, so
+// both spellings are accepted and normalised to one on-disk name.
+func normalizeDigest(digest string) (string, error) {
+	hexDigest := strings.TrimPrefix(digest, "sha256:")
+	if !digestPattern.MatchString(hexDigest) {
+		return "", fmt.Errorf("invalid content digest %q", digest)
 	}
-	return nil
+	return hexDigest, nil
 }
 
 // archFileComponent converts a platform string (e.g. "linux/amd64") to a safe
@@ -154,10 +158,11 @@ func (s *ContentStorage) StoreBlob(data []byte) (string, error) {
 
 // GetBlob retrieves blob data by digest
 func (s *ContentStorage) GetBlob(digest string) ([]byte, error) {
-	if err := validateDigest(digest); err != nil {
+	hexDigest, err := normalizeDigest(digest)
+	if err != nil {
 		return nil, err
 	}
-	blobPath := filepath.Join(s.getCASDir(), digest)
+	blobPath := filepath.Join(s.getCASDir(), hexDigest)
 	data, err := os.ReadFile(blobPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -170,17 +175,10 @@ func (s *ContentStorage) GetBlob(digest string) ([]byte, error) {
 
 // StoreExecutable stores a plugin binary and returns the executable path
 func (s *ContentStorage) StoreExecutable(digest, arch string, data []byte) (string, error) {
-	if err := validateDigest(digest); err != nil {
-		return "", err
-	}
-	archName, err := archFileComponent(arch)
+	execPath, err := s.executablePath(digest, arch)
 	if err != nil {
 		return "", err
 	}
-
-	// Generate executable filename
-	execName := fmt.Sprintf("sha256-%s-%s", digest, archName)
-	execPath := filepath.Join(s.getBinsDir(), execName)
 
 	// Check if already exists
 	if _, err := os.Stat(execPath); err == nil {
@@ -215,16 +213,38 @@ func (s *ContentStorage) StoreExecutable(digest, arch string, data []byte) (stri
 	return execPath, nil
 }
 
-// GetExecutablePath returns the path to an executable by digest and architecture
+// executablePath validates digest and arch before building the executable
+// path, confining the result to the bins directory.
+func (s *ContentStorage) executablePath(digest, arch string) (string, error) {
+	hexDigest, err := normalizeDigest(digest)
+	if err != nil {
+		return "", err
+	}
+	archName, err := archFileComponent(arch)
+	if err != nil {
+		return "", err
+	}
+	execName := fmt.Sprintf("sha256-%s-%s", hexDigest, archName)
+	return filepath.Join(s.getBinsDir(), execName), nil
+}
+
+// GetExecutablePath returns the path to an executable by digest and
+// architecture, or "" if either is not a valid path component.
 func (s *ContentStorage) GetExecutablePath(digest, arch string) string {
-	execName := fmt.Sprintf("sha256-%s-%s", digest, strings.ReplaceAll(arch, "/", "-"))
-	return filepath.Join(s.getBinsDir(), execName)
+	execPath, err := s.executablePath(digest, arch)
+	if err != nil {
+		return ""
+	}
+	return execPath
 }
 
 // HasExecutable checks if an executable exists for the given digest and architecture
 func (s *ContentStorage) HasExecutable(digest, arch string) bool {
-	execPath := s.GetExecutablePath(digest, arch)
-	_, err := os.Stat(execPath)
+	execPath, err := s.executablePath(digest, arch)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(execPath)
 	return err == nil
 }
 
@@ -549,14 +569,15 @@ func (s *ContentStorage) LoadMetadata(digest, arch string) (*PluginMetadata, err
 // metadataPath validates digest and arch before building the metadata path,
 // confining the result to the metadata directory.
 func (s *ContentStorage) metadataPath(digest, arch string) (string, error) {
-	if err := validateDigest(digest); err != nil {
+	hexDigest, err := normalizeDigest(digest)
+	if err != nil {
 		return "", err
 	}
 	archName, err := archFileComponent(arch)
 	if err != nil {
 		return "", err
 	}
-	filename := fmt.Sprintf("sha256-%s-%s.json", digest, archName)
+	filename := fmt.Sprintf("sha256-%s-%s.json", hexDigest, archName)
 	return filepath.Join(s.getMetadataDir(), filename), nil
 }
 

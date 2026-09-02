@@ -43,7 +43,8 @@ That's it! The environment will automatically:
 | `make dev` | Start minimal env (Studio + Frontend + Postgres) |
 | `make dev-full` | Start full stack (+ Gateway + Plugin watcher) |
 | `make dev-ent` | Start enterprise minimal env |
-| `make dev-full-ent` | Start enterprise full stack |
+| `make dev-full-ent` | Start enterprise full stack (no plugin builds) |
+| `make dev-full-ent-plugins` | Enterprise full stack + plugin builder/watcher |
 
 ### Managing the Environment
 

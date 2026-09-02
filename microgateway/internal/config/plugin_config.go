@@ -44,6 +44,9 @@ type OCIPluginConfig struct {
 	CacheDir     string `env:"OCI_PLUGINS_CACHE_DIR" envDefault:"/var/lib/microgateway/plugins"`
 	MaxCacheSize int64  `env:"OCI_PLUGINS_MAX_CACHE_SIZE" envDefault:"1073741824"` // 1GB
 
+	// Bounds a single plugin binary (see ociplugins.OCIConfig.MaxPluginSize)
+	MaxPluginSize int64 `env:"OCI_PLUGINS_MAX_PLUGIN_SIZE" envDefault:"536870912"` // 512MB
+
 	// Default security settings
 	DefaultPublicKeys []string `env:"OCI_PLUGINS_DEFAULT_PUBKEYS" envSeparator:","`
 	AllowedRegistries []string `env:"OCI_PLUGINS_ALLOWED_REGISTRIES" envSeparator:","`
@@ -72,6 +75,7 @@ func (c *OCIPluginConfig) ToOCIConfig() *ociplugins.OCIConfig {
 	return &ociplugins.OCIConfig{
 		CacheDir:           c.CacheDir,
 		MaxCacheSize:       c.MaxCacheSize,
+		MaxPluginSize:      c.MaxPluginSize,
 		DefaultPublicKeys:  ociplugins.LoadPublicKeysFromEnv(),
 		AllowedRegistries:  c.AllowedRegistries,
 		RegistryAuth:       ociplugins.LoadRegistryAuthFromEnv(),

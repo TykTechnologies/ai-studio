@@ -62,7 +62,8 @@ echo "OPENAI_API_KEY=sk-..." >> dev/.env.secrets
 
 # Start enterprise dev environment
 make dev-ent
-make dev-full-ent
+make dev-full-ent            # Plugins are NOT built (fast start)
+make dev-full-ent-plugins    # Adds the plugin builder/watcher when you need it
 ```
 
 ### Building
