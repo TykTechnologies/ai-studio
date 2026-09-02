@@ -78,6 +78,12 @@ Complete reference for all microgateway environment variables organized by funct
 | `GATEWAY_MAX_RESPONSE_SIZE` | 50MB | Maximum response body size |
 | `GATEWAY_DEFAULT_RATE_LIMIT` | 100 | Default requests per minute |
 
+### Unified Endpoint
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GATEWAY_UNIFIED_ROUTER_PATH` | /v1 | Base path of the unified OpenAI-compatible endpoint (`{base}/chat/completions`, `{base}/completions`, `{base}/models`); move it when embedding in a host that owns `/v1` |
+| `GATEWAY_UNIFIED_ROUTER_DISABLED` | false | Remove the unified endpoint entirely; per-route endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected |
+
 ### Features
 | Variable | Default | Description |
 |----------|---------|-------------|

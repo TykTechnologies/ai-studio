@@ -1,8 +1,8 @@
 package proxy
 
-// Unified router endpoint: a fixed OpenRouter-style ingress (/v1/chat/completions,
-// /v1/completions) that accepts OpenAI-format requests with "vendor/model" model
-// strings. The vendor prefix is resolved against the gateway's LLM route table and
+// Unified router endpoint: an OpenRouter-style ingress (by default
+// /v1/chat/completions and /v1/completions) that accepts OpenAI-format requests
+// with "vendor/model" model strings. The vendor prefix is resolved against the gateway's LLM route table and
 // the request is rewritten to the existing /ai/{routeId}/v1/... shim path, then
 // handed to the /ai/ handler chain directly — no HTTP hop and no new middleware.
 // Auth, app→LLM access checks, AllowedModels enforcement, and streaming all run
@@ -20,14 +20,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
-// maxUnifiedRouterBodyBytes caps how much of a /v1/ completion request body the
+// maxUnifiedRouterBodyBytes caps how much of a unified-router completion request body the
 // router will buffer for model extraction. Generous enough for vision payloads,
 // small enough that oversized bodies cannot exhaust gateway memory.
 const maxUnifiedRouterBodyBytes = 10 << 20 // 10 MB
@@ -36,6 +38,54 @@ const maxUnifiedRouterBodyBytes = 10 << 20 // 10 MB
 // becomes a URL path segment, so this is defense-in-depth against traversal or
 // control characters even though unknown slugs cannot match a real route.
 var unifiedRouteSlugPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// DefaultUnifiedRouterBasePath is where the unified ingress lives unless the
+// embedder moves it. It matches the OpenAI/OpenRouter convention so an unmodified
+// SDK pointed at the gateway root works with no path configuration.
+const DefaultUnifiedRouterBasePath = "/v1"
+
+// unifiedShimBasePath is the base path of the per-route shim endpoints
+// (/ai/{routeId}/v1/...). It is an internal, fixed detail of the /ai/ mux and
+// does NOT move when the ingress base path is reconfigured.
+const unifiedShimBasePath = "/v1"
+
+// unifiedBasePathSegmentPattern is the shape every segment of a configured
+// ingress base path must have. The base path is registered as a route pattern in
+// this proxy's mux and in whatever router the host mounts the handler in, so
+// characters those routers give meaning to (":" and "{}" for path variables, "*"
+// for catch-alls) must not reach them from configuration.
+var unifiedBasePathSegmentPattern = regexp.MustCompile(`^[A-Za-z0-9._~-]+$`)
+
+// NormalizeUnifiedRouterBasePath cleans a configured ingress base path into the
+// form the router matches on: a leading slash, no trailing slash, no empty or
+// dot segments. Empty or unusable input falls back to DefaultUnifiedRouterBasePath:
+// a gateway with the ingress silently mounted at "/" would swallow every other
+// route, and a segment carrying router metacharacters would register a wildcard
+// or path-variable route instead of the literal prefix the operator asked for.
+//
+// Embedders that need the ingress gone entirely disable it (Config.DisableUnifiedRouter)
+// rather than passing an empty path.
+func NormalizeUnifiedRouterBasePath(basePath string) string {
+	p := strings.TrimSpace(basePath)
+	if p == "" {
+		return DefaultUnifiedRouterBasePath
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	p = path.Clean(p)
+	if p == "/" || p == "." {
+		return DefaultUnifiedRouterBasePath
+	}
+	for _, segment := range strings.Split(strings.TrimPrefix(p, "/"), "/") {
+		if !unifiedBasePathSegmentPattern.MatchString(segment) {
+			logger.Warnf("Invalid unified router base path %q (segment %q); falling back to %s",
+				basePath, segment, DefaultUnifiedRouterBasePath)
+			return DefaultUnifiedRouterBasePath
+		}
+	}
+	return p
+}
 
 // ParseUnifiedModel splits an OpenRouter-style model string into its vendor route
 // prefix and the bare model name. The split is on the FIRST slash so model names
@@ -57,13 +107,17 @@ func ParseUnifiedModel(model string) (route string, bareModel string, err error)
 // before route resolution. An anonymous caller therefore always gets 401 and
 // cannot enumerate configured route slugs from 404-vs-401 responses; the /ai/
 // shim produces the vendor-not-found 404 after auth.
-func NewUnifiedRouterHandler(next http.Handler) http.Handler {
+func NewUnifiedRouterHandler(next http.Handler, basePath string) http.Handler {
+	base := NormalizeUnifiedRouterBasePath(basePath)
+	chatCompletionsPath := base + "/chat/completions"
+	completionsPath := base + "/completions"
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Only the completion endpoints carry a routable model field. Everything
-		// else under /v1/ (e.g. GET /v1/models) passes through untouched so the
-		// authenticated chain can serve or reject it.
+		// else under the base path (e.g. GET {base}/models) passes through untouched
+		// so the authenticated chain can serve or reject it.
 		if r.Method != http.MethodPost ||
-			(r.URL.Path != "/v1/chat/completions" && r.URL.Path != "/v1/completions") {
+			(r.URL.Path != chatCompletionsPath && r.URL.Path != completionsPath) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -123,8 +177,9 @@ func NewUnifiedRouterHandler(next http.Handler) http.Handler {
 			return
 		}
 
-		// /v1/<rest> -> /ai/<route>/v1/<rest>; the /ai/ mux extracts routeId itself.
-		r.URL.Path = "/ai/" + route + r.URL.Path
+		// {base}/<rest> -> /ai/<route>/v1/<rest>; the /ai/ mux extracts routeId itself.
+		// The shim base path is fixed even when the ingress base path is not.
+		r.URL.Path = "/ai/" + route + unifiedShimBasePath + strings.TrimPrefix(r.URL.Path, base)
 		r.Body = io.NopCloser(bytes.NewReader(newBody))
 		r.ContentLength = int64(len(newBody))
 
@@ -144,7 +199,7 @@ type unifiedModelList struct {
 	Data   []unifiedModelInfo `json:"data"`
 }
 
-// handleUnifiedListModels serves GET /v1/models. It is registered BEHIND the
+// handleUnifiedListModels serves GET {unified router base path}/models. It is registered BEHIND the
 // credential middleware and lists only the routes the authenticated app is
 // associated with, as "{routeSlug}/{model}" ids ready to send back to the
 // unified router. Model names come from each route's AllowedModels plus its

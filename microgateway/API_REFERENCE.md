@@ -562,13 +562,29 @@ Proxies streaming requests to the specified LLM provider.
 **POST** `/v1/completions`
 **GET** `/v1/models`
 
-A single fixed ingress for all configured LLM routes. The request body is OpenAI
+A single ingress for all configured LLM routes. The request body is OpenAI
 format, and the `model` field selects the route: it must be
 `{llmSlug}/{model}` (e.g. `openai/gpt-4o`, split on the first `/`). The gateway
 strips the slug prefix and dispatches to the matching `/ai/{llmSlug}/v1/...`
 shim in-process, so auth, model allow-lists, and analytics behave exactly like a
 direct per-route call. This lets clients hot-swap vendor and model per request
 with one base URL (`https://<gateway>/v1`) and one credential, OpenRouter-style.
+
+**Configuring the path.** The gateway is embeddable in hosts that already own
+`/v1`, so the ingress is not fixed:
+
+| Setting | Default | Effect |
+|---------|---------|--------|
+| `GATEWAY_UNIFIED_ROUTER_PATH` | `/v1` | Base path of all three endpoints — set e.g. `/ai-gateway/v1` and they become `/ai-gateway/v1/chat/completions`, `/ai-gateway/v1/completions`, `/ai-gateway/v1/models` |
+| `GATEWAY_UNIFIED_ROUTER_DISABLED` | `false` | `true` removes the ingress entirely; the path is left free for the host, and only the per-route endpoints (`/ai/`, `/llm/`, `/anthropic/`) are served |
+
+The value is normalized (a leading slash is added, a trailing slash dropped);
+`/` is refused and falls back to `/v1`, since a root ingress would shadow every
+other gateway route. The internal per-route shim path (`/ai/{llmSlug}/v1/...`)
+does not move with it. Library embedders set the same two options through
+`aigateway.Config.UnifiedRouterBasePath` / `.DisableUnifiedRouter`, and read the
+effective prefix back from `Gateway.UnifiedRouterBasePath()` (empty when
+disabled) when mounting the handler in their own router.
 
 **Errors:**
 - `401` — missing/invalid credentials (checked before route resolution, so

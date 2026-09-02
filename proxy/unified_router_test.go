@@ -54,9 +54,14 @@ func TestParseUnifiedModel(t *testing.T) {
 	}
 }
 
-// newUnifiedTestHandler builds a UnifiedRouterHandler whose downstream records
-// the request it receives.
+// newUnifiedTestHandler builds a UnifiedRouterHandler on the default base path
+// whose downstream records the request it receives.
 func newUnifiedTestHandler() (http.Handler, *unifiedRecordedRequest) {
+	return newUnifiedTestHandlerAt("")
+}
+
+// newUnifiedTestHandlerAt is newUnifiedTestHandler with an explicit ingress base path.
+func newUnifiedTestHandlerAt(basePath string) (http.Handler, *unifiedRecordedRequest) {
 	rec := &unifiedRecordedRequest{}
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec.called = true
@@ -70,7 +75,7 @@ func newUnifiedTestHandler() (http.Handler, *unifiedRecordedRequest) {
 		rec.contentLength = r.ContentLength
 		w.WriteHeader(http.StatusOK)
 	})
-	h := NewUnifiedRouterHandler(next)
+	h := NewUnifiedRouterHandler(next, basePath)
 	return h, rec
 }
 
@@ -405,5 +410,162 @@ func TestUnifiedRouter_ProxyWiring(t *testing.T) {
 		// requests must never see the model list.
 		assert.NotEqual(t, http.StatusOK, w.Code)
 		assert.NotContains(t, w.Body.String(), "mock-llm")
+	})
+}
+
+func TestNormalizeUnifiedRouterBasePath(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"empty falls back to default", "", "/v1"},
+		{"whitespace falls back to default", "   ", "/v1"},
+		{"default passes through", "/v1", "/v1"},
+		{"missing leading slash is added", "openai", "/openai"},
+		{"trailing slash is trimmed", "/v1/", "/v1"},
+		{"nested prefix", "/ai-gateway/v1", "/ai-gateway/v1"},
+		{"double slashes collapse", "//ai//v1//", "/ai/v1"},
+		{"dot segments resolve", "/ai/./v1", "/ai/v1"},
+		// A root ingress would swallow every other gateway route, so it is refused
+		// in favour of the default; disabling is a separate, explicit switch.
+		{"root falls back to default", "/", "/v1"},
+		// Router metacharacters would register a path variable or catch-all instead
+		// of a literal prefix, in this proxy's mux or in the host's router.
+		{"path variable is refused", "/{tenant}/v1", "/v1"},
+		{"gin-style param is refused", "/:tenant/v1", "/v1"},
+		{"wildcard is refused", "/v1/*path", "/v1"},
+		{"spaces are refused", "/my gateway/v1", "/v1"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, NormalizeUnifiedRouterBasePath(tc.input))
+		})
+	}
+}
+
+// TestConfig_UnifiedRouterBasePath covers the config accessor the handler wiring
+// reads: defaults apply for an absent or empty config, and disabling wins over any
+// configured path.
+func TestConfig_UnifiedRouterBasePath(t *testing.T) {
+	var absent *Config
+	assert.Equal(t, DefaultUnifiedRouterBasePath, absent.unifiedRouterBasePath(),
+		"a nil config means defaults, not a disabled ingress")
+	assert.Equal(t, DefaultUnifiedRouterBasePath, (&Config{}).unifiedRouterBasePath())
+	assert.Equal(t, "/ai-gateway/v1", (&Config{UnifiedRouterBasePath: "ai-gateway/v1/"}).unifiedRouterBasePath(),
+		"the configured path must be normalized")
+	assert.Equal(t, "", (&Config{DisableUnifiedRouter: true}).unifiedRouterBasePath())
+	assert.Equal(t, "", (&Config{UnifiedRouterBasePath: "/ai-gateway/v1", DisableUnifiedRouter: true}).unifiedRouterBasePath(),
+		"disabling must win over a configured path")
+}
+
+func TestUnifiedRouterHandler_CustomBasePath(t *testing.T) {
+	h, rec := newUnifiedTestHandlerAt("/ai-gateway/v1")
+
+	t.Run("rewrites to the fixed shim path", func(t *testing.T) {
+		w := postJSON(t, h, "/ai-gateway/v1/chat/completions",
+			`{"model":"openai/gpt-4o","messages":[{"role":"user","content":"hi"}]}`)
+
+		require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+		require.True(t, rec.called)
+		// The shim base path stays /v1 no matter where the ingress is mounted.
+		assert.Equal(t, "/ai/openai/v1/chat/completions", rec.path)
+
+		var body map[string]any
+		require.NoError(t, json.Unmarshal(rec.body, &body))
+		assert.Equal(t, "gpt-4o", body["model"], "vendor prefix must still be stripped")
+	})
+
+	t.Run("legacy default path is no longer routed", func(t *testing.T) {
+		rec.called, rec.path = false, ""
+		w := postJSON(t, h, "/v1/chat/completions", `{"model":"openai/gpt-4o","messages":[]}`)
+
+		// Not a match for this ingress: passed through unrewritten rather than routed.
+		require.Equal(t, http.StatusOK, w.Code)
+		require.True(t, rec.called)
+		assert.Equal(t, "/v1/chat/completions", rec.path)
+	})
+
+	t.Run("completions endpoint moves with the base path", func(t *testing.T) {
+		rec.called, rec.path = false, ""
+		w := postJSON(t, h, "/ai-gateway/v1/completions", `{"model":"openai/gpt-4o-instruct","prompt":"hi"}`)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.True(t, rec.called)
+		assert.Equal(t, "/ai/openai/v1/completions", rec.path)
+	})
+}
+
+// TestUnifiedRouter_ConfigurableIngress covers the two embedding knobs through the
+// full proxy handler: moving the ingress off /v1, and removing it entirely, so a
+// host gateway (e.g. Tyk's API Gateway) can own that path space itself.
+func TestUnifiedRouter_ConfigurableIngress(t *testing.T) {
+	db, cancel := setupTest(t)
+	defer tearDownTest(db, cancel)
+
+	service := services.NewService(db)
+	notificationSvc := services.NewTestNotificationService(db)
+	budgetSvc := budget.NewService(db, notificationSvc)
+
+	llm := &models.LLM{Name: "Mock LLM", Vendor: models.MOCK_VENDOR, Active: true}
+	require.NoError(t, db.Create(llm).Error)
+
+	t.Run("custom base path", func(t *testing.T) {
+		p := New(service, budgetSvc, &Config{Port: 0, UnifiedRouterBasePath: "/ai-gateway/v1"})
+		require.NoError(t, p.Reload())
+		handler := p.Handler()
+
+		assert.Equal(t, "/ai-gateway/v1", p.UnifiedRouterBasePath())
+
+		// Reaching the /ai/ auth middleware (401) proves the rewrite + forward happened.
+		w := postJSON(t, handler, "/ai-gateway/v1/chat/completions",
+			`{"model":"mock-llm/mock-model","messages":[{"role":"user","content":"hi"}]}`)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+		// Format errors are still produced at the configured path.
+		w = postJSON(t, handler, "/ai-gateway/v1/chat/completions", `{"model":"gpt-4o","messages":[]}`)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, oaiErrorMessage(t, w.Body.Bytes()), "<vendor>/<model>")
+
+		// The default path is no longer claimed by the proxy: it falls through to the
+		// normal authenticated router, which rejects it as an unknown path.
+		w = postJSON(t, handler, "/v1/chat/completions", `{"model":"mock-llm/mock-model","messages":[]}`)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "invalid request path")
+
+		// Model discovery moves with the ingress and is never served unauthenticated.
+		req := httptest.NewRequest(http.MethodGet, "/ai-gateway/v1/models", nil)
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		assert.NotEqual(t, http.StatusOK, w.Code)
+		assert.NotContains(t, w.Body.String(), "mock-llm")
+
+		req = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		assert.NotEqual(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		p := New(service, budgetSvc, &Config{Port: 0, DisableUnifiedRouter: true})
+		require.NoError(t, p.Reload())
+		handler := p.Handler()
+
+		assert.Equal(t, "", p.UnifiedRouterBasePath(), "disabled ingress must report no path to mount")
+
+		// Nothing intercepts the path any more, so it is just an unknown route.
+		w := postJSON(t, handler, "/v1/chat/completions", `{"model":"mock-llm/mock-model","messages":[]}`)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Contains(t, w.Body.String(), "invalid request path")
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		assert.NotEqual(t, http.StatusOK, w.Code)
+		assert.NotContains(t, w.Body.String(), "mock-llm")
+
+		// Per-route endpoints are unaffected by disabling the unified ingress.
+		w = postJSON(t, handler, "/ai/mock-llm/v1/chat/completions", `{"model":"mock-model","messages":[]}`)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }

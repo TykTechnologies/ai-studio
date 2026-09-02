@@ -40,6 +40,12 @@ type AppConf struct {
 	DataSourceDisplayURL string
 	ServerPort           string
 	ProxyPort            int
+	// UnifiedRouterPath moves the gateway's OpenRouter-style single endpoint
+	// ({base}/chat/completions, {base}/completions, {base}/models) off its default
+	// "/v1". UnifiedRouterDisabled removes it altogether. Both exist because the
+	// gateway is embeddable in hosts that own the "/v1" path space.
+	UnifiedRouterPath     string
+	UnifiedRouterDisabled bool
 	CertFile              string
 	KeyFile               string
 	DisableCors           bool
@@ -314,6 +320,15 @@ func getConfigFromEnv(envFile string) *AppConf {
 	proxyOnlyStr := os.Getenv("PROXY_ONLY")
 	if proxyOnlyStr == "true" || proxyOnlyStr == "1" {
 		conf.ProxyOnly = true
+	}
+
+	conf.UnifiedRouterPath = strings.TrimSpace(os.Getenv("UNIFIED_ROUTER_PATH"))
+	unifiedDisabledStr := os.Getenv("UNIFIED_ROUTER_DISABLED")
+	if unifiedDisabledStr == "true" || unifiedDisabledStr == "1" {
+		conf.UnifiedRouterDisabled = true
+		cfgLog.Info().Msg("Unified router endpoint disabled; only per-route LLM endpoints are served")
+	} else if conf.UnifiedRouterPath != "" {
+		cfgLog.Info().Msgf("Unified router endpoint mounted at %s", conf.UnifiedRouterPath)
 	}
 
 	// Docs server configuration - read port first so we can use it in default URL

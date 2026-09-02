@@ -73,3 +73,29 @@ func BenchmarkGatewayCreation(b *testing.B) {
 	//     _ = gateway
 	// }
 }
+
+// TestUnifiedRouterOptionsReachProxy proves the wrapper's unified-router options
+// are not dropped on the way to the proxy, and that the effective prefix is
+// readable back through the Gateway interface — which is how an embedding host
+// knows what path to mount (and that it must mount nothing when disabled).
+func TestUnifiedRouterOptionsReachProxy(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *Config
+		want   string
+	}{
+		{"default", &Config{}, "/v1"},
+		{"custom base path", &Config{UnifiedRouterBasePath: "/ai-gateway/v1"}, "/ai-gateway/v1"},
+		{"normalized", &Config{UnifiedRouterBasePath: "ai-gateway/v1/"}, "/ai-gateway/v1"},
+		{"disabled", &Config{DisableUnifiedRouter: true}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// No services are needed: only configuration is read here.
+			g := NewWithAnalytics(nil, nil, nil, tc.config)
+			if got := g.UnifiedRouterBasePath(); got != tc.want {
+				t.Errorf("UnifiedRouterBasePath() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
