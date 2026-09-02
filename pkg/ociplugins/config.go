@@ -23,6 +23,11 @@ type OCIConfig struct {
 	CacheDir     string `yaml:"cache_dir" json:"cache_dir"`
 	MaxCacheSize int64  `yaml:"max_cache_size" json:"max_cache_size"`
 
+	// MaxPluginSize bounds a single plugin binary. Layer sizes come from
+	// registry-supplied descriptors, so the binary is streamed against this
+	// limit rather than trusting the descriptor.
+	MaxPluginSize int64 `yaml:"max_plugin_size" json:"max_plugin_size"`
+
 	// Default security settings
 	DefaultPublicKeys []string `yaml:"default_public_keys" json:"default_public_keys"`
 	AllowedRegistries []string `yaml:"allowed_registries" json:"allowed_registries"`
@@ -130,6 +135,7 @@ func DefaultOCIConfig() *OCIConfig {
 	config := &OCIConfig{
 		CacheDir:          "/var/lib/microgateway/plugins",
 		MaxCacheSize:      1024 * 1024 * 1024, // 1GB
+		MaxPluginSize:     DefaultMaxPluginSize,
 		DefaultPublicKeys: []string{},
 		AllowedRegistries: []string{},
 		RegistryAuth:      make(map[string]RegistryAuth),

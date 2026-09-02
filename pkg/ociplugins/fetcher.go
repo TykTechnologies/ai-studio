@@ -5,14 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 
-	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/content/memory"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
@@ -27,6 +26,11 @@ import (
 // internal-network policy at dial time (post-DNS), so a rebinding DNS answer
 // cannot bypass the SSRF protection.
 var registryHTTPClient = &http.Client{Transport: netguard.ValidatingHTTPTransport()}
+
+// DefaultMaxPluginSize bounds a single plugin binary when the configuration
+// does not set MaxPluginSize. Plugin binaries are statically linked Go
+// executables and routinely run to tens of megabytes.
+const DefaultMaxPluginSize = 512 * 1024 * 1024 // 512MB
 
 // ORASFetcher handles OCI artifact fetching using oras-go
 type ORASFetcher struct {
@@ -58,9 +62,6 @@ func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPl
 		return nil, nil, nil, fmt.Errorf("failed to configure authentication: %w", err)
 	}
 
-	// Create memory store for fetched content
-	store := memory.New()
-
 	// Determine reference (digest or tag)
 	reference := ref.Digest
 	if reference == "" {
@@ -70,27 +71,29 @@ func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPl
 		}
 	}
 
-	// Copy manifest and blobs from remote to local store
-	descriptor, err := oras.Copy(ctx, repo, reference, store, reference, oras.DefaultCopyOptions)
+	// Resolve the reference and read blobs straight from the registry. An
+	// intermediate store would have to hold every blob in the artifact,
+	// including the binaries for platforms this host will never run.
+	descriptor, err := repo.Resolve(ctx, reference)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to pull artifact: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to resolve reference: %w", err)
 	}
 
 	// Check if this is a multi-arch image index
 	switch descriptor.MediaType {
 	case ocispec.MediaTypeImageIndex, "application/vnd.docker.distribution.manifest.list.v2+json":
 		// Handle multi-arch index - resolve to platform-specific manifest
-		return f.pullFromIndex(ctx, store, &descriptor, params)
+		return f.pullFromIndex(ctx, repo, &descriptor, params)
 	}
 
 	// Handle single-platform manifest
-	return f.pullFromManifest(ctx, store, &descriptor, params)
+	return f.pullFromManifest(ctx, repo, &descriptor, params)
 }
 
 // pullFromManifest extracts plugin data from a single-platform manifest
-func (f *ORASFetcher) pullFromManifest(ctx context.Context, store content.Storage, descriptor *ocispec.Descriptor, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
+func (f *ORASFetcher) pullFromManifest(ctx context.Context, fetcher content.Fetcher, descriptor *ocispec.Descriptor, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
 	// Read and parse manifest
-	manifestData, err := content.FetchAll(ctx, store, *descriptor)
+	manifestData, err := content.FetchAll(ctx, fetcher, *descriptor)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 	}
@@ -103,7 +106,7 @@ func (f *ORASFetcher) pullFromManifest(ctx context.Context, store content.Storag
 	// Parse plugin configuration from config blob if present
 	var pluginConfig *PluginConfig
 	if manifest.Config.Size > 0 {
-		configData, err := content.FetchAll(ctx, store, manifest.Config)
+		configData, err := content.FetchAll(ctx, fetcher, manifest.Config)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to fetch config: %w", err)
 		}
@@ -116,7 +119,7 @@ func (f *ORASFetcher) pullFromManifest(ctx context.Context, store content.Storag
 	}
 
 	// Find and extract the plugin binary
-	binaryData, err := f.extractBinary(ctx, store, &manifest, params.Architecture)
+	binaryData, err := f.extractBinary(ctx, fetcher, &manifest, params.Architecture)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to extract binary: %w", err)
 	}
@@ -125,9 +128,9 @@ func (f *ORASFetcher) pullFromManifest(ctx context.Context, store content.Storag
 }
 
 // pullFromIndex handles multi-arch image indexes by selecting the appropriate platform manifest
-func (f *ORASFetcher) pullFromIndex(ctx context.Context, store content.Storage, indexDesc *ocispec.Descriptor, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
+func (f *ORASFetcher) pullFromIndex(ctx context.Context, fetcher content.Fetcher, indexDesc *ocispec.Descriptor, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
 	// Fetch and parse the index
-	indexData, err := content.FetchAll(ctx, store, *indexDesc)
+	indexData, err := content.FetchAll(ctx, fetcher, *indexDesc)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to fetch index: %w", err)
 	}
@@ -149,8 +152,7 @@ func (f *ORASFetcher) pullFromIndex(ctx context.Context, store content.Storage, 
 		return nil, nil, nil, err
 	}
 
-	// The platform-specific manifest should already be in the store from oras.Copy()
-	return f.pullFromManifest(ctx, store, manifestDesc, params)
+	return f.pullFromManifest(ctx, fetcher, manifestDesc, params)
 }
 
 // selectPlatformManifest selects the appropriate manifest from an index based on target architecture
@@ -317,7 +319,7 @@ func (c *basicAuthHTTPClient) Do(req *http.Request) (*http.Response, error) {
 }
 
 // extractBinary finds and extracts the plugin binary from the manifest layers
-func (f *ORASFetcher) extractBinary(ctx context.Context, store content.Storage, manifest *ocispec.Manifest, targetArch string) ([]byte, error) {
+func (f *ORASFetcher) extractBinary(ctx context.Context, fetcher content.Fetcher, manifest *ocispec.Manifest, targetArch string) ([]byte, error) {
 	if len(manifest.Layers) == 0 {
 		return nil, fmt.Errorf("no layers found in manifest")
 	}
@@ -341,13 +343,52 @@ func (f *ORASFetcher) extractBinary(ctx context.Context, store content.Storage, 
 		}
 	}
 
-	// Fetch binary data
-	binaryData, err := content.FetchAll(ctx, store, binaryLayer)
+	// Fetch binary data. content.FetchAll caps reads at 32MB, which ordinary
+	// plugin binaries exceed, so the layer is streamed under the configured
+	// plugin size limit and verified against its descriptor.
+	binaryData, err := f.fetchLayer(ctx, fetcher, binaryLayer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch binary layer: %w", err)
 	}
 
 	return binaryData, nil
+}
+
+// maxPluginSize returns the configured per-plugin size limit.
+func (f *ORASFetcher) maxPluginSize() int64 {
+	if f.config != nil && f.config.MaxPluginSize > 0 {
+		return f.config.MaxPluginSize
+	}
+	return DefaultMaxPluginSize
+}
+
+// fetchLayer reads a blob that may be larger than content.FetchAll allows,
+// bounded by the configured plugin size limit and verified against the
+// descriptor's digest and size.
+func (f *ORASFetcher) fetchLayer(ctx context.Context, fetcher content.Fetcher, desc ocispec.Descriptor) ([]byte, error) {
+	limit := f.maxPluginSize()
+	if desc.Size < 0 || desc.Size > limit {
+		return nil, fmt.Errorf("plugin layer size %d exceeds the %d byte limit", desc.Size, limit)
+	}
+
+	reader, err := fetcher.Fetch(ctx, desc)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	// VerifyReader stops at desc.Size and checks the digest, so a registry
+	// that streams more (or different) bytes than it declared is rejected.
+	verifyReader := content.NewVerifyReader(reader, desc)
+	data, err := io.ReadAll(verifyReader)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyReader.Verify(); err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 // isCompatibleArchitecture checks if the layer architecture is compatible with target

@@ -14,6 +14,9 @@ type OCIConfig struct {
 	CacheDir     string `env:"AI_STUDIO_OCI_CACHE_DIR" envDefault:""`
 	MaxCacheSize int64  `env:"AI_STUDIO_OCI_MAX_CACHE_SIZE" envDefault:"1073741824"` // 1GB
 
+	// Bounds a single plugin binary (see ociplugins.OCIConfig.MaxPluginSize)
+	MaxPluginSize int64 `env:"AI_STUDIO_OCI_MAX_PLUGIN_SIZE" envDefault:"536870912"` // 512MB
+
 	// Security settings
 	AllowedRegistries []string `env:"AI_STUDIO_OCI_ALLOWED_REGISTRIES" envSeparator:","`
 	RequireSignature  bool     `env:"AI_STUDIO_OCI_REQUIRE_SIGNATURE" envDefault:"false"` // More permissive default for AI Studio
@@ -46,6 +49,10 @@ func (c *OCIConfig) SetDefaults() {
 		c.MaxCacheSize = 1024 * 1024 * 1024 // 1GB
 	}
 
+	if c.MaxPluginSize <= 0 {
+		c.MaxPluginSize = ociplugins.DefaultMaxPluginSize
+	}
+
 	if c.Timeout == 0 {
 		c.Timeout = 30 * time.Second
 	}
@@ -71,6 +78,10 @@ func (c *OCIConfig) Validate() error {
 
 	if c.MaxCacheSize <= 0 {
 		return fmt.Errorf("AI_STUDIO_OCI_MAX_CACHE_SIZE must be positive")
+	}
+
+	if c.MaxPluginSize <= 0 {
+		return fmt.Errorf("AI_STUDIO_OCI_MAX_PLUGIN_SIZE must be positive")
 	}
 
 	if c.Timeout <= 0 {
@@ -105,6 +116,7 @@ func (c *OCIConfig) ToOCILibConfig() *ociplugins.OCIConfig {
 	return &ociplugins.OCIConfig{
 		CacheDir:           c.CacheDir,
 		MaxCacheSize:       c.MaxCacheSize,
+		MaxPluginSize:      c.MaxPluginSize,
 		DefaultPublicKeys:  ociplugins.LoadPublicKeysFromEnv(),    // Reuse microgateway function
 		AllowedRegistries:  c.AllowedRegistries,
 		RegistryAuth:       ociplugins.LoadRegistryAuthFromEnv(),  // Reuse microgateway function
