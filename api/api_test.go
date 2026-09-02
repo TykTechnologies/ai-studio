@@ -11,6 +11,7 @@ import (
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/auth"
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
@@ -144,6 +145,59 @@ func TestHandleGetConfig(t *testing.T) {
 			// Note: TIBEnabled is determined by sso.IsEnterpriseAvailable(), not by config
 			// In CE builds, this will always be false; in Enterprise builds with SSO factory registered, it will be true
 			// We don't assert a specific value since it depends on the build edition
+		})
+	}
+}
+
+// The portal renders the gateway's unified ("Main Ingress") endpoint from this
+// value, so it has to follow a relocated base path and go empty when the ingress
+// is switched off -- otherwise the portal advertises a URL that 404s.
+func TestHandleGetConfigUnifiedRouterPath(t *testing.T) {
+	testCases := []struct {
+		name     string
+		path     string
+		disabled string
+		expected string
+	}{
+		{name: "Default", expected: "/v1"},
+		{name: "Relocated", path: "/ai-gw/v1", expected: "/ai-gw/v1"},
+		{name: "Normalized", path: "ai-gw/v1/", expected: "/ai-gw/v1"},
+		{name: "Disabled", path: "/v1", disabled: "true", expected: ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			req := httptest.NewRequest("GET", "/auth/config", nil)
+			req.Host = "example.com"
+			c.Request = req
+
+			if tc.path != "" {
+				os.Setenv("UNIFIED_ROUTER_PATH", tc.path)
+			} else {
+				os.Unsetenv("UNIFIED_ROUTER_PATH")
+			}
+			if tc.disabled != "" {
+				os.Setenv("UNIFIED_ROUTER_DISABLED", tc.disabled)
+			} else {
+				os.Unsetenv("UNIFIED_ROUTER_DISABLED")
+			}
+			config.ResetGlobalConfig()
+			defer func() {
+				os.Unsetenv("UNIFIED_ROUTER_PATH")
+				os.Unsetenv("UNIFIED_ROUTER_DISABLED")
+				config.ResetGlobalConfig()
+			}()
+
+			api := &API{config: &auth.Config{}}
+			api.handleGetConfig(c)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			var response FrontendConfig
+			assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+			assert.Equal(t, tc.expected, response.UnifiedRouterPath)
 		})
 	}
 }

@@ -93,6 +93,10 @@ const AppDetailView = () => {
   const [proxyUrl, setProxyUrl] = useState("");
   const [toolDisplayUrl, setToolDisplayUrl] = useState("");
   const [datasourceDisplayUrl, setDatasourceDisplayUrl] = useState("");
+  // Base path of the gateway's unified ("Main Ingress") OpenAI-compatible
+  // endpoint. Configurable server-side and disable-able, so it comes from
+  // /auth/config; "" means the gateway does not serve it and we advertise nothing.
+  const [unifiedRouterPath, setUnifiedRouterPath] = useState("");
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
   const [appInteractionsData, setAppInteractionsData] = useState(null);
@@ -152,6 +156,9 @@ const AppDetailView = () => {
         setProxyUrl(proxyUrlValue);
         setToolDisplayUrl(toolDisplayUrlValue);
         setDatasourceDisplayUrl(datasourceDisplayUrlValue);
+        setUnifiedRouterPath(
+          config.unifiedRouterPath === undefined ? "/v1" : config.unifiedRouterPath,
+        );
 
         const app = appResponse.data;
         setApp(app);
@@ -252,6 +259,25 @@ const AppDetailView = () => {
         return part.replace(/^\/+/, '').replace(/\/+$/, '');
       })
       .join('/');
+  };
+
+  // Unified ("Main Ingress") endpoint helpers. The base path is whatever the
+  // gateway reports (default "/v1"), so nothing here hardcodes it.
+  const unifiedBaseUrl = () => joinUrlParts(proxyUrl, unifiedRouterPath);
+
+  const unifiedChatCompletionsUrl = () =>
+    joinUrlParts(proxyUrl, unifiedRouterPath, "chat/completions");
+
+  // The model string the Main Ingress expects for a given LLM: "<llm-slug>/<model>".
+  // Prefer the LLM's default model for the example, then its first allowed model,
+  // and fall back to a placeholder when the admin has configured neither.
+  const unifiedModelExample = (llm) => {
+    const slug = generateSlug(llm.attributes.name);
+    const model =
+      llm.attributes.default_model ||
+      (llm.attributes.allowed_models || [])[0] ||
+      "<model>";
+    return `${slug}/${model}`;
   };
 
   const copyToClipboard = (text) => {
@@ -689,6 +715,202 @@ const AppDetailView = () => {
 
       <Paper sx={{ p: 3 }}>
         <SectionTitle>LLM Access Details</SectionTitle>
+
+        {/* Three shapes of endpoint are on offer and they are easy to confuse, so
+            say up-front what each one is for before listing any URLs. */}
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Every endpoint below is authenticated with this app&apos;s credential and
+          enforces the same policies, budgets and filters. They differ in how you
+          choose the model:{" "}
+          <strong>Main Ingress</strong> is one URL covering every LLM in this app and
+          picks the LLM from the request body, while the{" "}
+          <strong>per-LLM endpoints</strong> pin one LLM into the URL itself.
+        </Typography>
+
+        {/* Main Ingress: the gateway's unified OpenAI-compatible ingress. It is
+            app-scoped rather than per-LLM, so it lives above the LLM cards. */}
+        {unifiedRouterPath && appLLMs.length > 0 && (
+          <Card
+            sx={{ mb: 3, border: "1px solid", borderColor: "primary.main" }}
+          >
+            <CardContent>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                <Typography variant="h6">Main Ingress</Typography>
+                <Chip
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  label="One endpoint, all LLMs"
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                A single OpenAI-compatible endpoint that fronts every LLM this app
+                can access. The LLM is selected per request from the{" "}
+                <code>model</code> field, so a client can switch model or vendor
+                without changing its base URL or credential.
+              </Typography>
+
+              <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 0.5 }}>
+                Use this when
+              </Typography>
+              <Box component="ul" sx={{ mt: 0, mb: 2, pl: 3 }}>
+                <Typography component="li" variant="body2" color="text.secondary">
+                  Your client already speaks the OpenAI Chat Completions API (OpenAI
+                  SDKs, LangChain, and most off-the-shelf AI tooling).
+                </Typography>
+                <Typography component="li" variant="body2" color="text.secondary">
+                  You want one base URL for the whole app and want to choose the
+                  model at request time, including across vendors.
+                </Typography>
+                <Typography component="li" variant="body2" color="text.secondary">
+                  You are configuring a tool that only lets you set one base URL and
+                  one API key.
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                <FieldLabel sx={{ minWidth: "130px" }}>MAIN INGRESS:</FieldLabel>
+                <Box>
+                  <Tooltip title="OpenAI-compatible ingress for every LLM in this app. The vendor prefix in the model field selects which LLM handles the request.">
+                    <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                  </Tooltip>
+                </Box>
+                <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                  <Typography
+                    variant="body2"
+                    component="code"
+                    sx={{
+                      fontFamily: "monospace",
+                      bgcolor: "background.paper",
+                      p: 1,
+                      borderRadius: 1,
+                      flexGrow: 1,
+                    }}
+                  >
+                    {unifiedChatCompletionsUrl()}
+                  </Typography>
+                  <IconButton
+                    onClick={() => copyToClipboard(unifiedChatCompletionsUrl())}
+                    size="small"
+                  >
+                    <ContentCopyIcon />
+                  </IconButton>
+                </Box>
+              </Box>
+
+              <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                <FieldLabel sx={{ minWidth: "130px" }}>SDK BASE URL:</FieldLabel>
+                <Box>
+                  <Tooltip title="Set this as base_url / OPENAI_BASE_URL in an OpenAI SDK and use the app secret as the API key. The SDK appends /chat/completions and /models itself.">
+                    <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
+                  </Tooltip>
+                </Box>
+                <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
+                  <Typography
+                    variant="body2"
+                    component="code"
+                    sx={{
+                      fontFamily: "monospace",
+                      bgcolor: "background.paper",
+                      p: 1,
+                      borderRadius: 1,
+                      flexGrow: 1,
+                    }}
+                  >
+                    {unifiedBaseUrl()}
+                  </Typography>
+                  <IconButton
+                    onClick={() => copyToClipboard(unifiedBaseUrl())}
+                    size="small"
+                  >
+                    <ContentCopyIcon />
+                  </IconButton>
+                </Box>
+              </Box>
+
+              {/* The two caveats that make this endpoint different from the per-LLM
+                  ones. Both are 400-level failures if you get them wrong, so they
+                  are called out rather than buried in a tooltip. */}
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <AlertTitle>Different model configuration</AlertTitle>
+                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                  <Typography component="li" variant="body2">
+                    <strong>Models must be namespaced.</strong> Send{" "}
+                    <code>&lt;llm-slug&gt;/&lt;model&gt;</code> rather than a bare model
+                    name — the prefix picks the LLM. A bare name is rejected with{" "}
+                    <strong>400</strong>. See the prefixes for this app below.
+                  </Typography>
+                  <Typography component="li" variant="body2">
+                    <strong>OpenAI format only.</strong> Requests and responses use the
+                    OpenAI Chat Completions schema whatever the upstream vendor is. To
+                    use a vendor&apos;s own SDK and native parameters, use that
+                    LLM&apos;s vendor-native endpoint below instead.
+                  </Typography>
+                  <Typography component="li" variant="body2">
+                    Streaming and non-streaming are both handled automatically from{" "}
+                    <code>stream: true</code>, and{" "}
+                    <code>GET {joinUrlParts(unifiedBaseUrl(), "models")}</code> lists
+                    every model this app can call, already namespaced.
+                  </Typography>
+                </Box>
+              </Alert>
+
+              <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 1 }}>
+                Model names for this app
+              </Typography>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {appLLMs.map((llm) => (
+                  <Box
+                    key={`unified-${llm.id}`}
+                    sx={{ display: "flex", alignItems: "center" }}
+                  >
+                    <FieldLabel sx={{ minWidth: "200px" }}>
+                      {llm.attributes.name}:
+                    </FieldLabel>
+                    <Box
+                      sx={{ flexGrow: 1, display: "flex", alignItems: "center" }}
+                    >
+                      <Typography
+                        variant="body2"
+                        component="code"
+                        sx={{
+                          fontFamily: "monospace",
+                          bgcolor: "background.paper",
+                          p: 1,
+                          borderRadius: 1,
+                          flexGrow: 1,
+                        }}
+                      >
+                        {unifiedModelExample(llm)}
+                      </Typography>
+                      <IconButton
+                        onClick={() => copyToClipboard(unifiedModelExample(llm))}
+                        size="small"
+                      >
+                        <ContentCopyIcon />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", mt: 1 }}
+              >
+                Any model the administrator has allowed on an LLM works with that
+                LLM&apos;s prefix — the names above are examples using each
+                LLM&apos;s default model.
+              </Typography>
+            </CardContent>
+          </Card>
+        )}
+
+        {appLLMs.length > 0 && (
+          <Typography variant="subtitle1" sx={{ fontWeight: "bold", mb: 2 }}>
+            Per-LLM Endpoints
+          </Typography>
+        )}
         {appLLMs.map((llm) => (
           <Card key={llm.id} sx={{ mb: 3 }}>
             <CardContent>
@@ -697,7 +919,8 @@ const AppDetailView = () => {
                 {llm.attributes.short_description}
               </Typography>
 
-              {/* Primary Unified Endpoint Section */}
+              {/* Vendor-native pass-through. Named for what it does rather than
+                  "Unified", which now means the app-wide Main Ingress above. */}
               <Typography
                 variant="subtitle1"
                 sx={{
@@ -706,16 +929,20 @@ const AppDetailView = () => {
                   mb: 1,
                 }}
               >
-                Recommended Endpoint
+                Vendor-native Endpoint
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                Use this unified endpoint that automatically handles both streaming and non-streaming requests based on your request parameters. Works with any vendor SDK or API.
+                Passes your request through in this vendor&apos;s own API format,
+                preserving vendor-specific parameters and response fields. Streaming
+                and non-streaming are detected automatically from the request.{" "}
+                <strong>Use this when</strong> you are working with the vendor&apos;s
+                own SDK, or need a capability the OpenAI schema cannot express.
               </Typography>
 
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-                <FieldLabel sx={{ minWidth: "100px" }}>UNIFIED:</FieldLabel>
+                <FieldLabel sx={{ minWidth: "100px" }}>VENDOR API:</FieldLabel>
                 <Box>
-                  <Tooltip title="This endpoint automatically detects streaming vs non-streaming requests and routes them appropriately. Use with your vendor's native SDK or API.">
+                  <Tooltip title="Pass-through to the vendor's native API for this LLM. Automatically detects streaming vs non-streaming requests. Use with your vendor's native SDK.">
                     <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
                   </Tooltip>
                 </Box>
@@ -760,7 +987,14 @@ const AppDetailView = () => {
                 OpenAI-Compatible Endpoint
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                Use this endpoint with OpenAI SDKs and tools. It translates OpenAI-format requests to your configured vendor's API.
+                Speaks the OpenAI Chat Completions API but is pinned to this one LLM:
+                the URL names the LLM, so the <code>model</code> field takes a plain
+                vendor model name (or is omitted, falling back to the default model
+                the administrator configured).{" "}
+                <strong>Use this when</strong> a client should only ever reach this
+                LLM, or when a tool cannot send a namespaced{" "}
+                <code>&lt;llm-slug&gt;/&lt;model&gt;</code> model string as the Main
+                Ingress requires.
               </Typography>
 
               <Box sx={{ display: "flex", alignItems: "center" }}>
@@ -813,7 +1047,7 @@ const AppDetailView = () => {
                     Anthropic-Compatible Endpoint
                   </Typography>
                   <Typography variant="body2" sx={{ mb: 2 }}>
-                    Use this endpoint with the native Anthropic Messages API. Set it as <code>ANTHROPIC_BASE_URL</code> and pass the app key as <code>ANTHROPIC_AUTH_TOKEN</code> (or <code>ANTHROPIC_API_KEY</code>). Requests are translated to your configured Bedrock model.
+                    Use this endpoint with the native Anthropic Messages API. Set it as <code>ANTHROPIC_BASE_URL</code> and pass the app key as <code>ANTHROPIC_AUTH_TOKEN</code> (or <code>ANTHROPIC_API_KEY</code>). Requests are translated to your configured Bedrock model. <strong>Use this when</strong> the client speaks the Anthropic Messages API — Claude Code, for example — rather than the OpenAI schema.
                   </Typography>
 
                   <Box sx={{ display: "flex", alignItems: "center" }}>
@@ -879,7 +1113,7 @@ const AppDetailView = () => {
                 </AccordionSummary>
                 <AccordionDetails>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    These endpoints require you to manually specify whether your request is streaming or non-streaming. Use the unified endpoint above instead for automatic routing.
+                    These endpoints require you to manually specify whether your request is streaming or non-streaming. Prefer the vendor-native endpoint above, which routes both automatically; these remain only for existing integrations.
                   </Typography>
 
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>

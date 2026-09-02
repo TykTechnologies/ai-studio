@@ -71,6 +71,14 @@ Remember that fundamental system parameters are typically set via environment va
 *   Email Server Settings (`SMTP_*`, `FROM_EMAIL`)
 *   Registration Settings (`ALLOW_REGISTRATIONS`, `FILTER_SIGNUP_DOMAINS`)
 
+### Unified Endpoint (Main Ingress)
+The gateway's OpenAI-compatible ingress (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) sits at `/v1` by default. Move it when embedding the gateway in a host that already owns `/v1`, or remove it entirely; the per-LLM endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected either way.
+
+*   Base path (`UNIFIED_ROUTER_PATH`): default `/v1`
+*   Disable entirely (`UNIFIED_ROUTER_DISABLED`): default `false`
+
+The Microgateway reads the **same settings under different names** — `GATEWAY_UNIFIED_ROUTER_PATH` and `GATEWAY_UNIFIED_ROUTER_DISABLED`. Set both sides to the same value in a hub-and-spoke deployment: the Developer Portal advertises the Main Ingress on an App's detail page using the **hub's** value, so a hub and edge that disagree send developers to a URL the edge does not serve. See [Proxy & API Gateway](./proxy.md#configuring-the-main-ingress).
+
 ### Message Queue Configuration
 *   Queue Type (`QUEUE_TYPE`): `inmemory` (default), `nats`, or `postgres`
 *   Buffer Size (`QUEUE_BUFFER_SIZE`): Default 100

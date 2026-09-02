@@ -13,15 +13,16 @@ jest.mock("../../admin/utils/pubClient", () => ({
 
 jest.mock("react-chartjs-2", () => ({ Line: () => <div data-testid="chart" /> }));
 
+let mockConfig = { apiUrl: "http://localhost", proxyUrl: "http://localhost:9090" };
 jest.mock("../../config", () => ({
-  getConfig: () => ({ apiUrl: "http://localhost", proxyUrl: "http://localhost:9090" }),
+  getConfig: () => mockConfig,
 }));
 
 const pubClient = require("../../admin/utils/pubClient").default;
 
 // The component uses `response.data` directly as the app object, and the
 // accessible-* endpoints as plain arrays.
-const appFixture = (credentialActive) => ({
+const appFixture = (credentialActive, llmIds = []) => ({
   data: {
     id: "1",
     type: "apps",
@@ -33,7 +34,7 @@ const appFixture = (credentialActive) => ({
         secret: "secret-abc",
         active: credentialActive,
       },
-      llm_ids: [],
+      llm_ids: llmIds,
       datasource_ids: [],
       tool_ids: [],
       plugin_resources: [],
@@ -53,9 +54,22 @@ const renderView = () =>
     </ThemeProvider>
   );
 
+const llmFixture = {
+  id: "7",
+  type: "llms",
+  attributes: {
+    name: "Acme OpenAI",
+    vendor: "openai",
+    short_description: "desc",
+    default_model: "gpt-4o",
+    allowed_models: ["gpt-4o", "gpt-4o-mini"],
+  },
+};
+
 describe("AppDetailView credential state", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockConfig = { apiUrl: "http://localhost", proxyUrl: "http://localhost:9090" };
     pubClient.get.mockResolvedValue({ data: [] });
   });
 
@@ -91,5 +105,70 @@ describe("AppDetailView credential state", () => {
     });
     expect(screen.queryByText("Waiting for approval")).not.toBeInTheDocument();
     expect(screen.queryByText("Pending approval")).not.toBeInTheDocument();
+  });
+});
+
+// The Main Ingress is the gateway's single OpenAI-compatible endpoint for the
+// whole app. It differs from the per-LLM endpoints in two ways developers hit as
+// 400s -- namespaced model strings and OpenAI-only payloads -- so the portal has
+// to state both.
+describe("AppDetailView Main Ingress endpoint", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockConfig = {
+      apiUrl: "http://localhost",
+      proxyURL: "http://gw.example.com",
+      unifiedRouterPath: "/v1",
+    };
+    pubClient.get.mockImplementation((url) => {
+      if (url === "/common/apps/1") return Promise.resolve(appFixture(true, [7]));
+      if (url === "/common/accessible-llms")
+        return Promise.resolve({ data: [llmFixture] });
+      return Promise.resolve({ data: [] });
+    });
+  });
+
+  it("advertises the unified endpoint with its namespaced model name", async () => {
+    renderView();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Main Ingress" })
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText("http://gw.example.com/v1/chat/completions")
+    ).toBeInTheDocument();
+    // The model prefix is the LLM slug, not the vendor name.
+    expect(screen.getByText("acme-openai/gpt-4o")).toBeInTheDocument();
+    expect(screen.getByText(/Models must be namespaced/)).toBeInTheDocument();
+    expect(screen.getByText(/OpenAI format only/)).toBeInTheDocument();
+  });
+
+  it("follows a relocated ingress base path", async () => {
+    mockConfig = { ...mockConfig, unifiedRouterPath: "/ai-gw/v1" };
+
+    renderView();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("http://gw.example.com/ai-gw/v1/chat/completions")
+      ).toBeInTheDocument();
+    });
+  });
+
+  // An empty path means the gateway does not serve the ingress at all; showing
+  // it anyway would send developers to a 404.
+  it("hides the section when the ingress is disabled", async () => {
+    mockConfig = { ...mockConfig, unifiedRouterPath: "" };
+
+    renderView();
+
+    await waitFor(() => {
+      expect(screen.getByText("Per-LLM Endpoints")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("heading", { name: "Main Ingress" })
+    ).not.toBeInTheDocument();
   });
 });

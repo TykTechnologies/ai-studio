@@ -1036,6 +1036,11 @@ type FrontendConfig struct {
 	ProxyURL             string            `json:"proxyURL"`
 	ToolDisplayURL       string            `json:"toolDisplayURL"`
 	DataSourceDisplayURL string            `json:"dataSourceDisplayURL"`
+	// UnifiedRouterPath is the base path of the gateway's unified OpenAI-compatible
+	// ingress ({base}/chat/completions), normalized as the proxy itself resolves it.
+	// Empty when the ingress is disabled, so the portal hides it instead of
+	// advertising an endpoint that would 404.
+	UnifiedRouterPath    string            `json:"unifiedRouterPath"`
 	DefaultSignUpMode    string            `json:"defaultSignUpMode"`
 	TIBEnabled           bool              `json:"tibEnabled"`
 	IsEnterprise         bool              `json:"is_enterprise"`
