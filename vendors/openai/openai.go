@@ -153,10 +153,6 @@ func (v *OpenAI) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamin
 			return fmt.Errorf("streaming is required for this endpoint: %s", r.URL.String())
 		}
 
-		if !req.StreamOptions.IncludeUsage {
-			return fmt.Errorf("streaming without usage is not allowed")
-		}
-
 		return nil
 	}
 

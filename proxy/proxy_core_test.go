@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -257,5 +259,28 @@ func TestProxy_Handler(t *testing.T) {
 	t.Run("Get handler returns router", func(t *testing.T) {
 		handler := proxy.Handler()
 		assert.NotNil(t, handler)
+	})
+}
+
+func TestStripStreamOptions(t *testing.T) {
+	t.Run("removes stream_options from body", func(t *testing.T) {
+		input := `{"model":"glm-5p3-flash","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"user","content":"hi"}]}`
+		result, _ := io.ReadAll(stripStreamOptions(strings.NewReader(input)))
+		assert.NotContains(t, string(result), "stream_options")
+		assert.Contains(t, string(result), `"model"`)
+		assert.Contains(t, string(result), `"stream"`)
+		assert.Contains(t, string(result), `"messages"`)
+	})
+
+	t.Run("no-op when stream_options absent", func(t *testing.T) {
+		input := `{"model":"gpt-4","stream":true,"messages":[{"role":"user","content":"hi"}]}`
+		result, _ := io.ReadAll(stripStreamOptions(strings.NewReader(input)))
+		assert.JSONEq(t, input, string(result))
+	})
+
+	t.Run("returns original on invalid JSON", func(t *testing.T) {
+		input := `not json at all`
+		result, _ := io.ReadAll(stripStreamOptions(strings.NewReader(input)))
+		assert.Equal(t, input, string(result))
 	})
 }

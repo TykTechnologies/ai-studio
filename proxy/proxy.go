@@ -1244,8 +1244,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	upstreamURL.RawQuery = r.URL.RawQuery
 
-	// Use r.Body directly as CopyRequestBody has already replaced it with a readable one.
-	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL.String(), r.Body)
+	// Strip stream_options before forwarding — not all upstream models support it,
+	// and the gateway handles usage tracking independently.
+	upstreamBody := stripStreamOptions(r.Body)
+
+	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL.String(), upstreamBody)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to create upstream request for streaming", err, false)
 		return
@@ -1594,6 +1597,29 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time, contentEncoding string) {
 	AnalyzeStreamingResponse(p.gatewayService, llm, app, code, fullResponse, reqBody, req, chunks, timestamp, contentEncoding)
 }
+// stripStreamOptions reads the request body, removes the "stream_options" field
+// (which not all upstream models support), and returns a new reader with the
+// cleaned body. Falls back to the original body on any error.
+func stripStreamOptions(body io.Reader) io.Reader {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return bytes.NewReader(data)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return bytes.NewReader(data)
+	}
+	if _, ok := raw["stream_options"]; !ok {
+		return bytes.NewReader(data)
+	}
+	delete(raw, "stream_options")
+	cleaned, err := json.Marshal(raw)
+	if err != nil {
+		return bytes.NewReader(data)
+	}
+	return bytes.NewReader(cleaned)
+}
+
 func readBodyWithoutConsuming(r *http.Request) ([]byte, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
