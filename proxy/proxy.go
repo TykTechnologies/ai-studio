@@ -961,16 +961,23 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "invalid tool type in context", nil, false)
 		return
 	}
-	var input struct {
-		OperationID string                 `json:"operation_id"`
-		Parameters  map[string][]string    `json:"parameters"`
-		Payload     map[string]interface{} `json:"payload"`
-		Headers     map[string][]string    `json:"headers"`
-	}
+	var input scripting.ToolCallArgs
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		respondWithError(w, http.StatusBadRequest, "invalid request body", err, false)
 		return
 	}
+
+	// Governance filters attached to the tool run on the way in, before the
+	// downstream tool is contacted, and on the way out.
+	identity := toolFilterIdentity(r.Context(), tool)
+	input, block, err := scripting.RunToolInputFilters(r.Context(), tool.Filters, p.gatewayService, input, identity)
+	if block != nil || err != nil {
+		recordToolPolicyBlock(r.Context(), scripting.ToolInputScope)
+		slog.Info("tool call blocked before dispatch", "tool", tool.Name, "operation", input.OperationID, "error", err, "block", block)
+		respondWithError(w, http.StatusForbidden, toolBlockedMessage, nil, false)
+		return
+	}
+
 	t0 := time.Now()
 	result, err := p.gatewayService.CallToolOperation(tool.ID, input.OperationID, input.Parameters, input.Payload, input.Headers)
 	t1 := time.Now()
@@ -980,12 +987,91 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	analytics.RecordToolCall(r.Context(), input.OperationID, time.Now(), int(t1.Sub(t0).Milliseconds()), tool.ID)
+
+	if hasToolOutputFilters(tool) {
+		// Filtering needs the response as text. A result that cannot be
+		// rendered as text cannot be governed, so it is refused rather than
+		// passed through unfiltered.
+		body, err := toolResultBody(result)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, "failed to read tool response", err, false)
+			return
+		}
+
+		filtered, block, err := scripting.RunToolOutputFilters(r.Context(), tool.Filters, p.gatewayService, body, identity)
+		if block != nil || err != nil {
+			recordToolPolicyBlock(r.Context(), scripting.ToolOutputScope)
+			slog.Info("tool response blocked", "tool", tool.Name, "operation", input.OperationID, "error", err, "block", block)
+			respondWithError(w, http.StatusForbidden, toolBlockedMessage, nil, false)
+			return
+		}
+
+		result = applyFilteredToolResult(result, body, filtered)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if str, ok := result.(string); ok && (strings.HasPrefix(str, "{") || strings.HasPrefix(str, "[")) {
 		w.Write([]byte(str))
 	} else {
 		json.NewEncoder(w).Encode(result)
+	}
+}
+
+// hasToolOutputFilters reports whether any response-side filter is attached,
+// so an unfiltered tool keeps its existing result encoding untouched.
+func hasToolOutputFilters(tool *models.Tool) bool {
+	for i := range tool.Filters {
+		if tool.Filters[i].ResponseFilter {
+			return true
+		}
+	}
+	return false
+}
+
+// applyFilteredToolResult folds a filtered response body back into the value
+// the caller receives.
+//
+// Tool results are not always strings: the microgateway builds its client
+// without forcing a JSON string response, so a tool whose OpenAPI spec
+// declares a scalar response schema comes back as a float64 or a bool.
+// Rendering that to text for the filters and handing the text straight back
+// would turn the JSON number 123 into the JSON string "123" - governance
+// silently changing the type a client receives.
+//
+// So an untouched response keeps its original value, and a rewritten one is
+// re-parsed to recover its type, falling back to text when the filter
+// produced something that is not JSON.
+func applyFilteredToolResult(original interface{}, body, filtered string) interface{} {
+	if filtered == body {
+		return original
+	}
+
+	switch original.(type) {
+	case string, []byte:
+		return filtered
+	}
+
+	var reparsed interface{}
+	if err := json.Unmarshal([]byte(filtered), &reparsed); err == nil {
+		return reparsed
+	}
+	return filtered
+}
+
+// toolResultBody renders a tool result as the text a filter script sees.
+func toolResultBody(result interface{}) (string, error) {
+	switch v := result.(type) {
+	case string:
+		return v, nil
+	case []byte:
+		return string(v), nil
+	default:
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return "", err
+		}
+		return string(encoded), nil
 	}
 }
 
@@ -2212,13 +2298,34 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 				}
 			}
 
+			// Govern the call with the filters attached to the tool as it
+			// stands now, not as it stood when this MCP server was cached.
+			// The arguments are presented in the same envelope the REST tool
+			// endpoint uses, so one filter script covers both transports.
+			filterTool := resolvedToolFromContext(ctx, toolModel)
+			identity := toolFilterIdentity(ctx, filterTool)
+			args := scripting.ToolCallArgs{
+				OperationID: operationID,
+				Parameters:  params,
+				Payload:     payload,
+			}
+
+			args, block, err := scripting.RunToolInputFilters(ctx, filterTool.Filters, p.gatewayService, args, identity)
+			if block != nil || err != nil {
+				recordToolPolicyBlock(ctx, scripting.ToolInputScope)
+				slog.Info("mcp tool call blocked before dispatch",
+					"tool", filterTool.Name, "operation", operationID, "error", err, "block", block)
+				return mcp.NewToolResultError(toolBlockedMessage), nil
+			}
+			params, payload = args.Parameters, args.Payload
+
 			// Call the operation using our existing service
 			result, err := p.gatewayService.CallToolOperation(
 				toolModel.ID,
 				operationID,
 				params,
 				payload,
-				nil, // No headers for MCP calls
+				args.Headers,
 			)
 
 			// Record end time and log analytics
@@ -2244,6 +2351,24 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 				int(t1.Sub(t0).Milliseconds()),
 				toolModel.ID,
 			)
+
+			if hasToolOutputFilters(filterTool) {
+				body, err := toolResultBody(result)
+				if err != nil {
+					slog.Error("failed to read mcp tool response for filtering",
+						"tool", filterTool.Name, "operation", operationID, "error", err)
+					return mcp.NewToolResultError(toolBlockedMessage), nil
+				}
+
+				filtered, block, err := scripting.RunToolOutputFilters(ctx, filterTool.Filters, p.gatewayService, body, identity)
+				if block != nil || err != nil {
+					recordToolPolicyBlock(ctx, scripting.ToolOutputScope)
+					slog.Info("mcp tool response blocked",
+						"tool", filterTool.Name, "operation", operationID, "error", err, "block", block)
+					return mcp.NewToolResultError(toolBlockedMessage), nil
+				}
+				result = applyFilteredToolResult(result, body, filtered)
+			}
 
 			// Convert the result to MCP format
 			return mcpToolResultFromValue(operationID, result), nil
@@ -2296,7 +2421,9 @@ func (p *Proxy) handleMCPToolSSE(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "failed to initialize MCP server", err, false)
 		return
 	}
-	cache.SSEServer.SSEHandler().ServeHTTP(w, r)
+	// Hand the handler the tool as loaded for this request, so filters
+	// never run from the copy captured when the MCP server was cached.
+	cache.SSEServer.SSEHandler().ServeHTTP(w, withResolvedTool(r, tool))
 }
 func (p *Proxy) handleMCPToolMessage(w http.ResponseWriter, r *http.Request) {
 	toolSlug := mux.Vars(r)["toolSlug"]
@@ -2310,7 +2437,9 @@ func (p *Proxy) handleMCPToolMessage(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusInternalServerError, "failed to initialize MCP server", err, false)
 		return
 	}
-	cache.SSEServer.MessageHandler().ServeHTTP(w, r)
+	// Hand the handler the tool as loaded for this request, so filters
+	// never run from the copy captured when the MCP server was cached.
+	cache.SSEServer.MessageHandler().ServeHTTP(w, withResolvedTool(r, tool))
 }
 func (p *Proxy) handleMCPToolStreamable(w http.ResponseWriter, r *http.Request) {
 	toolSlug := mux.Vars(r)["toolSlug"]
@@ -2324,7 +2453,9 @@ func (p *Proxy) handleMCPToolStreamable(w http.ResponseWriter, r *http.Request) 
 		respondWithError(w, http.StatusInternalServerError, "failed to initialize MCP server", err, false)
 		return
 	}
-	cache.StreamableServer.ServeHTTP(w, r)
+	// Hand the handler the tool as loaded for this request, so filters
+	// never run from the copy captured when the MCP server was cached.
+	cache.StreamableServer.ServeHTTP(w, withResolvedTool(r, tool))
 }
 
 // Definitions for APIError, OAIErrorResponse, responseCapture, truncateString, maxBodySize

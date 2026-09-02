@@ -195,9 +195,16 @@ flowchart TD
 
 * **Filter Integration:**
   * Tools can have associated **Filters** that control their behavior.
-  * Filters are applied before tool operations are executed.
-  * Filters can validate inputs, transform data, or block operations.
+  * The filter's `response_filter` flag picks the direction: `false` governs the
+    **arguments sent to the tool**, `true` governs the **response it returned**.
+  * Filters can validate inputs, redact data, or block the call outright. An
+    input block means the downstream tool is never contacted.
+  * Filters run on the REST tool endpoint, on all MCP transports, and on tool
+    calls made from a chat session - in AI Studio and in the Microgateway alike.
+  * A blocked call returns a generic refusal (HTTP 403 `blocked by policy`, or
+    an MCP tool error); the reason goes to the logs and to a compliance event.
   * Filter hierarchy: Tool filters → LLM Provider filters → Chat Room filters.
+  * See `features/Filters.md` section 3a for the script contract.
 
 * **App Integration:**
   * Tools can now be subscribed to by applications, similar to how applications can subscribe to LLMs and Data Sources.

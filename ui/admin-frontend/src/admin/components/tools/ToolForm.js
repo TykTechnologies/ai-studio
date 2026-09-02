@@ -150,6 +150,13 @@ const StyledTextField = styled(TextField)({
   },
 });
 
+// A filter's response_filter flag decides which side of the tool call it
+// governs: requests on the way to the tool, responses on the way back.
+const filterDirectionLabel = (filter) =>
+  filter?.attributes?.response_filter
+    ? "Response filter — runs on the tool's result"
+    : "Request filter — runs on arguments sent to the tool";
+
 const ToolForm = () => {
   const [tool, setTool] = useState({
     name: "",
@@ -739,16 +746,23 @@ const ToolForm = () => {
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" color="text.secondary" paragraph>
-                Middleware scripts are filters that enable you to modify the
-                output of the tool before it's results are sent back to the LLM,
-                for example a filter to remove sensitive information.
+                Middleware scripts are filters that govern this tool's traffic.
+                A <strong>request</strong> filter runs on the arguments being
+                sent to the tool, so it can redact sensitive information before
+                it leaves, or block the call so the tool is never contacted. A{" "}
+                <strong>response</strong> filter runs on the result before it is
+                sent back to the LLM. Which one a filter is depends on how it
+                was configured on the Filters page.
               </Typography>
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <List>
                     {toolFilters.map((filter) => (
                       <ListItem key={filter.id}>
-                        <ListItemText primary={filter.attributes.name} />
+                        <ListItemText
+                          primary={filter.attributes.name}
+                          secondary={filterDirectionLabel(filter)}
+                        />
                         <ListItemSecondaryAction>
                           <IconButton
                             edge="end"
@@ -772,7 +786,8 @@ const ToolForm = () => {
                     >
                       {(availableFilters || []).map((filter) => (
                         <MenuItem key={filter.id} value={filter.id}>
-                          {filter.attributes.name}
+                          {filter.attributes.name} —{" "}
+                          {filterDirectionLabel(filter)}
                         </MenuItem>
                       ))}
                     </TextField>

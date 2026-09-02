@@ -61,6 +61,57 @@ output := {
 }
 ```
 
+## Tool filters
+
+A filter attached to a **Tool** rather than an LLM uses the same `input` /
+`output` contract, with two differences.
+
+**Direction** comes from the filter's `response_filter` flag: `false` runs the
+script on the arguments heading *to* the tool, `true` on the body it returned.
+`input.is_response` tells the script which side it is on.
+
+**`raw_input`** on the input side is the tool call envelope, identical across
+the REST endpoint, the MCP transports and chat tool calls:
+
+```json
+{
+  "operation_id": "createTicket",
+  "parameters": {"project": ["ACME"]},
+  "payload": {"summary": "card 4111 1111 1111 1111 was declined"},
+  "headers": {}
+}
+```
+
+On the output side it is the tool's raw response body.
+
+`input.context` carries `tool_id`, `tool_name`, `app_id` and `user_id`, plus
+`session_id` and `call_id` when the call came from a chat session.
+
+Returning a `payload` rewrites the call. On the input side only `parameters`,
+`payload` and `headers` are taken back - `operation_id` is fixed, so a filter
+cannot redirect the call to a different operation.
+
+```tengo
+text := import("text")
+
+// Redact card numbers before they leave for the downstream tool.
+output := {
+    block: false,
+    payload: text.re_replace(`\b(?:\d[ -]*?){13,16}\b`, input.raw_input, "[REDACTED CARD]"),
+    compliance_events: [
+        {event_type: "pii_redacted", severity: "warning", description: "redacted a card number from tool arguments"}
+    ]
+}
+```
+
+Two behaviours differ from LLM filters:
+
+- **Tool filters fail closed.** A script that errors or panics blocks the call,
+  in both directions. (An LLM *response* filter fails open.)
+- **The caller never sees `message`.** A blocked tool call returns a generic
+  `blocked by policy`; the reason reaches the logs and the compliance event
+  only. Every block records an event even if the script reported none.
+
 ## Testing a script
 
 The filter editor's **Test** panel runs the script server-side against composed
