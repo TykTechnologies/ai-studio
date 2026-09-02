@@ -80,7 +80,12 @@ services:
       - midsommar-dev
 
   # Plugin Builder - watches and rebuilds plugins on change
+  #
+  # Gated behind the "plugins" profile: building every plugin module on start
+  # costs minutes, and the rest of the stack does not depend on it. Started by
+  # the *-plugins make targets, or with --profile plugins.
   plugins:
+    profiles: ["plugins"]
     image: golang:1.25-alpine
     container_name: midsommar-plugins
     working_dir: /app
