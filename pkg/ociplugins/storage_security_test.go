@@ -139,3 +139,64 @@ func TestMetadataRejectsTraversal(t *testing.T) {
 		t.Errorf("metadata round-trip mangled: %+v", got)
 	}
 }
+
+// OCI references carry digests as "sha256:<hex>" (the marketplace builds
+// "oci://registry/repo@sha256:..."), so storage must accept that spelling and
+// map it onto the same on-disk entry as the bare hex form.
+func TestStorageAcceptsPrefixedDigest(t *testing.T) {
+	s := newTestStorage(t)
+
+	data := []byte("plugin-binary")
+	bare := digestOf(data)
+	prefixed := "sha256:" + bare
+
+	execPath, err := s.StoreExecutable(prefixed, "linux/amd64", data)
+	if err != nil {
+		t.Fatalf("StoreExecutable with prefixed digest: %v", err)
+	}
+	if got := s.GetExecutablePath(bare, "linux/amd64"); got != execPath {
+		t.Errorf("prefixed and bare digests map to different paths: %q vs %q", got, execPath)
+	}
+	if !s.HasExecutable(prefixed, "linux/amd64") || !s.HasExecutable(bare, "linux/amd64") {
+		t.Error("executable must be found under both digest spellings")
+	}
+	if filepath.Base(execPath) != "sha256-"+bare+"-linux-amd64" {
+		t.Errorf("unexpected executable filename: %s", filepath.Base(execPath))
+	}
+
+	meta := &PluginMetadata{Version: "1.0"}
+	if err := s.StoreMetadata(prefixed, "linux/amd64", meta); err != nil {
+		t.Fatalf("StoreMetadata with prefixed digest: %v", err)
+	}
+	if !s.HasMetadata(bare, "linux/amd64") {
+		t.Error("metadata stored under prefixed digest must be found under bare digest")
+	}
+
+	if _, err := s.StoreBlob(data); err != nil {
+		t.Fatalf("StoreBlob: %v", err)
+	}
+	if _, err := s.GetBlob(prefixed); err != nil {
+		t.Errorf("GetBlob with prefixed digest: %v", err)
+	}
+}
+
+// The prefix must not become a way around the path checks.
+func TestStorageRejectsPrefixedTraversal(t *testing.T) {
+	s := newTestStorage(t)
+
+	for _, digest := range []string{
+		"sha256:../../secret.txt",
+		"sha256:",
+		"sha256:sha256:" + strings.Repeat("a", 64),
+	} {
+		if _, err := s.GetBlob(digest); err == nil {
+			t.Errorf("GetBlob(%q) should be rejected", digest)
+		}
+		if _, err := s.StoreExecutable(digest, "linux/amd64", []byte("x")); err == nil {
+			t.Errorf("StoreExecutable(%q) should be rejected", digest)
+		}
+		if path := s.GetExecutablePath(digest, "linux/amd64"); path != "" {
+			t.Errorf("GetExecutablePath(%q) returned %q, want empty", digest, path)
+		}
+	}
+}
