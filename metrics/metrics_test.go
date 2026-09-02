@@ -38,7 +38,7 @@ func TestNoOpBeforeInit(t *testing.T) {
 	RecordCost(ctx, "openai", "gpt-4", "app1", 0.05)
 	RecordToolCall(ctx, "search", "app1")
 	RecordPolicyBlock(ctx, "content_filter", "filter")
-	ObserveRequestDuration(ctx, "openai", "gpt-4", false, 1.5)
+	ObserveRequestDuration(ctx, "openai", "gpt-4", false, 1.5, http.StatusOK)
 	ObserveToolDuration(ctx, "search", 0.3)
 	IncrementInflight(ctx, "openai")
 	DecrementInflight(ctx, "openai")
@@ -169,8 +169,8 @@ func TestObserveRequestDuration(t *testing.T) {
 	h := Init()
 	ctx := context.Background()
 
-	ObserveRequestDuration(ctx, "openai", "gpt-4", false, 1.5)
-	ObserveRequestDuration(ctx, "openai", "gpt-4", true, 30.0)
+	ObserveRequestDuration(ctx, "openai", "gpt-4", false, 1.5, http.StatusOK)
+	ObserveRequestDuration(ctx, "openai", "gpt-4", true, 30.0, http.StatusOK)
 
 	body := scrape(t, h)
 	if !strings.Contains(body, "aistudio_llm_request_duration_seconds") {
@@ -224,7 +224,7 @@ func TestHistogramBucketBoundaries(t *testing.T) {
 	h := Init()
 	ctx := context.Background()
 
-	ObserveRequestDuration(ctx, "test", "test-model", false, 0.05)
+	ObserveRequestDuration(ctx, "test", "test-model", false, 0.05, http.StatusOK)
 
 	body := scrape(t, h)
 
@@ -299,7 +299,7 @@ func TestConcurrentRecording(t *testing.T) {
 				RecordCost(ctx, "openai", "gpt-4", "app1", 0.001)
 				RecordToolCall(ctx, "search", "app1")
 				RecordPolicyBlock(ctx, "test_rule", "filter")
-				ObserveRequestDuration(ctx, "openai", "gpt-4", false, 0.5)
+				ObserveRequestDuration(ctx, "openai", "gpt-4", false, 0.5, http.StatusOK)
 				ObserveToolDuration(ctx, "search", 0.1)
 				IncrementInflight(ctx, "openai")
 				DecrementInflight(ctx, "openai")

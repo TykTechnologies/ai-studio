@@ -2,7 +2,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-microgateway-config
+  name: {{ include "microgateway.fullname" . }}-config
+  labels:
+    {{- include "microgateway.labels" . | nindent 4 }}
 data:
   PORT: "8080"
   HOST: "0.0.0.0"
@@ -14,7 +16,9 @@ data:
   DB_AUTO_MIGRATE: {{ .Values.config.dbAutoMigrate | quote }}
   GATEWAY_MODE: "edge"
   CONTROL_ENDPOINT: {{ default (printf "%s:50051" .Release.Name) .Values.config.controlEndpoint | quote }}
-  EDGE_ID: {{ .Values.config.edgeId | quote }}
+  # EDGE_ID is deliberately absent: it is set per-pod from the downward API in
+  # the workload template, because one shared value made every replica register
+  # under the same edge identity.
   EDGE_NAMESPACE: {{ .Values.config.edgeNamespace | quote }}
   EDGE_HEARTBEAT_INTERVAL: {{ .Values.config.heartbeatInterval | quote }}
   EDGE_ALLOW_INSECURE: {{ .Values.config.allowInsecure | quote }}
@@ -30,4 +34,24 @@ data:
   OCI_PLUGINS_CACHE_DIR: {{ .Values.config.ociPluginsCacheDir | quote }}
   OCI_PLUGINS_REQUIRE_SIGNATURE: {{ .Values.config.ociPluginsRequireSignature | quote }}
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  ENABLE_METRICS: {{ .Values.metrics.enabled | quote }}
+  METRICS_PATH: {{ .Values.metrics.path | quote }}
+  {{- if .Values.metrics.allowUnauthenticated }}
+  METRICS_ALLOW_UNAUTHENTICATED: "true"
+  {{- end }}
+  {{- if .Values.metrics.legacyNames }}
+  METRICS_LEGACY_NAMES: "true"
+  {{- else }}
+  METRICS_LEGACY_NAMES: "false"
+  {{- end }}
+  ENABLE_TRACING: {{ .Values.tracing.enabled | quote }}
+  {{- with .Values.tracing.endpoint }}
+  TRACING_ENDPOINT: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.config.allowedInternalHosts }}
+  LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS: {{ . | quote }}
+  {{- end }}
+  {{- if .Values.config.blockInternalUpstreams }}
+  LLM_UPSTREAM_BLOCK_INTERNAL: "true"
+  {{- end }}
 {{- end }}

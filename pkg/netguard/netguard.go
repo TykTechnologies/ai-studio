@@ -12,6 +12,7 @@
 package netguard
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -38,6 +39,21 @@ const (
 	// EnvAllowInternal is the existing development flag that disables
 	// internal-network restrictions platform-wide.
 	EnvAllowInternal = "ALLOW_INTERNAL_NETWORK_ACCESS"
+
+	// EnvAllowedInternalHosts ("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS") names
+	// upstream hosts that are exempt from internal-range blocking, using the
+	// same matching as EnvAllowedHosts (".svc.cluster.local" matches every
+	// in-cluster Service). It exists because the two existing controls cannot
+	// express "reach this in-cluster model server, keep blocking everything
+	// else internal": EnvAllowInternal disables the policy platform-wide, and
+	// EnvAllowedHosts is a global allowlist, so using it to permit a cluster
+	// host silently restricts every external provider not also listed.
+	//
+	// This is an additive exemption. It is consulted before EnvAllowedHosts and
+	// widens the policy only for the hosts named, so an operator can run an
+	// InferencePool-backed upstream alongside SaaS providers with egress
+	// blocking left on.
+	EnvAllowedInternalHosts = "LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS"
 )
 
 // internalCIDRs covers loopback, RFC1918, link-local (incl. cloud metadata
@@ -88,10 +104,13 @@ func blockInternalEnabled() bool {
 // configured policy:
 //
 //  1. Scheme must be http or https.
-//  2. If LLM_UPSTREAM_ALLOWED_HOSTS is set, the hostname must match an entry
+//  2. If LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS names the host, it is permitted
+//     outright — this is the in-cluster exemption and it short-circuits the
+//     rules below.
+//  3. If LLM_UPSTREAM_ALLOWED_HOSTS is set, the hostname must match an entry
 //     (exact, case-insensitive; ".suffix" entries match the apex and
 //     subdomains on a label boundary).
-//  3. If internal blocking is enabled and the host is an IP literal, it must
+//  4. If internal blocking is enabled and the host is an IP literal, it must
 //     not be an internal address (an early, clear error; hostnames are
 //     enforced at dial time by DialControl/HTTPTransport, which also covers
 //     DNS-rebinding).
@@ -111,6 +130,13 @@ func ValidateUpstreamURL(u *url.URL) error {
 	host := strings.ToLower(u.Hostname())
 	if host == "" {
 		return fmt.Errorf("upstream URL %q has no host", u.String())
+	}
+
+	// An explicitly exempted internal host is permitted whatever else is
+	// configured, so an in-cluster upstream does not force the operator to
+	// choose between blocking nothing and allowlisting every SaaS provider.
+	if internalHostExempt(host) {
+		return nil
 	}
 
 	if allowed := os.Getenv(EnvAllowedHosts); allowed != "" {
@@ -181,6 +207,15 @@ func DialControl(network, address string, _ syscall.RawConn) error {
 	return nil
 }
 
+// internalHostExempt reports whether host is named by EnvAllowedInternalHosts.
+func internalHostExempt(host string) bool {
+	allowed := os.Getenv(EnvAllowedInternalHosts)
+	if allowed == "" {
+		return false
+	}
+	return hostMatchesAllowlist(strings.ToLower(host), allowed)
+}
+
 // NewDialer returns a net.Dialer whose connections are guarded by
 // DialControl.
 func NewDialer() *net.Dialer {
@@ -191,12 +226,42 @@ func NewDialer() *net.Dialer {
 	}
 }
 
+// newUnguardedDialer returns a dialer with the same timeouts as NewDialer but
+// without the internal-range Control hook. It is used only for hosts the
+// operator has explicitly exempted via EnvAllowedInternalHosts.
+func newUnguardedDialer() *net.Dialer {
+	return &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+}
+
 // HTTPTransport returns an *http.Transport (based on
 // http.DefaultTransport) whose dials are guarded by DialControl. Use it for
 // any HTTP client whose destination comes from stored configuration.
+//
+// The exemption is applied here rather than in DialControl because Control runs
+// after DNS resolution and sees only an IP, whereas the transport hands
+// DialContext the hostname it set out to reach — the same name
+// ValidateUpstreamURL checked. Keying the exemption on that name is what makes
+// a host allowlist expressible at all, and it does not reopen the
+// DNS-rebinding window the Control hook closes: an exempted name is one the
+// operator has declared may resolve internally, not one an attacker chose.
 func HTTPTransport() *http.Transport {
+	guarded := NewDialer()
+	unguarded := newUnguardedDialer()
+
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.DialContext = NewDialer().DialContext
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			host = address
+		}
+		if internalHostExempt(host) {
+			return unguarded.DialContext(ctx, network, address)
+		}
+		return guarded.DialContext(ctx, network, address)
+	}
 	return transport
 }
 

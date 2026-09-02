@@ -1,0 +1,84 @@
+# Reference values: Tyk AI Studio governing traffic into a Gateway API Inference
+# Extension deployment.
+#
+# The layering this file sets up:
+#
+#   HTTPRoute  ──►  microgateway  ──►  Service fronting an InferencePool  ──►  vLLM pods
+#                   (auth, budgets,     (endpoint picker chooses the pod
+#                    filters, analytics)  by KV-cache / queue depth)
+#
+# Tyk does not implement InferencePool and does not need to. The pool fronts an
+# OpenAI-compatible endpoint, and the gateway speaks OpenAI-compatible upstream,
+# so the two compose as-is. Endpoint selection stays with the inference gateway;
+# identity, spend and policy stay with Tyk.
+#
+# See docs/site/docs/deployment-kubernetes-inference-gateway.md for the full
+# walkthrough, including the LLM configuration to create in the Studio.
+
+microgateway:
+  enabled: true
+
+  # Scale out horizontally; each pod registers with the hub under its own
+  # EDGE_ID, taken from the pod name.
+  replicaCount: 2
+
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app: microgateway
+
+  config:
+    controlEndpoint: "midsommar:50051"
+    edgeNamespace: "inference"
+
+    # Egress hardening, with the cluster carved out.
+    #
+    # blockInternalUpstreams alone would refuse the InferencePool Service,
+    # because it lives on a private address. allowedInternalHosts is the
+    # exemption: it names the in-cluster destinations that stay reachable,
+    # without turning into a global allowlist that would then have to
+    # enumerate every SaaS provider too.
+    blockInternalUpstreams: true
+    allowedInternalHosts: ".svc.cluster.local"
+
+  metrics:
+    enabled: true
+    allowUnauthenticated: true   # in-cluster scraping only
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+    # Flip to false once dashboards have moved to the gen_ai.* metric names.
+    legacyNames: true
+
+  tracing:
+    enabled: true
+    endpoint: "otel-collector.observability:4317"
+
+  # Keep buffered analytics across restarts. Optional — the edge rebuilds its
+  # configuration from the hub on every start regardless.
+  kind: StatefulSet
+  persistence:
+    enabled: true
+    size: 2Gi
+
+  secrets:
+    # Supply these from External Secrets / Sealed Secrets rather than here.
+    existingSecret: "microgateway-credentials"
+
+# The Studio (hub) side. Its own secrets should come from your secret manager
+# too; see helm/values.yaml for the full set of knobs.
+config:
+  gatewayMode: control

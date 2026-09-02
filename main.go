@@ -17,16 +17,17 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
-	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/api"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
 	"github.com/TykTechnologies/midsommar/v2/grpc"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -262,6 +263,26 @@ func main() {
 		metrics.Init()
 		logger.Infof("Prometheus metrics enabled at %s", appConf.MetricsPath)
 	}
+
+	// tracing. Init is called unconditionally so the W3C propagator is installed
+	// even when export is off, which keeps an inbound traceparent flowing through
+	// to the upstream provider.
+	tracingShutdown, err := tracing.Init(context.Background(), tracing.Config{
+		Enabled:        appConf.TracingEnabled,
+		Endpoint:       appConf.TracingEndpoint,
+		ServiceName:    "tyk-ai-studio",
+		ServiceVersion: Version,
+	})
+	if err != nil {
+		logger.Errorf("Tracing disabled: %v", err)
+	} else if appConf.TracingEnabled {
+		logger.Infof("OpenTelemetry tracing enabled, exporting to %s", appConf.TracingEndpoint)
+	}
+	defer func() {
+		if err := tracingShutdown(context.Background()); err != nil {
+			logger.Errorf("Failed to flush traces on shutdown: %v", err)
+		}
+	}()
 
 	// analytics
 	ctx, stopRec := context.WithCancel(context.Background())

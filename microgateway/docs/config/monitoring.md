@@ -16,44 +16,69 @@ Monitoring configuration features:
 
 ### Metrics Configuration
 ```bash
-# Enable Prometheus metrics
+# Enable Prometheus metrics. The endpoint is secure by default: unless a token
+# is set or unauthenticated access is explicitly allowed, the route is not
+# registered at all.
 ENABLE_METRICS=true
 METRICS_PATH=/metrics
-METRICS_PORT=8080           # Same as HTTP server port
+METRICS_AUTH_TOKEN=            # requires "Authorization: Bearer <token>"
+METRICS_ALLOW_UNAUTHENTICATED=false   # set true for in-cluster scraping
 
-# Metrics namespace
-METRICS_NAMESPACE=microgateway
-METRICS_SUBSYSTEM=api
+# Emit the pre-conventions aistudio_* series alongside the gen_ai.* ones.
+# Set to false once dashboards have migrated.
+METRICS_LEGACY_NAMES=true
 ```
+
+Metrics are served on the main HTTP port (`PORT`, default 8080). There is no
+separate metrics listener, and no namespace/subsystem configuration — metric
+names are fixed.
 
 ### Available Metrics
-```bash
-# Core service metrics
-curl http://localhost:8080/metrics | grep microgateway
 
-# Key metrics include:
-# - microgateway_info (service information)
-# - microgateway_requests_total (request counter)
-# - microgateway_request_duration_seconds (request latency histogram)
-# - microgateway_response_size_bytes (response size histogram)
-# - microgateway_concurrent_requests (active requests gauge)
+```bash
+curl -s http://localhost:8080/metrics
 ```
 
-### Custom Metrics
-```bash
-# Business metrics
-# - microgateway_token_usage_total (token consumption)
-# - microgateway_cost_total (cost tracking)
-# - microgateway_budget_utilization (budget usage percentage)
-# - microgateway_llm_requests_total (per-LLM request counter)
-# - microgateway_error_rate (error percentage)
+#### OpenTelemetry GenAI metrics
 
-# Technical metrics
-# - microgateway_cache_hit_ratio (cache performance)
-# - microgateway_db_connections_active (database connections)
-# - microgateway_plugin_executions_total (plugin usage)
-# - microgateway_config_reloads_total (configuration changes)
-```
+These follow the [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/).
+Attributes are `gen_ai_provider_name`, `gen_ai_request_model`,
+`gen_ai_operation_name`, `gen_ai_token_type`, and `error_type` on failures.
+
+| Metric | Type | Description |
+|---|---|---|
+| `gen_ai_server_request_duration_seconds` | histogram | End-to-end request latency |
+| `gen_ai_server_time_to_first_token_seconds` | histogram | Streaming: time to the first chunk |
+| `gen_ai_server_time_per_output_token_seconds` | histogram | Streaming: mean inter-token latency |
+| `gen_ai_client_token_usage` | histogram | Tokens per request, by `gen_ai_token_type` |
+| `gen_ai_client_operation_duration_seconds` | histogram | Tool execution duration |
+
+> The GenAI conventions are still marked *Development* upstream, not Stable, so
+> these names may change.
+
+#### AI Studio metrics
+
+These have no counterpart in the conventions and keep their own names.
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `aistudio_llm_requests_total` | counter | `app_id`, `vendor`, `model`, `status_code` | Proxied LLM requests |
+| `aistudio_llm_cost_total` | counter | `vendor`, `model`, `app_id` | Cumulative cost |
+| `aistudio_llm_inflight_requests` | gauge | `vendor` | Requests currently in flight |
+| `aistudio_policy_blocks_total` | counter | `rule_name`, `block_type` | Requests blocked by budget, firewall or filter |
+| `aistudio_compliance_events_total` | counter | `event_type`, `severity`, `filter_name` | Events raised by filter scripts |
+| `aistudio_tool_calls_total` | counter | `tool_name`, `app_id` | Tool / MCP invocations |
+
+#### Legacy metrics
+
+Emitted alongside the GenAI ones while `METRICS_LEGACY_NAMES=true` (the default),
+and removed from the output when it is `false`:
+
+| Legacy metric | Replaced by |
+|---|---|
+| `aistudio_llm_request_duration_seconds` | `gen_ai_server_request_duration_seconds` |
+| `aistudio_llm_tokens_total` | `gen_ai_client_token_usage` |
+| `aistudio_tool_execution_duration_seconds` | `gen_ai_client_operation_duration_seconds` |
 
 ## Health Checks
 
@@ -272,7 +297,7 @@ scrape_configs:
         "title": "Request Rate",
         "targets": [
           {
-            "expr": "rate(microgateway_requests_total[5m])",
+            "expr": "sum(rate(aistudio_llm_requests_total[5m]))",
             "legendFormat": "{{method}} {{endpoint}}"
           }
         ]
@@ -281,7 +306,7 @@ scrape_configs:
         "title": "Response Latency",
         "targets": [
           {
-            "expr": "histogram_quantile(0.95, rate(microgateway_request_duration_seconds_bucket[5m]))",
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(gen_ai_server_request_duration_seconds_bucket[5m])))",
             "legendFormat": "95th percentile"
           }
         ]
@@ -290,7 +315,7 @@ scrape_configs:
         "title": "Error Rate",
         "targets": [
           {
-            "expr": "rate(microgateway_requests_total{status_code=~\"4..|5..\"}[5m]) / rate(microgateway_requests_total[5m])",
+            "expr": "sum(rate(aistudio_llm_requests_total{status_code=~\"4..|5..\"}[5m])) / sum(rate(aistudio_llm_requests_total[5m]))",
             "legendFormat": "Error Rate"
           }
         ]
@@ -307,7 +332,7 @@ groups:
   - name: microgateway
     rules:
       - alert: HighLatency
-        expr: histogram_quantile(0.95, rate(microgateway_request_duration_seconds_bucket[5m])) > 5
+        expr: histogram_quantile(0.95, sum by (le) (rate(gen_ai_server_request_duration_seconds_bucket[5m]))) > 5
         for: 2m
         labels:
           severity: warning
@@ -315,20 +340,28 @@ groups:
           summary: "High request latency detected"
           
       - alert: HighErrorRate
-        expr: rate(microgateway_requests_total{status_code=~"5.."}[5m]) / rate(microgateway_requests_total[5m]) > 0.05
+        expr: sum(rate(aistudio_llm_requests_total{status_code=~"5.."}[5m])) / sum(rate(aistudio_llm_requests_total[5m])) > 0.05
         for: 1m
         labels:
           severity: critical
         annotations:
           summary: "High error rate detected"
           
-      - alert: DatabaseConnectionExhaustion
-        expr: microgateway_db_connections_in_use / microgateway_db_connections_max > 0.9
-        for: 30s
+      - alert: HighPolicyBlockRate
+        expr: sum(rate(aistudio_policy_blocks_total[5m])) / sum(rate(aistudio_llm_requests_total[5m])) > 0.1
+        for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Database connection pool nearly exhausted"
+          summary: "More than 10% of requests are being blocked by budget or filter policy"
+
+      - alert: SlowTimeToFirstToken
+        expr: histogram_quantile(0.95, sum by (le) (rate(gen_ai_server_time_to_first_token_seconds_bucket[5m]))) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 time to first token above 5s"
 ```
 
 ## Log Aggregation
@@ -481,9 +514,9 @@ ALERT_AUTH_FAILURES=50               # 50 failures/hour
 # - Cache hit ratio
 
 # Example Grafana panel queries:
-# Request rate: rate(microgateway_requests_total[5m])
-# P95 latency: histogram_quantile(0.95, rate(microgateway_request_duration_seconds_bucket[5m]))
-# Error rate: rate(microgateway_requests_total{status_code=~"5.."}[5m])
+# Request rate: sum(rate(aistudio_llm_requests_total[5m]))
+# P95 latency: histogram_quantile(0.95, sum by (le) (rate(gen_ai_server_request_duration_seconds_bucket[5m])))
+# Error rate: sum(rate(aistudio_llm_requests_total{status_code=~"5.."}[5m]))
 ```
 
 ### Business Metrics Dashboard
@@ -496,9 +529,9 @@ ALERT_AUTH_FAILURES=50               # 50 failures/hour
 # - Geographic usage distribution
 
 # Example queries:
-# Cost rate: rate(microgateway_cost_total[1h])
-# Token usage: rate(microgateway_token_usage_total[5m])
-# App distribution: microgateway_requests_total by (app_id)
+# Cost rate: sum(rate(aistudio_llm_cost_total[1h]))
+# Token usage: sum(rate(gen_ai_client_token_usage_sum[5m]))
+# App distribution: sum by (app_id) (aistudio_llm_requests_total)
 ```
 
 ### Infrastructure Dashboard
@@ -511,9 +544,13 @@ ALERT_AUTH_FAILURES=50               # 50 failures/hour
 # - Disk usage
 
 # Example queries:
-# DB connections: microgateway_db_connections_in_use
-# Cache hit rate: microgateway_cache_hits_total / microgateway_cache_requests_total
-# Plugin errors: rate(microgateway_plugin_errors_total[5m])
+# In-flight requests:  sum by (vendor) (aistudio_llm_inflight_requests)
+# Policy blocks:       sum by (block_type) (rate(aistudio_policy_blocks_total[5m]))
+# Compliance events:   sum by (severity) (rate(aistudio_compliance_events_total[5m]))
+# Tool latency (p95):  histogram_quantile(0.95, sum by (le) (rate(gen_ai_client_operation_duration_seconds_bucket[5m])))
+#
+# Note: there are no database-connection, cache or plugin-execution metrics
+# today. Use the /health/detailed endpoint for database and plugin status.
 ```
 
 ## Log Monitoring

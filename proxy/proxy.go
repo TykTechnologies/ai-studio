@@ -27,6 +27,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
@@ -592,26 +593,35 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Metrics: track in-flight requests and request duration
+	// Metrics: track in-flight requests and request duration. respStatus carries
+	// the status the caller ends up seeing so the duration observation can attach
+	// error.type; it is updated at each failure path and by the upstream response.
 	metrics.IncrementInflight(r.Context(), string(llm.Vendor))
 	requestStart := time.Now()
+	respStatus := http.StatusOK
+
+	r, span := startProxySpan(r, llm)
 	defer func() {
+		endProxySpan(span, respStatus)
 		metrics.DecrementInflight(r.Context(), string(llm.Vendor))
-		metrics.ObserveRequestDuration(r.Context(), string(llm.Vendor), llm.Name, false, time.Since(requestStart).Seconds())
+		metrics.ObserveRequestDuration(r.Context(), string(llm.Vendor), llm.Name, false, time.Since(requestStart).Seconds(), respStatus)
 	}()
 
 	reqBody, err := helpers.CopyRequestBody(r)
 	if err != nil {
+		respStatus = http.StatusInternalServerError
 		respondWithError(w, http.StatusInternalServerError, "Failed to read request body", err, false)
 		return
 	}
 	appObj := r.Context().Value("app")
 	if appObj == nil {
+		respStatus = http.StatusUnauthorized
 		respondWithError(w, http.StatusUnauthorized, "App context not found, authentication likely failed.", nil, true)
 		return
 	}
 	app, ok := appObj.(*models.App)
 	if !ok {
+		respStatus = http.StatusInternalServerError
 		respondWithError(w, http.StatusInternalServerError, "app context invalid", nil, false)
 		return
 	}
@@ -619,10 +629,12 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
 		// Error body for analytics should be constructed carefully if needed
 		go p.analyzeResponse(llm, app, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, r)
+		respStatus = http.StatusForbidden
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded", err, false)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
+		respStatus = http.StatusBadRequest
 		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
 		go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
@@ -640,12 +652,14 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 
 	upstreamURL, err := url.Parse(upstreamEndpoint)
 	if err != nil {
+		respStatus = http.StatusInternalServerError
 		respondWithError(w, http.StatusInternalServerError, "invalid upstream URL", err, false)
 		return
 	}
 
 	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
 		logger.Errorf("Upstream URL blocked by SSRF policy: %v", err)
+		respStatus = http.StatusBadGateway
 		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
 		return
 	}
@@ -667,6 +681,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			logger.Debugf("REST proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
 		}
 		req.Host = upstreamURL.Host
+		// Continue the trace into the upstream. Done before the vendor auth
+		// header so a vendor that rewrites headers wholesale cannot drop it.
+		tracing.InjectOutgoing(req.Context(), req.Header)
 		// Clear the Auth header, some vendors don't use it for auth and return error if its present(e.g Google AI)
 		req.Header.Del("Authorization")
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
@@ -676,7 +693,16 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	// upstreamGuardedTransport enforces the internal-network policy at dial
 	// time (post-DNS), closing the DNS-rebinding TOCTOU window.
-	httpProxy := &httputil.ReverseProxy{Director: proxyDirector, Transport: upstreamGuardedTransport}
+	httpProxy := &httputil.ReverseProxy{
+		Director:  proxyDirector,
+		Transport: upstreamGuardedTransport,
+		// ModifyResponse runs on this goroutine, before the deferred duration
+		// observation, so recording the upstream status here is race-free.
+		ModifyResponse: func(resp *http.Response) error {
+			respStatus = resp.StatusCode
+			return nil
+		},
+	}
 
 	// Apply LLM timeout to the request context for the reverse proxy
 	llmCtx, llmCancel := context.WithTimeout(r.Context(), p.config.llmTimeout())
@@ -1166,36 +1192,48 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Metrics: track in-flight requests and request duration
+	// Metrics: track in-flight requests and request duration. respStatus carries
+	// the status the caller ends up seeing so the duration observation can attach
+	// error.type; it is updated at each failure path and by the upstream response.
 	metrics.IncrementInflight(r.Context(), string(llm.Vendor))
 	streamingRequestStart := time.Now()
+	respStatus := http.StatusOK
+	timing := newStreamTiming(streamingRequestStart)
+	r, span := startProxySpan(r, llm)
 	defer func() {
+		endProxySpan(span, respStatus)
 		metrics.DecrementInflight(r.Context(), string(llm.Vendor))
-		metrics.ObserveRequestDuration(r.Context(), string(llm.Vendor), llm.Name, true, time.Since(streamingRequestStart).Seconds())
+		metrics.ObserveRequestDuration(r.Context(), string(llm.Vendor), llm.Name, true, time.Since(streamingRequestStart).Seconds(), respStatus)
 	}()
+	r = r.WithContext(withStreamTiming(r.Context(), timing))
 
 	reqBody, err := helpers.CopyRequestBody(r)
 	if err != nil {
+		respStatus = http.StatusInternalServerError
 		respondWithError(w, http.StatusInternalServerError, "failed to read streaming request body", err, false)
 		return
 	}
 	appObj := r.Context().Value("app")
 	if appObj == nil {
+		respStatus = http.StatusUnauthorized
 		respondWithError(w, http.StatusUnauthorized, "App context not found, authentication likely failed.", nil, true)
 		return
 	}
 	app, ok := appObj.(*models.App)
 	if !ok {
+		respStatus = http.StatusInternalServerError
 		respondWithError(w, http.StatusInternalServerError, "app context invalid for streaming", nil, false)
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
 		go p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
+		respStatus = http.StatusForbidden
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded for streaming", err, false)
 		return
 	}
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
+		respStatus = http.StatusBadRequest
 		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
 		go p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
@@ -1225,6 +1263,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 
 	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
 		logger.Errorf("Streaming upstream URL blocked by SSRF policy: %v", err)
+		respStatus = http.StatusBadGateway
 		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
 		return
 	}
@@ -1254,6 +1293,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	r.Header.Del("Authorization")
 	upstreamReq.Header = r.Header.Clone()
 	upstreamReq.Host = upstreamURL.Host
+	// Continue the trace into the upstream, as the non-streaming director does.
+	tracing.InjectOutgoing(upstreamReq.Context(), upstreamReq.Header)
 	if err := p.setVendorAuthHeader(upstreamReq, llm); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header for streaming", err, false)
 		return
@@ -1273,6 +1314,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	for k, v := range resp.Header {
 		w.Header()[k] = v
 	}
+	respStatus = resp.StatusCode
 	w.WriteHeader(resp.StatusCode)
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
@@ -1289,6 +1331,14 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	for {
 		n, readErr := resp.Body.Read(buffer)
 		if n > 0 {
+			// The first chunk off the upstream is the first token as far as the
+			// caller is concerned; markFirstChunk ignores every later call.
+			if timing.markFirstChunk(time.Now()); chunkIndex == 0 {
+				if ttft, ok := timing.timeToFirstToken(); ok {
+					metrics.ObserveTimeToFirstToken(r.Context(), string(llm.Vendor), llm.Name, ttft.Seconds())
+				}
+			}
+
 			chunk := make([]byte, n)
 			copy(chunk, buffer[:n])
 			responses = append(responses, chunk)
