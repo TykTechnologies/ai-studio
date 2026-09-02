@@ -288,7 +288,9 @@ func main() {
 
 	// start the Proxy
 	pConfig := &proxy.Config{
-		Port: appConf.ProxyPort,
+		Port:                  appConf.ProxyPort,
+		UnifiedRouterBasePath: appConf.UnifiedRouterPath,
+		DisableUnifiedRouter:  appConf.UnifiedRouterDisabled,
 	}
 	p := proxy.NewProxy(service, pConfig, budgetService)
 

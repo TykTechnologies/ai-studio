@@ -88,6 +88,12 @@ type GatewayConfig struct {
 	RateLimitRPM              int           `env:"GATEWAY_DEFAULT_RATE_LIMIT" envDefault:"100"`
 	EnableFilters             bool          `env:"GATEWAY_ENABLE_FILTERS" envDefault:"true"`
 	EnableAnalytics           bool          `env:"GATEWAY_ENABLE_ANALYTICS" envDefault:"true"`
+	// UnifiedRouterPath is the base path of the OpenRouter-style single endpoint
+	// ({base}/chat/completions, {base}/completions, {base}/models). Configurable
+	// because the gateway is embeddable in hosts that already own "/v1";
+	// UnifiedRouterDisabled removes the endpoint entirely.
+	UnifiedRouterPath         string        `env:"GATEWAY_UNIFIED_ROUTER_PATH" envDefault:"/v1"`
+	UnifiedRouterDisabled     bool          `env:"GATEWAY_UNIFIED_ROUTER_DISABLED" envDefault:"false"`
 	PluginEndpointMaxBodySize    int64         `env:"PLUGIN_ENDPOINT_MAX_BODY_SIZE" envDefault:"1048576"`    // 1MB max request body for custom plugin endpoints
 	PluginEndpointStreamTimeout time.Duration `env:"PLUGIN_ENDPOINT_STREAM_TIMEOUT" envDefault:"5m"`       // Timeout for streaming plugin endpoints
 }
