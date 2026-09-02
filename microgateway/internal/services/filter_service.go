@@ -3,6 +3,8 @@ package services
 
 import (
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -241,6 +243,29 @@ func (s *FilterService) ExecuteFilter(filterID uint, payload map[string]interfac
 	return payload, nil
 }
 
-// executeFilterScript is implemented in edition-specific files (filter_service_ce.go and filter_service_ent.go)
-// CE: Always returns true (filters disabled)
-// ENT: Executes Tengo script and returns result
+// executeFilterScript runs a filter script and converts any panic raised by
+// the script engine into an ordinary error.
+//
+// Tengo panics instead of returning an error for faults it does not model —
+// integer divide by zero being the common one. Filters run on the goroutine
+// serving the request, so an unrecovered panic would take the gateway process
+// down and with it every other tenant's traffic, over one malformed script.
+//
+// The behaviour itself lives in runFilterScript, implemented in the
+// edition-specific files (filter_service_ce.go and filter_service_ent.go):
+// CE always returns true (filters disabled), ENT executes the Tengo script.
+func (s *FilterService) executeFilterScript(filter *database.Filter, payload map[string]interface{}) (result bool, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("filter script panicked, converting to error",
+				"filter_name", filter.Name,
+				"filter_id", filter.ID,
+				"panic", r,
+				"stack", string(debug.Stack()))
+			result = false
+			err = fmt.Errorf("script panic: %v", r)
+		}
+	}()
+
+	return s.runFilterScript(filter, payload)
+}

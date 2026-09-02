@@ -7,8 +7,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
-// RunScript executes a unified script using enterprise Tengo implementation
-func (sr *ScriptRunner) RunScript(input *ScriptInput, serviceRef services.ServiceInterface) (*ScriptOutput, error) {
+// runScript executes a unified script using enterprise Tengo implementation
+func (sr *ScriptRunner) runScript(input *ScriptInput, serviceRef services.ServiceInterface) (*ScriptOutput, error) {
 	runner := ent_scripting.NewScriptRunner(sr.source)
 
 	// Convert base ScriptInput to enterprise ScriptInput
