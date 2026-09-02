@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -290,4 +291,65 @@ func TestToolRequest_BlockDisclosesNothingAboutTheFilter(t *testing.T) {
 		assert.NotContains(t, body, "ssn-outbound-guard", "%s must not disclose the filter name", name)
 		assert.NotContains(t, body, "DLP-7", "%s must not disclose the filter's reason", name)
 	}
+}
+
+// typedResultService returns a tool result of a caller-chosen Go type,
+// standing in for the microgateway's client, which - unlike Studio's - does
+// not force a JSON string response and so yields float64, bool or a map for a
+// tool whose spec declares a response schema.
+type typedResultService struct {
+	*services.Service
+	result interface{}
+}
+
+func (s *typedResultService) CallToolOperation(uint, string, map[string][]string, map[string]interface{}, map[string][]string) (interface{}, error) {
+	return s.result, nil
+}
+
+// Filtering must not change the JSON type a client receives. A no-op filter on
+// a tool returning the number 123 must still yield 123, not the string "123".
+func TestToolRequest_FilteringPreservesResultType(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		result   interface{}
+		expected string
+	}{
+		{"number", float64(123), "123"},
+		{"boolean", true, "true"},
+		{"object", map[string]interface{}{"a": float64(1)}, `{"a":1}`},
+		{"array", []interface{}{float64(1), float64(2)}, "[1,2]"},
+		{"null", nil, "null"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newToolFilterFixtureWithService(t, `unused`, func(svc *services.Service) services.ServiceInterface {
+				return &typedResultService{Service: svc, result: tc.result}
+			})
+			defer f.teardown()
+
+			f.attachFilter(t, "noop", `output := {block: false, payload: ""}`, true)
+
+			rr := f.call(t, "getTestData", nil)
+
+			require.Equal(t, http.StatusOK, rr.Code)
+			assert.JSONEq(t, tc.expected, rr.Body.String(),
+				"a filter that changed nothing must not change the response type")
+		})
+	}
+}
+
+// When a filter does rewrite the body, the rewritten JSON keeps its type too.
+func TestToolRequest_RewriteKeepsJSONType(t *testing.T) {
+	f := newToolFilterFixtureWithService(t, `unused`, func(svc *services.Service) services.ServiceInterface {
+		return &typedResultService{Service: svc, result: map[string]interface{}{"ssn": "123-45-6789"}}
+	})
+	defer f.teardown()
+
+	f.attachFilter(t, "redact", `
+text := import("text")
+output := {block: false, payload: text.replace(input.raw_input, "123-45-6789", "[REDACTED]", -1)}`, true)
+
+	rr := f.call(t, "getTestData", nil)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.JSONEq(t, `{"ssn":"[REDACTED]"}`, rr.Body.String())
 }

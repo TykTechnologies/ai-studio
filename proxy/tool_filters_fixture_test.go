@@ -66,6 +66,14 @@ func (f *toolFilterFixture) call(t *testing.T, operationID string, payload map[s
 
 func newToolFilterFixture(t *testing.T, upstreamBody string) *toolFilterFixture {
 	t.Helper()
+	return newToolFilterFixtureWithService(t, upstreamBody, nil)
+}
+
+// newToolFilterFixtureWithService allows a test to wrap the gateway service,
+// e.g. to return a tool result of a type Studio's client would never produce
+// but the microgateway's does.
+func newToolFilterFixtureWithService(t *testing.T, upstreamBody string, wrap func(*services.Service) services.ServiceInterface) *toolFilterFixture {
+	t.Helper()
 
 	db, cancel := setupTest(t)
 	service := services.NewService(db)
@@ -107,7 +115,12 @@ func newToolFilterFixture(t *testing.T, upstreamBody string) *toolFilterFixture 
 	require.NoError(t, err)
 	require.NotNil(t, app.Credential)
 
-	p := NewProxy(service, &Config{Port: 9998}, budgetService)
+	var gatewayService services.ServiceInterface = service
+	if wrap != nil {
+		gatewayService = wrap(service)
+	}
+
+	p := New(gatewayService, budgetService, &Config{Port: 9998})
 	require.NoError(t, p.loadResources())
 
 	return &toolFilterFixture{

@@ -980,9 +980,7 @@ func (p *Proxy) handleToolRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// A filtered response is always returned as the text the filters
-		// agreed on, so a redaction cannot be undone by re-encoding.
-		result = filtered
+		result = applyFilteredToolResult(result, body, filtered)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1003,6 +1001,36 @@ func hasToolOutputFilters(tool *models.Tool) bool {
 		}
 	}
 	return false
+}
+
+// applyFilteredToolResult folds a filtered response body back into the value
+// the caller receives.
+//
+// Tool results are not always strings: the microgateway builds its client
+// without forcing a JSON string response, so a tool whose OpenAPI spec
+// declares a scalar response schema comes back as a float64 or a bool.
+// Rendering that to text for the filters and handing the text straight back
+// would turn the JSON number 123 into the JSON string "123" - governance
+// silently changing the type a client receives.
+//
+// So an untouched response keeps its original value, and a rewritten one is
+// re-parsed to recover its type, falling back to text when the filter
+// produced something that is not JSON.
+func applyFilteredToolResult(original interface{}, body, filtered string) interface{} {
+	if filtered == body {
+		return original
+	}
+
+	switch original.(type) {
+	case string, []byte:
+		return filtered
+	}
+
+	var reparsed interface{}
+	if err := json.Unmarshal([]byte(filtered), &reparsed); err == nil {
+		return reparsed
+	}
+	return filtered
 }
 
 // toolResultBody renders a tool result as the text a filter script sees.
@@ -2289,7 +2317,7 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 						"tool", filterTool.Name, "operation", operationID, "error", err, "block", block)
 					return mcp.NewToolResultError(toolBlockedMessage), nil
 				}
-				result = filtered
+				result = applyFilteredToolResult(result, body, filtered)
 			}
 
 			// Convert the result to MCP format
