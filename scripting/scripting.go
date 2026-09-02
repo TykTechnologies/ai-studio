@@ -8,8 +8,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
-// RunScript always passes through in CE (enterprise feature)
-func (sr *ScriptRunner) RunScript(input *ScriptInput, serviceRef services.ServiceInterface) (*ScriptOutput, error) {
+// runScript always passes through in CE (enterprise feature)
+func (sr *ScriptRunner) runScript(input *ScriptInput, serviceRef services.ServiceInterface) (*ScriptOutput, error) {
 	slog.Warn("⚠️ CE: Script execution skipped (enterprise feature)")
 	return &ScriptOutput{
 		Block:   false,
