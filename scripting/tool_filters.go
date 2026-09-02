@@ -205,7 +205,9 @@ func runToolFilter(
 		IsResponse: isResponse,
 	}
 
-	output, err := runToolScript(filter, service, input)
+	// RunScript recovers panics from the Tengo VM and returns them as errors,
+	// which the fail-closed handling below then treats as a refusal.
+	output, err := NewScriptRunner(filter.Script).RunScript(input, service)
 	if err != nil {
 		slog.Error("tool filter execution error",
 			"filter_name", filter.Name, "scope", scope, "tool_id", id.ToolID, "error", err)
@@ -259,24 +261,6 @@ func warnToolFilterDirection(filters []models.Filter, id ToolFilterIdentity) {
 			"filter_name", filter.Name, "filter_id", filter.ID,
 			"tool_id", id.ToolID, "tool_name", id.ToolName)
 	}
-}
-
-// runToolScript executes one filter script, converting a panic into an error.
-//
-// The Tengo VM panics rather than returning an error on some runtime faults
-// (integer divide by zero, for one), and a tool call is served on the caller's
-// own goroutine, so an unrecovered panic in a filter would take the whole
-// gateway process down. Recovering here turns a bad script into a fail-closed
-// refusal of the one call that triggered it.
-func runToolScript(filter models.Filter, service services.ServiceInterface, input *ScriptInput) (output *ScriptOutput, err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			output = nil
-			err = fmt.Errorf("filter script panicked: %v", recovered)
-		}
-	}()
-
-	return NewScriptRunner(filter.Script).RunScript(input, service)
 }
 
 // recordToolBlockEvent synthesises a compliance event for a block the script

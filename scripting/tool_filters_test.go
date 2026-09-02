@@ -152,11 +152,14 @@ func TestRunToolFilters_FailClosedOnScriptError(t *testing.T) {
 func TestRunToolFilters_RecoversFromScriptPanic(t *testing.T) {
 	// The Tengo VM panics on some runtime faults. A tool call runs on the
 	// caller's goroutine, so an unrecovered panic would take the process down.
+	// The recovery itself lives in ScriptRunner.RunScript; what matters here
+	// is that the tool paths turn it into a fail-closed refusal.
 	_, block, err := RunToolInputFilters(context.Background(),
 		[]models.Filter{inputFilter("panicky", `output := 5 / 0`)}, nil, baseArgs(), testIdentity())
 
 	require.Error(t, err, "a panicking filter must fail closed, not crash the process")
-	assert.Contains(t, err.Error(), "panicked")
+	assert.Contains(t, err.Error(), "panic")
+	assert.Contains(t, err.Error(), "panicky", "the failing filter is named for the operator")
 	assert.Nil(t, block)
 }
 
