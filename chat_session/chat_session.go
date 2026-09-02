@@ -16,8 +16,8 @@ import (
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
@@ -689,8 +689,8 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 					ModelName:  cs.chatRef.LLMSettings.ModelName,
 					Context: map[string]interface{}{
 						"session_id": cs.ID(),
-						"user_id":    int64(cs.userID),      // Convert uint to int64 for Tengo
-						"chat_id":    int64(cs.chatRef.ID),  // Convert uint to int64 for Tengo
+						"user_id":    int64(cs.userID),     // Convert uint to int64 for Tengo
+						"chat_id":    int64(cs.chatRef.ID), // Convert uint to int64 for Tengo
 						"file_ref":   refs[i],
 					},
 					IsChat: true,
@@ -1124,7 +1124,7 @@ User message: %s`, userMessage)
 	}
 
 	title := strings.TrimSpace(resp.Choices[0].Content)
-	
+
 	// Clean up the title - remove quotes and limit length
 	title = strings.Trim(title, `"'`)
 	if len(title) > 60 {
@@ -1453,12 +1453,15 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 	}
 
 	callArgs, block, err := scripting.RunToolInputFilters(cs.ctx, toolDef.Filters, cs.service, callArgs, identity)
-	if block != nil {
-		cs.handleToolError(fmt.Sprintf("blocked by filter '%s'", block.FilterName), t.ID, t.FunctionCall.Name, toolResult)
-		return
-	}
-	if err != nil {
-		cs.handleToolError(fmt.Sprintf("filter error: %v", err), t.ID, t.FunctionCall.Name, toolResult)
+	if block != nil || err != nil {
+		// The model is told only that policy stopped the call. Naming the
+		// filter would map the governance configuration for anyone able to
+		// steer the conversation, and a script error carries Tengo's own
+		// diagnostics, which can quote the filter source.
+		slog.Info("tool call blocked before dispatch",
+			"tool", toolDef.Name, "operation", t.FunctionCall.Name,
+			"session_id", cs.ID(), "error", err, "block", block)
+		cs.handleToolError(scripting.ToolBlockedMessage, t.ID, t.FunctionCall.Name, toolResult)
 		return
 	}
 
@@ -1500,12 +1503,11 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 	}
 
 	filtered, block, err := scripting.RunToolOutputFilters(cs.ctx, toolDef.Filters, cs.service, asStr, identity)
-	if block != nil {
-		cs.handleToolError(fmt.Sprintf("blocked by filter '%s'", block.FilterName), t.ID, t.FunctionCall.Name, toolResult)
-		return
-	}
-	if err != nil {
-		cs.handleToolError(fmt.Sprintf("filter error: %v", err), t.ID, t.FunctionCall.Name, toolResult)
+	if block != nil || err != nil {
+		slog.Info("tool response blocked",
+			"tool", toolDef.Name, "operation", t.FunctionCall.Name,
+			"session_id", cs.ID(), "error", err, "block", block)
+		cs.handleToolError(scripting.ToolBlockedMessage, t.ID, t.FunctionCall.Name, toolResult)
 		return
 	}
 	asStr = filtered

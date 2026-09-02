@@ -18,6 +18,13 @@ const (
 	ToolOutputScope = "tool_output"
 )
 
+// ToolBlockedMessage is what a caller is told when a governance filter stops a
+// tool call, on every transport. It is deliberately generic and identical for
+// input and output blocks: the filter's own name and reason go to the logs and
+// to the compliance event, so a caller cannot probe the filters to map the
+// governance configuration or learn whether the downstream tool was reached.
+const ToolBlockedMessage = "blocked by policy"
+
 // Event types synthesised when a filter blocks without reporting an event of
 // its own, so that every block is auditable.
 const (

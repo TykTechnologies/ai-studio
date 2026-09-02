@@ -269,3 +269,25 @@ output := {block: false, payload: string(json.encode(decoded))}`, false)
 	received := f.upstream.ReceivedRequests[0]
 	assert.Equal(t, "yes", received.Headers.Get("X-Governed"))
 }
+
+// All three transports must refuse with the same generic text, and none may
+// disclose the filter's name or its reason. This is the property the separate
+// per-transport tests can each satisfy while still drifting apart, so it is
+// asserted directly.
+func TestToolRequest_BlockDisclosesNothingAboutTheFilter(t *testing.T) {
+	f := newToolFilterFixture(t, `{"ok":true}`)
+	defer f.teardown()
+
+	f.attachFilter(t, "ssn-outbound-guard", `output := {block: true, message: "matched rule DLP-7"}`, false)
+
+	rest := f.call(t, "getTestData", nil).Body.String()
+	mcp, isError := newMCPSession(t, f).callTool(t, "getTestData", map[string]interface{}{})
+
+	require.True(t, isError)
+
+	for name, body := range map[string]string{"REST": rest, "MCP": mcp} {
+		assert.Contains(t, body, toolBlockedMessage, name)
+		assert.NotContains(t, body, "ssn-outbound-guard", "%s must not disclose the filter name", name)
+		assert.NotContains(t, body, "DLP-7", "%s must not disclose the filter's reason", name)
+	}
+}

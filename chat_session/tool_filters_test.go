@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -113,9 +114,13 @@ func TestChatToolCall_BlockedOutputIsNotAlsoDelivered(t *testing.T) {
 	responses := f.call(t, `{}`)
 
 	require.Len(t, responses, 1, "a blocked tool call must produce exactly one result part")
-	assert.Contains(t, responses[0].Content, "blocked by filter")
+	assert.Contains(t, responses[0].Content, scripting.ToolBlockedMessage)
 	assert.NotContains(t, responses[0].Content, "123-45-6789",
 		"the blocked payload must never reach the model")
+	assert.NotContains(t, responses[0].Content, "deny-output",
+		"the filter name must not be disclosed to the model")
+	assert.NotContains(t, responses[0].Content, "sensitive",
+		"the filter's own reason must not be disclosed to the model")
 }
 
 func TestChatToolCall_InputFilterBlocksBeforeUpstream(t *testing.T) {
@@ -125,7 +130,11 @@ func TestChatToolCall_InputFilterBlocksBeforeUpstream(t *testing.T) {
 	responses := f.call(t, `{"body":{"ssn":"123-45-6789"}}`)
 
 	require.Len(t, responses, 1)
-	assert.Contains(t, responses[0].Content, "blocked by filter")
+	assert.Contains(t, responses[0].Content, scripting.ToolBlockedMessage)
+	assert.NotContains(t, responses[0].Content, "deny-input",
+		"the filter name must not be disclosed to the model")
+	assert.NotContains(t, responses[0].Content, "no PII",
+		"the filter's own reason must not be disclosed to the model")
 	assert.Equal(t, 0, *f.received, "a blocked tool call must never reach the downstream tool")
 }
 
@@ -163,7 +172,11 @@ func TestChatToolCall_FilterErrorFailsClosed(t *testing.T) {
 	responses := f.call(t, `{}`)
 
 	require.Len(t, responses, 1)
-	assert.Contains(t, responses[0].Content, "ERROR")
+	assert.Contains(t, responses[0].Content, scripting.ToolBlockedMessage)
+	assert.NotContains(t, responses[0].Content, "broken",
+		"a failing filter must not name itself to the model")
+	assert.NotContains(t, responses[0].Content, "Runtime Error",
+		"Tengo diagnostics can quote the filter source and must not reach the model")
 	assert.Equal(t, 0, *f.received)
 }
 
@@ -240,7 +253,7 @@ output := {block: blocked, message: "denied"}`, false)})
 	second := toolResult.Parts[1].(llms.ToolCallResponse)
 
 	assert.Equal(t, "call_1", first.ToolCallID)
-	assert.Contains(t, first.Content, "blocked by filter")
+	assert.Contains(t, first.Content, scripting.ToolBlockedMessage)
 
 	assert.Equal(t, "call_2", second.ToolCallID)
 	assert.JSONEq(t, `{"ok":true}`, second.Content, "the allowed call must still succeed")

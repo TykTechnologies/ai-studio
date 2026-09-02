@@ -9,12 +9,9 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 )
 
-// toolBlockedMessage is what a caller sees when a governance filter stops a
-// tool call. It is deliberately identical for input and output blocks: the
-// filter's own reason goes to the logs and to compliance reporting, and an
-// identical response either way means a caller cannot probe the filters to
-// learn whether the downstream tool was reached.
-const toolBlockedMessage = "blocked by policy"
+// toolBlockedMessage is shared with every other tool-call transport so the
+// refusal a caller sees cannot drift between them.
+const toolBlockedMessage = scripting.ToolBlockedMessage
 
 // resolvedToolCtxKey carries the tool loaded for the current MCP request.
 //
