@@ -744,7 +744,7 @@ EOF
 # Walk every published entry in both marketplace checkouts.  Cheap, and the
 # fastest way to see whether a release actually landed the way its entry claims.
 verify_all() {
-  local failures=0 checked=0
+  local failures=0 checked=0 skipped=0
   for marketplace in "$REPO_ROOT/tyk-ai-studio-plugins" "$REPO_ROOT/tyk-internal-marketplace"; do
     [ -d "$marketplace/plugins" ] || continue
     for plugin_dir in "$marketplace"/plugins/*/; do
@@ -755,6 +755,13 @@ verify_all() {
         [ -f "$version_dir/manifest.yaml" ] || continue
         local version
         version="$(basename "$version_dir")"
+        # Retired versions are expected to look wrong - they were published
+        # before the tag and digest invariants existed, and nothing installs
+        # them any more. Counting them would make this useless as a CI gate.
+        if [ "$(manifest_value "$version_dir/manifest.yaml" deprecated)" = "true" ]; then
+          skipped=$((skipped + 1))
+          continue
+        fi
         checked=$((checked + 1))
         printf '\n--- %s %s\n' "$name" "$version" >&2
         local output
@@ -768,7 +775,7 @@ verify_all() {
     done
   done
   info ""
-  info "$checked entries checked, $failures with problems"
+  info "$checked entries checked, $failures with problems ($skipped deprecated, skipped)"
   [ "$failures" -eq 0 ] || exit 1
 }
 
