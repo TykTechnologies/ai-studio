@@ -46,9 +46,13 @@ func createFullSnapshot(namespace string) *pb.ConfigurationSnapshot {
 		},
 		Apps: []*pb.AppConfig{
 			{
-				Id:            1,
-				Name:          "Test App",
-				IsActive:      true,
+				Id:       1,
+				Name:     "Test App",
+				IsActive: true,
+				// The owner id matters to more than analytics: the gateway's OAuth
+				// branch refuses a token whose bound app belongs to another user, and
+				// reads that comparison off this field.
+				UserId:        1,
 				Namespace:     namespace,
 				LlmIds:        []uint32{1},
 				ToolIds:       []uint32{1, 2},
@@ -140,6 +144,7 @@ func createFullSnapshot(namespace string) *pb.ConfigurationSnapshot {
 				TokenEncrypted: "encrypted-token-xyz",
 				ClientId:       "mcp-client-abc",
 				UserId:         1,
+				AppId:          1,
 				Scope:          "mcp",
 				ExpiresAt:      timestamppb.New(now.Add(24 * time.Hour)),
 				CreatedAt:      timestamppb.New(now),
@@ -289,6 +294,9 @@ func TestEdgeSyncService_SyncAccessTokens(t *testing.T) {
 		assert.Equal(t, "encrypted-token-xyz", token.TokenEncrypted)
 		assert.Equal(t, "mcp-client-abc", token.ClientID)
 		assert.Equal(t, uint(1), token.UserID)
+		// The app binding is what the gateway authorises the token against. If it
+		// does not survive the sync, the edge has to refuse every OAuth token.
+		assert.Equal(t, uint(1), token.AppID)
 		assert.Equal(t, "mcp", token.Scope)
 		assert.True(t, token.ExpiresAt.After(time.Now()), "Token should not be expired")
 	})
@@ -535,11 +543,91 @@ func TestGatewayAdapterToolMethods(t *testing.T) {
 		assert.Equal(t, uint(1), token.UserID)
 		assert.Equal(t, "mcp", token.Scope)
 		assert.True(t, token.ExpiresAt.After(time.Now()))
+		// The gateway's credential validator reads AppID off this model to run the
+		// tool ACL, and fails the token closed when it is nil.
+		require.NotNil(t, token.AppID)
+		assert.Equal(t, uint(1), *token.AppID)
+	})
+
+	t.Run("GetValidAccessTokenByToken_UnboundTokenHasNilAppID", func(t *testing.T) {
+		// A token the control plane sent with no app binding must arrive as nil,
+		// not as app 0, so the validator refuses it rather than resolving an app.
+		unbound := database.AccessTokenEdge{
+			TokenHash:      "144d597854adbcb97b5071a9812d1a9e506663b5598390d1e54f3658ea2f6e62", // SHA-256 of "unbound-token"
+			TokenEncrypted: "unbound-token",
+			ClientID:       "mcp-client-abc",
+			UserID:         1,
+			AppID:          0,
+			Scope:          "mcp",
+			ExpiresAt:      time.Now().Add(time.Hour),
+		}
+		require.NoError(t, db.Create(&unbound).Error)
+
+		token, err := adapter.GetValidAccessTokenByToken("unbound-token")
+		require.NoError(t, err)
+		assert.Nil(t, token.AppID)
 	})
 
 	t.Run("GetValidAccessTokenByToken_Invalid", func(t *testing.T) {
 		_, err := adapter.GetValidAccessTokenByToken("invalid-token")
 		assert.Error(t, err)
+	})
+
+	// TestGatewayAdapterToolMethods/OAuthToolACLContract pins everything the
+	// shared credential validator reads when it authorises an OAuth token for a
+	// tool. The edge runs the same proxy.CredentialValidator as the hub but is fed
+	// by this adapter, so if any of these fields stops being populated the ACL
+	// silently refuses every OAuth request at the edge - or, worse, stops being
+	// able to tell two tenants apart.
+	t.Run("OAuthToolACLContract", func(t *testing.T) {
+		token, err := adapter.GetValidAccessTokenByToken("encrypted-token-xyz")
+		require.NoError(t, err)
+		require.NotNil(t, token.AppID, "the validator resolves the app from this")
+
+		app, err := adapter.GetAppByID(*token.AppID)
+		require.NoError(t, err)
+
+		// The ownership check: app.UserID must survive the sync, or every token
+		// looks like it belongs to someone else.
+		assert.Equal(t, token.UserID, app.UserID,
+			"app owner must round-trip so the ownership check can pass")
+
+		// The membership check: the app's tool grants must be present.
+		require.NotEmpty(t, app.Tools, "app.Tools is what the tool ACL scans")
+		grantedIDs := make(map[uint]bool, len(app.Tools))
+		for _, tool := range app.Tools {
+			grantedIDs[tool.ID] = true
+		}
+		assert.True(t, grantedIDs[1] && grantedIDs[2], "both granted tools should be present, got %v", grantedIDs)
+
+		// The handler's slug re-check compares the context tool's Slug against the
+		// URL, so an empty Slug here would refuse every MCP request.
+		resolved, err := adapter.GetToolBySlug("weather-api")
+		require.NoError(t, err)
+		assert.Equal(t, "weather-api", resolved.Slug)
+		assert.True(t, grantedIDs[resolved.ID], "the resolved tool should be one the app grants")
+
+		// A tool the app does not grant must not be scannable into the grant set.
+		assert.False(t, grantedIDs[999])
+	})
+
+	// TestGatewayAdapterToolMethods/AppLivenessFieldsAreAbsentAtTheEdge records a
+	// trap rather than a feature. convertDatabaseAppToModel does not populate
+	// Credential or IsActive, so a liveness check added to the shared validator
+	// would deny every request on the edge while passing every test on the hub.
+	// If this test starts failing because the fields are now populated, the
+	// comment in the OAuth branch of proxy/credential_validator.go can be revisited.
+	t.Run("AppLivenessFieldsAreAbsentAtTheEdge", func(t *testing.T) {
+		app, err := adapter.GetAppByID(1)
+		require.NoError(t, err)
+
+		assert.False(t, app.Credential.Active,
+			"Credential is not synced to the edge - do not gate the shared validator on it")
+		// The Credential association itself is empty; CredentialID is set to the
+		// app's own id as a placeholder, so it is not a usable signal either. A
+		// liveness check would have to guard on Credential.ID != 0.
+		assert.Zero(t, app.Credential.ID,
+			"no real credential is synced, so Credential.ID is the only safe guard")
 	})
 
 	t.Run("AppWithToolAndDatasourcePreloads", func(t *testing.T) {

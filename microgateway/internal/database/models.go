@@ -520,6 +520,7 @@ type AccessTokenEdge struct {
 	TokenEncrypted string    `gorm:"type:varchar(255);not null" json:"token_encrypted"`       // Encrypted token (for returning to caller)
 	ClientID       string    `gorm:"type:varchar(255);not null" json:"client_id"`
 	UserID         uint      `gorm:"not null" json:"user_id"`
+	AppID          uint      `gorm:"index" json:"app_id"` // App selected at consent; 0 means unbound and authorises nothing
 	Scope          string    `gorm:"type:varchar(255)" json:"scope"`
 	ExpiresAt      time.Time `gorm:"not null" json:"expires_at"`
 }

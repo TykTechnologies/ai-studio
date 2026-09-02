@@ -1976,12 +1976,20 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			tokenHash = fmt.Sprintf("%x", h[:])
 		}
 
+		// The app binding travels with the token: without it the edge cannot run
+		// the same tool ACL the hub does, and would have to refuse the token.
+		var appID uint32
+		if token.AppID != nil {
+			appID = uint32(*token.AppID)
+		}
+
 		pbToken := &pb.AccessTokenConfig{
 			Id:             uint32(token.ID),
 			TokenEncrypted: encryptedToken,
 			TokenHash:      tokenHash,
 			ClientId:       token.ClientID,
 			UserId:         uint32(token.UserID),
+			AppId:          appID,
 			Scope:          token.Scope,
 			ExpiresAt:      timestamppb.New(token.ExpiresAt),
 			CreatedAt:      timestamppb.New(token.CreatedAt),

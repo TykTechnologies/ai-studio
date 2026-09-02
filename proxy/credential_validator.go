@@ -2,12 +2,15 @@ package proxy
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
 )
@@ -48,26 +51,145 @@ func (cv *CredentialValidator) RegisterValidator(vendor string, validator Creden
 	cv.validators[strings.ToLower(vendor)] = validator
 }
 
+// toolSlugFromPath returns the slug named by a /tools/{slug}/... path, or "" when
+// the path is not a tool path. It covers the REST endpoint and all three MCP
+// transports (/mcp, /mcp/sse, /mcp/message) alike.
+//
+// The middleware wraps the router, so mux route vars are not populated yet and
+// the path has to be split by hand. fixDoubleSlash runs ahead of auth, so
+// "//tools/x" cannot dodge this.
+func toolSlugFromPath(path string) string {
+	pathParts := strings.Split(path, "/")
+	if len(pathParts) >= 3 && pathParts[1] == "tools" {
+		return pathParts[2]
+	}
+	return ""
+}
+
+// appHasTool reports whether the app is entitled to the tool.
+func appHasTool(app *models.App, toolID uint) bool {
+	if app == nil {
+		return false
+	}
+	for _, t := range app.Tools {
+		if t.ID == toolID {
+			return true
+		}
+	}
+	return false
+}
+
+// authorizeToolAccess resolves the tool named by a tool path and checks the app
+// is entitled to it, returning a context carrying the tool for the handlers.
+//
+// This is the single implementation of the tool ACL. Every authentication branch
+// calls it, because the branches had drifted: the OAuth branch performed no check
+// at all, which let any valid token reach any tool's MCP server.
+//
+// Failures answer 401 "invalid credential" whether the tool is missing or merely
+// not granted - the caller must not learn which.
+func (cv *CredentialValidator) authorizeToolAccess(w http.ResponseWriter, r *http.Request, app *models.App, toolSlug string) (context.Context, bool) {
+	tool, err := cv.service.GetToolBySlug(toolSlug)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+		return nil, false
+	}
+
+	if !appHasTool(app, tool.ID) {
+		log.Debug().
+			Uint("app_id", app.GetID()).
+			Uint("tool_id", tool.ID).
+			Str("tool_slug", toolSlug).
+			Msg("Tool authorization denied: app is not entitled to this tool")
+		respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+		return nil, false
+	}
+
+	ctx := context.WithValue(r.Context(), "tool", tool)
+	ctx = context.WithValue(ctx, "toolSlug", toolSlug)
+	return ctx, true
+}
+
+// appFromPluginAuthContext loads the app a microgateway auth plugin authenticated
+// as. The plugin middleware puts the id on the context under "app_id" (it cannot
+// put a *models.App there without importing models), so the app is resolved here.
+//
+// The key is a bare string rather than microgateway/internal/auth.AppIDKey because
+// that package is internal to the microgateway module and this one is not.
+func (cv *CredentialValidator) appFromPluginAuthContext(r *http.Request) (*models.App, error) {
+	raw := r.Context().Value("app_id")
+	if raw == nil {
+		return nil, errors.New("no app_id on a plugin-authenticated request")
+	}
+
+	var appID uint
+	switch v := raw.(type) {
+	case uint:
+		appID = v
+	case uint32:
+		appID = uint(v)
+	case int:
+		if v <= 0 {
+			return nil, fmt.Errorf("non-positive app_id %d on a plugin-authenticated request", v)
+		}
+		appID = uint(v)
+	case int64:
+		if v <= 0 {
+			return nil, fmt.Errorf("non-positive app_id %d on a plugin-authenticated request", v)
+		}
+		appID = uint(v)
+	default:
+		return nil, fmt.Errorf("unexpected app_id type %T on a plugin-authenticated request", raw)
+	}
+
+	if appID == 0 {
+		return nil, errors.New("zero app_id on a plugin-authenticated request")
+	}
+
+	return cv.service.GetAppByID(appID)
+}
+
 func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check if authentication was already done by a microgateway plugin
 		if pluginAuth := r.Context().Value("plugin_authenticated"); pluginAuth != nil {
 			if authenticated, ok := pluginAuth.(bool); ok && authenticated {
-				// Request already authenticated by microgateway plugin - skip credential validation
-				// The plugin has already set the app context with correct AppID
+				// Request already authenticated by microgateway plugin - skip credential validation.
+				// The plugin has already set the app context with correct AppID, but it does not
+				// resolve tools: a tool request still has to clear the tool ACL here, or the
+				// plugin auth path would be a way around it.
+				if toolSlug := toolSlugFromPath(r.URL.Path); toolSlug != "" {
+					app, err := cv.appFromPluginAuthContext(r)
+					if err != nil {
+						log.Debug().Err(err).Msg("Plugin-authenticated tool request without a resolvable app")
+						respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+						return
+					}
+					ctx, ok := cv.authorizeToolAccess(w, r, app, toolSlug)
+					if !ok {
+						return
+					}
+					ctx = context.WithValue(ctx, "app", app)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
 		}
 
 		pathParts := strings.Split(r.URL.Path, "/")
-		if len(pathParts) < 2 { // Adjusted for paths like "/.well-known/..."
-			// Allow .well-known paths without auth for now, or handle them separately if needed
-			if pathParts[1] == ".well-known" {
-				next.ServeHTTP(w, r)
-				return
-			}
+		if len(pathParts) < 2 {
 			respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false)
+			return
+		}
+
+		// Discovery metadata is public by definition - it is how a client learns
+		// where to authenticate - so it is served before any credential handling.
+		// It was previously exempted further down, which meant a client that did
+		// present a credential had its metadata request run through authentication.
+		if pathParts[1] == ".well-known" {
+			next.ServeHTTP(w, r)
 			return
 		}
 
@@ -87,7 +209,41 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			// First try OAuth access token lookup using interface method
 			accessToken, err := cv.service.GetValidAccessTokenByToken(tokenString)
 			if err == nil {
-				// Valid OAuth access token
+				// A valid OAuth access token authenticates a user - it does not, on its
+				// own, authorise anything. Authorisation comes from the app the user
+				// selected at consent, which the token carries as AppID, and from the
+				// app's tool grants. This branch used to stop at "the token exists and
+				// has not expired", which let any token reach any tool's MCP server.
+				toolSlug := toolSlugFromPath(r.URL.Path)
+				if toolSlug == "" {
+					// OAuth access tokens are issued for MCP. They authorise the tool
+					// endpoints and their MCP transports, nothing else: LLM, datasource
+					// and /ai/ traffic authenticates with an app secret or API key.
+					log.Debug().Str("path", r.URL.Path).Msg("OAuth token presented on a non-tool path")
+					respondWithError(w, http.StatusUnauthorized, "Invalid or expired bearer token", nil, true)
+					return
+				}
+
+				if !oauthscope.Grants(accessToken.Scope, oauthscope.MCP) {
+					log.Debug().
+						Str("scope", accessToken.Scope).
+						Str("required", oauthscope.MCP).
+						Msg("OAuth token rejected: scope does not grant MCP access")
+					respondWithError(w, http.StatusUnauthorized, "insufficient scope for this resource", nil, true)
+					return
+				}
+
+				// Fail closed: a token with no app binding was never authorised against
+				// anything, so it grants nothing.
+				if accessToken.AppID == nil {
+					log.Warn().
+						Uint("token_id", accessToken.ID).
+						Uint("user_id", accessToken.UserID).
+						Msg("OAuth token rejected: no app binding")
+					respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+					return
+				}
+
 				user, err := cv.service.GetUserByID(accessToken.UserID)
 				if err != nil {
 					respondWithError(w, http.StatusInternalServerError, "Could not retrieve user for token", err, false)
@@ -100,12 +256,44 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					return
 				}
 
-				ctx := context.WithValue(r.Context(), "user", user)
+				app, err := cv.service.GetAppByID(*accessToken.AppID)
+				if err != nil {
+					log.Debug().Err(err).Uint("app_id", *accessToken.AppID).Msg("OAuth token references an app that could not be loaded")
+					respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+					return
+				}
+
+				// Re-check the ownership consent established. The consent screen and
+				// the token endpoint both verify it, but this is the point where the
+				// binding is actually trusted, and the whole reason this branch exists
+				// is that a token must not be believed about its own authority. App
+				// ownership is a single scalar (models.App.UserID), and the edge syncs
+				// it, so the check is the same on both planes.
+				if app.UserID != accessToken.UserID {
+					log.Warn().
+						Uint("token_id", accessToken.ID).
+						Uint("token_user_id", accessToken.UserID).
+						Uint("app_id", app.ID).
+						Uint("app_user_id", app.UserID).
+						Msg("OAuth token rejected: bound app is not owned by the token's user")
+					respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+					return
+				}
+
+				// The same tool ACL every other branch applies.
+				ctx, ok := cv.authorizeToolAccess(w, r, app, toolSlug)
+				if !ok {
+					return
+				}
+
+				ctx = context.WithValue(ctx, "user", user)
 				ctx = context.WithValue(ctx, "oauthClient", oauthClient)
 				ctx = context.WithValue(ctx, "scope", accessToken.Scope)
+				// The app is what budget, analytics, filters and the plugin hooks read.
+				ctx = context.WithValue(ctx, "app", app)
 
-				// OAuth flow does NOT trigger auth hooks - MCP server authentication path
-				// This is separate from LLM proxy request authentication
+				// Tool requests do not fire the post-auth hook, matching the app-secret
+				// branch below, which returns before reaching it.
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -130,6 +318,19 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					app, err := cv.service.GetAppByID(appID)
 					if err != nil {
 						respondWithError(w, http.StatusInternalServerError, "Failed to retrieve app", err, false)
+						return
+					}
+
+					// An auth plugin authenticates; it does not authorise a tool. Tool
+					// requests still clear the tool ACL, so custom auth cannot be a way
+					// around it.
+					if toolSlug := toolSlugFromPath(r.URL.Path); toolSlug != "" {
+						ctx, ok := cv.authorizeToolAccess(w, r, app, toolSlug)
+						if !ok {
+							return
+						}
+						ctx = context.WithValue(ctx, "app", app)
+						next.ServeHTTP(w, r.WithContext(ctx))
 						return
 					}
 
@@ -159,33 +360,12 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					ctx := context.WithValue(r.Context(), "app", app)
 
 					// For tool requests, validate the app has access to the tool
-					pathParts := strings.Split(r.URL.Path, "/")
-					if len(pathParts) >= 3 && pathParts[1] == "tools" {
-						toolSlug := pathParts[2]
-						tool, err := cv.service.GetToolBySlug(toolSlug)
-						if err != nil {
-							// Return 401 for security - don't leak whether tool exists
-							respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+					if toolSlug := toolSlugFromPath(r.URL.Path); toolSlug != "" {
+						toolCtx, ok := cv.authorizeToolAccess(w, r, app, toolSlug)
+						if !ok {
 							return
 						}
-
-						// Check if app has access to this tool
-						hasAccess := false
-						for _, t := range app.Tools {
-							if t.ID == tool.ID {
-								hasAccess = true
-								break
-							}
-						}
-
-						if !hasAccess {
-							// Return 401 for security - don't leak tool access info
-							respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
-							return
-						}
-
-						ctx = context.WithValue(ctx, "tool", tool)
-						ctx = context.WithValue(ctx, "toolSlug", toolSlug)
+						ctx = context.WithValue(toolCtx, "app", app)
 
 						next.ServeHTTP(w, r.WithContext(ctx))
 						return
@@ -339,6 +519,17 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 				app, err := cv.service.GetAppByID(appID)
 				if err != nil {
 					respondWithError(w, http.StatusInternalServerError, "Failed to retrieve app", err, false)
+					return
+				}
+
+				// As with the bearer custom-auth branch: authentication by a plugin does
+				// not authorise a tool.
+				if toolSlug != "" {
+					toolCtx, ok := cv.authorizeToolAccess(w, r, app, toolSlug)
+					if !ok {
+						return
+					}
+					next.ServeHTTP(w, r.WithContext(context.WithValue(toolCtx, "app", app)))
 					return
 				}
 
@@ -504,11 +695,9 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 			if err != nil {
 				return false, r
 			}
-			for _, t := range app.Tools {
-				if t.ID == tool.ID {
-					ctx := context.WithValue(r.Context(), "tool", tool) // Add full tool to context
-					return true, r.WithContext(ctx)
-				}
+			if appHasTool(app, tool.ID) {
+				ctx := context.WithValue(r.Context(), "tool", tool) // Add full tool to context
+				return true, r.WithContext(ctx)
 			}
 			return false, r
 		}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
+	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -668,6 +669,20 @@ func (a *API) handleOAuthAuthorize(c *gin.Context) {
 		return
 	}
 
+	// The requested scope used to be taken verbatim and never checked against
+	// anything, so a token could be minted carrying any string a client cared to
+	// send. Reject what this platform does not issue, and default an omitted scope
+	// to mcp so clients that leave the parameter out still get a usable token.
+	if scope == "" {
+		scope = oauthscope.Default
+	} else if bad := oauthscope.Unsupported(scope); len(bad) > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":             "invalid_scope",
+			"error_description": "Unsupported scope(s): " + strings.Join(bad, " "),
+		})
+		return
+	}
+
 	oauthClientService := services.NewOAuthClientService(a.config.DB)
 	client, err := oauthClientService.GetClient(clientID)
 	if err != nil {
@@ -1282,7 +1297,7 @@ func (a *API) handleOAuthMetadata(c *gin.Context) {
 		AuthorizationEndpoint:             resolve("/oauth/authorize"),
 		TokenEndpoint:                     resolve("/oauth/token"),
 		RegistrationEndpoint:              resolve("/oauth/register_client"),
-		ScopesSupported:                   []string{"openid", "profile", "email", "mcp"},
+		ScopesSupported:                   oauthscope.Supported,
 		ResponseTypesSupported:            []string{"code"},
 		GrantTypesSupported:               []string{"authorization_code"},
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_post", "client_secret_basic", "none"},
