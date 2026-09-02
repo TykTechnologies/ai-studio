@@ -63,6 +63,8 @@ TLS_KEY_PATH=/etc/certs/server.key
 | `GATEWAY_DEFAULT_RATE_LIMIT` | int | `100` | Default requests per minute limit |
 | `GATEWAY_ENABLE_FILTERS` | bool | `true` | Enable filter processing |
 | `GATEWAY_ENABLE_ANALYTICS` | bool | `true` | Enable analytics collection |
+| `GATEWAY_UNIFIED_ROUTER_PATH` | string | `/v1` | Base path of the unified OpenAI-compatible endpoint (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) |
+| `GATEWAY_UNIFIED_ROUTER_DISABLED` | bool | `false` | Remove the unified endpoint entirely (per-route endpoints unaffected) |
 
 ## Database Configuration
 

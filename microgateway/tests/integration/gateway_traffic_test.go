@@ -40,6 +40,14 @@ const trafficTestToken = "e2e-traffic-test-token"
 // It returns the gateway base URL and the mock backend for request assertions.
 func setupTrafficTest(t *testing.T) (string, *mockllm.MockLLMBackend) {
 	t.Helper()
+	return setupTrafficTestWithGateway(t, config.GatewayConfig{})
+}
+
+// setupTrafficTestWithGateway is setupTrafficTest with explicit gateway settings,
+// so tests can boot the assembled microgateway with the unified router moved or
+// switched off and verify the real mounted route table.
+func setupTrafficTestWithGateway(t *testing.T, gwCfg config.GatewayConfig) (string, *mockllm.MockLLMBackend) {
+	t.Helper()
 
 	// Shared-cache named in-memory DB: the server handles requests concurrently,
 	// so every pooled connection must see the same database.
@@ -78,6 +86,7 @@ func setupTrafficTest(t *testing.T) (string, *mockllm.MockLLMBackend) {
 			FlushInterval: 100 * time.Millisecond,
 		},
 		Observability: config.ObservabilityConfig{LogLevel: "error", LogFormat: "json"},
+		Gateway:       gwCfg,
 	}
 
 	serviceContainer, err := services.NewServiceContainer(db, cfg)
@@ -291,4 +300,56 @@ func TestGatewayTraffic_EndToEnd(t *testing.T) {
 		assert.NotEqual(t, http.StatusOK, status)
 		assert.NotContains(t, string(body), "mock-openai")
 	})
+}
+
+// TestGatewayTraffic_UnifiedRouterConfigurable drives real LLM traffic through a
+// relocated unified endpoint, and confirms the default prefix is left free — the
+// property an embedding host gateway (e.g. Tyk's API Gateway) depends on.
+func TestGatewayTraffic_UnifiedRouterConfigurable(t *testing.T) {
+	baseURL, backend := setupTrafficTestWithGateway(t, config.GatewayConfig{
+		UnifiedRouterPath: "/ai-gateway/v1",
+	})
+
+	t.Run("traffic flows through the configured path", func(t *testing.T) {
+		before := backend.GetRequestCount()
+
+		status, body := gatewayPost(t, baseURL+"/ai-gateway/v1/chat/completions", trafficTestToken,
+			`{"model":"mock-openai/gpt-4","messages":[{"role":"user","content":"hello"}]}`)
+		require.Equal(t, http.StatusOK, status, "body: %s", body)
+
+		var resp map[string]interface{}
+		require.NoError(t, json.Unmarshal(body, &resp))
+		require.NotEmpty(t, resp["choices"], "response missing choices: %s", body)
+		require.Greater(t, backend.GetRequestCount(), before, "mock upstream never received the routed request")
+
+		// The vendor prefix is still stripped before the request leaves the gateway.
+		reqs := backend.GetRequests()
+		last := reqs[len(reqs)-1]
+		var upstreamReq map[string]interface{}
+		require.NoError(t, json.Unmarshal(last.Body, &upstreamReq))
+		assert.Equal(t, "gpt-4", upstreamReq["model"], "upstream saw a prefixed model name")
+	})
+
+	t.Run("default path is free for the host gateway", func(t *testing.T) {
+		status, _ := gatewayPost(t, baseURL+"/v1/chat/completions", trafficTestToken,
+			`{"model":"mock-openai/gpt-4","messages":[{"role":"user","content":"hello"}]}`)
+		require.Equal(t, http.StatusNotFound, status, "the relocated ingress must not still answer on /v1")
+	})
+}
+
+// TestGatewayTraffic_UnifiedRouterDisabled confirms the endpoint can be removed
+// entirely without disturbing the per-route endpoints.
+func TestGatewayTraffic_UnifiedRouterDisabled(t *testing.T) {
+	baseURL, _ := setupTrafficTestWithGateway(t, config.GatewayConfig{
+		UnifiedRouterDisabled: true,
+	})
+
+	chatBody := `{"model":"gpt-4","messages":[{"role":"user","content":"hello"}]}`
+
+	status, _ := gatewayPost(t, baseURL+"/v1/chat/completions", trafficTestToken,
+		`{"model":"mock-openai/gpt-4","messages":[{"role":"user","content":"hello"}]}`)
+	require.Equal(t, http.StatusNotFound, status)
+
+	status, body := gatewayPost(t, baseURL+"/ai/mock-openai/v1/chat/completions", trafficTestToken, chatBody)
+	require.Equal(t, http.StatusOK, status, "per-route endpoint broke with the unified ingress off: %s", body)
 }

@@ -24,6 +24,11 @@ type Gateway interface {
 	// Handler returns an http.Handler that can be integrated into existing HTTP servers
 	Handler() http.Handler
 
+	// UnifiedRouterBasePath reports the path prefix the OpenRouter-style unified
+	// ingress is served under ("/v1" by default), or "" when it is disabled.
+	// Hosts mounting Handler() behind their own router forward this prefix.
+	UnifiedRouterBasePath() string
+
 	// Reload reloads the gateway configuration (LLMs, datasources, filters)
 	Reload() error
 
@@ -49,6 +54,16 @@ type Config struct {
 	// LLMTimeout is the timeout for upstream LLM HTTP requests.
 	// Defaults to 5 minutes if zero, suitable for long-running agentic workloads.
 	LLMTimeout time.Duration
+
+	// UnifiedRouterBasePath moves the OpenRouter-style single-endpoint ingress
+	// ({base}/chat/completions, {base}/completions, {base}/models) off its default
+	// "/v1". Set it when embedding the gateway in a host that already owns "/v1",
+	// or that mounts this handler under a prefix of its own.
+	UnifiedRouterBasePath string
+
+	// DisableUnifiedRouter turns the unified ingress off entirely. The per-route
+	// endpoints (/ai/, /llm/, /anthropic/) are unaffected.
+	DisableUnifiedRouter bool
 }
 
 // New creates a new Gateway instance using the unified services interface with default database analytics.
@@ -117,8 +132,10 @@ func NewWithAnalytics(
 	}
 
 	proxyConfig := &proxy.Config{
-		Port:       config.Port,
-		LLMTimeout: config.LLMTimeout,
+		Port:                  config.Port,
+		LLMTimeout:            config.LLMTimeout,
+		UnifiedRouterBasePath: config.UnifiedRouterBasePath,
+		DisableUnifiedRouter:  config.DisableUnifiedRouter,
 	}
 	proxyInstance := proxy.New(gatewayService, budgetService, proxyConfig)
 	return &gateway{
@@ -139,6 +156,11 @@ func (g *gateway) Stop(ctx context.Context) error {
 // Handler returns the HTTP handler for integration with existing servers
 func (g *gateway) Handler() http.Handler {
 	return g.proxy.Handler()
+}
+
+// UnifiedRouterBasePath returns the unified ingress prefix, or "" when disabled.
+func (g *gateway) UnifiedRouterBasePath() string {
+	return g.proxy.UnifiedRouterBasePath()
 }
 
 // Reload reloads the gateway configuration

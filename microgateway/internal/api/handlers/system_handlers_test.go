@@ -33,6 +33,7 @@ func (m *MockGateway) GetPort() int                                      { retur
 func (m *MockGateway) AddResponseHook(hook proxy.ResponseHook)           { /* no-op for testing */ }
 func (m *MockGateway) SetAuthHooks(hooks *proxy.AuthHooks)               { /* no-op for testing */ }
 func (m *MockGateway) SetPostAuthCallback(callback proxy.PostAuthCallback) { /* no-op for testing */ }
+func (m *MockGateway) UnifiedRouterBasePath() string                       { return "/v1" }
 
 func TestReloadConfiguration_Handler(t *testing.T) {
 	_, router := setupTestHandlers(t)

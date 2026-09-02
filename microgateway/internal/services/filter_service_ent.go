@@ -12,8 +12,8 @@ import (
 	"github.com/d5/tengo/v2/stdlib"
 )
 
-// executeFilterScript executes a filter script using Tengo (enterprise feature)
-func (s *FilterService) executeFilterScript(filter *database.Filter, payload map[string]interface{}) (bool, error) {
+// runFilterScript executes a filter script using Tengo (enterprise feature)
+func (s *FilterService) runFilterScript(filter *database.Filter, payload map[string]interface{}) (bool, error) {
 	slog.Info("🔥 MICROGATEWAY ENT: Executing filter script", "filter_name", filter.Name, "filter_id", filter.ID)
 
 	// Convert payload to JSON string for script processing

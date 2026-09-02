@@ -162,6 +162,36 @@ type Config struct {
 	DatasourceMaxBodyBytes   int64 // Max request body size in bytes (default: 1MB)
 	DatasourceMaxResults     int   // Max documents returned per query (default: 100)
 	DatasourceMaxEmbedTexts  int   // Max texts per embedding request (default: 100)
+
+	// UnifiedRouterBasePath is where the OpenRouter-style single-endpoint ingress
+	// is mounted: "{base}/chat/completions", "{base}/completions" and "{base}/models".
+	// Empty uses DefaultUnifiedRouterBasePath ("/v1").
+	//
+	// This exists because the proxy is embedded in host gateways (e.g. Tyk's API
+	// Gateway) that already own "/v1" or mount the proxy under their own prefix.
+	// The value is normalized by NormalizeUnifiedRouterBasePath; the base path of
+	// the internal per-route shims (/ai/{slug}/v1/...) is unaffected by it.
+	UnifiedRouterBasePath string
+
+	// DisableUnifiedRouter removes the unified ingress entirely: no base-path
+	// interception and no {base}/models route, so those paths fall through to the
+	// normal authenticated router (404). Per-route endpoints (/ai/, /llm/,
+	// /anthropic/) are unaffected. Hosts that expose their own single endpoint,
+	// or that must not have the proxy claim a shared path prefix, set this.
+	DisableUnifiedRouter bool
+}
+
+// unifiedRouterBasePath returns the normalized ingress base path, or "" when the
+// unified router is disabled. A nil config means defaults, like the other config
+// accessors here — only DisableUnifiedRouter turns the ingress off.
+func (c *Config) unifiedRouterBasePath() string {
+	if c == nil {
+		return DefaultUnifiedRouterBasePath
+	}
+	if c.DisableUnifiedRouter {
+		return ""
+	}
+	return NormalizeUnifiedRouterBasePath(c.UnifiedRouterBasePath)
 }
 
 func (c *Config) llmTimeout() time.Duration {
@@ -358,6 +388,14 @@ func fixDoubleSlash(next http.Handler) http.Handler {
 }
 
 
+// UnifiedRouterBasePath reports where the OpenRouter-style unified ingress is
+// mounted on this proxy's handler ("/v1" by default), or "" when it is disabled.
+// Hosts that mount Handler() behind their own router use this to forward exactly
+// the prefix the proxy claims, instead of hardcoding "/v1".
+func (p *Proxy) UnifiedRouterBasePath() string {
+	return p.config.unifiedRouterBasePath()
+}
+
 func (p *Proxy) createHandler() http.Handler {
 	// Main router for authenticated routes
 	r := mux.NewRouter()
@@ -390,8 +428,12 @@ func (p *Proxy) createHandler() http.Handler {
 	aiRouter.HandleFunc("/ai/{routeId}/v1/chat/completions", p.CreateChatCompletionHandler).Methods("POST")
 	aiRouter.HandleFunc("/ai/{routeId}/v1/completions", p.CreateCompletionHandler).Methods("POST")
 	// Unified router model discovery: behind the same credential middleware, and
-	// scoped to the authenticated app's LLM associations by the handler.
-	aiRouter.HandleFunc("/v1/models", p.handleUnifiedListModels).Methods("GET")
+	// scoped to the authenticated app's LLM associations by the handler. Registered
+	// only when the unified ingress is enabled, and at its configured base path.
+	unifiedBasePath := p.config.unifiedRouterBasePath()
+	if unifiedBasePath != "" {
+		aiRouter.HandleFunc(unifiedBasePath+"/models", p.handleUnifiedListModels).Methods("GET")
+	}
 	authenticatedAIHandler := p.credValidator.Middleware(aiRouter)
 
 	// Anthropic Messages bridge: lets Claude Code (native Anthropic Messages API) drive
@@ -401,18 +443,25 @@ func (p *Proxy) createHandler() http.Handler {
 	anthropicRouter.HandleFunc("/anthropic/{routeId}/v1/messages", p.handleAnthropicMessagesEntry).Methods("POST")
 	authenticatedAnthropicHandler := p.credValidator.Middleware(anthropicRouter)
 
-	// Unified router: fixed OpenRouter-style ingress (/v1/...) that rewrites a
+	// Unified router: OpenRouter-style ingress (default /v1/...) that rewrites a
 	// "vendor/model" model string to /ai/{slug}/v1/... BEFORE auth, so the
 	// existing /ai/ chain runs unchanged. Route resolution happens downstream,
-	// after authentication (see NewUnifiedRouterHandler).
-	unifiedRouterHandler := NewUnifiedRouterHandler(authenticatedAIHandler)
+	// after authentication (see NewUnifiedRouterHandler). The base path is
+	// configurable, and the whole ingress optional, for embedding in host
+	// gateways that own the path space.
+	var unifiedRouterHandler http.Handler
+	unifiedPathPrefix := ""
+	if unifiedBasePath != "" {
+		unifiedRouterHandler = NewUnifiedRouterHandler(authenticatedAIHandler, unifiedBasePath)
+		unifiedPathPrefix = unifiedBasePath + "/"
+	}
 
 	// Combine routers: all go through auth, but /ai/ and /anthropic/ routes are separated for routing
 	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch {
 		case strings.HasPrefix(req.URL.Path, "/ai/"):
 			authenticatedAIHandler.ServeHTTP(w, req)
-		case strings.HasPrefix(req.URL.Path, "/v1/"):
+		case unifiedRouterHandler != nil && strings.HasPrefix(req.URL.Path, unifiedPathPrefix):
 			unifiedRouterHandler.ServeHTTP(w, req)
 		case strings.HasPrefix(req.URL.Path, "/anthropic/"):
 			authenticatedAnthropicHandler.ServeHTTP(w, req)

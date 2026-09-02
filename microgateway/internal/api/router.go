@@ -292,11 +292,18 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 		// all live inside the gateway handler (proxy.createHandler); the data plane just
 		// needs to forward this path prefix, same as /ai/.
 		gateway.Any("/anthropic/*path", gin.WrapH(config.Gateway.Handler()))
-		// Unified router: fixed OpenAI-compatible ingress (/v1/chat/completions,
-		// /v1/completions) taking "vendor/model" model strings and dispatching to the
+		// Unified router: OpenAI-compatible ingress ({base}/chat/completions,
+		// {base}/completions) taking "vendor/model" model strings and dispatching to the
 		// matching /ai/{slug}/ shim inside the gateway handler. Distinct from the
 		// Enterprise Model Router below, which registers per-router /router/{slug}/ URLs.
-		gateway.Any("/v1/*path", gin.WrapH(config.Gateway.Handler()))
+		//
+		// The prefix comes from the gateway itself rather than being hardcoded: it is
+		// configurable (GATEWAY_UNIFIED_ROUTER_PATH) and can be switched off entirely,
+		// in which case the gateway reports "" and the data plane mounts nothing.
+		if unifiedBasePath := config.Gateway.UnifiedRouterBasePath(); unifiedBasePath != "" {
+			log.Debug().Str("path", unifiedBasePath).Msg("Mounting unified router ingress")
+			gateway.Any(unifiedBasePath+"/*path", gin.WrapH(config.Gateway.Handler()))
+		}
 
 		// Model Router endpoints (Enterprise)
 		// Routes requests to LLM vendors based on model name patterns
