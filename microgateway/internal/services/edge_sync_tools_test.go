@@ -427,6 +427,33 @@ func TestGatewayAdapterToolMethods(t *testing.T) {
 		assert.Error(t, err)
 	})
 
+	// Governance filters attached to a tool are executed on the gateway's tool
+	// paths, so the adapter must carry them - and their direction - out of the
+	// edge's SQLite. Without the direction, an input filter would silently run
+	// on tool output instead.
+	t.Run("GetToolByID_CarriesFilters", func(t *testing.T) {
+		tool, err := adapter.GetToolByID(1)
+		require.NoError(t, err)
+		require.Len(t, tool.Filters, 1, "tool 1 is synced with one filter attached")
+		assert.Equal(t, uint(1), tool.Filters[0].ID)
+		assert.Equal(t, "Test Filter", tool.Filters[0].Name)
+		assert.NotEmpty(t, tool.Filters[0].Script, "the script must reach the edge or nothing is enforced")
+		assert.False(t, tool.Filters[0].ResponseFilter)
+	})
+
+	t.Run("GetToolBySlug_CarriesFilters", func(t *testing.T) {
+		tool, err := adapter.GetToolBySlug("weather-api")
+		require.NoError(t, err)
+		require.Len(t, tool.Filters, 1)
+		assert.NotEmpty(t, tool.Filters[0].Script)
+	})
+
+	t.Run("ToolWithoutFiltersHasNone", func(t *testing.T) {
+		tool, err := adapter.GetToolByID(2)
+		require.NoError(t, err)
+		assert.Empty(t, tool.Filters, "tool 2 is synced with no filters attached")
+	})
+
 	// The gateway's MCP server cache invalidates on the tool's version. When
 	// the adapter dropped the timestamps, every edge-served tool carried the
 	// zero time, the comparison always matched, and the cache was never

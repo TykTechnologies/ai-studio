@@ -111,6 +111,57 @@ flowchart LR
     *   `DELETE /tools/{id}/filters/{filter_id}`: Remove a filter from a tool.
     *   `PUT /tools/{id}/filters`: Set all filters for a tool.
 
+**3a. Tool Filters**
+
+Filters attach to Tools as well as to LLMs and Chats, and govern the tool call
+itself rather than the model call.
+
+*   **Direction:** the `response_filter` flag on the filter selects which side of
+    the tool call it governs. `false` runs it on **tool input** - the arguments
+    the model (or an API caller) is sending *to* the tool. `true` runs it on
+    **tool output** - the body the tool returned.
+*   **Coverage:** the REST tool endpoint (`POST /tools/{slug}`), all three MCP
+    transports (`/tools/{slug}/mcp`, `/mcp/sse`, `/mcp/message`) and tool calls
+    made from a chat session. The proxy is shared by AI Studio and the
+    Microgateway, so tool filters run identically on the control plane and at
+    the edge, and the `tool_filters` associations are carried to edges in the
+    configuration snapshot.
+*   **Script input:** on the input side, `input.raw_input` is the tool call
+    envelope as JSON - `operation_id`, `parameters`, `payload`, `headers` - the
+    same shape on REST, MCP and chat. On the output side it is the tool's
+    response body. `input.is_response` distinguishes the two, and
+    `input.context` carries `tool_id`, `tool_name`, `app_id` and `user_id`, plus
+    `session_id` and `call_id` for chat calls.
+*   **Rewriting:** a script may return a modified `payload` in either direction.
+    On the input side only `parameters`, `payload` and `headers` are taken back:
+    a filter cannot change `operation_id` and so cannot redirect the call to a
+    different operation.
+*   **Blocking:** the caller receives a generic refusal - HTTP 403
+    `blocked by policy` on REST, an MCP tool error with the same text on MCP.
+    The filter's own message is written to the logs and to the compliance
+    event, never to the caller, and the input and output refusals are identical
+    so a caller cannot infer whether the downstream tool was reached. An input
+    block means the downstream tool is never contacted.
+*   **Fail closed:** unlike LLM response filters, a tool filter that fails to
+    compile, errors, or panics blocks the call. A filter that did not run
+    enforced nothing.
+*   **Compliance:** every block records a compliance event
+    (`tool_input_blocked` / `tool_output_blocked`, severity `critical`) even
+    when the script reported none, under filter scopes `tool_input` and
+    `tool_output`. At the edge these reach AI Studio on the analytics pulse.
+*   **Community Edition:** script execution is an enterprise feature. In CE the
+    runner is a pass-through, so attached tool filters are evaluated as no-ops.
+
+Implemented in `scripting/tool_filters.go`, called from `proxy/proxy.go`
+(`handleToolRequest` and the MCP tool handler) and
+`chat_session/chat_session.go` (`executeRESTToolCall`).
+
+> **Upgrade note:** before directions were honoured, *every* filter attached to
+> a tool ran on the tool's response regardless of its `response_filter` flag. A
+> pre-existing request-direction attachment now governs tool input instead. The
+> gateway logs a warning naming the filter and tool the first time each such
+> filter runs.
+
 **4. Use Cases & Behavior**
 
 *   **Creating a DLP Filter:** Admin creates a Filter via `POST /filters` with a Tengo script that searches the `payload` for keywords or patterns (e.g., credit card numbers) and sets `result = false` if found.
@@ -127,7 +178,7 @@ flowchart LR
 *   **Script Complexity:** Managing complex logic in Tengo scripts might become difficult. Versioning or testing frameworks for scripts could be beneficial.
 *   **Compliance Event Reporting:** Implemented in `models/compliance_event.go` and `scripting/compliance_recorder.go`. Scripts can emit governance events (PII redaction, policy violations, etc.) that are stored for compliance auditing. Events flow through the analytics pipeline and are queryable via `GET /compliance/events`. Prometheus metrics are tracked via `aistudio_compliance_events_total`.
 *   **Filter Ordering:** If multiple filters are applied, their execution order might matter but isn't explicitly defined in the findings.
-*   **Request/Response Filtering:** Currently, filtering seems focused on the *request* payload (`outboundRequestMiddleware`, `screenProxyRequestByVendor`). Filtering the *response* from the LLM might be a future enhancement.
+*   **Request/Response Filtering:** Implemented in both directions. LLM request filtering runs in `screenProxyRequestByVendor`; LLM response filtering in `proxy/response_filter_utils.go` (block-only - payload edits are ignored there). Tool filtering runs in both directions with payload rewriting supported, see section 3a.
 *   **Middleware Scripting:** The `scripting` package also contains `RunMiddleware`, suggesting scripts might also be usable for modifying requests/responses, not just filtering/blocking. This wasn't the focus but is related.
 
 This document outlines the Midsommar Filters functionality based on the analyzed code, detailing how custom scripts can be used to enforce policies on LLM requests.

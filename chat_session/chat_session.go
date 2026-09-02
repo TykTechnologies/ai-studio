@@ -1390,154 +1390,147 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 		}
 
 		if toolDef.ToolType == models.ToolTypeREST {
-			opts := make([]universalclient.ClientOption, 0)
-			if toolDef.AuthKey != "" {
-				schemaName := toolDef.AuthSchemaName
-				if toolDef.AuthSchemaName == "" {
-					schemaName = "apiKey"
-				}
-
-				opts = append(opts, universalclient.WithAuth(schemaName, toolDef.AuthKey))
-			}
-
-			opts = append(opts, universalclient.WithResponseFormat(universalclient.ResponseFormatJSON))
-
-			uc, err := universalclient.NewClient([]byte(toolDef.OASSpec), "", opts...)
-			if err != nil {
-				errMsg := fmt.Sprintf("error creating tool client: %v", err)
-				cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
-				continue
-			}
-
-			t0 := time.Now()
-			args, err := cs.convertLLMArgsToUniversalClientInputs([]byte(t.FunctionCall.Arguments), t.FunctionCall.Name, uc)
-			if err != nil {
-				errMsg := fmt.Sprintf("error converting LLM args to universal client inputs: %v", err)
-				cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
-				continue
-			}
-
-			cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
-			cs.sendStatus(fmt.Sprintf("Parameters: `%s`", t.FunctionCall.Arguments))
-			if config.Get("").EchoConversation {
-				slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
-				slog.Info("[TOOL-CALL]", "[PARAMS]", t.FunctionCall.Arguments)
-			}
-
-			resp, err := uc.CallOperation(t.FunctionCall.Name, args.Parameters, args.Body, args.Headers)
-			if err != nil {
-				if config.Get("").EchoConversation {
-					slog.Info("[TOOL-CALL]", "[ERROR]", err)
-				}
-
-				errMsg := fmt.Sprintf("error calling tool operation [%s]: %v", t.FunctionCall.Name, err)
-				cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
-				continue
-			}
-
-			var asStr string
-			switch resp.(type) {
-			case []byte:
-				asStr = string(resp.([]byte))
-			case string:
-				asStr = resp.(string)
-			default:
-				errMsg := fmt.Sprintf("response is not a compatible string (%T)", resp)
-				cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
-				continue
-			}
-
-			t1 := time.Now()
-
-			if config.Get("").EchoConversation {
-				fmt.Println("===============================================")
-				slog.Info("[TOOL CALL]", "[FUNCTION]", t.FunctionCall.Name)
-				fmt.Println(asStr)
-				fmt.Println("===============================================")
-			}
-
-			currentResponse := asStr
-
-			for i, _ := range toolDef.Filters {
-				filter := toolDef.Filters[i]
-				sr := scripting.NewScriptRunner(filter.Script)
-				cs.sendStatus(fmt.Sprintf("Running governance filter: `%s`", filter.Name))
-
-				// Create MessageContent for tool response
-				messages := []llms.MessageContent{
-					{
-						Role:  llms.ChatMessageTypeTool,
-						Parts: []llms.ContentPart{llms.TextPart(currentResponse)},
-					},
-				}
-
-				scriptInput := &scripting.ScriptInput{
-					RawInput:   currentResponse,
-					Messages:   messages,
-					VendorName: string(cs.chatRef.LLM.Vendor),
-					ModelName:  cs.chatRef.LLMSettings.ModelName,
-					Context: map[string]interface{}{
-						"session_id": cs.ID(),
-						"user_id":    int64(cs.userID),   // Convert uint to int64 for Tengo
-						"tool_name":  toolDef.Name,
-						"tool_id":    int64(toolDef.ID),  // Convert uint to int64 for Tengo
-						"call_id":    t.ID,
-					},
-					IsChat: true,
-				}
-
-				output, err := sr.RunScript(scriptInput, cs.service)
-				if err != nil {
-					errMsg := fmt.Sprintf("filter error: %v", err)
-					cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
-					continue
-				}
-
-				// Record any compliance events reported by the script
-				scripting.RecordComplianceEvents(cs.ctx, output, filter.Name, "tool_response", 0, cs.userID, cs.chatRef.LLM.ID, string(cs.chatRef.LLM.Vendor), cs.chatRef.LLMSettings.ModelName)
-
-				// Check if tool response should be blocked (NEW capability)
-				if output.Block {
-					msg := output.Message
-					if msg == "" {
-						msg = "tool response blocked by policy"
-					}
-					errMsg := fmt.Sprintf("blocked by filter '%s': %s", filter.Name, msg)
-					cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
-					continue
-				}
-
-				// Apply modifications for next filter
-				if output.Payload != "" && output.Payload != currentResponse {
-					currentResponse = output.Payload
-				}
-			}
-
-			asStr = currentResponse
-
-			toolResp := llms.ToolCallResponse{
-				ToolCallID: t.ID,
-				Name:       t.FunctionCall.Name,
-				Content:    asStr,
-			}
-
-			cs.sendStatus(fmt.Sprintf("Function `%s()` returned: `%d` bytes", t.FunctionCall.Name, len(asStr)))
-			if config.Get("").EchoConversation && len(toolDef.Filters) > 0 {
-				slog.Info("[TOOL-CALL]", "[FILTERED]", t.FunctionCall.Name)
-				fmt.Println("===============================================")
-				fmt.Println(asStr)
-				fmt.Println("===============================================")
-			}
-
-			toolResult.Parts = append(toolResult.Parts, toolResp)
-
-			analytics.RecordToolCall(
-				context.Background(),
-				t.FunctionCall.Name,
-				time.Now(),
-				int(t1.Sub(t0).Milliseconds()), toolDef.ID)
+			cs.executeRESTToolCall(t, toolDef, toolResult)
 		}
 	}
+}
+
+// executeRESTToolCall runs a single REST tool call end to end: governance
+// filters on the arguments, the call itself, then governance filters on the
+// response. Every failure path returns, so a blocked call contributes exactly
+// one error part to the result and never the payload it blocked.
+func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool, toolResult *llms.MessageContent) {
+	opts := make([]universalclient.ClientOption, 0)
+	if toolDef.AuthKey != "" {
+		schemaName := toolDef.AuthSchemaName
+		if toolDef.AuthSchemaName == "" {
+			schemaName = "apiKey"
+		}
+
+		opts = append(opts, universalclient.WithAuth(schemaName, toolDef.AuthKey))
+	}
+
+	opts = append(opts, universalclient.WithResponseFormat(universalclient.ResponseFormatJSON))
+
+	uc, err := universalclient.NewClient([]byte(toolDef.OASSpec), "", opts...)
+	if err != nil {
+		errMsg := fmt.Sprintf("error creating tool client: %v", err)
+		cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+		return
+	}
+
+	t0 := time.Now()
+	args, err := cs.convertLLMArgsToUniversalClientInputs([]byte(t.FunctionCall.Arguments), t.FunctionCall.Name, uc)
+	if err != nil {
+		errMsg := fmt.Sprintf("error converting LLM args to universal client inputs: %v", err)
+		cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+		return
+	}
+
+	identity := scripting.ToolFilterIdentity{
+		ToolID:    toolDef.ID,
+		ToolName:  toolDef.Name,
+		UserID:    cs.userID,
+		SessionID: cs.ID(),
+		CallID:    t.ID,
+		IsChat:    true,
+	}
+
+	// Request-side filters see the arguments before they leave for the tool,
+	// so sensitive content can be stopped or redacted on the way out.
+	callArgs := scripting.ToolCallArgs{
+		OperationID: t.FunctionCall.Name,
+		Parameters:  args.Parameters,
+		Payload:     args.Body,
+		Headers:     args.Headers,
+	}
+
+	cs.sendStatus(fmt.Sprintf("Using function: `%s()`", t.FunctionCall.Name))
+	cs.sendStatus(fmt.Sprintf("Parameters: `%s`", t.FunctionCall.Arguments))
+	if config.Get("").EchoConversation {
+		slog.Info("[TOOL-CALL]", "[FUNCTION]", t.FunctionCall.Name)
+		slog.Info("[TOOL-CALL]", "[PARAMS]", t.FunctionCall.Arguments)
+	}
+
+	callArgs, block, err := scripting.RunToolInputFilters(cs.ctx, toolDef.Filters, cs.service, callArgs, identity)
+	if block != nil {
+		cs.handleToolError(fmt.Sprintf("blocked by filter '%s'", block.FilterName), t.ID, t.FunctionCall.Name, toolResult)
+		return
+	}
+	if err != nil {
+		cs.handleToolError(fmt.Sprintf("filter error: %v", err), t.ID, t.FunctionCall.Name, toolResult)
+		return
+	}
+
+	resp, err := uc.CallOperation(t.FunctionCall.Name, callArgs.Parameters, callArgs.Payload, callArgs.Headers)
+	if err != nil {
+		if config.Get("").EchoConversation {
+			slog.Info("[TOOL-CALL]", "[ERROR]", err)
+		}
+
+		errMsg := fmt.Sprintf("error calling tool operation [%s]: %v", t.FunctionCall.Name, err)
+		cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+		return
+	}
+
+	var asStr string
+	switch resp.(type) {
+	case []byte:
+		asStr = string(resp.([]byte))
+	case string:
+		asStr = resp.(string)
+	default:
+		errMsg := fmt.Sprintf("response is not a compatible string (%T)", resp)
+		cs.handleToolError(errMsg, t.ID, t.FunctionCall.Name, toolResult)
+		return
+	}
+
+	t1 := time.Now()
+
+	if config.Get("").EchoConversation {
+		fmt.Println("===============================================")
+		slog.Info("[TOOL CALL]", "[FUNCTION]", t.FunctionCall.Name)
+		fmt.Println(asStr)
+		fmt.Println("===============================================")
+	}
+
+	// Response-side filters see what the tool returned before the model does.
+	if len(toolDef.Filters) > 0 {
+		cs.sendStatus("Running governance filters")
+	}
+
+	filtered, block, err := scripting.RunToolOutputFilters(cs.ctx, toolDef.Filters, cs.service, asStr, identity)
+	if block != nil {
+		cs.handleToolError(fmt.Sprintf("blocked by filter '%s'", block.FilterName), t.ID, t.FunctionCall.Name, toolResult)
+		return
+	}
+	if err != nil {
+		cs.handleToolError(fmt.Sprintf("filter error: %v", err), t.ID, t.FunctionCall.Name, toolResult)
+		return
+	}
+	asStr = filtered
+
+	toolResp := llms.ToolCallResponse{
+		ToolCallID: t.ID,
+		Name:       t.FunctionCall.Name,
+		Content:    asStr,
+	}
+
+	cs.sendStatus(fmt.Sprintf("Function `%s()` returned: `%d` bytes", t.FunctionCall.Name, len(asStr)))
+	if config.Get("").EchoConversation && len(toolDef.Filters) > 0 {
+		slog.Info("[TOOL-CALL]", "[FILTERED]", t.FunctionCall.Name)
+		fmt.Println("===============================================")
+		fmt.Println(asStr)
+		fmt.Println("===============================================")
+	}
+
+	toolResult.Parts = append(toolResult.Parts, toolResp)
+
+	analytics.RecordToolCall(
+		context.Background(),
+		t.FunctionCall.Name,
+		time.Now(),
+		int(t1.Sub(t0).Milliseconds()), toolDef.ID)
 }
 
 func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
