@@ -76,6 +76,9 @@ help:
 	@echo "  make plugin-new         - Scaffold a new plugin (NAME=x TYPE=y [CAPABILITIES=a,b])"
 	@echo "  make plugin-help        - Show plugin scaffolding help"
 	@echo "  make plugins            - Build all example plugins"
+	@echo "  make plugin-publish     - Build, sign, push a plugin + index it (NAME=x [VERSION=y])"
+	@echo "  make plugin-verify      - Check a published plugin's digest and signature (NAME=x|all)"
+	@echo "                            (guide: docs/site/docs/plugins-publishing.md)"
 	@echo ""
 	@echo "Packaging (RPM/DEB via GoReleaser + nfpm):"
 	@echo "  make package            - Build all packages (auto-detect edition)"
@@ -485,6 +488,63 @@ plugin-new: bin/plugin-scaffold
 # Show plugin scaffolding help
 plugin-help: bin/plugin-scaffold
 	@./bin/plugin-scaffold -help
+
+# ============================================================================
+# Plugin Release (build -> sign -> push -> marketplace index entry)
+# ============================================================================
+# One command takes a plugin from source to a signed, indexed marketplace
+# release.  The version comes from the plugin's manifest.json and is used
+# verbatim as the OCI tag, and the digest written into the marketplace entry is
+# read back from the registry - so the tag, the binary and the index entry
+# cannot drift apart.
+#
+# Usage:
+#   make plugin-publish NAME=llm-cache SIGN_KEY=~/keys/plugin-ci.key
+#   make plugin-publish NAME=llm-cache DRY_RUN=1        # print the plan, push nothing
+#   make plugin-publish NAME=llm-cache YES=1            # no confirmation prompt (CI)
+#   make plugin-publish NAME=llm-cache NO_PUSH=1        # commit the entry, don't push it
+#   make plugin-verify  NAME=llm-cache [VERSION=1.0.1] PUB_KEY=~/keys/plugin-ci.pub
+#
+# Variables: NAME (required), VERSION, REG, PLATFORMS, SIGN_KEY, PUB_KEY,
+#            MIN_STUDIO_VERSION, DRY_RUN, YES, NO_PUSH, FORCE, SKIP_SIGN,
+#            SKIP_UI, SKIP_MARKETPLACE
+#
+# Full guide: docs/site/docs/plugins-publishing.md
+
+.PHONY: plugin-publish plugin-verify
+
+# This Makefile defines its own VERSION (the git describe of the platform), so
+# only forward VERSION to the script when it was set on the command line - and
+# blank it in the recipe environment so the platform version can never be
+# mistaken for a plugin version.
+PLUGIN_VERSION_FLAG :=
+ifeq ($(origin VERSION),command line)
+PLUGIN_VERSION_FLAG := --version "$(VERSION)"
+endif
+
+plugin-publish:
+	@if [ -z "$(NAME)" ]; then \
+		echo "Usage: make plugin-publish NAME=<plugin> [VERSION=x.y.z] SIGN_KEY=/path/to/plugin-ci.key"; \
+		echo ""; \
+		echo "Plugins are looked up under community/plugins, enterprise/plugins,"; \
+		echo "tyk-internal/plugins and examples/plugins."; \
+		echo "Add DRY_RUN=1 to see the full plan without pushing anything."; \
+		echo ""; \
+		echo "Full guide: docs/site/docs/plugins-publishing.md"; \
+		echo "All flags:  ./tools/publish-plugin.sh --help"; \
+		exit 1; \
+	fi
+	@env VERSION= ./tools/publish-plugin.sh publish "$(NAME)" $(PLUGIN_VERSION_FLAG)
+
+plugin-verify:
+	@if [ -z "$(NAME)" ]; then \
+		echo "Usage: make plugin-verify NAME=<plugin>|all [VERSION=x.y.z] [PUB_KEY=/path/to/plugin-ci.pub]"; \
+		echo ""; \
+		echo "NAME=all audits every published entry in both marketplace repos."; \
+		echo "Full guide: docs/site/docs/plugins-publishing.md"; \
+		exit 1; \
+	fi
+	@env VERSION= ./tools/publish-plugin.sh verify "$(NAME)" $(PLUGIN_VERSION_FLAG)
 
 # Test target (legacy - use test-all for more control)
 test:

@@ -224,6 +224,11 @@ Register with service DNS:
 
 ## oci:// - OCI Registry
 
+> **Publishing to a registry?** Use `make plugin-publish NAME=<plugin>`, which
+> builds, signs, pushes and indexes a plugin in one step. See
+> [Publishing Plugins](plugins-publishing.md). The steps below describe how a
+> gateway *consumes* an `oci://` plugin.
+
 Deploy plugins as OCI artifacts in container registries.
 
 ### Prerequisites

@@ -381,6 +381,7 @@ For detailed technical specifications, see the docs in `docs/site/docs/`:
 | Observability (metrics & tracing) | `observability.md` |
 | Kubernetes Inference Gateway co-existence | `deployment-kubernetes-inference-gateway.md` |
 | Plugin System Overview | `plugins-overview.md` |
+| Publishing Plugins (make plugin-publish) | `plugins-publishing.md` |
 | Gateway Plugins | `plugins-microgateway.md` |
 | Plugin SDK Reference | `plugins-sdk.md` |
 | Plugin Service APIs | `plugins-service-api.md` |

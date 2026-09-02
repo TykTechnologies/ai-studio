@@ -5,11 +5,12 @@ This guide covers the complete workflow for publishing, signing, and deploying p
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Plugin Publishing Workflow](#plugin-publishing-workflow)
-3. [Edge Gateway Configuration](#edge-gateway-configuration)
-4. [Control Gateway Plugin Management](#control-gateway-plugin-management)
-5. [Verification and Testing](#verification-and-testing)
-6. [Troubleshooting](#troubleshooting)
+2. [Publishing a Tyk Plugin: `make plugin-publish`](#publishing-a-tyk-plugin-make-plugin-publish)
+3. [Plugin Publishing Workflow (manual)](#plugin-publishing-workflow-manual)
+4. [Edge Gateway Configuration](#edge-gateway-configuration)
+5. [Control Gateway Plugin Management](#control-gateway-plugin-management)
+6. [Verification and Testing](#verification-and-testing)
+7. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
@@ -42,7 +43,92 @@ Ensure you have access to an OCI-compatible registry:
 - **Amazon ECR**
 - **Local registry** (for testing)
 
-## Plugin Publishing Workflow
+## Publishing a Tyk Plugin: `make plugin-publish`
+
+For plugins that live in this repository, the whole release - cross-compile,
+push, sign, and the marketplace index entry - is one command. Use this rather
+than the manual steps below; the manual workflow is the reference for what it
+does under the hood and for plugins built outside this repo.
+
+```bash
+# One-time: install oras and cosign (see Prerequisites), and log in
+oras login docker.tyk.io -u <user>
+
+# Release a plugin. The version comes from the plugin's manifest.json.
+make plugin-publish NAME=llm-cache SIGN_KEY=~/keys/plugin-ci.key
+
+# See exactly what would happen, without pushing anything
+make plugin-publish NAME=llm-cache DRY_RUN=1
+```
+
+It resolves the plugin under `community/plugins/`, `enterprise/plugins/`,
+`tyk-internal/plugins/` or `examples/plugins/`, builds the UI bundle if the
+plugin has one, cross-compiles for `linux/amd64` and `darwin/arm64`, pushes each
+binary as an OCI artifact, assembles the multi-platform index, signs the index
+**by digest**, verifies the signature it just made, then writes and pushes the
+marketplace entry.
+
+Two properties matter, because both were sources of broken releases:
+
+- **The version is the tag.** It comes from the plugin's `manifest.json` and is
+  used verbatim as the OCI tag, so `manifest.yaml`, the registry tag and the
+  binary cannot drift apart. Per-platform tags are version-scoped too
+  (`1.0.2-linux_amd64`), so a half-finished release can never leave the index
+  pointing at a previous version's binary.
+- **The digest is read back, never typed.** The digest recorded in the
+  marketplace entry is the one the registry returned for the index that was
+  just pushed.
+
+The marketplace repo (`tyk-ai-studio-plugins`, or `tyk-internal-marketplace` for
+internal plugins) is cloned if missing and pulled before the entry is written,
+because its CI regenerates `index.yaml` from the manifests on `main`.
+
+### Useful variables
+
+| Variable | Effect |
+|----------|--------|
+| `NAME` | Plugin to publish (required) |
+| `VERSION` | Override the version from `manifest.json` |
+| `SIGN_KEY` / `PUB_KEY` | Cosign private key, and the public key for the read-back verify (defaults to `SIGN_KEY` with a `.pub` suffix) |
+| `REG` | Registry host (defaults to whatever the last release used) |
+| `PLATFORMS` | Platform list, e.g. `"linux/amd64 linux/arm64"` |
+| `DRY_RUN=1` | Print every step, push nothing |
+| `YES=1` | Skip the confirmation prompt (CI) |
+| `NO_PUSH=1` | Commit the marketplace entry but do not push it |
+| `SKIP_MARKETPLACE=1` | Stop after signing |
+| `FORCE=1` | Overwrite a version directory that already exists |
+
+### Checking a release: `make plugin-verify`
+
+```bash
+make plugin-verify NAME=llm-cache                       # newest published version
+make plugin-verify NAME=llm-cache VERSION=1.0.1
+make plugin-verify NAME=all PUB_KEY=~/keys/plugin-ci.pub  # audit every entry
+```
+
+For each entry it checks that the recorded tag matches the manifest version,
+that the tag still resolves to the recorded digest, that the index really is
+multi-platform, and - given a public key - that the artifact is signed.
+
+### Repairing an entry that went out wrong
+
+If the artifact in the registry is fine but the marketplace entry is not,
+rewrite just the entry, reading the digest back from the registry:
+
+```bash
+make plugin-verify NAME=llm-cache VERSION=1.0.1
+./tools/publish-plugin.sh publish llm-cache --version 1.0.1 \
+  --marketplace-only --force
+```
+
+This touches `manifest.yaml` only; the README, icon and changelog that shipped
+with that version are left alone. If the *artifact* is wrong or missing, do a
+full `make plugin-publish` with `FORCE=1` instead.
+
+## Plugin Publishing Workflow (manual)
+
+The steps below are what `make plugin-publish` automates. Follow them by hand
+only for plugins outside this repository.
 
 ### Step 1: Generate Signing Keys (One-time Setup)
 
