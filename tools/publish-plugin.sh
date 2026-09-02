@@ -374,6 +374,26 @@ sys.exit(1 if want and have and want > have else 0)
   fi
 }
 
+# Read a signature back, tolerating the registry's write-to-read lag.  cosign
+# returns BLOB_UNKNOWN for a few seconds after pushing a signature, which would
+# otherwise fail a release that actually succeeded.
+verify_signature() {
+  local ref="$1" attempt=1 max="${VERIFY_ATTEMPTS:-6}"
+  while :; do
+    if cosign verify --key "$PUB_KEY" "$ref" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [ "$attempt" -ge "$max" ]; then
+      # Final attempt with output shown, so a genuine failure is diagnosable.
+      cosign verify --key "$PUB_KEY" "$ref" >/dev/null
+      return 1
+    fi
+    info "    signature not readable yet (attempt $attempt/$max) - registry catching up"
+    sleep 5
+    attempt=$((attempt + 1))
+  done
+}
+
 # --- marketplace checkout ---------------------------------------------------
 
 prepare_marketplace() {
@@ -603,7 +623,11 @@ EOF
   # artifact it points at actually verifies.
   if [ -n "$PUB_KEY" ] && { [ -f "$PUB_KEY" ] || [ "$DRY_RUN" = "1" ]; }; then
     step "Verifying the signature with $PUB_KEY"
-    run cosign verify --key "$PUB_KEY" "$TARGET@$DIGEST" >/dev/null
+    if [ "$DRY_RUN" = "1" ]; then
+      run cosign verify --key "$PUB_KEY" "$TARGET@$DIGEST"
+    else
+      verify_signature "$TARGET@$DIGEST"
+    fi
     info "    signature verifies"
   elif [ "$SKIP_SIGN" != "1" ]; then
     warn "no public key at $PUB_KEY - skipping the read-back verify. Pass --pub-key to check the signature."
