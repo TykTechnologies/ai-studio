@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/mock"
@@ -377,6 +378,7 @@ func TestHandleOAuthAuthorize_ValidationErrors(t *testing.T) {
 		{"no_redirect_uri", "?response_type=code&client_id=1&code_challenge=y&code_challenge_method=S256", "client_id and redirect_uri are required"},
 		{"invalid_pkce_method", "?response_type=code&client_id=1&redirect_uri=x&code_challenge=y&code_challenge_method=plain", "code_challenge_method must be 'S256'"},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			w := performOAuthRequest(router, "GET", "/oauth/authorize"+tc.queryString, nil, nil)
@@ -573,4 +575,78 @@ func TestHandleSubmitConsent_Denied(t *testing.T) {
 	location := w.Header().Get("Location")
 	require.Contains(t, location, "http://client.deny.com/cb?")
 	require.Contains(t, location, "error=access_denied")
+}
+
+// The requested scope used to be taken verbatim from the query string and never
+// checked, so a token could be minted carrying anything a client sent. These pin
+// the validation added alongside the gateway's scope enforcement.
+func TestHandleOAuthAuthorize_ScopeValidation(t *testing.T) {
+	apiInstance, router, _, _, _, _, mockAuthSvc := setupTestAPIWithMocks(t)
+	testDB := apiInstance.config.DB
+
+	currentUser := ensureUserInDB(t, testDB, testUserGlobal)
+	mockAuthSvc.SimulateAuthenticatedUser = currentUser
+	mockAuthSvc.SimulateAuthError = nil
+
+	clientSvc := services.NewOAuthClientService(testDB)
+	testClient, _, err := clientSvc.CreateClient("ScopeTestClient", []string{"http://client.example.com/callback"}, &currentUser.ID, "mcp")
+	require.NoError(t, err)
+
+	appConf := config.Get("")
+	originalSiteURL := appConf.SiteURL
+	appConf.SiteURL = "http://dashboard.example.com"
+	defer func() { appConf.SiteURL = originalSiteURL }()
+
+	authURL := func(scope string) string {
+		return "/oauth/authorize?response_type=code&client_id=" + testClient.ClientID +
+			"&redirect_uri=" + url.QueryEscape("http://client.example.com/callback") +
+			"&code_challenge=challenge&code_challenge_method=S256&state=123&scope=" + url.QueryEscape(scope)
+	}
+
+	pendingReqService := services.NewPendingAuthRequestService(testDB)
+
+	scopeOfPendingRequest := func(t *testing.T, w *httptest.ResponseRecorder) string {
+		t.Helper()
+		parsedLocation, err := url.Parse(w.Header().Get("Location"))
+		require.NoError(t, err)
+		pending, err := pendingReqService.GetPendingAuthRequest(parsedLocation.Query().Get("auth_req_id"), currentUser.ID)
+		require.NoError(t, err)
+		return pending.Scope
+	}
+
+	t.Run("an unsupported scope is rejected", func(t *testing.T) {
+		w := performOAuthRequest(router, "GET", authURL("mcp admin:everything"), nil, nil)
+		require.Equal(t, http.StatusBadRequest, w.Code)
+
+		var resp gin.H
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Equal(t, "invalid_scope", resp["error"])
+		require.Contains(t, resp["error_description"], "admin:everything")
+	})
+
+	t.Run("an omitted scope defaults to mcp", func(t *testing.T) {
+		w := performOAuthRequest(router, "GET", authURL(""), nil, nil)
+		require.Equal(t, http.StatusFound, w.Code, "Body: "+w.Body.String())
+		require.Equal(t, oauthscope.MCP, scopeOfPendingRequest(t, w))
+	})
+
+	t.Run("supported scopes are carried through", func(t *testing.T) {
+		w := performOAuthRequest(router, "GET", authURL("openid mcp"), nil, nil)
+		require.Equal(t, http.StatusFound, w.Code, "Body: "+w.Body.String())
+		require.Equal(t, "openid mcp", scopeOfPendingRequest(t, w))
+	})
+}
+
+// The two discovery documents used to advertise different scope lists, and
+// neither matched what was enforced. Both now come from pkg/oauthscope.
+func TestOAuthMetadataAdvertisesEnforcedScopes(t *testing.T) {
+	_, router, _, _, _, _, _ := setupTestAPIWithMocks(t)
+
+	w := performOAuthRequest(router, "GET", "/.well-known/oauth-authorization-server", nil, nil)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var metadata OAuthServerMetadata
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
+	require.Equal(t, oauthscope.Supported, metadata.ScopesSupported)
+	require.Contains(t, metadata.ScopesSupported, oauthscope.MCP)
 }

@@ -24,6 +24,9 @@ type CreateAccessTokenArgs struct {
 	UserID    uint
 	Scope     string
 	ExpiresIn time.Duration // How long the token is valid for
+	// AppID binds the token to the app chosen at consent. A token minted without
+	// it authorises no resource at the gateway.
+	AppID *uint
 }
 
 // CreateAccessToken generates, stores, and returns a new access token.
@@ -42,6 +45,7 @@ func (s *AccessTokenService) CreateAccessToken(args CreateAccessTokenArgs) (*mod
 		UserID:    args.UserID,
 		Scope:     args.Scope,
 		ExpiresAt: time.Now().Add(args.ExpiresIn),
+		AppID:     args.AppID,
 	}
 
 	if err := s.db.Create(accessToken).Error; err != nil {

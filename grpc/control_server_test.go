@@ -1753,3 +1753,55 @@ func TestControlServer_ThreadSafety(t *testing.T) {
 	assert.Empty(t, server.edgeConnections)
 	server.edgeMutex.RUnlock()
 }
+
+// TestControlServer_SnapshotCarriesAccessTokenAppBinding covers the hub end of the
+// OAuth tool ACL. The edge runs the same credential validator as the hub and
+// authorises a token against the app it was bound to at consent, so if app_id
+// does not travel in the snapshot the edge has to refuse every OAuth token.
+func TestControlServer_SnapshotCarriesAccessTokenAppBinding(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+
+	boundAppID := uint(42)
+	tokens := []models.AccessToken{
+		{
+			Token:     "bound-access-token",
+			ClientID:  "mcp-client",
+			UserID:    7,
+			Scope:     "mcp",
+			ExpiresAt: time.Now().Add(time.Hour),
+			AppID:     &boundAppID,
+		},
+		{
+			Token:     "unbound-access-token",
+			ClientID:  "mcp-client",
+			UserID:    7,
+			Scope:     "mcp",
+			ExpiresAt: time.Now().Add(time.Hour),
+		},
+	}
+	for i := range tokens {
+		require.NoError(t, db.Create(&tokens[i]).Error)
+	}
+
+	snapshot, err := server.getConfigurationSnapshot("")
+	require.NoError(t, err)
+
+	require.Len(t, snapshot.AccessTokens, 2)
+
+	var bound, unbound *pb.AccessTokenConfig
+	for _, tok := range snapshot.AccessTokens {
+		if tok.AppId == uint32(boundAppID) {
+			bound = tok
+		} else {
+			unbound = tok
+		}
+	}
+
+	require.NotNil(t, bound, "the app-bound token should be in the snapshot")
+	assert.Equal(t, uint32(boundAppID), bound.AppId)
+
+	// A token with no binding travels as 0, which the edge maps back to a nil
+	// AppID so the validator fails it closed rather than resolving app 0.
+	require.NotNil(t, unbound, "the unbound token should still be in the snapshot")
+	assert.Equal(t, uint32(0), unbound.AppId)
+}

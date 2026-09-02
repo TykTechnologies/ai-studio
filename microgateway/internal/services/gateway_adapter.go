@@ -580,6 +580,13 @@ func (a *GatewayServiceAdapter) GetValidAccessTokenByToken(token string) (*model
 		Scope:     dbToken.Scope,
 		ExpiresAt: dbToken.ExpiresAt,
 	}
+	// A zero AppID means the control plane sent no app binding. Leave it nil so
+	// the gateway's credential validator fails the token closed, rather than
+	// resolving app 0.
+	if dbToken.AppID != 0 {
+		appID := dbToken.AppID
+		at.AppID = &appID
+	}
 	at.ID = dbToken.ID
 	return at, nil
 }

@@ -2013,6 +2013,7 @@ type AccessTokenConfig struct {
 	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	TokenHash      string                 `protobuf:"bytes,9,opt,name=token_hash,json=tokenHash,proto3" json:"token_hash,omitempty"` // SHA-256 hash for O(1) lookup on edge (no decryption needed)
+	AppId          uint32                 `protobuf:"varint,10,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`           // App selected at consent; the token is authorised against this app's tools (0 = unbound, authorises nothing)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2108,6 +2109,13 @@ func (x *AccessTokenConfig) GetTokenHash() string {
 		return x.TokenHash
 	}
 	return ""
+}
+
+func (x *AccessTokenConfig) GetAppId() uint32 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
 }
 
 // ConfigurationSnapshot represents a complete configuration state
@@ -2784,7 +2792,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe8\x02\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xff\x02\n" +
 	"\x11AccessTokenConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12'\n" +
 	"\x0ftoken_encrypted\x18\x02 \x01(\tR\x0etokenEncrypted\x12\x1b\n" +
@@ -2798,7 +2806,9 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1d\n" +
 	"\n" +
-	"token_hash\x18\t \x01(\tR\ttokenHash\"\x82\x06\n" +
+	"token_hash\x18\t \x01(\tR\ttokenHash\x12\x15\n" +
+	"\x06app_id\x18\n" +
+	" \x01(\rR\x05appId\"\x82\x06\n" +
 	"\x15ConfigurationSnapshot\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12+\n" +
 	"\x04llms\x18\x02 \x03(\v2\x17.microgateway.LLMConfigR\x04llms\x12+\n" +

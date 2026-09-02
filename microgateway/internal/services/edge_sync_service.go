@@ -828,6 +828,7 @@ func (s *EdgeSyncService) syncAccessTokens(tx *gorm.DB, tokens []*pb.AccessToken
 			TokenEncrypted: pbToken.TokenEncrypted,
 			ClientID:       pbToken.ClientId,
 			UserID:         uint(pbToken.UserId),
+			AppID:          uint(pbToken.AppId),
 			Scope:          pbToken.Scope,
 			ExpiresAt:      pbToken.ExpiresAt.AsTime(),
 		})

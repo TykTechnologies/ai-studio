@@ -30,6 +30,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
+	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -566,7 +567,11 @@ func (p *Proxy) handleOAuthProtectedResourceMetadata(w http.ResponseWriter, r *h
 
 	metadata := map[string]interface{}{
 		"resource": resourceBaseURI, "authorization_servers": []string{authServerMetadataURL},
-		"scopes_supported": []string{"mcp", "mcp_read", "mcp_write"}, "bearer_methods_supported": []string{"auth_header"},
+		// Only scopes that are actually enforced are advertised. This used to claim
+		// mcp_read and mcp_write, which no client ever requested, no token ever
+		// carried and nothing ever checked - and it disagreed with the list the
+		// authorization server advertises. Both now come from pkg/oauthscope.
+		"scopes_supported": oauthscope.Resource, "bearer_methods_supported": []string{"auth_header"},
 		"mcp_protocol_version": "1.0",
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -2409,11 +2414,44 @@ func (p *Proxy) getMCPServerForTool(toolModel *models.Tool, r *http.Request) (*M
 	return p.mcpServers[cacheKey], nil
 }
 
+// authorizedMCPTool returns the tool the caller has been authorised for, or nil
+// after writing a 401.
+//
+// The MCP handlers used to resolve the tool from the URL slug alone and read
+// nothing from the request context. That made the credential middleware's
+// path-string check the only thing standing between a caller and any tool's MCP
+// server: a branch that authenticated without running the tool ACL - as the OAuth
+// branch did - handed over every tool in the system. handleToolRequest has always
+// required the context tool; these handlers now do the same, so an auth branch
+// that forgets the check fails closed here instead of granting access.
+//
+// The slug is re-checked against the authorised tool so a context tool from one
+// path cannot be used to serve another.
+func (p *Proxy) authorizedMCPTool(w http.ResponseWriter, r *http.Request) *models.Tool {
+	toolCtx := r.Context().Value("tool")
+	if toolCtx == nil {
+		respondWithError(w, http.StatusUnauthorized, "Tool context not found, authentication likely failed.", nil, true)
+		return nil
+	}
+
+	tool, ok := toolCtx.(*models.Tool)
+	if !ok || tool == nil {
+		respondWithError(w, http.StatusInternalServerError, "invalid tool type in context", nil, false)
+		return nil
+	}
+
+	if toolSlug := mux.Vars(r)["toolSlug"]; toolSlug != "" && toolSlug != tool.Slug {
+		logger.Debugf("MCP request for tool slug %q authorized only for %q", toolSlug, tool.Slug)
+		respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
+		return nil
+	}
+
+	return tool
+}
+
 func (p *Proxy) handleMCPToolSSE(w http.ResponseWriter, r *http.Request) {
-	toolSlug := mux.Vars(r)["toolSlug"]
-	tool, err := p.gatewayService.GetToolBySlug(toolSlug)
-	if err != nil {
-		respondWithError(w, http.StatusNotFound, "tool not found", err, false)
+	tool := p.authorizedMCPTool(w, r)
+	if tool == nil {
 		return
 	}
 	cache, err := p.getMCPServerForTool(tool, r)
@@ -2426,10 +2464,8 @@ func (p *Proxy) handleMCPToolSSE(w http.ResponseWriter, r *http.Request) {
 	cache.SSEServer.SSEHandler().ServeHTTP(w, withResolvedTool(r, tool))
 }
 func (p *Proxy) handleMCPToolMessage(w http.ResponseWriter, r *http.Request) {
-	toolSlug := mux.Vars(r)["toolSlug"]
-	tool, err := p.gatewayService.GetToolBySlug(toolSlug)
-	if err != nil {
-		respondWithError(w, http.StatusNotFound, "tool not found", err, false)
+	tool := p.authorizedMCPTool(w, r)
+	if tool == nil {
 		return
 	}
 	cache, err := p.getMCPServerForTool(tool, r)
@@ -2442,10 +2478,8 @@ func (p *Proxy) handleMCPToolMessage(w http.ResponseWriter, r *http.Request) {
 	cache.SSEServer.MessageHandler().ServeHTTP(w, withResolvedTool(r, tool))
 }
 func (p *Proxy) handleMCPToolStreamable(w http.ResponseWriter, r *http.Request) {
-	toolSlug := mux.Vars(r)["toolSlug"]
-	tool, err := p.gatewayService.GetToolBySlug(toolSlug)
-	if err != nil {
-		respondWithError(w, http.StatusNotFound, "tool not found", err, false)
+	tool := p.authorizedMCPTool(w, r)
+	if tool == nil {
 		return
 	}
 	cache, err := p.getMCPServerForTool(tool, r)
