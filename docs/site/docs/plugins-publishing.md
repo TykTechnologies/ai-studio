@@ -62,6 +62,7 @@ Two properties are deliberate, because both were sources of broken releases:
 | `REG` | Registry host (defaults to whatever the last release used) |
 | `PLATFORMS` | Platform list, e.g. `"linux/amd64 linux/arm64"` |
 | `MIN_STUDIO_VERSION` | Override the compatibility floor (see below) |
+| `ALLOW_FUTURE_MIN_VERSION=1` | Permit a floor newer than the newest release |
 | `DRY_RUN=1` | Print every step, push nothing |
 | `YES=1` | Skip the confirmation prompt (CI) |
 | `NO_PUSH=1` | Commit the marketplace entry but do not push it |
@@ -94,11 +95,26 @@ when the floor moves:
 warning: min_studio_version moves from 2.0 to 2.6.0 in this release.
 ```
 
-Override it for a single release with `MIN_STUDIO_VERSION=2.7.0`. If the plugin
+Override it for a single release with `MIN_STUDIO_VERSION=2.2.0`. If the plugin
 declares no `compat` block, the previous entry's value is carried forward
 unchanged.
 
-Two caveats worth knowing:
+**The floor is validated against reality.** Publishing a floor newer than the
+newest `vX.Y.Z` tag in this repo is refused:
+
+```
+error: min_studio_version is 2.6.0, but the newest studio release is 2.1.0.
+       Publishing this would advertise a plugin that requires a version nobody
+       has. Fix compat.min_studio_version in <manifest>, or pass
+       MIN_STUDIO_VERSION=<real version> for this release.
+```
+
+This is not hypothetical: six plugin manifests currently declare `2.6.0` against
+a newest release of `2.1.0`. Fix the manifest, or pass a real version for the
+release. To advertise a floor ahead of the current release deliberately, set
+`ALLOW_FUTURE_MIN_VERSION=1`. The check is skipped in a checkout with no tags.
+
+Two more caveats worth knowing:
 
 - **`min_gateway_version` is not published.** The marketplace schema and index
   have no field for it (`pkg/marketplace/types.go`), so it stays a source-side

@@ -42,6 +42,7 @@ NO_PUSH="${NO_PUSH:-0}"
 FORCE="${FORCE:-0}"
 MARKETPLACE_ONLY="${MARKETPLACE_ONLY:-0}"
 MIN_STUDIO_VERSION="${MIN_STUDIO_VERSION:-}"
+ALLOW_FUTURE_MIN_VERSION="${ALLOW_FUTURE_MIN_VERSION:-0}"
 
 info()  { printf '%s\n' "$*" >&2; }
 step()  { printf '\n==> %s\n' "$*" >&2; }
@@ -58,7 +59,9 @@ Flags (publish):
       --platforms LIST  space or comma separated os/arch list
       --min-studio-version X
                         studio version floor for the entry (default: the
-                        plugin's own compat.min_studio_version)
+                        plugin's own compat.min_studio_version). Refuses a
+                        floor newer than the newest release unless
+                        ALLOW_FUTURE_MIN_VERSION=1
       --sign-key PATH   cosign private key (env: SIGN_KEY)
       --pub-key PATH    cosign public key for the read-back verify
       --skip-sign       build and push without signing (not for releases)
@@ -325,6 +328,52 @@ marketplace_defaults() {
   ISSUES_URL="$(manifest_value "$sample" links.issues)"
 }
 
+# The highest stable vX.Y.Z tag in this repo - what "the current studio version"
+# means for compatibility purposes.  Empty if the checkout has no tags.
+latest_studio_version() {
+  git -C "$REPO_ROOT" tag --list 'v[0-9]*' 2>/dev/null | python3 -c '
+import re, sys
+best = None
+for line in sys.stdin:
+    m = re.match(r"^v(\d+)\.(\d+)\.(\d+)$", line.strip())
+    if m:
+        v = tuple(int(g) for g in m.groups())
+        if best is None or v > best:
+            best = v
+print(".".join(str(n) for n in best) if best else "")
+'
+}
+
+# A plugin declaring a floor newer than any release that exists ships an entry
+# claiming it needs a version nobody can install.  Catch the typo here rather
+# than in the marketplace.
+validate_min_studio_version() {
+  [ -n "$MIN_STUDIO_VERSION" ] || return 0
+  if [ "$ALLOW_FUTURE_MIN_VERSION" = "1" ]; then
+    return 0
+  fi
+
+  STUDIO_LATEST="$(latest_studio_version)"
+  # No tags to compare against (shallow clone, fresh fork): nothing to check.
+  [ -n "$STUDIO_LATEST" ] || return 0
+
+  if ! python3 -c '
+import re, sys
+def parse(v):
+    m = re.match(r"^(\d+)\.(\d+)(?:\.(\d+))?", v.strip())
+    return tuple(int(g or 0) for g in m.groups()) if m else None
+want, have = parse(sys.argv[1]), parse(sys.argv[2])
+sys.exit(1 if want and have and want > have else 0)
+' "$MIN_STUDIO_VERSION" "$STUDIO_LATEST"; then
+    die "min_studio_version is $MIN_STUDIO_VERSION, but the newest studio release is $STUDIO_LATEST.
+       Publishing this would advertise a plugin that requires a version nobody
+       has. Fix compat.min_studio_version in $SRC_MANIFEST, or pass
+       MIN_STUDIO_VERSION=<real version> for this release.
+       To publish a floor ahead of the current release on purpose, set
+       ALLOW_FUTURE_MIN_VERSION=1."
+  fi
+}
+
 # --- marketplace checkout ---------------------------------------------------
 
 prepare_marketplace() {
@@ -408,6 +457,8 @@ do_publish() {
   [ -n "$REPO_PATH" ] || REPO_PATH="$DEFAULT_REPO_PATH"
   [ -n "$REG" ] || REG="docker.tyk.io"
 
+  validate_min_studio_version
+
   PREV_MIN_STUDIO=""
   if [ -f "$PREV_MANIFEST" ]; then
     PREV_MIN_STUDIO="$(manifest_value "$PREV_MANIFEST" requirements.min_studio_version)"
@@ -447,6 +498,7 @@ do_publish() {
   [ "$SKIP_SIGN" != "1" ] && sign_display="$SIGN_KEY"
   local min_studio_display="$MIN_STUDIO_VERSION"
   [ -n "$min_studio_display" ] || min_studio_display="(carried forward)"
+  [ -n "${STUDIO_LATEST:-}" ] && min_studio_display="$min_studio_display  (studio latest: $STUDIO_LATEST)"
   local mp_display="SKIPPED"
   if [ "$SKIP_MARKETPLACE" != "1" ]; then
     if [ "$NO_PUSH" = "1" ]; then
