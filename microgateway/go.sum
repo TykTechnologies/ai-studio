@@ -437,6 +437,8 @@ github.com/lonelycode/go-uuid v0.0.0-20141202165402-ed3ca8a15a93 h1:WcaWCUFwpiRp
 github.com/lonelycode/go-uuid v0.0.0-20141202165402-ed3ca8a15a93/go.mod h1:ZjpSGzPgHSthaPv5L+rBEMIwrr5Uto0pKPwHmCHRkUM=
 github.com/lonelycode/langchaingo v0.0.0-20251125225155-18c4ce82812d h1:kt0PO+dwrjCCKQtrG8JAPlgurhBhbnVTDKHBmDcrcpQ=
 github.com/lonelycode/langchaingo v0.0.0-20251125225155-18c4ce82812d/go.mod h1:u8HxY9w7iaVa1j7gwEQDaSqQf6clhb2sXwx6nfaBtdA=
+github.com/lonelycode/langchaingo v0.0.0-20260902213528-f80534f57671 h1:+TXzDD/eGhh7eFS7qtKrQkFVluW0PoW1j57CCVSSK0Y=
+github.com/lonelycode/langchaingo v0.0.0-20260902213528-f80534f57671/go.mod h1:u8HxY9w7iaVa1j7gwEQDaSqQf6clhb2sXwx6nfaBtdA=
 github.com/lonelycode/osin v0.0.0-20160423095202-da239c9dacb6 h1:G2UYdR7/shMh7NMp2ETozj6zlqU5M8b0VqRbdxTXciU=
 github.com/lonelycode/osin v0.0.0-20160423095202-da239c9dacb6/go.mod h1:x4kc0i0iLfRkNWchVMcLjy+Txcz3XqNbr8iRUGFduLQ=
 github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35 h1:PpXWgLPs+Fqr325bN2FD2ISlRRztXibcX6e8f5FR5Dc=
