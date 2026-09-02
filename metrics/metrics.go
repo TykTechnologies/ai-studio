@@ -52,6 +52,10 @@ func Init() http.Handler {
 
 	meter := provider.Meter("aistudio")
 
+	// Register the OpenTelemetry GenAI semantic convention instruments (genai.go)
+	// before the aistudio_* ones, so legacyNames is set for every recorder below.
+	initGenAI(meter)
+
 	// Register counters
 	requestsTotal, err = meter.Int64Counter("aistudio_llm_requests_total",
 		otelmetric.WithDescription("Total LLM proxy requests"),
@@ -146,10 +150,14 @@ func RecordRequest(ctx context.Context, appID, vendor, model string, statusCode 
 	)
 }
 
-// RecordTokens increments the token counter for a given type.
+// RecordTokens records token consumption for a given type.
 // tokenType should be one of: "prompt", "completion", "cache_read", "cache_write".
 func RecordTokens(ctx context.Context, vendor, model, tokenType string, count int) {
 	if !initialized.Load() || count == 0 {
+		return
+	}
+	recordGenAITokens(ctx, vendor, model, tokenType, count)
+	if !legacyNames {
 		return
 	}
 	tokensTotal.Add(ctx, int64(count),
@@ -217,8 +225,14 @@ func RecordComplianceEvent(ctx context.Context, eventType, severity, filterName 
 }
 
 // ObserveRequestDuration records an LLM request duration observation.
-func ObserveRequestDuration(ctx context.Context, vendor, model string, streaming bool, durationSeconds float64) {
+// statusCode is the response status the caller received; it populates the
+// error.type attribute on the GenAI instrument and may be 0 when unknown.
+func ObserveRequestDuration(ctx context.Context, vendor, model string, streaming bool, durationSeconds float64, statusCode int) {
 	if !initialized.Load() {
+		return
+	}
+	recordGenAIRequestDuration(ctx, vendor, model, durationSeconds, statusCode)
+	if !legacyNames {
 		return
 	}
 	streamingStr := "false"
@@ -237,6 +251,10 @@ func ObserveRequestDuration(ctx context.Context, vendor, model string, streaming
 // ObserveToolDuration records a tool execution duration observation.
 func ObserveToolDuration(ctx context.Context, toolName string, durationSeconds float64) {
 	if !initialized.Load() {
+		return
+	}
+	recordGenAIToolDuration(ctx, toolName, durationSeconds)
+	if !legacyNames {
 		return
 	}
 	toolExecDuration.Record(ctx, durationSeconds,

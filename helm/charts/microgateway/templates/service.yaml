@@ -2,7 +2,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-microgateway
+  name: {{ include "microgateway.fullname" . }}
+  labels:
+    {{- include "microgateway.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -14,5 +16,5 @@ spec:
       nodePort: {{ .Values.service.nodePort }}
       {{- end }}
   selector:
-    app: microgateway
+    {{- include "microgateway.selectorLabels" . | nindent 4 }}
 {{- end }}

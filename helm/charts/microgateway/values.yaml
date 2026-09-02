@@ -7,6 +7,107 @@ image:
 
 replicaCount: 1
 
+# Workload kind. "Deployment" (default) is fine: the edge's SQLite is a cache
+# rebuilt from the hub on every start. Use "StatefulSet" when you want stable
+# per-replica edge identities and a PVC (see persistence below), so analytics
+# buffered between pulses survive a restart.
+kind: Deployment
+
+# Must be >= SHUTDOWN_TIMEOUT (30s) or the graceful drain is cut short.
+terminationGracePeriodSeconds: 40
+
+imagePullSecrets: []
+podAnnotations: {}
+extraEnv: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: ""
+  maxUnavailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: ""
+  # LLM requests are long-lived, so scale in slowly.
+  scaleDownStabilizationSeconds: 300
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+  # - maxSkew: 1
+  #   topologyKey: topology.kubernetes.io/zone
+  #   whenUnsatisfiable: ScheduleAnyway
+  #   labelSelector:
+  #     matchLabels:
+  #       app: microgateway
+
+# Only takes effect with kind: StatefulSet.
+persistence:
+  enabled: false
+  storageClass: ""
+  size: 2Gi
+
+probes:
+  startup:
+    periodSeconds: 5
+    failureThreshold: 30
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 10
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+metrics:
+  enabled: true
+  path: /metrics
+  # The gateway does not register /metrics at all unless one of these is set.
+  # allowUnauthenticated is the usual choice for in-cluster scraping; use
+  # bearerTokenSecret when the endpoint is exposed more widely (its value must
+  # match METRICS_AUTH_TOKEN in the gateway's own secret).
+  allowUnauthenticated: true
+  bearerTokenSecret:
+    name: ""
+    key: token
+  # Emit the pre-conventions aistudio_* series alongside the gen_ai.* ones.
+  # Set to false once dashboards have migrated to the OpenTelemetry GenAI names.
+  legacyNames: true
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: ""
+    labels: {}
+
+tracing:
+  enabled: false
+  # OTLP/gRPC collector. "host:port" is dialled insecurely; give an https:// URL
+  # to use TLS.
+  endpoint: ""   # e.g. "otel-collector.observability:4317"
+
 service:
   type: ClusterIP
   port: 8080
@@ -31,7 +132,9 @@ ingress:
 config:
   # Control endpoint — AI Studio service name and gRPC port
   controlEndpoint: ""   # Auto-set in parent values, e.g. "midsommar:50051"
-  edgeId: "edge-1"
+  # edgeId is no longer set here: each pod derives EDGE_ID from its own name via
+  # the downward API, because a single shared value made every replica register
+  # with the hub under one identity.
   edgeNamespace: "default"
   heartbeatInterval: "30s"
   allowInsecure: "true"
@@ -58,11 +161,22 @@ config:
   ociPluginsCacheDir: "/var/lib/microgateway/plugins"
   ociPluginsRequireSignature: "false"
 
+  # Upstream network policy. Turn blockInternalUpstreams on to stop LLM configs
+  # reaching cluster-internal or link-local addresses, then name the exceptions
+  # in allowedInternalHosts — that is how you front an in-cluster model server
+  # (an InferencePool-backed Service, say) without opening up egress generally.
+  blockInternalUpstreams: false
+  allowedInternalHosts: ""   # e.g. ".svc.cluster.local"
+
   # Logging
   logLevel: "info"
 
-# Secrets — MUST match AI Studio values
+# Secrets — MUST match AI Studio values.
+# Set existingSecret to the name of a Secret you manage yourself (External
+# Secrets, Sealed Secrets, ...) and the chart creates none; it must carry the
+# keys EDGE_AUTH_TOKEN, ENCRYPTION_KEY and TYK_AI_LICENSE.
 secrets:
+  existingSecret: ""
   edgeAuthToken: ""         # Must match config.grpcAuthToken
   encryptionKey: ""         # Must match config.microgatewayEncryptionKey
   tykAiLicense: ""          # Must match config.tykAiLicense

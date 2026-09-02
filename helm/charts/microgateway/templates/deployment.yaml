@@ -1,43 +1,101 @@
 {{- if .Values.enabled }}
 apiVersion: apps/v1
-kind: Deployment
+kind: {{ .Values.kind | default "Deployment" }}
 metadata:
-  name: {{ .Release.Name }}-microgateway
+  name: {{ include "microgateway.fullname" . }}
+  labels:
+    {{- include "microgateway.labels" . | nindent 4 }}
 spec:
+{{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+{{- end }}
+{{- if eq (.Values.kind | default "Deployment") "StatefulSet" }}
+  serviceName: {{ include "microgateway.fullname" . }}
+{{- end }}
   selector:
     matchLabels:
-      app: microgateway
+      {{- include "microgateway.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: microgateway
+        {{- include "microgateway.selectorLabels" . | nindent 8 }}
+        {{- include "microgateway.labels" . | nindent 8 }}
+      annotations:
+        # Roll the pods when the rendered config changes, so a values edit takes
+        # effect without a manual restart.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
+      serviceAccountName: {{ include "microgateway.serviceAccountName" . }}
+      # Must be at least SHUTDOWN_TIMEOUT, or Kubernetes SIGKILLs the process
+      # part-way through the graceful drain in cmd/microgateway/main.go.
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: microgateway
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 8080
+          env:
+            # Every replica must register with the hub under its own identity.
+            # A single EDGE_ID in the ConfigMap made all replicas collide on one
+            # registration; the pod name is unique per replica. Deployment pod
+            # names churn on restart, and the control plane reaps the orphaned
+            # entries via cleanupStaleConnections. Set kind=StatefulSet for
+            # stable ordinal identities.
+            - name: EDGE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           envFrom:
             - configMapRef:
-                name: {{ .Release.Name }}-microgateway-config
+                name: {{ include "microgateway.fullname" . }}-config
             - secretRef:
-                name: {{ .Release.Name }}-microgateway-secrets
+                name: {{ include "microgateway.secretName" . }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
-            initialDelaySeconds: 15
-            periodSeconds: 10
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
           readinessProbe:
+            # /ready, not /health: it checks the database and plugin health, so
+            # a pod that cannot serve is taken out of the Service.
             httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
+              path: /ready
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
           volumeMounts:
+            # readOnlyRootFilesystem is on by default, so anything that writes
+            # outside a mounted volume — SQLite's temp files among them — needs
+            # a writable /tmp.
+            - name: tmp
+              mountPath: /tmp
             - name: analytics-config
               mountPath: /opt/tyk-microgateway/config
             - name: data
@@ -46,12 +104,51 @@ spec:
               mountPath: /var/lib/microgateway
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: analytics-config
           configMap:
-            name: {{ .Release.Name }}-microgateway-analytics
-        - name: data
-          emptyDir: {}
+            name: {{ include "microgateway.fullname" . }}-analytics
         - name: plugins
           emptyDir: {}
+        {{- if not (and .Values.persistence.enabled (eq (.Values.kind | default "Deployment") "StatefulSet")) }}
+        # A volumeClaimTemplate is only available on a StatefulSet, so a
+        # Deployment always gets ephemeral storage regardless of persistence.
+        - name: data
+          emptyDir: {}
+        {{- end }}
+{{- if and .Values.persistence.enabled (eq (.Values.kind | default "Deployment") "StatefulSet") }}
+  volumeClaimTemplates:
+    # The edge's SQLite is rebuilt from the hub on every start, so this is not
+    # required for correctness — it only preserves analytics buffered but not
+    # yet shipped in a pulse, plus local budget counters, across a restart.
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with .Values.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+{{- end }}
 {{- end }}

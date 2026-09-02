@@ -121,7 +121,7 @@ microgateway:
     port: 8080
     nodePort: 32591
   config:
-    edgeId: "edge-1"
+    # EDGE_ID is set per-pod from the pod name; do not set edgeId here.
     edgeNamespace: "default"
   secrets:
     edgeAuthToken: "CHANGE-ME-third-secret"             # Must match config.grpcAuthToken
@@ -260,7 +260,7 @@ microgateway:
         hosts:
           - gateway.yourdomain.com
   config:
-    edgeId: "edge-1"
+    # EDGE_ID is set per-pod from the pod name; do not set edgeId here.
     edgeNamespace: "default"
     allowInsecure: "false"
     tlsEnabled: "false"                                  # gRPC client TLS to AI Studio
@@ -388,16 +388,123 @@ transformer-server:
 
 ### Scaling Edge Gateways
 
-To deploy multiple edge gateways for different regions, override `edgeId` and `edgeNamespace` per instance. You can either deploy separate Helm releases or create additional Kubernetes Deployments with unique values:
+Two different things are often meant by "scaling", and they are configured differently.
+
+**More replicas of one edge.** Just raise `replicaCount`. Each pod derives its
+`EDGE_ID` from its own pod name via the downward API, so every replica registers
+with AI Studio under a distinct identity. Do **not** set `edgeId` yourself — the
+value is no longer read from the chart, because a single shared value made every
+replica collide on one registration.
+
+```yaml
+microgateway:
+  replicaCount: 3
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+```
+
+Pod names change when a Deployment rolls, which leaves behind stale edge
+registrations; AI Studio reaps these automatically. Use `kind: StatefulSet` if
+you would rather have stable per-replica identities.
+
+**Separate edges per region.** Deploy separate Helm releases and override
+`edgeNamespace` per instance. Each edge receives only the configuration assigned
+to its namespace:
 
 ```yaml
 microgateway:
   config:
-    edgeId: "edge-eu-west-1"
     edgeNamespace: "eu-west"
 ```
 
-Each edge instance registers independently with AI Studio and receives only the configuration assigned to its namespace.
+### Production Hardening
+
+The microgateway subchart supports the usual production controls. Defaults are
+safe but conservative:
+
+```yaml
+microgateway:
+  # Supply credentials from External Secrets, Sealed Secrets or your own tooling
+  # instead of putting them in values. The Secret must carry EDGE_AUTH_TOKEN,
+  # ENCRYPTION_KEY and TYK_AI_LICENSE.
+  secrets:
+    existingSecret: "microgateway-credentials"
+
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 75
+    # LLM requests are long-lived, so scale in slowly rather than cutting
+    # streams short.
+    scaleDownStabilizationSeconds: 300
+
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app: microgateway
+
+  # Keeps analytics buffered between pulses across a restart. Optional: the edge
+  # rebuilds its configuration from the hub on every start regardless.
+  kind: StatefulSet
+  persistence:
+    enabled: true
+    size: 2Gi
+```
+
+Notes on the defaults:
+
+- The container runs as non-root with a read-only root filesystem. A writable
+  `/tmp` is mounted for it, since SQLite needs somewhere to put temporary files.
+- `terminationGracePeriodSeconds` is 40s, comfortably above the 30s
+  `SHUTDOWN_TIMEOUT`, so in-flight requests can drain before the pod is killed.
+- Readiness probes `/ready`, which checks the database and plugin health, rather
+  than `/health`, which only reports that the process is alive.
+
+### Egress Policy
+
+By default the gateway will connect to any upstream an LLM configuration names,
+including cluster-internal addresses. To constrain that while still allowing
+specific in-cluster model servers:
+
+```yaml
+microgateway:
+  config:
+    blockInternalUpstreams: true
+    allowedInternalHosts: ".svc.cluster.local"
+```
+
+`allowedInternalHosts` is an additive exemption, not a global allowlist — naming
+a cluster host does not restrict the external providers you are already using.
+See [Running Alongside the Kubernetes Inference Gateway](./deployment-kubernetes-inference-gateway.md).
+
+### Monitoring and Tracing
+
+```yaml
+microgateway:
+  metrics:
+    enabled: true
+    allowUnauthenticated: true   # required for in-cluster scraping
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+  tracing:
+    enabled: true
+    endpoint: "otel-collector.observability:4317"
+```
+
+The `/metrics` endpoint is secure by default and is not served at all unless
+`allowUnauthenticated` is true or a `METRICS_AUTH_TOKEN` is set; the chart fails
+the render rather than deploying a ServiceMonitor that would scrape nothing. For
+the full metric reference and example queries, see [Observability](./observability.md).
 
 ### Database Options
 

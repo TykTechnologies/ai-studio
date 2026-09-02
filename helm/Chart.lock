@@ -1,12 +1,12 @@
 dependencies:
 - name: microgateway
   repository: file://charts/microgateway
-  version: 0.1.0
+  version: 0.2.0
 - name: reranker
   repository: file://charts/reranker
   version: 0.1.0
 - name: transformer-server
   repository: file://charts/transformer-server
   version: 0.1.0
-digest: sha256:057a53f6a45eeef7772b11df35b742207bb9763168eaf83140398fc7c7853fa0
-generated: "2026-03-10T12:45:42.471814+13:00"
+digest: sha256:92e01c15540ce4d7e2a6b5cf7699fd1455af37810c5eb2ab8e45602f3ba636f2
+generated: "2026-09-02T12:37:02.307399+12:00"

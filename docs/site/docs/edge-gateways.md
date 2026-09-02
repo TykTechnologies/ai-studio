@@ -236,3 +236,9 @@ Triggers a configuration reload for all edges or a specific namespace:
 - Verify all edges have successfully loaded the new configuration
 - Check for any disconnected edges that can't receive updates
 - Refresh the page to ensure the latest status is displayed
+
+## See Also
+
+- [Observability](./observability.md) — metrics and traces emitted by each edge
+- [Kubernetes / Helm Deployment](./deployment-helm-k8s.md) — running edges on Kubernetes, including scale-out
+- [Running Alongside the Kubernetes Inference Gateway](./deployment-kubernetes-inference-gateway.md)

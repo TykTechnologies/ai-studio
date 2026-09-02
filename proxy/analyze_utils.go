@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -168,6 +169,13 @@ func AnalyzeCompletionResponse(service services.ServiceInterface, llm *models.LL
 
 	// Record the chat record with retries
 	analytics.RecordChatRecord(ctx, rec)
+
+	// time-per-output-token needs both the streaming landmarks and the completion
+	// token count, and this is the only point where both are in hand. The timing
+	// is absent on non-streaming requests, which correctly skips the metric.
+	if elapsed, ok := streamTimingFrom(r.Context()).sinceFirstToken(timestamp); ok {
+		metrics.ObserveTimePerOutputToken(ctx, string(llm.Vendor), model, elapsed.Seconds(), rt)
+	}
 	// time.Sleep(200 * time.Millisecond) // Removed: Unreliable fixed sleep. Test should handle waiting.
 
 	// Budget analysis

@@ -1,0 +1,39 @@
+{{- if and .Values.enabled .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+{{/*
+The gateway's /metrics endpoint is secure by default: the route is not
+registered at all unless METRICS_AUTH_TOKEN is set or
+METRICS_ALLOW_UNAUTHENTICATED is true. So a ServiceMonitor alone is not enough —
+one of the two must be configured, and this template fails the render rather
+than shipping a monitor that would scrape a 404 forever.
+*/}}
+{{- if not (or .Values.metrics.allowUnauthenticated .Values.metrics.bearerTokenSecret.name) }}
+{{- fail "metrics.serviceMonitor.enabled requires either metrics.allowUnauthenticated=true or metrics.bearerTokenSecret.{name,key}; the gateway does not register /metrics otherwise" }}
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "microgateway.fullname" . }}
+  labels:
+    {{- include "microgateway.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "microgateway.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ .Values.metrics.path }}
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      {{- with .Values.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+      {{- end }}
+      {{- if .Values.metrics.bearerTokenSecret.name }}
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .Values.metrics.bearerTokenSecret.name }}
+          key: {{ .Values.metrics.bearerTokenSecret.key }}
+      {{- end }}
+{{- end }}

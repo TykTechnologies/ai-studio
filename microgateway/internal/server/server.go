@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/aigateway"
+	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/api"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
@@ -24,6 +25,7 @@ type Server struct {
 	pluginManager *plugins.PluginManager
 	router        *gin.Engine
 	server        *http.Server
+	traceShutdown tracing.Shutdown
 	
 	// Build information
 	version   string
@@ -119,6 +121,21 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		log.Info().Msg("Prometheus metrics enabled")
 	}
 
+	// Initialize tracing. Init runs even when export is disabled so the W3C
+	// propagator is installed and an inbound traceparent still reaches the
+	// upstream provider.
+	traceShutdown, err := tracing.Init(context.Background(), tracing.Config{
+		Enabled:        cfg.Observability.EnableTracing,
+		Endpoint:       cfg.Observability.TracingEndpoint,
+		ServiceName:    "tyk-microgateway",
+		ServiceVersion: version,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("Tracing disabled")
+	} else if cfg.Observability.EnableTracing {
+		log.Info().Str("endpoint", cfg.Observability.TracingEndpoint).Msg("OpenTelemetry tracing enabled")
+	}
+
 	// Setup API router with mounted gateway
 	routerConfig := &api.RouterConfig{
 		AuthProvider:                serviceContainer.AuthProvider,
@@ -158,6 +175,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		pluginManager: pluginManager,
 		router:        router,
 		server:        server,
+		traceShutdown: traceShutdown,
 		version:       version,
 		buildHash:     buildHash,
 		buildTime:     buildTime,
@@ -237,6 +255,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// The AI Gateway is mounted, so shutting down the main server handles everything
 	if err := s.server.Shutdown(ctx); err != nil {
 		return fmt.Errorf("server shutdown failed: %w", err)
+	}
+
+	// Flush any buffered spans once no more can be produced.
+	if s.traceShutdown != nil {
+		if err := s.traceShutdown(ctx); err != nil {
+			log.Error().Err(err).Msg("Failed to flush traces on shutdown")
+		}
 	}
 
 	log.Debug().Msg("Server stopped successfully")

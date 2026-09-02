@@ -364,6 +364,7 @@ Always check the `features/` directory for detailed specifications of system com
 - `features/Tools.md` - Tool integration system
 - `features/LLM.md` - LLM management
 - `features/Proxy.md` - LLM proxy system
+- `features/Observability.md` - Gateway metrics (OpenTelemetry GenAI conventions) and tracing
 - `features/Branding.md` - UI branding and customization system
 - And many more detailed specifications
 
@@ -376,6 +377,8 @@ For detailed technical specifications, see the docs in `docs/site/docs/`:
 | Hub-Spoke Architecture | `edge-gateways.md` |
 | Core Concepts | `core-concepts.md` |
 | LLM Proxy | `proxy.md` |
+| Observability (metrics & tracing) | `observability.md` |
+| Kubernetes Inference Gateway co-existence | `deployment-kubernetes-inference-gateway.md` |
 | Plugin System Overview | `plugins-overview.md` |
 | Gateway Plugins | `plugins-microgateway.md` |
 | Plugin SDK Reference | `plugins-sdk.md` |

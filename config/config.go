@@ -112,6 +112,11 @@ type AppConf struct {
 	MetricsAuthToken            string
 	MetricsAllowUnauthenticated bool
 
+	// Tracing Configuration. Names match the microgateway's equivalents so a
+	// single set of env vars configures either side of the hub-spoke pair.
+	TracingEnabled  bool
+	TracingEndpoint string
+
 	// Submission Configuration
 	MaxResourcePayloadSize int // Max size in bytes for submission resource_payload JSON (default: 5MB)
 }
@@ -428,6 +433,11 @@ func getConfigFromEnv(envFile string) *AppConf {
 	conf.MetricsAuthToken = os.Getenv("METRICS_AUTH_TOKEN")
 	metricsAllowUnauthStr := os.Getenv("METRICS_ALLOW_UNAUTHENTICATED")
 	conf.MetricsAllowUnauthenticated = metricsAllowUnauthStr == "true" || metricsAllowUnauthStr == "1"
+
+	// Tracing configuration - disabled by default
+	tracingEnabledStr := os.Getenv("ENABLE_TRACING")
+	conf.TracingEnabled = tracingEnabledStr == "true" || tracingEnabledStr == "1"
+	conf.TracingEndpoint = os.Getenv("TRACING_ENDPOINT")
 
 	conf.AuthServerURL = os.Getenv("AUTH_SERVER_URL")
 	if conf.AuthServerURL == "" {
