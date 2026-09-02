@@ -171,4 +171,20 @@ describe("AppDetailView Main Ingress endpoint", () => {
       screen.queryByRole("heading", { name: "Main Ingress" })
     ).not.toBeInTheDocument();
   });
+
+  // The backend is the only source of truth for the path. A missing key must not
+  // fall back to "/v1": that would advertise an endpoint on the strength of an
+  // assumption about the backend rather than something it actually reported.
+  it("hides the section when the backend reports no path at all", async () => {
+    mockConfig = { apiUrl: "http://localhost", proxyURL: "http://gw.example.com" };
+
+    renderView();
+
+    await waitFor(() => {
+      expect(screen.getByText("Per-LLM Endpoints")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("heading", { name: "Main Ingress" })
+    ).not.toBeInTheDocument();
+  });
 });

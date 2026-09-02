@@ -94,8 +94,10 @@ const AppDetailView = () => {
   const [toolDisplayUrl, setToolDisplayUrl] = useState("");
   const [datasourceDisplayUrl, setDatasourceDisplayUrl] = useState("");
   // Base path of the gateway's unified ("Main Ingress") OpenAI-compatible
-  // endpoint. Configurable server-side and disable-able, so it comes from
-  // /auth/config; "" means the gateway does not serve it and we advertise nothing.
+  // endpoint. The backend is the only source of truth for it: the path is
+  // configurable and the ingress can be switched off, so anything absent, empty
+  // or unset means "not served" and we advertise nothing rather than guessing a
+  // default and sending developers to a 404.
   const [unifiedRouterPath, setUnifiedRouterPath] = useState("");
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
@@ -156,9 +158,7 @@ const AppDetailView = () => {
         setProxyUrl(proxyUrlValue);
         setToolDisplayUrl(toolDisplayUrlValue);
         setDatasourceDisplayUrl(datasourceDisplayUrlValue);
-        setUnifiedRouterPath(
-          config.unifiedRouterPath === undefined ? "/v1" : config.unifiedRouterPath,
-        );
+        setUnifiedRouterPath(config.unifiedRouterPath || "");
 
         const app = appResponse.data;
         setApp(app);
