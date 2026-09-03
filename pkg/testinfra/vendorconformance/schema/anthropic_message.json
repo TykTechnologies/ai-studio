@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anthropic_message.json",
+  "title": "Anthropic Messages response",
+  "description": "Native Anthropic wire format, seen on the sdk surface (/llm/call/{slug}/v1/messages) and the Bedrock /anthropic/ bridge.",
+  "type": "object",
+  "required": ["id", "type", "role", "content", "model"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": { "const": "message" },
+    "role": { "const": "assistant" },
+    "model": { "type": "string", "minLength": 1 },
+    "stop_reason": {
+      "type": ["string", "null"],
+      "enum": ["end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn", "refusal", null]
+    },
+    "stop_sequence": { "type": ["string", "null"] },
+    "content": {
+      "description": "Always an array of typed blocks, never a bare string. Flattening it to a string is a translation bug.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "enum": ["text", "tool_use", "thinking", "redacted_thinking", "server_tool_use", "web_search_tool_result"] },
+          "text": { "type": "string" },
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "input": {
+            "description": "Unlike OpenAI's tool_calls.function.arguments, this is a decoded OBJECT, not a string. Translating between the two is where argument round-tripping breaks.",
+            "type": "object"
+          },
+          "thinking": { "type": "string" },
+          "signature": { "type": "string" }
+        }
+      }
+    },
+    "usage": {
+      "type": ["object", "null"],
+      "required": ["input_tokens", "output_tokens"],
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "cache_creation_input_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "cache_read_input_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "service_tier": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

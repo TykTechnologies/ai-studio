@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anthropic_stream_event.json",
+  "title": "Anthropic Messages stream event",
+  "description": "One event of a native Anthropic SSE stream, seen on the sdk surface. Unlike OpenAI's uniform chunk, each event is type-discriminated and carries a different payload. Sequence rules (message_start first, message_stop last, indices contiguous) are asserted in Go.",
+  "type": "object",
+  "required": ["type"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "message_start",
+        "content_block_start",
+        "content_block_delta",
+        "content_block_stop",
+        "message_delta",
+        "message_stop",
+        "ping",
+        "error"
+      ]
+    },
+    "index": { "type": "integer", "minimum": 0 },
+    "message": {
+      "description": "Present on message_start: the message envelope with empty content.",
+      "type": "object",
+      "required": ["id", "type", "role", "model"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "const": "message" },
+        "role": { "const": "assistant" },
+        "model": { "type": "string", "minLength": 1 },
+        "content": { "type": "array" },
+        "stop_reason": { "type": ["string", "null"] },
+        "stop_sequence": { "type": ["string", "null"] },
+        "usage": {
+          "type": ["object", "null"],
+          "required": ["input_tokens"],
+          "properties": {
+            "input_tokens": { "type": "integer", "minimum": 0 },
+            "output_tokens": { "type": "integer", "minimum": 0 },
+            "cache_creation_input_tokens": { "type": ["integer", "null"] },
+            "cache_read_input_tokens": { "type": ["integer", "null"] }
+          }
+        }
+      }
+    },
+    "content_block": {
+      "description": "Present on content_block_start.",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["text", "tool_use", "thinking", "redacted_thinking", "server_tool_use"] },
+        "text": { "type": "string" },
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "input": { "type": "object" }
+      }
+    },
+    "delta": {
+      "description": "Present on content_block_delta and message_delta, with different shapes.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["text_delta", "input_json_delta", "thinking_delta", "signature_delta"] },
+        "text": { "type": "string" },
+        "partial_json": {
+          "description": "A fragment of a tool call's JSON arguments. Individually it need not parse; the concatenation must.",
+          "type": "string"
+        },
+        "thinking": { "type": "string" },
+        "signature": { "type": "string" },
+        "stop_reason": {
+          "type": ["string", "null"],
+          "enum": ["end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn", "refusal", null]
+        },
+        "stop_sequence": { "type": ["string", "null"] }
+      }
+    },
+    "usage": {
+      "description": "Present on message_delta: the final output token count.",
+      "type": ["object", "null"],
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

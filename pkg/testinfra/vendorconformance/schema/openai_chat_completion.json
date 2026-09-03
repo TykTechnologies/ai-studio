@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "openai_chat_completion.json",
+  "title": "OpenAI Chat Completion (non-streaming)",
+  "description": "The object every OpenAI-compatible SDK deserializes. Fields marked required here are the ones whose absence breaks a client; see features/VendorConformance.md 2.1.",
+  "type": "object",
+  "required": ["id", "object", "created", "model", "choices"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "object": { "const": "chat.completion" },
+    "created": { "type": "integer", "minimum": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "system_fingerprint": { "type": ["string", "null"] },
+    "service_tier": { "type": ["string", "null"] },
+    "choices": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["index", "message", "finish_reason"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "logprobs": { "type": ["object", "null"] },
+          "finish_reason": {
+            "description": "Never null on a non-streaming response: the turn is over by definition.",
+            "type": "string",
+            "enum": ["stop", "length", "tool_calls", "content_filter", "function_call"]
+          },
+          "message": {
+            "type": "object",
+            "required": ["role"],
+            "properties": {
+              "role": { "const": "assistant" },
+              "content": { "type": ["string", "null"] },
+              "refusal": { "type": ["string", "null"] },
+              "reasoning_content": { "type": ["string", "null"] },
+              "annotations": { "type": ["array", "null"] },
+              "audio": { "type": ["object", "null"] },
+              "function_call": { "type": ["object", "null"] },
+              "tool_calls": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "type", "function"],
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "index": { "type": "integer", "minimum": 0 },
+                    "type": { "const": "function" },
+                    "function": {
+                      "type": "object",
+                      "required": ["name", "arguments"],
+                      "properties": {
+                        "name": { "type": "string", "minLength": 1 },
+                        "arguments": {
+                          "description": "MUST be a JSON-encoded STRING, not an object. Emitting an object here is the single most common SDK-breaking translation bug; validity of the encoded JSON is checked in Go.",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "usage": {
+      "type": ["object", "null"],
+      "required": ["prompt_tokens", "completion_tokens", "total_tokens"],
+      "properties": {
+        "prompt_tokens": { "type": "integer", "minimum": 0 },
+        "completion_tokens": { "type": "integer", "minimum": 0 },
+        "total_tokens": { "type": "integer", "minimum": 0 },
+        "prompt_tokens_details": {
+          "type": ["object", "null"],
+          "properties": {
+            "cached_tokens": { "type": "integer", "minimum": 0 },
+            "audio_tokens": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "completion_tokens_details": {
+          "type": ["object", "null"],
+          "properties": {
+            "reasoning_tokens": { "type": "integer", "minimum": 0 },
+            "audio_tokens": { "type": "integer", "minimum": 0 },
+            "accepted_prediction_tokens": { "type": "integer", "minimum": 0 },
+            "rejected_prediction_tokens": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}
