@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "openai_error.json",
+  "title": "OpenAI error envelope",
+  "description": "Error shape is as SDK-breaking as success shape: clients branch on error.type and error.code. Produced by proxy.respondWithOAIError.",
+  "type": "object",
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object",
+      "required": ["message", "type"],
+      "properties": {
+        "message": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "param": { "type": ["string", "null"] },
+        "code": { "type": ["string", "integer", "null"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "openai_models_list.json",
+  "title": "OpenAI model list",
+  "description": "Returned by {base}/models. The pre-flight uses it to prove every configured model ID still exists upstream, which is what stops 'latest-1' from silently rotting.",
+  "type": "object",
+  "required": ["object", "data"],
+  "properties": {
+    "object": { "const": "list" },
+    "data": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "object"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "object": { "const": "model" },
+          "created": { "type": "integer" },
+          "owned_by": { "type": "string" }
+        }
+      }
+    }
+  }
+}

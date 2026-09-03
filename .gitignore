@@ -141,3 +141,10 @@ tests/postgres_data_ci/
 .playwright-mcp
 oci-cache
 helm/values-testing.yaml
+
+# Live vendor conformance test credentials (test-secrets/vendors.env et al).
+# Only the .example template and the README are tracked.
+test-secrets/*
+!test-secrets/*.example
+!test-secrets/README.md
+test-results/vendor-conformance/

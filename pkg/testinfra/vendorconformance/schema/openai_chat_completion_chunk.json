@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "openai_chat_completion_chunk.json",
+  "title": "OpenAI Chat Completion Chunk (streaming)",
+  "description": "One `data:` frame of an SSE completion stream. Cross-chunk invariants (role on first delta only, [DONE] terminator, nothing after it, tool-call argument fragments concatenating to valid JSON) cannot be expressed per-chunk and are asserted in Go.",
+  "type": "object",
+  "required": ["id", "object", "created", "model", "choices"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "object": { "const": "chat.completion.chunk" },
+    "created": { "type": "integer", "minimum": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "system_fingerprint": { "type": ["string", "null"] },
+    "service_tier": { "type": ["string", "null"] },
+    "choices": {
+      "description": "Empty only on a usage-carrying final chunk (stream_options.include_usage).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["index", "delta"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "logprobs": { "type": ["object", "null"] },
+          "finish_reason": {
+            "description": "Null on every chunk but the terminal one for that choice.",
+            "type": ["string", "null"],
+            "enum": ["stop", "length", "tool_calls", "content_filter", "function_call", null]
+          },
+          "delta": {
+            "type": "object",
+            "properties": {
+              "role": { "enum": ["assistant"] },
+              "content": { "type": ["string", "null"] },
+              "refusal": { "type": ["string", "null"] },
+              "reasoning_content": { "type": ["string", "null"] },
+              "function_call": { "type": ["object", "null"] },
+              "tool_calls": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["index"],
+                  "properties": {
+                    "index": {
+                      "description": "Required on every streamed tool-call fragment: it is the only way a client can reassemble fragments into the right call.",
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "id": { "type": "string" },
+                    "type": { "enum": ["function"] },
+                    "function": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "arguments": {
+                          "description": "A fragment of the JSON-encoded argument string. Individually it need not parse; the concatenation must.",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "usage": {
+      "type": ["object", "null"],
+      "required": ["prompt_tokens", "completion_tokens", "total_tokens"],
+      "properties": {
+        "prompt_tokens": { "type": "integer", "minimum": 0 },
+        "completion_tokens": { "type": "integer", "minimum": 0 },
+        "total_tokens": { "type": "integer", "minimum": 0 },
+        "prompt_tokens_details": { "type": ["object", "null"] },
+        "completion_tokens_details": { "type": ["object", "null"] }
+      }
+    }
+  }
+}

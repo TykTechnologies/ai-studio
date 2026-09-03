@@ -673,6 +673,54 @@ test-microgateway-integration: ## Run Microgateway integration tests
 		-timeout $(TEST_TIMEOUT) -count=1 ./tests/integration/...
 
 # ============================================================================
+# Live Vendor Conformance Tests
+# ============================================================================
+#
+# Calls REAL LLM vendors and spends REAL money. Gated twice over -- the
+# `vendorlive` build tag AND VENDOR_TESTS_ENABLED=true -- so it can never be
+# picked up by `go test ./...`, `make test-all` or CI by accident.
+#
+# Setup:   cp test-secrets/vendors.env.example test-secrets/vendors.env
+#          $EDITOR test-secrets/vendors.env
+# Design:  features/VendorConformance.md
+#
+# Filters (all optional, comma separated):
+#   VENDORS=openai,anthropic     SURFACES=shim,universal     SCENARIOS=tools
+
+VENDOR_TEST_TIMEOUT ?= 30m
+
+.PHONY: test-vendors
+test-vendors: ## Run live vendor conformance tests (needs test-secrets/vendors.env)
+	@if [ ! -f test-secrets/vendors.env ]; then \
+		echo "test-secrets/vendors.env not found."; \
+		echo "  cp test-secrets/vendors.env.example test-secrets/vendors.env"; \
+		exit 1; \
+	fi
+	@echo "Running live vendor conformance tests (gateway surfaces)..."
+	cd microgateway && VENDOR_TESTS_VENDORS="$(VENDORS)" \
+		VENDOR_TESTS_SURFACES="$(SURFACES)" \
+		VENDOR_TESTS_SCENARIOS="$(SCENARIOS)" \
+		go test -tags vendorlive -v -count=1 \
+		-timeout $(VENDOR_TEST_TIMEOUT) ./tests/vendorconformance/...
+
+.PHONY: test-vendors-preflight
+test-vendors-preflight: ## Verify vendor credentials and model IDs without spending on completions
+	cd microgateway && VENDOR_TESTS_VENDORS="$(VENDORS)" \
+		go test -tags vendorlive -v -count=1 \
+		-timeout 5m -run 'TestPreflight' ./tests/vendorconformance/...
+
+.PHONY: test-vendors-update-golden
+test-vendors-update-golden: ## Refresh golden envelope snapshots
+	cd microgateway && VENDOR_TESTS_UPDATE_GOLDEN=true \
+		VENDOR_TESTS_VENDORS="$(VENDORS)" \
+		go test -tags vendorlive -v -count=1 \
+		-timeout $(VENDOR_TEST_TIMEOUT) ./tests/vendorconformance/...
+
+.PHONY: test-vendors-harness
+test-vendors-harness: ## Run the credential-free unit tests that protect the conformance harness itself
+	go test -count=1 ./pkg/testinfra/vendorconformance/...
+
+# ============================================================================
 # Frontend Tests
 # ============================================================================
 
