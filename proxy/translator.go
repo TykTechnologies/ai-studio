@@ -154,14 +154,12 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Handle streaming if requested
+	// Handle streaming if requested. Tools no longer divert to the buffered
+	// path: a client that asked for a stream and got Content-Type
+	// application/json never sees a token and has no idea why.
 	if req.Stream != nil && *req.Stream {
-		// Fall back to non-streaming if tools are present (tool streaming is complex)
-		if len(req.Tools) == 0 {
-			p.handleChatCompletionStream(w, r, conf, &req, reqBody)
-			return
-		}
-		// Continue to non-streaming path when tools are present
+		p.handleChatCompletionStream(w, r, conf, &req, reqBody)
+		return
 	}
 
 	// Create internal routing HTTP client
@@ -202,15 +200,19 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 	// Auth, plugins, budget, analytics all happen on the /llm/call/ hop
 	resp, err := llm.GenerateContent(ctx, messages, opts...)
 	if err != nil {
-		respondWithOAIError(w, http.StatusInternalServerError, "failed to generate content", err, false)
+		// Surface the vendor's own status. An unknown model is a 404 upstream;
+		// reporting it as our 500 tells the caller to retry a request that can
+		// never succeed, and hides a client error as a server one.
+		status, _ := upstreamStatusFromError(err, http.StatusBadGateway)
+		respondWithOAIError(w, status, "failed to generate content", err, false)
 		return
 	}
 
 	// Extract token usage from ContentResponse
-	usage := extractTokenUsageFromContentResponse(resp, conf.Vendor)
+	usage := extractTokenUsageFromContentResponse(resp, conf.Vendor, req.CompletionCount())
 
 	// Create response with usage field populated
-	response := NewChatCompletionResponse(resp, req.Model)
+	response := NewChatCompletionResponse(resp, req.Model, req.CompletionCount())
 	response.Usage = usage
 
 	// Marshal response
@@ -267,8 +269,13 @@ func handleOptions(req *CreateCompletionRequest) []llms.CallOption {
 	return opts
 }
 
-// extractTokenUsageFromContentResponse extracts token usage from langchaingo ContentResponse
-func extractTokenUsageFromContentResponse(resp *llms.ContentResponse, vendor models.Vendor) CompletionUsage {
+// extractTokenUsageFromContentResponse extracts token usage from langchaingo ContentResponse.
+//
+// n is the number of completions the caller asked for. Choices beyond that are
+// content blocks of a single turn (see NewChatCompletionResponse), and every
+// block carries the same whole-response counters - summing them reported double
+// the tokens the vendor actually charged for on Anthropic.
+func extractTokenUsageFromContentResponse(resp *llms.ContentResponse, vendor models.Vendor, n int) CompletionUsage {
 	if resp == nil || len(resp.Choices) == 0 {
 		return CompletionUsage{}
 	}
@@ -276,9 +283,9 @@ func extractTokenUsageFromContentResponse(resp *llms.ContentResponse, vendor mod
 	totalPrompt := 0
 	totalCompletion := 0
 
-	// Sum tokens across all choices (usually just one)
-	for _, choice := range resp.Choices {
-		_, prompt, completion := switches.GetTokenCounts(choice, vendor)
+	// One reading per requested completion, not per content block.
+	for _, group := range groupContentChoices(resp.Choices, n) {
+		_, prompt, completion := switches.GetTokenCounts(group[0], vendor)
 		totalPrompt += prompt
 		totalCompletion += completion
 	}
@@ -354,6 +361,12 @@ func (p *Proxy) recordTranslatorAnalytics(
 // handleChatCompletionStream handles streaming chat completion requests with OpenAI-compatible SSE format
 // NOTE: This is a PURE BRIDGE HANDLER - NO AUTH runs here
 // Auth, plugins, budget checking, analytics all happen on the internal /llm/call/ hop
+//
+// Tool calls are streamed too. langchaingo hands text to the streaming callback
+// as it arrives but accumulates tool-call fragments internally, so the calls are
+// only known once GenerateContent returns; they are framed as tool_calls deltas
+// before the terminal chunk. The client sees a well-formed OpenAI stream either
+// way, which is what it dispatches on.
 func (p *Proxy) handleChatCompletionStream(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -361,56 +374,60 @@ func (p *Proxy) handleChatCompletionStream(
 	req *ChatCompletionRequest,
 	reqBody []byte,
 ) {
-	// Set SSE headers before any writes
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache, no-transform")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
-	// Check if we can flush
+	// Check if we can flush before promising a stream.
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		respondWithOAIError(w, http.StatusInternalServerError, "Streaming not supported", nil, false)
 		return
 	}
 
+	// Set SSE headers before any writes. Nothing is committed until the first
+	// write, so a failure that happens before then can still be answered with a
+	// real HTTP status and an OpenAI error envelope rather than a 200 whose
+	// single frame says something went wrong.
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
 	// Generate completion ID and timestamp for all chunks
 	completionID := "chatcmpl-" + uuid.New().String()
 	created := time.Now().Unix()
-	isFirstChunk := true
+	framesSent := 0
 
-	// Create streaming callback that formats chunks as OpenAI SSE events
-	streamingFunc := func(ctx context.Context, chunk []byte) error {
-		chunkResp := ChatCompletionChunk{
+	newChunk := func(delta ChatCompletionDelta) ChatCompletionChunk {
+		// delta.role belongs on the first frame and nowhere else: clients that
+		// build a message from the stream treat a repeat as a new message.
+		if framesSent == 0 {
+			delta.Role = "assistant"
+		}
+		return ChatCompletionChunk{
 			ID:      completionID,
 			Object:  "chat.completion.chunk",
 			Created: created,
 			Model:   req.Model,
 			Choices: []ChatCompletionChunkChoice{{
 				Index:        0,
-				Delta:        ChatCompletionDelta{},
+				Delta:        delta,
 				FinishReason: nil,
 			}},
 		}
+	}
 
-		// First chunk includes role
-		if isFirstChunk {
-			chunkResp.Choices[0].Delta.Role = "assistant"
-			isFirstChunk = false
-		}
-
-		// Add content to delta
-		chunkResp.Choices[0].Delta.Content = string(chunk)
-
-		// Marshal and send
-		jsonBytes, err := json.Marshal(chunkResp)
+	send := func(chunk ChatCompletionChunk) error {
+		jsonBytes, err := json.Marshal(chunk)
 		if err != nil {
 			return fmt.Errorf("failed to marshal chunk: %w", err)
 		}
-
 		fmt.Fprintf(w, "data: %s\n\n", jsonBytes)
 		flusher.Flush()
+		framesSent++
 		return nil
+	}
+
+	// Create streaming callback that formats chunks as OpenAI SSE events
+	streamingFunc := func(ctx context.Context, chunk []byte) error {
+		return send(newChunk(ChatCompletionDelta{Content: string(chunk)}))
 	}
 
 	// Create internal routing HTTP client
@@ -430,7 +447,7 @@ func (p *Proxy) handleChatCompletionStream(
 	// Create LLM driver with internal routing HTTP client and streaming callback
 	llmDriver, err := switches.FetchDriver(&internalConf, nil, nil, streamingFunc, switches.WithHTTPClient(internalClient))
 	if err != nil {
-		p.sendStreamError(w, flusher, "Failed to create LLM client", "server_error")
+		p.failStream(w, flusher, framesSent, http.StatusInternalServerError, "Failed to create LLM client", err)
 		return
 	}
 
@@ -444,15 +461,35 @@ func (p *Proxy) handleChatCompletionStream(
 	// Auth, plugins, budget, analytics all happen on the /llm/call/ hop
 	resp, err := llmDriver.GenerateContent(ctx, messages, opts...)
 	if err != nil {
-		p.sendStreamError(w, flusher, fmt.Sprintf("LLM call failed: %s", err.Error()), "server_error")
+		status, _ := upstreamStatusFromError(err, http.StatusBadGateway)
+		p.failStream(w, flusher, framesSent, status, "LLM call failed", err)
 		return
 	}
 
-	// Send final chunk with finish_reason and usage
-	usage := extractTokenUsageFromContentResponse(resp, conf.Vendor)
+	// Fold the driver's per-content-block choices back into the single turn the
+	// caller asked for, exactly as the non-streaming path does.
+	groups := groupContentChoices(resp.Choices, req.CompletionCount())
+	usage := extractTokenUsageFromContentResponse(resp, conf.Vendor, req.CompletionCount())
+
 	finishReason := "stop"
-	if len(resp.Choices) > 0 && resp.Choices[0].StopReason != "" {
-		finishReason = convertFinishReason(resp.Choices[0].StopReason)
+	toolCalls := 0
+	if len(groups) > 0 {
+		merged := newChatCompletionChoice(0, groups[0])
+		finishReason = merged.FinishReason
+		toolCalls = len(merged.Message.ToolCalls)
+
+		// A tool-only turn never reaches the streaming callback, so this may be
+		// the first frame of the stream - which is why delta.role is decided by
+		// framesSent rather than assumed to have gone out with the text.
+		for i, call := range merged.Message.ToolCalls {
+			delta := ChatCompletionDelta{ToolCalls: []ChatCompletionToolCallDelta{
+				toolCallDelta(i, call),
+			}}
+			if err := send(newChunk(delta)); err != nil {
+				log.Error().Err(err).Msg("failed to send tool call chunk")
+				break
+			}
+		}
 	}
 
 	finalChunk := ChatCompletionChunk{
@@ -467,14 +504,62 @@ func (p *Proxy) handleChatCompletionStream(
 		}},
 		Usage: &usage,
 	}
-
-	jsonBytes, err := json.Marshal(finalChunk)
-	if err == nil {
-		fmt.Fprintf(w, "data: %s\n\n", jsonBytes)
-		flusher.Flush()
+	if framesSent == 0 {
+		// Nothing at all came back. The terminal frame is the only one the
+		// client will see, so the role has to ride on it.
+		finalChunk.Choices[0].Delta.Role = "assistant"
 	}
+	_ = send(finalChunk)
 
 	// Send [DONE] marker
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
+
+	log.Debug().
+		Str("vendor", string(conf.Vendor)).
+		Int("tool_calls", toolCalls).
+		Int("frames", framesSent).
+		Msg("streamed chat completion")
+}
+
+// toolCallDelta renders one fully-accumulated tool call as a streamed fragment.
+// index is required on the wire: it is the only thing a client can use to tie
+// argument fragments back to the call they belong to.
+func toolCallDelta(index int, call map[string]interface{}) ChatCompletionToolCallDelta {
+	out := ChatCompletionToolCallDelta{Index: index, Type: "function"}
+	if id, ok := call["id"].(string); ok {
+		out.ID = id
+	}
+	if t, ok := call["type"].(string); ok && t != "" {
+		out.Type = t
+	}
+	fn, _ := call["function"].(map[string]interface{})
+	name, _ := fn["name"].(string)
+	args, _ := fn["arguments"].(string)
+	if args == "" {
+		// An empty string does not parse; clients that json.Unmarshal the
+		// concatenation would get "unexpected end of JSON input".
+		args = "{}"
+	}
+	out.Function = &ChatCompletionFunctionDelta{Name: name, Arguments: args}
+	return out
+}
+
+// failStream reports a streaming failure. Before the first frame nothing is
+// committed, so the client can still be given a real HTTP status and an OpenAI
+// error envelope; after it, an in-band error frame followed by [DONE] is all
+// the protocol allows.
+func (p *Proxy) failStream(w http.ResponseWriter, flusher http.Flusher, framesSent, status int, message string, err error) {
+	if framesSent == 0 {
+		w.Header().Del("Content-Type")
+		respondWithOAIError(w, status, message, err, false)
+		return
+	}
+	detail := message
+	if err != nil {
+		detail = fmt.Sprintf("%s: %s", message, err.Error())
+	}
+	p.sendStreamError(w, flusher, detail, oaiErrorType(status))
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
 }

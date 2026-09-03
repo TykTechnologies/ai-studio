@@ -2,6 +2,7 @@ package bedrockVendor
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
@@ -508,8 +509,14 @@ func TestExtractToolCallsFromContentBlocks(t *testing.T) {
 
 		fn := toolCalls[0]["function"].(map[string]interface{})
 		assert.Equal(t, "get_weather", fn["name"])
-		// arguments is JSON-marshaled from document.Interface
-		assert.NotEmpty(t, fn["arguments"])
+
+		// The bug this pins: Input is a document.Interface whose payload lives
+		// in an unexported field, so json.Marshal produced "{}" and every
+		// Bedrock tool call reached the client with empty arguments - valid
+		// against the schema, and useless.
+		var args map[string]any
+		require.NoError(t, json.Unmarshal([]byte(fn["arguments"].(string)), &args))
+		assert.Equal(t, map[string]any{"location": "London"}, args)
 	})
 
 	t.Run("returns nil when no tool calls", func(t *testing.T) {
@@ -597,4 +604,25 @@ func TestConvertToConverseRole(t *testing.T) {
 // helper
 func strPtr(s string) *string {
 	return &s
+}
+
+func TestMarshalToolInput(t *testing.T) {
+	t.Run("renders the document payload, not the wrapper", func(t *testing.T) {
+		doc := document.NewLazyDocument(map[string]interface{}{"city": "London", "days": 3})
+
+		// json.Marshal is the trap: the wrapper has no exported fields.
+		naive, err := json.Marshal(doc)
+		require.NoError(t, err)
+		assert.Equal(t, "{}", string(naive),
+			"if this ever stops being {}, the workaround in MarshalToolInput can go")
+
+		var args map[string]any
+		require.NoError(t, json.Unmarshal([]byte(MarshalToolInput(doc)), &args))
+		assert.Equal(t, "London", args["city"])
+	})
+
+	t.Run("a nil input is an empty object, not an empty string", func(t *testing.T) {
+		// "" does not parse; clients json.Unmarshal this field directly.
+		assert.Equal(t, "{}", MarshalToolInput(nil))
+	})
 }

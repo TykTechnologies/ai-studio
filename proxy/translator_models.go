@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -156,6 +157,15 @@ func (r *ChatCompletionRequest) ToLangchainOptions(conf *models.LLM) []llms.Call
 	return options
 }
 
+// CompletionCount is the number of completions the caller asked for: the
+// request's `n`, defaulting to OpenAI's own default of 1.
+func (r *ChatCompletionRequest) CompletionCount() int {
+	if r == nil || r.N == nil || *r.N < 1 {
+		return 1
+	}
+	return *r.N
+}
+
 // Getter functions for ambiguous fields
 func (r *ChatCompletionRequest) GetStop() ([]string, bool) {
 	switch v := r.Stop.(type) {
@@ -283,8 +293,29 @@ type ChatCompletionChunkChoice struct {
 
 // ChatCompletionDelta represents the delta content in a streaming chunk
 type ChatCompletionDelta struct {
-	Role    string `json:"role,omitempty"`    // Only in first chunk
-	Content string `json:"content,omitempty"` // Streaming text content
+	Role      string                        `json:"role,omitempty"`    // Only in first chunk
+	Content   string                        `json:"content,omitempty"` // Streaming text content
+	ToolCalls []ChatCompletionToolCallDelta `json:"tool_calls,omitempty"`
+}
+
+// ChatCompletionToolCallDelta is one fragment of a streamed tool call.
+//
+// Index is what makes reassembly possible and is required on every fragment:
+// it is the only thing tying an arguments fragment back to the call it belongs
+// to when a model emits several in parallel. Id and Function.Name appear on the
+// opening fragment; subsequent fragments carry argument text only, and the
+// concatenation of those fragments must parse as JSON.
+type ChatCompletionToolCallDelta struct {
+	Index    int                          `json:"index"`
+	ID       string                       `json:"id,omitempty"`
+	Type     string                       `json:"type,omitempty"`
+	Function *ChatCompletionFunctionDelta `json:"function,omitempty"`
+}
+
+// ChatCompletionFunctionDelta is the function half of a streamed tool call.
+type ChatCompletionFunctionDelta struct {
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
 }
 
 // ChatCompletionStreamError represents an error in SSE format
@@ -364,46 +395,121 @@ func convertRole(role string) llms.ChatMessageType {
 	}
 }
 
-func NewChatCompletionResponse(llmResponse *llms.ContentResponse, model string) *ChatCompletionResponse {
+// NewChatCompletionResponse converts a langchaingo ContentResponse into the
+// OpenAI chat.completion object.
+//
+// n is the number of completions the caller asked for (the request's `n`, or 1
+// when it is omitted). It matters because langchaingo drivers do not agree on
+// what a ContentChoice represents: OpenAI's returns one per requested
+// completion, while Anthropic's returns one per *content block* of a single
+// turn - so a reply carrying text and a tool call arrives as two choices.
+//
+// OpenAI indexes `choices` by n and puts every part of one turn in the same
+// message. Passing the block-per-choice shape straight through produced
+// choices[0] with finish_reason:"tool_calls" and no tool_calls array, plus a
+// choices[1] holding the call: an SDK reads choices[0], finds nothing to
+// invoke, and breaks. Anything beyond the requested n is therefore folded back
+// into a single turn.
+func NewChatCompletionResponse(llmResponse *llms.ContentResponse, model string, n int) *ChatCompletionResponse {
 	response := &ChatCompletionResponse{
 		ID:      uuid.New().String(),
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
 		Model:   model,
-		Choices: make([]ChatCompletionChoice, len(llmResponse.Choices)),
+		Choices: make([]ChatCompletionChoice, 0, len(llmResponse.Choices)),
 	}
 
-	for i, choice := range llmResponse.Choices {
-		// Convert the choice
-		response.Choices[i] = ChatCompletionChoice{
-			Index: i,
-			Message: ChatCompletionMessage{
-				Role:    "assistant",
-				Content: choice.Content,
-			},
-			FinishReason: convertFinishReason(choice.StopReason),
-		}
-
-		// If there are tool calls, add them to the message
-		if len(choice.ToolCalls) > 0 {
-			toolCalls := make([]map[string]interface{}, len(choice.ToolCalls))
-			for j, toolCall := range choice.ToolCalls {
-				toolCalls[j] = map[string]interface{}{
-					"id":   toolCall.ID,
-					"type": toolCall.Type,
-					"function": map[string]interface{}{
-						"name":      toolCall.FunctionCall.Name,
-						"arguments": toolCall.FunctionCall.Arguments,
-					},
-				}
-			}
-			response.Choices[i].Message.Content = "" // Clear content when there are tool calls
-			response.Choices[i].Message.ToolCalls = toolCalls
-		}
+	for i, group := range groupContentChoices(llmResponse.Choices, n) {
+		response.Choices = append(response.Choices, newChatCompletionChoice(i, group))
 	}
 
 	// Note: Usage stats would need to be set separately as they're not part of ContentResponse
 	return response
+}
+
+// groupContentChoices partitions the driver's choices into the turns the caller
+// actually asked for. With n completions requested and more choices than that
+// coming back, the extras are content blocks of one turn rather than
+// alternatives, so they all collapse into a single group.
+func groupContentChoices(choices []*llms.ContentChoice, n int) [][]*llms.ContentChoice {
+	if len(choices) == 0 {
+		return nil
+	}
+	if n < 1 {
+		n = 1
+	}
+	if len(choices) <= n {
+		groups := make([][]*llms.ContentChoice, 0, len(choices))
+		for _, c := range choices {
+			groups = append(groups, []*llms.ContentChoice{c})
+		}
+		return groups
+	}
+	return [][]*llms.ContentChoice{choices}
+}
+
+// newChatCompletionChoice merges one group of driver choices into a single
+// OpenAI choice: text concatenated, tool calls unioned, and the finish reason
+// taken from the turn rather than from whichever block happened to be last.
+func newChatCompletionChoice(index int, group []*llms.ContentChoice) ChatCompletionChoice {
+	choice := ChatCompletionChoice{
+		Index:   index,
+		Message: ChatCompletionMessage{Role: "assistant"},
+	}
+
+	var content strings.Builder
+	var toolCalls []map[string]interface{}
+	stopReason := ""
+
+	for _, c := range group {
+		content.WriteString(c.Content)
+		if stopReason == "" {
+			stopReason = c.StopReason
+		}
+		for _, toolCall := range c.ToolCalls {
+			if toolCall.FunctionCall == nil {
+				continue
+			}
+			// Anthropic's driver leaves Type empty; OpenAI's schema pins it to
+			// the literal "function" and SDKs switch on it.
+			callType := toolCall.Type
+			if callType == "" {
+				callType = "function"
+			}
+			// Gemini returns tool calls with no id at all. The id is what a
+			// client puts in tool_call_id when it sends the result back, so an
+			// empty one breaks the round trip - mint one rather than emit "".
+			callID := toolCall.ID
+			if callID == "" {
+				callID = "call_" + uuid.New().String()
+			}
+			// Clients json.Unmarshal this field directly; "" fails with
+			// "unexpected end of JSON input" where "{}" is a no-argument call.
+			args := toolCall.FunctionCall.Arguments
+			if args == "" {
+				args = "{}"
+			}
+			toolCalls = append(toolCalls, map[string]interface{}{
+				"id":   callID,
+				"type": callType,
+				"function": map[string]interface{}{
+					"name":      toolCall.FunctionCall.Name,
+					"arguments": args,
+				},
+			})
+		}
+	}
+
+	choice.Message.Content = content.String()
+	choice.Message.ToolCalls = toolCalls
+	choice.FinishReason = convertFinishReason(stopReason)
+	// A turn that produced tool calls must say so, whatever the block-level
+	// stop reason was: clients branch on finish_reason to decide whether to run
+	// a tool and send the result back.
+	if len(toolCalls) > 0 {
+		choice.FinishReason = "tool_calls"
+	}
+	return choice
 }
 
 // Helper to convert finish reasons

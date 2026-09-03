@@ -32,6 +32,7 @@
         "content": { "type": "array" },
         "stop_reason": { "type": ["string", "null"] },
         "stop_sequence": { "type": ["string", "null"] },
+        "stop_details": { "type": ["object", "null"] },
         "usage": {
           "type": ["object", "null"],
           "required": ["input_tokens"],
@@ -39,7 +40,11 @@
             "input_tokens": { "type": "integer", "minimum": 0 },
             "output_tokens": { "type": "integer", "minimum": 0 },
             "cache_creation_input_tokens": { "type": ["integer", "null"] },
-            "cache_read_input_tokens": { "type": ["integer", "null"] }
+            "cache_read_input_tokens": { "type": ["integer", "null"] },
+            "cache_creation": { "type": ["object", "null"] },
+            "output_tokens_details": { "type": ["object", "null"] },
+            "service_tier": { "type": ["string", "null"] },
+            "inference_geo": { "type": ["string", "null"] }
           }
         }
       }
@@ -72,15 +77,22 @@
           "type": ["string", "null"],
           "enum": ["end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn", "refusal", null]
         },
-        "stop_sequence": { "type": ["string", "null"] }
+        "stop_sequence": { "type": ["string", "null"] },
+        "stop_details": { "type": ["object", "null"] }
       }
     },
     "usage": {
-      "description": "Present on message_delta: the final output token count.",
+      "description": "Present on message_delta: the final token counts. The cache_* and *_details members were added upstream 2026-09; see anthropic_message.json for why they are documented but not carried through.",
       "type": ["object", "null"],
       "properties": {
         "input_tokens": { "type": "integer", "minimum": 0 },
-        "output_tokens": { "type": "integer", "minimum": 0 }
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "cache_creation_input_tokens": { "type": ["integer", "null"] },
+        "cache_read_input_tokens": { "type": ["integer", "null"] },
+        "cache_creation": { "type": ["object", "null"] },
+        "output_tokens_details": { "type": ["object", "null"] },
+        "service_tier": { "type": ["string", "null"] },
+        "inference_geo": { "type": ["string", "null"] }
       }
     },
     "error": {

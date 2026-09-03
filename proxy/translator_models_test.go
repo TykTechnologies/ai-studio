@@ -5,6 +5,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tmc/langchaingo/llms"
 )
 
@@ -315,7 +316,7 @@ func TestNewChatCompletionResponse(t *testing.T) {
 			},
 		}
 
-		resp := NewChatCompletionResponse(llmResp, "gpt-4")
+		resp := NewChatCompletionResponse(llmResp, "gpt-4", 1)
 		assert.NotNil(t, resp)
 		assert.NotEmpty(t, resp.ID)
 		assert.Equal(t, "chat.completion", resp.Object)
@@ -346,11 +347,14 @@ func TestNewChatCompletionResponse(t *testing.T) {
 			},
 		}
 
-		resp := NewChatCompletionResponse(llmResp, "gpt-4")
+		resp := NewChatCompletionResponse(llmResp, "gpt-4", 1)
 		assert.Len(t, resp.Choices, 1)
-		assert.Empty(t, resp.Choices[0].Message.Content) // Content cleared when tool calls present
+		// Text alongside tool calls is preserved: OpenAI's schema allows both in
+		// one message, and Anthropic routinely says something before calling.
+		assert.Equal(t, "Tool call response", resp.Choices[0].Message.Content)
 		assert.Len(t, resp.Choices[0].Message.ToolCalls, 1)
 		assert.Equal(t, "call_123", resp.Choices[0].Message.ToolCalls[0]["id"])
+		assert.Equal(t, "tool_calls", resp.Choices[0].FinishReason)
 	})
 
 	t.Run("Create response with multiple choices", func(t *testing.T) {
@@ -361,9 +365,85 @@ func TestNewChatCompletionResponse(t *testing.T) {
 			},
 		}
 
-		resp := NewChatCompletionResponse(llmResp, "gpt-4")
+		// n=2: the caller asked for two completions, so two choices is what the
+		// driver was reporting and both survive.
+		resp := NewChatCompletionResponse(llmResp, "gpt-4", 2)
 		assert.Len(t, resp.Choices, 2)
 		assert.Equal(t, 0, resp.Choices[0].Index)
 		assert.Equal(t, 1, resp.Choices[1].Index)
 	})
+
+	// Anthropic's driver returns one ContentChoice per content block, so a reply
+	// that says something and then calls a tool arrives as two. OpenAI indexes
+	// choices by n and puts both in one message: passing the split through gave
+	// SDKs a choices[0] with finish_reason "tool_calls" and nothing to call.
+	t.Run("Fold content blocks of one turn into a single choice", func(t *testing.T) {
+		llmResp := &llms.ContentResponse{
+			Choices: []*llms.ContentChoice{
+				{Content: "Let me check that for you.", StopReason: "tool_use"},
+				{
+					StopReason: "tool_use",
+					ToolCalls: []llms.ToolCall{{
+						ID: "toolu_1",
+						// Anthropic's driver leaves Type empty.
+						FunctionCall: &llms.FunctionCall{
+							Name:      "get_weather",
+							Arguments: `{"city":"London"}`,
+						},
+					}},
+				},
+			},
+		}
+
+		resp := NewChatCompletionResponse(llmResp, "claude-x", 1)
+		require.Len(t, resp.Choices, 1)
+		assert.Equal(t, "Let me check that for you.", resp.Choices[0].Message.Content)
+		assert.Equal(t, "tool_calls", resp.Choices[0].FinishReason)
+		require.Len(t, resp.Choices[0].Message.ToolCalls, 1)
+		call := resp.Choices[0].Message.ToolCalls[0]
+		assert.Equal(t, "toolu_1", call["id"])
+		assert.Equal(t, "function", call["type"], "OpenAI pins tool_calls[].type to \"function\"")
+	})
+}
+
+// Gemini's driver returns tool calls with no id and no tool-use stop reason.
+// Both matter on the wire: the id is what the client echoes back as
+// tool_call_id, and finish_reason is how it knows to run the tool at all.
+func TestNewChatCompletionResponseRepairsToolCallIdentity(t *testing.T) {
+	llmResp := &llms.ContentResponse{
+		Choices: []*llms.ContentChoice{
+			{
+				StopReason: "stop",
+				ToolCalls: []llms.ToolCall{{
+					FunctionCall: &llms.FunctionCall{
+						Name:      "get_weather",
+						Arguments: `{"city":"Wellington"}`,
+					},
+				}},
+			},
+		},
+	}
+
+	resp := NewChatCompletionResponse(llmResp, "gemini-x", 1)
+	require.Len(t, resp.Choices, 1)
+	require.Len(t, resp.Choices[0].Message.ToolCalls, 1)
+
+	call := resp.Choices[0].Message.ToolCalls[0]
+	assert.NotEmpty(t, call["id"], "a tool call with no id cannot be answered")
+	assert.Equal(t, "function", call["type"])
+	assert.Equal(t, "tool_calls", resp.Choices[0].FinishReason,
+		"a turn that produced tool calls must say so, whatever the vendor's stop reason was")
+}
+
+func TestCompletionCount(t *testing.T) {
+	var req ChatCompletionRequest
+	assert.Equal(t, 1, req.CompletionCount(), "n defaults to OpenAI's own default of 1")
+
+	three := 3
+	req.N = &three
+	assert.Equal(t, 3, req.CompletionCount())
+
+	zero := 0
+	req.N = &zero
+	assert.Equal(t, 1, req.CompletionCount())
 }

@@ -75,6 +75,12 @@ func TestPreflightModelsCallable(t *testing.T) {
 				if resp.Status == http.StatusOK {
 					return
 				}
+				// A throttled call still proves the credential and the model id
+				// are good - it is the quota that ran out, which is what
+				// pre-flight is meant to rule out, not report.
+				if skipIfThrottled(t, resp) {
+					return
+				}
 
 				t.Errorf("model %q is not callable (HTTP %d).\n"+
 					"Check %s in test-secrets/vendors.env.\n\nResponse:\n%s",

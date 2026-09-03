@@ -33,6 +33,10 @@
                   "properties": {
                     "text": { "type": "string" },
                     "thought": { "type": "boolean" },
+                    "thoughtSignature": {
+                      "description": "Added upstream 2026-09. An opaque token that lets a follow-up turn resume the model's reasoning. Opaque to us and deliberately not carried into the OpenAI shape, which has nowhere to put it.",
+                      "type": "string"
+                    },
                     "functionCall": {
                       "type": "object",
                       "required": ["name", "args"],
@@ -62,7 +66,13 @@
         "candidatesTokenCount": { "type": "integer", "minimum": 0 },
         "thoughtsTokenCount": { "type": "integer", "minimum": 0 },
         "cachedContentTokenCount": { "type": "integer", "minimum": 0 },
-        "totalTokenCount": { "type": "integer", "minimum": 0 }
+        "totalTokenCount": { "type": "integer", "minimum": 0 },
+        "promptTokensDetails": {
+          "description": "Added upstream 2026-09. Per-modality breakdown of promptTokenCount, which stays the billable total.",
+          "type": ["array", "null"]
+        },
+        "candidatesTokensDetails": { "type": ["array", "null"] },
+        "serviceTier": { "type": ["string", "null"] }
       }
     }
   }

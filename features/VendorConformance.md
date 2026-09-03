@@ -300,85 +300,161 @@ Steps 1–3 are complete. 4–6 are mechanical extension.
 
 ## 7. Findings
 
-From a run against OpenAI, Anthropic and Bedrock with `vision` disabled:
-**102 passed, 24 failed, 72 skipped.** Every failure falls into one of four
-bugs. Reproduce any with
+The first full run against OpenAI, Anthropic, Bedrock and Google AI found
+**six bugs**, every one of them a schema-matching defect invisible to unit
+tests with hand-written fixtures. All six are fixed; this section is kept as
+the record of what the suite caught and where the repairs live, because the
+same shapes will be reintroduced if nobody knows they were ever wrong.
+
+Reproduce any historical case with
 `make test-vendors VENDORS=<vendor> SCENARIOS=<scenario>`; bodies land in
 `test-results/vendor-conformance/failures/`.
 
-| # | Bug | Failing cases |
-|---|---|---|
-| 1 | Bedrock tool arguments always empty | 4 |
-| 2 | Anthropic splits one turn across two choices | 4 |
-| 3 | `stream:true` + `tools` returns a buffered response | 6 |
-| 4 | Bedrock streaming + tools produces no content at all | 4 |
-| 5 | Error contract: empty `error.type`, upstream 4xx as our 5xx | 6 |
+| # | Bug | Cases | Fixed in |
+|---|---|---|---|
+| 1 | Bedrock tool arguments always empty | 4 | `vendors/bedrock/bedrock.go` |
+| 2 | Anthropic splits one turn across two choices | 4 | `proxy/translator_models.go` |
+| 3 | `stream:true` + `tools` returns a buffered response | 6 | `proxy/translator.go` |
+| 4 | Bedrock streaming + tools produces no content at all | 4 | `proxy/bedrock_translator.go` |
+| 5 | Error contract: empty `error.type`, upstream 4xx as our 5xx | 6 | `proxy/oai_error_contract.go` |
+| 6 | Gemini `finishReason` breaks the analytics decoder | all | `responses/enum_string.go` |
 
-### 7.1 Bedrock tool arguments are always empty
+### 7.1 Bedrock tool arguments were always empty
 
-`vendors/bedrock/bedrock.go:324` — `ExtractToolCallsFromContentBlocks` does
-`json.Marshal(toolBlock.Value.Input)`, but `Input` is a `document.Interface`
-(a smithy document wrapper with no exported fields), so it marshals to `{}`.
-Every Bedrock tool call reaches the client as `"arguments":"{}"`. It needs
-`Input.UnmarshalSmithyDocument(&v)`. The marshal error is discarded on the same
-line, so nothing logs.
+`ExtractToolCallsFromContentBlocks` did `json.Marshal(toolBlock.Value.Input)`,
+but `Input` is a `document.Interface` — a smithy document wrapper whose payload
+lives in an unexported field — so it marshalled to `{}`. Every Bedrock tool call
+reached the client as `"arguments":"{}"`. The marshal error was discarded on the
+same line, so nothing logged.
 
-Schema-valid, passes every naive check, silently breaks every tool-using client
-on Bedrock. This is the exact failure mode the suite was built for.
+Schema-valid, passing every naive check, and silently breaking every tool-using
+client on Bedrock. This is the exact failure mode the suite was built for.
 
-### 7.2 Anthropic splits one turn across two choices
+**Fix:** `MarshalToolInput` uses `Input.MarshalSmithyDocument()`, the accessor
+that returns the real payload, and logs rather than swallows a failure. Pinned
+by `TestMarshalToolInput`, which also asserts that `json.Marshal` still returns
+`{}` — so the day the SDK changes, the workaround can go.
 
-A response carrying both text and a tool call becomes `choices[0]` (text,
+### 7.2 Anthropic split one turn across two choices
+
+A response carrying both text and a tool call became `choices[0]` (text,
 `finish_reason: "tool_calls"`, **no** `tool_calls`) plus `choices[1]` (the tool
 call). OpenAI's contract puts both in the *same* message; `choices` is indexed
 by `n`, not by content block. An SDK reads `choices[0]`, sees
 `finish_reason: "tool_calls"` and no `tool_calls` array, and breaks.
 
-### 7.3 `stream: true` plus `tools` returns a buffered response
+The cause is that langchaingo drivers disagree about what a `ContentChoice` is:
+OpenAI's returns one per requested completion, Anthropic's one per content
+block.
 
-Content-Type `application/json`, `object: "chat.completion"`, no SSE frames.
-Reproduced on OpenAI and Anthropic, shim and universal. A client that asked for
-a stream gets a content type it does not expect and never sees a token.
+**Fix:** `NewChatCompletionResponse` now takes the requested `n` and folds
+anything beyond it back into a single turn — text concatenated, tool calls
+unioned, `finish_reason` forced to `tool_calls` when the turn produced any.
+The same grouping fixed a usage bug riding along with it: each Anthropic block
+carries the *whole response's* token counters, and summing across blocks
+reported double the tokens the vendor actually charged for.
 
-### 7.4 Bedrock streaming with tools produces nothing
+Two smaller wire defects were repaired in the same place, both found by the
+suite rather than reported:
 
-Well-formed OpenAI chunks arrive, but carrying neither text nor `tool_calls`:
-the tool call is dropped entirely rather than merely emptied. Distinct from 7.1
-and worse. `proxy/bedrock_streaming.go:225` marshals `toolDelta.Value.Input`
-with the same `document.Interface` pattern as 7.1, so the two are likely one
-root cause; that has not been confirmed.
+- `tool_calls[].type` was `""` on Anthropic and Gemini (the drivers leave it
+  unset); OpenAI's schema pins it to the literal `"function"`.
+- `tool_calls[].id` was `""` on Gemini. The id is what a client echoes back as
+  `tool_call_id`, so an empty one breaks the round trip; one is now minted when
+  the driver supplies none.
+
+### 7.3 `stream: true` plus `tools` returned a buffered response
+
+Content-Type `application/json`, `object: "chat.completion"`, no SSE frames —
+the handler explicitly fell back to the non-streaming path whenever tools were
+present. Reproduced on OpenAI and Anthropic, shim and universal. A client that
+asked for a stream got a content type it did not expect and never saw a token.
+
+**Fix:** the fallback is gone. langchaingo streams text through the callback and
+accumulates tool-call fragments internally, so the calls are known once
+`GenerateContent` returns and are framed as `tool_calls` deltas before the
+terminal chunk. `delta.role` is now decided by whether any frame has actually
+gone out, because a tool-only turn never reaches the streaming callback at all
+and would otherwise have produced a stream with no role on it.
+
+### 7.4 Bedrock streaming with tools produced nothing
+
+Well-formed OpenAI chunks arrived carrying neither text nor `tool_calls`: the
+tool call was dropped entirely rather than merely emptied.
+
+The suspected shared root cause with 7.1 was wrong. `ToolUseBlockDelta.Input` is
+a `*string`, not a `document.Interface`. The actual cause was simpler and
+entirely local to `handleBedrockChatCompletionStream`: the event loop handled
+only `ContentBlockDeltaMemberText` and ignored `ContentBlockStart` and
+`ContentBlockDeltaMemberToolUse` outright, so the id, the name and every
+argument fragment were discarded.
+
+**Fix:** both events are handled. Because Bedrock numbers all content blocks in
+one sequence while OpenAI's `tool_calls[].index` counts tool calls only, the two
+numberings are mapped rather than passed through — the index is the only thing a
+client can use to reassemble fragments. A tool call that produced no argument
+fragments is closed with `{}` rather than `""`, which does not parse.
 
 ### 7.5 The error contract
 
 Two defects, on every vendor and both surfaces:
 
-- **`error.type` is always empty.** Every error from `respondWithOAIError`
-  carries `"type":""`. OpenAI's contract requires a non-empty type
+- **`error.type` was always empty.** Every error from `respondWithOAIError`
+  carried `"type":""`. OpenAI's contract requires a non-empty type
   (`invalid_request_error`, `authentication_error`, …) and SDKs branch on it.
-  `error.code` is also a number where OpenAI uses a string.
-- **Upstream 4xx surfaces as our 5xx.** An unknown model returns HTTP 500
+  `error.code` was a number where OpenAI uses a string.
+- **Upstream 4xx surfaced as our 5xx.** An unknown model returned HTTP 500
   (OpenAI, Anthropic) or 502 (Bedrock), telling the caller to retry something
   that can never succeed. Upstream returned 404 in every case.
 
-### 7.6 Gemini `finishReason` breaks the analytics decoder
+**Fix:** `proxy/oai_error_contract.go` derives both `type` and a string `code`
+from the status, and recovers the upstream status from the driver error —
+langchaingo's `"API returned unexpected status code: 404"`, Google's
+`"googleapi: Error 429"`, and the `HTTPStatusCode()` smithy puts on every AWS
+error. A streaming failure that happens before the first frame now answers with
+a real HTTP status and an error envelope instead of a 200 whose only frame says
+something went wrong.
+
+### 7.6 Gemini `finishReason` broke the analytics decoder
 
 Logged on every successful Gemini call: `failed to analyze response: json:
 cannot unmarshal number into Go struct field .candidates.finishReason of type
-string`. The analyzer types it as a string; the value arrives as a number, so
-those analytics records are dropped.
+string`. The analyzer typed it as a string; the value arrives as a number over
+one of Gemini's two transports, so the whole record was dropped — calls that
+worked perfectly for the caller produced no usage or cost data at all.
 
-### 7.7 Upstream drift (informational, not failures)
+**Fix:** `responses.EnumString` accepts either an enum name or its ordinal.
+Applied to every enum field in the Gemini models, not just `finishReason`:
+decoding stops at the first error, so `safetyRatings[].category`,
+`.probability` and `.severity` were latent failures of exactly the same kind.
 
-13 undocumented fields, caught automatically and listed in
-`drift-summary.md`. OpenAI: `usage.prompt_tokens_details.cache_write_tokens`,
-and `obfuscation` on streaming chunks. Anthropic: `stop_details`,
-`usage.cache_creation`, `usage.inference_geo`, `usage.output_tokens_details`,
-and their streaming equivalents.
+### 7.7 Upstream drift
 
-Triage these into the schemas, then set
-`VENDOR_TESTS_STRICT_UNKNOWN_FIELDS=true` to keep the contract closed.
+17 undocumented fields, caught automatically, all now triaged into
+`pkg/testinfra/vendorconformance/schema/` with a note on each saying whether we
+carry it through and why:
 
-### 7.8 Not bugs
+- **OpenAI** — `usage.prompt_tokens_details.cache_write_tokens`, and
+  `obfuscation` on streaming chunks (random padding against traffic analysis).
+- **Anthropic** — `stop_details`, `usage.cache_creation`, `usage.inference_geo`,
+  `usage.output_tokens_details`, and their streaming equivalents.
+- **Gemini** — `thoughtSignature` on content parts,
+  `usageMetadata.promptTokensDetails`, `usageMetadata.serviceTier`.
+
+None changes a billable figure: the flat counters remain what the usage triple
+carries. `VENDOR_TESTS_STRICT_UNKNOWN_FIELDS` is deliberately still `false` by
+default — the next vendor addition should show up as drift for a human to
+triage, not as a red build. Set it to `true` for a run when you want the
+contract locked shut.
+
+### 7.8 Vendor throttling is not a conformance signal
+
+Free-tier Gemini allows 20 requests per minute, and a full matrix run exceeds
+that comfortably. The harness now skips on an upstream 429 or 503 with the
+vendor's own words rather than failing: a refusal to serve says nothing about
+whether our translation is correct, and a suite that cries wolf gets ignored.
+
+### 7.9 Not bugs
 
 `vision` is switched off platform-wide via `unsupportedFeatures` in `matrix.go`
 — multimodal input is not officially supported. Delete that entry to re-enable
