@@ -15,6 +15,10 @@
       "enum": ["end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn", "refusal", null]
     },
     "stop_sequence": { "type": ["string", "null"] },
+    "stop_details": {
+      "description": "Added upstream 2026-09. A structured companion to stop_reason; null on every ordinary turn so far. Documented rather than carried through: stop_reason is what the OpenAI finish_reason maps from.",
+      "type": ["object", "null"]
+    },
     "content": {
       "description": "Always an array of typed blocks, never a bare string. Flattening it to a string is a translation bug.",
       "type": "array",
@@ -43,7 +47,19 @@
         "output_tokens": { "type": "integer", "minimum": 0 },
         "cache_creation_input_tokens": { "type": ["integer", "null"], "minimum": 0 },
         "cache_read_input_tokens": { "type": ["integer", "null"], "minimum": 0 },
-        "service_tier": { "type": ["string", "null"] }
+        "service_tier": { "type": ["string", "null"] },
+        "cache_creation": {
+          "description": "Added upstream 2026-09. Breaks cache_creation_input_tokens down by TTL bucket. Not carried into our usage triple: the flat counter above is the billable total.",
+          "type": ["object", "null"]
+        },
+        "output_tokens_details": {
+          "description": "Added upstream 2026-09, mirroring OpenAI's completion_tokens_details.",
+          "type": ["object", "null"]
+        },
+        "inference_geo": {
+          "description": "Added upstream 2026-09. The region that served the request; informational, not billing.",
+          "type": ["string", "null"]
+        }
       }
     }
   }

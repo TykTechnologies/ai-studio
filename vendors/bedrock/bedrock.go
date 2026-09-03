@@ -316,18 +316,41 @@ func ExtractTextFromContentBlocks(blocks []types.ContentBlock) string {
 	return sb.String()
 }
 
+// MarshalToolInput renders a Converse tool-use Input as the JSON string OpenAI
+// clients expect in tool_calls[].function.arguments.
+//
+// json.Marshal cannot be used here. Input is a document.Interface - a smithy
+// document wrapper whose payload lives in an unexported field - so the standard
+// marshaller sees a struct with nothing exported and produces "{}". Every
+// Bedrock tool call then reaches the client with empty arguments: schema-valid,
+// and silently useless to the caller. MarshalSmithyDocument is the accessor that
+// returns the real payload.
+func MarshalToolInput(input document.Interface) string {
+	if input == nil {
+		return "{}"
+	}
+	raw, err := input.MarshalSmithyDocument()
+	if err != nil {
+		logrus.WithError(err).Warn("Failed to marshal Bedrock tool use input; sending empty arguments")
+		return "{}"
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return "{}"
+	}
+	return string(raw)
+}
+
 // ExtractToolCallsFromContentBlocks extracts tool calls from Converse ContentBlocks as OpenAI format.
 func ExtractToolCallsFromContentBlocks(blocks []types.ContentBlock) []map[string]interface{} {
 	var toolCalls []map[string]interface{}
 	for _, block := range blocks {
 		if toolBlock, ok := block.(*types.ContentBlockMemberToolUse); ok {
-			argsJSON, _ := json.Marshal(toolBlock.Value.Input)
 			toolCalls = append(toolCalls, map[string]interface{}{
 				"id":   aws.ToString(toolBlock.Value.ToolUseId),
 				"type": "function",
 				"function": map[string]interface{}{
 					"name":      aws.ToString(toolBlock.Value.Name),
-					"arguments": string(argsJSON),
+					"arguments": MarshalToolInput(toolBlock.Value.Input),
 				},
 			})
 		}

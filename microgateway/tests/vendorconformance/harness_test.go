@@ -155,6 +155,23 @@ func modelCapabilityGap(body []byte) (string, bool) {
 	return "", false
 }
 
+// skipIfThrottled reports whether the vendor refused to serve us for reasons
+// that say nothing about our translation, skipping the test if so.
+//
+// A rate limit or a capacity refusal is not a conformance signal. Free-tier
+// Gemini quotas in particular will paint a whole run red for a reason that has
+// nothing to do with the product, and a suite that cries wolf gets ignored.
+func skipIfThrottled(t *testing.T, resp *response) bool {
+	t.Helper()
+	switch resp.Status {
+	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
+		t.Skipf("upstream returned %d (rate limit or capacity), not a conformance signal:\n%s",
+			resp.Status, bodyExcerpt(resp.Body))
+		return true
+	}
+	return false
+}
+
 // looksLikeErrorEnvelope reports whether a payload is an {"error": ...} object
 // rather than a completion. A 200 response whose body is an error envelope is
 // how a mid-stream upstream failure reaches the client.

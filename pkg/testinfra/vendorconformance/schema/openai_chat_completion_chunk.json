@@ -12,6 +12,10 @@
     "model": { "type": "string", "minLength": 1 },
     "system_fingerprint": { "type": ["string", "null"] },
     "service_tier": { "type": ["string", "null"] },
+    "obfuscation": {
+      "description": "Added upstream 2026-09. Random padding OpenAI adds to defeat traffic analysis on streamed responses; carries no meaning and is dropped.",
+      "type": ["string", "null"]
+    },
     "choices": {
       "description": "Empty only on a usage-carrying final chunk (stream_options.include_usage).",
       "type": "array",

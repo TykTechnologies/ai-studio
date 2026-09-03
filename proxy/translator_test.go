@@ -75,13 +75,13 @@ func TestExtractTokenUsageFromContentResponse(t *testing.T) {
 			},
 		}
 
-		usage := extractTokenUsageFromContentResponse(resp, models.OPENAI)
+		usage := extractTokenUsageFromContentResponse(resp, models.OPENAI, 1)
 		assert.NotNil(t, usage)
 		// Note: Actual token extraction depends on switches.GetTokenCounts implementation
 	})
 
 	t.Run("Extract from nil response", func(t *testing.T) {
-		usage := extractTokenUsageFromContentResponse(nil, models.OPENAI)
+		usage := extractTokenUsageFromContentResponse(nil, models.OPENAI, 1)
 		assert.Equal(t, CompletionUsage{}, usage)
 	})
 
@@ -90,7 +90,7 @@ func TestExtractTokenUsageFromContentResponse(t *testing.T) {
 			Choices: []*llms.ContentChoice{},
 		}
 
-		usage := extractTokenUsageFromContentResponse(resp, models.OPENAI)
+		usage := extractTokenUsageFromContentResponse(resp, models.OPENAI, 1)
 		assert.Equal(t, CompletionUsage{}, usage)
 	})
 
@@ -102,9 +102,29 @@ func TestExtractTokenUsageFromContentResponse(t *testing.T) {
 			},
 		}
 
-		usage := extractTokenUsageFromContentResponse(resp, models.OPENAI)
+		usage := extractTokenUsageFromContentResponse(resp, models.OPENAI, 2)
 		assert.NotNil(t, usage)
 		// Token counts are summed across choices
+	})
+
+	// Anthropic reports one choice per content block, each carrying the same
+	// whole-response counters. Summing them charged the caller twice for a
+	// single turn; only one reading per requested completion is counted.
+	t.Run("Content blocks of one turn are counted once", func(t *testing.T) {
+		block := func() *llms.ContentChoice {
+			return &llms.ContentChoice{
+				GenerationInfo: map[string]any{
+					"InputTokens":  20,
+					"OutputTokens": 50,
+				},
+			}
+		}
+		resp := &llms.ContentResponse{Choices: []*llms.ContentChoice{block(), block()}}
+
+		single := extractTokenUsageFromContentResponse(
+			&llms.ContentResponse{Choices: []*llms.ContentChoice{block()}}, models.ANTHROPIC, 1)
+		usage := extractTokenUsageFromContentResponse(resp, models.ANTHROPIC, 1)
+		assert.Equal(t, single, usage, "a two-block turn must report the same usage as a one-block turn")
 	})
 }
 

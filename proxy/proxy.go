@@ -614,10 +614,22 @@ func respondWithError(w http.ResponseWriter, status int, message string, err err
 	json.NewEncoder(w).Encode(response)
 }
 
+// respondWithOAIError writes an OpenAI-shaped error envelope.
+//
+// type and code are derived from the status rather than left blank: OpenAI's
+// contract requires a non-empty type, SDKs branch on it, and code is a string
+// there — we were emitting "type":"" and a numeric code, so neither field
+// matched anything a client tests for.
 func respondWithOAIError(w http.ResponseWriter, status int, message string, err error, wwwAuthenticate bool) {
 	httpStatusText := http.StatusText(status)
 	// Assuming APIError and OAIErrorResponse are defined in oai_error.go
-	apiError := &APIError{Code: status, Message: message, HTTPStatus: httpStatusText, HTTPStatusCode: status}
+	apiError := &APIError{
+		Code:           oaiErrorCode(status),
+		Message:        message,
+		Type:           oaiErrorType(status),
+		HTTPStatus:     httpStatusText,
+		HTTPStatusCode: status,
+	}
 	if err != nil {
 		apiError.Message = fmt.Sprintf("[ERROR] msg: %s err: %s", message, err.Error())
 	}

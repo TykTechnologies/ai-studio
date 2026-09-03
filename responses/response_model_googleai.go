@@ -10,13 +10,15 @@ type GoogleAIChatResponse struct {
 				Args map[string]interface{} `json:"args"`
 			} `json:"parts"`
 		} `json:"content"`
-		FinishReason  string `json:"finishReason"`
+		// Enum fields: Gemini sends these as names over one transport and as
+		// ordinals over another, so they must accept both. See EnumString.
+		FinishReason  EnumString `json:"finishReason"`
 		SafetyRatings []struct {
-			Category         string  `json:"category"`
-			Probability      string  `json:"probability"`
-			ProbabilityScore float64 `json:"probabilityScore"`
-			Severity         string  `json:"severity"`
-			SeverityScore    float64 `json:"severityScore"`
+			Category         EnumString `json:"category"`
+			Probability      EnumString `json:"probability"`
+			ProbabilityScore float64    `json:"probabilityScore"`
+			Severity         EnumString `json:"severity"`
+			SeverityScore    float64    `json:"severityScore"`
 		} `json:"safetyRatings"`
 	} `json:"candidates"`
 	UsageMetadata struct {
@@ -38,16 +40,16 @@ type GoogleAIStreamChunk struct {
 			} `json:"parts"`
 			Role string `json:"role"`
 		} `json:"content"`
-		FinishReason  string `json:"finishReason"`
-		Index         int    `json:"index"`
+		FinishReason  EnumString `json:"finishReason"`
+		Index         int        `json:"index"`
 		SafetyRatings []struct {
-			Category    string `json:"category"`
-			Probability string `json:"probability"`
+			Category    EnumString `json:"category"`
+			Probability EnumString `json:"probability"`
 		} `json:"safetyRatings"`
 	} `json:"candidates"`
 	UsageMetadata struct {
-		PromptTokenCount     int `json:"promptTokenCount"`
-		CandidatesTokenCount int `json:"candidatesTokenCount"`
+		PromptTokenCount        int `json:"promptTokenCount"`
+		CandidatesTokenCount    int `json:"candidatesTokenCount"`
 		TotalTokenCount         int `json:"totalTokenCount"`
 		CachedContentTokenCount int `json:"cachedContentTokenCount"`
 		ThoughtsTokenCount      int `json:"thoughtsTokenCount"`

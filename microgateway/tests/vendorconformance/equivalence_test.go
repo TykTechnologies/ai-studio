@@ -48,10 +48,16 @@ func TestShimUniversalEquivalence(t *testing.T) {
 
 			shimResp, err := h.post(ctx, h.URLFor(vc.SurfaceShim, v), req.WithModel(model).JSON(), nil)
 			require.NoError(t, err)
+			if skipIfThrottled(t, shimResp) {
+				return
+			}
 			require.Equalf(t, 200, shimResp.Status, "shim returned %d:\n%s", shimResp.Status, bodyExcerpt(shimResp.Body))
 
 			uniResp, err := h.post(ctx, h.URLFor(vc.SurfaceUniversal, v), req.WithModel(v.Slug()+"/"+model).JSON(), nil)
 			require.NoError(t, err)
+			if skipIfThrottled(t, uniResp) {
+				return
+			}
 			require.Equalf(t, 200, uniResp.Status, "universal returned %d:\n%s", uniResp.Status, bodyExcerpt(uniResp.Body))
 
 			shimEnv, err := vc.Normalize(vc.FormatOpenAICompletion, shimResp.Body)
@@ -109,6 +115,9 @@ func TestStreamingMatchesBuffered(t *testing.T) {
 
 			bufResp, err := h.post(ctx, url, buffered.WithModel(model).JSON(), nil)
 			require.NoError(t, err)
+			if skipIfThrottled(t, bufResp) {
+				return
+			}
 			require.Equalf(t, 200, bufResp.Status, "buffered returned %d:\n%s", bufResp.Status, bodyExcerpt(bufResp.Body))
 
 			streaming, ok := vc.BuildRequest(vc.Case{
@@ -119,6 +128,9 @@ func TestStreamingMatchesBuffered(t *testing.T) {
 
 			stream, meta, err := h.postStream(ctx, url, streaming.WithModel(model).JSON(), nil)
 			require.NoError(t, err)
+			if skipIfThrottled(t, meta) {
+				return
+			}
 			require.Equalf(t, 200, meta.Status, "streaming returned %d:\n%s", meta.Status, bodyExcerpt(meta.Body))
 			require.NotNil(t, stream)
 

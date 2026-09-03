@@ -75,7 +75,11 @@ func (p *Proxy) handleBedrockChatCompletion(w http.ResponseWriter, r *http.Reque
 
 	output, err := client.Converse(r.Context(), input)
 	if err != nil {
-		respondWithOAIError(w, http.StatusBadGateway, fmt.Sprintf("Bedrock Converse failed: %s", err.Error()), err, false)
+		// Bedrock's SDK errors carry the HTTP status the service returned;
+		// flattening every one of them to 502 turned "no such model" into a
+		// retryable server fault.
+		status := bedrockErrorStatus(err, http.StatusBadGateway)
+		respondWithOAIError(w, status, fmt.Sprintf("Bedrock Converse failed: %s", err.Error()), err, false)
 		return
 	}
 
@@ -152,14 +156,16 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	// Create Bedrock client
 	client, err := bedrockVendor.NewBedrockClient(conf)
 	if err != nil {
-		p.sendStreamError(w, flusher, "failed to create Bedrock client", "server_error")
+		w.Header().Del("Content-Type")
+		respondWithOAIError(w, http.StatusInternalServerError, "failed to create Bedrock client", err, false)
 		return
 	}
 
 	// Determine model ID
 	modelID := bedrockVendor.GetModelID(conf, req.Model)
 	if modelID == "" {
-		p.sendStreamError(w, flusher, "model ID is required", "invalid_request_error")
+		w.Header().Del("Content-Type")
+		respondWithOAIError(w, http.StatusBadRequest, "model ID is required", nil, false)
 		return
 	}
 
@@ -186,13 +192,19 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 
 	output, err := client.ConverseStream(r.Context(), input)
 	if err != nil {
-		p.sendStreamError(w, flusher, fmt.Sprintf("Bedrock ConverseStream failed: %s", err.Error()), "server_error")
+		// Nothing has been written yet, so the caller can still be given the
+		// status Bedrock actually returned instead of a 200 whose only frame
+		// says the request failed.
+		status := bedrockErrorStatus(err, http.StatusBadGateway)
+		w.Header().Del("Content-Type")
+		respondWithOAIError(w, status, "Bedrock ConverseStream failed", err, false)
 		return
 	}
 
 	stream := output.GetStream()
 	if stream == nil {
-		p.sendStreamError(w, flusher, "Bedrock returned no stream", "server_error")
+		w.Header().Del("Content-Type")
+		respondWithOAIError(w, http.StatusBadGateway, "Bedrock returned no stream", nil, false)
 		return
 	}
 	defer stream.Close()
@@ -206,6 +218,31 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	var textBuffer strings.Builder
 	chunkIndex := 0
 
+	// Bedrock numbers every content block in one sequence, text and tool use
+	// alike, but OpenAI's tool_calls[].index counts tool calls only - it is what
+	// a client uses to reassemble argument fragments, so the two numberings have
+	// to be mapped rather than passed through.
+	toolCallIndexes := map[int32]int{}
+	toolArgsSeen := map[int32]bool{}
+	nextToolCallIndex := 0
+
+	sendChunk := func(delta ChatCompletionDelta) {
+		if isFirstChunk {
+			delta.Role = "assistant"
+			isFirstChunk = false
+		}
+		sendSSEChunk(w, flusher, ChatCompletionChunk{
+			ID:      completionID,
+			Object:  "chat.completion.chunk",
+			Created: created,
+			Model:   req.Model,
+			Choices: []ChatCompletionChunkChoice{{
+				Index: 0,
+				Delta: delta,
+			}},
+		})
+	}
+
 	for event := range stream.Events() {
 		if err := stream.Err(); err != nil {
 			log.Error().Err(err).Msg("Bedrock ConverseStream error")
@@ -216,22 +253,65 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 		case *types.ConverseStreamOutputMemberMessageStart:
 			// Send first chunk with role
 			if isFirstChunk {
-				chunkResp := ChatCompletionChunk{
-					ID:      completionID,
-					Object:  "chat.completion.chunk",
-					Created: created,
-					Model:   req.Model,
-					Choices: []ChatCompletionChunkChoice{{
-						Index: 0,
-						Delta: ChatCompletionDelta{Role: "assistant"},
-					}},
-				}
-				sendSSEChunk(w, flusher, chunkResp)
-				isFirstChunk = false
+				sendChunk(ChatCompletionDelta{})
 			}
 			_ = v
 
+		case *types.ConverseStreamOutputMemberContentBlockStart:
+			// The opening fragment of a tool call: it is the only place Bedrock
+			// sends the id and the function name. Dropping this event is why
+			// streamed Bedrock tool calls used to vanish entirely - the
+			// arguments that follow have nothing to attach to.
+			toolUse, ok := v.Value.Start.(*types.ContentBlockStartMemberToolUse)
+			if !ok {
+				continue
+			}
+			blockIndex := aws.ToInt32(v.Value.ContentBlockIndex)
+			toolCallIndexes[blockIndex] = nextToolCallIndex
+			nextToolCallIndex++
+
+			sendChunk(ChatCompletionDelta{ToolCalls: []ChatCompletionToolCallDelta{{
+				Index: toolCallIndexes[blockIndex],
+				ID:    aws.ToString(toolUse.Value.ToolUseId),
+				Type:  "function",
+				Function: &ChatCompletionFunctionDelta{
+					Name: aws.ToString(toolUse.Value.Name),
+				},
+			}}})
+
+		case *types.ConverseStreamOutputMemberContentBlockStop:
+			// A tool call whose input was empty produced no argument fragments,
+			// and "" does not parse. Clients concatenate the fragments and
+			// json.Unmarshal the result, so close the call with an empty object.
+			blockIndex := aws.ToInt32(v.Value.ContentBlockIndex)
+			toolIndex, isTool := toolCallIndexes[blockIndex]
+			if !isTool || toolArgsSeen[blockIndex] {
+				continue
+			}
+			sendChunk(ChatCompletionDelta{ToolCalls: []ChatCompletionToolCallDelta{{
+				Index:    toolIndex,
+				Function: &ChatCompletionFunctionDelta{Arguments: "{}"},
+			}}})
+
 		case *types.ConverseStreamOutputMemberContentBlockDelta:
+			if toolDelta, ok := v.Value.Delta.(*types.ContentBlockDeltaMemberToolUse); ok {
+				blockIndex := aws.ToInt32(v.Value.ContentBlockIndex)
+				toolIndex, isTool := toolCallIndexes[blockIndex]
+				if !isTool {
+					continue
+				}
+				fragment := aws.ToString(toolDelta.Value.Input)
+				if fragment == "" {
+					continue
+				}
+				toolArgsSeen[blockIndex] = true
+				sendChunk(ChatCompletionDelta{ToolCalls: []ChatCompletionToolCallDelta{{
+					Index:    toolIndex,
+					Function: &ChatCompletionFunctionDelta{Arguments: fragment},
+				}}})
+				continue
+			}
+
 			if textDelta, ok := v.Value.Delta.(*types.ContentBlockDeltaMemberText); ok {
 				// Accumulate text for logging
 				textBuffer.WriteString(textDelta.Value)
@@ -254,17 +334,7 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 					chunkIndex++
 				}
 
-				chunkResp := ChatCompletionChunk{
-					ID:      completionID,
-					Object:  "chat.completion.chunk",
-					Created: created,
-					Model:   req.Model,
-					Choices: []ChatCompletionChunkChoice{{
-						Index: 0,
-						Delta: ChatCompletionDelta{Content: textDelta.Value},
-					}},
-				}
-				sendSSEChunk(w, flusher, chunkResp)
+				sendChunk(ChatCompletionDelta{Content: textDelta.Value})
 			}
 
 		case *types.ConverseStreamOutputMemberMessageStop:

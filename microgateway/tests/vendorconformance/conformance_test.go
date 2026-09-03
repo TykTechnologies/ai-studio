@@ -299,6 +299,10 @@ func assertUpstreamOK(t *testing.T, h *harness, c vc.Case, resp *response) bool 
 
 	h.recorder.RecordFailure(c.Name(), fmt.Sprintf("HTTP %d", resp.Status), resp.Body)
 
+	if skipIfThrottled(t, resp) {
+		return false
+	}
+
 	// A model that cannot do what the scenario asked tells us nothing about
 	// whether our translation is correct. Skipped with the vendor's own words so
 	// the gap is visible rather than silently absent.

@@ -76,7 +76,12 @@
           "type": ["object", "null"],
           "properties": {
             "cached_tokens": { "type": "integer", "minimum": 0 },
-            "audio_tokens": { "type": "integer", "minimum": 0 }
+            "audio_tokens": { "type": "integer", "minimum": 0 },
+            "cache_write_tokens": {
+              "description": "Added upstream 2026-09. Prompt tokens written to the cache on this call, billed separately from cached_tokens. Informational here; prompt_tokens remains the figure our usage triple carries.",
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
         "completion_tokens_details": {
