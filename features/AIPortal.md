@@ -49,6 +49,16 @@ The AI Portal consists of several key components that work together to provide a
   * Tool selection validated against user permissions and privacy settings.
   * Similar interface to LLM and data source selection for consistency.
 
+* **App Endpoint Documentation (App detail view):**
+  * The App detail page documents every way the app's credential can reach an LLM, grouped so the intended use case of each is explicit:
+    * **Main Ingress** — the gateway's unified OpenAI-compatible ingress (`{proxy}{unified base path}/chat/completions`, base path default `/v1`). One URL for every LLM the app can access; the LLM is chosen per request. Shown once per app, above the per-LLM cards.
+    * **Per-LLM vendor-native endpoint** — `/llm/call/{llm-slug}`, pass-through in the vendor's own API format, streaming auto-detected.
+    * **Per-LLM OpenAI shim** — `/ai/{llm-slug}/v1`, OpenAI format pinned to one LLM, bare model names.
+    * **Per-LLM Anthropic shim** — `/anthropic/{llm-slug}` (Bedrock LLMs only), for clients speaking the Anthropic Messages API.
+    * **Legacy** — `/llm/rest/{llm-slug}` and `/llm/stream/{llm-slug}`, collapsed, for existing integrations only.
+  * The Main Ingress carries two caveats the per-LLM endpoints do not, both surfaced in the UI because getting either wrong is a 400: the `model` field must be namespaced as `<llm-slug>/<model>`, and the payload must be OpenAI Chat Completions format regardless of upstream vendor. The view lists the namespaced model name for each of the app's LLMs (using each LLM's default model) and points at `GET {base}/models` for the full list.
+  * The ingress base path is configurable (`UNIFIED_ROUTER_PATH`) and can be disabled (`UNIFIED_ROUTER_DISABLED`), so it is served to the frontend as `unifiedRouterPath` on `/auth/config`; an empty value hides the Main Ingress section rather than advertising a URL that would 404.
+
 * **Chat Experience:**
   * Conversational interface for interacting with LLMs.
   * Support for tool usage within conversations.

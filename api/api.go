@@ -1086,11 +1086,20 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		dataSourceDisplayURL = proxyURL
 	}
 
+	// The unified ingress is mounted at a configurable base path and can be turned
+	// off entirely, so resolve it the same way the proxy does rather than letting
+	// the portal assume "/v1". Empty means "not served".
+	unifiedRouterPath := ""
+	if !config.Get("").UnifiedRouterDisabled {
+		unifiedRouterPath = proxy.NormalizeUnifiedRouterBasePath(config.Get("").UnifiedRouterPath)
+	}
+
 	cfg := FrontendConfig{
 		APIBaseURL:           apiBaseURL,
 		ProxyURL:             proxyURL,
 		ToolDisplayURL:       toolDisplayURL,
 		DataSourceDisplayURL: dataSourceDisplayURL,
+		UnifiedRouterPath:    unifiedRouterPath,
 		DefaultSignUpMode:    suMode,
 		TIBEnabled:           sso.IsEnterpriseAvailable(),
 		IsEnterprise:         config.IsEnterprise(), // Detect enterprise edition via build tags
