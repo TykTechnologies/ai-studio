@@ -47,6 +47,8 @@ type Service struct {
 	ModelRouterService model_router.Service
 	// Sync Status (Hub-and-Spoke)
 	SyncStatusService *SyncStatusService
+	// Outbound Webhooks
+	WebhookService *WebhookService
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -73,6 +75,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	namespaceService := NewNamespaceService(db, edgeService)
 	edgeManagementService := edge_management.NewService(db)
 	syncStatusService := NewSyncStatusService(db)
+	webhookService := NewWebhookService(db, DefaultWebhookServiceConfig())
 
 	// Initialize plugin services with OCI support
 	var pluginService *PluginService
@@ -180,6 +183,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		HookManager:           hookManager,
 		ModelRouterService:    modelRouterSvc,
 		SyncStatusService:     syncStatusService,
+		WebhookService:        webhookService,
 	}
 
 	// Wire service reference to AI Studio plugin manager for proper service provider injection
@@ -218,6 +222,12 @@ func (s *Service) Cleanup() error {
 	logger.Info("Starting service cleanup...")
 
 	var errors []error
+
+	// Stop webhook service
+	if s.WebhookService != nil {
+		logger.Info("Stopping webhook service...")
+		s.WebhookService.Stop()
+	}
 
 	// Stop log export service (cleanup goroutine)
 	if s.LogExportService != nil {
@@ -298,6 +308,10 @@ func (s *Service) SetEventBus(bus eventbridge.Bus) {
 		s.SystemEvents = NewSystemEventEmitter(bus, "control")
 		s.SubscribeResourceInstanceChanges(bus)
 		logger.Debug("Initialized system event emitter")
+		if s.WebhookService != nil {
+			bus.SubscribeAll(s.WebhookService.HandleEvent)
+			logger.Debug("Webhook service subscribed to all events")
+		}
 	}
 }
 

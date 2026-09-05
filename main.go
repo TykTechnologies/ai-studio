@@ -26,6 +26,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
@@ -151,6 +152,17 @@ func main() {
 	}
 
 	service := services.NewServiceWithOCI(db, ociConfig)
+
+	// Replace the default webhook service with one configured from environment variables.
+	webhookCfg := services.WebhookServiceConfigFromValues(
+		appConf.WebhookWorkers,
+		appConf.WebhookQueueSize,
+		appConf.WebhookMaxRetries,
+		appConf.WebhookHTTPTimeoutSeconds,
+		appConf.WebhookMaxResponseBodyBytes,
+		appConf.WebhookBackoffSeconds,
+	)
+	service.WebhookService = services.NewWebhookService(db, webhookCfg)
 
 	// Wire licensing service to main service for plugin license checks
 	service.SetLicensingService(licensingService)
@@ -322,6 +334,13 @@ func main() {
 		logger.Info("Gateway not started - feature_gateway not in license entitlements")
 	}
 
+	// Wire a local event bus so webhooks work in standalone mode.
+	// In control mode, SetEventBus is called again below with the gRPC-backed bus,
+	// which re-subscribes the webhook service to the correct bus.
+	localBus := eventbridge.NewBus()
+	service.SetEventBus(localBus)
+	logger.Info("Local event bus initialized")
+
 	// Initialize gRPC control server and reload coordinator if in control mode
 	var controlServer *grpc.ControlServer
 	var reloadCoordinator *services.ReloadCoordinator
@@ -396,6 +415,14 @@ func main() {
 				logger.Debug("AI Studio plugins loaded successfully (standalone mode)")
 			}
 		}
+	}
+
+	// Start webhook workers after all event bus wiring is complete.
+	if service.WebhookService != nil {
+		webhookCtx, webhookCancel := context.WithCancel(context.Background())
+		defer webhookCancel()
+		go service.WebhookService.Start(webhookCtx)
+		logger.Info("Webhook service workers started")
 	}
 
 	noDocsArg := appConf.DocsDisabled
