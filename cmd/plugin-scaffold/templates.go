@@ -301,7 +301,7 @@ func main() {
 
 const studioGoModTemplate = `module github.com/TykTechnologies/midsommar/v2/examples/plugins/studio/{{.Name}}
 
-go 1.24.10
+go 1.26.6
 
 replace github.com/TykTechnologies/midsommar/v2 => {{.RelativeReplace}}
 
@@ -513,7 +513,7 @@ func main() {
 
 const gatewayGoModTemplate = `module github.com/TykTechnologies/midsommar/examples/plugins/gateway/{{.Name}}
 
-go 1.24.10
+go 1.26.6
 
 replace github.com/TykTechnologies/midsommar/v2 => {{.RelativeReplace}}
 
@@ -777,7 +777,7 @@ func main() {
 
 const agentGoModTemplate = `module github.com/TykTechnologies/midsommar/v2/examples/plugins/studio/{{.Name}}/server
 
-go 1.24.10
+go 1.26.6
 
 replace github.com/TykTechnologies/midsommar/v2 => {{.RelativeReplace}}
 
@@ -995,7 +995,7 @@ func main() {
 
 const dataCollectorGoModTemplate = `module github.com/TykTechnologies/midsommar/v2/examples/plugins/data-collectors/{{.Name}}
 
-go 1.24.10
+go 1.26.6
 
 replace github.com/TykTechnologies/midsommar/v2 => {{.RelativeReplace}}
 

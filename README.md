@@ -105,7 +105,7 @@ Standards-based AI component integration:
 **For absolute first-timers who want to build from source:**
 
 ### Prerequisites
-- Go 1.22+  
+- Go 1.26+  
 - Node.js 20+
 - Git
 
@@ -217,7 +217,7 @@ When you first register, your account will automatically become admin with a def
 ### Option 2: Native Development
 
 **Prerequisites**
-- Go 1.22+
+- Go 1.26+
 - Node.js 20+
 - Clone the langchaingo fork: https://github.com/lonelycode/langchaingo
 

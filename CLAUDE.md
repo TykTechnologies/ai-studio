@@ -9,7 +9,7 @@ Tyk AI Studio (Midsommar) is an open source AI management platform for secure, g
 ## Prerequisites
 
 - **Docker** and **Docker Compose v2** (included with Docker Desktop)
-- **Go 1.21+** (for local builds)
+- **Go 1.26+** (for local builds)
 - **Node.js 20+** (for frontend builds)
 - At least **8GB RAM** available for Docker
 

@@ -38,7 +38,7 @@ jobs:
           # Studio CE
           - component: studio
             edition: ce
-            golang_cross: 1.25-bullseye
+            golang_cross: 1.26-bullseye
             goreleaser: "ci/goreleaser/goreleaser.yml"
             goflags: ""
             cgo: 1
@@ -50,7 +50,7 @@ jobs:
           # Studio ENT
           - component: studio
             edition: ent
-            golang_cross: 1.25-bullseye
+            golang_cross: 1.26-bullseye
             goreleaser: "ci/goreleaser/goreleaser.yml"
             goflags: "-tags=enterprise"
             cgo: 1
@@ -62,7 +62,7 @@ jobs:
           # Microgateway CE
           - component: microgateway
             edition: ce
-            golang_cross: 1.25-bullseye
+            golang_cross: 1.26-bullseye
             goreleaser: "ci/goreleaser/goreleaser-microgateway.yml"
             goflags: ""
             cgo: 1
@@ -74,7 +74,7 @@ jobs:
           # Microgateway ENT
           - component: microgateway
             edition: ent
-            golang_cross: 1.25-bullseye
+            golang_cross: 1.26-bullseye
             goreleaser: "ci/goreleaser/goreleaser-microgateway.yml"
             goflags: "-tags=enterprise"
             cgo: 1

@@ -293,7 +293,7 @@ build-enterprise: build-prod-ent
 #   make package-ent                Build ENT packages for both components
 # ============================================================================
 
-GOLANG_CROSS_IMAGE ?= tykio/golang-cross:1.25-bullseye
+GOLANG_CROSS_IMAGE ?= tykio/golang-cross:1.26-bullseye
 GORELEASER_FLAGS ?= --snapshot --skip=sign --skip=publish --clean
 
 # Internal helper: run goreleaser inside the cross-compilation Docker container.
