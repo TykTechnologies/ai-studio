@@ -115,7 +115,7 @@ jobs:
           cat > enterprise/go.mod << 'EOF'
           module github.com/TykTechnologies/midsommar/v2/enterprise
 
-          go 1.25.6
+          go 1.26.6
           EOF
 
       - name: Setup Go
