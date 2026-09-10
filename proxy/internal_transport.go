@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"crypto/tls"
 	"io"
 	"net/http"
 
@@ -23,16 +24,38 @@ type InternalRoutingTransport struct {
 
 // NewInternalRoutingTransport creates a transport that passes through the original
 // client auth header while stripping any vendor-specific auth headers set by the SDK.
-func NewInternalRoutingTransport(originalAuth string) *InternalRoutingTransport {
+//
+// serverTLS must be true when the listener being called back terminates TLS: the
+// loopback then dials 127.0.0.1 over HTTPS without verifying the certificate,
+// which is issued for the public hostname rather than the loopback address.
+//
+// This builds a private connection pool; the proxy's request path uses
+// newInternalRoutingTransport with a shared pool instead.
+func NewInternalRoutingTransport(originalAuth string, serverTLS bool) *InternalRoutingTransport {
+	return newInternalRoutingTransport(newLoopbackTransport(serverTLS), originalAuth)
+}
+
+// newInternalRoutingTransport wraps an existing pool with the per-request auth
+// handling. The wrapper is cheap and holds only the caller's Authorization
+// header; the underlying pool is what must be shared across requests.
+func newInternalRoutingTransport(underlying http.RoundTripper, originalAuth string) *InternalRoutingTransport {
+	return &InternalRoutingTransport{
+		underlying:   underlying,
+		originalAuth: originalAuth,
+	}
+}
+
+// newLoopbackTransport builds the connection pool for calls back into our own
+// listener on 127.0.0.1.
+func newLoopbackTransport(serverTLS bool) *http.Transport {
 	// Create a custom transport that disables automatic gzip handling
 	// This prevents double-decompression issues when the SDK also tries to handle gzip
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DisableCompression = true // Don't add Accept-Encoding or auto-decompress
-
-	return &InternalRoutingTransport{
-		underlying:   transport,
-		originalAuth: originalAuth,
+	if serverTLS {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // loopback to our own listener on 127.0.0.1
 	}
+	return transport
 }
 
 func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response, error) {

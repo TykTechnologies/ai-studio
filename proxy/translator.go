@@ -26,7 +26,11 @@ import (
 // - OpenAI SDK expects base URL with /v1 (e.g., http://host/llm/call/openai/v1) and appends /chat/completions
 // - Anthropic SDK expects base URL without version (e.g., http://host/llm/call/claude) and appends /v1/messages
 func (p *Proxy) getInternalLLMBaseURL(slug string, vendor models.Vendor) string {
-	baseURL := fmt.Sprintf("http://127.0.0.1:%d/llm/call/%s", p.config.Port, slug)
+	scheme := "http"
+	if p.loopbackTLS() {
+		scheme = "https"
+	}
+	baseURL := fmt.Sprintf("%s://127.0.0.1:%d/llm/call/%s", scheme, p.config.Port, slug)
 
 	// OpenAI and OpenAI-compatible SDKs expect the base URL to include /v1
 	// They then append /chat/completions or /completions directly
@@ -37,6 +41,30 @@ func (p *Proxy) getInternalLLMBaseURL(slug string, vendor models.Vendor) string 
 		// Other vendors (Anthropic, Google, etc.) handle their own path construction
 		return baseURL
 	}
+}
+
+// loopbackTLS reports whether the /ai/ -> /llm/call/ loopback hop must use
+// HTTPS because the listener the proxy is mounted on terminates TLS.
+func (p *Proxy) loopbackTLS() bool {
+	return p.config != nil && p.config.TLSEnabled
+}
+
+// sharedLoopbackTransport returns the proxy-wide connection pool for the
+// loopback hop, creating it on first use. TLSEnabled is fixed for the life of
+// the proxy, so one pool is enough.
+func (p *Proxy) sharedLoopbackTransport() *http.Transport {
+	p.loopbackOnce.Do(func() {
+		p.loopbackTransport = newLoopbackTransport(p.loopbackTLS())
+	})
+	return p.loopbackTransport
+}
+
+// newInternalRoutingClient builds the HTTP client the SDK uses for the loopback
+// hop to /llm/call/{slug}: it carries the caller's Authorization header across
+// and, when the listener serves TLS, speaks HTTPS to it. Only the thin
+// per-request wrapper is allocated here; the connection pool is shared.
+func (p *Proxy) newInternalRoutingClient(originalAuth string) *http.Client {
+	return &http.Client{Transport: newInternalRoutingTransport(p.sharedLoopbackTransport(), originalAuth)}
 }
 
 // Handlers
@@ -164,9 +192,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 
 	// Create internal routing HTTP client
 	// This routes SDK requests through /llm/call/ for plugin hook execution
-	originalAuth := r.Header.Get("Authorization")
-	internalTransport := NewInternalRoutingTransport(originalAuth)
-	internalClient := &http.Client{Transport: internalTransport}
+	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"))
 
 	// Create a modified LLM config with internal endpoint
 	// The SDK will route to /llm/call/{slug} instead of the external vendor
@@ -432,9 +458,7 @@ func (p *Proxy) handleChatCompletionStream(
 
 	// Create internal routing HTTP client
 	// This routes SDK requests through /llm/call/ for plugin hook execution
-	originalAuth := r.Header.Get("Authorization")
-	internalTransport := NewInternalRoutingTransport(originalAuth)
-	internalClient := &http.Client{Transport: internalTransport}
+	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"))
 
 	// Create a modified LLM config with internal endpoint
 	llmSlug := slug.Make(conf.Name)

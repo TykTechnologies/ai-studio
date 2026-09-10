@@ -246,7 +246,8 @@ The microgateway follows a clean three-tier architecture:
 #### Server Configuration
 - `PORT` - Server port (default: 8080)
 - `HOST` - Server host (default: 0.0.0.0)
-- `TLS_ENABLED` - Enable HTTPS (default: false)
+- `TLS_ENABLED` - Enable HTTPS (default: false). The OpenAI-compatible endpoints (`/ai/...` and the unified `/v1/chat/completions` router) re-enter the gateway over a loopback call to `/llm/call/`; that call follows this setting, so no extra configuration is needed for them under TLS.
+- `TLS_CERT_PATH` / `TLS_KEY_PATH` - Certificate and key files (required when `TLS_ENABLED=true`)
 
 #### Database Configuration
 - `DATABASE_TYPE` - Database type: sqlite/postgres

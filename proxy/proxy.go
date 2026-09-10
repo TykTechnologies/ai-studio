@@ -143,10 +143,26 @@ type Proxy struct {
 	openAPICache            map[string]*OpenAPICache
 	openAPICacheMu          sync.RWMutex
 	responseHookManager     ResponseHookManager // REST-only response hooks
+
+	// loopbackTransport is the shared connection pool for the /ai/ -> /llm/call/
+	// loopback hop (see newInternalRoutingClient). Built once so keep-alive
+	// connections are reused across requests instead of a fresh pool per call.
+	loopbackTransport *http.Transport
+	loopbackOnce      sync.Once
 }
 
 type Config struct {
 	Port int
+
+	// TLSEnabled reports that the listener this proxy is served from terminates
+	// TLS. The /ai/ and unified-router handlers re-enter the gateway with a
+	// loopback HTTP call to /llm/call/{slug} on Port (see getInternalLLMBaseURL);
+	// that hop must speak HTTPS when the listener does, otherwise the server
+	// rejects it with "client sent an HTTP request to an HTTPS server" and every
+	// OpenAI-compatible request fails. The loopback connects to 127.0.0.1 and the
+	// serving certificate is issued for the public hostname, so it does not
+	// verify the certificate: it is talking to its own process.
+	TLSEnabled bool
 
 	// LLMTimeout is the timeout for upstream LLM HTTP requests (both streaming and REST).
 	// Defaults to 5 minutes if zero, suitable for long-running agentic workloads.

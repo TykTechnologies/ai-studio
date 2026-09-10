@@ -51,6 +51,12 @@ type gateway struct {
 type Config struct {
 	Port int
 
+	// TLSEnabled must be set when the host serves this gateway over HTTPS on
+	// Port. The OpenAI-compatible endpoints (/ai/ and the unified router) call
+	// back into /llm/call/ over a loopback connection to Port, and that hop has
+	// to match the listener's scheme or the server rejects it as plain HTTP.
+	TLSEnabled bool
+
 	// LLMTimeout is the timeout for upstream LLM HTTP requests.
 	// Defaults to 5 minutes if zero, suitable for long-running agentic workloads.
 	LLMTimeout time.Duration
@@ -133,6 +139,7 @@ func NewWithAnalytics(
 
 	proxyConfig := &proxy.Config{
 		Port:                  config.Port,
+		TLSEnabled:            config.TLSEnabled,
 		LLMTimeout:            config.LLMTimeout,
 		UnifiedRouterBasePath: config.UnifiedRouterBasePath,
 		DisableUnifiedRouter:  config.DisableUnifiedRouter,
