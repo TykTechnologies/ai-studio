@@ -48,6 +48,24 @@ func TestInternalRoutingTransport_PlainListenerKeepsDefaultTLSConfig(t *testing.
 	}
 }
 
+// The per-request client must share one connection pool so keep-alives are
+// reused and file descriptors are not exhausted under load.
+func TestInternalRoutingClient_SharesConnectionPool(t *testing.T) {
+	p := &Proxy{config: &Config{Port: 8443, TLSEnabled: true}}
+	first := p.newInternalRoutingClient("Bearer a").Transport.(*InternalRoutingTransport)
+	second := p.newInternalRoutingClient("Bearer b").Transport.(*InternalRoutingTransport)
+	if first.underlying != second.underlying {
+		t.Fatal("each request built its own transport; the connection pool must be shared")
+	}
+	if first.originalAuth != "Bearer a" || second.originalAuth != "Bearer b" {
+		t.Fatal("per-request auth must stay with its own wrapper")
+	}
+	pool := first.underlying.(*http.Transport)
+	if pool.TLSClientConfig == nil || !pool.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("shared pool must follow the listener's TLS setting")
+	}
+}
+
 // End to end: the loopback transport can call an HTTPS listener whose
 // certificate is not trusted (self-signed, issued for another name), and still
 // swaps the SDK's vendor auth for the caller's Authorization header.

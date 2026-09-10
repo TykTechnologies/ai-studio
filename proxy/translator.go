@@ -49,11 +49,22 @@ func (p *Proxy) loopbackTLS() bool {
 	return p.config != nil && p.config.TLSEnabled
 }
 
+// sharedLoopbackTransport returns the proxy-wide connection pool for the
+// loopback hop, creating it on first use. TLSEnabled is fixed for the life of
+// the proxy, so one pool is enough.
+func (p *Proxy) sharedLoopbackTransport() *http.Transport {
+	p.loopbackOnce.Do(func() {
+		p.loopbackTransport = newLoopbackTransport(p.loopbackTLS())
+	})
+	return p.loopbackTransport
+}
+
 // newInternalRoutingClient builds the HTTP client the SDK uses for the loopback
 // hop to /llm/call/{slug}: it carries the caller's Authorization header across
-// and, when the listener serves TLS, speaks HTTPS to it.
+// and, when the listener serves TLS, speaks HTTPS to it. Only the thin
+// per-request wrapper is allocated here; the connection pool is shared.
 func (p *Proxy) newInternalRoutingClient(originalAuth string) *http.Client {
-	return &http.Client{Transport: NewInternalRoutingTransport(originalAuth, p.loopbackTLS())}
+	return &http.Client{Transport: newInternalRoutingTransport(p.sharedLoopbackTransport(), originalAuth)}
 }
 
 // Handlers

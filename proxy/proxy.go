@@ -143,6 +143,12 @@ type Proxy struct {
 	openAPICache            map[string]*OpenAPICache
 	openAPICacheMu          sync.RWMutex
 	responseHookManager     ResponseHookManager // REST-only response hooks
+
+	// loopbackTransport is the shared connection pool for the /ai/ -> /llm/call/
+	// loopback hop (see newInternalRoutingClient). Built once so keep-alive
+	// connections are reused across requests instead of a fresh pool per call.
+	loopbackTransport *http.Transport
+	loopbackOnce      sync.Once
 }
 
 type Config struct {
