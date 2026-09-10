@@ -106,6 +106,14 @@ const (
 	FormatJSON = "json"
 )
 
+// Paging bounds. The API rejects page sizes above MaxPageSize and the
+// enterprise implementation clamps to it as well, so neither layer depends
+// on the other to bound a query.
+const (
+	DefaultPageSize = 50
+	MaxPageSize     = 500
+)
+
 // Service is the audit trail contract shared by both editions.
 type Service interface {
 	// Middleware returns the Gin handler that records requests. It must be

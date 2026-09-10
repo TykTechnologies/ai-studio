@@ -137,6 +137,9 @@ func TestAuditEnterprise_ListValidation(t *testing.T) {
 		"start_date=2026-09-02&end_date=2026-09-01",
 		"page=0",
 		"page_size=-1",
+		"page_size=0",
+		"page_size=501",
+		"page_size=1000000",
 		"status=99",
 		"status_class=9xx",
 		"user_id=abc",
@@ -145,6 +148,26 @@ func TestAuditEnterprise_ListValidation(t *testing.T) {
 		w := apitest.PerformRequest(r, "GET", "/api/v1/audit/records?"+q, nil)
 		assert.Equal(t, http.StatusBadRequest, w.Code, q)
 	}
+}
+
+func TestAuditEnterprise_PageSizeBounds(t *testing.T) {
+	api, r := setupAuditTestAPI(t)
+	seedAuditRows(t, api)
+
+	w := apitest.PerformRequest(r, "GET", "/api/v1/audit/records?page_size=500", nil)
+	require.Equal(t, http.StatusOK, w.Code, "the documented maximum is accepted")
+	var page audit.Page
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	assert.Equal(t, audit.MaxPageSize, page.PageSize)
+
+	w = apitest.PerformRequest(r, "GET", "/api/v1/audit/records?page_size=501", nil)
+	assert.Equal(t, http.StatusBadRequest, w.Code, "one over the maximum is rejected at the handler, before any query")
+	assert.Contains(t, w.Body.String(), "expected 1 to 500")
+
+	w = apitest.PerformRequest(r, "GET", "/api/v1/audit/records", nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	assert.Equal(t, audit.DefaultPageSize, page.PageSize, "default applies when omitted")
 }
 
 func TestAuditEnterprise_GetRecord(t *testing.T) {

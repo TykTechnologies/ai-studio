@@ -149,8 +149,8 @@ func parseAuditQuery(c *gin.Context) (audit.Query, error) {
 	}
 	if v := c.Query("page_size"); v != "" {
 		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 {
-			return q, errors.New("invalid page_size")
+		if err != nil || n < 1 || n > audit.MaxPageSize {
+			return q, fmt.Errorf("invalid page_size, expected 1 to %d", audit.MaxPageSize)
 		}
 		q.PageSize = n
 	}
