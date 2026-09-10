@@ -616,6 +616,62 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 		assert.NotNil(t, costs)
 	})
 
+	t.Run("Returns every cost field in dollars, not the stored scaled unit", func(t *testing.T) {
+		llm := &models.LLM{Name: "Priced LLM", Vendor: models.OPENAI}
+		db.Create(llm)
+
+		// Per-token prices. Record cost is stored as dollars * 10000, and the
+		// breakdown columns are derived from these prices in the same unit.
+		price := &models.ModelPrice{
+			ModelName:    "gpt-priced",
+			Vendor:       string(models.OPENAI),
+			Currency:     "USD",
+			CPIT:         0.000010, // prompt
+			CPT:          0.000030, // response
+			CacheWritePT: 0.000012,
+			CacheReadPT:  0.000001,
+		}
+		assert.NoError(t, db.Create(price).Error)
+
+		now := time.Now()
+		promptTokens, responseTokens, cacheWrite, cacheRead := 1000, 500, 200, 400
+		dollars := 0.000010*float64(promptTokens) +
+			0.000030*float64(responseTokens) +
+			0.000012*float64(cacheWrite) +
+			0.000001*float64(cacheRead) // = 0.0100 + 0.0150 + 0.0024 + 0.0004 = 0.0278
+		db.Create(&models.LLMChatRecord{
+			LLMID:                  llm.ID,
+			AppID:                  1,
+			Vendor:                 string(models.OPENAI),
+			Name:                   "gpt-priced",
+			PromptTokens:           promptTokens,
+			ResponseTokens:         responseTokens,
+			CacheWritePromptTokens: cacheWrite,
+			CacheReadPromptTokens:  cacheRead,
+			Cost:                   dollars * 10000,
+			TimeStamp:              now,
+			InteractionType:        models.ProxyInteraction,
+		})
+
+		costs, err := GetTotalCostPerVendorAndModel(db, now.AddDate(0, 0, -1), now.AddDate(0, 0, 1), nil, &llm.ID)
+		assert.NoError(t, err)
+		if !assert.Len(t, costs, 1) {
+			return
+		}
+		row := costs[0]
+		assert.Equal(t, "gpt-priced", row.Model)
+		if assert.NotNil(t, row.ModelPriceID) {
+			assert.Equal(t, price.ID, *row.ModelPriceID)
+		}
+		assert.InDelta(t, 0.0278, row.TotalCost, 1e-9, "totalCost must be dollars")
+		assert.InDelta(t, 0.0100, row.PromptCost, 1e-9)
+		assert.InDelta(t, 0.0150, row.ResponseCost, 1e-9)
+		assert.InDelta(t, 0.0024, row.CacheWriteCost, 1e-9)
+		assert.InDelta(t, 0.0004, row.CacheReadCost, 1e-9)
+		assert.InDelta(t, row.TotalCost, row.PromptCost+row.ResponseCost+row.CacheWriteCost+row.CacheReadCost, 1e-9,
+			"breakdown must sum to the total in the same unit")
+	})
+
 	t.Run("Reports request count, distinct apps and last used per model", func(t *testing.T) {
 		llm := &models.LLM{Name: "Usage LLM", Vendor: models.OPENAI}
 		db.Create(llm)
