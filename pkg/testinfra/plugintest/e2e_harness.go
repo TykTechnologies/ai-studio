@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 
@@ -204,6 +205,14 @@ func (h *E2EPluginHarness) Initialize(config map[string]string) error {
 	h.mu.Lock()
 	h.pluginConfig = config
 	h.mu.Unlock()
+
+	// Studio resolves "plugin_resource:self:<slug>" from the authenticated
+	// connection; the fake needs to be told which plugin is talking.
+	if idStr, ok := config["plugin_id"]; ok {
+		if id, perr := strconv.ParseUint(idStr, 10, 32); perr == nil {
+			h.testServer.SetMetadataPluginID(uint32(id))
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

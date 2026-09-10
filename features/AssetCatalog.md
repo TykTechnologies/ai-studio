@@ -21,6 +21,7 @@ The plugin bundles two example asset types, **Agent** and **Prompt**, plus two s
 | Access model | Assets (or their type) may require approval. Approval records a grant and unlocks the asset's gated fields for that user. Visibility of the catalog itself is open to all portal users. |
 | Platform integration | Every asset type is registered as a plugin resource type at runtime, so assets can be attached to Apps, assigned to groups, appear in the portal sidebar and reach gateways in the config snapshot. |
 | Events | Published locally on the bus as `asset_catalog.<kind>` with a full payload (never gated values). Exact topic matching. |
+| Governance | Assets of governed types (default: all) carry the platform's Governed Metadata. Governance fields are never duplicated into the type schema; Studio validates and stores them keyed by asset ID (`plugin_resource:<plugin id>:<slug>`), an enforcing schema blocks the save, and the assets appear in the compliance report. Community submissions create the asset without a record. |
 
 ## Data model
 
@@ -62,6 +63,15 @@ draft → experimental → in_review → approved → production → deprecated
 2. **`CreateNotification` management RPC** (`notifications.write` scope) and `NotificationService.NotifyDirect` for template-less notifications. Also fixes submission notifications, which previously failed silently because `Notify` requires a template path.
 3. **`RegisterResourceTypes` management RPC** (`resource-types.manage` scope) and `plugin_sdk.SyncResourceTypes` for runtime-defined resource types; resource types are deactivated when a plugin unloads.
 4. **Caller identity on admin RPC**: `CallRequest.user_context` and the optional `plugin_sdk.UserAwareRPCHandler` interface.
+5. **Governed metadata test fakes** (`pkg/testinfra/plugintest/test_service_broker_metadata.go`): `TestManagementServer` implements `GetObjectMetadata`, `SetObjectMetadata`, `DeleteObjectMetadata`, `GetResolvedMetadataSchema` and `ValidateObjectMetadata` with a per-object-type schema (`SetMetadataSchema`), `plugin_resource:self:` resolution, an Enterprise gate (`SetMetadataEnterprise`) and record inspection, so any resource-provider plugin can test its governance integration end to end.
+
+## Governance metadata integration
+
+The plugin follows the resource-provider recipe in `docs/site/docs/governed-metadata.md`:
+
+- `AssetType.Governed` (optional, default true) drives `ResourceTypeRegistration.SupportsMetadata`; the type becomes the object type `plugin_resource:<plugin id>:<slug>` (addressed as `plugin_resource:self:<slug>` on the Go side).
+- `catalog.Governance` is the seam: `createAsset` / `UpdateAsset` call `Set` before persisting and roll back on a failed persist; `DeleteAsset` and `DeactivateType` call `Delete` first; `AttachGovernance` fills `governance_display` (portal audience) for readers and `governance` (all values) for editors on single-asset reads. `governance/studio.go` adapts `plugin_sdk.StudioServices` and maps FailedPrecondition, Unimplemented, scope denials and unknown object types to `ErrGovernanceUnavailable`, which the catalog treats as "no governance" (saves proceed, nothing rendered).
+- Rejections surface as RPC code `governance_invalid` with the validation result in `details`; the UIs pass `errors[]` to `<governed-metadata-fields>.setErrors`. The admin form uses the element with `object-type` (admin API, live validation); the portal form feeds it the payload of `get_governance_schema` and validates on save. User-picker fields are hidden in the portal and their stored values preserved.
 
 ## Events
 
@@ -85,7 +95,7 @@ Topics (`asset_catalog.` prefix, configurable): `asset.created|updated|version_c
 
 ## Testing
 
-- Unit: `cd enterprise/plugins/asset-catalog && go test -tags enterprise ./...` (catalog rules, router gating, events, resource bridge).
+- Unit: `cd enterprise/plugins/asset-catalog && go test -tags enterprise ./...` (catalog rules, router gating, events, resource bridge, governance write/rollback/delete paths against `catalog.MemoryGovernance`, and the Studio adapter's error classification).
 - E2E: `go test -tags "e2e enterprise" ./tests/e2e/...` (boots the binary through `pkg/testinfra/plugintest`).
 - Core: `services/submission_plugin_test.go`, `services/grpc/plugin_extension_rpc_test.go`, `pkg/plugin_sdk/rpc_user_context_test.go`, `api/plugin_resource_types_portal_test.go`.
 
