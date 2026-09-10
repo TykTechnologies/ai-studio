@@ -285,7 +285,10 @@ Resource types declared in the manifest are automatically registered when the pl
 | `has_privacy_score` | No | Whether instances carry privacy scores (default: `false`) |
 | `supports_submissions` | No | Whether community users can submit instances (default: `false`) |
 | `supports_metadata` | No | Whether instances can carry governed metadata (Enterprise); registers the object type `plugin_resource:<plugin_id>:<slug>` (default: `false`) |
+| `submission_schema` | No | JSON Schema (`"type": "object"`) for community submissions; inline object or JSON string. Drives the portal submission form and server-side validation. |
 | `form_component` | No | Custom Web Component for the App form selector |
+
+Types that are only known at runtime can be registered with `plugin_sdk.SyncResourceTypes` instead of (or in addition to) the manifest; this needs the `resource-types.manage` scope.
 
 See [Resource Provider Plugins](plugins-resource-types.md) for the full guide.
 
@@ -343,6 +346,18 @@ See [Resource Provider Plugins](plugins-resource-types.md) for the full guide.
 |-------|-------------|------------|
 | `analytics.read` | Read analytics data | GetUsageStats, GetCostAnalytics |
 | `analytics.write` | Write analytics data | RecordCustomMetric |
+
+### Notification Scopes
+
+| Scope | Description | Operations |
+|-------|-------------|------------|
+| `notifications.write` | Raise in-app notifications for admins or a user | CreateNotification |
+
+### Resource Type Scopes
+
+| Scope | Description | Operations |
+|-------|-------------|------------|
+| `resource-types.manage` | Register or deactivate the plugin's own resource types at runtime | RegisterResourceTypes |
 
 ## UI Slot System
 

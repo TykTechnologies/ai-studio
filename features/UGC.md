@@ -15,7 +15,7 @@ The UGC feature enables Portal developers to submit their own Data Sources and T
 |----------|--------|
 | Catalogue visibility | Admin assigns during review |
 | Contributor trust model | All submissions treated equally |
-| Submission scope | Data Sources + Tools (LLMs remain admin-only) |
+| Submission scope | Data Sources + Tools + plugin resource types that opt in (LLMs remain admin-only) |
 
 ## Submission States
 
@@ -32,8 +32,10 @@ draft → submitted → in_review → approved
 | Field | Type | Description |
 |-------|------|-------------|
 | `ID` | uint | Primary key |
-| `ResourceType` | string | `datasource` or `tool` |
-| `ResourceID` | *uint | Set after approval creates the resource |
+| `ResourceType` | string | `datasource`, `tool` or `plugin` |
+| `ResourceID` | *uint | Set after approval creates the resource (datasource/tool) |
+| `PluginResourceTypeID` | *uint | FK to `plugin_resource_types` (plugin submissions only) |
+| `PluginInstanceID` | string | Plugin-assigned instance ID set after approval (plugin submissions only) |
 | `Status` | string | Submission state (see above) |
 | `SubmitterID` | uint | FK to users |
 | `ReviewerID` | *uint | FK to users (admin who reviewed) |
@@ -156,10 +158,25 @@ Admin-configurable attestation statements that submitters must accept.
 }
 ```
 
+### For Plugin Resource Types
+
+Plugins that implement `ResourceProvider` with `supports_submissions: true` appear in the Submission form next to Data Source and Tool (`GET /common/plugin-resource-types`). The payload is defined by the type's `submission_schema` (JSON Schema, rendered with the platform's schema form) and validated server-side on create and update:
+
+```json
+{
+  "name": "Customer Support Triage Agent",
+  "description": "Routes inbound tickets",
+  "purpose": "Triage inbound support tickets",
+  "risk_level": "medium"
+}
+```
+
+On approval the platform calls the plugin's `CreateResourceInstance` with a submission envelope (`source`, `submission_id`, `submitter`, `reviewer`, `final_privacy_score`, `assigned_catalogues`, `resource_payload`, ...). The plugin owns the instance; `Submission.PluginInstanceID` records its ID. Catalogue assignment and connectivity tests do not apply, and update proposals are not supported for plugin types. See `docs/site/docs/plugins-resource-types.md`.
+
 ## Approval Flow
 
 1. **Submit** — Submitter fills form, accepts attestations, submits
-2. **Admin notification** — Admins are notified of new submission
+2. **Admin notification** — Admins are notified of new submission (`NotificationService.NotifyDirect`, in-app and email; the title names the resource type, e.g. "New Agent submission for review")
 3. **Review** — Admin claims submission, reviews payload, tests connectivity
 4. **Decision** — Admin approves (sets privacy score + catalogues), rejects (with feedback), or requests changes
 5. **Resource creation** — On approval, the actual Datasource/Tool is created from the payload

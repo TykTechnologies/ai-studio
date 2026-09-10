@@ -327,6 +327,57 @@ func (h *E2EPluginHarness) CallRPC(method string, payload []byte) ([]byte, error
 	return []byte(resp.Data), nil
 }
 
+// CallRPCAs invokes the admin Call RPC with an authenticated caller, as AI
+// Studio does for plugins implementing plugin_sdk.UserAwareRPCHandler.
+func (h *E2EPluginHarness) CallRPCAs(method string, payload []byte, user *pb.PortalUserContext) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp, err := h.pluginClient.Call(ctx, &pb.CallRequest{
+		Method:      method,
+		Payload:     string(payload),
+		UserContext: user,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("RPC call failed: %w", err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("RPC call failed: %s", resp.ErrorMessage)
+	}
+	return []byte(resp.Data), nil
+}
+
+// CallPortalRPC invokes HandlePortalRPC on the plugin via the PortalCall gRPC method.
+func (h *E2EPluginHarness) CallPortalRPC(method string, payload []byte, user *pb.PortalUserContext) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	resp, err := h.pluginClient.PortalCall(ctx, &pb.PortalCallRequest{
+		Method:      method,
+		Payload:     string(payload),
+		UserContext: user,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("portal RPC call failed: %w", err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("portal RPC call failed: %s", resp.ErrorMessage)
+	}
+	return []byte(resp.Data), nil
+}
+
+// PluginClient exposes the raw plugin gRPC client for capability-specific calls
+// (resource provider, config provider, ...).
+func (h *E2EPluginHarness) PluginClient() pb.PluginServiceClient {
+	return h.pluginClient
+}
+
+// ManagementServer returns the fake AI Studio management service, to assert
+// on notifications, resource type registrations, KV writes and other calls.
+func (h *E2EPluginHarness) ManagementServer() *TestManagementServer {
+	return h.testServer
+}
+
 // CallPostAuth invokes HandlePostAuth on the plugin.
 func (h *E2EPluginHarness) CallPostAuth(req *pb.EnrichedRequest) (*pb.PluginResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

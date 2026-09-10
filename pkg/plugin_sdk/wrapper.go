@@ -400,8 +400,26 @@ func (w *pluginServerWrapper) Call(ctx context.Context, req *pb.CallRequest) (*p
 
 	payload := []byte(req.Payload)
 
-	// Call the plugin's RPC handler
-	response, err := provider.HandleRPC(req.Method, payload)
+	// Call the plugin's RPC handler. Plugins that implement UserAwareRPCHandler
+	// receive the authenticated admin when the host supplied one.
+	var response []byte
+	var err error
+	if userAware, isUserAware := w.plugin.(UserAwareRPCHandler); isUserAware && req.UserContext != nil {
+		userCtx := &PortalUserContext{
+			UserID:   req.UserContext.UserId,
+			Email:    req.UserContext.Email,
+			Name:     req.UserContext.Name,
+			IsAdmin:  req.UserContext.IsAdmin,
+			Groups:   req.UserContext.Groups,
+			Metadata: req.UserContext.Metadata,
+		}
+		if userCtx.Metadata == nil {
+			userCtx.Metadata = make(map[string]string)
+		}
+		response, err = userAware.HandleRPCWithUser(req.Method, payload, userCtx)
+	} else {
+		response, err = provider.HandleRPC(req.Method, payload)
+	}
 	if err != nil {
 		return &pb.CallResponse{
 			Success:      false,
@@ -607,8 +625,8 @@ func (w *pluginServerWrapper) AcceptEdgePayload(ctx context.Context, req *pb.Edg
 	if !ok {
 		// Plugin doesn't handle edge payloads
 		return &pb.EdgePayloadResponse{
-			Success: false,
-			Handled: false,
+			Success:      false,
+			Handled:      false,
 			ErrorMessage: "plugin does not implement EdgePayloadReceiver",
 		}, nil
 	}
@@ -706,6 +724,7 @@ func (w *pluginServerWrapper) GetResourceTypeRegistrations(ctx context.Context, 
 			HasPrivacyScore:     r.HasPrivacyScore,
 			SupportsSubmissions: r.SupportsSubmissions,
 			SupportsMetadata:    r.SupportsMetadata,
+			SubmissionSchema:    r.SubmissionSchema,
 		}
 		if r.FormComponent != nil {
 			pr.FormComponent = &pb.ResourceFormComponentProto{

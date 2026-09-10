@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../utils/testTheme";
@@ -177,6 +177,104 @@ describe("SubmissionReview", () => {
     await waitFor(() => {
       expect(screen.getByText("Dev User")).toBeInTheDocument();
       expect(screen.getByText("Public product data")).toBeInTheDocument();
+    });
+  });
+
+  describe("plugin resource submissions", () => {
+    const pluginSubmission = {
+      ...mockSubmission,
+      resource_type: "plugin",
+      plugin_resource_type_id: 7,
+      plugin_instance_id: null,
+      plugin_resource_type: {
+        id: 7,
+        plugin_id: 3,
+        slug: "agent",
+        name: "Agent",
+        plugin_name: "Asset Catalog",
+        is_active: true,
+        submission_schema: {
+          type: "object",
+          required: ["name"],
+          properties: {
+            name: { type: "string", title: "Agent Name" },
+            system_prompt: { type: "string", title: "System Prompt" },
+          },
+        },
+      },
+      resource_payload: {
+        name: "Support Bot",
+        system_prompt: "Be helpful.",
+        custom_flag: true,
+      },
+    };
+
+    it("labels the type by the plugin resource type and renders the schema-driven payload", async () => {
+      apiClient.get.mockResolvedValueOnce({ data: { data: pluginSubmission } });
+      renderWithRoute();
+      await waitFor(() => {
+        expect(screen.getByText("Review: Support Bot")).toBeInTheDocument();
+      });
+      expect(screen.getByText("Agent")).toBeInTheDocument();
+      expect(screen.getByText("Asset Catalog")).toBeInTheDocument();
+      expect(screen.getByText("Agent Name")).toBeInTheDocument();
+      expect(screen.getByText("System Prompt")).toBeInTheDocument();
+      expect(screen.getByText("Be helpful.")).toBeInTheDocument();
+      expect(screen.getByText("custom_flag")).toBeInTheDocument();
+    });
+
+    it("offers no connectivity test, since there is nothing to test", async () => {
+      apiClient.get.mockResolvedValueOnce({ data: { data: pluginSubmission } });
+      renderWithRoute();
+      await waitFor(() => {
+        expect(screen.getByText("Resource Configuration")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Test connection")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Validate specification")
+      ).not.toBeInTheDocument();
+    });
+
+    it("approves with an empty catalogue assignment", async () => {
+      apiClient.get.mockResolvedValueOnce({ data: { data: pluginSubmission } });
+      apiClient.post.mockResolvedValue({ data: { data: {} } });
+      renderWithRoute();
+      await waitFor(() => {
+        expect(screen.getByText("Approve")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByText("Approve"));
+      // The dialog's confirm button carries the same label as the opener.
+      const confirm = (await screen.findAllByRole("button", { name: "Approve" })).pop();
+      fireEvent.click(confirm);
+
+      await waitFor(() => {
+        expect(apiClient.post).toHaveBeenCalledWith(
+          "/submissions/1/approve",
+          expect.objectContaining({
+            data: {
+              attributes: expect.objectContaining({
+                assigned_catalogues: {},
+              }),
+            },
+          })
+        );
+      });
+    });
+
+    it("shows the plugin resource id once approved", async () => {
+      apiClient.get.mockResolvedValueOnce({
+        data: {
+          data: {
+            ...pluginSubmission,
+            status: "approved",
+            plugin_instance_id: "agent-9f3c",
+          },
+        },
+      });
+      renderWithRoute();
+      await waitFor(() => {
+        expect(screen.getByText("agent-9f3c")).toBeInTheDocument();
+      });
     });
   });
 });

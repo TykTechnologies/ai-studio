@@ -163,20 +163,54 @@ func redactSnapshotCredentials(payload models.JSONMap) models.JSONMap {
 
 // --- Notification helpers ---
 
+// submissionTypeLabel returns a human-readable label for the submission's
+// resource type. Plugin resource types use the type's registered name when it
+// has been preloaded (e.g. "Agent"), so notifications read naturally.
+func submissionTypeLabel(submission *models.Submission) string {
+	switch submission.ResourceType {
+	case models.SubmissionResourceTypeDatasource:
+		return "data source"
+	case models.SubmissionResourceTypeTool:
+		return "tool"
+	case models.SubmissionResourceTypePlugin:
+		if submission.PluginResourceType != nil && submission.PluginResourceType.Name != "" {
+			return submission.PluginResourceType.Name
+		}
+		return "plugin resource"
+	default:
+		return submission.ResourceType
+	}
+}
+
+// submissionResourceName extracts the display name from the submission payload
+// (all supported payload shapes carry a top-level "name").
+func submissionResourceName(submission *models.Submission) string {
+	if submission.ResourcePayload == nil {
+		return ""
+	}
+	if v, ok := submission.ResourcePayload["name"].(string); ok {
+		return v
+	}
+	return ""
+}
+
 func (s *Service) notifyAdminsOfSubmission(submission *models.Submission) {
-	title := fmt.Sprintf("New %s submission for review", submission.ResourceType)
+	label := submissionTypeLabel(submission)
+	title := fmt.Sprintf("New %s submission for review", label)
 	notificationID := fmt.Sprintf("submission_new_%d", submission.ID)
 
-	if err := s.NotificationService.Notify(
+	content := fmt.Sprintf("A new **%s** submission is waiting for review.\n\n", label)
+	if name := submissionResourceName(submission); name != "" {
+		content += fmt.Sprintf("- **Name:** %s\n", name)
+	}
+	content += fmt.Sprintf("- **Suggested privacy score:** %d\n", submission.SuggestedPrivacy)
+	content += fmt.Sprintf("\n[Open the submission queue](/admin/submissions/%d)", submission.ID)
+
+	if err := s.NotificationService.NotifyDirect(
 		notificationID,
+		"submission",
 		title,
-		"",
-		map[string]interface{}{
-			"submission_id":   submission.ID,
-			"resource_type":   submission.ResourceType,
-			"submitter_id":    submission.SubmitterID,
-			"suggested_score": submission.SuggestedPrivacy,
-		},
+		content,
 		models.NotifyAdmins,
 	); err != nil {
 		logger.Warn(fmt.Sprintf("Failed to notify admins of submission %d: %v", submission.ID, err))
@@ -184,19 +218,25 @@ func (s *Service) notifyAdminsOfSubmission(submission *models.Submission) {
 }
 
 func (s *Service) notifySubmitterOfDecision(submission *models.Submission, decision string) {
-	title := fmt.Sprintf("Your %s submission has been %s", submission.ResourceType, decision)
+	label := submissionTypeLabel(submission)
+	title := fmt.Sprintf("Your %s submission has been %s", label, decision)
 	notificationID := fmt.Sprintf("submission_%s_%d", decision, submission.ID)
 
-	if err := s.NotificationService.Notify(
+	content := fmt.Sprintf("Your **%s** submission", label)
+	if name := submissionResourceName(submission); name != "" {
+		content += fmt.Sprintf(" **%s**", name)
+	}
+	content += fmt.Sprintf(" has been **%s**.\n", strings.ReplaceAll(decision, "_", " "))
+	if submission.SubmitterFeedback != "" {
+		content += fmt.Sprintf("\n**Feedback from the reviewer:**\n\n%s\n", submission.SubmitterFeedback)
+	}
+	content += fmt.Sprintf("\n[View your contribution](/portal/submissions/%d)", submission.ID)
+
+	if err := s.NotificationService.NotifyDirect(
 		notificationID,
+		"submission",
 		title,
-		"",
-		map[string]interface{}{
-			"submission_id": submission.ID,
-			"resource_type": submission.ResourceType,
-			"decision":      decision,
-			"feedback":      submission.SubmitterFeedback,
-		},
+		content,
 		submission.SubmitterID,
 	); err != nil {
 		logger.Warn(fmt.Sprintf("Failed to notify submitter of submission %d decision: %v", submission.ID, err))

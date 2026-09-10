@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -16,7 +17,8 @@ type SubmissionInput struct {
 	Data struct {
 		Attributes struct {
 			ResourceType         string         `json:"resource_type"`
-			Status               string         `json:"status"` // draft or submitted
+			PluginResourceTypeID *uint          `json:"plugin_resource_type_id"` // required when resource_type == "plugin"
+			Status               string         `json:"status"`                  // draft or submitted
 			ResourcePayload      models.JSONMap `json:"resource_payload"`
 			Attestations         models.JSONMap `json:"attestations"`
 			SuggestedPrivacy     int            `json:"suggested_privacy"`
@@ -123,21 +125,59 @@ func (a *API) createSubmission(c *gin.Context) {
 		dataCutoff = &t
 	}
 
-	submission, err := a.service.CreateSubmission(
-		currentUser.ID,
-		attrs.ResourceType,
-		attrs.Status,
-		attrs.ResourcePayload,
-		attrs.Attestations,
-		attrs.SuggestedPrivacy,
-		attrs.PrivacyJustification,
-		attrs.PrimaryContact,
-		attrs.SecondaryContact,
-		attrs.SLAExpectation,
-		dataCutoff,
-		attrs.DocumentationURL,
-		attrs.Notes,
-	)
+	var submission *models.Submission
+	var err error
+	if attrs.ResourceType == models.SubmissionResourceTypePlugin {
+		if attrs.PluginResourceTypeID == nil || *attrs.PluginResourceTypeID == 0 {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "plugin_resource_type_id is required for plugin submissions"}},
+			})
+			return
+		}
+		submission, err = a.service.CreatePluginSubmission(
+			currentUser.ID,
+			*attrs.PluginResourceTypeID,
+			attrs.Status,
+			attrs.ResourcePayload,
+			attrs.Attestations,
+			attrs.SuggestedPrivacy,
+			attrs.PrivacyJustification,
+			attrs.PrimaryContact,
+			attrs.SecondaryContact,
+			attrs.SLAExpectation,
+			dataCutoff,
+			attrs.DocumentationURL,
+			attrs.Notes,
+		)
+	} else {
+		if attrs.PluginResourceTypeID != nil && *attrs.PluginResourceTypeID != 0 {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "plugin_resource_type_id is only valid when resource_type is \"plugin\""}},
+			})
+			return
+		}
+		submission, err = a.service.CreateSubmission(
+			currentUser.ID,
+			attrs.ResourceType,
+			attrs.Status,
+			attrs.ResourcePayload,
+			attrs.Attestations,
+			attrs.SuggestedPrivacy,
+			attrs.PrivacyJustification,
+			attrs.PrimaryContact,
+			attrs.SecondaryContact,
+			attrs.SLAExpectation,
+			dataCutoff,
+			attrs.DocumentationURL,
+			attrs.Notes,
+		)
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -667,6 +707,28 @@ func serializeSubmissionInternal(s *models.Submission, includeInternalNotes bool
 
 	if includeInternalNotes {
 		result["review_notes"] = s.ReviewNotes
+	}
+
+	if s.ResourceType == models.SubmissionResourceTypePlugin {
+		result["plugin_resource_type_id"] = s.PluginResourceTypeID
+		result["plugin_instance_id"] = s.PluginInstanceID
+		if s.PluginResourceType != nil {
+			prt := gin.H{
+				"id":        s.PluginResourceType.ID,
+				"plugin_id": s.PluginResourceType.PluginID,
+				"slug":      s.PluginResourceType.Slug,
+				"name":      s.PluginResourceType.Name,
+				"icon":      s.PluginResourceType.Icon,
+				"is_active": s.PluginResourceType.IsActive,
+			}
+			if s.PluginResourceType.SubmissionSchema != "" {
+				prt["submission_schema"] = json.RawMessage(s.PluginResourceType.SubmissionSchema)
+			}
+			if s.PluginResourceType.Plugin != nil {
+				prt["plugin_name"] = s.PluginResourceType.Plugin.Name
+			}
+			result["plugin_resource_type"] = prt
+		}
 	}
 
 	if s.Submitter != nil {

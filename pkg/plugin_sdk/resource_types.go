@@ -1,6 +1,10 @@
 package plugin_sdk
 
-import "fmt"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+)
 
 // ResourceTypeRegistration declares a resource type provided by a plugin.
 // Each plugin can register one or more resource types that appear in the
@@ -38,6 +42,13 @@ type ResourceTypeRegistration struct {
 	// FormComponent declares how the plugin provides its App Form UI section.
 	// If nil, the platform renders a standard multi-select populated via ListResourceInstances.
 	FormComponent *ResourceFormComponent
+
+	// SubmissionSchema is an optional JSON Schema (with "type": "object")
+	// describing the payload of community submissions for this type. When set,
+	// the portal renders the submission form from it and the platform validates
+	// submitted payloads against it before accepting them. Only meaningful when
+	// SupportsSubmissions is true.
+	SubmissionSchema string
 }
 
 // ResourceFormComponent declares a Web Component that the platform will render
@@ -108,4 +119,89 @@ func NotifyResourceInstanceChanged(ctx Context, resourceTypeSlug, instanceID str
 	}
 
 	return eventSvc.Publish(ctx.Context, ResourceInstanceChangedEvent, payload, DirLocal)
+}
+
+// SubmissionUser identifies a user involved in a community submission.
+type SubmissionUser struct {
+	ID    uint32 `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
+// SubmissionEnvelope is the payload AI Studio passes to
+// ResourceProvider.CreateResourceInstance when an administrator approves a
+// community submission for one of the plugin's resource types.
+//
+// The RPC is issued outside the platform's database transaction, so a plugin
+// must treat SubmissionID as an idempotency key: if an instance already exists
+// for the same submission, return it instead of creating a duplicate.
+type SubmissionEnvelope struct {
+	Source               string                 `json:"source"` // always "submission"
+	SubmissionID         uint32                 `json:"submission_id"`
+	Submitter            SubmissionUser         `json:"submitter"`
+	Reviewer             SubmissionUser         `json:"reviewer"`
+	FinalPrivacyScore    int                    `json:"final_privacy_score"`
+	SuggestedPrivacy     int                    `json:"suggested_privacy"`
+	PrivacyJustification string                 `json:"privacy_justification"`
+	AssignedCatalogues   []uint32               `json:"assigned_catalogues"`
+	DocumentationURL     string                 `json:"documentation_url"`
+	Notes                string                 `json:"notes"`
+	Attestations         interface{}            `json:"attestations"`
+	ResourcePayload      map[string]interface{} `json:"resource_payload"`
+}
+
+// ParseSubmissionEnvelope decodes the payload passed to CreateResourceInstance.
+// Payloads without a "source" field are treated as a bare resource payload
+// (the pre-envelope contract), so plugins can accept both shapes.
+func ParseSubmissionEnvelope(payload []byte) (*SubmissionEnvelope, error) {
+	var env SubmissionEnvelope
+	if err := json.Unmarshal(payload, &env); err != nil {
+		return nil, fmt.Errorf("parse submission envelope: %w", err)
+	}
+	if env.Source == "" {
+		var bare map[string]interface{}
+		if err := json.Unmarshal(payload, &bare); err != nil {
+			return nil, fmt.Errorf("parse submission payload: %w", err)
+		}
+		env = SubmissionEnvelope{ResourcePayload: bare}
+	}
+	if env.ResourcePayload == nil {
+		env.ResourcePayload = map[string]interface{}{}
+	}
+	return &env, nil
+}
+
+// SyncResourceTypes (re)registers the plugin's resource types with AI Studio at
+// runtime and deactivates any of the plugin's previously registered types that
+// are not in regs. Use it when the set of types is defined dynamically (for
+// example by administrators inside the plugin) rather than in the manifest.
+//
+// Requires the "resource-types.manage" service scope. Studio-only.
+//
+// The platform calls back ListResourceInstances for every registered type
+// while this call is in flight, so do not hold locks that ListResourceInstances
+// needs across the call.
+func SyncResourceTypes(ctx Context, regs []*ResourceTypeRegistration) error {
+	if ctx.Runtime != RuntimeStudio {
+		return fmt.Errorf("resource types can only be registered in the Studio runtime")
+	}
+	if ctx.Services == nil {
+		return fmt.Errorf("services not available")
+	}
+	studio := ctx.Services.Studio()
+	if studio == nil {
+		return fmt.Errorf("studio services not available")
+	}
+	specs := make([]ResourceTypeRegistration, 0, len(regs))
+	for _, r := range regs {
+		if r != nil {
+			specs = append(specs, *r)
+		}
+	}
+	base := ctx.Context
+	if base == nil {
+		base = context.Background()
+	}
+	_, _, err := studio.RegisterResourceTypes(base, specs, true)
+	return err
 }

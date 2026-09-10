@@ -107,6 +107,8 @@ flowchart TD
     *   `GET /common/api/v1/notifications/unread/count`: Get unread count for auth'd user.
     *   `PUT /common/api/v1/notifications/:id/read`: Mark notification (by DB `ID`) as read for auth'd user.
 *   **Admin Notifications (`NotificationService.SendAdminAppNotification`):** A specific helper function to send notifications to all enabled admins and optionally to a globally configured `config.Get().AdminEmail`.
+*   **Template-less Notifications (`NotificationService.NotifyDirect`):** `Notify` requires a template file and fails when given an empty path. `NotifyDirect(notificationID, type, title, content, userFlags)` takes pre-rendered content (markdown, rendered by the in-app list) and sets the `Type` column. Submission notifications and plugin notifications use it.
+*   **Plugin Notifications (`CreateNotification` management RPC):** Plugins with the `notifications.write` service scope call `ctx.Services.Studio().CreateNotification(...)` (see `docs/site/docs/plugins-service-api.md`). The server prefixes the plugin-supplied dedupe ID with `plugin_<pluginID>_`, validates title/content lengths and requires at least one recipient (admins and/or a user ID). Implemented in `services/grpc/ai_studio_management_server.go`.
 
 **4. Notification Types**
 
@@ -116,6 +118,8 @@ Based on system behavior and code analysis:
 2.  **`system_update`**: A potential type for announcements, though specific implementation details are not detailed here.
 3.  **`admin_app_notification`**: Used for events like new app creation or approvals, likely sent via `SendAdminAppNotification`.
 4.  **`user_signup`** (Implicit): Triggered by `AuthService.notifyAdmin` on new registration, notifies admins. Uses `admin-notify.tmpl`. The `NotificationID` format is `new_user_<userID>_<timestamp>`.
+5.  **`submission`**: New community submissions (admins) and review decisions (submitter). `NotificationID` formats are `submission_new_<id>` and `submission_<decision>_<id>`.
+6.  **Plugin-defined types** (e.g. `asset_access_request`): raised by plugins through the `CreateNotification` RPC; `NotificationID` is `plugin_<pluginID>_<plugin key>`.
 
 **5. Delivery Methods**
 

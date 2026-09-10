@@ -30,6 +30,9 @@ type Submission struct {
 	// Plugin resource type reference (only set when ResourceType == "plugin")
 	PluginResourceTypeID *uint               `json:"plugin_resource_type_id"`
 	PluginResourceType   *PluginResourceType `json:"plugin_resource_type,omitempty" gorm:"foreignKey:PluginResourceTypeID"`
+	// PluginInstanceID is the plugin-assigned instance ID created on approval
+	// (plugin instances use string IDs, unlike ResourceID).
+	PluginInstanceID string `json:"plugin_instance_id" gorm:"size:255;index"`
 	Status       string `json:"status" gorm:"index"`         // draft | submitted | in_review | approved | rejected | changes_requested
 	LockVersion  int    `json:"lock_version"`                // optimistic concurrency control
 
@@ -112,7 +115,7 @@ func (s *Submission) Create(db *gorm.DB) error {
 }
 
 func (s *Submission) Get(db *gorm.DB, id uint) error {
-	return db.Preload("Submitter").Preload("Reviewer").First(s, id).Error
+	return db.Preload("Submitter").Preload("Reviewer").Preload("PluginResourceType.Plugin").First(s, id).Error
 }
 
 func (s *Submission) Update(db *gorm.DB) error {
@@ -166,7 +169,7 @@ func (s *Submissions) GetBySubmitter(db *gorm.DB, submitterID uint, status strin
 	}
 
 	offset := (pageNumber - 1) * pageSize
-	err := query.Preload("Submitter").Preload("Reviewer").
+	err := query.Preload("Submitter").Preload("Reviewer").Preload("PluginResourceType.Plugin").
 		Order("created_at DESC").
 		Offset(offset).Limit(pageSize).
 		Find(s).Error
@@ -195,7 +198,7 @@ func (s *Submissions) GetAll(db *gorm.DB, status, resourceType string, pageSize,
 	}
 
 	offset := (pageNumber - 1) * pageSize
-	err := query.Preload("Submitter").Preload("Reviewer").
+	err := query.Preload("Submitter").Preload("Reviewer").Preload("PluginResourceType.Plugin").
 		Order("created_at DESC").
 		Offset(offset).Limit(pageSize).
 		Find(s).Error

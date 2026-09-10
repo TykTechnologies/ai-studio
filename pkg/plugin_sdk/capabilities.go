@@ -105,6 +105,22 @@ type UIProvider interface {
 	HandleRPC(method string, payload []byte) ([]byte, error)
 }
 
+// UserAwareRPCHandler is an optional extension of UIProvider for plugins that
+// need to know which administrator issued an admin RPC call (for audit trails,
+// ownership fields, or per-admin behaviour).
+//
+// When a plugin implements this interface, admin UI calls
+// (POST /api/v1/plugins/:id/rpc/:method) are routed to HandleRPCWithUser with
+// the authenticated caller instead of HandleRPC. Plugins that do not implement
+// it keep receiving HandleRPC unchanged. userCtx is never nil; IsAdmin is
+// always true on this path because the route is admin-only.
+type UserAwareRPCHandler interface {
+	UIProvider
+
+	// HandleRPCWithUser processes an admin RPC call with the caller's identity.
+	HandleRPCWithUser(method string, payload []byte, userCtx *PortalUserContext) ([]byte, error)
+}
+
 // PortalUserContext provides information about the authenticated portal user.
 // This is passed to plugins on portal RPC calls so they can make authorization decisions.
 type PortalUserContext struct {

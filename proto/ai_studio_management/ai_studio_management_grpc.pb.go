@@ -108,6 +108,8 @@ const (
 	AIStudioManagementService_UpdateSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/UpdateSchedule"
 	AIStudioManagementService_DeleteSchedule_FullMethodName              = "/ai_studio_management.AIStudioManagementService/DeleteSchedule"
 	AIStudioManagementService_GetLicenseInfo_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetLicenseInfo"
+	AIStudioManagementService_CreateNotification_FullMethodName          = "/ai_studio_management.AIStudioManagementService/CreateNotification"
+	AIStudioManagementService_RegisterResourceTypes_FullMethodName       = "/ai_studio_management.AIStudioManagementService/RegisterResourceTypes"
 )
 
 // AIStudioManagementServiceClient is the client API for AIStudioManagementService service.
@@ -226,6 +228,15 @@ type AIStudioManagementServiceClient interface {
 	// License Information (Enterprise)
 	// Allows plugins to check license status and entitlements at runtime
 	GetLicenseInfo(ctx context.Context, in *GetLicenseInfoRequest, opts ...grpc.CallOption) (*GetLicenseInfoResponse, error)
+	// Notifications
+	// Allows plugins to raise in-app (and, when SMTP is configured, email)
+	// notifications for admins or a specific user. Requires notifications.write.
+	CreateNotification(ctx context.Context, in *CreateNotificationRequest, opts ...grpc.CallOption) (*CreateNotificationResponse, error)
+	// Resource Types (ResourceProvider plugins)
+	// Allows a plugin to (re)register its resource types at runtime, e.g. when
+	// an administrator defines a new type inside the plugin. Requires
+	// resource-types.manage.
+	RegisterResourceTypes(ctx context.Context, in *RegisterResourceTypesRequest, opts ...grpc.CallOption) (*RegisterResourceTypesResponse, error)
 }
 
 type aIStudioManagementServiceClient struct {
@@ -1135,6 +1146,26 @@ func (c *aIStudioManagementServiceClient) GetLicenseInfo(ctx context.Context, in
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) CreateNotification(ctx context.Context, in *CreateNotificationRequest, opts ...grpc.CallOption) (*CreateNotificationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateNotificationResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_CreateNotification_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) RegisterResourceTypes(ctx context.Context, in *RegisterResourceTypesRequest, opts ...grpc.CallOption) (*RegisterResourceTypesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterResourceTypesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_RegisterResourceTypes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AIStudioManagementServiceServer is the server API for AIStudioManagementService service.
 // All implementations must embed UnimplementedAIStudioManagementServiceServer
 // for forward compatibility.
@@ -1251,6 +1282,15 @@ type AIStudioManagementServiceServer interface {
 	// License Information (Enterprise)
 	// Allows plugins to check license status and entitlements at runtime
 	GetLicenseInfo(context.Context, *GetLicenseInfoRequest) (*GetLicenseInfoResponse, error)
+	// Notifications
+	// Allows plugins to raise in-app (and, when SMTP is configured, email)
+	// notifications for admins or a specific user. Requires notifications.write.
+	CreateNotification(context.Context, *CreateNotificationRequest) (*CreateNotificationResponse, error)
+	// Resource Types (ResourceProvider plugins)
+	// Allows a plugin to (re)register its resource types at runtime, e.g. when
+	// an administrator defines a new type inside the plugin. Requires
+	// resource-types.manage.
+	RegisterResourceTypes(context.Context, *RegisterResourceTypesRequest) (*RegisterResourceTypesResponse, error)
 	mustEmbedUnimplementedAIStudioManagementServiceServer()
 }
 
@@ -1527,6 +1567,12 @@ func (UnimplementedAIStudioManagementServiceServer) DeleteSchedule(context.Conte
 }
 func (UnimplementedAIStudioManagementServiceServer) GetLicenseInfo(context.Context, *GetLicenseInfoRequest) (*GetLicenseInfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLicenseInfo not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) CreateNotification(context.Context, *CreateNotificationRequest) (*CreateNotificationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateNotification not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) RegisterResourceTypes(context.Context, *RegisterResourceTypesRequest) (*RegisterResourceTypesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterResourceTypes not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) mustEmbedUnimplementedAIStudioManagementServiceServer() {
 }
@@ -3145,6 +3191,42 @@ func _AIStudioManagementService_GetLicenseInfo_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_CreateNotification_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateNotificationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).CreateNotification(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_CreateNotification_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).CreateNotification(ctx, req.(*CreateNotificationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_RegisterResourceTypes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterResourceTypesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).RegisterResourceTypes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_RegisterResourceTypes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).RegisterResourceTypes(ctx, req.(*RegisterResourceTypesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AIStudioManagementService_ServiceDesc is the grpc.ServiceDesc for AIStudioManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3503,6 +3585,14 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetLicenseInfo",
 			Handler:    _AIStudioManagementService_GetLicenseInfo_Handler,
+		},
+		{
+			MethodName: "CreateNotification",
+			Handler:    _AIStudioManagementService_CreateNotification_Handler,
+		},
+		{
+			MethodName: "RegisterResourceTypes",
+			Handler:    _AIStudioManagementService_RegisterResourceTypes_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

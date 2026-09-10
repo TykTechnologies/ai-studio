@@ -543,6 +543,7 @@ func (a *API) setupRoutes() {
 	authed.GET("/accessible-datasources", a.getUserAccessibleDataSources)
 	authed.GET("/accessible-tools", a.getUserAccessibleTools)
 	authed.GET("/accessible-plugin-resources", a.getUserAccessiblePluginResources)
+	authed.GET("/plugin-resource-types", a.listSubmittablePluginResourceTypes)
 	authed.GET("/history", a.listChatHistoryRecordsForMe)
 	authed.GET("/chat-sessions/:id/defaults", a.getChatDefaults)
 	authed.GET("/sessions/:session_id/messages", a.getLastCMessagesForSession)

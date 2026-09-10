@@ -15,10 +15,10 @@ import {
   Button,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import StorageIcon from "@mui/icons-material/Storage";
-import BuildIcon from "@mui/icons-material/Build";
 import { PrimaryButton, PrimaryOutlineButton } from "../../admin/styles/sharedStyles";
 import StatusChip from "../../admin/components/submissions/StatusChip";
+import { ResourceTypeChip } from "../../admin/components/submissions/resourceTypeLabel";
+import PluginPayloadView from "../../admin/components/submissions/PluginPayloadView";
 
 const SubmissionDetail = () => {
   const { id } = useParams();
@@ -76,19 +76,7 @@ const SubmissionDetail = () => {
 
       <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
         <Typography variant="h4">{payload.name || "Untitled"}</Typography>
-        <Chip
-          icon={
-            submission.resource_type === "datasource" ? (
-              <StorageIcon />
-            ) : (
-              <BuildIcon />
-            )
-          }
-          label={
-            submission.resource_type === "datasource" ? "Data Source" : "Tool"
-          }
-          variant="outlined"
-        />
+        <ResourceTypeChip submission={submission} />
         <StatusChip status={submission.status} />
         {submission.is_update && (
           <Chip label="Update" size="small" color="info" />
@@ -209,6 +197,32 @@ const SubmissionDetail = () => {
             <Typography variant="h6" gutterBottom>
               Resource Configuration
             </Typography>
+
+            {submission.resource_type === "plugin" && (
+              <>
+                {submission.plugin_resource_type?.plugin_name && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                    sx={{ mb: 1.5 }}
+                  >
+                    Provided by the {submission.plugin_resource_type.plugin_name}{" "}
+                    plugin
+                  </Typography>
+                )}
+                <PluginPayloadView
+                  payload={payload}
+                  schema={submission.plugin_resource_type?.submission_schema}
+                />
+                {submission.plugin_instance_id && (
+                  <Typography variant="body2" sx={{ mt: 2 }}>
+                    <strong>Published resource ID:</strong>{" "}
+                    {submission.plugin_instance_id}
+                  </Typography>
+                )}
+              </>
+            )}
 
             {submission.resource_type === "datasource" && (
               <Grid container spacing={2}>

@@ -961,6 +961,19 @@ class RateLimitingDashboardElement extends HTMLElement {
 customElements.define('rate-limiting-dashboard', RateLimitingDashboardElement);
 ```
 
+## Knowing Which Administrator Called
+
+`HandleRPC(method, payload)` carries no caller identity. Plugins that need it (audit trails, "created by" fields, per-admin behaviour) implement the optional `plugin_sdk.UserAwareRPCHandler` interface in addition to `UIProvider`:
+
+```go
+func (p *MyPlugin) HandleRPCWithUser(method string, payload []byte, user *plugin_sdk.PortalUserContext) ([]byte, error) {
+    // user.UserID, user.Email, user.Name, user.Groups; user.IsAdmin is always true here
+    return p.router.Handle(method, payload, user)
+}
+```
+
+When the plugin implements it, admin UI calls (`POST /api/v1/plugins/:id/rpc/:method`) are routed to `HandleRPCWithUser` with the authenticated administrator; `HandleRPC` is still used by hosts that do not send a caller. This lets a plugin share one router between its admin UI (`pluginAPI`) and portal UI (`portalPluginAPI`, see [Portal UI Plugins](plugins-portal-ui.md)) and gate admin-only methods on `user.IsAdmin`.
+
 ## Best Practices
 
 ### Security

@@ -10,6 +10,8 @@ import (
 	gwmgmtpb "github.com/TykTechnologies/midsommar/microgateway/proto/microgateway_management"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -25,6 +27,12 @@ type TestManagementServer struct {
 	// KV storage
 	kvStore  map[string][]byte
 	kvWrites []KVWrite
+
+	// Notifications raised by the plugin
+	notifications []*mgmtpb.CreateNotificationRequest
+
+	// Resource type registrations made by the plugin (latest call wins)
+	resourceTypes []*mgmtpb.ResourceTypeSpec
 
 	// Call tracking
 	calls []ServiceCall
@@ -102,10 +110,13 @@ func (s *TestManagementServer) ReadPluginKV(ctx context.Context, req *mgmtpb.Rea
 	})
 
 	value, exists := s.kvStore[req.Key]
-	msg := ""
 	if !exists {
-		msg = "key not found"
+		// Match the real KV server (services/grpc/plugin_kv_server.go), which
+		// answers a missing key with a gRPC NotFound status. Plugins must treat
+		// that as "empty", and tests should exercise that contract.
+		return nil, status.Errorf(codes.NotFound, "key not found: %s", req.Key)
 	}
+	msg := ""
 	return &mgmtpb.ReadPluginKVResponse{
 		Value:   value,
 		Message: msg,
@@ -213,7 +224,81 @@ func (s *TestManagementServer) Reset() {
 	s.licenseChecked = false
 	s.kvStore = make(map[string][]byte)
 	s.kvWrites = []KVWrite{}
+	s.notifications = nil
+	s.resourceTypes = nil
 	s.calls = []ServiceCall{}
+}
+
+// CreateNotification implements the CreateNotification RPC and records the request.
+func (s *TestManagementServer) CreateNotification(ctx context.Context, req *mgmtpb.CreateNotificationRequest) (*mgmtpb.CreateNotificationResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.calls = append(s.calls, ServiceCall{
+		Method:    "CreateNotification",
+		Request:   req,
+		Timestamp: time.Now(),
+	})
+	if req.Title == "" {
+		return &mgmtpb.CreateNotificationResponse{Success: false, Message: "title is required"}, nil
+	}
+	if !req.NotifyAdmins && req.UserId == 0 {
+		return &mgmtpb.CreateNotificationResponse{Success: false, Message: "no recipient"}, nil
+	}
+	s.notifications = append(s.notifications, req)
+	return &mgmtpb.CreateNotificationResponse{Success: true}, nil
+}
+
+// GetNotifications returns the notifications raised by the plugin so far.
+func (s *TestManagementServer) GetNotifications() []*mgmtpb.CreateNotificationRequest {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]*mgmtpb.CreateNotificationRequest, len(s.notifications))
+	copy(result, s.notifications)
+	return result
+}
+
+// RegisterResourceTypes implements the RegisterResourceTypes RPC and records the specs.
+func (s *TestManagementServer) RegisterResourceTypes(ctx context.Context, req *mgmtpb.RegisterResourceTypesRequest) (*mgmtpb.RegisterResourceTypesResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.calls = append(s.calls, ServiceCall{
+		Method:    "RegisterResourceTypes",
+		Request:   req,
+		Timestamp: time.Now(),
+	})
+
+	var deactivated uint32
+	if req.DeactivateMissing {
+		keep := make(map[string]bool, len(req.Types))
+		for _, t := range req.Types {
+			keep[t.Slug] = true
+		}
+		for _, prev := range s.resourceTypes {
+			if !keep[prev.Slug] {
+				deactivated++
+			}
+		}
+	}
+	s.resourceTypes = append([]*mgmtpb.ResourceTypeSpec{}, req.Types...)
+
+	return &mgmtpb.RegisterResourceTypesResponse{
+		Success:     true,
+		Registered:  uint32(len(req.Types)),
+		Deactivated: deactivated,
+	}, nil
+}
+
+// GetResourceTypes returns the resource types most recently registered by the plugin.
+func (s *TestManagementServer) GetResourceTypes() []*mgmtpb.ResourceTypeSpec {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]*mgmtpb.ResourceTypeSpec, len(s.resourceTypes))
+	copy(result, s.resourceTypes)
+	return result
 }
 
 // ============================================================================

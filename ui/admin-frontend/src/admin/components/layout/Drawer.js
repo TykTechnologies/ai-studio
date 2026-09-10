@@ -196,7 +196,12 @@ const Drawer = () => {
       subItems: item.sub_items?.map(subItem => ({
         id: subItem.id,
         text: subItem.text,
-        path: subItem.path
+        path: subItem.path,
+        // Exact-match a page whose path is a prefix of a sibling page so both
+        // do not highlight on the child route.
+        exact: (item.sub_items || []).some(
+          other => other !== subItem && other.path && subItem.path && other.path.startsWith(`${subItem.path}/`)
+        ),
       })) || []
     }))
   ];

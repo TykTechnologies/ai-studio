@@ -2004,8 +2004,24 @@ func (a *API) callPluginRPC(c *gin.Context) {
 	// TODO: Validate RPC permissions from manifest
 	// For MVP, allow all RPC calls to loaded plugins
 
+	// Pass the calling administrator so plugins implementing
+	// UserAwareRPCHandler can attribute the action.
+	var adminCtx *pb.PortalUserContext
+	if userInterface, ok := c.Get("user"); ok {
+		if user, ok := userInterface.(*models.User); ok && user != nil {
+			adminCtx = &pb.PortalUserContext{
+				UserId:   uint32(user.ID),
+				Email:    user.Email,
+				Name:     user.Name,
+				IsAdmin:  user.IsAdmin,
+				Groups:   extractUserGroupNames(c),
+				Metadata: make(map[string]string),
+			}
+		}
+	}
+
 	// Call plugin RPC method
-	response, err := a.service.AIStudioPluginManager.CallPluginRPC(uint(id), method, payload)
+	response, err := a.service.AIStudioPluginManager.CallPluginRPCAs(uint(id), method, payload, adminCtx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

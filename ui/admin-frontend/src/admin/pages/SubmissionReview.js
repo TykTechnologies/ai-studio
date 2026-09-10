@@ -36,6 +36,8 @@ import {
   SecondaryLinkButton,
 } from "../styles/sharedStyles";
 import StatusChip from "../components/submissions/StatusChip";
+import { getResourceTypeLabel } from "../components/submissions/resourceTypeLabel";
+import PluginPayloadView from "../components/submissions/PluginPayloadView";
 
 const SubmissionReview = () => {
   const { id } = useParams();
@@ -133,6 +135,7 @@ const SubmissionReview = () => {
   };
 
   const handleApprove = async () => {
+    const isPluginSubmission = submission?.resource_type === "plugin";
     try {
       setActionLoading(true);
       await apiClient.post(`/submissions/${id}/approve`, {
@@ -140,6 +143,11 @@ const SubmissionReview = () => {
           attributes: {
             final_privacy_score: finalPrivacyScore,
             review_notes: reviewNotes,
+            // Plugin resources are governed by group access on the plugin,
+            // not by catalogues, so there is nothing to assign.
+            // Plugin resources use group access, not catalogues; the API
+            // field is a JSON object, so send an empty object rather than an array.
+            ...(isPluginSubmission ? { assigned_catalogues: {} } : {}),
           },
         },
       });
@@ -147,8 +155,9 @@ const SubmissionReview = () => {
         open: true,
         // Say what approval actually did: it publishes into Default, and the
         // resource is not live until an administrator activates it.
-        message:
-          "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
+        message: isPluginSubmission
+          ? "Submission approved. The resource was created in the plugin and access is governed by the plugin's group settings."
+          : "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
         severity: "success",
       });
       setApproveDialogOpen(false);
@@ -273,6 +282,7 @@ const SubmissionReview = () => {
   const payload = submission.resource_payload || {};
   const canReview =
     submission.status === "submitted" || submission.status === "in_review";
+  const isPlugin = submission.resource_type === "plugin";
 
   return (
     <>
@@ -318,12 +328,21 @@ const SubmissionReview = () => {
               </Typography>
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 <Typography variant="body2">
-                  <strong>Type:</strong>{" "}
-                  {submission.resource_type === "datasource"
-                    ? "Data Source"
-                    : "Tool"}
+                  <strong>Type:</strong> {getResourceTypeLabel(submission)}
                   {submission.is_update && " (Update)"}
                 </Typography>
+                {isPlugin && submission.plugin_resource_type?.plugin_name && (
+                  <Typography variant="body2">
+                    <strong>Provided by:</strong>{" "}
+                    {submission.plugin_resource_type.plugin_name}
+                  </Typography>
+                )}
+                {isPlugin && submission.plugin_instance_id && (
+                  <Typography variant="body2">
+                    <strong>Plugin resource ID:</strong>{" "}
+                    {submission.plugin_instance_id}
+                  </Typography>
+                )}
                 <Typography variant="body2">
                   <strong>Submitter:</strong>{" "}
                   {submission.submitter?.name || `User #${submission.submitter_id}`}
@@ -473,29 +492,40 @@ const SubmissionReview = () => {
                 }}
               >
                 <Typography variant="h6">Resource Configuration</Typography>
-                <PrimaryOutlineButton
-                  startIcon={
-                    testing ? (
-                      <CircularProgress size={16} />
-                    ) : (
-                      <PlayArrowIcon />
-                    )
-                  }
-                  onClick={handleTest}
-                  disabled={testing}
-                  size="small"
-                >
-                  {/* A tool submission only re-validates its spec; only a
-                      datasource actually reaches the upstream. One label for
-                      both promised the stronger guarantee, so a reviewer could
-                      approve a tool whose server block points nowhere. */}
-                  {submission.resource_type === "tool"
-                    ? "Validate specification"
-                    : "Test connection"}
-                </PrimaryOutlineButton>
+                {/* A plugin resource has no upstream to reach and no spec to
+                    validate; the server would only answer "skipped". */}
+                      {!isPlugin && (
+                  <PrimaryOutlineButton
+                    startIcon={
+                      testing ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        <PlayArrowIcon />
+                      )
+                    }
+                    onClick={handleTest}
+                    disabled={testing}
+                    size="small"
+                  >
+                    {/* A tool submission only re-validates its spec; only a
+                        datasource actually reaches the upstream. One label for
+                        both promised the stronger guarantee, so a reviewer could
+                        approve a tool whose server block points nowhere. */}
+                    {submission.resource_type === "tool"
+                      ? "Validate specification"
+                      : "Test connection"}
+                  </PrimaryOutlineButton>
+                      )}
               </Box>
 
               {/* Resource payload display */}
+              {isPlugin && (
+                <PluginPayloadView
+                  payload={payload}
+                  schema={submission.plugin_resource_type?.submission_schema}
+                />
+              )}
+
               {submission.resource_type === "datasource" && (
                 <Grid container spacing={1}>
                   {[

@@ -27,12 +27,11 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import AddIcon from "@mui/icons-material/Add";
-import StorageIcon from "@mui/icons-material/Storage";
-import BuildIcon from "@mui/icons-material/Build";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
 import StatusChip, {
   statusLabel,
 } from "../../admin/components/submissions/StatusChip";
+import { ResourceTypeChip } from "../../admin/components/submissions/resourceTypeLabel";
 
 // Labels come from StatusChip so a tab and the badge on the cards beneath it
 // can never disagree again. The "approved" tab used to read "Published" while
@@ -207,22 +206,7 @@ const MyContributions = () => {
                       }}
                     >
                       <Box sx={{ display: "flex", gap: 0.5 }}>
-                        <Chip
-                          icon={
-                            submission.resource_type === "datasource" ? (
-                              <StorageIcon />
-                            ) : (
-                              <BuildIcon />
-                            )
-                          }
-                          label={
-                            submission.resource_type === "datasource"
-                              ? "Data Source"
-                              : "Tool"
-                          }
-                          size="small"
-                          variant="outlined"
-                        />
+                        <ResourceTypeChip submission={submission} size="small" />
                         {submission.is_update && (
                           <Chip
                             label="Update"

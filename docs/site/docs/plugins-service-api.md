@@ -531,9 +531,14 @@ type ObjectEventPayload struct {
 
 #### Subscribing to System Events
 
+> **Topics match exactly.** The bus has no wildcard support: `Subscribe("system.app.*", ...)` never fires. Subscribe to each topic you need (`system.app.created`, `system.app.updated`, ...) or use `SubscribeAll` and filter on `ev.Topic`.
+
 ```go
-// Subscribe to all App events using wildcard
-subID, err := ctx.Services.Events().Subscribe("system.app.*", func(ev plugin_sdk.Event) {
+// Subscribe to every event and filter by topic prefix
+subID, err := ctx.Services.Events().SubscribeAll(func(ev plugin_sdk.Event) {
+    if !strings.HasPrefix(ev.Topic, "system.app.") {
+        return
+    }
     var payload struct {
         ObjectType string      `json:"object_type"`
         Action     string      `json:"action"`
@@ -634,6 +639,49 @@ func (p *AuditLogPlugin) OnSessionClosing(ctx plugin_sdk.Context) {
 **Note**: System events are published with `DirLocal` direction, meaning they stay on the control plane and are not forwarded to edge instances.
 
 ## Studio Services
+
+### Notifications
+
+Plugins can raise in-app notifications (delivered to the notification bell, and by email when SMTP is configured) for all administrators and/or a specific user.
+
+Requires: `notifications.write` scope. Studio-only.
+
+```go
+err := ctx.Services.Studio().CreateNotification(ctx.Context, plugin_sdk.Notification{
+    ID:           "req_" + request.ID,          // optional dedupe key, scoped to your plugin
+    Type:         "asset_access_request",       // free-form label stored on the notification
+    Title:        "Access request: Triage Agent",
+    Content:      "**alice@acme.com** asked for access.\n\n[Review](/admin/enterprise/asset-catalog/requests)",
+    NotifyAdmins: true,                         // every admin with notifications enabled
+    UserID:       0,                            // or a specific user ID (both may be set)
+})
+```
+
+| Field | Notes |
+|-------|-------|
+| `ID` | Optional. The platform prefixes it with `plugin_<id>_`, so two calls with the same ID produce one notification per recipient. Empty = always new. |
+| `Title` | Required, max 255 characters. |
+| `Content` | Markdown, max 10000 characters. Rendered in the admin UI's notification list. |
+| `NotifyAdmins` / `UserID` | At least one is required. |
+
+### Resource Type Registration (runtime)
+
+Resource types declared in the manifest are registered when the plugin loads. Plugins whose types are defined dynamically (for example by administrators inside the plugin) register them at runtime instead:
+
+Requires: `resource-types.manage` scope. Studio-only.
+
+```go
+// Registers the given types for this plugin and deactivates any of its
+// previously registered types that are missing from the list.
+err := plugin_sdk.SyncResourceTypes(ctx, []*plugin_sdk.ResourceTypeRegistration{
+    {Slug: "agent", Name: "Agent", SupportsSubmissions: true, SubmissionSchema: agentSchemaJSON},
+})
+
+// Lower level: keep missing types active
+registered, deactivated, err := ctx.Services.Studio().RegisterResourceTypes(ctx.Context, regs, false)
+```
+
+The plugin ID always comes from the authenticated connection, so a plugin can only manage its own types. While the call is in flight the platform calls back your `ListResourceInstances` for each type, so do not hold locks that method needs. See [Resource Provider Plugins](plugins-resource-types.md).
 
 Available when `ctx.Runtime == plugin_sdk.RuntimeStudio`.
 

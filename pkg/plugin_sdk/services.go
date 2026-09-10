@@ -205,14 +205,6 @@ func getLicenseInfoStudio(ctx context.Context) (*LicenseInfo, error) {
 
 // ===== Gateway Services Implementation =====
 
-
-
-
-
-
-
-
-
 // ===== Studio Services Implementation =====
 
 type studioServicesImpl struct{}
@@ -331,4 +323,51 @@ func (s *studioServicesImpl) ValidateObjectMetadata(ctx context.Context, objectT
 		return false, false, "", err
 	}
 	return resp.Valid, resp.Enforced, resp.ResultJson, nil
+}
+
+func (s *studioServicesImpl) CreateNotification(ctx context.Context, n Notification) error {
+	resp, err := ai_studio_sdk.CreateNotification(ctx, ai_studio_sdk.NotificationRequest{
+		ID:           n.ID,
+		Type:         n.Type,
+		Title:        n.Title,
+		Content:      n.Content,
+		NotifyAdmins: n.NotifyAdmins,
+		UserID:       n.UserID,
+	})
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		return fmt.Errorf("notification rejected: %s", resp.Message)
+	}
+	return nil
+}
+
+func (s *studioServicesImpl) RegisterResourceTypes(ctx context.Context, regs []ResourceTypeRegistration, deactivateMissing bool) (uint32, uint32, error) {
+	specs := make([]ai_studio_sdk.ResourceTypeSpec, 0, len(regs))
+	for _, r := range regs {
+		spec := ai_studio_sdk.ResourceTypeSpec{
+			Slug:                r.Slug,
+			Name:                r.Name,
+			Description:         r.Description,
+			Icon:                r.Icon,
+			HasPrivacyScore:     r.HasPrivacyScore,
+			SupportsSubmissions: r.SupportsSubmissions,
+			SubmissionSchema:    r.SubmissionSchema,
+			SupportsMetadata:    r.SupportsMetadata,
+		}
+		if r.FormComponent != nil {
+			spec.FormComponentTag = r.FormComponent.Tag
+			spec.FormComponentEntry = r.FormComponent.EntryPoint
+		}
+		specs = append(specs, spec)
+	}
+	resp, err := ai_studio_sdk.RegisterResourceTypes(ctx, specs, deactivateMissing)
+	if err != nil {
+		return 0, 0, err
+	}
+	if !resp.Success {
+		return 0, 0, fmt.Errorf("resource type registration rejected: %s", resp.Message)
+	}
+	return resp.Registered, resp.Deactivated, nil
 }

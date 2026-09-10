@@ -170,6 +170,17 @@ func (a *API) adminTestSubmission(c *gin.Context) {
 	}
 
 	switch submission.ResourceType {
+	case models.SubmissionResourceTypePlugin:
+		// Plugin resources are metadata managed by the owning plugin; there is
+		// no upstream to contact from here.
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"type":         "plugin",
+			"skipped":      true,
+			"check_kind":   "none",
+			"check_label":  "No connectivity test",
+			"check_detail": "Connectivity tests do not apply to plugin resource types. Review the submitted fields against the resource type's schema instead.",
+		}})
+		return
 	case "tool":
 		oasSpec := getString("oas_spec")
 		if oasSpec == "" {

@@ -32,12 +32,27 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
+import validator from "@rjsf/validator-ajv8";
 import { PrimaryButton, PrimaryOutlineButton } from "../../admin/styles/sharedStyles";
 import {
   fetchVendors,
   getEmbedderDefaultModel,
   getEmbedderDefaultUrl,
 } from "../../admin/utils/vendorUtils";
+import SchemaFormRenderer from "../../admin/components/plugins/SchemaFormRenderer";
+
+// The resource type dropdown carries plugin-provided types as "plugin:<id>" so
+// one control can pick both the built-in kinds and every ResourceProvider type
+// the server advertises. resourceType itself stays "plugin" for those, with the
+// concrete type id held separately, which is the shape the API expects.
+const PLUGIN_TYPE_PREFIX = "plugin:";
+
+// Everything in a plugin payload except `name` is free-form when the type has
+// no submission schema; it is edited as one JSON blob.
+const pluginExtraFieldsJson = (payload) => {
+  const { name, ...rest } = payload || {};
+  return Object.keys(rest).length > 0 ? JSON.stringify(rest, null, 2) : "";
+};
 
 const vectorStoreOptions = [
   "chroma",
@@ -76,6 +91,14 @@ const SubmissionForm = () => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showEmbedKey, setShowEmbedKey] = useState(false);
   const [specValidation, setSpecValidation] = useState(null);
+  // Plugin-provided resource types (ResourceProvider plugins).
+  const [pluginTypes, setPluginTypes] = useState([]);
+  const [pluginResourceTypeId, setPluginResourceTypeId] = useState(null);
+  // The type as returned on an existing submission, so a draft still renders
+  // its schema if the type list has not loaded (or the type was deactivated).
+  const [loadedPluginType, setLoadedPluginType] = useState(null);
+  const [pluginExtraJson, setPluginExtraJson] = useState("");
+  const [pluginExtraJsonError, setPluginExtraJsonError] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -89,11 +112,22 @@ const SubmissionForm = () => {
     };
     loadVendors();
     loadAttestations();
+    loadPluginTypes();
 
     if (isEdit) {
       loadSubmission();
     }
   }, [id]);
+
+  const loadPluginTypes = async () => {
+    try {
+      const response = await pubClient.get("/common/plugin-resource-types");
+      setPluginTypes(response.data?.data || []);
+    } catch (error) {
+      // No plugin types is the normal case on an installation without
+      // ResourceProvider plugins; the built-in types still work.
+    }
+  };
 
   const loadSubmission = async () => {
     try {
@@ -102,6 +136,11 @@ const SubmissionForm = () => {
       const data = response.data.data;
       setResourceType(data.resource_type);
       setPayload(data.resource_payload || {});
+      if (data.resource_type === "plugin") {
+        setPluginResourceTypeId(data.plugin_resource_type_id ?? null);
+        setLoadedPluginType(data.plugin_resource_type || null);
+        setPluginExtraJson(pluginExtraFieldsJson(data.resource_payload));
+      }
       setMeta({
         suggested_privacy: data.suggested_privacy ?? 0,
         privacy_justification: data.privacy_justification || "",
@@ -217,9 +256,61 @@ const SubmissionForm = () => {
     }
   };
 
+  const selectedPluginType =
+    resourceType === "plugin"
+      ? pluginTypes.find((t) => t.id === pluginResourceTypeId) ||
+        loadedPluginType
+      : null;
+  // The schema on the submission wins: it is the one the payload was written
+  // against. The fetched list is the fallback for a fresh submission.
+  const pluginSchema =
+    resourceType === "plugin"
+      ? loadedPluginType?.submission_schema ||
+        pluginTypes.find((t) => t.id === pluginResourceTypeId)
+          ?.submission_schema ||
+        null
+      : null;
+
+  const handleResourceTypeChange = (value) => {
+    if (value.startsWith(PLUGIN_TYPE_PREFIX)) {
+      setResourceType("plugin");
+      setPluginResourceTypeId(Number(value.slice(PLUGIN_TYPE_PREFIX.length)));
+    } else {
+      setResourceType(value);
+      setPluginResourceTypeId(null);
+    }
+    setPayload({});
+    setPluginExtraJson("");
+    setPluginExtraJsonError(null);
+    setTestResult(null);
+    setSpecValidation(null);
+  };
+
+  const handlePluginExtraJsonChange = (text) => {
+    setPluginExtraJson(text);
+    if (!text.trim()) {
+      setPluginExtraJsonError(null);
+      setPayload((prev) => ({ name: prev.name }));
+      return;
+    }
+    try {
+      const parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setPluginExtraJsonError("Additional fields must be a JSON object");
+        return;
+      }
+      setPluginExtraJsonError(null);
+      setPayload((prev) => ({ ...parsed, name: prev.name }));
+    } catch (err) {
+      setPluginExtraJsonError("Additional fields must be valid JSON");
+    }
+  };
+
   const validateForm = (submitForReview = false) => {
     const newErrors = {};
     if (!resourceType) newErrors.resource_type = "Please select a resource type";
+    if (resourceType === "plugin" && !pluginResourceTypeId)
+      newErrors.resource_type = "Please select a resource type";
     if (!payload.name?.trim()) newErrors.name = "Name is required";
     if (payload.name && payload.name.length > 200) newErrors.name = "Name must be under 200 characters";
 
@@ -275,6 +366,24 @@ const SubmissionForm = () => {
       }
     }
 
+    if (resourceType === "plugin") {
+      // The server validates against the same schema and rejects with a 400;
+      // catching it here keeps the message next to the field that caused it.
+      if (pluginSchema) {
+        const { errors: schemaErrors } = validator.validateFormData(
+          payload,
+          pluginSchema
+        );
+        if (schemaErrors.length > 0) {
+          newErrors.resource_payload = schemaErrors
+            .map((e) => e.stack || e.message)
+            .join("; ");
+        }
+      } else if (pluginExtraJsonError) {
+        newErrors.resource_payload = pluginExtraJsonError;
+      }
+    }
+
     // Privacy score range validation
     if (meta.suggested_privacy < 0 || meta.suggested_privacy > 100) {
       newErrors.suggested_privacy = "Privacy score must be between 0 and 100";
@@ -322,6 +431,9 @@ const SubmissionForm = () => {
         data: {
           attributes: {
             resource_type: resourceType,
+            ...(resourceType === "plugin"
+              ? { plugin_resource_type_id: pluginResourceTypeId }
+              : {}),
             status: submitForReview ? "submitted" : "draft",
             resource_payload: resourcePayload,
             attestations: {
@@ -365,10 +477,18 @@ const SubmissionForm = () => {
       });
       setTimeout(() => navigate("/portal/contributions"), 1500);
     } catch (error) {
+      // A schema violation comes back as one error per failing field; show
+      // them all, and keep them on the page next to the fields, not only in a
+      // snackbar that disappears.
+      const details = (error.response?.data?.errors || [])
+        .map((e) => e.detail)
+        .filter(Boolean);
+      if (error.response?.status === 400 && details.length > 0) {
+        setErrors((prev) => ({ ...prev, resource_payload: details.join("; ") }));
+      }
       setSnackbar({
         open: true,
-        message:
-          error.response?.data?.errors?.[0]?.detail || "Failed to save",
+        message: details.length > 0 ? details.join("; ") : "Failed to save",
         severity: "error",
       });
     } finally {
@@ -412,17 +532,40 @@ const SubmissionForm = () => {
           <InputLabel id="submissionform-resource-type-label">Resource Type</InputLabel>
           <Select
             labelId="submissionform-resource-type-label"
-            value={resourceType}
+            value={
+              resourceType === "plugin" && pluginResourceTypeId
+                ? `${PLUGIN_TYPE_PREFIX}${pluginResourceTypeId}`
+                : resourceType
+            }
             label="Resource Type"
-            onChange={(e) => {
-              setResourceType(e.target.value);
-              setPayload({});
-              setTestResult(null);
-              setSpecValidation(null);
+            onChange={(e) => handleResourceTypeChange(e.target.value)}
+            renderValue={(value) => {
+              if (value === "datasource") return "Data Source";
+              if (value === "tool") return "Tool (OpenAPI)";
+              const t = pluginTypes.find(
+                (pt) => `${PLUGIN_TYPE_PREFIX}${pt.id}` === value
+              );
+              return t ? `${t.name} (${t.plugin_name})` : value;
             }}
           >
             <MenuItem value="datasource">Data Source</MenuItem>
             <MenuItem value="tool">Tool (OpenAPI)</MenuItem>
+            {pluginTypes.map((t) => (
+              <MenuItem key={t.id} value={`${PLUGIN_TYPE_PREFIX}${t.id}`}>
+                <Box>
+                  <Typography variant="body1" component="div">
+                    {t.name}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    component="div"
+                  >
+                    {t.plugin_name}
+                  </Typography>
+                </Box>
+              </MenuItem>
+            ))}
           </Select>
           {errors.resource_type && (
             <Typography variant="caption" color="error">
@@ -434,47 +577,53 @@ const SubmissionForm = () => {
 
       {resourceType && (
         <Box component="form" onSubmit={(e) => e.preventDefault()}>
-          {/* Basic info */}
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Basic Information
-          </Typography>
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Name"
-                value={payload.name || ""}
-                onChange={(e) => handlePayloadChange("name", e.target.value)}
-                onBlur={checkDuplicates}
-                error={!!errors.name}
-                helperText={errors.name}
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label={
-                  resourceType === "datasource"
-                    ? "Short Description"
-                    : "Description"
-                }
-                value={
-                  payload.short_description || payload.description || ""
-                }
-                onChange={(e) =>
-                  handlePayloadChange(
+          {/* Basic info. For a plugin type the schema form is the whole
+              resource section and always carries `name`, so these generic
+              fields would only duplicate it. */}
+          {resourceType !== "plugin" && (
+            <>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Basic Information
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Name"
+                  value={payload.name || ""}
+                  onChange={(e) => handlePayloadChange("name", e.target.value)}
+                  onBlur={checkDuplicates}
+                  error={!!errors.name}
+                  helperText={errors.name}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label={
                     resourceType === "datasource"
-                      ? "short_description"
-                      : "description",
-                    e.target.value
-                  )
-                }
-                multiline
-                rows={2}
-              />
+                      ? "Short Description"
+                      : "Description"
+                  }
+                  value={
+                    payload.short_description || payload.description || ""
+                  }
+                  onChange={(e) =>
+                    handlePayloadChange(
+                      resourceType === "datasource"
+                        ? "short_description"
+                        : "description",
+                      e.target.value
+                    )
+                  }
+                  multiline
+                  rows={2}
+                />
+              </Grid>
             </Grid>
-          </Grid>
+            </>
+          )}
 
           {duplicateWarning && (
             <Alert severity="warning" sx={{ mb: 3 }}>
@@ -487,6 +636,98 @@ const SubmissionForm = () => {
                 </Typography>
               ))}
             </Alert>
+          )}
+
+          {/* Plugin-provided resource type: the plugin's submission schema
+              drives the whole resource section. Without a schema the type
+              only promises a name, so that plus a free-form JSON blob. */}
+          {resourceType === "plugin" && (
+            <Accordion defaultExpanded>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6">
+                  {selectedPluginType?.name || "Resource Details"}
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                {selectedPluginType?.description && (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 2 }}
+                  >
+                    {selectedPluginType.description}
+                  </Typography>
+                )}
+                {selectedPluginType?.plugin_name && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                    sx={{ mb: 2 }}
+                  >
+                    Provided by the {selectedPluginType.plugin_name} plugin
+                  </Typography>
+                )}
+                {(errors.name || errors.resource_payload) && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {errors.name && (
+                      <Typography variant="body2">{errors.name}</Typography>
+                    )}
+                    {errors.resource_payload && (
+                      <Typography variant="body2">
+                        {errors.resource_payload}
+                      </Typography>
+                    )}
+                  </Alert>
+                )}
+                {pluginSchema ? (
+                  <SchemaFormRenderer
+                    schema={pluginSchema}
+                    formData={payload}
+                    onChange={(data) => setPayload(data || {})}
+                  />
+                ) : (
+                  <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Name"
+                        value={payload.name || ""}
+                        onChange={(e) =>
+                          handlePayloadChange("name", e.target.value)
+                        }
+                        error={!!errors.name}
+                        helperText={errors.name}
+                        required
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Additional fields (JSON)"
+                        multiline
+                        rows={8}
+                        value={pluginExtraJson}
+                        onChange={(e) =>
+                          handlePluginExtraJsonChange(e.target.value)
+                        }
+                        error={!!pluginExtraJsonError}
+                        helperText={
+                          pluginExtraJsonError ||
+                          "Optional. A JSON object of any further fields this resource type expects."
+                        }
+                        sx={{
+                          "& .MuiInputBase-input": {
+                            fontFamily: "monospace",
+                            fontSize: "0.85rem",
+                          },
+                        }}
+                      />
+                    </Grid>
+                  </Grid>
+                )}
+              </AccordionDetails>
+            </Accordion>
           )}
 
           {/* Datasource-specific fields */}

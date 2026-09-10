@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"html"
 	"log"
 	"net/http"
@@ -234,6 +235,45 @@ func (a *API) listPluginResourceTypes(c *gin.Context) {
 				"tag":         t.FormComponentTag,
 				"entry_point": t.FormComponentEntry,
 			}
+		}
+		if t.SubmissionSchema != "" {
+			entry["submission_schema"] = json.RawMessage(t.SubmissionSchema)
+		}
+		if t.Plugin != nil {
+			entry["plugin_name"] = sanitizeString(t.Plugin.Name)
+		}
+		result = append(result, entry)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": result})
+}
+
+// listSubmittablePluginResourceTypes returns the active plugin resource types
+// that accept community submissions, for the portal submission form.
+// GET /common/plugin-resource-types
+func (a *API) listSubmittablePluginResourceTypes(c *gin.Context) {
+	types, err := a.service.GetPluginResourceTypes()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list plugin resource types"})
+		return
+	}
+
+	result := make([]gin.H, 0, len(types))
+	for _, t := range types {
+		if !t.IsActive || !t.SupportsSubmissions {
+			continue
+		}
+		entry := gin.H{
+			"id":                t.ID,
+			"plugin_id":         t.PluginID,
+			"slug":              t.Slug,
+			"name":              sanitizeString(t.Name),
+			"description":       sanitizeString(t.Description),
+			"icon":              sanitizeString(t.Icon),
+			"has_privacy_score": t.HasPrivacyScore,
+		}
+		if t.SubmissionSchema != "" {
+			entry["submission_schema"] = json.RawMessage(t.SubmissionSchema)
 		}
 		if t.Plugin != nil {
 			entry["plugin_name"] = sanitizeString(t.Plugin.Name)

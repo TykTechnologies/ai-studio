@@ -34,7 +34,10 @@ type Service struct {
 	PluginService         *PluginService
 	PluginManifestService *PluginManifestService
 	AIStudioPluginManager *AIStudioPluginManager
-	PluginMetadataLoader  *PluginMetadataLoader
+	// PluginResourceRPC creates plugin resource instances from approved
+	// submissions. Defaults to AIStudioPluginManager; tests inject a fake.
+	PluginResourceRPC    ResourceInstanceCreator
+	PluginMetadataLoader *PluginMetadataLoader
 	MarketplaceService    *MarketplaceService
 	// Object Hooks
 	HookRegistry *HookRegistry

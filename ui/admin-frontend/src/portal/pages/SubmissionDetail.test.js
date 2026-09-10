@@ -89,6 +89,47 @@ describe("SubmissionDetail", () => {
     });
   });
 
+  it("shows the plugin payload and published id for a plugin resource", async () => {
+    pubClient.get.mockResolvedValueOnce({
+      data: {
+        data: {
+          ...mockSubmission,
+          resource_type: "plugin",
+          resource_id: null,
+          plugin_resource_type_id: 7,
+          plugin_instance_id: "agent-9f3c",
+          plugin_resource_type: {
+            id: 7,
+            name: "Agent",
+            plugin_name: "Asset Catalog",
+            submission_schema: {
+              type: "object",
+              properties: {
+                name: { type: "string", title: "Agent Name" },
+                system_prompt: { type: "string", title: "System Prompt" },
+              },
+            },
+          },
+          resource_payload: { name: "Support Bot", system_prompt: "Be helpful." },
+        },
+      },
+    });
+
+    renderWithRoute();
+
+    // The name is both the page heading and a payload row.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: "Support Bot" })
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByText("Agent")).toBeInTheDocument();
+    expect(screen.getByText("System Prompt")).toBeInTheDocument();
+    expect(screen.getByText("Be helpful.")).toBeInTheDocument();
+    expect(screen.getByText("agent-9f3c")).toBeInTheDocument();
+    expect(screen.queryByText("View in Catalogue")).not.toBeInTheDocument();
+  });
+
   it("shows resource configuration for datasource", async () => {
     pubClient.get.mockResolvedValueOnce({
       data: { data: mockSubmission },

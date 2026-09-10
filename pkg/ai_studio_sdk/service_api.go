@@ -454,16 +454,16 @@ func CreateLLM(ctx context.Context, name, apiKey, apiEndpoint, vendor, defaultMo
 	}
 
 	return client.CreateLLM(ctx, &mgmtpb.CreateLLMRequest{
-		Context:         createPluginContext(AvailableScopes.LLMsWrite),
-		Name:            name,
-		ApiKey:          apiKey,
-		ApiEndpoint:     apiEndpoint,
-		Vendor:          vendor,
-		PrivacyScore:    privacyScore,
-		DefaultModel:    defaultModel,
-		AllowedModels:   allowedModels,
-		MonthlyBudget:   monthlyBudget,
-		Active:          true,
+		Context:       createPluginContext(AvailableScopes.LLMsWrite),
+		Name:          name,
+		ApiKey:        apiKey,
+		ApiEndpoint:   apiEndpoint,
+		Vendor:        vendor,
+		PrivacyScore:  privacyScore,
+		DefaultModel:  defaultModel,
+		AllowedModels: allowedModels,
+		MonthlyBudget: monthlyBudget,
+		Active:        true,
 	})
 }
 
@@ -1666,6 +1666,7 @@ func HasEntitlement(ctx context.Context, entitlement string) (bool, error) {
 	}
 	return false, nil
 }
+
 // ===== Governed Metadata (Enterprise) =====
 
 // GetObjectMetadata returns the governed metadata stored for an object.
@@ -1750,5 +1751,83 @@ func ValidateObjectMetadata(ctx context.Context, objectType, valuesJSON string) 
 		Context:    createPluginContext(AvailableScopes.MetadataRead),
 		ObjectType: objectType,
 		ValuesJson: valuesJSON,
+	})
+}
+
+// --- Notifications ---
+
+// NotificationRequest describes an in-app notification raised by a plugin.
+type NotificationRequest struct {
+	ID           string // optional dedupe key (scoped to the plugin by the server)
+	Type         string // free-form label stored on the notification
+	Title        string // required, max 255 chars
+	Content      string // markdown body, max 10000 chars
+	NotifyAdmins bool   // deliver to all admins with notifications enabled
+	UserID       uint32 // deliver to a specific user (0 = none)
+}
+
+// CreateNotification raises an in-app notification for admins and/or a user.
+// Requires the notifications.write scope.
+func CreateNotification(ctx context.Context, n NotificationRequest) (*mgmtpb.CreateNotificationResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	return client.CreateNotification(ctx, &mgmtpb.CreateNotificationRequest{
+		Context:        createPluginContext(AvailableScopes.NotificationsWrite),
+		NotificationId: n.ID,
+		Type:           n.Type,
+		Title:          n.Title,
+		Content:        n.Content,
+		NotifyAdmins:   n.NotifyAdmins,
+		UserId:         n.UserID,
+	})
+}
+
+// --- Resource types ---
+
+// ResourceTypeSpec describes one resource type to register at runtime.
+type ResourceTypeSpec struct {
+	Slug                string
+	Name                string
+	Description         string
+	Icon                string
+	HasPrivacyScore     bool
+	SupportsSubmissions bool
+	FormComponentTag    string
+	FormComponentEntry  string
+	SubmissionSchema    string
+	SupportsMetadata    bool // instances can carry governed metadata (Enterprise)
+}
+
+// RegisterResourceTypes (re)registers the calling plugin's resource types.
+// Requires the resource-types.manage scope.
+func RegisterResourceTypes(ctx context.Context, specs []ResourceTypeSpec, deactivateMissing bool) (*mgmtpb.RegisterResourceTypesResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+
+	types := make([]*mgmtpb.ResourceTypeSpec, 0, len(specs))
+	for _, s := range specs {
+		types = append(types, &mgmtpb.ResourceTypeSpec{
+			Slug:                s.Slug,
+			Name:                s.Name,
+			Description:         s.Description,
+			Icon:                s.Icon,
+			HasPrivacyScore:     s.HasPrivacyScore,
+			SupportsSubmissions: s.SupportsSubmissions,
+			FormComponentTag:    s.FormComponentTag,
+			FormComponentEntry:  s.FormComponentEntry,
+			SubmissionSchema:    s.SubmissionSchema,
+			SupportsMetadata:    s.SupportsMetadata,
+		})
+	}
+
+	return client.RegisterResourceTypes(ctx, &mgmtpb.RegisterResourceTypesRequest{
+		Context:           createPluginContext(AvailableScopes.ResourceTypesManage),
+		Types:             types,
+		DeactivateMissing: deactivateMissing,
 	})
 }

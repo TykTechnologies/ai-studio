@@ -27,6 +27,7 @@ import {
   StyledTableRow,
 } from "../styles/sharedStyles";
 import StatusChip from "../components/submissions/StatusChip";
+import { ResourceTypeChip } from "../components/submissions/resourceTypeLabel";
 import usePagination from "../hooks/usePagination";
 import PaginationControls from "../components/common/PaginationControls";
 
@@ -147,6 +148,7 @@ const SubmissionReviewQueue = () => {
               <MenuItem value="">All Types</MenuItem>
               <MenuItem value="datasource">Data Source</MenuItem>
               <MenuItem value="tool">Tool</MenuItem>
+              <MenuItem value="plugin">Plugin Resource</MenuItem>
             </Select>
           </FormControl>
         </Box>
@@ -185,14 +187,10 @@ const SubmissionReviewQueue = () => {
                       sx={{ cursor: "pointer" }}
                     >
                       <StyledTableCell>
-                        <Chip
-                          label={
-                            submission.resource_type === "datasource"
-                              ? "Data Source"
-                              : "Tool"
-                          }
+                        <ResourceTypeChip
+                          submission={submission}
+                          withIcon={false}
                           size="small"
-                          variant="outlined"
                         />
                         {submission.is_update && (
                           <Chip
