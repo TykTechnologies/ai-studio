@@ -312,6 +312,7 @@ func TestBudgetEnforcement(t *testing.T) {
 - ❌ Multiple marketplace sources
 - ❌ Custom marketplace management
 - ❌ Audit logging
+- ❌ Governed metadata (schemas, vocabularies, enforcement, compliance report)
 
 ### Enterprise Edition (ENT)
 
@@ -339,6 +340,9 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Marketplace URL validation
 - ✅ Per-marketplace sync control
 - ✅ Audit logging
+- ✅ Governed metadata: admin-defined schemas, required fields, controlled vocabularies
+- ✅ Governed metadata enforcement (422 on create/update) and compliance report
+- ✅ Governed metadata in portal responses, edge snapshots and plugin APIs
 - ✅ Priority support
 
 ## Budget Feature Specifics
@@ -697,6 +701,29 @@ ENT: Edge (namespace: "custom") → Control Plane → Accepted as "custom"
 **Upgrade Path:**
 - CE → ENT: All edges remain in "default", can now create additional namespaces
 - ENT → CE: Edges keep their namespaces in DB but all forced to "default" at runtime
+
+## Governed Metadata Feature Specifics
+
+### How Governed Metadata Works
+
+Governed Metadata attaches admin-defined, validated fields (owners, lifecycle state, risk tier, data classification, regulatory applicability, approved consumers, support contact, expiration date, or anything custom) to LLMs, Tools, Datasources and opted-in plugin resource types.
+
+- **CE**: `services/governed_metadata` community stub. Reads report no schemas (serializers and snapshots are no-ops), management endpoints return `ErrEnterpriseFeature` → HTTP 403, `Validate` always succeeds.
+- **ENT**: `enterprise/features/governed_metadata` implements schema/vocabulary CRUD, schema resolution with per-type caching, JSON Schema (draft-07) + semantic validation, object value storage with audit, plugin hooks (`governed_metadata` object type), system events, compliance reporting, manifest contributions and seeding of the "Governance Core" schema.
+
+### Implementation Details
+
+```
+services/governed_metadata/{interface,factory,community}.go   # public contract
+enterprise/features/governed_metadata/{service,validation,compliance,seed,init}.go
+services/governed_metadata_hooks.go                            # HookManager adapter
+api/governed_metadata_handlers.go, api/governed_metadata_helpers.go
+grpc/control_server.go        # gateway-visible fields in snapshots (SnapshotReader)
+services/grpc/governed_metadata_server.go                      # plugin management RPCs
+microgateway/internal/database/governed_metadata.go            # plugin context exposure
+```
+
+Enforcement happens in the admin REST handlers (`validateGovernedMetadataInput` before the object write, `persistGovernedMetadata` after). Plugin-driven writes and UGC approvals are never blocked; they surface in the compliance report. The service is wired on `services.Service.GovernedMetadataService`; tests that build `services.Service` by hand get the edition-appropriate default through `Service.GovernedMetadata()`.
 
 ## Group-Based Access Control Feature Specifics
 

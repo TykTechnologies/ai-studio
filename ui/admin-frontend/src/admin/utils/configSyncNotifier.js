@@ -24,6 +24,7 @@ const GATEWAY_AFFECTING = [
   /^\/?catalogues(\/|$)/,
   /^\/?tool-catalogues(\/|$)/,
   /^\/?data-catalogues(\/|$)/,
+  /^\/?metadata\/objects(\/|$)/,
 ];
 
 const MUTATING = ["post", "patch", "put", "delete"];

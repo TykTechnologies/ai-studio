@@ -1,3 +1,5 @@
+import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadata/GovernedMetadataFields";
+import { extractGovernedMetadataErrors } from "../../services/governedMetadataService";
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import { generateSlug } from "../../components/wizards/quick-start/utils";
@@ -79,6 +81,10 @@ const LLMForm = () => {
     dont_log_bodies: false, // When true, request/response bodies are not stored in logs
   });
   const [vendors, setVendors] = useState([]);
+  // Governed metadata (Enterprise): values live beside the object and are
+  // sent as attributes.governed_metadata; 422 field errors map back here.
+  const [governedMetadata, setGovernedMetadata] = useState({});
+  const [metadataErrors, setMetadataErrors] = useState({});
   const [filters, setFilters] = useState(null);
   const [availablePlugins, setAvailablePlugins] = useState([]);
   const [originalName, setOriginalName] = useState("");
@@ -196,6 +202,7 @@ const LLMForm = () => {
         dont_log_bodies: llmData.dont_log_bodies || false,
       });
       setOriginalName(llmData.name);
+      setGovernedMetadata(llmResponse.data.data.governed_metadata || {});
 
       // Extract AWS Bedrock credentials from metadata if vendor is bedrock
       if (llmData.vendor === "bedrock" && llmData.metadata) {
@@ -349,6 +356,7 @@ const LLMForm = () => {
           active: Boolean(llm.active),
           filters: llm.filters.map((filterId) => parseInt(filterId, 10)),
           metadata: metadata,
+          governed_metadata: governedMetadata,
         },
       },
     };
@@ -380,6 +388,17 @@ const LLMForm = () => {
 
       setTimeout(() => navigate("/admin/llms"), 2000);
     } catch (error) {
+      if (error.response?.status === 422) {
+        const fieldErrors = extractGovernedMetadataErrors(error);
+        setMetadataErrors(fieldErrors);
+        setSnackbar({
+          open: true,
+          message: fieldErrors._ || "Governance metadata failed validation. Fix the highlighted fields.",
+          severity: "error",
+        });
+        document.getElementById(GOVERNED_METADATA_SECTION_ID)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
       console.error("Error saving LLM", error);
       setSnackbar({
         open: true,
@@ -937,6 +956,17 @@ const LLMForm = () => {
               )}
             </AccordionDetails>
           </StyledAccordion>
+
+          {/* Governance metadata (Enterprise; hidden when no schema applies) */}
+          <GovernedMetadataFields
+            objectType="llm"
+            value={governedMetadata}
+            onChange={(next) => {
+              setGovernedMetadata(next);
+              setMetadataErrors({});
+            }}
+            errors={metadataErrors}
+          />
 
           {/* Edge Availability Section */}
           <EdgeAvailabilitySection

@@ -35,6 +35,9 @@ func (a *API) createDatasource(c *gin.Context) {
 		})
 		return
 	}
+	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, true) {
+		return
+	}
 
 	// Namespace authorization: only admins can assign non-empty namespace
 	if input.Data.Attributes.Namespace != "" {
@@ -85,7 +88,8 @@ func (a *API) createDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeDatasource(datasource)})
+	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(datasource.ID), input.Data.Attributes.GovernedMetadata)
+	c.JSON(http.StatusCreated, dataWithMeta(a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource)), meta))
 }
 
 // @Summary Get a datasource by ID
@@ -122,7 +126,7 @@ func (a *API) getDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasource(datasource)})
+	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource))})
 }
 
 // @Summary Update a datasource
@@ -157,6 +161,9 @@ func (a *API) updateDatasource(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
+		return
+	}
+	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, false) {
 		return
 	}
 
@@ -213,7 +220,8 @@ func (a *API) updateDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasource(datasource)})
+	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(datasource.ID), input.Data.Attributes.GovernedMetadata)
+	c.JSON(http.StatusOK, dataWithMeta(a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource)), meta))
 }
 
 // @Summary Delete a datasource
@@ -250,6 +258,8 @@ func (a *API) deleteDatasource(c *gin.Context) {
 		return
 	}
 
+	a.removeGovernedMetadata(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(uint(id)))
+
 	c.Status(http.StatusNoContent)
 }
 
@@ -278,7 +288,7 @@ func (a *API) listDatasources(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasources(datasources)})
+	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadata(serializeDatasources(datasources), false)})
 }
 
 // @Summary Search datasources

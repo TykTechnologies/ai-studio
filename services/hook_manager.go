@@ -206,6 +206,13 @@ func (m *HookManager) unmarshalObject(objectType ObjectType, jsonStr string) (in
 		}
 		return &user, nil
 
+	case ObjectTypeGovernedMetadata:
+		var rec models.ObjectMetadata
+		if err := json.Unmarshal([]byte(jsonStr), &rec); err != nil {
+			return nil, err
+		}
+		return &rec, nil
+
 	default:
 		return nil, fmt.Errorf("unknown object type: %s", objectType)
 	}
@@ -292,6 +299,14 @@ func (m *HookManager) MergeMetadata(object interface{}, hookMetadata map[string]
 		}
 		for k, v := range hookMetadata {
 			obj.Metadata[k] = v
+		}
+
+	case *models.ObjectMetadata:
+		if obj.Values == nil {
+			obj.Values = make(models.JSONMap)
+		}
+		for k, v := range hookMetadata {
+			obj.Values[k] = v
 		}
 
 	default:

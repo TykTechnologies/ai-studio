@@ -37,6 +37,10 @@ func (a *API) createLLM(c *gin.Context) {
 		return
 	}
 
+	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeLLM, input.Data.Attributes.GovernedMetadata, true) {
+		return
+	}
+
 	filters := []*models.Filter{}
 	for _, f := range input.Data.Attributes.Filters {
 		a.service.GetFilterByID(uint(f))
@@ -96,13 +100,15 @@ func (a *API) createLLM(c *gin.Context) {
 		return
 	}
 
+	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeLLM, models.BuiltinObjectID(llm.ID), input.Data.Attributes.GovernedMetadata)
+
 	if llm.Active {
 		if a.proxy != nil {
 			a.proxy.Reload()
 		}
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": a.serializeLLM(llm)})
+	c.JSON(http.StatusCreated, dataWithMeta(a.withLLMGovernedMetadataOne(a.serializeLLM(llm)), meta))
 }
 
 // @Summary Get an LLM by ID
@@ -139,7 +145,7 @@ func (a *API) getLLM(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLM(llm)})
+	c.JSON(http.StatusOK, gin.H{"data": a.withLLMGovernedMetadataOne(a.serializeLLM(llm))})
 }
 
 // @Summary Update an LLM
@@ -207,6 +213,10 @@ func (a *API) updateLLM(c *gin.Context) {
 	// value and was written -- so {"filters":[3]} wiped the provider.
 	mergeLLMPatch(&input, thisLLM, llmPatchAttributeKeys(rawBody))
 
+	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeLLM, input.Data.Attributes.GovernedMetadata, false) {
+		return
+	}
+
 	filters := []*models.Filter{}
 	for _, f := range input.Data.Attributes.Filters {
 		a.service.GetFilterByID(uint(f))
@@ -262,7 +272,8 @@ func (a *API) updateLLM(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLM(llm)})
+	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeLLM, models.BuiltinObjectID(llm.ID), input.Data.Attributes.GovernedMetadata)
+	c.JSON(http.StatusOK, dataWithMeta(a.withLLMGovernedMetadataOne(a.serializeLLM(llm)), meta))
 }
 
 func parseBudgetStartDate(dateStr *string) *time.Time {
@@ -322,6 +333,8 @@ func (a *API) deleteLLM(c *gin.Context) {
 		return
 	}
 
+	a.removeGovernedMetadata(c, models.GovernedObjectTypeLLM, models.BuiltinObjectID(uint(id)))
+
 	c.Status(http.StatusNoContent)
 }
 
@@ -350,7 +363,7 @@ func (a *API) listLLMs(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": a.serializeLLMs(llms)})
+	c.JSON(http.StatusOK, gin.H{"data": a.withLLMGovernedMetadata(a.serializeLLMs(llms), false)})
 }
 
 // @Summary Search LLMs by name

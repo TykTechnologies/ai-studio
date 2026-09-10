@@ -28,6 +28,9 @@ const (
 	ObjectTypeDatasource ObjectType = "datasource"
 	ObjectTypeTool       ObjectType = "tool"
 	ObjectTypeUser       ObjectType = "user"
+	// ObjectTypeGovernedMetadata hooks fire on governed metadata records (Enterprise).
+	// Only before_update/after_update/before_delete/after_delete are ever invoked.
+	ObjectTypeGovernedMetadata ObjectType = "governed_metadata"
 )
 
 // HookRegistration represents a plugin's registration for a specific hook
@@ -243,7 +246,7 @@ func (r *HookRegistry) removeFromList(key string, pluginID uint32) {
 
 func (r *HookRegistry) isValidObjectType(objType ObjectType) bool {
 	switch objType {
-	case ObjectTypeLLM, ObjectTypeDatasource, ObjectTypeTool, ObjectTypeUser:
+	case ObjectTypeLLM, ObjectTypeDatasource, ObjectTypeTool, ObjectTypeUser, ObjectTypeGovernedMetadata:
 		return true
 	default:
 		return false

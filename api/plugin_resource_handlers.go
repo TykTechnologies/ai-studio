@@ -52,19 +52,31 @@ func (a *API) listPluginResourceInstances(c *gin.Context) {
 		return
 	}
 
+	// Governed metadata (Enterprise) for instances of opted-in resource types.
+	objectType := models.PluginResourceObjectType(uint(pluginID), slug)
+	instanceIDs := make([]string, 0, len(instances))
+	for _, inst := range instances {
+		instanceIDs = append(instanceIDs, inst.Id)
+	}
+	governed := a.governedMetadataFor(objectType, instanceIDs)
+
 	// Convert proto instances to JSON response with sanitization
 	result := make([]gin.H, 0, len(instances))
 	for _, inst := range instances {
 		if !inst.IsActive {
 			continue
 		}
-		result = append(result, gin.H{
+		item := gin.H{
 			"id":            inst.Id,
 			"name":          sanitizeString(inst.Name),
 			"description":   sanitizeString(inst.Description),
 			"privacy_score": inst.PrivacyScore,
 			"is_active":     inst.IsActive,
-		})
+		}
+		if rec := governed[inst.Id]; rec != nil {
+			item["governed_metadata"], item["governed_metadata_status"] = a.adminGovernedView(objectType, rec)
+		}
+		result = append(result, item)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": result})
@@ -134,6 +146,17 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 			// Filter by pre-fetched access set for non-admins
 			accessibleSet := accessibleByType[rt.ID] // nil for admins
 
+			// Governed metadata (Enterprise): portal-visible fields only, display-ready.
+			var governed map[string]*models.ObjectMetadata
+			objectType := models.PluginResourceObjectType(rt.PluginID, rt.Slug)
+			if rt.SupportsMetadata {
+				ids := make([]string, 0, len(protoInstances))
+				for _, inst := range protoInstances {
+					ids = append(ids, inst.Id)
+				}
+				governed = a.governedMetadataFor(objectType, ids)
+			}
+
 			for _, inst := range protoInstances {
 				if !inst.IsActive {
 					continue
@@ -141,12 +164,16 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 				if accessibleSet != nil && !accessibleSet[inst.Id] {
 					continue
 				}
-				instances = append(instances, gin.H{
+				item := gin.H{
 					"id":            inst.Id,
 					"name":          sanitizeString(inst.Name),
 					"description":   sanitizeString(inst.Description),
 					"privacy_score": inst.PrivacyScore,
-				})
+				}
+				if rec := governed[inst.Id]; rec != nil {
+					item["governed_metadata"] = a.portalGovernedView(objectType, rec)
+				}
+				instances = append(instances, item)
 			}
 			resultCh <- typeResult{Index: idx, Instances: instances}
 		}(i, rt)
@@ -167,12 +194,13 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 	result := make([]gin.H, 0, len(types))
 	for i, rt := range types {
 		result = append(result, gin.H{
-			"plugin_id":   rt.PluginID,
-			"slug":        rt.Slug,
-			"name":        sanitizeString(rt.Name),
-			"description": sanitizeString(rt.Description),
-			"icon":        sanitizeString(rt.Icon),
-			"instances":   instancesByIndex[i],
+			"plugin_id":         rt.PluginID,
+			"slug":              rt.Slug,
+			"name":              sanitizeString(rt.Name),
+			"description":       sanitizeString(rt.Description),
+			"icon":              sanitizeString(rt.Icon),
+			"supports_metadata": rt.SupportsMetadata,
+			"instances":         instancesByIndex[i],
 		})
 	}
 
@@ -196,6 +224,7 @@ func (a *API) listPluginResourceTypes(c *gin.Context) {
 			"name":                 sanitizeString(t.Name),
 			"description":          sanitizeString(t.Description),
 			"icon":                 sanitizeString(t.Icon),
+			"supports_metadata":    t.SupportsMetadata,
 			"has_privacy_score":    t.HasPrivacyScore,
 			"supports_submissions": t.SupportsSubmissions,
 			"is_active":            t.IsActive,

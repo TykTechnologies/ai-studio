@@ -34,6 +34,7 @@ func (s *Service) RegisterPluginResourceTypes(pluginID uint, registrations []mod
 			existing.Icon = reg.Icon
 			existing.HasPrivacyScore = reg.HasPrivacyScore
 			existing.SupportsSubmissions = reg.SupportsSubmissions
+			existing.SupportsMetadata = reg.SupportsMetadata
 			existing.FormComponentTag = reg.FormComponentTag
 			existing.FormComponentEntry = reg.FormComponentEntry
 			existing.IsActive = true

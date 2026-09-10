@@ -76,6 +76,11 @@ The configuration checksum includes objects that need to be synchronized to edge
 
 Any create, update, or delete operation on these objects triggers a checksum recalculation.
 
+Two properties keep the checksum meaningful:
+
+- **Deterministic encryption.** Secrets in the snapshot (LLM API keys, tool auth keys, datasource credentials) are encrypted for the edge with AES-GCM using a nonce derived from the secret itself, so regenerating an unchanged configuration produces byte-identical ciphertext and the same checksum. A random nonce would make every regeneration look like a change.
+- **Change detection.** When a recalculation yields the same checksum the control plane leaves the namespace status and edge sync states untouched and writes no audit entry. Only a change that alters the snapshot (including governed metadata fields marked *Sent to gateways*) marks edges as pending.
+
 ### Apps and Credentials
 
 **Apps** are synced as part of the configuration snapshot but are **not** included in the checksum calculation. This is because Apps change frequently (users create and update them regularly), and including them in the checksum would cause unnecessary sync churn. App associations (LLM access, tool access, datasource access) are included in the snapshot to enable access control on edges.

@@ -1,3 +1,4 @@
+import GovernedMetadataBadges from "./GovernedMetadataBadges";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -203,6 +204,7 @@ const DataSourceListView = () => {
           <Typography variant="subtitle1" sx={{ mt: 2 }}>
             Embedding Model: {selectedDataSource.attributes.embed_model}
           </Typography>
+          <GovernedMetadataBadges items={selectedDataSource.governed_metadata} sx={{ mt: 2 }} />
           <Typography variant="body1" sx={{ mt: 2 }}>
             {selectedDataSource.attributes.long_description}
           </Typography>

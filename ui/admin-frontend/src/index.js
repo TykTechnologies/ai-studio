@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import registerGovernedMetadataElements from './admin/components/metadata/webc/governedMetadataElements';
+
+// <governed-metadata-fields> / <governed-metadata-badges> for plugin UIs.
+registerGovernedMetadataElements();
 
 // Suppress console logs in production
 if (process.env.NODE_ENV === 'production') {

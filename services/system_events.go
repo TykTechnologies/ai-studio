@@ -60,6 +60,10 @@ const (
 	TopicModelRouterCreated = "system.model_router.created"
 	TopicModelRouterUpdated = "system.model_router.updated"
 	TopicModelRouterDeleted = "system.model_router.deleted"
+
+	// Governed metadata events (Enterprise). Payload object: {object_type, object_id, values, validation_status, source}
+	TopicGovernedMetadataUpdated = "system.governed_metadata.updated"
+	TopicGovernedMetadataDeleted = "system.governed_metadata.deleted"
 )
 
 // ObjectEventPayload is the standard payload for all system CRUD events

@@ -217,12 +217,13 @@ type LLMConfig struct {
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// Embedded relationship data (from join tables)
-	AppIds        []uint32 `protobuf:"varint,21,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`                 // From app_llms join table
-	FilterIds     []uint32 `protobuf:"varint,22,rep,packed,name=filter_ids,json=filterIds,proto3" json:"filter_ids,omitempty"`        // From llm_filters join table
-	PluginIds     []uint32 `protobuf:"varint,23,rep,packed,name=plugin_ids,json=pluginIds,proto3" json:"plugin_ids,omitempty"`        // From llm_plugins join table
-	DontLogBodies bool     `protobuf:"varint,24,opt,name=dont_log_bodies,json=dontLogBodies,proto3" json:"dont_log_bodies,omitempty"` // When true, suppress request/response body logging
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AppIds           []uint32 `protobuf:"varint,21,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`                       // From app_llms join table
+	FilterIds        []uint32 `protobuf:"varint,22,rep,packed,name=filter_ids,json=filterIds,proto3" json:"filter_ids,omitempty"`              // From llm_filters join table
+	PluginIds        []uint32 `protobuf:"varint,23,rep,packed,name=plugin_ids,json=pluginIds,proto3" json:"plugin_ids,omitempty"`              // From llm_plugins join table
+	DontLogBodies    bool     `protobuf:"varint,24,opt,name=dont_log_bodies,json=dontLogBodies,proto3" json:"dont_log_bodies,omitempty"`       // When true, suppress request/response body logging
+	GovernedMetadata string   `protobuf:"bytes,25,opt,name=governed_metadata,json=governedMetadata,proto3" json:"governed_metadata,omitempty"` // JSON object of gateway-visible governed metadata (Enterprise); empty when none
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *LLMConfig) Reset() {
@@ -421,6 +422,13 @@ func (x *LLMConfig) GetDontLogBodies() bool {
 		return x.DontLogBodies
 	}
 	return false
+}
+
+func (x *LLMConfig) GetGovernedMetadata() string {
+	if x != nil {
+		return x.GovernedMetadata
+	}
+	return ""
 }
 
 // AppConfig represents an application configuration with embedded relationships
@@ -1531,10 +1539,11 @@ type ToolConfig struct {
 	CreatedAt           *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt           *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// Embedded relationship data (from join tables)
-	FilterIds     []uint32 `protobuf:"varint,16,rep,packed,name=filter_ids,json=filterIds,proto3" json:"filter_ids,omitempty"` // From tool_filters join table
-	AppIds        []uint32 `protobuf:"varint,17,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`          // From app_tools join table
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	FilterIds        []uint32 `protobuf:"varint,16,rep,packed,name=filter_ids,json=filterIds,proto3" json:"filter_ids,omitempty"`              // From tool_filters join table
+	AppIds           []uint32 `protobuf:"varint,17,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`                       // From app_tools join table
+	GovernedMetadata string   `protobuf:"bytes,18,opt,name=governed_metadata,json=governedMetadata,proto3" json:"governed_metadata,omitempty"` // JSON object of gateway-visible governed metadata (Enterprise); empty when none
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ToolConfig) Reset() {
@@ -1686,6 +1695,13 @@ func (x *ToolConfig) GetAppIds() []uint32 {
 	return nil
 }
 
+func (x *ToolConfig) GetGovernedMetadata() string {
+	if x != nil {
+		return x.GovernedMetadata
+	}
+	return ""
+}
+
 // DatasourceConfig represents a datasource configuration
 type DatasourceConfig struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
@@ -1710,9 +1726,10 @@ type DatasourceConfig struct {
 	CreatedAt             *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt             *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// Embedded relationship data (from join tables)
-	AppIds        []uint32 `protobuf:"varint,21,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"` // From app_datasources join table
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AppIds           []uint32 `protobuf:"varint,21,rep,packed,name=app_ids,json=appIds,proto3" json:"app_ids,omitempty"`                       // From app_datasources join table
+	GovernedMetadata string   `protobuf:"bytes,22,opt,name=governed_metadata,json=governedMetadata,proto3" json:"governed_metadata,omitempty"` // JSON object of gateway-visible governed metadata (Enterprise); empty when none
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DatasourceConfig) Reset() {
@@ -1890,6 +1907,13 @@ func (x *DatasourceConfig) GetAppIds() []uint32 {
 		return x.AppIds
 	}
 	return nil
+}
+
+func (x *DatasourceConfig) GetGovernedMetadata() string {
+	if x != nil {
+		return x.GovernedMetadata
+	}
+	return ""
 }
 
 // OAuthClientConfig represents an OAuth 2.0 client (synced to edges for MCP auth)
@@ -2568,7 +2592,7 @@ var File_proto_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb9\x06\n" +
+	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x06\n" +
 	"\tLLMConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2601,7 +2625,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"filter_ids\x18\x16 \x03(\rR\tfilterIds\x12\x1d\n" +
 	"\n" +
 	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\x12&\n" +
-	"\x0fdont_log_bodies\x18\x18 \x01(\bR\rdontLogBodies\"\xc1\x06\n" +
+	"\x0fdont_log_bodies\x18\x18 \x01(\bR\rdontLogBodies\x12+\n" +
+	"\x11governed_metadata\x18\x19 \x01(\tR\x10governedMetadata\"\xc1\x06\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -2730,7 +2755,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x12ModelMappingConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12!\n" +
 	"\fsource_model\x18\x02 \x01(\tR\vsourceModel\x12!\n" +
-	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\xd3\x04\n" +
+	"\ftarget_model\x18\x03 \x01(\tR\vtargetModel\"\x80\x05\n" +
 	"\n" +
 	"ToolConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
@@ -2753,7 +2778,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"updated_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1d\n" +
 	"\n" +
 	"filter_ids\x18\x10 \x03(\rR\tfilterIds\x12\x17\n" +
-	"\aapp_ids\x18\x11 \x03(\rR\x06appIds\"\x89\x06\n" +
+	"\aapp_ids\x18\x11 \x03(\rR\x06appIds\x12+\n" +
+	"\x11governed_metadata\x18\x12 \x01(\tR\x10governedMetadata\"\xb6\x06\n" +
 	"\x10DatasourceConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12+\n" +
@@ -2779,7 +2805,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x17\n" +
-	"\aapp_ids\x18\x15 \x03(\rR\x06appIds\"\xd9\x02\n" +
+	"\aapp_ids\x18\x15 \x03(\rR\x06appIds\x12+\n" +
+	"\x11governed_metadata\x18\x16 \x01(\tR\x10governedMetadata\"\xd9\x02\n" +
 	"\x11OAuthClientConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12,\n" +

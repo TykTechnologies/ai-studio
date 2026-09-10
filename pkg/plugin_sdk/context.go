@@ -215,6 +215,98 @@ type StudioServices interface {
 	// If append is true, the plugin is added to existing associations; otherwise replaces all
 	// Returns success status and the final list of plugin IDs
 	UpdateLLMPlugins(ctx context.Context, llmID uint32, pluginIDs []uint32, append bool) (bool, string, []uint32, error)
+
+	// ===== Governed Metadata (Enterprise) =====
+	// objectType is "llm", "tool", "datasource" or "plugin_resource:<plugin_id>:<slug>".
+	// A plugin may write "plugin_resource:self:<slug>" (see SelfResourceObjectType) for
+	// its own resource types; Studio resolves it to the calling plugin.
+	// objectID is the numeric ID as a string, or the plugin resource instance ID.
+	//
+	// Typical resource-provider lifecycle:
+	//   create/update → SetObjectMetadata (honour ok=false when the schema enforces)
+	//   render (admin) → GetResolvedMetadataSchema + GetObjectMetadata
+	//   render (portal) → GetObjectMetadataForAudience(..., MetadataVisibilityPortal)
+	//   delete → DeleteObjectMetadata
+
+	// GetObjectMetadata returns the stored governed metadata values as JSON and whether a record exists.
+	// Requires the metadata.read scope.
+	GetObjectMetadata(ctx context.Context, objectType, objectID string) (valuesJSON string, found bool, err error)
+
+	// GetObjectMetadataForAudience narrows the stored values to one audience
+	// (MetadataVisibilityPortal or MetadataVisibilityGateway). For the portal it also
+	// returns displayJSON: [{key,label,type,value}] with vocabulary labels and user
+	// names resolved, i.e. exactly what the built-in portal shows end users.
+	// Requires the metadata.read scope.
+	GetObjectMetadataForAudience(ctx context.Context, objectType, objectID, visibility string) (valuesJSON string, displayJSON string, found bool, err error)
+
+	// SetObjectMetadata validates and stores governed metadata. merge=true keeps existing keys.
+	// Returns the stored values and the validation result as JSON. When an enforcing schema
+	// rejects the values, err is nil and ok is false; inspect validationResultJSON for details.
+	// Requires the metadata.write scope.
+	SetObjectMetadata(ctx context.Context, objectType, objectID, valuesJSON string, merge bool) (ok bool, storedValuesJSON string, validationResultJSON string, err error)
+
+	// DeleteObjectMetadata removes the governed metadata of an object. Call it when the
+	// plugin deletes the resource instance so no orphaned record remains. Absent records succeed.
+	// Requires the metadata.write scope.
+	DeleteObjectMetadata(ctx context.Context, objectType, objectID string) error
+
+	// GetResolvedMetadataSchema returns the merged schema for an object type: field
+	// definitions, the draft-07 JSON Schema, the vocabularies those fields use and the
+	// enforcement level. Enough to render the form in the plugin's own UI.
+	// Requires the metadata.read scope.
+	GetResolvedMetadataSchema(ctx context.Context, objectType string) (*ResolvedMetadataSchema, error)
+
+	// ValidateObjectMetadata validates values without storing them.
+	// Requires the metadata.read scope.
+	ValidateObjectMetadata(ctx context.Context, objectType, valuesJSON string) (valid bool, enforced bool, resultJSON string, err error)
+}
+
+// Governed metadata audiences for StudioServices.GetObjectMetadataForAudience.
+const (
+	MetadataVisibilityAdmin   = "admin"   // every field
+	MetadataVisibilityPortal  = "portal"  // fields flagged portal_visible
+	MetadataVisibilityGateway = "gateway" // fields flagged gateway_visible
+)
+
+// Governed metadata enforcement levels reported by ResolvedMetadataSchema.
+const (
+	MetadataEnforcementAdvisory = "advisory"
+	MetadataEnforcementEnforce  = "enforce"
+)
+
+// ResolvedMetadataSchema is the merged governed metadata schema for one object type.
+// All payloads are JSON strings so plugins can hand them to their own UI unchanged.
+type ResolvedMetadataSchema struct {
+	// FieldsJSON is a JSON array of field definitions:
+	// {key,label,description,type,required,severity,vocabulary_slug,pattern,min,max,
+	//  max_length,warn_if_past,portal_visible,gateway_visible,order}.
+	FieldsJSON string
+	// JSONSchema is a draft-07 JSON Schema for the values object (vocabularies as enums).
+	JSONSchema string
+	// VocabulariesJSON maps vocabulary slug → [{value,label,description,deprecated}]
+	// for every vocabulary referenced by FieldsJSON.
+	VocabulariesJSON string
+	// Enforcement is MetadataEnforcementAdvisory or MetadataEnforcementEnforce.
+	Enforcement string
+	// SchemaSlugs lists the schemas that contributed fields.
+	SchemaSlugs []string
+}
+
+// HasFields reports whether any governed field applies to the object type.
+func (r *ResolvedMetadataSchema) HasFields() bool {
+	return r != nil && r.FieldsJSON != "" && r.FieldsJSON != "[]" && r.FieldsJSON != "null"
+}
+
+// IsEnforced reports whether an enforcing schema applies (hard errors block saves).
+func (r *ResolvedMetadataSchema) IsEnforced() bool {
+	return r != nil && r.Enforcement == MetadataEnforcementEnforce
+}
+
+// SelfResourceObjectType returns the governed metadata object type for one of the
+// calling plugin's own resource types without needing the numeric plugin ID:
+// "plugin_resource:self:<slug>". Studio resolves it on every management API call.
+func SelfResourceObjectType(resourceTypeSlug string) string {
+	return "plugin_resource:self:" + resourceTypeSlug
 }
 
 // detectRuntime determines the runtime environment from environment variables

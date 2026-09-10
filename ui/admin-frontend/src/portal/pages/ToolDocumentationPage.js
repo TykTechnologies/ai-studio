@@ -1,3 +1,4 @@
+import GovernedMetadataBadges from "../components/GovernedMetadataBadges";
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -286,6 +287,7 @@ const ToolDocumentationPage = () => {
             {toolDetails.attributes.description}
           </Typography>
         )}
+        {toolDetails && <GovernedMetadataBadges items={toolDetails.governed_metadata} sx={{ mb: 3 }} />}
         <Alert severity="info" variant="outlined">
           No API documentation found for this tool, or the tool does not have an OAS specification.
         </Alert>
@@ -303,6 +305,8 @@ const ToolDocumentationPage = () => {
           {toolDetails.attributes.description}
         </Typography>
       )}
+
+      {toolDetails && <GovernedMetadataBadges items={toolDetails.governed_metadata} sx={{ mb: 3 }} />}
 
       {/* App Selection Section - Swagger UI style */}
       {userApps.length > 0 && (

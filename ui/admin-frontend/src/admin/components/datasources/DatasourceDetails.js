@@ -1,3 +1,4 @@
+import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
@@ -401,6 +402,12 @@ const DatasourceDetails = () => {
             </Grid>
           </AccordionDetails>
         </StyledAccordion>
+
+        <GovernedMetadataSummary
+          objectType="datasource"
+          values={datasource.governed_metadata}
+          status={datasource.governed_metadata_status}
+        />
 
         <Box
           mt={4}

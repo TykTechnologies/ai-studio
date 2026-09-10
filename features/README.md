@@ -119,6 +119,11 @@ Each feature specification below provides detailed documentation on the individu
 - Activation control for LLM providers
 - Admin UI for configuration
 
+### [Governed Metadata (Enterprise)](GovernedMetadata.md)
+- Admin-defined metadata schemas, required fields and controlled vocabularies for LLMs, tools and data sources
+- Standard validation envelope with advisory or enforced modes, compliance report and audit trail
+- Portal- and gateway-visible fields, plugin hooks, management gRPC API and manifest contributions
+
 ### [LLM Proxy System](Proxy.md)
 - Centralized gateway for LLM provider interactions
 - Authentication and authorization enforcement

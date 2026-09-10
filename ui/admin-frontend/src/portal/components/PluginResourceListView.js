@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import GovernedMetadataBadges from "./GovernedMetadataBadges";
 import {
   Box,
   Grid,
@@ -115,6 +116,7 @@ const PluginResourceListView = () => {
                       sx={{ mb: 1 }}
                     />
                   )}
+                  <GovernedMetadataBadges items={inst.governed_metadata} sx={{ mt: 1 }} />
                 </CardContent>
                 <Box sx={{ p: 2, pt: 0 }}>
                   <PrimaryButton

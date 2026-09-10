@@ -767,6 +767,47 @@ log.Printf("Total LLMs: %d", count)
 
 **Note**: For complete Studio Services documentation including Tools, Apps, Plugins, Datasources, and Filters, see the examples in the working plugins at `examples/plugins/studio/service-api-test/`.
 
+## Governed Metadata (Enterprise)
+
+Studio plugins can read, validate, write and delete the governed metadata attached to LLMs, tools, datasources and opted-in plugin resource types. Object types are `llm`, `tool`, `datasource` or `plugin_resource:<plugin_id>:<slug>`; a plugin may write `plugin_resource:self:<slug>` (`plugin_sdk.SelfResourceObjectType`) for its own resource types and Studio resolves it. Object IDs are the numeric ID as a string, or the resource instance ID.
+
+Scopes: `metadata.read` (get, resolve schema, validate) and `metadata.write` (set, delete). Declare them under `permissions.services` in the manifest. In Community Edition writes fail with `FailedPrecondition`.
+
+```go
+studio := ctx.Services.Studio()
+objectType := plugin_sdk.SelfResourceObjectType("prompts") // or "llm", "tool", "datasource"
+
+// Which fields apply, is the schema enforced, and which vocabulary terms do the fields use?
+schema, err := studio.GetResolvedMetadataSchema(ctx, objectType)
+// schema.FieldsJSON, schema.JSONSchema, schema.VocabulariesJSON, schema.Enforcement, schema.SchemaSlugs
+if schema.HasFields() && schema.IsEnforced() { /* saves must pass validation */ }
+
+// Read what is stored (every field)
+valuesJSON, found, err := studio.GetObjectMetadata(ctx, objectType, "ast_1")
+
+// Read for an audience: only portal-visible fields, plus a display-ready list
+valuesJSON, displayJSON, found, err := studio.GetObjectMetadataForAudience(ctx, objectType, "ast_1", plugin_sdk.MetadataVisibilityPortal)
+// displayJSON: [{"key":"risk_tier","label":"Risk tier","type":"vocabulary","value":"High"}, ...]
+
+// Validate without saving
+valid, enforced, resultJSON, err := studio.ValidateObjectMetadata(ctx, objectType, `{"risk_tier":"high"}`)
+
+// Write (merge=true keeps keys not present in the payload)
+ok, storedJSON, resultJSON, err := studio.SetObjectMetadata(ctx, objectType, "ast_1", `{"risk_tier":"high"}`, true)
+if err == nil && !ok {
+    // enforced schema rejected the values; resultJSON holds {errors[], warnings[]}
+}
+
+// Remove when the object itself is deleted (absent records succeed)
+err = studio.DeleteObjectMetadata(ctx, objectType, "ast_1")
+```
+
+A rejection by another plugin's `governed_metadata` object hook returns `PermissionDenied`. Every successful write or delete is audited with source `plugin:<id>` and emits `system.governed_metadata.updated` / `.deleted`. Using `plugin_resource:self:` without a plugin context is `InvalidArgument`.
+
+Lower level: `ai_studio_sdk.GetObjectMetadata`, `GetObjectMetadataWithVisibility`, `SetObjectMetadata`, `DeleteObjectMetadata`, `GetResolvedMetadataSchema`, `ValidateObjectMetadata` return the raw protobuf responses.
+
+See [Governing objects a plugin owns](governed-metadata.md#governing-objects-a-plugin-owns-resource-providers) for the end-to-end recipe, including the `<governed-metadata-fields>` and `<governed-metadata-badges>` Web Components plugin UIs can embed.
+
 ## Gateway Services
 
 Available when `ctx.Runtime == plugin_sdk.RuntimeGateway`.

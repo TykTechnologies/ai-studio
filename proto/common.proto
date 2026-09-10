@@ -36,6 +36,7 @@ message LLMConfig {
   repeated uint32 filter_ids = 22;  // From llm_filters join table  
   repeated uint32 plugin_ids = 23;  // From llm_plugins join table
   bool dont_log_bodies = 24;        // When true, suppress request/response body logging
+  string governed_metadata = 25;    // JSON object of gateway-visible governed metadata (Enterprise); empty when none
 }
 
 // AppConfig represents an application configuration with embedded relationships
@@ -198,6 +199,7 @@ message ToolConfig {
   // Embedded relationship data (from join tables)
   repeated uint32 filter_ids = 16;      // From tool_filters join table
   repeated uint32 app_ids = 17;         // From app_tools join table
+  string governed_metadata = 18;        // JSON object of gateway-visible governed metadata (Enterprise); empty when none
 }
 
 // DatasourceConfig represents a datasource configuration
@@ -225,6 +227,7 @@ message DatasourceConfig {
 
   // Embedded relationship data (from join tables)
   repeated uint32 app_ids = 21;         // From app_datasources join table
+  string governed_metadata = 22;        // JSON object of gateway-visible governed metadata (Enterprise); empty when none
 }
 
 // OAuthClientConfig represents an OAuth 2.0 client (synced to edges for MCP auth)

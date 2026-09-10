@@ -17,6 +17,7 @@ type PluginResourceType struct {
 	Icon                string `json:"icon" gorm:"size:500"`
 	HasPrivacyScore     bool   `json:"has_privacy_score" gorm:"default:false"`
 	SupportsSubmissions bool   `json:"supports_submissions" gorm:"default:false"`
+	SupportsMetadata    bool   `json:"supports_metadata" gorm:"default:false"` // Instances can carry governed metadata (Enterprise)
 	FormComponentTag    string `json:"form_component_tag" gorm:"size:100"`
 	FormComponentEntry  string `json:"form_component_entry" gorm:"size:500"`
 	IsActive            bool   `json:"is_active" gorm:"default:true"`

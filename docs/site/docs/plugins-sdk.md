@@ -347,6 +347,8 @@ type ObjectHookHandler interface {
 }
 ```
 
+Object types: `llm`, `datasource`, `tool`, `user`, and (Enterprise) `governed_metadata`. For `governed_metadata` the object JSON is the metadata record (`object_type`, `object_id`, `values`, ...); only `before_update`, `after_update`, `before_delete` and `after_delete` fire, a rejection blocks the metadata save, and a modification may change `values` (re-validated against the schema). See [Governed Metadata](governed-metadata.md).
+
 ### 8. UIProvider
 
 Serve web UI assets for AI Studio plugins. See [UI Plugins Guide](plugins-studio-ui.md) for details.

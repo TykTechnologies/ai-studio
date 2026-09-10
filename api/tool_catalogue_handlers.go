@@ -601,7 +601,7 @@ func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
 	}
 
 	// Use secure response format that hides sensitive fields
-	c.JSON(http.StatusOK, toSecureToolResponses(tools))
+	c.JSON(http.StatusOK, a.withToolGovernedMetadata(toSecureToolResponses(tools), true))
 }
 
 // @Summary Get tool documentation by ID

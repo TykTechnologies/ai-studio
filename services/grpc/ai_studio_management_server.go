@@ -48,6 +48,7 @@ type AIStudioManagementServer struct {
 	modelPricingServer  *ModelPricingServer
 	pluginKVServer      *PluginKVServer
 	schedulerServer     *SchedulerServer
+	governedMetadataServer *GovernedMetadataServer
 
 	// Note: Analytics server removed - analytics functionality not available to plugins
 
@@ -123,6 +124,7 @@ func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementS
 		modelPricingServer:  NewModelPricingServer(service),
 		pluginKVServer:      NewPluginKVServer(pluginKVService),
 		schedulerServer:     NewSchedulerServer(service),
+		governedMetadataServer: NewGovernedMetadataServer(service),
 		service:            service,
 		// Note: Analytics server removed - analytics functionality not available to plugins
 	}
@@ -450,6 +452,28 @@ func (s *AIStudioManagementServer) PatchAppMetadata(ctx context.Context, req *pb
 		Message:  "Metadata updated",
 		Metadata: metadataJSON,
 	}, nil
+}
+
+// Governed Metadata Operations (Enterprise) - delegate to governed metadata server
+
+func (s *AIStudioManagementServer) GetObjectMetadata(ctx context.Context, req *pb.GetObjectMetadataRequest) (*pb.GetObjectMetadataResponse, error) {
+	return s.governedMetadataServer.GetObjectMetadata(ctx, req)
+}
+
+func (s *AIStudioManagementServer) SetObjectMetadata(ctx context.Context, req *pb.SetObjectMetadataRequest) (*pb.SetObjectMetadataResponse, error) {
+	return s.governedMetadataServer.SetObjectMetadata(ctx, req)
+}
+
+func (s *AIStudioManagementServer) GetResolvedMetadataSchema(ctx context.Context, req *pb.GetResolvedMetadataSchemaRequest) (*pb.GetResolvedMetadataSchemaResponse, error) {
+	return s.governedMetadataServer.GetResolvedMetadataSchema(ctx, req)
+}
+
+func (s *AIStudioManagementServer) ValidateObjectMetadata(ctx context.Context, req *pb.ValidateObjectMetadataRequest) (*pb.ValidateObjectMetadataResponse, error) {
+	return s.governedMetadataServer.ValidateObjectMetadata(ctx, req)
+}
+
+func (s *AIStudioManagementServer) DeleteObjectMetadata(ctx context.Context, req *pb.DeleteObjectMetadataRequest) (*pb.DeleteObjectMetadataResponse, error) {
+	return s.governedMetadataServer.DeleteObjectMetadata(ctx, req)
 }
 
 // Tool Management Operations - delegate to tools server

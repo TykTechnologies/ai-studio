@@ -55,9 +55,11 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 
 		var llmID uint
 		var vendor string
+		var dbLLM *database.LLM
 		if llm, ok := llmInterface.(*database.LLM); ok {
 			llmID = llm.ID
 			vendor = llm.Vendor
+			dbLLM = llm
 		} else {
 			return false
 		}
@@ -88,6 +90,7 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 		if serviceContainer.EdgeNamespace != "" {
 			metadata["edge_namespace"] = serviceContainer.EdgeNamespace
 		}
+		database.AddGovernedMetadataToContext(metadata, dbLLM)
 
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context
@@ -191,8 +194,10 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 		}
 
 		var llmID uint
+		var dbLLM *database.LLM
 		if llm, ok := llmInterface.(*database.LLM); ok {
 			llmID = llm.ID
+			dbLLM = llm
 		} else {
 			return 0, false, nil
 		}
@@ -222,6 +227,7 @@ func createCustomAuthHook(serviceContainer *services.ServiceContainer, pluginMan
 		if serviceContainer.EdgeNamespace != "" {
 			authMetadata["edge_namespace"] = serviceContainer.EdgeNamespace
 		}
+		database.AddGovernedMetadataToContext(authMetadata, dbLLM)
 
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context
@@ -318,9 +324,11 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 
 		var llmID uint
 		var vendor string
+		var dbLLM *database.LLM
 		if llm, ok := llmInterface.(*database.LLM); ok {
 			llmID = llm.ID
 			vendor = llm.Vendor
+			dbLLM = llm
 		} else {
 			return false
 		}
@@ -353,6 +361,7 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		if serviceContainer.EdgeNamespace != "" {
 			postAuthMetadata["edge_namespace"] = serviceContainer.EdgeNamespace
 		}
+		database.AddGovernedMetadataToContext(postAuthMetadata, dbLLM)
 
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context

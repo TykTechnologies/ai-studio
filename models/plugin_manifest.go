@@ -2,6 +2,8 @@ package models
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -68,6 +70,57 @@ type PluginManifest struct {
 
 	// Resource types provided by this plugin (for ResourceProvider capability)
 	ResourceTypes []ManifestResourceType `json:"resource_types,omitempty"`
+
+	// Governed metadata contributions (Enterprise): vocabularies and schemas
+	// the plugin wants registered when it is loaded.
+	Metadata *ManifestMetadata `json:"metadata,omitempty"`
+}
+
+// ManifestMetadata declares governed-metadata vocabularies and schemas contributed by a plugin.
+// Contributed schemas are created inactive and advisory; admins opt them in.
+type ManifestMetadata struct {
+	Vocabularies []ManifestVocabulary `json:"vocabularies,omitempty"`
+	Schemas      []ManifestSchema     `json:"schemas,omitempty"`
+}
+
+// ManifestVocabulary declares a controlled vocabulary in the plugin manifest.
+type ManifestVocabulary struct {
+	Slug        string           `json:"slug"`
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Terms       []VocabularyTerm `json:"terms"`
+}
+
+// ManifestSchema declares a governed metadata schema in the plugin manifest.
+type ManifestSchema struct {
+	Slug        string             `json:"slug"`
+	Name        string             `json:"name"`
+	Description string             `json:"description,omitempty"`
+	AppliesTo   []string           `json:"applies_to"`
+	Fields      []MetadataFieldDef `json:"fields"`
+}
+
+// isValidManifestAppliesTo accepts the object types a manifest schema may target.
+// "plugin_resource:self:<slug>" refers to the declaring plugin's own resource
+// types and is resolved to the concrete plugin ID when the manifest is loaded.
+func isValidManifestAppliesTo(target string) bool {
+	switch target {
+	case GovernedObjectTypeLLM, GovernedObjectTypeTool, GovernedObjectTypeDatasource, GovernedObjectTypeAll:
+		return true
+	}
+	if !strings.HasPrefix(target, GovernedObjectTypePluginResourcePrefix) {
+		return false
+	}
+	rest := strings.TrimPrefix(target, GovernedObjectTypePluginResourcePrefix)
+	parts := strings.SplitN(rest, ":", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		return false
+	}
+	if parts[0] == "self" {
+		return true
+	}
+	_, err := strconv.ParseUint(parts[0], 10, 32)
+	return err == nil
 }
 
 // ManifestResourceType declares a resource type in the plugin manifest
@@ -78,6 +131,7 @@ type ManifestResourceType struct {
 	Icon                string `json:"icon"`
 	HasPrivacyScore     bool   `json:"has_privacy_score"`
 	SupportsSubmissions bool   `json:"supports_submissions"`
+	SupportsMetadata    bool   `json:"supports_metadata"` // Instances can carry governed metadata (Enterprise)
 	FormComponent       *struct {
 		Tag        string `json:"tag"`
 		EntryPoint string `json:"entry_point"`
@@ -223,6 +277,35 @@ func (pm *PluginManifest) ValidateManifest() error {
 		}
 		if !found {
 			return fmt.Errorf("primary_hook '%s' must be included in capabilities.hooks array", pm.Capabilities.PrimaryHook)
+		}
+	}
+
+	// Governed metadata contributions (Enterprise): light structural checks so a
+	// malformed manifest fails at load rather than at schema registration.
+	if pm.Metadata != nil {
+		for _, v := range pm.Metadata.Vocabularies {
+			if v.Slug == "" || v.Name == "" {
+				return fmt.Errorf("metadata.vocabularies entries require slug and name")
+			}
+			if len(v.Terms) == 0 {
+				return fmt.Errorf("metadata vocabulary '%s' must declare at least one term", v.Slug)
+			}
+		}
+		for _, sc := range pm.Metadata.Schemas {
+			if sc.Slug == "" || sc.Name == "" {
+				return fmt.Errorf("metadata.schemas entries require slug and name")
+			}
+			if len(sc.AppliesTo) == 0 {
+				return fmt.Errorf("metadata schema '%s' must declare applies_to", sc.Slug)
+			}
+			for _, target := range sc.AppliesTo {
+				if !isValidManifestAppliesTo(target) {
+					return fmt.Errorf("metadata schema '%s' applies_to entry %q must be llm, tool, datasource, *, plugin_resource:<plugin_id>:<slug> or plugin_resource:self:<slug>", sc.Slug, target)
+				}
+			}
+			if len(sc.Fields) == 0 {
+				return fmt.Errorf("metadata schema '%s' must declare at least one field", sc.Slug)
+			}
 		}
 	}
 

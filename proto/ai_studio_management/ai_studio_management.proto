@@ -43,6 +43,13 @@ service AIStudioManagementService {
     rpc DeleteApp(DeleteAppRequest) returns (DeleteAppResponse);
     rpc PatchAppMetadata(PatchAppMetadataRequest) returns (PatchAppMetadataResponse);
 
+    // Governed Metadata Operations (Enterprise) - admin-defined, validated metadata on LLMs/Tools/Datasources
+    rpc GetObjectMetadata(GetObjectMetadataRequest) returns (GetObjectMetadataResponse);
+    rpc SetObjectMetadata(SetObjectMetadataRequest) returns (SetObjectMetadataResponse);
+    rpc GetResolvedMetadataSchema(GetResolvedMetadataSchemaRequest) returns (GetResolvedMetadataSchemaResponse);
+    rpc ValidateObjectMetadata(ValidateObjectMetadataRequest) returns (ValidateObjectMetadataResponse);
+    rpc DeleteObjectMetadata(DeleteObjectMetadataRequest) returns (DeleteObjectMetadataResponse);
+
     // Tool Management Operations (High Priority)
     rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
     rpc GetTool(GetToolRequest) returns (GetToolResponse);
@@ -501,6 +508,78 @@ message PatchAppMetadataResponse {
     bool success = 1;
     string message = 2;
     string metadata = 3;  // Full metadata JSON after the operation
+}
+
+// Governed Metadata Messages (Enterprise)
+// object_type is "llm", "tool", "datasource" or "plugin_resource:<plugin_id>:<slug>";
+// object_id is the object's numeric ID as a string, or the plugin resource instance ID.
+
+message GetObjectMetadataRequest {
+    PluginContext context = 1;
+    string object_type = 2;              // "llm" | "tool" | "datasource" | "plugin_resource:<plugin_id>:<slug>"
+                                         // ("plugin_resource:self:<slug>" resolves to the calling plugin)
+    string object_id = 3;
+    string visibility = 4;               // "" | admin (all fields) | portal | gateway (only fields flagged visible)
+}
+
+message GetObjectMetadataResponse {
+    bool found = 1;
+    string values_json = 2;              // JSON object of stored values ("{}" when not found), filtered by visibility
+    string validation_status = 3;        // valid | warnings | invalid | unvalidated
+    string validation_result_json = 4;   // Last {valid, enforced, errors[], warnings[]}
+    google.protobuf.Timestamp updated_at = 5;
+    string display_json = 6;             // visibility=portal: display-ready [{key,label,type,value}] for end users
+}
+
+message DeleteObjectMetadataRequest {
+    PluginContext context = 1;
+    string object_type = 2;
+    string object_id = 3;
+}
+
+message DeleteObjectMetadataResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message SetObjectMetadataRequest {
+    PluginContext context = 1;
+    string object_type = 2;
+    string object_id = 3;
+    string values_json = 4;              // JSON object of values to set
+    bool merge = 5;                      // Merge into existing values instead of replacing
+}
+
+message SetObjectMetadataResponse {
+    bool success = 1;                    // false when an enforcing schema rejected the values
+    string message = 2;
+    string values_json = 3;              // Stored values after the operation
+    string validation_result_json = 4;   // {valid, enforced, errors[], warnings[]}
+}
+
+message GetResolvedMetadataSchemaRequest {
+    PluginContext context = 1;
+    string object_type = 2;
+}
+
+message GetResolvedMetadataSchemaResponse {
+    string fields_json = 1;              // JSON array of field definitions
+    string json_schema = 2;              // Draft-07 JSON Schema for the values object
+    string enforcement = 3;              // advisory | enforce
+    repeated string schema_slugs = 4;    // Contributing schema slugs
+    string vocabularies_json = 5;        // {"<slug>": [{value,label,description,deprecated}]} for vocabulary fields
+}
+
+message ValidateObjectMetadataRequest {
+    PluginContext context = 1;
+    string object_type = 2;
+    string values_json = 3;
+}
+
+message ValidateObjectMetadataResponse {
+    bool valid = 1;
+    bool enforced = 2;
+    string result_json = 3;              // {valid, enforced, errors[], warnings[]}
 }
 
 // Tool Management Messages

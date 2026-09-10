@@ -1666,3 +1666,89 @@ func HasEntitlement(ctx context.Context, entitlement string) (bool, error) {
 	}
 	return false, nil
 }
+// ===== Governed Metadata (Enterprise) =====
+
+// GetObjectMetadata returns the governed metadata stored for an object.
+// objectType is "llm", "tool", "datasource" or "plugin_resource:<plugin_id>:<slug>".
+// Requires the metadata.read scope. Found=false when nothing is stored.
+func GetObjectMetadata(ctx context.Context, objectType, objectID string) (*mgmtpb.GetObjectMetadataResponse, error) {
+	return GetObjectMetadataWithVisibility(ctx, objectType, objectID, "")
+}
+
+// GetObjectMetadataWithVisibility is GetObjectMetadata narrowed to one audience:
+// visibility "portal" or "gateway" returns only the fields flagged for it, and
+// "portal" also fills display_json ([{key,label,type,value}], labels resolved).
+// Requires the metadata.read scope.
+func GetObjectMetadataWithVisibility(ctx context.Context, objectType, objectID, visibility string) (*mgmtpb.GetObjectMetadataResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+	return client.GetObjectMetadata(ctx, &mgmtpb.GetObjectMetadataRequest{
+		Context:    createPluginContext(AvailableScopes.MetadataRead),
+		ObjectType: objectType,
+		ObjectId:   objectID,
+		Visibility: visibility,
+	})
+}
+
+// DeleteObjectMetadata removes the governed metadata of an object; call it when
+// the plugin deletes the resource instance. Absent records succeed.
+// Requires the metadata.write scope.
+func DeleteObjectMetadata(ctx context.Context, objectType, objectID string) (*mgmtpb.DeleteObjectMetadataResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+	return client.DeleteObjectMetadata(ctx, &mgmtpb.DeleteObjectMetadataRequest{
+		Context:    createPluginContext(AvailableScopes.MetadataWrite),
+		ObjectType: objectType,
+		ObjectId:   objectID,
+	})
+}
+
+// SetObjectMetadata validates and stores governed metadata for an object.
+// valuesJSON is a JSON object; merge=true keeps existing keys not present in valuesJSON.
+// Requires the metadata.write scope. Success=false with validation_result_json when an
+// enforcing schema rejects the values; a plugin hook rejection returns PermissionDenied.
+func SetObjectMetadata(ctx context.Context, objectType, objectID, valuesJSON string, merge bool) (*mgmtpb.SetObjectMetadataResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+	return client.SetObjectMetadata(ctx, &mgmtpb.SetObjectMetadataRequest{
+		Context:    createPluginContext(AvailableScopes.MetadataWrite),
+		ObjectType: objectType,
+		ObjectId:   objectID,
+		ValuesJson: valuesJSON,
+		Merge:      merge,
+	})
+}
+
+// GetResolvedMetadataSchema returns the merged governed metadata schema for an object type
+// (field definitions, a draft-07 JSON Schema and the enforcement level).
+// Requires the metadata.read scope.
+func GetResolvedMetadataSchema(ctx context.Context, objectType string) (*mgmtpb.GetResolvedMetadataSchemaResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+	return client.GetResolvedMetadataSchema(ctx, &mgmtpb.GetResolvedMetadataSchemaRequest{
+		Context:    createPluginContext(AvailableScopes.MetadataRead),
+		ObjectType: objectType,
+	})
+}
+
+// ValidateObjectMetadata validates values against the resolved schema without storing them.
+// Requires the metadata.read scope.
+func ValidateObjectMetadata(ctx context.Context, objectType, valuesJSON string) (*mgmtpb.ValidateObjectMetadataResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+	return client.ValidateObjectMetadata(ctx, &mgmtpb.ValidateObjectMetadataRequest{
+		Context:    createPluginContext(AvailableScopes.MetadataRead),
+		ObjectType: objectType,
+		ValuesJson: valuesJSON,
+	})
+}

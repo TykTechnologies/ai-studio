@@ -61,6 +61,10 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
+	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeTool, input.Data.Attributes.GovernedMetadata, true) {
+		return
+	}
+
 	if input.Data.Attributes.ToolType == models.ToolTypeREST {
 		if len(input.Data.Attributes.OASSpec) == 0 {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -139,7 +143,8 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeTool(tool, a.config.DB)})
+	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(tool.ID), input.Data.Attributes.GovernedMetadata)
+	c.JSON(http.StatusCreated, dataWithMeta(a.withToolGovernedMetadataOne(serializeTool(tool, a.config.DB)), meta))
 }
 
 // validateOASSpecEncoding checks that an oas_spec attribute is the base64 the
@@ -191,7 +196,7 @@ func (a *API) getTool(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+	c.JSON(http.StatusOK, gin.H{"data": a.withToolGovernedMetadataOne(serializeTool(tool, a.config.DB))})
 }
 
 // @Summary Update a tool
@@ -273,6 +278,9 @@ func (a *API) updateTool(c *gin.Context) {
 			return
 		}
 	}
+	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeTool, input.Data.Attributes.GovernedMetadata, false) {
+		return
+	}
 	tool.Namespace = input.Data.Attributes.Namespace
 
 	// Update operations
@@ -292,7 +300,8 @@ func (a *API) updateTool(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeTool(tool, a.config.DB)})
+	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(tool.ID), input.Data.Attributes.GovernedMetadata)
+	c.JSON(http.StatusOK, dataWithMeta(a.withToolGovernedMetadataOne(serializeTool(tool, a.config.DB)), meta))
 }
 
 // @Summary Delete a tool
@@ -328,6 +337,7 @@ func (a *API) deleteTool(c *gin.Context) {
 		})
 		return
 	}
+	a.removeGovernedMetadata(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(uint(id)))
 
 	c.Status(http.StatusNoContent)
 }
@@ -357,7 +367,7 @@ func (a *API) getAllTools(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeTools(tools, a.config.DB)})
+	c.JSON(http.StatusOK, gin.H{"data": a.withToolGovernedMetadata(serializeTools(tools, a.config.DB), false)})
 }
 
 // @Summary Get tools by type

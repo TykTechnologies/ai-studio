@@ -64,9 +64,11 @@ func CreatePluginMiddleware(config *PluginMiddlewareConfig) gin.HandlerFunc {
 
 		var llmID uint
 		var vendor string
+		var dbLLM *database.LLM
 		if llm, ok := llmInterface.(*database.LLM); ok {
 			llmID = llm.ID
 			vendor = llm.Vendor
+			dbLLM = llm
 		} else {
 			log.Error().Str("llm_slug", llmSlug).Msg("Invalid LLM type from service")
 			c.Next()
@@ -101,6 +103,7 @@ func CreatePluginMiddleware(config *PluginMiddlewareConfig) gin.HandlerFunc {
 		if edgeNamespace := config.Services.GetEdgeNamespace(); edgeNamespace != "" {
 			middlewareMetadata["edge_namespace"] = edgeNamespace
 		}
+		database.AddGovernedMetadataToContext(middlewareMetadata, dbLLM)
 
 		pluginCtx := &interfaces.PluginContext{
 			RequestID:    requestID, // Use canonical request ID from context

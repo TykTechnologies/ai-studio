@@ -10,6 +10,7 @@ import (
 	// Import enterprise features to register factories before tests run
 	// Note: budget creates import cycle, so it's excluded here
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/edge_management"
+	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/governed_metadata"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/group_access"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/licensing"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/marketplace_management"

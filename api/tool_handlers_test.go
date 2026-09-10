@@ -34,6 +34,7 @@ func TestToolEndpoints(t *testing.T) {
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -47,6 +48,7 @@ func TestToolEndpoints(t *testing.T) {
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:         "Test Tool",
 				Description:  "A test tool",
@@ -86,6 +88,7 @@ func TestToolEndpoints(t *testing.T) {
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -99,6 +102,7 @@ func TestToolEndpoints(t *testing.T) {
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
@@ -169,6 +173,7 @@ func TestToolAuthKeyRedaction(t *testing.T) {
 					AuthSchemaName string   `json:"auth_schema_name"`
 					Operations     []string `json:"operations"`
 					Namespace      string   `json:"namespace"`
+					GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 				} `json:"attributes"`
 			}{
 				Type: "tools",
@@ -182,6 +187,7 @@ func TestToolAuthKeyRedaction(t *testing.T) {
 					AuthSchemaName string   `json:"auth_schema_name"`
 					Operations     []string `json:"operations"`
 					Namespace      string   `json:"namespace"`
+					GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 				}{
 					Name:     name,
 					AuthKey:  authKey,
@@ -261,6 +267,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -274,6 +281,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
@@ -305,6 +313,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -318,6 +327,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				AuthSchemaName string   `json:"auth_schema_name"`
 				Operations     []string `json:"operations"`
 				Namespace      string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:         "",
 				Description:  "",

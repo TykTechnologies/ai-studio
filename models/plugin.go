@@ -493,6 +493,10 @@ const (
 	// Vendor information scopes
 	ServiceScopeVendorsRead = "vendors.read"
 
+	// Governed metadata scopes (Enterprise)
+	ServiceScopeMetadataRead  = "metadata.read"
+	ServiceScopeMetadataWrite = "metadata.write"
+
 	// Advanced analytics scopes
 	ServiceScopeAnalyticsDetailed = "analytics.detailed"
 	ServiceScopeAnalyticsReports  = "analytics.reports"
