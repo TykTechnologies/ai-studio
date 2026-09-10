@@ -1150,6 +1150,10 @@ definitions:
             type: string
           budget_start_date:
             type: string
+          credential_ref:
+            type: string
+          credential_status:
+            type: string
           default_model:
             type: string
           dont_log_bodies:
@@ -1539,6 +1543,9 @@ definitions:
           type:
             type: string
         type: object
+      operation:
+        description: Operation is the bare-form alternative to the data envelope above.
+        type: string
     type: object
   api.OperationsResponse:
     description: Tool operations response model
@@ -2207,6 +2214,9 @@ definitions:
               namespace:
                 type: string
               oas_spec:
+                description: |-
+                  OASSpec must be the base64 encoding of the UTF-8 OpenAPI
+                  document. Raw JSON or YAML is rejected with a 400.
                 type: string
               operations:
                 items:
@@ -2500,6 +2510,82 @@ definitions:
         type: string
       type:
         type: string
+    type: object
+  audit.DayCount:
+    properties:
+      count:
+        type: integer
+      date:
+        type: string
+    type: object
+  audit.NamedCount:
+    properties:
+      count:
+        type: integer
+      name:
+        type: string
+    type: object
+  audit.Page:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      records:
+        items:
+          $ref: '#/definitions/models.AuditRecord'
+        type: array
+      total:
+        type: integer
+    type: object
+  audit.Status:
+    properties:
+      available:
+        type: boolean
+      detailed_recording:
+        type: boolean
+      dropped:
+        type: integer
+      enabled:
+        type: boolean
+      queue_depth:
+        type: integer
+      record_reads:
+        type: boolean
+      retention_days:
+        type: integer
+      store_type:
+        type: string
+    type: object
+  audit.Summary:
+    properties:
+      by_action:
+        items:
+          $ref: '#/definitions/audit.NamedCount'
+        type: array
+      by_resource_type:
+        items:
+          $ref: '#/definitions/audit.NamedCount'
+        type: array
+      by_status_class:
+        items:
+          $ref: '#/definitions/audit.NamedCount'
+        type: array
+      by_user:
+        items:
+          $ref: '#/definitions/audit.NamedCount'
+        type: array
+      distinct_users:
+        type: integer
+      failed:
+        description: status >= 400
+        type: integer
+      timeline:
+        items:
+          $ref: '#/definitions/audit.DayCount'
+        type: array
+      total:
+        type: integer
     type: object
   compliance.AccessIssue:
     properties:
@@ -2835,6 +2921,74 @@ definitions:
         description: filter_block, model_access, budget_exceeded, auth_failure
         type: string
     type: object
+  github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest:
+    properties:
+      checksum:
+        description: Optional
+        type: string
+      command:
+        type: string
+      config:
+        additionalProperties: true
+        type: object
+      description:
+        type: string
+      hook_type:
+        description: Optional - will be populated from manifest
+        type: string
+      hook_types:
+        items:
+          type: string
+        type: array
+      hook_types_customized:
+        type: boolean
+      is_active:
+        type: boolean
+      load_immediately:
+        description: Auto-load AI Studio plugins
+        type: boolean
+      name:
+        type: string
+      namespace:
+        type: string
+      oci_reference:
+        description: OCI artifact reference
+        type: string
+    required:
+    - command
+    - name
+    type: object
+  github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest:
+    properties:
+      checksum:
+        type: string
+      command:
+        type: string
+      config:
+        additionalProperties: true
+        type: object
+      description:
+        type: string
+      hook_type:
+        type: string
+      hook_types:
+        items:
+          type: string
+        type: array
+      hook_types_customized:
+        type: boolean
+      is_active:
+        type: boolean
+      load_immediately:
+        description: Auto-load AI Studio plugins
+        type: boolean
+      name:
+        type: string
+      namespace:
+        type: string
+      oci_reference:
+        type: string
+    type: object
   models.AppBudgetUsageResponse:
     properties:
       current_usage:
@@ -2844,6 +2998,59 @@ definitions:
       percentage:
         type: number
       start_date:
+        type: string
+    type: object
+  models.AuditRecord:
+    properties:
+      action:
+        description: What happened
+        type: string
+      diff:
+        description: |-
+          Diff of changed fields for updates, and the final state for deletes.
+          Shape: {"field": {"old": <v>, "new": <v>}}. Sensitive columns are
+          redacted before storage.
+        type: string
+      duration_ms:
+        type: integer
+      error:
+        type: string
+      id:
+        type: integer
+      ip:
+        description: Actor
+        type: string
+      method:
+        type: string
+      req_id:
+        type: string
+      request_dump:
+        description: Populated only when detailed recording is enabled.
+        type: string
+      resource_id:
+        type: string
+      resource_name:
+        type: string
+      resource_type:
+        description: What it touched
+        type: string
+      response_dump:
+        type: string
+      route:
+        type: string
+      status:
+        type: integer
+      timestamp:
+        type: string
+      url:
+        type: string
+      user:
+        type: string
+      user_agent:
+        type: string
+      user_id:
+        type: integer
+      user_name:
         type: string
     type: object
   models.BudgetUsage:
@@ -3124,74 +3331,6 @@ definitions:
     - hook_type
     - name
     - oci_reference
-    type: object
-  services.CreatePluginRequest:
-    properties:
-      checksum:
-        description: Optional
-        type: string
-      command:
-        type: string
-      config:
-        additionalProperties: true
-        type: object
-      description:
-        type: string
-      hook_type:
-        description: Optional - will be populated from manifest
-        type: string
-      hook_types:
-        items:
-          type: string
-        type: array
-      hook_types_customized:
-        type: boolean
-      is_active:
-        type: boolean
-      load_immediately:
-        description: Auto-load AI Studio plugins
-        type: boolean
-      name:
-        type: string
-      namespace:
-        type: string
-      oci_reference:
-        description: OCI artifact reference
-        type: string
-    required:
-    - command
-    - name
-    type: object
-  services.UpdatePluginRequest:
-    properties:
-      checksum:
-        type: string
-      command:
-        type: string
-      config:
-        additionalProperties: true
-        type: object
-      description:
-        type: string
-      hook_type:
-        type: string
-      hook_types:
-        items:
-          type: string
-        type: array
-      hook_types_customized:
-        type: boolean
-      is_active:
-        type: boolean
-      load_immediately:
-        description: Auto-load AI Studio plugins
-        type: boolean
-      name:
-        type: string
-      namespace:
-        type: string
-      oci_reference:
-        type: string
     type: object
   sso.NonceTokenRequest:
     properties:
@@ -5065,8 +5204,7 @@ paths:
         "200":
           description: OK
           schema:
-            items:
-              type: object
+            items: {}
             type: array
       security:
       - BearerAuth: []
@@ -5910,7 +6048,7 @@ paths:
         name: plugin
         required: true
         schema:
-          $ref: '#/definitions/services.CreatePluginRequest'
+          $ref: '#/definitions/github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest'
       produces:
       - application/json
       responses:
@@ -6009,7 +6147,7 @@ paths:
         name: plugin
         required: true
         schema:
-          $ref: '#/definitions/services.UpdatePluginRequest'
+          $ref: '#/definitions/github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest'
       produces:
       - application/json
       responses:
@@ -7881,6 +8019,213 @@ paths:
       summary: Search apps
       tags:
       - apps
+  /audit/export:
+    get:
+      description: Downloads matching records (max 50,000) as CSV or JSON
+      parameters:
+      - description: csv (default) or json
+        in: query
+        name: format
+        type: string
+      produces:
+      - text/csv
+      - application/json
+      responses:
+        "200":
+          description: file
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Export audit records
+      tags:
+      - Audit
+  /audit/records:
+    get:
+      description: Page through the audit trail with filters. Newest first unless
+        sort=asc.
+      parameters:
+      - description: Start (YYYY-MM-DD or RFC3339)
+        in: query
+        name: start_date
+        type: string
+      - description: End (YYYY-MM-DD or RFC3339)
+        in: query
+        name: end_date
+        type: string
+      - description: User email substring
+        in: query
+        name: user
+        type: string
+      - description: User ID
+        in: query
+        name: user_id
+        type: integer
+      - description: Exact action name, e.g. Update LLM
+        in: query
+        name: action
+        type: string
+      - description: Resource type, e.g. llm
+        in: query
+        name: resource_type
+        type: string
+      - description: Resource ID
+        in: query
+        name: resource_id
+        type: string
+      - description: HTTP method
+        in: query
+        name: method
+        type: string
+      - description: Exact HTTP status
+        in: query
+        name: status
+        type: integer
+      - description: 2xx, 3xx, 4xx or 5xx
+        in: query
+        name: status_class
+        type: string
+      - description: Client IP
+        in: query
+        name: ip
+        type: string
+      - description: Request ID
+        in: query
+        name: req_id
+        type: string
+      - description: Free text over action, URL, user, resource name, IP, request
+          ID
+        in: query
+        name: search
+        type: string
+      - description: Page (1-based)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (max 500)
+        in: query
+        name: page_size
+        type: integer
+      - description: asc or desc
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.Page'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: List audit records
+      tags:
+      - Audit
+  /audit/records/{id}:
+    get:
+      description: Returns a single record including request/response dumps when detailed
+        recording is on
+      parameters:
+      - description: Record ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AuditRecord'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Get one audit record
+      tags:
+      - Audit
+  /audit/resources/{type}/{id}:
+    get:
+      description: Every recorded action on a single resource, newest first
+      parameters:
+      - description: Resource type, e.g. llm
+        in: path
+        name: type
+        required: true
+        type: string
+      - description: Resource ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.Page'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: History of one object
+      tags:
+      - Audit
+  /audit/status:
+    get:
+      description: Reports whether the audit trail is available (Enterprise), enabled,
+        and how it is configured
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.Status'
+      summary: Audit trail availability and configuration
+      tags:
+      - Audit
+  /audit/summary:
+    get:
+      description: Counts by action, user, resource type and status class plus a daily
+        timeline for the filter
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/audit.Summary'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Summarise audit records
+      tags:
+      - Audit
   /auth/{id}/{provider}:
     get:
       consumes:
@@ -14619,7 +14964,9 @@ paths:
     delete:
       consumes:
       - application/json
-      description: Remove an operation from a specific tool
+      description: Remove an operation from a specific tool. The body may use the
+        JSON:API envelope ({"data":{"attributes":{"operation":"..."}}}) or the bare
+        form ({"operation":"..."}).
       parameters:
       - description: Tool ID
         in: path
@@ -14693,7 +15040,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Add an operation to a specific tool
+      description: Add an operation to a specific tool. The body may use the JSON:API
+        envelope ({"data":{"attributes":{"operation":"..."}}}) or the bare form ({"operation":"..."}).
       parameters:
       - description: Tool ID
         in: path

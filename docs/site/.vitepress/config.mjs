@@ -59,6 +59,7 @@ export default defineConfig({
           { text: 'Analytics & Monitoring', link: '/docs/analytics' }, // New (replace dashboard)
           { text: 'Compliance Events', link: '/docs/compliance-events' }, // v2.1
           { text: 'Governed Metadata (Enterprise)', link: '/docs/governed-metadata' }, // v2.2
+          { text: 'Audit Trail (Enterprise)', link: '/docs/audit-trail' }, // Management API audit log
           { text: 'Notifications', link: '/docs/notifications' }, // New
           { text: 'Edge Gateways (Enterprise)', link: '/docs/edge-gateways' } // Enterprise hub-spoke management
           // Removed: apps, model-prices, call-settings (to be merged)

@@ -124,6 +124,7 @@ const Drawer = () => {
               { id: 'metadata-schemas', text: 'Metadata schemas', path: '/admin/metadata/schemas' },
               { id: 'metadata-vocabularies', text: 'Vocabularies', path: '/admin/metadata/vocabularies' },
               { id: 'metadata-compliance', text: 'Metadata compliance', path: '/admin/metadata/compliance' },
+              { id: 'audit', text: 'Audit Trail', path: '/admin/audit' },
             ]
           : []),
       ],

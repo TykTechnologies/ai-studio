@@ -73,6 +73,7 @@ func InitModels(db *gorm.DB) error {
 		// Sync Status Models
 		&NamespaceSyncStatus{}, // Namespace configuration sync status tracking
 		&SyncAuditLog{},        // Sync audit log for control-edge synchronization
+		&AuditRecord{},         // Platform audit trail (Enterprise; table exists in CE, unused)
 		// Model Router Models (Enterprise)
 		&ModelRouter{},  // Model router configurations
 		&ModelPool{},    // Model pools with patterns

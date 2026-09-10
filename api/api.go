@@ -19,6 +19,8 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
+	appconfig "github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/services/audit"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
@@ -82,6 +84,21 @@ type API struct {
 	licensingService              licensing.Service
 	pluginSecurityService         plugin_security.Service
 	marketplaceManagementService  marketplace_management.Service
+	// Audit trail (ENT: records management API activity, CE: no-op)
+	auditService audit.Service
+	auditHandler gin.HandlerFunc
+}
+
+// SetAuditService swaps the audit trail implementation. The recording
+// middleware is registered once at construction and dispatches through the
+// current service, so this may be called after NewAPI (tests use it).
+func (a *API) SetAuditService(s audit.Service) {
+	a.auditService = s
+	if s != nil {
+		a.auditHandler = s.Middleware()
+	} else {
+		a.auditHandler = nil
+	}
 }
 
 func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthService, config *auth.Config, proxy *proxy.Proxy, staticFiles embed.FS, licensingService licensing.Service) *API {
@@ -164,6 +181,24 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	if licensingService != nil {
 		router.Use(licensingService.TelemetryMiddleware())
 	}
+
+	// Audit trail middleware (ENT: records management API activity, CE: no-op).
+	// Registered before authentication so failed logins and rejected requests
+	// are captured; the actor is resolved after the handler chain runs.
+	// Recording defaults off under TestMode unless AUDIT_ENABLED is set, so
+	// unrelated test suites do not write audit rows.
+	auditCfg := appconfig.Get("").Audit
+	if config.TestMode && os.Getenv("AUDIT_ENABLED") == "" {
+		auditCfg.Enabled = false
+	}
+	api.SetAuditService(audit.NewService(config.DB, auditCfg))
+	router.Use(func(c *gin.Context) {
+		if api.auditHandler != nil {
+			api.auditHandler(c)
+			return
+		}
+		c.Next()
+	})
 
 	// Initialize SSO service (ENT: full TIB functionality, CE: stub returning enterprise errors)
 	logLevel := "info"
@@ -275,6 +310,10 @@ func (a *API) Shutdown(ctx context.Context) error {
 
 	if err := a.server.Shutdown(ctx); err != nil {
 		return fmt.Errorf("API server shutdown failed: %w", err)
+	}
+
+	if a.auditService != nil {
+		a.auditService.Stop()
 	}
 
 	logger.Info("API server stopped successfully")
@@ -928,6 +967,14 @@ func (a *API) setupRoutes() {
 
 	v1.GET("/analytics/proxy-logs-for-app", a.getProxyLogsForApp)
 	v1.GET("/analytics/proxy-logs-for-llm", a.getProxyLogsForLLM)
+
+	// Audit trail routes (Enterprise feature)
+	v1.GET("/audit/status", a.getAuditStatus)
+	v1.GET("/audit/records", a.listAuditRecords)
+	v1.GET("/audit/records/:id", a.getAuditRecord)
+	v1.GET("/audit/summary", a.getAuditSummary)
+	v1.GET("/audit/export", a.exportAuditRecords)
+	v1.GET("/audit/resources/:type/:id", a.getAuditResourceHistory)
 
 	// Compliance routes (Enterprise feature)
 	a.InitComplianceService()

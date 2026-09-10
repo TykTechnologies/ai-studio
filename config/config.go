@@ -27,13 +27,13 @@ func init() {
 }
 
 type AppConf struct {
-	SMTPServer            string
-	SMTPPort              int
-	SMTPUser              string
-	SMTPPass              string
-	FromEmail             string
-	AllowRegistrations    bool
-	AdminEmail            string
+	SMTPServer           string
+	SMTPPort             int
+	SMTPUser             string
+	SMTPPass             string
+	FromEmail            string
+	AllowRegistrations   bool
+	AdminEmail           string
 	SiteURL              string
 	ProxyURL             string
 	ToolDisplayURL       string
@@ -67,10 +67,13 @@ type AppConf struct {
 	LogLevel              string
 
 	// Session Configuration
-	SessionDuration       time.Duration
+	SessionDuration time.Duration
 
 	// OCI Plugin Configuration
-	OCIPlugins            OCIConfig
+	OCIPlugins OCIConfig
+
+	// Audit Trail Configuration (Enterprise)
+	Audit AuditConfig
 
 	// Marketplace Configuration
 	MarketplaceEnabled      bool
@@ -79,21 +82,21 @@ type AppConf struct {
 	MarketplaceCacheDir     string
 
 	// Hub-and-Spoke Configuration
-	GatewayMode        string
-	GRPCPort           int
-	GRPCHost           string
-	GRPCTLSEnabled     bool
-	GRPCTLSCertPath    string
-	GRPCTLSKeyPath     string
-	GRPCAuthToken      string
-	GRPCNextAuthToken  string
+	GatewayMode       string
+	GRPCPort          int
+	GRPCHost          string
+	GRPCTLSEnabled    bool
+	GRPCTLSCertPath   string
+	GRPCTLSKeyPath    string
+	GRPCAuthToken     string
+	GRPCNextAuthToken string
 
 	// Licensing Configuration (Enterprise Edition)
-	LicenseKey              string
-	LicenseTelemetryPeriod  time.Duration
-	LicenseDisableTelemetry bool
-	LicenseTelemetryURL     string
-	LicenseValidityPeriod   time.Duration
+	LicenseKey                  string
+	LicenseTelemetryPeriod      time.Duration
+	LicenseDisableTelemetry     bool
+	LicenseTelemetryURL         string
+	LicenseValidityPeriod       time.Duration
 	LicenseTelemetryConcurrency int
 
 	// Budget Configuration
@@ -123,10 +126,10 @@ type AppConf struct {
 
 // QueueConfig holds configuration for message queues
 type QueueConfig struct {
-	Type       string         `json:"type"`        // "inmemory" | "nats" | "postgres"
-	BufferSize int            `json:"buffer_size"` // Local channel buffer (default: 100)
-	NATS       NATSConfig     `json:"nats"`        // NATS-specific config
-	PostgreSQL PostgreSQLQueueConfig `json:"postgresql"` // PostgreSQL-specific config
+	Type       string                `json:"type"`        // "inmemory" | "nats" | "postgres"
+	BufferSize int                   `json:"buffer_size"` // Local channel buffer (default: 100)
+	NATS       NATSConfig            `json:"nats"`        // NATS-specific config
+	PostgreSQL PostgreSQLQueueConfig `json:"postgresql"`  // PostgreSQL-specific config
 }
 
 // NATSConfig holds NATS JetStream configuration
@@ -139,30 +142,30 @@ type NATSConfig struct {
 	DurableConsumer bool   `json:"durable_consumer"`
 	AckWait         string `json:"ack_wait"` // Duration string like "30s"
 	MaxDeliver      int    `json:"max_deliver"`
-	FetchTimeout    string `json:"fetch_timeout"`    // Duration string like "5s"
-	RetryInterval   string `json:"retry_interval"`   // Duration string like "1s"
-	MaxRetries      int    `json:"max_retries"`      // Max retries for failed operations
-	
+	FetchTimeout    string `json:"fetch_timeout"`  // Duration string like "5s"
+	RetryInterval   string `json:"retry_interval"` // Duration string like "1s"
+	MaxRetries      int    `json:"max_retries"`    // Max retries for failed operations
+
 	// Authentication options
 	CredentialsFile string `json:"credentials_file"` // Optional NATS credentials file
 	Username        string `json:"username"`         // Optional username for basic auth
 	Password        string `json:"password"`         // Optional password for basic auth
 	Token           string `json:"token"`            // Optional token for token-based auth
 	NKeyFile        string `json:"nkey_file"`        // Optional NKey file path
-	
+
 	// TLS options
-	TLSEnabled      bool   `json:"tls_enabled"`      // Enable TLS connection
-	TLSCertFile     string `json:"tls_cert_file"`    // Optional client certificate file
-	TLSKeyFile      string `json:"tls_key_file"`     // Optional client key file
-	TLSCAFile       string `json:"tls_ca_file"`      // Optional CA certificate file
-	TLSSkipVerify   bool   `json:"tls_skip_verify"`  // Skip TLS certificate verification
+	TLSEnabled    bool   `json:"tls_enabled"`     // Enable TLS connection
+	TLSCertFile   string `json:"tls_cert_file"`   // Optional client certificate file
+	TLSKeyFile    string `json:"tls_key_file"`    // Optional client key file
+	TLSCAFile     string `json:"tls_ca_file"`     // Optional CA certificate file
+	TLSSkipVerify bool   `json:"tls_skip_verify"` // Skip TLS certificate verification
 }
 
 // PostgreSQLQueueConfig holds PostgreSQL-specific queue configuration
 type PostgreSQLQueueConfig struct {
-	ReconnectInterval   string `json:"reconnect_interval"`   // Duration string like "2s"
+	ReconnectInterval   string `json:"reconnect_interval"`    // Duration string like "2s"
 	MaxReconnectRetries int    `json:"max_reconnect_retries"` // Maximum reconnection attempts (default: 10)
-	NotifyTimeout       string `json:"notify_timeout"`       // Duration string like "5s"
+	NotifyTimeout       string `json:"notify_timeout"`        // Duration string like "5s"
 }
 
 type DocsLinks map[string]string
@@ -508,6 +511,9 @@ func getConfigFromEnv(envFile string) *AppConf {
 	// OCI Plugin configuration
 	conf.OCIPlugins = getOCIConfig()
 
+	// Audit trail configuration
+	conf.Audit = getAuditConfig()
+
 	// Marketplace configuration
 	conf.MarketplaceEnabled = true // Enabled by default
 	if enabledStr := os.Getenv("MARKETPLACE_ENABLED"); enabledStr != "" {
@@ -594,7 +600,7 @@ func getQueueConfig() QueueConfig {
 
 	// Parse NATS configuration
 	config.NATS = getNATSConfig()
-	
+
 	// Parse PostgreSQL configuration
 	config.PostgreSQL = getPostgreSQLQueueConfig()
 
@@ -703,15 +709,15 @@ func getNATSConfig() NATSConfig {
 	if username := os.Getenv("NATS_USERNAME"); username != "" {
 		config.Username = username
 	}
-	
+
 	if password := os.Getenv("NATS_PASSWORD"); password != "" {
 		config.Password = password
 	}
-	
+
 	if token := os.Getenv("NATS_TOKEN"); token != "" {
 		config.Token = token
 	}
-	
+
 	if nkeyFile := os.Getenv("NATS_NKEY_FILE"); nkeyFile != "" {
 		config.NKeyFile = nkeyFile
 	}
@@ -724,19 +730,19 @@ func getNATSConfig() NATSConfig {
 			cfgLog.Info().Msgf("Warning: Invalid NATS_TLS_ENABLED value: %s. Using default: %t", tlsStr, config.TLSEnabled)
 		}
 	}
-	
+
 	if certFile := os.Getenv("NATS_TLS_CERT_FILE"); certFile != "" {
 		config.TLSCertFile = certFile
 	}
-	
+
 	if keyFile := os.Getenv("NATS_TLS_KEY_FILE"); keyFile != "" {
 		config.TLSKeyFile = keyFile
 	}
-	
+
 	if caFile := os.Getenv("NATS_TLS_CA_FILE"); caFile != "" {
 		config.TLSCAFile = caFile
 	}
-	
+
 	if skipVerifyStr := os.Getenv("NATS_TLS_SKIP_VERIFY"); skipVerifyStr != "" {
 		if skipVerify, err := strconv.ParseBool(skipVerifyStr); err == nil {
 			config.TLSSkipVerify = skipVerify
@@ -779,6 +785,149 @@ func getPostgreSQLQueueConfig() PostgreSQLQueueConfig {
 }
 
 // getOCIConfig parses OCI plugin-related environment variables
+// AuditConfig controls the platform audit trail (Enterprise feature). The
+// keys mirror the Tyk Dashboard audit settings (enabled, store_type, path,
+// format, detailed_recording) with retention and read-recording added.
+type AuditConfig struct {
+	// Enabled turns recording on. Enterprise builds default to true.
+	Enabled bool
+	// StoreType is "db" (queryable from the API/UI), "file" (append-only log
+	// file), or "both".
+	StoreType string
+	// FilePath is the audit log file used when StoreType is "file" or "both".
+	FilePath string
+	// FileFormat is "json" (one JSON object per line) or "text".
+	FileFormat string
+	// DetailedRecording stores redacted request and response bodies.
+	DetailedRecording bool
+	// RecordReads also records GET requests. Off by default because the admin
+	// UI polls several read endpoints and the volume is rarely useful.
+	RecordReads bool
+	// RetentionDays deletes database records older than this. 0 keeps forever.
+	RetentionDays int
+	// MaxBodyBytes caps each stored request/response dump and diff.
+	MaxBodyBytes int
+	// QueueSize bounds the in-memory write queue between the HTTP path and
+	// the background writer. Overflow is dropped and logged, never blocking
+	// the request.
+	QueueSize int
+	// RedactKeys adds to the built-in list of column / JSON key fragments
+	// whose values are replaced with [REDACTED] in diffs and dumps. Matching
+	// is case-insensitive substring, e.g. "ssn" matches "customer_ssn".
+	RedactKeys []string
+	// RedactHeaders adds to the built-in list of HTTP header names masked in
+	// detailed request/response dumps.
+	RedactHeaders []string
+}
+
+const (
+	AuditStoreDB   = "db"
+	AuditStoreFile = "file"
+	AuditStoreBoth = "both"
+)
+
+// StoresToDB reports whether records are written to the database.
+func (c AuditConfig) StoresToDB() bool {
+	return c.StoreType == AuditStoreDB || c.StoreType == AuditStoreBoth
+}
+
+// StoresToFile reports whether records are appended to the log file.
+func (c AuditConfig) StoresToFile() bool {
+	return c.StoreType == AuditStoreFile || c.StoreType == AuditStoreBoth
+}
+
+func getAuditConfig() AuditConfig {
+	cfg := AuditConfig{
+		Enabled:           true,
+		StoreType:         AuditStoreDB,
+		FilePath:          "./data/audit/audit.log",
+		FileFormat:        "json",
+		DetailedRecording: false,
+		RecordReads:       false,
+		RetentionDays:     90,
+		MaxBodyBytes:      64 * 1024,
+		QueueSize:         4096,
+	}
+
+	if v := os.Getenv("AUDIT_ENABLED"); v != "" {
+		if enabled, err := strconv.ParseBool(v); err == nil {
+			cfg.Enabled = enabled
+		} else {
+			cfgLog.Warn().Msgf("Invalid AUDIT_ENABLED value: %s. Using default: %t", v, cfg.Enabled)
+		}
+	}
+
+	switch v := strings.ToLower(os.Getenv("AUDIT_STORE_TYPE")); v {
+	case "":
+	case AuditStoreDB, AuditStoreFile, AuditStoreBoth:
+		cfg.StoreType = v
+	default:
+		cfgLog.Warn().Msgf("Invalid AUDIT_STORE_TYPE value: %s. Using default: %s", v, cfg.StoreType)
+	}
+
+	if v := os.Getenv("AUDIT_FILE_PATH"); v != "" {
+		cfg.FilePath = v
+	}
+
+	switch v := strings.ToLower(os.Getenv("AUDIT_FILE_FORMAT")); v {
+	case "":
+	case "json", "text":
+		cfg.FileFormat = v
+	default:
+		cfgLog.Warn().Msgf("Invalid AUDIT_FILE_FORMAT value: %s. Using default: %s", v, cfg.FileFormat)
+	}
+
+	if v := os.Getenv("AUDIT_DETAILED_RECORDING"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.DetailedRecording = b
+		}
+	}
+
+	if v := os.Getenv("AUDIT_RECORD_READS"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			cfg.RecordReads = b
+		}
+	}
+
+	if v := os.Getenv("AUDIT_RETENTION_DAYS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			cfg.RetentionDays = n
+		} else {
+			cfgLog.Warn().Msgf("Invalid AUDIT_RETENTION_DAYS value: %s. Using default: %d", v, cfg.RetentionDays)
+		}
+	}
+
+	if v := os.Getenv("AUDIT_MAX_BODY_BYTES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.MaxBodyBytes = n
+		}
+	}
+
+	if v := os.Getenv("AUDIT_QUEUE_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.QueueSize = n
+		}
+	}
+
+	cfg.RedactKeys = splitCSVList(os.Getenv("AUDIT_REDACT_KEYS"))
+	cfg.RedactHeaders = splitCSVList(os.Getenv("AUDIT_REDACT_HEADERS"))
+
+	return cfg
+}
+
+// splitCSVList parses a comma-separated env value into trimmed, lower-cased,
+// non-empty entries.
+func splitCSVList(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
 func getOCIConfig() OCIConfig {
 	config := OCIConfig{}
 
