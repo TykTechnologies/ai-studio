@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { ThemeProvider } from "@mui/material/styles";
-import { Box } from "@mui/material";
+import { Box, Container } from "@mui/material";
 import TopNavigation from "../components/common/TopNavigation";
 import AdminLayout from "../admin/components/layout/MainLayout";
 import ChatDrawer from "../admin/components/layout/ChatDrawer";
@@ -9,7 +9,7 @@ import PortalDrawer from "../admin/components/layout/PortalDrawer";
 import { useNavigate } from "react-router-dom";
 import pubClient, { logout } from "../admin/utils/pubClient";
 import adminTheme from "../admin/theme";
-import { DRAWER_WIDTH } from "../constants/layout";
+import { DRAWER_WIDTH, CONTENT_MAX_WIDTH } from "../constants/layout";
 import useSystemFeatures from "../admin/hooks/useSystemFeatures";
 
 const MainLayout = () => {
@@ -174,9 +174,18 @@ const MainLayout = () => {
               flexGrow: 1,
               marginTop: "64px",
               width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
+              minWidth: 0,
             }}
           >
-            <Outlet />
+            {currentTab === "chat" ? (
+              // Chat views stay full-width
+              <Outlet />
+            ) : (
+              // Portal and common views share the same constrained, centred width as the admin UI
+              <Container maxWidth={CONTENT_MAX_WIDTH} disableGutters>
+                <Outlet />
+              </Container>
+            )}
           </Box>
         </Box>
       )}
