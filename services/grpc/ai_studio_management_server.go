@@ -456,26 +456,51 @@ func (s *AIStudioManagementServer) PatchAppMetadata(ctx context.Context, req *pb
 	}, nil
 }
 
-// Governed Metadata Operations (Enterprise) - delegate to governed metadata server
+// Governed Metadata Operations (Enterprise) - delegate to governed metadata server.
+//
+// Brokered plugin sessions only carry the plugin ID in the context; the scope
+// check below loads the plugin and attaches it, which is what
+// resolveObjectType needs to expand "plugin_resource:self:<slug>" and what
+// pluginSource needs to attribute writes to "plugin:<id>".
 
 func (s *AIStudioManagementServer) GetObjectMetadata(ctx context.Context, req *pb.GetObjectMetadataRequest) (*pb.GetObjectMetadataResponse, error) {
-	return s.governedMetadataServer.GetObjectMetadata(ctx, req)
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeMetadataRead)
+	if err != nil {
+		return nil, err
+	}
+	return s.governedMetadataServer.GetObjectMetadata(SetPluginInContext(ctx, plugin), req)
 }
 
 func (s *AIStudioManagementServer) SetObjectMetadata(ctx context.Context, req *pb.SetObjectMetadataRequest) (*pb.SetObjectMetadataResponse, error) {
-	return s.governedMetadataServer.SetObjectMetadata(ctx, req)
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeMetadataWrite)
+	if err != nil {
+		return nil, err
+	}
+	return s.governedMetadataServer.SetObjectMetadata(SetPluginInContext(ctx, plugin), req)
 }
 
 func (s *AIStudioManagementServer) GetResolvedMetadataSchema(ctx context.Context, req *pb.GetResolvedMetadataSchemaRequest) (*pb.GetResolvedMetadataSchemaResponse, error) {
-	return s.governedMetadataServer.GetResolvedMetadataSchema(ctx, req)
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeMetadataRead)
+	if err != nil {
+		return nil, err
+	}
+	return s.governedMetadataServer.GetResolvedMetadataSchema(SetPluginInContext(ctx, plugin), req)
 }
 
 func (s *AIStudioManagementServer) ValidateObjectMetadata(ctx context.Context, req *pb.ValidateObjectMetadataRequest) (*pb.ValidateObjectMetadataResponse, error) {
-	return s.governedMetadataServer.ValidateObjectMetadata(ctx, req)
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeMetadataRead)
+	if err != nil {
+		return nil, err
+	}
+	return s.governedMetadataServer.ValidateObjectMetadata(SetPluginInContext(ctx, plugin), req)
 }
 
 func (s *AIStudioManagementServer) DeleteObjectMetadata(ctx context.Context, req *pb.DeleteObjectMetadataRequest) (*pb.DeleteObjectMetadataResponse, error) {
-	return s.governedMetadataServer.DeleteObjectMetadata(ctx, req)
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeMetadataWrite)
+	if err != nil {
+		return nil, err
+	}
+	return s.governedMetadataServer.DeleteObjectMetadata(SetPluginInContext(ctx, plugin), req)
 }
 
 // Tool Management Operations - delegate to tools server

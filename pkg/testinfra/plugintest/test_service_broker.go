@@ -34,6 +34,9 @@ type TestManagementServer struct {
 	// Resource type registrations made by the plugin (latest call wins)
 	resourceTypes []*mgmtpb.ResourceTypeSpec
 
+	// Governed metadata schemas and records (see test_service_broker_metadata.go)
+	metadataState *metadataState
+
 	// Call tracking
 	calls []ServiceCall
 
@@ -226,6 +229,7 @@ func (s *TestManagementServer) Reset() {
 	s.kvWrites = []KVWrite{}
 	s.notifications = nil
 	s.resourceTypes = nil
+	s.metadataState = nil
 	s.calls = []ServiceCall{}
 }
 
