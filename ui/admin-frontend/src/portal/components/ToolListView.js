@@ -1,3 +1,4 @@
+import GovernedMetadataBadges from "./GovernedMetadataBadges";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
@@ -177,6 +178,7 @@ const ToolListView = () => {
                   </>
                 )}
               </CardContent>
+              <GovernedMetadataBadges items={tool.governed_metadata} sx={{ px: 2 }} />
               <Box
                 sx={{ p: 2, display: "flex", justifyContent: "space-between" }}
               >

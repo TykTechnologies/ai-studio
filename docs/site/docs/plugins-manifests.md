@@ -284,6 +284,7 @@ Resource types declared in the manifest are automatically registered when the pl
 | `name` | Yes | Display name shown in the App form |
 | `has_privacy_score` | No | Whether instances carry privacy scores (default: `false`) |
 | `supports_submissions` | No | Whether community users can submit instances (default: `false`) |
+| `supports_metadata` | No | Whether instances can carry governed metadata (Enterprise); registers the object type `plugin_resource:<plugin_id>:<slug>` (default: `false`) |
 | `form_component` | No | Custom Web Component for the App form selector |
 
 See [Resource Provider Plugins](plugins-resource-types.md) for the full guide.
@@ -731,3 +732,30 @@ See [plugins-studio-ui.md]([plugins-studio-ui](https://docs.claude.com/en/docs/p
 - [Plugin Deployment Options]([plugins-deployment](https://docs.claude.com/en/docs/plugins-deployment))
 - [Service API Reference]([plugins-service-api](https://docs.claude.com/en/docs/plugins-service-api))
 - [SDK Reference]([plugins-sdk](https://docs.claude.com/en/docs/plugins-sdk))
+
+
+## Governed Metadata Contributions (Enterprise)
+
+A plugin can ship controlled vocabularies and metadata schemas that administrators enable from **Governance → Metadata schemas**. Contributed schemas are created **inactive and advisory** with `source: plugin:<id>`; administrators may only toggle `active` and `enforcement`, the structure stays owned by the manifest and is refreshed on every plugin load.
+
+```json
+{
+  "metadata": {
+    "vocabularies": [
+      { "slug": "widget_kind", "name": "Widget Kind",
+        "terms": [ { "value": "big", "label": "Big" }, { "value": "small", "label": "Small" } ] }
+    ],
+    "schemas": [
+      { "slug": "widget-governance", "name": "Widget Governance",
+        "applies_to": ["plugin_resource:self:widgets", "llm"],
+        "fields": [
+          { "key": "widget_kind", "label": "Widget kind", "type": "vocabulary", "vocabulary_slug": "widget_kind", "required": true, "gateway_visible": true }
+        ] }
+    ]
+  }
+}
+```
+
+`applies_to` accepts `llm`, `tool`, `datasource`, `*`, `plugin_resource:<plugin_id>:<slug>` and `plugin_resource:self:<slug>`. The `self` form refers to the declaring plugin's own resource types (which must have `supports_metadata: true`) and is rewritten to the concrete plugin ID when the manifest is loaded, so a manifest never needs to know the ID Studio assigned to the plugin. Any other value fails manifest validation.
+
+Field definitions use the same shape as the admin API (`key`, `label`, `type`, `required`, `severity`, `vocabulary_slug`, `pattern`, `min`, `max`, `max_length`, `warn_if_past`, `portal_visible`, `gateway_visible`, `order`). A slug already owned by an administrator or another plugin is skipped with a warning; a field key that collides with an active schema for the same object type is skipped too. See [Governed Metadata](governed-metadata.md).

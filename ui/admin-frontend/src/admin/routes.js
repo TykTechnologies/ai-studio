@@ -28,6 +28,11 @@ import ToolList from "./pages/ToolList";
 import ToolDetails from "./components/tools/ToolDetails";
 import ToolForm from "./components/tools/ToolForm";
 
+import MetadataSchemas from "./pages/MetadataSchemas";
+import MetadataSchemaForm from "./pages/MetadataSchemaForm";
+import MetadataVocabularies from "./pages/MetadataVocabularies";
+import MetadataCompliance from "./pages/MetadataCompliance";
+
 import CatalogueList from "./pages/CatalogueList";
 import CatalogueDetails from "./components/catalogues/CatalogueDetails";
 import CatalogueForm from "./components/catalogues/CatalogueForm";
@@ -159,6 +164,13 @@ const mainAdminRoutes = (
     <Route path="submissions" element={<SubmissionReviewQueue />} />
     <Route path="submissions/:id" element={<SubmissionReview />} />
     <Route path="attestation-templates" element={<AttestationTemplates />} />
+
+    {/* Governed metadata (Enterprise only; pages self-gate via /metadata/available) */}
+    <Route path="metadata/schemas" element={<MetadataSchemas />} />
+    <Route path="metadata/schemas/new" element={<MetadataSchemaForm />} />
+    <Route path="metadata/schemas/edit/:id" element={<MetadataSchemaForm />} />
+    <Route path="metadata/vocabularies" element={<MetadataVocabularies />} />
+    <Route path="metadata/compliance" element={<MetadataCompliance />} />
   </>
 );
 

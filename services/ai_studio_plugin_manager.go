@@ -878,6 +878,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 					Icon:                rt.Icon,
 					HasPrivacyScore:     rt.HasPrivacyScore,
 					SupportsSubmissions: rt.SupportsSubmissions,
+					SupportsMetadata:    rt.SupportsMetadata,
 				}
 				if rt.FormComponent != nil {
 					prt.FormComponentTag = rt.FormComponent.Tag
@@ -891,6 +892,17 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 					Uint("plugin_id", pluginID).
 					Err(err).
 					Msg("Failed to register resource types from manifest")
+			}
+		}
+
+		// Register governed metadata vocabularies/schemas contributed by the manifest (Enterprise).
+		// Contributed schemas start inactive and advisory; admins opt them in.
+		if manifest.Metadata != nil && (len(manifest.Metadata.Schemas) > 0 || len(manifest.Metadata.Vocabularies) > 0) {
+			if err := m.service.GovernedMetadata().UpsertPluginSchemas(pluginID, manifest.Metadata); err != nil {
+				log.Debug().
+					Uint("plugin_id", pluginID).
+					Err(err).
+					Msg("Governed metadata contributions from manifest not applied")
 			}
 		}
 	}()

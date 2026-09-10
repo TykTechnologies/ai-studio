@@ -52,6 +52,8 @@ type LLM struct {
 	MonthlyBudget   float64        `json:"monthly_budget"`
 	RateLimitRPM    int            `json:"rate_limit_rpm"`
 	Metadata        datatypes.JSON `gorm:"type:json" json:"metadata"`
+	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
+	GovernedMetadata datatypes.JSON `gorm:"type:json" json:"governed_metadata"`
 	AllowedModels   datatypes.JSON `gorm:"type:json" json:"allowed_models"` // JSON array of regex patterns for allowed models
 	
 	// Authentication configuration for pluggable auth mechanisms
@@ -472,6 +474,8 @@ type Tool struct {
 	AuthSchemaName      string `json:"auth_schema_name"`
 	Active              bool   `gorm:"default:true" json:"active"`
 	Namespace           string `gorm:"default:'';index:idx_tool_namespace" json:"namespace"`
+	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
+	GovernedMetadata datatypes.JSON `gorm:"type:json" json:"governed_metadata"`
 
 	// Relationships
 	Filters []Filter `gorm:"many2many:tool_filters;" json:"filters,omitempty"`
@@ -497,6 +501,8 @@ type Datasource struct {
 	EmbedModel            string `json:"embed_model"`
 	Active                bool   `gorm:"default:true" json:"active"`
 	Namespace             string `gorm:"default:'';index:idx_ds_namespace" json:"namespace"`
+	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
+	GovernedMetadata datatypes.JSON `gorm:"type:json" json:"governed_metadata"`
 
 	// Relationships
 	Apps []App `gorm:"many2many:app_datasources;" json:"apps,omitempty"`

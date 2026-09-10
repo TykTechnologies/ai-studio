@@ -125,6 +125,10 @@ type ServiceAPIScope struct {
 
 	// Scheduler management scopes
 	SchedulerManage string
+
+	// Governed metadata scopes (Enterprise)
+	MetadataRead  string
+	MetadataWrite string
 }
 
 // AvailableScopes provides constants for common service API scopes
@@ -154,6 +158,8 @@ var AvailableScopes = ServiceAPIScope{
 	DataCataloguesRead:  "data-catalogues.read",
 	DataCataloguesWrite: "data-catalogues.write",
 	SchedulerManage:     "scheduler.manage",
+	MetadataRead:        "metadata.read",
+	MetadataWrite:       "metadata.write",
 }
 
 // PluginContext provides context information for service API calls

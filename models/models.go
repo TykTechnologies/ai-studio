@@ -93,6 +93,11 @@ func InitModels(db *gorm.DB) error {
 		&PluginResourceType{},  // Plugin-registered resource types
 		&AppPluginResource{},   // App ↔ plugin resource instance associations
 		&GroupPluginResource{}, // Group ↔ plugin resource instance access control
+		// Governed Metadata Models (Enterprise)
+		&MetadataSchema{},      // Admin/plugin-defined governed metadata schemas
+		&MetadataVocabulary{},  // Controlled vocabularies for schema fields
+		&ObjectMetadata{},      // Governed metadata values per object
+		&ObjectMetadataAudit{}, // Governed metadata change audit trail
 	); err != nil {
 		return err
 	}

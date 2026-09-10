@@ -695,6 +695,7 @@ message ResourceTypeRegistrationProto {
     bool has_privacy_score = 5;          // Whether instances carry privacy scores
     bool supports_submissions = 6;       // Whether community submissions are supported
     ResourceFormComponentProto form_component = 7;  // Optional custom form component
+    bool supports_metadata = 8;          // Whether instances can carry governed metadata (Enterprise)
 }
 
 message ResourceFormComponentProto {

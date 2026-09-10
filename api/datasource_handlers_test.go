@@ -93,6 +93,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				EmbedModel       string   `json:"embed_model"`
 				Active           bool     `json:"active"`
 				Namespace        string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "datasources",
@@ -115,6 +116,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				EmbedModel       string   `json:"embed_model"`
 				Active           bool     `json:"active"`
 				Namespace        string   `json:"namespace"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:             "Test Datasource",
 				ShortDescription: "Test datasource with secret refs",

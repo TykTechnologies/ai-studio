@@ -7,6 +7,7 @@ import (
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/budget"                    // Register enterprise budget service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/compliance"                // Register enterprise compliance service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/edge_management"           // Register enterprise edge management service
+	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/governed_metadata"         // Register enterprise governed metadata service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/group_access"              // Register enterprise group access service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/licensing"                 // Register enterprise licensing service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/log_export"                // Register enterprise log export service

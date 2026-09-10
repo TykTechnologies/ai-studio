@@ -1,3 +1,4 @@
+import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
@@ -820,6 +821,12 @@ const LLMDetails = () => {
             </FieldValue>
           </Grid>
         </Grid>
+
+        <GovernedMetadataSummary
+          objectType="llm"
+          values={llm.governed_metadata}
+          status={llm.governed_metadata_status}
+        />
 
         <Divider sx={{ my: 3 }} />
 

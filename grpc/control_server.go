@@ -5,12 +5,11 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"strings"
@@ -24,6 +23,7 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
+	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -71,6 +71,9 @@ type ControlServer struct {
 
 	db     *gorm.DB
 	config *Config
+
+	// Governed metadata reader (Enterprise); nil means no governed metadata in snapshots.
+	governedMetadata governed_metadata.SnapshotReader
 
 	// Edge instance management
 	edgeConnections      map[string]*EdgeInstanceConnection
@@ -1178,6 +1181,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		return nil, fmt.Errorf("failed to get LLMs: %w", err)
 	}
 
+	governedLLMs := s.loadGovernedMetadata(models.GovernedObjectTypeLLM)
+
 	// Convert LLMs to protobuf with complete configuration
 	for _, llm := range llms {
 		// Create slug from name (microgateway expects slugs)
@@ -1231,26 +1236,27 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 
 		pbLLM := &pb.LLMConfig{
-			Id:              uint32(llm.ID),
-			Name:            llm.Name,
-			Slug:            slug,
-			Vendor:          string(llm.Vendor),
-			Endpoint:        resolvedEndpoint,
-			ApiKeyEncrypted: encryptedAPIKey, // Encrypted using microgateway's format
-			DefaultModel:    llm.DefaultModel,
-			MaxTokens:       4096, // Default value
-			TimeoutSeconds:  30,   // Default value
-			RetryCount:      3,    // Default value
-			IsActive:        llm.Active,
-			MonthlyBudget:   monthlyBudget,
-			RateLimitRpm:    0, // AI Studio doesn't have this field yet
-			Metadata:        metadataJSON,
-			AllowedModels:   allowedModelsJSON,
-			Namespace:       llm.Namespace,
-			DontLogBodies:   llm.DontLogBodies,
-			FilterIds:       filterIDs,
-			CreatedAt:       timestamppb.New(llm.CreatedAt),
-			UpdatedAt:       timestamppb.New(llm.UpdatedAt),
+			Id:               uint32(llm.ID),
+			Name:             llm.Name,
+			Slug:             slug,
+			Vendor:           string(llm.Vendor),
+			Endpoint:         resolvedEndpoint,
+			ApiKeyEncrypted:  encryptedAPIKey, // Encrypted using microgateway's format
+			DefaultModel:     llm.DefaultModel,
+			MaxTokens:        4096, // Default value
+			TimeoutSeconds:   30,   // Default value
+			RetryCount:       3,    // Default value
+			IsActive:         llm.Active,
+			MonthlyBudget:    monthlyBudget,
+			RateLimitRpm:     0, // AI Studio doesn't have this field yet
+			Metadata:         metadataJSON,
+			GovernedMetadata: s.governedMetadataJSON(models.GovernedObjectTypeLLM, governedLLMs[models.BuiltinObjectID(llm.ID)]),
+			AllowedModels:    allowedModelsJSON,
+			Namespace:        llm.Namespace,
+			DontLogBodies:    llm.DontLogBodies,
+			FilterIds:        filterIDs,
+			CreatedAt:        timestamppb.New(llm.CreatedAt),
+			UpdatedAt:        timestamppb.New(llm.UpdatedAt),
 		}
 		snapshot.Llms = append(snapshot.Llms, pbLLM)
 	}
@@ -1777,6 +1783,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	// Convert Tools to protobuf
+	governedTools := s.loadGovernedMetadata(models.GovernedObjectTypeTool)
 	for _, tool := range tools {
 		// Resolve and encrypt auth key for edge transit (fail-closed: skip tool if encryption fails)
 		resolvedAuthKey := secrets.GetValue(tool.AuthKey, false)
@@ -1812,6 +1819,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			IsActive:            tool.Active,
 			Namespace:           tool.Namespace,
 			Metadata:            metadataJSON,
+			GovernedMetadata:    s.governedMetadataJSON(models.GovernedObjectTypeTool, governedTools[models.BuiltinObjectID(tool.ID)]),
 			FilterIds:           toolFilterMap[tool.ID],
 			AppIds:              toolAppMap[tool.ID],
 			CreatedAt:           timestamppb.New(tool.CreatedAt),
@@ -1858,6 +1866,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	// Convert Datasources to protobuf (fail-closed: skip datasource if any secret encryption fails)
+	governedDatasources := s.loadGovernedMetadata(models.GovernedObjectTypeDatasource)
 	for _, ds := range datasources {
 		// Resolve and encrypt secrets for edge transit
 		resolvedConnString := secrets.GetValue(ds.DBConnString, false)
@@ -1902,27 +1911,28 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 
 		pbDS := &pb.DatasourceConfig{
-			Id:                     uint32(ds.ID),
-			Name:                   ds.Name,
-			ShortDescription:       ds.ShortDescription,
-			LongDescription:        ds.LongDescription,
-			Icon:                   ds.Icon,
-			Url:                    ds.Url,
-			PrivacyScore:           int32(ds.PrivacyScore),
-			DbSourceType:           ds.DBSourceType,
-			DbConnStringEncrypted:  encryptedConnString,
-			DbConnApiKeyEncrypted:  encryptedConnAPIKey,
-			DbName:                 ds.DBName,
-			EmbedVendor:            string(ds.EmbedVendor),
-			EmbedUrl:               ds.EmbedUrl,
-			EmbedApiKeyEncrypted:   encryptedEmbedAPIKey,
-			EmbedModel:             ds.EmbedModel,
-			IsActive:               ds.Active,
-			Namespace:              ds.Namespace,
-			Metadata:               metadataJSON,
-			AppIds:                 dsAppMap[ds.ID],
-			CreatedAt:              timestamppb.New(ds.CreatedAt),
-			UpdatedAt:              timestamppb.New(ds.UpdatedAt),
+			Id:                    uint32(ds.ID),
+			Name:                  ds.Name,
+			ShortDescription:      ds.ShortDescription,
+			LongDescription:       ds.LongDescription,
+			Icon:                  ds.Icon,
+			Url:                   ds.Url,
+			PrivacyScore:          int32(ds.PrivacyScore),
+			DbSourceType:          ds.DBSourceType,
+			DbConnStringEncrypted: encryptedConnString,
+			DbConnApiKeyEncrypted: encryptedConnAPIKey,
+			DbName:                ds.DBName,
+			EmbedVendor:           string(ds.EmbedVendor),
+			EmbedUrl:              ds.EmbedUrl,
+			EmbedApiKeyEncrypted:  encryptedEmbedAPIKey,
+			EmbedModel:            ds.EmbedModel,
+			IsActive:              ds.Active,
+			Namespace:             ds.Namespace,
+			Metadata:              metadataJSON,
+			GovernedMetadata:      s.governedMetadataJSON(models.GovernedObjectTypeDatasource, governedDatasources[models.BuiltinObjectID(ds.ID)]),
+			AppIds:                dsAppMap[ds.ID],
+			CreatedAt:             timestamppb.New(ds.CreatedAt),
+			UpdatedAt:             timestamppb.New(ds.UpdatedAt),
 		}
 		snapshot.Datasources = append(snapshot.Datasources, pbDS)
 	}
@@ -2035,8 +2045,21 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	return snapshot, nil
 }
 
-// updateNamespaceSyncStatus updates the sync status for a namespace in the database
+// updateNamespaceSyncStatus updates the sync status for a namespace in the database.
+// When the recomputed checksum equals the stored one the configuration edges must
+// hold has not changed, so nothing is written and no edge is marked pending. This
+// keeps snapshot regeneration (edge fetches, no-op edits, governed metadata that
+// is not gateway-visible) from churning sync status.
 func (s *ControlServer) updateNamespaceSyncStatus(namespace, checksum, version string) error {
+	var previous models.NamespaceSyncStatus
+	if err := previous.GetByNamespace(s.db, namespace); err == nil && previous.ExpectedChecksum == checksum {
+		log.Debug().
+			Str("namespace", namespace).
+			Str("checksum", checksum).
+			Msg("Namespace snapshot unchanged; sync status left as is")
+		return nil
+	}
+
 	status := &models.NamespaceSyncStatus{
 		Namespace:        namespace,
 		ExpectedChecksum: checksum,
@@ -2103,17 +2126,38 @@ func (s *ControlServer) encryptForMicrogateway(plaintext string) (string, error)
 		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 
-	// Create a random nonce
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", fmt.Errorf("failed to generate nonce: %w", err)
-	}
+	// Derive the nonce from the plaintext instead of drawing it at random.
+	//
+	// The snapshot checksum edges report back is computed over the encrypted
+	// snapshot, so a random nonce made every regeneration hash differently:
+	// edges could never be "in sync" once an LLM carried an API key, and every
+	// heartbeat logged an out-of-sync audit row. A synthetic nonce keyed by
+	// HMAC-SHA256 over the plaintext (with a key derived from, but distinct
+	// from, the AES key) gives identical ciphertext for identical secrets while
+	// keeping the GCM invariant that distinct plaintexts never share a nonce.
+	// The only thing this reveals is that two objects hold the same secret,
+	// which the edge (holding the key) can see anyway. The wire format is
+	// unchanged: the 12-byte nonce still prefixes the ciphertext, so existing
+	// edges decrypt it as before.
+	nonce := deriveSnapshotNonce(encryptionKey, plaintext, gcm.NonceSize())
 
 	// Encrypt the plaintext
 	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
 
 	// Encode to base64 for transmission
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// snapshotNonceDomain separates the nonce-derivation key from the AES key.
+const snapshotNonceDomain = "midsommar:microgateway:snapshot-nonce:v1"
+
+// deriveSnapshotNonce returns a deterministic GCM nonce for a plaintext.
+// nonceKey = SHA-256(domain || encryptionKey); nonce = HMAC-SHA256(nonceKey, plaintext)[:size].
+func deriveSnapshotNonce(encryptionKey, plaintext string, size int) []byte {
+	nonceKey := sha256.Sum256([]byte(snapshotNonceDomain + encryptionKey))
+	mac := hmac.New(sha256.New, nonceKey[:])
+	mac.Write([]byte(plaintext))
+	return mac.Sum(nil)[:size]
 }
 
 // SetReloadCoordinator sets the reload coordinator reference (avoids import cycle)
@@ -2296,6 +2340,10 @@ const (
 	topicModelRouterCreated = "system.model_router.created"
 	topicModelRouterUpdated = "system.model_router.updated"
 	topicModelRouterDeleted = "system.model_router.deleted"
+
+	// Governed metadata (Enterprise): gateway-visible fields are part of the snapshot.
+	topicGovernedMetadataUpdated = "system.governed_metadata.updated"
+	topicGovernedMetadataDeleted = "system.governed_metadata.deleted"
 )
 
 // subscribeToConfigChanges sets up event subscriptions for configuration changes.
@@ -2313,6 +2361,7 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		topicPluginCreated, topicPluginUpdated, topicPluginDeleted,
 		topicModelPriceCreated, topicModelPriceUpdated, topicModelPriceDeleted,
 		topicModelRouterCreated, topicModelRouterUpdated, topicModelRouterDeleted,
+		topicGovernedMetadataUpdated, topicGovernedMetadataDeleted,
 	}
 
 	for _, topic := range configTopics {
@@ -2341,8 +2390,11 @@ func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.E
 	}
 
 	for _, namespace := range namespaces {
-		// Recompute snapshot and checksum for this namespace
-		// This will also update NamespaceSyncStatus
+		// Recompute the snapshot and checksum for this namespace. This updates
+		// NamespaceSyncStatus and marks edges pending only when the checksum
+		// actually changed (see updateNamespaceSyncStatus), so changes that do not
+		// alter the snapshot (a description edit, governed metadata that is not
+		// gateway-visible) never churn edges.
 		snapshot, err := s.getConfigurationSnapshot(namespace)
 		if err != nil {
 			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to recompute snapshot on config change")
@@ -2354,12 +2406,6 @@ func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.E
 			Str("checksum", snapshot.Checksum).
 			Str("version", snapshot.Version).
 			Msg("Recomputed namespace checksum after config change")
-
-		// Mark all edges in this namespace as pending sync
-		var edgeInstance models.EdgeInstance
-		if err := edgeInstance.MarkEdgesAsPendingInNamespace(s.db, namespace); err != nil {
-			log.Error().Err(err).Str("namespace", namespace).Msg("Failed to mark edges as pending")
-		}
 	}
 }
 
@@ -2459,4 +2505,41 @@ func (s *ControlServer) convertAppToProto(app *models.App) *pb.AppConfig {
 		CreatedAt:          timestamppb.New(app.CreatedAt),
 		UpdatedAt:          timestamppb.New(app.UpdatedAt),
 	}
+}
+
+// SetGovernedMetadataReader wires the governed metadata service so gateway-visible
+// fields are included in configuration snapshots. Safe to leave unset (CE).
+func (s *ControlServer) SetGovernedMetadataReader(reader governed_metadata.SnapshotReader) {
+	s.governedMetadata = reader
+}
+
+// loadGovernedMetadata batch-loads all governed metadata records for an object type.
+// Returns nil when no reader is configured or the lookup fails.
+func (s *ControlServer) loadGovernedMetadata(objectType string) map[string]*models.ObjectMetadata {
+	if s.governedMetadata == nil {
+		return nil
+	}
+	recs, err := s.governedMetadata.ListObjectMetadata(objectType, nil)
+	if err != nil {
+		log.Warn().Err(err).Str("object_type", objectType).Msg("Failed to load governed metadata for snapshot")
+		return nil
+	}
+	return recs
+}
+
+// governedMetadataJSON serialises the gateway-visible governed metadata for one object.
+// Returns "" when there is nothing to send so CE snapshots are byte-identical.
+func (s *ControlServer) governedMetadataJSON(objectType string, rec *models.ObjectMetadata) string {
+	if s.governedMetadata == nil || rec == nil {
+		return ""
+	}
+	values := s.governedMetadata.VisibleValues(objectType, rec, governed_metadata.VisibilityGateway)
+	if len(values) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(values)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }

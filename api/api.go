@@ -218,7 +218,15 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 			csrf.Path("/"),
 		}
 		if os.Getenv("DEVMODE") == "true" || os.Getenv("DEVMODE") == "1" {
-			csrfOpts = append(csrfOpts, csrf.TrustedOrigins([]string{"localhost:3000"}))
+			// The dev frontend runs on :3000; CSRF_TRUSTED_ORIGINS (comma-separated
+			// host[:port] values) lets a locally served build on another port log in.
+			trusted := []string{"localhost:3000"}
+			for _, origin := range strings.Split(os.Getenv("CSRF_TRUSTED_ORIGINS"), ",") {
+				if origin = strings.TrimSpace(origin); origin != "" {
+					trusted = append(trusted, origin)
+				}
+			}
+			csrfOpts = append(csrfOpts, csrf.TrustedOrigins(trusted))
 		}
 		csrfMiddleware := csrf.Protect(
 			csrfKey,
@@ -934,6 +942,27 @@ func (a *API) setupRoutes() {
 	v1.GET("/compliance/errors", a.getComplianceErrors)
 	v1.GET("/compliance/app/:id/risk-profile", a.getAppRiskProfile)
 	v1.GET("/compliance/export", a.exportComplianceData)
+
+	// Governed metadata routes (Enterprise feature)
+	v1.GET("/metadata/available", a.isGovernedMetadataAvailable)
+	v1.GET("/metadata/object-types", a.listMetadataObjectTypes)
+	v1.GET("/metadata/schemas", a.listMetadataSchemas)
+	v1.POST("/metadata/schemas", a.createMetadataSchema)
+	v1.GET("/metadata/schemas/resolve", a.resolveMetadataSchema)
+	v1.GET("/metadata/schemas/:id", a.getMetadataSchema)
+	v1.PATCH("/metadata/schemas/:id", a.updateMetadataSchema)
+	v1.DELETE("/metadata/schemas/:id", a.deleteMetadataSchema)
+	v1.GET("/metadata/vocabularies", a.listMetadataVocabularies)
+	v1.POST("/metadata/vocabularies", a.createMetadataVocabulary)
+	v1.GET("/metadata/vocabularies/:id", a.getMetadataVocabulary)
+	v1.PATCH("/metadata/vocabularies/:id", a.updateMetadataVocabulary)
+	v1.DELETE("/metadata/vocabularies/:id", a.deleteMetadataVocabulary)
+	v1.POST("/metadata/validate", a.validateObjectMetadata)
+	v1.GET("/metadata/objects/:object_type/:object_id", a.getObjectMetadata)
+	v1.PUT("/metadata/objects/:object_type/:object_id", a.setObjectMetadata)
+	v1.DELETE("/metadata/objects/:object_type/:object_id", a.deleteObjectMetadata)
+	v1.GET("/metadata/objects/:object_type/:object_id/audit", a.getObjectMetadataAudit)
+	v1.GET("/metadata/compliance", a.getMetadataComplianceReport)
 
 	// Export routes (Enterprise feature)
 	v1.POST("/exports", a.startExport)

@@ -705,6 +705,7 @@ func (w *pluginServerWrapper) GetResourceTypeRegistrations(ctx context.Context, 
 			Icon:                r.Icon,
 			HasPrivacyScore:     r.HasPrivacyScore,
 			SupportsSubmissions: r.SupportsSubmissions,
+			SupportsMetadata:    r.SupportsMetadata,
 		}
 		if r.FormComponent != nil {
 			pr.FormComponent = &pb.ResourceFormComponentProto{

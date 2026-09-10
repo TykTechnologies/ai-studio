@@ -110,6 +110,15 @@ func (p *HookTestPlugin) GetObjectHookRegistrations() ([]*pb.ObjectHookRegistrat
 			HookTypes:  []string{"before_create", "after_create", "before_update", "after_update", "before_delete", "after_delete"},
 			Priority:   50,
 		},
+		{
+			// Governed metadata records (Enterprise). Only update/delete hooks are
+			// ever fired for this type: a metadata record is "updated" whether or
+			// not it existed before. The object JSON is the ObjectMetadata record;
+			// a "modify" response may change its "values" map, "reject" blocks the save.
+			ObjectType: "governed_metadata",
+			HookTypes:  []string{"before_update", "after_update", "before_delete", "after_delete"},
+			Priority:   50,
+		},
 	}, nil
 }
 

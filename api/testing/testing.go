@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -48,6 +49,8 @@ func SetupTestService(db *gorm.DB) *services.Service {
 		EdgeService:         edgeService,
 		NamespaceService:    namespaceService,
 		PluginService:       pluginService,
+		// Enterprise builds get the real service (factory registered via init), CE the stub.
+		GovernedMetadataService: governed_metadata.NewService(db, governed_metadata.Deps{}),
 	}
 }
 

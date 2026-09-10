@@ -279,3 +279,56 @@ func (s *studioServicesImpl) UpdateLLMPlugins(ctx context.Context, llmID uint32,
 	}
 	return resp.Success, resp.Message, resp.PluginIds, nil
 }
+
+// ===== Governed Metadata (Enterprise) =====
+
+func (s *studioServicesImpl) GetObjectMetadata(ctx context.Context, objectType, objectID string) (string, bool, error) {
+	resp, err := ai_studio_sdk.GetObjectMetadata(ctx, objectType, objectID)
+	if err != nil {
+		return "", false, err
+	}
+	return resp.ValuesJson, resp.Found, nil
+}
+
+func (s *studioServicesImpl) SetObjectMetadata(ctx context.Context, objectType, objectID, valuesJSON string, merge bool) (bool, string, string, error) {
+	resp, err := ai_studio_sdk.SetObjectMetadata(ctx, objectType, objectID, valuesJSON, merge)
+	if err != nil {
+		return false, "", "", err
+	}
+	return resp.Success, resp.ValuesJson, resp.ValidationResultJson, nil
+}
+
+func (s *studioServicesImpl) GetObjectMetadataForAudience(ctx context.Context, objectType, objectID, visibility string) (string, string, bool, error) {
+	resp, err := ai_studio_sdk.GetObjectMetadataWithVisibility(ctx, objectType, objectID, visibility)
+	if err != nil {
+		return "", "", false, err
+	}
+	return resp.ValuesJson, resp.DisplayJson, resp.Found, nil
+}
+
+func (s *studioServicesImpl) DeleteObjectMetadata(ctx context.Context, objectType, objectID string) error {
+	_, err := ai_studio_sdk.DeleteObjectMetadata(ctx, objectType, objectID)
+	return err
+}
+
+func (s *studioServicesImpl) GetResolvedMetadataSchema(ctx context.Context, objectType string) (*ResolvedMetadataSchema, error) {
+	resp, err := ai_studio_sdk.GetResolvedMetadataSchema(ctx, objectType)
+	if err != nil {
+		return nil, err
+	}
+	return &ResolvedMetadataSchema{
+		FieldsJSON:       resp.FieldsJson,
+		JSONSchema:       resp.JsonSchema,
+		VocabulariesJSON: resp.VocabulariesJson,
+		Enforcement:      resp.Enforcement,
+		SchemaSlugs:      resp.SchemaSlugs,
+	}, nil
+}
+
+func (s *studioServicesImpl) ValidateObjectMetadata(ctx context.Context, objectType, valuesJSON string) (bool, bool, string, error) {
+	resp, err := ai_studio_sdk.ValidateObjectMetadata(ctx, objectType, valuesJSON)
+	if err != nil {
+		return false, false, "", err
+	}
+	return resp.Valid, resp.Enforced, resp.ResultJson, nil
+}

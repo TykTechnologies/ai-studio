@@ -43,6 +43,11 @@ const (
 	AIStudioManagementService_UpdateApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/UpdateApp"
 	AIStudioManagementService_DeleteApp_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/DeleteApp"
 	AIStudioManagementService_PatchAppMetadata_FullMethodName            = "/ai_studio_management.AIStudioManagementService/PatchAppMetadata"
+	AIStudioManagementService_GetObjectMetadata_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GetObjectMetadata"
+	AIStudioManagementService_SetObjectMetadata_FullMethodName           = "/ai_studio_management.AIStudioManagementService/SetObjectMetadata"
+	AIStudioManagementService_GetResolvedMetadataSchema_FullMethodName   = "/ai_studio_management.AIStudioManagementService/GetResolvedMetadataSchema"
+	AIStudioManagementService_ValidateObjectMetadata_FullMethodName      = "/ai_studio_management.AIStudioManagementService/ValidateObjectMetadata"
+	AIStudioManagementService_DeleteObjectMetadata_FullMethodName        = "/ai_studio_management.AIStudioManagementService/DeleteObjectMetadata"
 	AIStudioManagementService_ListTools_FullMethodName                   = "/ai_studio_management.AIStudioManagementService/ListTools"
 	AIStudioManagementService_GetTool_FullMethodName                     = "/ai_studio_management.AIStudioManagementService/GetTool"
 	AIStudioManagementService_GetToolOperations_FullMethodName           = "/ai_studio_management.AIStudioManagementService/GetToolOperations"
@@ -141,6 +146,12 @@ type AIStudioManagementServiceClient interface {
 	UpdateApp(ctx context.Context, in *UpdateAppRequest, opts ...grpc.CallOption) (*UpdateAppResponse, error)
 	DeleteApp(ctx context.Context, in *DeleteAppRequest, opts ...grpc.CallOption) (*DeleteAppResponse, error)
 	PatchAppMetadata(ctx context.Context, in *PatchAppMetadataRequest, opts ...grpc.CallOption) (*PatchAppMetadataResponse, error)
+	// Governed Metadata Operations (Enterprise) - admin-defined, validated metadata on LLMs/Tools/Datasources
+	GetObjectMetadata(ctx context.Context, in *GetObjectMetadataRequest, opts ...grpc.CallOption) (*GetObjectMetadataResponse, error)
+	SetObjectMetadata(ctx context.Context, in *SetObjectMetadataRequest, opts ...grpc.CallOption) (*SetObjectMetadataResponse, error)
+	GetResolvedMetadataSchema(ctx context.Context, in *GetResolvedMetadataSchemaRequest, opts ...grpc.CallOption) (*GetResolvedMetadataSchemaResponse, error)
+	ValidateObjectMetadata(ctx context.Context, in *ValidateObjectMetadataRequest, opts ...grpc.CallOption) (*ValidateObjectMetadataResponse, error)
+	DeleteObjectMetadata(ctx context.Context, in *DeleteObjectMetadataRequest, opts ...grpc.CallOption) (*DeleteObjectMetadataResponse, error)
 	// Tool Management Operations (High Priority)
 	ListTools(ctx context.Context, in *ListToolsRequest, opts ...grpc.CallOption) (*ListToolsResponse, error)
 	GetTool(ctx context.Context, in *GetToolRequest, opts ...grpc.CallOption) (*GetToolResponse, error)
@@ -459,6 +470,56 @@ func (c *aIStudioManagementServiceClient) PatchAppMetadata(ctx context.Context, 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PatchAppMetadataResponse)
 	err := c.cc.Invoke(ctx, AIStudioManagementService_PatchAppMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetObjectMetadata(ctx context.Context, in *GetObjectMetadataRequest, opts ...grpc.CallOption) (*GetObjectMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetObjectMetadataResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetObjectMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) SetObjectMetadata(ctx context.Context, in *SetObjectMetadataRequest, opts ...grpc.CallOption) (*SetObjectMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetObjectMetadataResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_SetObjectMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) GetResolvedMetadataSchema(ctx context.Context, in *GetResolvedMetadataSchemaRequest, opts ...grpc.CallOption) (*GetResolvedMetadataSchemaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetResolvedMetadataSchemaResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_GetResolvedMetadataSchema_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) ValidateObjectMetadata(ctx context.Context, in *ValidateObjectMetadataRequest, opts ...grpc.CallOption) (*ValidateObjectMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidateObjectMetadataResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_ValidateObjectMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *aIStudioManagementServiceClient) DeleteObjectMetadata(ctx context.Context, in *DeleteObjectMetadataRequest, opts ...grpc.CallOption) (*DeleteObjectMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteObjectMetadataResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_DeleteObjectMetadata_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1110,6 +1171,12 @@ type AIStudioManagementServiceServer interface {
 	UpdateApp(context.Context, *UpdateAppRequest) (*UpdateAppResponse, error)
 	DeleteApp(context.Context, *DeleteAppRequest) (*DeleteAppResponse, error)
 	PatchAppMetadata(context.Context, *PatchAppMetadataRequest) (*PatchAppMetadataResponse, error)
+	// Governed Metadata Operations (Enterprise) - admin-defined, validated metadata on LLMs/Tools/Datasources
+	GetObjectMetadata(context.Context, *GetObjectMetadataRequest) (*GetObjectMetadataResponse, error)
+	SetObjectMetadata(context.Context, *SetObjectMetadataRequest) (*SetObjectMetadataResponse, error)
+	GetResolvedMetadataSchema(context.Context, *GetResolvedMetadataSchemaRequest) (*GetResolvedMetadataSchemaResponse, error)
+	ValidateObjectMetadata(context.Context, *ValidateObjectMetadataRequest) (*ValidateObjectMetadataResponse, error)
+	DeleteObjectMetadata(context.Context, *DeleteObjectMetadataRequest) (*DeleteObjectMetadataResponse, error)
 	// Tool Management Operations (High Priority)
 	ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error)
 	GetTool(context.Context, *GetToolRequest) (*GetToolResponse, error)
@@ -1265,6 +1332,21 @@ func (UnimplementedAIStudioManagementServiceServer) DeleteApp(context.Context, *
 }
 func (UnimplementedAIStudioManagementServiceServer) PatchAppMetadata(context.Context, *PatchAppMetadataRequest) (*PatchAppMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PatchAppMetadata not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetObjectMetadata(context.Context, *GetObjectMetadataRequest) (*GetObjectMetadataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetObjectMetadata not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) SetObjectMetadata(context.Context, *SetObjectMetadataRequest) (*SetObjectMetadataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetObjectMetadata not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) GetResolvedMetadataSchema(context.Context, *GetResolvedMetadataSchemaRequest) (*GetResolvedMetadataSchemaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetResolvedMetadataSchema not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) ValidateObjectMetadata(context.Context, *ValidateObjectMetadataRequest) (*ValidateObjectMetadataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateObjectMetadata not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) DeleteObjectMetadata(context.Context, *DeleteObjectMetadataRequest) (*DeleteObjectMetadataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteObjectMetadata not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) ListTools(context.Context, *ListToolsRequest) (*ListToolsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTools not implemented")
@@ -1896,6 +1978,96 @@ func _AIStudioManagementService_PatchAppMetadata_Handler(srv interface{}, ctx co
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AIStudioManagementServiceServer).PatchAppMetadata(ctx, req.(*PatchAppMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetObjectMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetObjectMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetObjectMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetObjectMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetObjectMetadata(ctx, req.(*GetObjectMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_SetObjectMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetObjectMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).SetObjectMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_SetObjectMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).SetObjectMetadata(ctx, req.(*SetObjectMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_GetResolvedMetadataSchema_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetResolvedMetadataSchemaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).GetResolvedMetadataSchema(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_GetResolvedMetadataSchema_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).GetResolvedMetadataSchema(ctx, req.(*GetResolvedMetadataSchemaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_ValidateObjectMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateObjectMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).ValidateObjectMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_ValidateObjectMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).ValidateObjectMetadata(ctx, req.(*ValidateObjectMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AIStudioManagementService_DeleteObjectMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteObjectMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).DeleteObjectMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_DeleteObjectMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).DeleteObjectMetadata(ctx, req.(*DeleteObjectMetadataRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3075,6 +3247,26 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PatchAppMetadata",
 			Handler:    _AIStudioManagementService_PatchAppMetadata_Handler,
+		},
+		{
+			MethodName: "GetObjectMetadata",
+			Handler:    _AIStudioManagementService_GetObjectMetadata_Handler,
+		},
+		{
+			MethodName: "SetObjectMetadata",
+			Handler:    _AIStudioManagementService_SetObjectMetadata_Handler,
+		},
+		{
+			MethodName: "GetResolvedMetadataSchema",
+			Handler:    _AIStudioManagementService_GetResolvedMetadataSchema_Handler,
+		},
+		{
+			MethodName: "ValidateObjectMetadata",
+			Handler:    _AIStudioManagementService_ValidateObjectMetadata_Handler,
+		},
+		{
+			MethodName: "DeleteObjectMetadata",
+			Handler:    _AIStudioManagementService_DeleteObjectMetadata_Handler,
 		},
 		{
 			MethodName: "ListTools",

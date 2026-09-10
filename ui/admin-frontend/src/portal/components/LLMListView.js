@@ -1,3 +1,4 @@
+import GovernedMetadataBadges from "./GovernedMetadataBadges";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -170,6 +171,7 @@ const LLMListView = () => {
               {getVendorName(selectedLLM.attributes.vendor)}
             </Typography>
           </Box>
+          <GovernedMetadataBadges items={selectedLLM.governed_metadata} sx={{ mt: 2 }} />
         </DetailModal>
       )}
     </Container>

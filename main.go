@@ -31,6 +31,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	_ "github.com/TykTechnologies/midsommar/v2/services/grpc" // Initialize AIStudioManagementServer factory
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
@@ -337,6 +338,7 @@ func main() {
 		}
 
 		controlServer = grpc.NewControlServer(grpcConfig, db)
+		controlServer.SetGovernedMetadataReader(service.GovernedMetadataService)
 
 		// Create reload coordinator and connect it to control server
 		reloadCoordinator = services.NewReloadCoordinator(controlServer)
@@ -525,6 +527,16 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults bool) error {
 		return fmt.Errorf("failed to create default LLM settings: %w", err)
 	}
 	logger.Info("Default LLM settings checked/initialized")
+
+	// Seed the default governed metadata vocabularies and "Governance Core" schema
+	// (Enterprise only; advisory mode so existing objects are never blocked).
+	if governed_metadata.IsEnterpriseAvailable() {
+		if err := governed_metadata.NewService(db, governed_metadata.Deps{}).EnsureDefaults(); err != nil {
+			logger.Warnf("Failed to seed default governed metadata schema: %v", err)
+		} else {
+			logger.Info("Governed metadata defaults checked/initialized")
+		}
+	}
 
 	// Upgrade any legacy-format encrypted secrets to authenticated encryption.
 	// Runs in the background so scrypt's deliberate cost never delays startup;

@@ -265,6 +265,9 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 		}
 
 		// Handle JSON fields with proper conversion
+		if pbLLM.GovernedMetadata != "" {
+			llm.GovernedMetadata = datatypes.JSON(pbLLM.GovernedMetadata)
+		}
 		if pbLLM.Metadata != "" {
 			llm.Metadata = datatypes.JSON(pbLLM.Metadata)
 		}
@@ -701,6 +704,7 @@ func (s *EdgeSyncService) syncTools(tx *gorm.DB, tools []*pb.ToolConfig) error {
 			AuthSchemaName:      pbTool.AuthSchemaName,
 			Active:              pbTool.IsActive,
 			Namespace:           pbTool.Namespace,
+			GovernedMetadata:    database.GovernedMetadataJSON(pbTool.GovernedMetadata),
 		})
 
 		// Collect tool_filter join table entries
@@ -763,6 +767,7 @@ func (s *EdgeSyncService) syncDatasources(tx *gorm.DB, datasources []*pb.Datasou
 			EmbedModel:            pbDS.EmbedModel,
 			Active:                pbDS.IsActive,
 			Namespace:             pbDS.Namespace,
+			GovernedMetadata:      database.GovernedMetadataJSON(pbDS.GovernedMetadata),
 		})
 	}
 

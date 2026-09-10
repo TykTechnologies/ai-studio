@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
+	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/TykTechnologies/midsommar/v2/services/group_access"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
@@ -45,6 +46,8 @@ type Service struct {
 	LicensingService licensing.Service
 	// Model Router (Enterprise)
 	ModelRouterService model_router.Service
+	// Governed Metadata (Enterprise)
+	GovernedMetadataService governed_metadata.Service
 	// Sync Status (Hub-and-Spoke)
 	SyncStatusService *SyncStatusService
 }
@@ -182,6 +185,36 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		SyncStatusService:     syncStatusService,
 	}
 
+	// Governed metadata: hooks are optional (nil when no plugin manager); the event
+	// emitter is resolved lazily because SetEventBus runs after construction.
+	service.GovernedMetadataService = governed_metadata.NewService(db, governed_metadata.Deps{
+		Hooks: newMetadataHookRunner(hookManager),
+		Events: func() governed_metadata.EventEmitter {
+			if service.SystemEvents == nil {
+				return nil
+			}
+			return service.SystemEvents
+		},
+		// Plugin resource instances live in the plugin; the compliance report
+		// lists them through the plugin manager, which is attached later.
+		ResourceInstances: func(pluginID uint, slug string) ([]governed_metadata.NamedInstance, error) {
+			if service.AIStudioPluginManager == nil {
+				return nil, fmt.Errorf("plugin manager not available")
+			}
+			instances, err := service.AIStudioPluginManager.ListResourceInstances(pluginID, slug)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]governed_metadata.NamedInstance, 0, len(instances))
+			for _, inst := range instances {
+				if inst.IsActive {
+					out = append(out, governed_metadata.NamedInstance{ID: inst.Id, Name: inst.Name})
+				}
+			}
+			return out, nil
+		},
+	})
+
 	// Wire service reference to AI Studio plugin manager for proper service provider injection
 	if aiStudioPluginManager != nil {
 		aiStudioPluginManager.SetService(service)
@@ -197,6 +230,18 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 
 func (s *Service) GetDB() *gorm.DB {
 	return s.DB
+}
+
+// GovernedMetadata returns the governed metadata service, falling back to the
+// edition-appropriate default when the Service was constructed by hand (tests).
+func (s *Service) GovernedMetadata() governed_metadata.Service {
+	if s == nil {
+		return governed_metadata.NewService(nil, governed_metadata.Deps{})
+	}
+	if s.GovernedMetadataService == nil {
+		s.GovernedMetadataService = governed_metadata.NewService(s.DB, governed_metadata.Deps{})
+	}
+	return s.GovernedMetadataService
 }
 
 // GetPluginClient gets a loaded plugin client by plugin ID

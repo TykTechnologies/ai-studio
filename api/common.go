@@ -82,7 +82,7 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 		return
 	}
 
-	response := a.serializeLLMs(llms)
+	response := a.withLLMGovernedMetadata(a.serializeLLMs(llms), true)
 
 	c.JSON(http.StatusOK, response)
 }
@@ -160,6 +160,7 @@ func (a *API) getDataCatalogueDatasources(c *gin.Context) {
 		response[i] = serializeDatasource(&ds)
 	}
 
+	response = a.withDatasourceGovernedMetadata(response, true)
 	c.JSON(http.StatusOK, response)
 }
 
@@ -262,6 +263,7 @@ func (a *API) getCommonToolCatalogueTools(c *gin.Context) {
 		}
 	}
 
+	response = a.withToolGovernedMetadata(response, true)
 	c.JSON(http.StatusOK, response)
 }
 
@@ -585,6 +587,7 @@ func (a *API) getUserAccessibleDataSources(c *gin.Context) {
 		response[i] = serializeDatasource(&ds)
 	}
 
+	response = a.withDatasourceGovernedMetadata(response, true)
 	c.JSON(http.StatusOK, response)
 }
 
@@ -618,7 +621,7 @@ func (a *API) getUserAccessibleLLMs(c *gin.Context) {
 		return
 	}
 
-	response := a.serializeLLMs(llms)
+	response := a.withLLMGovernedMetadata(a.serializeLLMs(llms), true)
 
 	c.JSON(http.StatusOK, response)
 }
@@ -991,6 +994,7 @@ func (a *API) getUserAccessibleTools(c *gin.Context) {
 		}
 	}
 
+	response = a.withToolGovernedMetadata(response, true)
 	c.JSON(http.StatusOK, response)
 }
 

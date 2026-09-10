@@ -98,6 +98,24 @@ type ErrorResponse struct {
 	} `json:"errors"`
 }
 
+// MetadataValidationError is one governed-metadata validation problem.
+// Source.Pointer is a JSON pointer into the request body
+// (e.g. /data/attributes/governed_metadata/risk_tier) so forms can highlight the field.
+type MetadataValidationError struct {
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+	Code   string `json:"code,omitempty"`
+	Source *struct {
+		Pointer string `json:"pointer"`
+	} `json:"source,omitempty"`
+}
+
+// MetadataValidationErrorResponse is returned with HTTP 422 when governed metadata
+// fails validation under an enforcing schema, or when a plugin hook rejects the change.
+type MetadataValidationErrorResponse struct {
+	Errors []MetadataValidationError `json:"errors"`
+}
+
 // LLMInput represents the input for LLM-related operations
 // @Description LLM input model
 type LLMInput struct {
@@ -121,6 +139,8 @@ type LLMInput struct {
 			Namespace        string                 `json:"namespace,omitempty"`
 			DontLogBodies    bool                   `json:"dont_log_bodies"`
 			Metadata         map[string]interface{} `json:"metadata,omitempty"`
+			// Governed metadata (Enterprise). nil = untouched; {} = clear.
+			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -152,6 +172,10 @@ type PluginInput struct {
 type LLMResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
+	// Governed metadata (Enterprise): admin responses carry the raw values map and a
+	// status; portal responses carry a display-ready [{key,label,type,value}] list.
+	GovernedMetadata       interface{} `json:"governed_metadata,omitempty"`
+	GovernedMetadataStatus string      `json:"governed_metadata_status,omitempty"`
 	Attributes struct {
 		Name             string           `json:"name"`
 		APIKey           string           `json:"api_key"`
@@ -272,6 +296,8 @@ type DatasourceInput struct {
 			EmbedModel       string   `json:"embed_model"`
 			Active           bool     `json:"active"`
 			Namespace        string   `json:"namespace"`
+			// Governed metadata (Enterprise). nil = untouched; {} = clear.
+			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -281,6 +307,9 @@ type DatasourceInput struct {
 type DatasourceResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
+	// Governed metadata (Enterprise); see LLMResponse.
+	GovernedMetadata       interface{} `json:"governed_metadata,omitempty"`
+	GovernedMetadataStatus string      `json:"governed_metadata_status,omitempty"`
 	Attributes struct {
 		Name             string              `json:"name"`
 		ShortDescription string              `json:"short_description"`
@@ -540,6 +569,8 @@ type ToolInput struct {
 			AuthSchemaName string   `json:"auth_schema_name"`
 			Operations     []string `json:"operations"`
 			Namespace      string   `json:"namespace"`
+			// Governed metadata (Enterprise). nil = untouched; {} = clear.
+			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -549,6 +580,9 @@ type ToolInput struct {
 type ToolResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
+	// Governed metadata (Enterprise); see LLMResponse.
+	GovernedMetadata       interface{} `json:"governed_metadata,omitempty"`
+	GovernedMetadataStatus string      `json:"governed_metadata_status,omitempty"`
 	Attributes struct {
 		Name           string              `json:"name"`
 		Description    string              `json:"description"`

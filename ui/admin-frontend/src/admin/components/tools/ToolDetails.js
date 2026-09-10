@@ -1,3 +1,4 @@
+import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
@@ -340,6 +341,12 @@ const ToolDetails = () => {
             )}
           </Grid>
         </Grid>
+
+        <GovernedMetadataSummary
+          objectType="tool"
+          values={tool.governed_metadata}
+          status={tool.governed_metadata_status}
+        />
 
         <Box mt={4} display="flex" justifyContent="flex-end">
           <PrimaryButton

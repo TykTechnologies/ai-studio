@@ -133,6 +133,14 @@ func extractScopeFromMethod(fullMethod string) string {
 		// App management methods
 		"/ai_studio_management.AIStudioManagementService/ListApps": models.ServiceScopeAppsRead,
 		"/ai_studio_management.AIStudioManagementService/GetApp":   models.ServiceScopeAppsRead,
+		"/ai_studio_management.AIStudioManagementService/PatchAppMetadata": models.ServiceScopeAppsWrite,
+
+		// Governed metadata methods (Enterprise)
+		"/ai_studio_management.AIStudioManagementService/GetObjectMetadata":         models.ServiceScopeMetadataRead,
+		"/ai_studio_management.AIStudioManagementService/GetResolvedMetadataSchema": models.ServiceScopeMetadataRead,
+		"/ai_studio_management.AIStudioManagementService/ValidateObjectMetadata":    models.ServiceScopeMetadataRead,
+		"/ai_studio_management.AIStudioManagementService/SetObjectMetadata":         models.ServiceScopeMetadataWrite,
+		"/ai_studio_management.AIStudioManagementService/DeleteObjectMetadata":      models.ServiceScopeMetadataWrite,
 		"/ai_studio_management.AIStudioManagementService/CreateApp": models.ServiceScopeAppsWrite,
 		"/ai_studio_management.AIStudioManagementService/UpdateApp": models.ServiceScopeAppsWrite,
 		"/ai_studio_management.AIStudioManagementService/DeleteApp": models.ServiceScopeAppsWrite,

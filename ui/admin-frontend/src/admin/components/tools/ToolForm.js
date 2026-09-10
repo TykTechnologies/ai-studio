@@ -1,3 +1,5 @@
+import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadata/GovernedMetadataFields";
+import { extractGovernedMetadataErrors } from "../../services/governedMetadataService";
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import {
@@ -283,6 +285,11 @@ const ToolForm = () => {
     }
   };
 
+  // Governed metadata (Enterprise): values live beside the object and are
+  // sent as attributes.governed_metadata; 422 field errors map back here.
+  const [governedMetadata, setGovernedMetadata] = useState({});
+  const [metadataErrors, setMetadataErrors] = useState({});
+
   const fetchTool = async () => {
     try {
       const response = await apiClient.get(`/tools/${id}`);
@@ -294,6 +301,7 @@ const ToolForm = () => {
 
       setTool(fetchedTool);
       setFiles(fetchedTool.file_stores || []);
+      setGovernedMetadata(response.data.data.governed_metadata || {});
     } catch (error) {
       console.error("Error fetching tool", error);
       setSnackbar({
@@ -447,6 +455,7 @@ const ToolForm = () => {
           privacy_score: Number(tool.privacy_score),
           tool_type: "REST",
           oas_spec: tool.oas_spec ? btoa(tool.oas_spec) : "",
+          governed_metadata: governedMetadata,
         },
       },
     };
@@ -469,6 +478,17 @@ const ToolForm = () => {
 
       setTimeout(() => navigate("/admin/tools"), 2000);
     } catch (error) {
+      if (error.response?.status === 422) {
+        const fieldErrors = extractGovernedMetadataErrors(error);
+        setMetadataErrors(fieldErrors);
+        setSnackbar({
+          open: true,
+          message: fieldErrors._ || "Governance metadata failed validation. Fix the highlighted fields.",
+          severity: "error",
+        });
+        document.getElementById(GOVERNED_METADATA_SECTION_ID)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
       console.error("Error saving tool", error);
       setSnackbar({
         open: true,
@@ -888,6 +908,17 @@ const ToolForm = () => {
               </PrimaryOutlineButton>
             </AccordionDetails>
           </StyledAccordion>
+
+          {/* Governance metadata (Enterprise; hidden when no schema applies) */}
+          <GovernedMetadataFields
+            objectType="tool"
+            value={governedMetadata}
+            onChange={(next) => {
+              setGovernedMetadata(next);
+              setMetadataErrors({});
+            }}
+            errors={metadataErrors}
+          />
 
           {/* Edge Availability Section (Enterprise only) */}
           <EdgeAvailabilitySection

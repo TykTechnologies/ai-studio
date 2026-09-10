@@ -451,6 +451,7 @@ func (p *GRPCProvider) convertPBLLMToDatabase(pbLLM *pb.LLMConfig) *database.LLM
 		MonthlyBudget:   pbLLM.MonthlyBudget,
 		RateLimitRPM:    int(pbLLM.RateLimitRpm),
 		Namespace:       pbLLM.Namespace,
+		GovernedMetadata: database.GovernedMetadataJSON(pbLLM.GovernedMetadata),
 		// Note: JSON fields (Metadata, AllowedModels, AuthConfig) would need proper JSON unmarshaling
 		// For now, we'll leave them empty or implement conversion if needed
 	}

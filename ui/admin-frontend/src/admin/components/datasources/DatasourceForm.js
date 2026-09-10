@@ -1,3 +1,5 @@
+import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadata/GovernedMetadataFields";
+import { extractGovernedMetadataErrors } from "../../services/governedMetadataService";
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import {
@@ -125,6 +127,7 @@ const DatasourceForm = () => {
             user_id: datasourceData.user_id.toString(),
           });
           setFiles(datasourceData.files || []);
+          setGovernedMetadata(response.data.data.governed_metadata || {});
           setVectorStoreHelpText(
             getVectorStoreHelpText(datasourceData.db_source_type),
           );
@@ -304,6 +307,11 @@ const DatasourceForm = () => {
     return newErrors;
   };
 
+  // Governed metadata (Enterprise): values live beside the object and are
+  // sent as attributes.governed_metadata; 422 field errors map back here.
+  const [governedMetadata, setGovernedMetadata] = useState({});
+  const [metadataErrors, setMetadataErrors] = useState({});
+
   // Fields in the order they appear, so a failed submit scrolls to the first
   // thing the user actually needs to fix. Without this the submit button sits
   // below the fold and a validation failure looks like a button that does
@@ -342,6 +350,7 @@ const DatasourceForm = () => {
           active: Boolean(datasource.active),
           tags: datasource.tags,
           user_id: parseInt(datasource.user_id, 10),
+          governed_metadata: governedMetadata,
         },
       },
     };
@@ -363,6 +372,17 @@ const DatasourceForm = () => {
 
       setTimeout(() => navigate("/admin/datasources"), 2000);
     } catch (error) {
+      if (error.response?.status === 422) {
+        const fieldErrors = extractGovernedMetadataErrors(error);
+        setMetadataErrors(fieldErrors);
+        setSnackbar({
+          open: true,
+          message: fieldErrors._ || "Governance metadata failed validation. Fix the highlighted fields.",
+          severity: "error",
+        });
+        document.getElementById(GOVERNED_METADATA_SECTION_ID)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
       console.error("Error saving datasource", error);
       setSnackbar({
         open: true,
@@ -868,6 +888,17 @@ const DatasourceForm = () => {
               </AccordionDetails>
             </StyledAccordion>
           )}
+
+          {/* Governance metadata (Enterprise; hidden when no schema applies) */}
+          <GovernedMetadataFields
+            objectType="datasource"
+            value={governedMetadata}
+            onChange={(next) => {
+              setGovernedMetadata(next);
+              setMetadataErrors({});
+            }}
+            errors={metadataErrors}
+          />
 
           {/* Edge Availability Section (Enterprise only) */}
           <EdgeAvailabilitySection

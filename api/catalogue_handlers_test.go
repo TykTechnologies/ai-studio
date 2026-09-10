@@ -104,6 +104,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				Namespace        string   `json:"namespace,omitempty"`
 				DontLogBodies    bool                   `json:"dont_log_bodies"`
 				Metadata         map[string]interface{} `json:"metadata,omitempty"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -125,6 +126,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				Namespace        string                 `json:"namespace,omitempty"`
 				DontLogBodies    bool                   `json:"dont_log_bodies"`
 				Metadata         map[string]interface{} `json:"metadata,omitempty"`
+				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",

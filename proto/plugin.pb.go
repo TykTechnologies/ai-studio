@@ -5176,6 +5176,7 @@ type ResourceTypeRegistrationProto struct {
 	HasPrivacyScore     bool                        `protobuf:"varint,5,opt,name=has_privacy_score,json=hasPrivacyScore,proto3" json:"has_privacy_score,omitempty"`           // Whether instances carry privacy scores
 	SupportsSubmissions bool                        `protobuf:"varint,6,opt,name=supports_submissions,json=supportsSubmissions,proto3" json:"supports_submissions,omitempty"` // Whether community submissions are supported
 	FormComponent       *ResourceFormComponentProto `protobuf:"bytes,7,opt,name=form_component,json=formComponent,proto3" json:"form_component,omitempty"`                    // Optional custom form component
+	SupportsMetadata    bool                        `protobuf:"varint,8,opt,name=supports_metadata,json=supportsMetadata,proto3" json:"supports_metadata,omitempty"`          // Whether instances can carry governed metadata (Enterprise)
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -5257,6 +5258,13 @@ func (x *ResourceTypeRegistrationProto) GetFormComponent() *ResourceFormComponen
 		return x.FormComponent
 	}
 	return nil
+}
+
+func (x *ResourceTypeRegistrationProto) GetSupportsMetadata() bool {
+	if x != nil {
+		return x.SupportsMetadata
+	}
+	return false
 }
 
 type ResourceFormComponentProto struct {
@@ -6408,7 +6416,7 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x05ERROR\x10\x03\"%\n" +
 	"#GetResourceTypeRegistrationsRequest\"s\n" +
 	"$GetResourceTypeRegistrationsResponse\x12K\n" +
-	"\rregistrations\x18\x01 \x03(\v2%.plugin.ResourceTypeRegistrationProtoR\rregistrations\"\xa7\x02\n" +
+	"\rregistrations\x18\x01 \x03(\v2%.plugin.ResourceTypeRegistrationProtoR\rregistrations\"\xd4\x02\n" +
 	"\x1dResourceTypeRegistrationProto\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -6416,7 +6424,8 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x04icon\x18\x04 \x01(\tR\x04icon\x12*\n" +
 	"\x11has_privacy_score\x18\x05 \x01(\bR\x0fhasPrivacyScore\x121\n" +
 	"\x14supports_submissions\x18\x06 \x01(\bR\x13supportsSubmissions\x12I\n" +
-	"\x0eform_component\x18\a \x01(\v2\".plugin.ResourceFormComponentProtoR\rformComponent\"O\n" +
+	"\x0eform_component\x18\a \x01(\v2\".plugin.ResourceFormComponentProtoR\rformComponent\x12+\n" +
+	"\x11supports_metadata\x18\b \x01(\bR\x10supportsMetadata\"O\n" +
 	"\x1aResourceFormComponentProto\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x1f\n" +
 	"\ventry_point\x18\x02 \x01(\tR\n" +

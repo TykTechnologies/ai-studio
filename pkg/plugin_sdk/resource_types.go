@@ -28,6 +28,13 @@ type ResourceTypeRegistration struct {
 	// new instances of this resource type through the submission workflow.
 	SupportsSubmissions bool
 
+	// SupportsMetadata indicates whether instances of this resource type can
+	// carry governed metadata (Enterprise). When true, admins can attach
+	// schema-validated metadata to instances under the object type
+	// "plugin_resource:<plugin_id>:<slug>". Must also be set as
+	// "supports_metadata" on the resource type in manifest.json.
+	SupportsMetadata bool
+
 	// FormComponent declares how the plugin provides its App Form UI section.
 	// If nil, the platform renders a standard multi-select populated via ListResourceInstances.
 	FormComponent *ResourceFormComponent
