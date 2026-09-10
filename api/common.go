@@ -1343,7 +1343,7 @@ func (a *API) getUserAppUsage(c *gin.Context) {
 
 	// Get analytics data
 	appIDPtr := uint(appID)
-	chartData, err := analytics.GetUsage(a.service.DB, startDate, endDate, "", nil, &appIDPtr, nil)
+	chartData, err := analytics.GetUsage(a.service.DB, startDate, endDate, "", nil, &appIDPtr, nil, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`

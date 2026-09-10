@@ -10,6 +10,7 @@ import GroupForm from "./components/groups/GroupForm";
 
 import LLMList from "./pages/LLMList";
 import LLMDetails from "./components/llms/LLMDetails";
+import LLMModelDetails from "./components/llms/LLMModelDetails";
 import LLMForm from "./components/llms/LLMForm";
 
 import LLMSettingsList from "./pages/LLMSettingsList";
@@ -105,6 +106,7 @@ const mainAdminRoutes = (
 
     <Route path="llms" element={<LLMList />} />
     <Route path="llms/:id" element={<LLMDetails />} />
+    <Route path="llms/:id/models" element={<LLMModelDetails />} />
     <Route path="llms/edit/:id" element={<LLMForm />} />
     <Route path="llms/new" element={<LLMForm />} />
 
