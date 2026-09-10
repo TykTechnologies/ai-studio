@@ -509,4 +509,10 @@ const (
 
 	// Scheduler management scopes
 	ServiceScopeSchedulerManage = "scheduler.manage" // Manage plugin schedules
+
+	// Notification scopes
+	ServiceScopeNotificationsWrite = "notifications.write" // Raise in-app notifications for admins/users
+
+	// Resource type management scopes (ResourceProvider plugins)
+	ServiceScopeResourceTypesManage = "resource-types.manage" // Register/deactivate the plugin's own resource types at runtime
 )

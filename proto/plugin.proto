@@ -369,6 +369,7 @@ message CallRequest {
     string method = 1;   // RPC method name (e.g., "get_statistics")
     string payload = 2;  // JSON payload as string
     uint32 service_broker_id = 3;  // Broker ID for service API access during RPC
+    PortalUserContext user_context = 4;  // Authenticated admin making the call (optional; see UserAwareRPCHandler)
 }
 
 message CallResponse {
@@ -696,6 +697,7 @@ message ResourceTypeRegistrationProto {
     bool supports_submissions = 6;       // Whether community submissions are supported
     ResourceFormComponentProto form_component = 7;  // Optional custom form component
     bool supports_metadata = 8;          // Whether instances can carry governed metadata (Enterprise)
+    string submission_schema = 9;        // JSON Schema (object) describing the submission payload
 }
 
 message ResourceFormComponentProto {

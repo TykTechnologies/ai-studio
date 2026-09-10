@@ -140,6 +140,12 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
                 id: subItem.id,
                 text: subItem.text,
                 path: subItem.path,
+                // A plugin page whose path is a prefix of a sibling page
+                // (e.g. /portal/plugins/x and /portal/plugins/x/mine) must
+                // match exactly, otherwise both light up on the child route.
+                exact: (pluginSection.sub_items || []).some(
+                  other => other !== subItem && other.path && subItem.path && other.path.startsWith(`${subItem.path}/`)
+                ),
               }))
             }
         )

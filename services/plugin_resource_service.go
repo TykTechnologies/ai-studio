@@ -2,13 +2,68 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+	"github.com/xeipuuv/gojsonschema"
 )
+
+// ErrInvalidSubmissionSchema is returned when a resource type declares a
+// submission schema that is not a valid JSON Schema object.
+var ErrInvalidSubmissionSchema = errors.New("invalid submission schema")
+
+// ValidateSubmissionSchema checks that a resource type's submission schema is
+// either empty or a JSON Schema describing an object. Community submissions
+// for the type are validated against it, and the portal renders a form from it.
+func ValidateSubmissionSchema(schema string) error {
+	schema = strings.TrimSpace(schema)
+	if schema == "" {
+		return nil
+	}
+	var doc map[string]interface{}
+	if err := json.Unmarshal([]byte(schema), &doc); err != nil {
+		return fmt.Errorf("%w: not a JSON object: %v", ErrInvalidSubmissionSchema, err)
+	}
+	if t, ok := doc["type"]; ok {
+		if v, isString := t.(string); !isString || v != "object" {
+			return fmt.Errorf("%w: top-level type must be \"object\"", ErrInvalidSubmissionSchema)
+		}
+	}
+	if _, err := gojsonschema.NewSchema(gojsonschema.NewStringLoader(schema)); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidSubmissionSchema, err)
+	}
+	return nil
+}
+
+// ValidatePayloadAgainstSchema validates a submission payload against a
+// resource type's submission schema. An empty schema accepts any payload.
+// Returns a single error listing every violation.
+func ValidatePayloadAgainstSchema(schema string, payload map[string]interface{}) error {
+	schema = strings.TrimSpace(schema)
+	if schema == "" {
+		return nil
+	}
+	if payload == nil {
+		payload = map[string]interface{}{}
+	}
+	result, err := gojsonschema.Validate(gojsonschema.NewStringLoader(schema), gojsonschema.NewGoLoader(payload))
+	if err != nil {
+		return fmt.Errorf("schema validation failed: %v", err)
+	}
+	if result.Valid() {
+		return nil
+	}
+	msgs := make([]string, 0, len(result.Errors()))
+	for _, e := range result.Errors() {
+		msgs = append(msgs, e.String())
+	}
+	return fmt.Errorf("payload does not match the resource type schema: %s", strings.Join(msgs, "; "))
+}
 
 // --- Plugin Resource Type Registration ---
 
@@ -17,6 +72,11 @@ import (
 // After registration, reconciles default group access by fetching instances
 // from the plugin and ensuring new ones are assigned to the default group.
 func (s *Service) RegisterPluginResourceTypes(pluginID uint, registrations []models.PluginResourceType) error {
+	for _, reg := range registrations {
+		if err := ValidateSubmissionSchema(reg.SubmissionSchema); err != nil {
+			return fmt.Errorf("resource type %s: %w", reg.Slug, err)
+		}
+	}
 	for _, reg := range registrations {
 		existing := &models.PluginResourceType{}
 		err := existing.GetByPluginAndSlug(s.DB, pluginID, reg.Slug)
@@ -37,6 +97,7 @@ func (s *Service) RegisterPluginResourceTypes(pluginID uint, registrations []mod
 			existing.SupportsMetadata = reg.SupportsMetadata
 			existing.FormComponentTag = reg.FormComponentTag
 			existing.FormComponentEntry = reg.FormComponentEntry
+			existing.SubmissionSchema = reg.SubmissionSchema
 			existing.IsActive = true
 			if err := existing.Update(s.DB); err != nil {
 				return fmt.Errorf("failed to update resource type %s: %w", reg.Slug, err)
@@ -79,10 +140,34 @@ func (s *Service) DeactivatePluginResourceTypes(pluginID uint) error {
 		Update("is_active", false).Error
 }
 
+// DeactivatePluginResourceTypesExcept marks every active resource type of a
+// plugin as inactive except those whose slug is in keepSlugs. Used when a
+// plugin re-registers its types at runtime and some were removed. Returns the
+// number of types deactivated.
+func (s *Service) DeactivatePluginResourceTypesExcept(pluginID uint, keepSlugs []string) (int64, error) {
+	q := s.DB.Model(&models.PluginResourceType{}).
+		Where("plugin_id = ? AND is_active = ?", pluginID, true)
+	if len(keepSlugs) > 0 {
+		q = q.Where("slug NOT IN ?", keepSlugs)
+	}
+	res := q.Update("is_active", false)
+	return res.RowsAffected, res.Error
+}
+
 // GetPluginResourceTypes returns all active resource types across all plugins.
 func (s *Service) GetPluginResourceTypes() ([]models.PluginResourceType, error) {
 	var types models.PluginResourceTypes
 	if err := types.GetAllActive(s.DB); err != nil {
+		return nil, err
+	}
+	return types, nil
+}
+
+// GetSubmittablePluginResourceTypes returns the active resource types that
+// accept community submissions (portal submission form).
+func (s *Service) GetSubmittablePluginResourceTypes() ([]models.PluginResourceType, error) {
+	var types models.PluginResourceTypes
+	if err := types.GetAllSubmittable(s.DB); err != nil {
 		return nil, err
 	}
 	return types, nil

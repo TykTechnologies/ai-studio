@@ -2752,6 +2752,7 @@ type CallRequest struct {
 	Method          string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`                                             // RPC method name (e.g., "get_statistics")
 	Payload         string                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`                                           // JSON payload as string
 	ServiceBrokerId uint32                 `protobuf:"varint,3,opt,name=service_broker_id,json=serviceBrokerId,proto3" json:"service_broker_id,omitempty"` // Broker ID for service API access during RPC
+	UserContext     *PortalUserContext     `protobuf:"bytes,4,opt,name=user_context,json=userContext,proto3" json:"user_context,omitempty"`                // Authenticated admin making the call (optional; see UserAwareRPCHandler)
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2805,6 +2806,13 @@ func (x *CallRequest) GetServiceBrokerId() uint32 {
 		return x.ServiceBrokerId
 	}
 	return 0
+}
+
+func (x *CallRequest) GetUserContext() *PortalUserContext {
+	if x != nil {
+		return x.UserContext
+	}
+	return nil
 }
 
 type CallResponse struct {
@@ -5177,6 +5185,7 @@ type ResourceTypeRegistrationProto struct {
 	SupportsSubmissions bool                        `protobuf:"varint,6,opt,name=supports_submissions,json=supportsSubmissions,proto3" json:"supports_submissions,omitempty"` // Whether community submissions are supported
 	FormComponent       *ResourceFormComponentProto `protobuf:"bytes,7,opt,name=form_component,json=formComponent,proto3" json:"form_component,omitempty"`                    // Optional custom form component
 	SupportsMetadata    bool                        `protobuf:"varint,8,opt,name=supports_metadata,json=supportsMetadata,proto3" json:"supports_metadata,omitempty"`          // Whether instances can carry governed metadata (Enterprise)
+	SubmissionSchema    string                      `protobuf:"bytes,9,opt,name=submission_schema,json=submissionSchema,proto3" json:"submission_schema,omitempty"`           // JSON Schema (object) describing the submission payload
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -5265,6 +5274,13 @@ func (x *ResourceTypeRegistrationProto) GetSupportsMetadata() bool {
 		return x.SupportsMetadata
 	}
 	return false
+}
+
+func (x *ResourceTypeRegistrationProto) GetSubmissionSchema() string {
+	if x != nil {
+		return x.SubmissionSchema
+	}
+	return ""
 }
 
 type ResourceFormComponentProto struct {
@@ -6174,11 +6190,12 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x13GetManifestResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rmanifest_json\x18\x02 \x01(\tR\fmanifestJson\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"k\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\xa9\x01\n" +
 	"\vCallRequest\x12\x16\n" +
 	"\x06method\x18\x01 \x01(\tR\x06method\x12\x18\n" +
 	"\apayload\x18\x02 \x01(\tR\apayload\x12*\n" +
-	"\x11service_broker_id\x18\x03 \x01(\rR\x0fserviceBrokerId\"a\n" +
+	"\x11service_broker_id\x18\x03 \x01(\rR\x0fserviceBrokerId\x12<\n" +
+	"\fuser_context\x18\x04 \x01(\v2\x19.plugin.PortalUserContextR\vuserContext\"a\n" +
 	"\fCallResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\tR\x04data\x12#\n" +
@@ -6416,7 +6433,7 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x05ERROR\x10\x03\"%\n" +
 	"#GetResourceTypeRegistrationsRequest\"s\n" +
 	"$GetResourceTypeRegistrationsResponse\x12K\n" +
-	"\rregistrations\x18\x01 \x03(\v2%.plugin.ResourceTypeRegistrationProtoR\rregistrations\"\xd4\x02\n" +
+	"\rregistrations\x18\x01 \x03(\v2%.plugin.ResourceTypeRegistrationProtoR\rregistrations\"\x81\x03\n" +
 	"\x1dResourceTypeRegistrationProto\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -6425,7 +6442,8 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x11has_privacy_score\x18\x05 \x01(\bR\x0fhasPrivacyScore\x121\n" +
 	"\x14supports_submissions\x18\x06 \x01(\bR\x13supportsSubmissions\x12I\n" +
 	"\x0eform_component\x18\a \x01(\v2\".plugin.ResourceFormComponentProtoR\rformComponent\x12+\n" +
-	"\x11supports_metadata\x18\b \x01(\bR\x10supportsMetadata\"O\n" +
+	"\x11supports_metadata\x18\b \x01(\bR\x10supportsMetadata\x12+\n" +
+	"\x11submission_schema\x18\t \x01(\tR\x10submissionSchema\"O\n" +
 	"\x1aResourceFormComponentProto\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x1f\n" +
 	"\ventry_point\x18\x02 \x01(\tR\n" +
@@ -6675,117 +6693,118 @@ var file_proto_plugin_proto_depIdxs = []int32{
 	9,   // 30: plugin.BudgetUsageRequest.context:type_name -> plugin.PluginContext
 	101, // 31: plugin.DataCollectionResponse.metadata:type_name -> plugin.DataCollectionResponse.MetadataEntry
 	37,  // 32: plugin.ListAssetsResponse.assets:type_name -> plugin.AssetInfo
-	44,  // 33: plugin.PortalCallRequest.user_context:type_name -> plugin.PortalUserContext
-	102, // 34: plugin.PortalUserContext.metadata:type_name -> plugin.PortalUserContext.MetadataEntry
-	49,  // 35: plugin.AgentMessageRequest.available_tools:type_name -> plugin.AgentToolInfo
-	50,  // 36: plugin.AgentMessageRequest.available_datasources:type_name -> plugin.AgentDatasourceInfo
-	51,  // 37: plugin.AgentMessageRequest.available_llms:type_name -> plugin.AgentLLMInfo
-	52,  // 38: plugin.AgentMessageRequest.history:type_name -> plugin.AgentConversationMessage
-	9,   // 39: plugin.AgentMessageRequest.context:type_name -> plugin.PluginContext
-	0,   // 40: plugin.AgentMessageChunk.type:type_name -> plugin.AgentMessageChunk.ChunkType
-	55,  // 41: plugin.GetObjectHookRegistrationsResponse.registrations:type_name -> plugin.ObjectHookRegistration
-	9,   // 42: plugin.ObjectHookRequest.context:type_name -> plugin.PluginContext
-	103, // 43: plugin.ObjectHookRequest.metadata:type_name -> plugin.ObjectHookRequest.MetadataEntry
-	104, // 44: plugin.ObjectHookResponse.plugin_metadata:type_name -> plugin.ObjectHookResponse.PluginMetadataEntry
-	9,   // 45: plugin.ExecuteScheduledTaskRequest.context:type_name -> plugin.PluginContext
-	60,  // 46: plugin.ExecuteScheduledTaskRequest.schedule:type_name -> plugin.ScheduleDefinition
-	105, // 47: plugin.EdgePayloadRequest.metadata:type_name -> plugin.EdgePayloadRequest.MetadataEntry
-	9,   // 48: plugin.EdgePayloadRequest.context:type_name -> plugin.PluginContext
-	106, // 49: plugin.EdgePayloadResponse.metadata:type_name -> plugin.EdgePayloadResponse.MetadataEntry
-	107, // 50: plugin.OpenSessionRequest.metadata:type_name -> plugin.OpenSessionRequest.MetadataEntry
-	1,   // 51: plugin.OpenSessionResponse.close_reason:type_name -> plugin.OpenSessionResponse.CloseReason
-	69,  // 52: plugin.GetEndpointRegistrationsResponse.registrations:type_name -> plugin.EndpointRegistration
-	108, // 53: plugin.EndpointRegistration.metadata:type_name -> plugin.EndpointRegistration.MetadataEntry
-	109, // 54: plugin.EndpointRequest.headers:type_name -> plugin.EndpointRequest.HeadersEntry
-	9,   // 55: plugin.EndpointRequest.context:type_name -> plugin.PluginContext
-	25,  // 56: plugin.EndpointRequest.app:type_name -> plugin.App
-	110, // 57: plugin.EndpointResponse.headers:type_name -> plugin.EndpointResponse.HeadersEntry
-	2,   // 58: plugin.EndpointResponseChunk.type:type_name -> plugin.EndpointResponseChunk.ChunkType
-	111, // 59: plugin.EndpointResponseChunk.headers:type_name -> plugin.EndpointResponseChunk.HeadersEntry
-	75,  // 60: plugin.GetResourceTypeRegistrationsResponse.registrations:type_name -> plugin.ResourceTypeRegistrationProto
-	76,  // 61: plugin.ResourceTypeRegistrationProto.form_component:type_name -> plugin.ResourceFormComponentProto
-	9,   // 62: plugin.ListResourceInstancesRequest.context:type_name -> plugin.PluginContext
-	79,  // 63: plugin.ListResourceInstancesResponse.instances:type_name -> plugin.ResourceInstanceProto
-	9,   // 64: plugin.GetResourceInstanceRequest.context:type_name -> plugin.PluginContext
-	79,  // 65: plugin.GetResourceInstanceResponse.instance:type_name -> plugin.ResourceInstanceProto
-	9,   // 66: plugin.ValidateResourceSelectionRequest.context:type_name -> plugin.PluginContext
-	9,   // 67: plugin.CreateResourceInstanceRequest.context:type_name -> plugin.PluginContext
-	79,  // 68: plugin.CreateResourceInstanceResponse.instance:type_name -> plugin.ResourceInstanceProto
-	3,   // 69: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
-	5,   // 70: plugin.PluginService.Ping:input_type -> plugin.PingRequest
-	7,   // 71: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
-	10,  // 72: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
-	12,  // 73: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
-	21,  // 74: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
-	23,  // 75: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
-	14,  // 76: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
-	15,  // 77: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
-	17,  // 78: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
-	19,  // 79: plugin.PluginService.OnStreamComplete:input_type -> plugin.StreamCompleteRequest
-	29,  // 80: plugin.PluginService.HandleProxyLog:input_type -> plugin.ProxyLogRequest
-	30,  // 81: plugin.PluginService.HandleAnalytics:input_type -> plugin.AnalyticsRequest
-	31,  // 82: plugin.PluginService.HandleBudgetUsage:input_type -> plugin.BudgetUsageRequest
-	33,  // 83: plugin.PluginService.GetAsset:input_type -> plugin.GetAssetRequest
-	35,  // 84: plugin.PluginService.ListAssets:input_type -> plugin.ListAssetsRequest
-	38,  // 85: plugin.PluginService.GetManifest:input_type -> plugin.GetManifestRequest
-	40,  // 86: plugin.PluginService.Call:input_type -> plugin.CallRequest
-	42,  // 87: plugin.PluginService.PortalCall:input_type -> plugin.PortalCallRequest
-	45,  // 88: plugin.PluginService.GetConfigSchema:input_type -> plugin.GetConfigSchemaRequest
-	47,  // 89: plugin.PluginService.HandleAgentMessage:input_type -> plugin.AgentMessageRequest
-	53,  // 90: plugin.PluginService.GetObjectHookRegistrations:input_type -> plugin.GetObjectHookRegistrationsRequest
-	56,  // 91: plugin.PluginService.HandleObjectHook:input_type -> plugin.ObjectHookRequest
-	58,  // 92: plugin.PluginService.ExecuteScheduledTask:input_type -> plugin.ExecuteScheduledTaskRequest
-	61,  // 93: plugin.PluginService.AcceptEdgePayload:input_type -> plugin.EdgePayloadRequest
-	67,  // 94: plugin.PluginService.GetEndpointRegistrations:input_type -> plugin.GetEndpointRegistrationsRequest
-	70,  // 95: plugin.PluginService.HandleEndpointRequest:input_type -> plugin.EndpointRequest
-	70,  // 96: plugin.PluginService.HandleEndpointRequestStream:input_type -> plugin.EndpointRequest
-	73,  // 97: plugin.PluginService.GetResourceTypeRegistrations:input_type -> plugin.GetResourceTypeRegistrationsRequest
-	77,  // 98: plugin.PluginService.ListResourceInstances:input_type -> plugin.ListResourceInstancesRequest
-	80,  // 99: plugin.PluginService.GetResourceInstance:input_type -> plugin.GetResourceInstanceRequest
-	82,  // 100: plugin.PluginService.ValidateResourceSelection:input_type -> plugin.ValidateResourceSelectionRequest
-	84,  // 101: plugin.PluginService.CreateResourceInstance:input_type -> plugin.CreateResourceInstanceRequest
-	63,  // 102: plugin.PluginService.OpenSession:input_type -> plugin.OpenSessionRequest
-	65,  // 103: plugin.PluginService.CloseSession:input_type -> plugin.CloseSessionRequest
-	4,   // 104: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
-	6,   // 105: plugin.PluginService.Ping:output_type -> plugin.PingResponse
-	8,   // 106: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
-	11,  // 107: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
-	13,  // 108: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
-	22,  // 109: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
-	24,  // 110: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
-	11,  // 111: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
-	16,  // 112: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
-	18,  // 113: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
-	20,  // 114: plugin.PluginService.OnStreamComplete:output_type -> plugin.StreamCompleteResponse
-	32,  // 115: plugin.PluginService.HandleProxyLog:output_type -> plugin.DataCollectionResponse
-	32,  // 116: plugin.PluginService.HandleAnalytics:output_type -> plugin.DataCollectionResponse
-	32,  // 117: plugin.PluginService.HandleBudgetUsage:output_type -> plugin.DataCollectionResponse
-	34,  // 118: plugin.PluginService.GetAsset:output_type -> plugin.GetAssetResponse
-	36,  // 119: plugin.PluginService.ListAssets:output_type -> plugin.ListAssetsResponse
-	39,  // 120: plugin.PluginService.GetManifest:output_type -> plugin.GetManifestResponse
-	41,  // 121: plugin.PluginService.Call:output_type -> plugin.CallResponse
-	43,  // 122: plugin.PluginService.PortalCall:output_type -> plugin.PortalCallResponse
-	46,  // 123: plugin.PluginService.GetConfigSchema:output_type -> plugin.GetConfigSchemaResponse
-	48,  // 124: plugin.PluginService.HandleAgentMessage:output_type -> plugin.AgentMessageChunk
-	54,  // 125: plugin.PluginService.GetObjectHookRegistrations:output_type -> plugin.GetObjectHookRegistrationsResponse
-	57,  // 126: plugin.PluginService.HandleObjectHook:output_type -> plugin.ObjectHookResponse
-	59,  // 127: plugin.PluginService.ExecuteScheduledTask:output_type -> plugin.ExecuteScheduledTaskResponse
-	62,  // 128: plugin.PluginService.AcceptEdgePayload:output_type -> plugin.EdgePayloadResponse
-	68,  // 129: plugin.PluginService.GetEndpointRegistrations:output_type -> plugin.GetEndpointRegistrationsResponse
-	71,  // 130: plugin.PluginService.HandleEndpointRequest:output_type -> plugin.EndpointResponse
-	72,  // 131: plugin.PluginService.HandleEndpointRequestStream:output_type -> plugin.EndpointResponseChunk
-	74,  // 132: plugin.PluginService.GetResourceTypeRegistrations:output_type -> plugin.GetResourceTypeRegistrationsResponse
-	78,  // 133: plugin.PluginService.ListResourceInstances:output_type -> plugin.ListResourceInstancesResponse
-	81,  // 134: plugin.PluginService.GetResourceInstance:output_type -> plugin.GetResourceInstanceResponse
-	83,  // 135: plugin.PluginService.ValidateResourceSelection:output_type -> plugin.ValidateResourceSelectionResponse
-	85,  // 136: plugin.PluginService.CreateResourceInstance:output_type -> plugin.CreateResourceInstanceResponse
-	64,  // 137: plugin.PluginService.OpenSession:output_type -> plugin.OpenSessionResponse
-	66,  // 138: plugin.PluginService.CloseSession:output_type -> plugin.CloseSessionResponse
-	104, // [104:139] is the sub-list for method output_type
-	69,  // [69:104] is the sub-list for method input_type
-	69,  // [69:69] is the sub-list for extension type_name
-	69,  // [69:69] is the sub-list for extension extendee
-	0,   // [0:69] is the sub-list for field type_name
+	44,  // 33: plugin.CallRequest.user_context:type_name -> plugin.PortalUserContext
+	44,  // 34: plugin.PortalCallRequest.user_context:type_name -> plugin.PortalUserContext
+	102, // 35: plugin.PortalUserContext.metadata:type_name -> plugin.PortalUserContext.MetadataEntry
+	49,  // 36: plugin.AgentMessageRequest.available_tools:type_name -> plugin.AgentToolInfo
+	50,  // 37: plugin.AgentMessageRequest.available_datasources:type_name -> plugin.AgentDatasourceInfo
+	51,  // 38: plugin.AgentMessageRequest.available_llms:type_name -> plugin.AgentLLMInfo
+	52,  // 39: plugin.AgentMessageRequest.history:type_name -> plugin.AgentConversationMessage
+	9,   // 40: plugin.AgentMessageRequest.context:type_name -> plugin.PluginContext
+	0,   // 41: plugin.AgentMessageChunk.type:type_name -> plugin.AgentMessageChunk.ChunkType
+	55,  // 42: plugin.GetObjectHookRegistrationsResponse.registrations:type_name -> plugin.ObjectHookRegistration
+	9,   // 43: plugin.ObjectHookRequest.context:type_name -> plugin.PluginContext
+	103, // 44: plugin.ObjectHookRequest.metadata:type_name -> plugin.ObjectHookRequest.MetadataEntry
+	104, // 45: plugin.ObjectHookResponse.plugin_metadata:type_name -> plugin.ObjectHookResponse.PluginMetadataEntry
+	9,   // 46: plugin.ExecuteScheduledTaskRequest.context:type_name -> plugin.PluginContext
+	60,  // 47: plugin.ExecuteScheduledTaskRequest.schedule:type_name -> plugin.ScheduleDefinition
+	105, // 48: plugin.EdgePayloadRequest.metadata:type_name -> plugin.EdgePayloadRequest.MetadataEntry
+	9,   // 49: plugin.EdgePayloadRequest.context:type_name -> plugin.PluginContext
+	106, // 50: plugin.EdgePayloadResponse.metadata:type_name -> plugin.EdgePayloadResponse.MetadataEntry
+	107, // 51: plugin.OpenSessionRequest.metadata:type_name -> plugin.OpenSessionRequest.MetadataEntry
+	1,   // 52: plugin.OpenSessionResponse.close_reason:type_name -> plugin.OpenSessionResponse.CloseReason
+	69,  // 53: plugin.GetEndpointRegistrationsResponse.registrations:type_name -> plugin.EndpointRegistration
+	108, // 54: plugin.EndpointRegistration.metadata:type_name -> plugin.EndpointRegistration.MetadataEntry
+	109, // 55: plugin.EndpointRequest.headers:type_name -> plugin.EndpointRequest.HeadersEntry
+	9,   // 56: plugin.EndpointRequest.context:type_name -> plugin.PluginContext
+	25,  // 57: plugin.EndpointRequest.app:type_name -> plugin.App
+	110, // 58: plugin.EndpointResponse.headers:type_name -> plugin.EndpointResponse.HeadersEntry
+	2,   // 59: plugin.EndpointResponseChunk.type:type_name -> plugin.EndpointResponseChunk.ChunkType
+	111, // 60: plugin.EndpointResponseChunk.headers:type_name -> plugin.EndpointResponseChunk.HeadersEntry
+	75,  // 61: plugin.GetResourceTypeRegistrationsResponse.registrations:type_name -> plugin.ResourceTypeRegistrationProto
+	76,  // 62: plugin.ResourceTypeRegistrationProto.form_component:type_name -> plugin.ResourceFormComponentProto
+	9,   // 63: plugin.ListResourceInstancesRequest.context:type_name -> plugin.PluginContext
+	79,  // 64: plugin.ListResourceInstancesResponse.instances:type_name -> plugin.ResourceInstanceProto
+	9,   // 65: plugin.GetResourceInstanceRequest.context:type_name -> plugin.PluginContext
+	79,  // 66: plugin.GetResourceInstanceResponse.instance:type_name -> plugin.ResourceInstanceProto
+	9,   // 67: plugin.ValidateResourceSelectionRequest.context:type_name -> plugin.PluginContext
+	9,   // 68: plugin.CreateResourceInstanceRequest.context:type_name -> plugin.PluginContext
+	79,  // 69: plugin.CreateResourceInstanceResponse.instance:type_name -> plugin.ResourceInstanceProto
+	3,   // 70: plugin.PluginService.Initialize:input_type -> plugin.InitRequest
+	5,   // 71: plugin.PluginService.Ping:input_type -> plugin.PingRequest
+	7,   // 72: plugin.PluginService.Shutdown:input_type -> plugin.ShutdownRequest
+	10,  // 73: plugin.PluginService.ProcessPreAuth:input_type -> plugin.PluginRequest
+	12,  // 74: plugin.PluginService.Authenticate:input_type -> plugin.AuthRequest
+	21,  // 75: plugin.PluginService.GetAppByCredential:input_type -> plugin.GetAppRequest
+	23,  // 76: plugin.PluginService.GetUserByCredential:input_type -> plugin.GetUserRequest
+	14,  // 77: plugin.PluginService.ProcessPostAuth:input_type -> plugin.EnrichedRequest
+	15,  // 78: plugin.PluginService.OnBeforeWriteHeaders:input_type -> plugin.HeadersRequest
+	17,  // 79: plugin.PluginService.OnBeforeWrite:input_type -> plugin.ResponseWriteRequest
+	19,  // 80: plugin.PluginService.OnStreamComplete:input_type -> plugin.StreamCompleteRequest
+	29,  // 81: plugin.PluginService.HandleProxyLog:input_type -> plugin.ProxyLogRequest
+	30,  // 82: plugin.PluginService.HandleAnalytics:input_type -> plugin.AnalyticsRequest
+	31,  // 83: plugin.PluginService.HandleBudgetUsage:input_type -> plugin.BudgetUsageRequest
+	33,  // 84: plugin.PluginService.GetAsset:input_type -> plugin.GetAssetRequest
+	35,  // 85: plugin.PluginService.ListAssets:input_type -> plugin.ListAssetsRequest
+	38,  // 86: plugin.PluginService.GetManifest:input_type -> plugin.GetManifestRequest
+	40,  // 87: plugin.PluginService.Call:input_type -> plugin.CallRequest
+	42,  // 88: plugin.PluginService.PortalCall:input_type -> plugin.PortalCallRequest
+	45,  // 89: plugin.PluginService.GetConfigSchema:input_type -> plugin.GetConfigSchemaRequest
+	47,  // 90: plugin.PluginService.HandleAgentMessage:input_type -> plugin.AgentMessageRequest
+	53,  // 91: plugin.PluginService.GetObjectHookRegistrations:input_type -> plugin.GetObjectHookRegistrationsRequest
+	56,  // 92: plugin.PluginService.HandleObjectHook:input_type -> plugin.ObjectHookRequest
+	58,  // 93: plugin.PluginService.ExecuteScheduledTask:input_type -> plugin.ExecuteScheduledTaskRequest
+	61,  // 94: plugin.PluginService.AcceptEdgePayload:input_type -> plugin.EdgePayloadRequest
+	67,  // 95: plugin.PluginService.GetEndpointRegistrations:input_type -> plugin.GetEndpointRegistrationsRequest
+	70,  // 96: plugin.PluginService.HandleEndpointRequest:input_type -> plugin.EndpointRequest
+	70,  // 97: plugin.PluginService.HandleEndpointRequestStream:input_type -> plugin.EndpointRequest
+	73,  // 98: plugin.PluginService.GetResourceTypeRegistrations:input_type -> plugin.GetResourceTypeRegistrationsRequest
+	77,  // 99: plugin.PluginService.ListResourceInstances:input_type -> plugin.ListResourceInstancesRequest
+	80,  // 100: plugin.PluginService.GetResourceInstance:input_type -> plugin.GetResourceInstanceRequest
+	82,  // 101: plugin.PluginService.ValidateResourceSelection:input_type -> plugin.ValidateResourceSelectionRequest
+	84,  // 102: plugin.PluginService.CreateResourceInstance:input_type -> plugin.CreateResourceInstanceRequest
+	63,  // 103: plugin.PluginService.OpenSession:input_type -> plugin.OpenSessionRequest
+	65,  // 104: plugin.PluginService.CloseSession:input_type -> plugin.CloseSessionRequest
+	4,   // 105: plugin.PluginService.Initialize:output_type -> plugin.InitResponse
+	6,   // 106: plugin.PluginService.Ping:output_type -> plugin.PingResponse
+	8,   // 107: plugin.PluginService.Shutdown:output_type -> plugin.ShutdownResponse
+	11,  // 108: plugin.PluginService.ProcessPreAuth:output_type -> plugin.PluginResponse
+	13,  // 109: plugin.PluginService.Authenticate:output_type -> plugin.AuthResponse
+	22,  // 110: plugin.PluginService.GetAppByCredential:output_type -> plugin.GetAppResponse
+	24,  // 111: plugin.PluginService.GetUserByCredential:output_type -> plugin.GetUserResponse
+	11,  // 112: plugin.PluginService.ProcessPostAuth:output_type -> plugin.PluginResponse
+	16,  // 113: plugin.PluginService.OnBeforeWriteHeaders:output_type -> plugin.HeadersResponse
+	18,  // 114: plugin.PluginService.OnBeforeWrite:output_type -> plugin.ResponseWriteResponse
+	20,  // 115: plugin.PluginService.OnStreamComplete:output_type -> plugin.StreamCompleteResponse
+	32,  // 116: plugin.PluginService.HandleProxyLog:output_type -> plugin.DataCollectionResponse
+	32,  // 117: plugin.PluginService.HandleAnalytics:output_type -> plugin.DataCollectionResponse
+	32,  // 118: plugin.PluginService.HandleBudgetUsage:output_type -> plugin.DataCollectionResponse
+	34,  // 119: plugin.PluginService.GetAsset:output_type -> plugin.GetAssetResponse
+	36,  // 120: plugin.PluginService.ListAssets:output_type -> plugin.ListAssetsResponse
+	39,  // 121: plugin.PluginService.GetManifest:output_type -> plugin.GetManifestResponse
+	41,  // 122: plugin.PluginService.Call:output_type -> plugin.CallResponse
+	43,  // 123: plugin.PluginService.PortalCall:output_type -> plugin.PortalCallResponse
+	46,  // 124: plugin.PluginService.GetConfigSchema:output_type -> plugin.GetConfigSchemaResponse
+	48,  // 125: plugin.PluginService.HandleAgentMessage:output_type -> plugin.AgentMessageChunk
+	54,  // 126: plugin.PluginService.GetObjectHookRegistrations:output_type -> plugin.GetObjectHookRegistrationsResponse
+	57,  // 127: plugin.PluginService.HandleObjectHook:output_type -> plugin.ObjectHookResponse
+	59,  // 128: plugin.PluginService.ExecuteScheduledTask:output_type -> plugin.ExecuteScheduledTaskResponse
+	62,  // 129: plugin.PluginService.AcceptEdgePayload:output_type -> plugin.EdgePayloadResponse
+	68,  // 130: plugin.PluginService.GetEndpointRegistrations:output_type -> plugin.GetEndpointRegistrationsResponse
+	71,  // 131: plugin.PluginService.HandleEndpointRequest:output_type -> plugin.EndpointResponse
+	72,  // 132: plugin.PluginService.HandleEndpointRequestStream:output_type -> plugin.EndpointResponseChunk
+	74,  // 133: plugin.PluginService.GetResourceTypeRegistrations:output_type -> plugin.GetResourceTypeRegistrationsResponse
+	78,  // 134: plugin.PluginService.ListResourceInstances:output_type -> plugin.ListResourceInstancesResponse
+	81,  // 135: plugin.PluginService.GetResourceInstance:output_type -> plugin.GetResourceInstanceResponse
+	83,  // 136: plugin.PluginService.ValidateResourceSelection:output_type -> plugin.ValidateResourceSelectionResponse
+	85,  // 137: plugin.PluginService.CreateResourceInstance:output_type -> plugin.CreateResourceInstanceResponse
+	64,  // 138: plugin.PluginService.OpenSession:output_type -> plugin.OpenSessionResponse
+	66,  // 139: plugin.PluginService.CloseSession:output_type -> plugin.CloseSessionResponse
+	105, // [105:140] is the sub-list for method output_type
+	70,  // [70:105] is the sub-list for method input_type
+	70,  // [70:70] is the sub-list for extension type_name
+	70,  // [70:70] is the sub-list for extension extendee
+	0,   // [0:70] is the sub-list for field type_name
 }
 
 func init() { file_proto_plugin_proto_init() }

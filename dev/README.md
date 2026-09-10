@@ -86,6 +86,8 @@ That's it! The environment will automatically:
 | `gateway` | 8081 | Microgateway (data plane) - full mode only |
 | `plugins` | - | Plugin watcher/builder - full mode only |
 
+Binaries built by the watcher land in the shared `plugin_builds` volume, mounted at `/app/bin/plugins` in Studio and the gateway. Register one from **Admin → Plugins → Add Plugin** with the command `file:///app/bin/plugins/<name>` (that directory is allow-listed via `AI_STUDIO_PLUGIN_ALLOWED_DIRS` in full mode).
+
 ## Hot Reloading
 
 ### How It Works

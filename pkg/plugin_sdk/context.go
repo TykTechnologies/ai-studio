@@ -216,6 +216,17 @@ type StudioServices interface {
 	// Returns success status and the final list of plugin IDs
 	UpdateLLMPlugins(ctx context.Context, llmID uint32, pluginIDs []uint32, append bool) (bool, string, []uint32, error)
 
+	// CreateNotification raises an in-app notification (and email when SMTP is
+	// configured) for all admins and/or a specific user.
+	// Requires the "notifications.write" service scope.
+	CreateNotification(ctx context.Context, n Notification) error
+
+	// RegisterResourceTypes (re)registers the plugin's resource types at runtime.
+	// When deactivateMissing is true, previously registered types absent from
+	// regs are deactivated. Returns the number of types registered and deactivated.
+	// Requires the "resource-types.manage" service scope.
+	RegisterResourceTypes(ctx context.Context, regs []ResourceTypeRegistration, deactivateMissing bool) (registered uint32, deactivated uint32, err error)
+
 	// ===== Governed Metadata (Enterprise) =====
 	// objectType is "llm", "tool", "datasource" or "plugin_resource:<plugin_id>:<slug>".
 	// A plugin may write "plugin_resource:self:<slug>" (see SelfResourceObjectType) for
@@ -454,4 +465,22 @@ type EventService interface {
 	// Unsubscribe removes a subscription by ID.
 	// After this call, the handler will no longer receive events.
 	Unsubscribe(subscriptionID string) error
+}
+
+// Notification describes an in-app notification raised by a plugin via
+// StudioServices.CreateNotification.
+type Notification struct {
+	// ID is an optional dedupe key. The platform scopes it to the plugin, so two
+	// calls with the same ID produce a single notification per recipient.
+	ID string
+	// Type is a free-form label stored on the notification (e.g. "access_request").
+	Type string
+	// Title is required (max 255 characters).
+	Title string
+	// Content is the body, rendered as markdown in the admin UI (max 10000 characters).
+	Content string
+	// NotifyAdmins delivers the notification to every admin with notifications enabled.
+	NotifyAdmins bool
+	// UserID delivers the notification to a specific user (0 = none).
+	UserID uint32
 }

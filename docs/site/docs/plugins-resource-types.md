@@ -166,7 +166,7 @@ func main() {
 | `ListResourceInstances(ctx, slug)` | App form load, Group form load | List available instances |
 | `GetResourceInstance(ctx, slug, id)` | Config snapshot build | Get instance details for gateway |
 | `ValidateResourceSelection(ctx, slug, ids, appID)` | App create/update | Custom validation logic |
-| `CreateResourceInstance(ctx, slug, payload)` | Submission approval | Create instance from approved submission |
+| `CreateResourceInstance(ctx, slug, payload)` | Submission approval | Create instance from approved submission (payload is a `SubmissionEnvelope`) |
 
 ## SDK Types
 
@@ -181,6 +181,7 @@ type ResourceTypeRegistration struct {
     HasPrivacyScore     bool                   // Whether instances carry privacy scores
     SupportsSubmissions bool                   // Whether community submissions are supported
     FormComponent       *ResourceFormComponent // Custom Web Component (nil = standard multi-select)
+    SubmissionSchema    string                 // JSON Schema (object) for community submissions
 }
 ```
 
@@ -342,12 +343,50 @@ Gateway plugins can access these associations from the app's config to make rout
 
 When `SupportsSubmissions` is `true`, community users can submit new resource instances through the existing submission workflow:
 
-1. User fills out a submission form with `resource_type: "plugin"` and a `plugin_resource_type_id`
-2. The `resource_payload` contains plugin-defined JSON describing the new instance
-3. Admin reviews the submission (including a suggested privacy score)
-4. On approval, the platform calls the plugin's `CreateResourceInstance()` with the payload
-5. The plugin creates the instance and returns its ID
-6. The instance becomes available for selection in the App form
+1. The portal Submission form lists the type (from `GET /common/plugin-resource-types`) next to Data Source and Tool. When the type declares a `SubmissionSchema`, the form is rendered from it; otherwise the user provides a name and free-form JSON.
+2. The user submits with `resource_type: "plugin"`, `plugin_resource_type_id` and a `resource_payload`. The platform validates the payload against `SubmissionSchema` and rejects violations with a 400.
+3. Admins review the submission in the Submission Queue (payload shown against the schema; no connectivity test applies) and set the final privacy score.
+4. On approval, the platform calls the plugin's `CreateResourceInstance(ctx, slug, payload)` where `payload` is a JSON **submission envelope**:
+
+```json
+{
+  "source": "submission",
+  "submission_id": 123,
+  "submitter": {"id": 7, "email": "alice@acme.com", "name": "Alice"},
+  "reviewer":  {"id": 1, "email": "admin@acme.com", "name": "Admin"},
+  "final_privacy_score": 40,
+  "suggested_privacy": 30,
+  "privacy_justification": "…",
+  "assigned_catalogues": [],
+  "documentation_url": "…",
+  "notes": "…",
+  "attestations": [...],
+  "resource_payload": { "name": "…", "...": "the user's form" }
+}
+```
+
+   Decode it with `plugin_sdk.ParseSubmissionEnvelope(payload)`; it also accepts a bare payload for older callers.
+5. The plugin creates the instance and returns it. The RPC runs outside the platform's database transaction, so treat `submission_id` as an idempotency key: if an instance already exists for it, return that instance. The instance ID is stored on the submission as `plugin_instance_id`.
+6. The instance becomes available for selection in the App form (group access is reconciled via `EnsureDefaultGroupAccess`).
+
+Update proposals (`POST /common/submissions/update`) are not supported for plugin resource types; plugins version their own instances.
+
+### Declaring a submission schema
+
+```go
+{
+    Slug:                "agent",
+    Name:                "Agent",
+    SupportsSubmissions: true,
+    SubmissionSchema:    `{"type":"object","properties":{"name":{"type":"string"},"purpose":{"type":"string"}},"required":["name","purpose"]}`,
+}
+```
+
+The schema must describe an object. It is validated when the type is registered (`ErrInvalidSubmissionSchema`).
+
+## Runtime Registration
+
+Manifest `resource_types` are registered at load time. When the set of types is defined at runtime (for example by administrators inside the plugin), call `plugin_sdk.SyncResourceTypes(ctx, regs)` whenever it changes: it registers the given types and deactivates the plugin's types that are no longer listed. This needs the `resource-types.manage` service scope. The platform calls back `ListResourceInstances` for each type during the call, so return an empty list (not an error) while your state is still loading.
 
 ## Manifest Reference
 

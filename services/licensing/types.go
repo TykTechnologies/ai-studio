@@ -91,4 +91,5 @@ const (
 	FeatureHubSpokeMultiTenant = "hub_spoke_multi_tenant"    // Multi-tenant namespace support (ENT)
 	FeatureGroups              = "feature_groups"            // Group-based access control (ENT)
 	FeatureAdvancedLLMCache    = "feature_advanced_llm_cache" // Enterprise LLM Cache with distributed backends (ENT)
+	FeatureAssetCatalog        = "feature_asset_catalog"      // Asset Catalog plugin: portal asset types with governance (ENT)
 )

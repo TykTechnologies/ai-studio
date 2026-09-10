@@ -56,6 +56,23 @@ Each feature specification below provides detailed documentation on the individu
 
 ## Available Specifications
 
+### [AI Portal](AIPortal.md)
+- End-user portal for discovering resources and building apps
+- App gallery, resource browser and chat interface
+- App endpoint documentation (Main Ingress and per-LLM endpoints)
+
+### [Asset Catalog (Enterprise plugin)](AssetCatalog.md)
+- Runtime-defined asset types for agents, prompts, skills, guardrails and other non-gateway assets
+- Ownership roles, versioning with lineage, relationships and lifecycle tags
+- Community submissions via the platform Submission form
+- Access-request workflow with in-Studio notifications and event publishing
+- Platform extensions: plugin submissions, `CreateNotification` and `RegisterResourceTypes` RPCs, admin RPC caller identity
+
+### [Community Submissions (UGC)](UGC.md)
+- Portal users submit Data Sources, Tools and plugin resource instances for review
+- Draft → submitted → in review → approved / rejected / changes requested
+- Attestations, privacy suggestions, catalogue assignment and versioned updates
+
 ### [Analytics System](Analytics.md)
 - Comprehensive usage tracking and cost calculation
 - Data aggregation for LLM interactions and tool calls

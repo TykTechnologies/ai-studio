@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/google/uuid"
 	"github.com/gosimple/slug"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
@@ -37,17 +39,17 @@ type AIStudioManagementServer struct {
 	pb.UnimplementedAIStudioManagementServiceServer
 
 	// Specialized servers for different domains
-	pluginServer         *PluginManagementServer
-	llmServer           *LLMManagementServer
-	toolsServer         *ToolsServer
-	datasourcesServer   *DatasourcesServer
-	dataCataloguesServer *DataCataloguesServer
-	tagsServer          *TagsServer
-	filtersServer       *FiltersServer
-	vendorsServer       *VendorsServer
-	modelPricingServer  *ModelPricingServer
-	pluginKVServer      *PluginKVServer
-	schedulerServer     *SchedulerServer
+	pluginServer           *PluginManagementServer
+	llmServer              *LLMManagementServer
+	toolsServer            *ToolsServer
+	datasourcesServer      *DatasourcesServer
+	dataCataloguesServer   *DataCataloguesServer
+	tagsServer             *TagsServer
+	filtersServer          *FiltersServer
+	vendorsServer          *VendorsServer
+	modelPricingServer     *ModelPricingServer
+	pluginKVServer         *PluginKVServer
+	schedulerServer        *SchedulerServer
 	governedMetadataServer *GovernedMetadataServer
 
 	// Note: Analytics server removed - analytics functionality not available to plugins
@@ -113,19 +115,19 @@ func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementS
 	pluginKVService := services.NewPluginKVService(service.GetDB())
 
 	return &AIStudioManagementServer{
-		pluginServer:         NewPluginManagementServer(service.PluginService),
-		llmServer:           NewLLMManagementServer(service),
-		toolsServer:         NewToolsServer(service),
-		datasourcesServer:   NewDatasourcesServer(service),
-		dataCataloguesServer: NewDataCataloguesServer(service),
-		tagsServer:          NewTagsServer(service),
-		filtersServer:       NewFiltersServer(service),
-		vendorsServer:       NewVendorsServer(service),
-		modelPricingServer:  NewModelPricingServer(service),
-		pluginKVServer:      NewPluginKVServer(pluginKVService),
-		schedulerServer:     NewSchedulerServer(service),
+		pluginServer:           NewPluginManagementServer(service.PluginService),
+		llmServer:              NewLLMManagementServer(service),
+		toolsServer:            NewToolsServer(service),
+		datasourcesServer:      NewDatasourcesServer(service),
+		dataCataloguesServer:   NewDataCataloguesServer(service),
+		tagsServer:             NewTagsServer(service),
+		filtersServer:          NewFiltersServer(service),
+		vendorsServer:          NewVendorsServer(service),
+		modelPricingServer:     NewModelPricingServer(service),
+		pluginKVServer:         NewPluginKVServer(pluginKVService),
+		schedulerServer:        NewSchedulerServer(service),
 		governedMetadataServer: NewGovernedMetadataServer(service),
-		service:            service,
+		service:                service,
 		// Note: Analytics server removed - analytics functionality not available to plugins
 	}
 }
@@ -1343,12 +1345,12 @@ func (s *AIStudioManagementServer) GetLicenseInfo(ctx context.Context, req *pb.G
 		// No licensing service means community edition
 		log.Debug().Msg("GetLicenseInfo called but no licensing service configured (community mode)")
 		return &pb.GetLicenseInfoResponse{
-			LicenseValid:   true, // Community is always "valid"
-			DaysRemaining:  -1,   // -1 means never expires
-			LicenseType:    "community",
-			Entitlements:   []string{},
-			Organization:   "",
-			ExpiresAt:      nil,
+			LicenseValid:  true, // Community is always "valid"
+			DaysRemaining: -1,   // -1 means never expires
+			LicenseType:   "community",
+			Entitlements:  []string{},
+			Organization:  "",
+			ExpiresAt:     nil,
 		}, nil
 	}
 
@@ -1401,4 +1403,141 @@ func (s *AIStudioManagementServer) UpdateSchedule(ctx context.Context, req *pb.U
 
 func (s *AIStudioManagementServer) DeleteSchedule(ctx context.Context, req *pb.DeleteScheduleRequest) (*pb.DeleteScheduleResponse, error) {
 	return s.schedulerServer.DeleteSchedule(ctx, req)
+}
+
+// --- Notifications ---
+
+const (
+	maxNotificationTitleLen   = 255
+	maxNotificationContentLen = 10000
+)
+
+// CreateNotification lets a plugin raise an in-app notification for admins
+// and/or a specific user. Requires the notifications.write scope. The
+// notification ID is scoped to the calling plugin so plugins cannot
+// suppress each other's notifications through the dedupe key.
+func (s *AIStudioManagementServer) CreateNotification(ctx context.Context, req *pb.CreateNotificationRequest) (*pb.CreateNotificationResponse, error) {
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeNotificationsWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.service == nil || s.service.NotificationService == nil {
+		return nil, status.Errorf(codes.Unavailable, "notification service not available")
+	}
+
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "title is required")
+	}
+	if len(title) > maxNotificationTitleLen {
+		return nil, status.Errorf(codes.InvalidArgument, "title exceeds %d characters", maxNotificationTitleLen)
+	}
+	if len(req.Content) > maxNotificationContentLen {
+		return nil, status.Errorf(codes.InvalidArgument, "content exceeds %d characters", maxNotificationContentLen)
+	}
+	if !req.NotifyAdmins && req.UserId == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "at least one of notify_admins or user_id is required")
+	}
+	if req.UserId >= uint32(models.NotifyAdmins) {
+		return nil, status.Errorf(codes.InvalidArgument, "user_id out of range")
+	}
+
+	flags := uint(req.UserId)
+	if req.NotifyAdmins {
+		flags |= models.NotifyAdmins
+	}
+
+	dedupeKey := strings.TrimSpace(req.NotificationId)
+	if dedupeKey == "" {
+		dedupeKey = uuid.NewString()
+	}
+	notificationID := fmt.Sprintf("plugin_%d_%s", plugin.ID, dedupeKey)
+
+	notifType := strings.TrimSpace(req.Type)
+	if notifType == "" {
+		notifType = fmt.Sprintf("plugin:%s", plugin.Name)
+	}
+
+	// Plugins are not trusted authors: strip raw HTML and script-capable link
+	// schemes before the Markdown is stored and shown to administrators.
+	content := sanitizePluginNotificationContent(req.Content)
+	title = sanitizePluginNotificationContent(title)
+	if title == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "title must contain text, not only markup")
+	}
+
+	if err := s.service.NotificationService.NotifyDirect(notificationID, notifType, title, content, flags); err != nil {
+		log.Warn().Err(err).Uint("plugin_id", plugin.ID).Str("notification_id", notificationID).Msg("Plugin notification failed")
+		return &pb.CreateNotificationResponse{Success: false, Message: err.Error()}, nil
+	}
+
+	log.Debug().Uint("plugin_id", plugin.ID).Str("notification_id", notificationID).Bool("admins", req.NotifyAdmins).Uint32("user_id", req.UserId).Msg("Plugin notification created")
+	return &pb.CreateNotificationResponse{Success: true}, nil
+}
+
+// --- Resource type registration ---
+
+// RegisterResourceTypes lets a ResourceProvider plugin (re)register its
+// resource types at runtime. The plugin ID always comes from the
+// authenticated context, never from the request, so a plugin can only manage
+// its own types. Requires the resource-types.manage scope.
+func (s *AIStudioManagementServer) RegisterResourceTypes(ctx context.Context, req *pb.RegisterResourceTypesRequest) (*pb.RegisterResourceTypesResponse, error) {
+	plugin, err := s.validatePluginScope(ctx, models.ServiceScopeResourceTypesManage)
+	if err != nil {
+		return nil, err
+	}
+	if s.service == nil {
+		return nil, status.Errorf(codes.Unavailable, "service not available")
+	}
+
+	types := make([]models.PluginResourceType, 0, len(req.Types))
+	keep := make([]string, 0, len(req.Types))
+	for _, spec := range req.Types {
+		if spec == nil {
+			continue
+		}
+		slugValue := strings.TrimSpace(spec.Slug)
+		if slugValue == "" || strings.TrimSpace(spec.Name) == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "each resource type needs a slug and a name")
+		}
+		types = append(types, models.PluginResourceType{
+			PluginID:            plugin.ID,
+			Slug:                slugValue,
+			Name:                spec.Name,
+			Description:         spec.Description,
+			Icon:                spec.Icon,
+			HasPrivacyScore:     spec.HasPrivacyScore,
+			SupportsSubmissions: spec.SupportsSubmissions,
+			FormComponentTag:    spec.FormComponentTag,
+			FormComponentEntry:  spec.FormComponentEntry,
+			SubmissionSchema:    spec.SubmissionSchema,
+			SupportsMetadata:    spec.SupportsMetadata,
+		})
+		keep = append(keep, slugValue)
+	}
+
+	if err := s.service.RegisterPluginResourceTypes(plugin.ID, types); err != nil {
+		if errors.Is(err, services.ErrInvalidSubmissionSchema) {
+			return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+		}
+		log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to register resource types")
+		return nil, status.Errorf(codes.Internal, "failed to register resource types: %v", err)
+	}
+
+	var deactivated int64
+	if req.DeactivateMissing {
+		deactivated, err = s.service.DeactivatePluginResourceTypesExcept(plugin.ID, keep)
+		if err != nil {
+			log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to deactivate stale resource types")
+			return nil, status.Errorf(codes.Internal, "failed to deactivate stale resource types: %v", err)
+		}
+	}
+
+	log.Info().Uint("plugin_id", plugin.ID).Int("registered", len(types)).Int64("deactivated", deactivated).Msg("Plugin resource types synchronised")
+	return &pb.RegisterResourceTypesResponse{
+		Success:     true,
+		Registered:  uint32(len(types)),
+		Deactivated: uint32(deactivated),
+	}, nil
 }

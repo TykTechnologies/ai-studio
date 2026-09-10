@@ -20,6 +20,7 @@ type PluginResourceType struct {
 	SupportsMetadata    bool   `json:"supports_metadata" gorm:"default:false"` // Instances can carry governed metadata (Enterprise)
 	FormComponentTag    string `json:"form_component_tag" gorm:"size:100"`
 	FormComponentEntry  string `json:"form_component_entry" gorm:"size:500"`
+	SubmissionSchema    string `json:"submission_schema" gorm:"type:text"` // JSON Schema (object) for community submissions; empty = free-form
 	IsActive            bool   `json:"is_active" gorm:"default:true"`
 
 	// Relationships
@@ -56,6 +57,12 @@ func (p *PluginResourceType) GetByPluginAndSlug(db *gorm.DB, pluginID uint, slug
 // GetAllActive returns all active plugin resource types
 func (pts *PluginResourceTypes) GetAllActive(db *gorm.DB) error {
 	return db.Where("is_active = ?", true).Preload("Plugin").Find(pts).Error
+}
+
+// GetAllSubmittable returns the active resource types that accept community
+// submissions, filtered in the database rather than in memory.
+func (pts *PluginResourceTypes) GetAllSubmittable(db *gorm.DB) error {
+	return db.Where("is_active = ? AND supports_submissions = ?", true, true).Preload("Plugin").Find(pts).Error
 }
 
 // GetByPlugin returns all resource types for a specific plugin

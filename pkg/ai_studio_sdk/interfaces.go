@@ -129,37 +129,44 @@ type ServiceAPIScope struct {
 	// Governed metadata scopes (Enterprise)
 	MetadataRead  string
 	MetadataWrite string
+	// Notification scopes
+	NotificationsWrite string
+
+	// Resource type management scopes (ResourceProvider plugins)
+	ResourceTypesManage string
 }
 
 // AvailableScopes provides constants for common service API scopes
 var AvailableScopes = ServiceAPIScope{
-	PluginsRead:         "plugins.read",
-	PluginsWrite:        "plugins.write",
-	PluginsConfig:       "plugins.config",
-	LLMsRead:            "llms.read",
-	LLMsWrite:           "llms.write",
-	LLMsProxy:           "llms.proxy",
-	ToolsRead:           "tools.read",
-	ToolsWrite:          "tools.write",
-	ToolsOperations:     "tools.operations",
-	AppsRead:            "apps.read",
-	AppsWrite:           "apps.write",
+	PluginsRead:           "plugins.read",
+	PluginsWrite:          "plugins.write",
+	PluginsConfig:         "plugins.config",
+	LLMsRead:              "llms.read",
+	LLMsWrite:             "llms.write",
+	LLMsProxy:             "llms.proxy",
+	ToolsRead:             "tools.read",
+	ToolsWrite:            "tools.write",
+	ToolsOperations:       "tools.operations",
+	AppsRead:              "apps.read",
+	AppsWrite:             "apps.write",
 	KVReadWrite:           "kv.readwrite",
 	DatasourcesRead:       "datasources.read",
 	DatasourcesWrite:      "datasources.write",
 	DatasourcesQuery:      "datasources.query",
 	DatasourcesEmbeddings: "datasources.embeddings",
 	TagsRead:              "tags.read",
-	TagsWrite:           "tags.write",
-	FiltersRead:         "filters.read",
-	FiltersWrite:        "filters.write",
-	PricingRead:         "pricing.read",
-	PricingWrite:        "pricing.write",
-	DataCataloguesRead:  "data-catalogues.read",
-	DataCataloguesWrite: "data-catalogues.write",
-	SchedulerManage:     "scheduler.manage",
-	MetadataRead:        "metadata.read",
-	MetadataWrite:       "metadata.write",
+	TagsWrite:             "tags.write",
+	FiltersRead:           "filters.read",
+	FiltersWrite:          "filters.write",
+	PricingRead:           "pricing.read",
+	PricingWrite:          "pricing.write",
+	DataCataloguesRead:    "data-catalogues.read",
+	DataCataloguesWrite:   "data-catalogues.write",
+	SchedulerManage:       "scheduler.manage",
+	MetadataRead:          "metadata.read",
+	MetadataWrite:         "metadata.write",
+	NotificationsWrite:    "notifications.write",
+	ResourceTypesManage:   "resource-types.manage",
 }
 
 // PluginContext provides context information for service API calls

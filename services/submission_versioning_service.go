@@ -6,8 +6,101 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"gorm.io/gorm"
 )
+
+// --- Plugin resource creation (for ApproveSubmission) ---
+
+// ResourceInstanceCreator is the slice of the AI Studio plugin manager used to
+// create plugin resource instances from approved submissions. It exists so
+// the submission service can be tested with a fake plugin.
+type ResourceInstanceCreator interface {
+	CreateResourceInstance(pluginID uint, resourceTypeSlug string, payload []byte, reviewerID uint) (*pb.ResourceInstanceProto, error)
+}
+
+// createPluginInstanceFromSubmission asks the owning plugin to create an
+// instance for an approved plugin-resource submission and returns the
+// plugin-assigned instance ID.
+func (s *Service) createPluginInstanceFromSubmission(tx *gorm.DB, submission *models.Submission, reviewer plugin_sdk.SubmissionUser, finalPrivacyScore int, catalogueIDs models.JSONMap) (string, error) {
+	if submission.PluginResourceTypeID == nil {
+		return "", fmt.Errorf("submission has no plugin resource type")
+	}
+	prt := submission.PluginResourceType
+	if prt == nil {
+		loaded := &models.PluginResourceType{}
+		if err := loaded.Get(tx, *submission.PluginResourceTypeID); err != nil {
+			return "", fmt.Errorf("plugin resource type not found: %w", err)
+		}
+		prt = loaded
+	}
+	if !prt.IsActive {
+		return "", fmt.Errorf("plugin resource type '%s' is not active (is the plugin loaded?)", prt.Name)
+	}
+
+	creator := s.PluginResourceRPC
+	if creator == nil && s.AIStudioPluginManager != nil {
+		creator = s.AIStudioPluginManager
+	}
+	if creator == nil {
+		return "", fmt.Errorf("plugin manager not available")
+	}
+
+	envelope := plugin_sdk.SubmissionEnvelope{
+		Source:               "submission",
+		SubmissionID:         uint32(submission.ID),
+		Submitter:            submissionUserRef(submission.Submitter, submission.SubmitterID),
+		Reviewer:             reviewer,
+		FinalPrivacyScore:    finalPrivacyScore,
+		SuggestedPrivacy:     submission.SuggestedPrivacy,
+		PrivacyJustification: submission.PrivacyJustification,
+		AssignedCatalogues:   toUint32Slice(catalogueIDsFrom(catalogueIDs)),
+		DocumentationURL:     submission.DocumentationURL,
+		Notes:                submission.Notes,
+		Attestations:         submission.Attestations,
+		ResourcePayload:      submission.ResourcePayload,
+	}
+	if envelope.ResourcePayload == nil {
+		envelope.ResourcePayload = map[string]interface{}{}
+	}
+	payload, err := json.Marshal(envelope)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode submission envelope: %w", err)
+	}
+
+	instance, err := creator.CreateResourceInstance(prt.PluginID, prt.Slug, payload, uint(reviewer.ID))
+	if err != nil {
+		return "", err
+	}
+	return instance.Id, nil
+}
+
+func submissionUserRef(user *models.User, fallbackID uint) plugin_sdk.SubmissionUser {
+	if user == nil {
+		return plugin_sdk.SubmissionUser{ID: uint32(fallbackID)}
+	}
+	return plugin_sdk.SubmissionUser{ID: uint32(user.ID), Email: user.Email, Name: user.Name}
+}
+
+func (s *Service) submissionUserRefByID(id uint) plugin_sdk.SubmissionUser {
+	if id == 0 {
+		return plugin_sdk.SubmissionUser{}
+	}
+	user, err := s.GetUserByID(id)
+	if err != nil || user == nil {
+		return plugin_sdk.SubmissionUser{ID: uint32(id)}
+	}
+	return submissionUserRef(user, id)
+}
+
+func toUint32Slice(ids []uint) []uint32 {
+	out := make([]uint32, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, uint32(id))
+	}
+	return out
+}
 
 // --- Transaction-aware resource creation (for ApproveSubmission) ---
 

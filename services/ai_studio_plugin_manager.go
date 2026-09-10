@@ -17,11 +17,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
-	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	mgmtpb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	configpb "github.com/TykTechnologies/midsommar/v2/proto/configpb"
 	eventpb "github.com/TykTechnologies/midsommar/v2/proto/plugin_events"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -51,7 +51,6 @@ func SetGlobalEventServer(server *PluginEventServer) {
 	logger.Debug("Global event server set for plugin pub/sub access")
 }
 
-
 // AIStudioPluginManager manages AI Studio plugin lifecycle and execution
 // Reuses proven patterns from microgateway's plugin manager
 type AIStudioPluginManager struct {
@@ -62,8 +61,8 @@ type AIStudioPluginManager struct {
 	mu              sync.RWMutex
 
 	// Plugin runtime state
-	loadedPlugins   map[uint]*LoadedAIStudioPlugin // plugin_id -> loaded plugin
-	pluginClients   map[uint]*goplugin.Client       // plugin_id -> go-plugin client
+	loadedPlugins map[uint]*LoadedAIStudioPlugin // plugin_id -> loaded plugin
+	pluginClients map[uint]*goplugin.Client      // plugin_id -> go-plugin client
 
 	// Plugin configuration
 	handshakeConfig goplugin.HandshakeConfig
@@ -205,8 +204,8 @@ func (p *AIStudioPluginGRPC) GRPCClient(ctx context.Context, broker *goplugin.GR
 type AIStudioPluginClient struct {
 	broker      *goplugin.GRPCBroker
 	pluginStub  pb.PluginServiceClient
-	service     *Service             // Reference to AI Studio service for brokered servers
-	eventServer *PluginEventServer   // Reference to plugin event server for pub/sub
+	service     *Service           // Reference to AI Studio service for brokered servers
+	eventServer *PluginEventServer // Reference to plugin event server for pub/sub
 }
 
 // SetupServiceBroker creates a long-lived brokered server for AI Studio services
@@ -879,6 +878,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 					HasPrivacyScore:     rt.HasPrivacyScore,
 					SupportsSubmissions: rt.SupportsSubmissions,
 					SupportsMetadata:    rt.SupportsMetadata,
+					SubmissionSchema:    rt.SubmissionSchemaString(),
 				}
 				if rt.FormComponent != nil {
 					prt.FormComponentTag = rt.FormComponent.Tag
@@ -919,7 +919,6 @@ func (m *AIStudioPluginManager) injectServiceProvider(loadedPlugin *LoadedAIStud
 			Msg("No service provider to inject - plugin will use fallback data")
 		return nil
 	}
-
 
 	log.Debug().
 		Uint("plugin_id", loadedPlugin.ID).
@@ -1018,6 +1017,15 @@ func (m *AIStudioPluginManager) UnloadPlugin(pluginID uint) error {
 	// Remove from maps
 	delete(m.loadedPlugins, pluginID)
 	delete(m.pluginClients, pluginID)
+
+	// Resource types provided by this plugin are unavailable until it loads
+	// again (manifest types are re-registered at load; runtime-registered
+	// types are re-synced by the plugin itself).
+	if m.service != nil {
+		if err := m.service.DeactivatePluginResourceTypes(pluginID); err != nil {
+			log.Warn().Err(err).Uint("plugin_id", pluginID).Msg("Failed to deactivate plugin resource types on unload")
+		}
+	}
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -1253,6 +1261,13 @@ func (m *AIStudioPluginManager) ListPluginAssets(pluginID uint, pathPrefix strin
 
 // CallPluginRPC calls a plugin's RPC method via gRPC
 func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payload map[string]interface{}) (interface{}, error) {
+	return m.CallPluginRPCAs(pluginID, method, payload, nil)
+}
+
+// CallPluginRPCAs is CallPluginRPC with the identity of the administrator
+// issuing the call. Plugins implementing plugin_sdk.UserAwareRPCHandler receive
+// it; others ignore it. userCtx may be nil.
+func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, payload map[string]interface{}, userCtx *pb.PortalUserContext) (interface{}, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -1292,9 +1307,10 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 		Msg("Calling plugin RPC")
 
 	resp, err := loadedPlugin.GRPCClient.Call(ctx, &pb.CallRequest{
-		Method:           method,
-		Payload:          string(payloadBytes),
-		ServiceBrokerId:  serviceBrokerID,
+		Method:          method,
+		Payload:         string(payloadBytes),
+		ServiceBrokerId: serviceBrokerID,
+		UserContext:     userCtx,
 	})
 
 	log.Debug().
@@ -1382,6 +1398,47 @@ func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string
 	}
 
 	return responseData, nil
+}
+
+// CreateResourceInstance calls a plugin's CreateResourceInstance RPC. Used when
+// an administrator approves a community submission for a plugin resource type.
+// payload is the JSON-encoded plugin_sdk.SubmissionEnvelope.
+func (m *AIStudioPluginManager) CreateResourceInstance(pluginID uint, resourceTypeSlug string, payload []byte, reviewerID uint) (*pb.ResourceInstanceProto, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	if !exists {
+		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+	}
+
+	if !loadedPlugin.IsHealthy {
+		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := loadedPlugin.GRPCClient.CreateResourceInstance(ctx, &pb.CreateResourceInstanceRequest{
+		ResourceTypeSlug: resourceTypeSlug,
+		Payload:          payload,
+		Context: &pb.PluginContext{
+			UserId:   uint32(reviewerID),
+			Metadata: map[string]string{"source": "submission"},
+		},
+		ServiceBrokerId: loadedPlugin.SessionBrokerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("CreateResourceInstance RPC failed: %w", err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("CreateResourceInstance failed: %s", resp.ErrorMessage)
+	}
+	if resp.Instance == nil || resp.Instance.Id == "" {
+		return nil, fmt.Errorf("CreateResourceInstance returned no instance")
+	}
+
+	return resp.Instance, nil
 }
 
 // ListResourceInstances calls a plugin's ListResourceInstances RPC to get all instances
@@ -2079,9 +2136,9 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 		Msg("Executing scheduled task on plugin")
 
 	resp, err := loadedPlugin.GRPCClient.ExecuteScheduledTask(ctx, &pb.ExecuteScheduledTaskRequest{
-		Context:          contextProto,
-		Schedule:         scheduleProto,
-		ServiceBrokerId:  serviceBrokerID,
+		Context:         contextProto,
+		Schedule:        scheduleProto,
+		ServiceBrokerId: serviceBrokerID,
 	})
 
 	log.Debug().

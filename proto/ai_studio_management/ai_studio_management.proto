@@ -136,6 +136,62 @@ service AIStudioManagementService {
     // License Information (Enterprise)
     // Allows plugins to check license status and entitlements at runtime
     rpc GetLicenseInfo(GetLicenseInfoRequest) returns (GetLicenseInfoResponse);
+
+    // Notifications
+    // Allows plugins to raise in-app (and, when SMTP is configured, email)
+    // notifications for admins or a specific user. Requires notifications.write.
+    rpc CreateNotification(CreateNotificationRequest) returns (CreateNotificationResponse);
+
+    // Resource Types (ResourceProvider plugins)
+    // Allows a plugin to (re)register its resource types at runtime, e.g. when
+    // an administrator defines a new type inside the plugin. Requires
+    // resource-types.manage.
+    rpc RegisterResourceTypes(RegisterResourceTypesRequest) returns (RegisterResourceTypesResponse);
+}
+
+// Notification Messages
+
+message CreateNotificationRequest {
+    PluginContext context = 1;
+    string notification_id = 2;   // Dedupe key (scoped by the server to the calling plugin). Optional.
+    string type = 3;              // Free-form type label, e.g. "asset_access_request"
+    string title = 4;             // Short title (max 255 chars)
+    string content = 5;           // Markdown body (max 10000 chars)
+    bool notify_admins = 6;       // Deliver to every admin with notifications enabled
+    uint32 user_id = 7;           // Deliver to this specific user (0 = none)
+}
+
+message CreateNotificationResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// Resource Type Registration Messages
+
+message ResourceTypeSpec {
+    string slug = 1;                     // Machine-readable identifier (unique per plugin)
+    string name = 2;                     // Human-readable display name
+    string description = 3;
+    string icon = 4;                     // Material icon name or asset path
+    bool has_privacy_score = 5;
+    bool supports_submissions = 6;       // Community users may submit instances
+    string form_component_tag = 7;       // Optional custom App-form Web Component tag
+    string form_component_entry = 8;     // JS entry point for the form component
+    string submission_schema = 9;        // JSON Schema (object) for community submissions
+    bool supports_metadata = 10;         // Instances can carry governed metadata (Enterprise)
+}
+
+message RegisterResourceTypesRequest {
+    PluginContext context = 1;
+    repeated ResourceTypeSpec types = 2;
+    bool deactivate_missing = 3;         // Deactivate this plugin's types not present in `types`
+}
+
+message RegisterResourceTypesResponse {
+    bool success = 1;
+    string message = 2;
+    uint32 registered = 3;
+    uint32 deactivated = 4;
 }
 
 // Common request context for all operations

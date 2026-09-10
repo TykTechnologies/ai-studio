@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 )
 
 // Input length limits for submission fields
@@ -95,7 +96,8 @@ func validateSubmissionInput(
 	return nil
 }
 
-// CreateSubmission creates a new submission (draft or submitted)
+// CreateSubmission creates a new datasource or tool submission (draft or submitted).
+// Plugin resource submissions go through CreatePluginSubmission.
 func (s *Service) CreateSubmission(submitterID uint, resourceType, status string, payload models.JSONMap,
 	attestations models.JSONMap, suggestedPrivacy int, privacyJustification string,
 	primaryContact, secondaryContact, slaExpectation string, dataCutoffDate *time.Time,
@@ -104,6 +106,55 @@ func (s *Service) CreateSubmission(submitterID uint, resourceType, status string
 	if resourceType != models.SubmissionResourceTypeDatasource && resourceType != models.SubmissionResourceTypeTool {
 		return nil, fmt.Errorf("invalid resource type: must be '%s' or '%s'", models.SubmissionResourceTypeDatasource, models.SubmissionResourceTypeTool)
 	}
+
+	return s.createSubmission(submitterID, resourceType, nil, status, payload, attestations, suggestedPrivacy,
+		privacyJustification, primaryContact, secondaryContact, slaExpectation, dataCutoffDate, documentationURL, notes)
+}
+
+// CreatePluginSubmission creates a submission for a plugin-provided resource
+// type (ResourceProvider plugins with SupportsSubmissions). The payload is
+// validated against the type's submission schema when one is declared.
+func (s *Service) CreatePluginSubmission(submitterID uint, pluginResourceTypeID uint, status string, payload models.JSONMap,
+	attestations models.JSONMap, suggestedPrivacy int, privacyJustification string,
+	primaryContact, secondaryContact, slaExpectation string, dataCutoffDate *time.Time,
+	documentationURL, notes string) (*models.Submission, error) {
+
+	prt, err := s.submittablePluginResourceType(pluginResourceTypeID)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidatePayloadAgainstSchema(prt.SubmissionSchema, payload); err != nil {
+		return nil, err
+	}
+
+	return s.createSubmission(submitterID, models.SubmissionResourceTypePlugin, prt, status, payload,
+		attestations, suggestedPrivacy, privacyJustification, primaryContact, secondaryContact, slaExpectation,
+		dataCutoffDate, documentationURL, notes)
+}
+
+// submittablePluginResourceType loads a plugin resource type and checks that
+// community submissions are currently possible for it.
+func (s *Service) submittablePluginResourceType(id uint) (*models.PluginResourceType, error) {
+	if id == 0 {
+		return nil, fmt.Errorf("plugin_resource_type_id is required for plugin submissions")
+	}
+	prt, err := s.GetPluginResourceTypeByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("plugin resource type not found")
+	}
+	if !prt.IsActive {
+		return nil, fmt.Errorf("plugin resource type '%s' is not active", prt.Name)
+	}
+	if !prt.SupportsSubmissions {
+		return nil, fmt.Errorf("plugin resource type '%s' does not accept community submissions", prt.Name)
+	}
+	return prt, nil
+}
+
+func (s *Service) createSubmission(submitterID uint, resourceType string, pluginResourceType *models.PluginResourceType, status string, payload models.JSONMap,
+	attestations models.JSONMap, suggestedPrivacy int, privacyJustification string,
+	primaryContact, secondaryContact, slaExpectation string, dataCutoffDate *time.Time,
+	documentationURL, notes string) (*models.Submission, error) {
 
 	if err := validateSubmissionInput(suggestedPrivacy, privacyJustification, primaryContact, secondaryContact, slaExpectation, documentationURL, notes, payload); err != nil {
 		return nil, err
@@ -132,6 +183,11 @@ func (s *Service) CreateSubmission(submitterID uint, resourceType, status string
 		Notes:                notes,
 	}
 
+	if pluginResourceType != nil {
+		id := pluginResourceType.ID
+		submission.PluginResourceTypeID = &id
+	}
+
 	if status == models.SubmissionStatusSubmitted {
 		now := time.Now()
 		submission.SubmittedAt = &now
@@ -140,6 +196,8 @@ func (s *Service) CreateSubmission(submitterID uint, resourceType, status string
 	if err := submission.Create(s.DB); err != nil {
 		return nil, err
 	}
+	// Attach after Create so GORM does not try to upsert the association.
+	submission.PluginResourceType = pluginResourceType
 
 	// Notify admins of new submission
 	if status == models.SubmissionStatusSubmitted && s.NotificationService != nil {
@@ -181,6 +239,17 @@ func (s *Service) UpdateSubmission(id uint, submitterID uint, payload models.JSO
 
 	if err := validateSubmissionInput(suggestedPrivacy, privacyJustification, primaryContact, secondaryContact, slaExpectation, documentationURL, notes, payload); err != nil {
 		return nil, err
+	}
+
+	// Plugin submissions must keep matching the resource type's schema
+	if submission.ResourceType == models.SubmissionResourceTypePlugin && submission.PluginResourceTypeID != nil {
+		prt, err := s.GetPluginResourceTypeByID(*submission.PluginResourceTypeID)
+		if err != nil {
+			return nil, fmt.Errorf("plugin resource type not found")
+		}
+		if err := ValidatePayloadAgainstSchema(prt.SubmissionSchema, payload); err != nil {
+			return nil, err
+		}
 	}
 
 	// Preserve original credentials when new payload contains "[redacted]" placeholders
@@ -330,6 +399,15 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 		return nil, fmt.Errorf("can only approve submissions in '%s' or '%s' status", models.SubmissionStatusInReview, models.SubmissionStatusSubmitted)
 	}
 
+	isPluginResource := submission.ResourceType == models.SubmissionResourceTypePlugin
+
+	// Resolve everything that needs its own DB round-trip before the
+	// transaction starts (SQLite holds a single connection).
+	var reviewer plugin_sdk.SubmissionUser
+	if isPluginResource {
+		reviewer = s.submissionUserRefByID(reviewerID)
+	}
+
 	// Begin transaction — all writes must succeed or all roll back
 	tx := s.DB.Begin()
 	if tx.Error != nil {
@@ -338,13 +416,24 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 
 	var resourceID uint
 
-	if submission.IsUpdate && submission.TargetResourceID != nil {
+	switch {
+	case isPluginResource:
+		// The plugin owns the instance. This RPC runs outside the transaction,
+		// so plugins treat submission_id as an idempotency key (see
+		// plugin_sdk.SubmissionEnvelope).
+		instanceID, err := s.createPluginInstanceFromSubmission(tx, submission, reviewer, finalPrivacyScore, catalogueIDs)
+		if err != nil {
+			tx.Rollback()
+			return nil, fmt.Errorf("plugin rejected submission: %w", err)
+		}
+		submission.PluginInstanceID = instanceID
+	case submission.IsUpdate && submission.TargetResourceID != nil:
 		resourceID = *submission.TargetResourceID
 		if err := s.snapshotAndUpdateResourceTx(tx, submission, reviewerID, finalPrivacyScore); err != nil {
 			tx.Rollback()
 			return nil, fmt.Errorf("failed to update resource: %w", err)
 		}
-	} else {
+	default:
 		resourceID, err = s.createResourceFromSubmissionTx(tx, submission, finalPrivacyScore)
 		if err != nil {
 			tx.Rollback()
@@ -355,15 +444,21 @@ func (s *Service) ApproveSubmission(submissionID, reviewerID uint, finalPrivacyS
 	now := time.Now()
 	submission.Status = models.SubmissionStatusApproved
 	submission.ReviewerID = &reviewerID
-	submission.ResourceID = &resourceID
 	submission.FinalPrivacyScore = &finalPrivacyScore
 	submission.AssignedCatalogues = catalogueIDs
 
-	// Actually put the resource in the catalogues the reviewer chose. This
-	// field was accepted, stored and returned, and never acted upon.
-	if err := s.assignSubmissionCatalogues(tx, submission, resourceID); err != nil {
-		tx.Rollback()
-		return nil, err
+	if isPluginResource {
+		// Plugin resources use direct group access rather than catalogues; the
+		// chosen catalogues are forwarded to the plugin in the envelope instead.
+		submission.ResourceID = nil
+	} else {
+		submission.ResourceID = &resourceID
+		// Actually put the resource in the catalogues the reviewer chose. This
+		// field was accepted, stored and returned, and never acted upon.
+		if err := s.assignSubmissionCatalogues(tx, submission, resourceID); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 	}
 	submission.ReviewNotes = reviewNotes
 	submission.ReviewCompletedAt = &now

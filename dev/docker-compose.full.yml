@@ -13,8 +13,11 @@
 #   - plugins:  Plugin watcher and builder
 
 services:
-  # Studio - mount plugin builds volume
+  # Studio - mount plugin builds volume and allow registering binaries from it
+  # (Admin > Plugins > command: file:///app/bin/plugins/<name>)
   studio:
+    environment:
+      AI_STUDIO_PLUGIN_ALLOWED_DIRS: /app/bin/plugins
     volumes:
       - plugin_builds:/app/bin/plugins
 

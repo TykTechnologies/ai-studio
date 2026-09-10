@@ -38,6 +38,24 @@ func (s *NotificationService) Notify(notificationID string, title string, templa
 		return fmt.Errorf("error rendering template: %v", err)
 	}
 
+	return s.NotifyDirect(notificationID, "", title, content, userFlags)
+}
+
+// NotifyDirect creates and sends a notification with pre-rendered content
+// (plain text or markdown; the in-app list renders markdown). Use this when no
+// email template applies, e.g. for notifications raised by plugins or by
+// workflows whose content is composed in code.
+//
+// notifType is stored on the record (e.g. "submission", "plugin:asset-catalog")
+// and may be empty. userFlags follows the same convention as Notify.
+func (s *NotificationService) NotifyDirect(notificationID string, notifType string, title string, content string, userFlags uint) error {
+	if notificationID == "" {
+		return fmt.Errorf("notification ID is required")
+	}
+	if title == "" {
+		return fmt.Errorf("notification title is required")
+	}
+
 	// Handle notifications based on flags
 	if userFlags&models.NotifyAdmins != 0 {
 		// Send to admin users
@@ -52,6 +70,7 @@ func (s *NotificationService) Notify(notificationID string, title string, templa
 		for _, adminID := range adminIDs {
 			notification := &models.Notification{
 				UserID:         adminID,
+				Type:           notifType,
 				Title:          title,
 				Content:        content,
 				NotificationID: fmt.Sprintf("%s_admin_%d", notificationID, adminID),
@@ -69,6 +88,7 @@ func (s *NotificationService) Notify(notificationID string, title string, templa
 	if userID != 0 {
 		notification := &models.Notification{
 			UserID:         userID,
+			Type:           notifType,
 			Title:          title,
 			Content:        content,
 			NotificationID: fmt.Sprintf("%s_owner", notificationID),
