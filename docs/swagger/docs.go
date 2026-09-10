@@ -2671,9 +2671,7 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "type": "array",
-                            "items": {
-                                "type": "object"
-                            }
+                            "items": {}
                         }
                     }
                 }
@@ -4122,7 +4120,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/services.CreatePluginRequest"
+                            "$ref": "#/definitions/github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest"
                         }
                     }
                 ],
@@ -4587,7 +4585,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/services.UpdatePluginRequest"
+                            "$ref": "#/definitions/github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest"
                         }
                     }
                 ],
@@ -7186,6 +7184,312 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/audit/export": {
+            "get": {
+                "description": "Downloads matching records (max 50,000) as CSV or JSON",
+                "produces": [
+                    "text/csv",
+                    "application/json"
+                ],
+                "tags": [
+                    "Audit"
+                ],
+                "summary": "Export audit records",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "csv (default) or json",
+                        "name": "format",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "file",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/audit/records": {
+            "get": {
+                "description": "Page through the audit trail with filters. Newest first unless sort=asc.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Audit"
+                ],
+                "summary": "List audit records",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Start (YYYY-MM-DD or RFC3339)",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End (YYYY-MM-DD or RFC3339)",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "User email substring",
+                        "name": "user",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact action name, e.g. Update LLM",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Resource type, e.g. llm",
+                        "name": "resource_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Resource ID",
+                        "name": "resource_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "HTTP method",
+                        "name": "method",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Exact HTTP status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "2xx, 3xx, 4xx or 5xx",
+                        "name": "status_class",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Client IP",
+                        "name": "ip",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Request ID",
+                        "name": "req_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Free text over action, URL, user, resource name, IP, request ID",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (max 500)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "asc or desc",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/audit.Page"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/audit/records/{id}": {
+            "get": {
+                "description": "Returns a single record including request/response dumps when detailed recording is on",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Audit"
+                ],
+                "summary": "Get one audit record",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Record ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AuditRecord"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/audit/resources/{type}/{id}": {
+            "get": {
+                "description": "Every recorded action on a single resource, newest first",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Audit"
+                ],
+                "summary": "History of one object",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Resource type, e.g. llm",
+                        "name": "type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Resource ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/audit.Page"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/audit/status": {
+            "get": {
+                "description": "Reports whether the audit trail is available (Enterprise), enabled, and how it is configured",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Audit"
+                ],
+                "summary": "Audit trail availability and configuration",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/audit.Status"
+                        }
+                    }
+                }
+            }
+        },
+        "/audit/summary": {
+            "get": {
+                "description": "Counts by action, user, resource type and status class plus a daily timeline for the filter",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Audit"
+                ],
+                "summary": "Summarise audit records",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/audit.Summary"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
                         }
                     }
                 }
@@ -17747,7 +18051,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Add an operation to a specific tool",
+                "description": "Add an operation to a specific tool. The body may use the JSON:API envelope ({\"data\":{\"attributes\":{\"operation\":\"...\"}}}) or the bare form ({\"operation\":\"...\"}).",
                 "consumes": [
                     "application/json"
                 ],
@@ -17809,7 +18113,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Remove an operation from a specific tool",
+                "description": "Remove an operation from a specific tool. The body may use the JSON:API envelope ({\"data\":{\"attributes\":{\"operation\":\"...\"}}}) or the bare form ({\"operation\":\"...\"}).",
                 "consumes": [
                     "application/json"
                 ],
@@ -20376,6 +20680,12 @@ const docTemplate = `{
                         "budget_start_date": {
                             "type": "string"
                         },
+                        "credential_ref": {
+                            "type": "string"
+                        },
+                        "credential_status": {
+                            "type": "string"
+                        },
                         "default_model": {
                             "type": "string"
                         },
@@ -20970,6 +21280,10 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
+                },
+                "operation": {
+                    "description": "Operation is the bare-form alternative to the data envelope above.",
+                    "type": "string"
                 }
             }
         },
@@ -21990,6 +22304,7 @@ const docTemplate = `{
                                     "type": "string"
                                 },
                                 "oas_spec": {
+                                    "description": "OASSpec must be the base64 encoding of the UTF-8 OpenAPI\ndocument. Raw JSON or YAML is rejected with a 400.",
                                     "type": "string"
                                 },
                                 "operations": {
@@ -22437,6 +22752,122 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "audit.DayCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                }
+            }
+        },
+        "audit.NamedCount": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "audit.Page": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "records": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.AuditRecord"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "audit.Status": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean"
+                },
+                "detailed_recording": {
+                    "type": "boolean"
+                },
+                "dropped": {
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "queue_depth": {
+                    "type": "integer"
+                },
+                "record_reads": {
+                    "type": "boolean"
+                },
+                "retention_days": {
+                    "type": "integer"
+                },
+                "store_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "audit.Summary": {
+            "type": "object",
+            "properties": {
+                "by_action": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/audit.NamedCount"
+                    }
+                },
+                "by_resource_type": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/audit.NamedCount"
+                    }
+                },
+                "by_status_class": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/audit.NamedCount"
+                    }
+                },
+                "by_user": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/audit.NamedCount"
+                    }
+                },
+                "distinct_users": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "description": "status \u003e= 400",
+                    "type": "integer"
+                },
+                "timeline": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/audit.DayCount"
+                    }
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -22928,6 +23359,105 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest": {
+            "type": "object",
+            "required": [
+                "command",
+                "name"
+            ],
+            "properties": {
+                "checksum": {
+                    "description": "Optional",
+                    "type": "string"
+                },
+                "command": {
+                    "type": "string"
+                },
+                "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "description": {
+                    "type": "string"
+                },
+                "hook_type": {
+                    "description": "Optional - will be populated from manifest",
+                    "type": "string"
+                },
+                "hook_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "hook_types_customized": {
+                    "type": "boolean"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "load_immediately": {
+                    "description": "Auto-load AI Studio plugins",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "oci_reference": {
+                    "description": "OCI artifact reference",
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest": {
+            "type": "object",
+            "properties": {
+                "checksum": {
+                    "type": "string"
+                },
+                "command": {
+                    "type": "string"
+                },
+                "config": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "description": {
+                    "type": "string"
+                },
+                "hook_type": {
+                    "type": "string"
+                },
+                "hook_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "hook_types_customized": {
+                    "type": "boolean"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "load_immediately": {
+                    "description": "Auto-load AI Studio plugins",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "oci_reference": {
+                    "type": "string"
+                }
+            }
+        },
         "models.AppBudgetUsageResponse": {
             "type": "object",
             "properties": {
@@ -22941,6 +23471,79 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "start_date": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.AuditRecord": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "What happened",
+                    "type": "string"
+                },
+                "diff": {
+                    "description": "Diff of changed fields for updates, and the final state for deletes.\nShape: {\"field\": {\"old\": \u003cv\u003e, \"new\": \u003cv\u003e}}. Sensitive columns are\nredacted before storage.",
+                    "type": "string"
+                },
+                "duration_ms": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "ip": {
+                    "description": "Actor",
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "req_id": {
+                    "type": "string"
+                },
+                "request_dump": {
+                    "description": "Populated only when detailed recording is enabled.",
+                    "type": "string"
+                },
+                "resource_id": {
+                    "type": "string"
+                },
+                "resource_name": {
+                    "type": "string"
+                },
+                "resource_type": {
+                    "description": "What it touched",
+                    "type": "string"
+                },
+                "response_dump": {
+                    "type": "string"
+                },
+                "route": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "user": {
+                    "type": "string"
+                },
+                "user_agent": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "user_name": {
                     "type": "string"
                 }
             }
@@ -23344,105 +23947,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "is_active": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "namespace": {
-                    "type": "string"
-                },
-                "oci_reference": {
-                    "type": "string"
-                }
-            }
-        },
-        "services.CreatePluginRequest": {
-            "type": "object",
-            "required": [
-                "command",
-                "name"
-            ],
-            "properties": {
-                "checksum": {
-                    "description": "Optional",
-                    "type": "string"
-                },
-                "command": {
-                    "type": "string"
-                },
-                "config": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "description": {
-                    "type": "string"
-                },
-                "hook_type": {
-                    "description": "Optional - will be populated from manifest",
-                    "type": "string"
-                },
-                "hook_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "hook_types_customized": {
-                    "type": "boolean"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "load_immediately": {
-                    "description": "Auto-load AI Studio plugins",
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "namespace": {
-                    "type": "string"
-                },
-                "oci_reference": {
-                    "description": "OCI artifact reference",
-                    "type": "string"
-                }
-            }
-        },
-        "services.UpdatePluginRequest": {
-            "type": "object",
-            "properties": {
-                "checksum": {
-                    "type": "string"
-                },
-                "command": {
-                    "type": "string"
-                },
-                "config": {
-                    "type": "object",
-                    "additionalProperties": true
-                },
-                "description": {
-                    "type": "string"
-                },
-                "hook_type": {
-                    "type": "string"
-                },
-                "hook_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "hook_types_customized": {
-                    "type": "boolean"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "load_immediately": {
-                    "description": "Auto-load AI Studio plugins",
                     "type": "boolean"
                 },
                 "name": {

@@ -79,6 +79,17 @@ The gateway's OpenAI-compatible ingress (`{base}/chat/completions`, `{base}/comp
 
 The Microgateway reads the **same settings under different names** — `GATEWAY_UNIFIED_ROUTER_PATH` and `GATEWAY_UNIFIED_ROUTER_DISABLED`. Set both sides to the same value in a hub-and-spoke deployment: the Developer Portal advertises the Main Ingress on an App's detail page using the **hub's** value, so a hub and edge that disagree send developers to a URL the edge does not serve. See [Proxy & API Gateway](./proxy.md#configuring-the-main-ingress).
 
+### Audit Trail (Enterprise)
+Every action on the management API is recorded for incident reconstruction. On by default in Enterprise Edition.
+
+*   Enable (`AUDIT_ENABLED`): default `true`
+*   Storage (`AUDIT_STORE_TYPE`): `db` (default), `file`, or `both`; file path and format via `AUDIT_FILE_PATH`, `AUDIT_FILE_FORMAT`
+*   Retention (`AUDIT_RETENTION_DAYS`): default `90`, `0` keeps forever
+*   Depth (`AUDIT_DETAILED_RECORDING`, `AUDIT_RECORD_READS`): default `false`
+*   Redaction additions (`AUDIT_REDACT_KEYS`, `AUDIT_REDACT_HEADERS`): comma-separated, extend the built-in secret detection
+
+See [Audit Trail](./audit-trail.md) for the record schema, redaction rules and API.
+
 ### Message Queue Configuration
 *   Queue Type (`QUEUE_TYPE`): `inmemory` (default), `nats`, or `postgres`
 *   Buffer Size (`QUEUE_BUFFER_SIZE`): Default 100
