@@ -27,7 +27,7 @@ User documentation: `docs/site/docs/audit-trail.md`.
 - ✅ Database and/or append-only file storage
 - ✅ Retention enforcement
 - ✅ Query, summary, export and per-object history API
-- ✅ Admin UI page (Governance → Audit Trail)
+- ✅ Admin UI page (Governance → Audit trail)
 
 ---
 

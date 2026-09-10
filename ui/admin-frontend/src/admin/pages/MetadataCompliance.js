@@ -89,7 +89,7 @@ const MetadataCompliance = () => {
       setReport({ entries: data?.entries || [], counts: data?.counts || {} });
       setError("");
     } catch (err) {
-      setError("Failed to load the metadata compliance report");
+      setError("Failed to load the metadata coverage report");
     } finally {
       setLoading(false);
     }
@@ -122,7 +122,7 @@ const MetadataCompliance = () => {
       <TitleBox top="64px">
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <RuleOutlinedIcon />
-          <Typography variant="headingXLarge">Metadata Compliance</Typography>
+          <Typography variant="headingXLarge">Metadata Coverage</Typography>
           <Chip label="Enterprise" size="small" color="primary" />
         </Box>
       </TitleBox>

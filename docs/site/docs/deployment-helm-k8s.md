@@ -295,7 +295,7 @@ AI Studio pre-populates OpenAI and Anthropic LLM configurations on first startup
 ### 1. Add Your API Keys
 
 1. Open AI Studio at the `siteUrl` you configured and register your first admin account
-2. Navigate to **Governance → Secrets** in the sidebar
+2. Navigate to **Settings → Secrets** in the sidebar
 3. Click on **`OPENAI_KEY`** and edit it to add your OpenAI API key
 4. Click on **`ANTHROPIC_KEY`** and edit it to add your Anthropic API key
 

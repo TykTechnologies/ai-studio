@@ -163,7 +163,7 @@ Branding settings are automatically included in the frontend config response at 
 
 ### Admin Workflow
 
-1. Navigate to **Governance > Branding** in the admin panel
+1. Navigate to **Settings > Branding** in the admin panel
 2. Customize desired elements:
    - Upload logo and/or favicon
    - Adjust color scheme
@@ -174,7 +174,7 @@ Branding settings are automatically included in the frontend config response at 
 
 ### Resetting to Defaults
 
-1. Navigate to **Governance > Branding**
+1. Navigate to **Settings > Branding**
 2. Click **Reset to Defaults**
 3. Confirm the action
 4. All branding reverts to Tyk defaults

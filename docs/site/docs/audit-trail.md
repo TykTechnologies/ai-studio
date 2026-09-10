@@ -87,7 +87,7 @@ Records average around 700 bytes without detailed recording and 1 to 3 KB with i
 
 ## Dashboard
 
-**Governance → Audit Trail** in the admin UI lists records newest first with:
+**Governance → Audit trail** in the admin UI lists records newest first with:
 
 * a date range, free-text search, and filters for user, action, resource type, HTTP method and status class;
 * summary tiles for total actions, failures and distinct users in the range;
