@@ -26,6 +26,7 @@ import UserMessageLog from "../admin/components/users/UserMessageLog";
 import GroupDetail from "../admin/components/groups/GroupDetail";
 import GroupForm from "../admin/components/groups/GroupForm";
 import LLMDetails from "../admin/components/llms/LLMDetails";
+import LLMModelDetails from "../admin/components/llms/LLMModelDetails";
 import LLMForm from "../admin/components/llms/LLMForm";
 import LLMSettingsDetails from "../admin/components/llm-settings/LLMSettingsDetails";
 import LLMSettingsForm from "../admin/components/llm-settings/LLMSettingsForm";
@@ -163,6 +164,10 @@ export const protectedRoutes = [
   {
     path: "/admin/llms/:id",
     element: <LLMDetails />,
+  },
+  {
+    path: "/admin/llms/:id/models",
+    element: <LLMModelDetails />,
   },
   {
     path: "/admin/llms/edit/:id",

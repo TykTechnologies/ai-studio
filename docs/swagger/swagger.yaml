@@ -15,6 +15,34 @@ definitions:
           type: string
         type: array
     type: object
+  analytics.ModelAppUsage:
+    properties:
+      appDeleted:
+        type: boolean
+      appId:
+        type: integer
+      appName:
+        type: string
+      firstUsed:
+        $ref: '#/definitions/analytics.ScanTime'
+      lastUsed:
+        $ref: '#/definitions/analytics.ScanTime'
+      ownerEmail:
+        type: string
+      ownerUserId:
+        type: integer
+      requestCount:
+        type: integer
+      totalCost:
+        type: number
+      totalTokens:
+        type: integer
+    type: object
+  analytics.ScanTime:
+    properties:
+      time.Time:
+        type: string
+    type: object
   api.AccessTokenResponse:
     properties:
       access_token:
@@ -629,6 +657,11 @@ definitions:
                 type: string
               embed_vendor:
                 type: string
+              governed_metadata:
+                additionalProperties: true
+                description: Governed metadata (Enterprise). nil = untouched; {} =
+                  clear.
+                type: object
               icon:
                 type: string
               long_description:
@@ -706,6 +739,10 @@ definitions:
           user_id:
             type: integer
         type: object
+      governed_metadata:
+        description: Governed metadata (Enterprise); see LLMResponse.
+      governed_metadata_status:
+        type: string
       id:
         type: string
       type:
@@ -759,6 +796,7 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
+            description: Always "default" in CE
             type: string
           session_id:
             type: string
@@ -1109,6 +1147,11 @@ definitions:
                 items:
                   type: integer
                 type: array
+              governed_metadata:
+                additionalProperties: true
+                description: Governed metadata (Enterprise). nil = untouched; {} =
+                  clear.
+                type: object
               logo_url:
                 type: string
               long_description:
@@ -1188,6 +1231,12 @@ definitions:
           vendor:
             type: string
         type: object
+      governed_metadata:
+        description: |-
+          Governed metadata (Enterprise): admin responses carry the raw values map and a
+          status; portal responses carry a display-ready [{key,label,type,value}] list.
+      governed_metadata_status:
+        type: string
       id:
         type: string
       type:
@@ -1330,6 +1379,79 @@ definitions:
             properties:
               message:
                 type: string
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.MetadataSchemaInput:
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              active:
+                type: boolean
+              applies_to:
+                items:
+                  type: string
+                type: array
+              description:
+                type: string
+              enforcement:
+                type: string
+              fields:
+                items:
+                  $ref: '#/definitions/models.MetadataFieldDef'
+                type: array
+              name:
+                type: string
+              order:
+                type: integer
+              slug:
+                type: string
+            type: object
+          type:
+            type: string
+        type: object
+    type: object
+  api.MetadataValidationError:
+    properties:
+      code:
+        type: string
+      detail:
+        type: string
+      source:
+        properties:
+          pointer:
+            type: string
+        type: object
+      title:
+        type: string
+    type: object
+  api.MetadataValidationErrorResponse:
+    properties:
+      errors:
+        items:
+          $ref: '#/definitions/api.MetadataValidationError'
+        type: array
+    type: object
+  api.MetadataVocabularyInput:
+    properties:
+      data:
+        properties:
+          attributes:
+            properties:
+              description:
+                type: string
+              name:
+                type: string
+              slug:
+                type: string
+              terms:
+                items:
+                  $ref: '#/definitions/models.VocabularyTerm'
+                type: array
             type: object
           type:
             type: string
@@ -1529,6 +1651,14 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  api.ObjectMetadataInput:
+    properties:
+      merge:
+        type: boolean
+      values:
+        additionalProperties: true
+        type: object
     type: object
   api.OperationInput:
     description: Operation input model
@@ -2209,6 +2339,11 @@ definitions:
                 type: string
               description:
                 type: string
+              governed_metadata:
+                additionalProperties: true
+                description: Governed metadata (Enterprise). nil = untouched; {} =
+                  clear.
+                type: object
               name:
                 type: string
               namespace:
@@ -2273,6 +2408,10 @@ definitions:
           tool_type:
             type: string
         type: object
+      governed_metadata:
+        description: Governed metadata (Enterprise); see LLMResponse.
+      governed_metadata_status:
+        type: string
       id:
         type: string
       type:
@@ -2466,6 +2605,14 @@ definitions:
         type: string
       type:
         type: string
+    type: object
+  api.ValidateMetadataInput:
+    properties:
+      object_type:
+        type: string
+      values:
+        additionalProperties: true
+        type: object
     type: object
   api.VendorListResponse:
     description: Vendor list response model
@@ -2989,6 +3136,100 @@ definitions:
       oci_reference:
         type: string
     type: object
+  governed_metadata.ComplianceEntry:
+    properties:
+      issues:
+        items:
+          $ref: '#/definitions/governed_metadata.FieldIssue'
+        type: array
+      last_validated_at:
+        type: string
+      object_id:
+        type: string
+      object_name:
+        type: string
+      object_type:
+        type: string
+      status:
+        description: missing | invalid | warnings | expired | valid
+        type: string
+    type: object
+  governed_metadata.ComplianceReport:
+    properties:
+      counts:
+        additionalProperties:
+          type: integer
+        description: status -> count
+        type: object
+      entries:
+        items:
+          $ref: '#/definitions/governed_metadata.ComplianceEntry'
+        type: array
+    type: object
+  governed_metadata.FieldIssue:
+    properties:
+      code:
+        type: string
+      field:
+        type: string
+      message:
+        type: string
+    type: object
+  governed_metadata.ObjectTypeInfo:
+    properties:
+      label:
+        type: string
+      slug:
+        type: string
+      source:
+        description: builtin | plugin:<id>
+        type: string
+    type: object
+  governed_metadata.ResolvedSchema:
+    properties:
+      enforcement:
+        type: string
+      fields:
+        items:
+          $ref: '#/definitions/models.MetadataFieldDef'
+        type: array
+      json_schema:
+        additionalProperties: true
+        type: object
+      object_type:
+        type: string
+      schema_slugs:
+        items:
+          type: string
+        type: array
+      vocabularies:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/models.VocabularyTerm'
+          type: array
+        description: |-
+          Vocabularies holds the terms of every vocabulary referenced by Fields,
+          keyed by slug, so a consumer can render selects with labels without a
+          second round-trip (plugins only see this via the management API).
+        type: object
+    type: object
+  governed_metadata.ValidationResult:
+    properties:
+      enforced:
+        description: resolved schema enforcement == enforce
+        type: boolean
+      errors:
+        items:
+          $ref: '#/definitions/governed_metadata.FieldIssue'
+        type: array
+      valid:
+        description: no hard errors
+        type: boolean
+      warnings:
+        items:
+          $ref: '#/definitions/governed_metadata.FieldIssue'
+        type: array
+    type: object
   models.AppBudgetUsageResponse:
     properties:
       current_usage:
@@ -3131,6 +3372,41 @@ definitions:
     - ExportStatusCompleted
     - ExportStatusFailed
     - ExportStatusExpired
+  models.MetadataFieldDef:
+    properties:
+      description:
+        type: string
+      gateway_visible:
+        type: boolean
+      key:
+        type: string
+      label:
+        type: string
+      max:
+        type: number
+      max_length:
+        type: integer
+      min:
+        type: number
+      order:
+        type: integer
+      pattern:
+        type: string
+      portal_visible:
+        type: boolean
+      required:
+        type: boolean
+      severity:
+        description: error (default) | warning
+        type: string
+      type:
+        type: string
+      vocabulary_slug:
+        type: string
+      warn_if_past:
+        description: 'date fields: warn when the value is in the past'
+        type: boolean
+    type: object
   models.MultiAxisChartData:
     properties:
       datasets:
@@ -3233,6 +3509,17 @@ definitions:
       totalCost:
         type: number
       vendor:
+        type: string
+    type: object
+  models.VocabularyTerm:
+    properties:
+      deprecated:
+        type: boolean
+      description:
+        type: string
+      label:
+        type: string
+      value:
         type: string
     type: object
   providers.APISpec:
@@ -3426,6 +3713,58 @@ paths:
           schema:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Get app interactions over time
+      tags:
+      - Analytics
+  /analytics/apps-for-model:
+    get:
+      consumes:
+      - application/json
+      description: List every app that called the given model through the given LLM
+        entry in the period, with request counts, cost and first/last use. Most recently
+        used first.
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end_date
+        required: true
+        type: string
+      - description: LLM ID
+        in: query
+        name: llm_id
+        required: true
+        type: integer
+      - description: Model name as recorded in usage records
+        in: query
+        name: model_name
+        required: true
+        type: string
+      - description: Interaction type to filter by (chat/proxy)
+        in: query
+        name: interaction_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/analytics.ModelAppUsage'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Get the apps that used a model
       tags:
       - Analytics
   /analytics/budget-usage:
@@ -4167,6 +4506,10 @@ paths:
       - description: Interaction type to filter by (chat/proxy)
         in: query
         name: interaction_type
+        type: string
+      - description: Model name to filter by (as recorded in usage records)
+        in: query
+        name: model_name
         type: string
       produces:
       - application/json
@@ -5914,6 +6257,361 @@ paths:
       summary: Get current user with entitlements
       tags:
       - auth
+  /api/v1/metadata/available:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      summary: Check governed metadata availability
+      tags:
+      - governed-metadata
+  /api/v1/metadata/compliance:
+    get:
+      parameters:
+      - description: Filter by object type
+        in: query
+        name: object_type
+        type: string
+      - description: Filter by status (missing, invalid, expired, warnings, valid)
+        in: query
+        name: status
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/governed_metadata.ComplianceReport'
+      summary: Governed metadata compliance report
+      tags:
+      - governed-metadata
+  /api/v1/metadata/object-types:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/governed_metadata.ObjectTypeInfo'
+              type: array
+            type: object
+      summary: List object types that can carry governed metadata
+      tags:
+      - governed-metadata
+  /api/v1/metadata/objects/{object_type}/{object_id}:
+    delete:
+      parameters:
+      - description: Object type
+        in: path
+        name: object_type
+        required: true
+        type: string
+      - description: Object ID
+        in: path
+        name: object_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+      summary: Delete governed metadata for an object
+      tags:
+      - governed-metadata
+    get:
+      parameters:
+      - description: Object type
+        in: path
+        name: object_type
+        required: true
+        type: string
+      - description: Object ID
+        in: path
+        name: object_id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Get governed metadata for an object
+      tags:
+      - governed-metadata
+    put:
+      parameters:
+      - description: Object type
+        in: path
+        name: object_type
+        required: true
+        type: string
+      - description: Object ID
+        in: path
+        name: object_id
+        required: true
+        type: string
+      - description: Values
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.ObjectMetadataInput'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/api.MetadataValidationErrorResponse'
+      summary: Set governed metadata for an object
+      tags:
+      - governed-metadata
+  /api/v1/metadata/objects/{object_type}/{object_id}/audit:
+    get:
+      parameters:
+      - description: Object type
+        in: path
+        name: object_type
+        required: true
+        type: string
+      - description: Object ID
+        in: path
+        name: object_id
+        required: true
+        type: string
+      - description: Max entries (default 100)
+        in: query
+        name: limit
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get the governed metadata audit trail for an object
+      tags:
+      - governed-metadata
+  /api/v1/metadata/schemas:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: List governed metadata schemas
+      tags:
+      - governed-metadata
+    post:
+      parameters:
+      - description: Schema
+        in: body
+        name: schema
+        required: true
+        schema:
+          $ref: '#/definitions/api.MetadataSchemaInput'
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Create a governed metadata schema
+      tags:
+      - governed-metadata
+  /api/v1/metadata/schemas/{id}:
+    delete:
+      parameters:
+      - description: Schema ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      summary: Delete a governed metadata schema
+      tags:
+      - governed-metadata
+    get:
+      parameters:
+      - description: Schema ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a governed metadata schema
+      tags:
+      - governed-metadata
+    patch:
+      parameters:
+      - description: Schema ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Schema
+        in: body
+        name: schema
+        required: true
+        schema:
+          $ref: '#/definitions/api.MetadataSchemaInput'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update a governed metadata schema
+      tags:
+      - governed-metadata
+  /api/v1/metadata/schemas/resolve:
+    get:
+      parameters:
+      - description: Object type (llm, tool, datasource, plugin_resource:<id>:<slug>)
+        in: query
+        name: object_type
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/governed_metadata.ResolvedSchema'
+      summary: Resolve the merged schema for an object type
+      tags:
+      - governed-metadata
+  /api/v1/metadata/validate:
+    post:
+      parameters:
+      - description: Values
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.ValidateMetadataInput'
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/governed_metadata.ValidationResult'
+      summary: Validate governed metadata values without saving
+      tags:
+      - governed-metadata
+  /api/v1/metadata/vocabularies:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List controlled vocabularies
+      tags:
+      - governed-metadata
+    post:
+      parameters:
+      - description: Vocabulary
+        in: body
+        name: vocabulary
+        required: true
+        schema:
+          $ref: '#/definitions/api.MetadataVocabularyInput'
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a controlled vocabulary
+      tags:
+      - governed-metadata
+  /api/v1/metadata/vocabularies/{id}:
+    delete:
+      parameters:
+      - description: Vocabulary ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "409":
+          description: Referenced by a schema field
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Delete a controlled vocabulary
+      tags:
+      - governed-metadata
+    get:
+      parameters:
+      - description: Vocabulary ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a controlled vocabulary
+      tags:
+      - governed-metadata
+    patch:
+      parameters:
+      - description: Vocabulary ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Vocabulary
+        in: body
+        name: vocabulary
+        required: true
+        schema:
+          $ref: '#/definitions/api.MetadataVocabularyInput'
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update a controlled vocabulary
+      tags:
+      - governed-metadata
   /api/v1/namespaces:
     get:
       consumes:

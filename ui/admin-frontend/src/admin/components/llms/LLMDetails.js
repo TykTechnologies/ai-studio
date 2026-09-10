@@ -16,12 +16,13 @@ import {
   Divider,
   Table,
   TableBody,
-  TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
+import PriceChangeIcon from "@mui/icons-material/PriceChange";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { CredentialStatusNotice } from "./CredentialStatusIndicator";
@@ -62,6 +63,31 @@ import { getVendorName, getVendorLogo } from "../../utils/vendorLogos";
 import Chip from "@mui/material/Chip";
 import { useTheme } from "@mui/material/styles";
 import { formatBudgetDisplay } from "../../utils/budgetFormatter";
+import {
+  tokenChartOptions,
+  costChartOptions,
+  buildTokenChartData,
+  buildCostChartData,
+} from "./usageCharts";
+import {
+  sortUsageRows,
+  nextSortConfig,
+  formatUsageTime,
+  formatTokens,
+  formatCost,
+  modelDetailPath,
+} from "../../utils/modelUsage";
+
+// Column types drive sort behaviour for the "Models in use" table.
+const MODEL_COLUMN_TYPES = {
+  model: "string",
+  requestCount: "number",
+  appCount: "number",
+  lastUsed: "date",
+  totalCost: "number",
+  promptTokens: "number",
+  responseTokens: "number",
+};
 
 const ExpandableMessage = ({ message, isCode = false }) => {
   const [expanded, setExpanded] = useState(false);
@@ -132,6 +158,7 @@ const LLMDetails = () => {
   const [vendorUsageData, setVendorUsageData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
   const [vendorModelCostData, setVendorModelCostData] = useState([]);
+  const [modelSort, setModelSort] = useState({ field: "lastUsed", direction: "desc" });
   const [proxyLogs, setProxyLogs] = useState([]);
   const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -320,121 +347,29 @@ const LLMDetails = () => {
     );
   };
 
-  const tokenChartOptions = useMemo(() => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: {
-        type: "time",
-        time: {
-          unit: "day",
-        },
-        title: {
-          display: true,
-          text: "Date",
-        },
-        stacked: true,
-      },
-      y: {
-        beginAtZero: true,
-        title: {
-          display: true,
-          text: "Token Usage",
-        },
-        stacked: true,
-      },
-    },
-    plugins: {
-      legend: {
-        position: "top",
-      },
-      title: {
-        display: true,
-        text: "Token Usage Over Time",
-      },
-      tooltip: {
-        mode: 'index',
-      },
-    },
-  }), []);
+  const tokenChartData = useMemo(() => buildTokenChartData(vendorUsageData), [vendorUsageData]);
+  const costChartData = useMemo(() => buildCostChartData(vendorUsageData), [vendorUsageData]);
 
-  const costChartOptions = useMemo(() => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    scales: {
-      x: {
-        type: "time",
-        time: {
-          unit: "day",
-        },
-        title: {
-          display: true,
-          text: "Date",
-        },
-      },
-      y: {
-        beginAtZero: true,
-        title: {
-          display: true,
-          text: "Cost ($)",
-        },
-      },
-    },
-    plugins: {
-      legend: {
-        position: "top",
-      },
-      title: {
-        display: true,
-        text: "Cost Over Time",
-      },
-    },
-  }), []);
+  const sortedModelRows = useMemo(
+    () => sortUsageRows(vendorModelCostData, modelSort, MODEL_COLUMN_TYPES),
+    [vendorModelCostData, modelSort],
+  );
 
-  const tokenChartData = useMemo(() => ({
-    labels: vendorUsageData?.labels || [],
-    datasets: [
-      {
-        label: "Prompt Tokens",
-        data: vendorUsageData?.datasets[2]?.data || [],
-        borderColor: "rgb(53, 162, 235)",
-        backgroundColor: "rgba(53, 162, 235, 0.5)",
-        fill: true,
-      },
-      {
-        label: "Response Tokens",
-        data: vendorUsageData?.datasets[3]?.data || [],
-        borderColor: "rgb(75, 192, 192)",
-        backgroundColor: "rgba(75, 192, 192, 0.5)",
-        fill: true,
-      },
-      {
-        label: "Cache Write Tokens",
-        data: vendorUsageData?.datasets[4]?.data || [],
-        borderColor: "rgb(255, 159, 64)",
-        backgroundColor: "rgba(255, 159, 64, 0.5)",
-        fill: true,
-      },
-      {
-        label: "Cache Read Tokens",
-        data: vendorUsageData?.datasets[5]?.data || [],
-        borderColor: "rgb(153, 102, 255)",
-        backgroundColor: "rgba(153, 102, 255, 0.5)",
-        fill: true,
-      },
-    ],
-  }), [vendorUsageData]);
+  const handleModelSort = (field) => {
+    setModelSort((current) => nextSortConfig(current, field, MODEL_COLUMN_TYPES));
+  };
 
-  const costChartData = useMemo(() => ({
-    labels: vendorUsageData?.labels || [],
-    datasets: [
-      {
-        ...vendorUsageData?.datasets[1] || { data: [] },
-        borderColor: "rgb(255, 99, 132)",
-        tension: 0.1,
-      },
-    ],
-  }), [vendorUsageData]);
+  const modelSortLabel = (field, label, align = "left") => (
+    <StyledTableHeaderCell align={align} sortDirection={modelSort.field === field ? modelSort.direction : false}>
+      <TableSortLabel
+        active={modelSort.field === field}
+        direction={modelSort.field === field ? modelSort.direction : "desc"}
+        onClick={() => handleModelSort(field)}
+      >
+        {label}
+      </TableSortLabel>
+    </StyledTableHeaderCell>
+  );
 
   if (loading) return <CircularProgress />;
   if (!llm) return <Typography>LLM not found</Typography>;
@@ -473,83 +408,99 @@ const LLMDetails = () => {
         </Box>
 
         <StyledPaper elevation={3} style={{ padding: "20px", marginTop: "20px", marginBottom: "20px" }}>
-          <Typography variant="h6" gutterBottom>
-            <Box
-              component="span"
-              onClick={() => navigate("/admin/model-prices")}
-              sx={{
-                cursor: 'pointer',
-                textDecoration: 'none',
-                color: 'inherit',
-                '&:hover': {
-                  textDecoration: 'underline'
-                }
-              }}
-            >
-              Cost per Model
+          <Box display="flex" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={1} mb={1}>
+            <Box>
+              <Typography variant="h6">Models in use</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Every model this provider served in the selected period. Click a model to see which apps are calling it.
+              </Typography>
             </Box>
-          </Typography>
+            <Button
+              size="small"
+              startIcon={<PriceChangeIcon />}
+              onClick={() => navigate("/admin/model-prices")}
+            >
+              Manage model prices
+            </Button>
+          </Box>
           {vendorModelCostData.length > 0 ? (
             <>
-              <TableContainer>
-                <Table>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small" data-testid="models-in-use-table">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Model</TableCell>
-                      <TableCell align="right">Total Cost</TableCell>
-                      <TableCell align="right">Request Tokens</TableCell>
-                      <TableCell align="right">Response Tokens</TableCell>
+                      {modelSortLabel("model", "Model")}
+                      {modelSortLabel("requestCount", "Requests", "right")}
+                      {modelSortLabel("appCount", "Apps", "right")}
+                      {modelSortLabel("lastUsed", "Last used", "right")}
+                      {modelSortLabel("totalCost", "Total cost", "right")}
+                      {modelSortLabel("promptTokens", "Request tokens", "right")}
+                      {modelSortLabel("responseTokens", "Response tokens", "right")}
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {vendorModelCostData
+                    {sortedModelRows
                       .slice(0, isTableExpanded ? undefined : 5)
-                      .map((row, index) => (
-                        <TableRow key={index}>
-                          <TableCell>
-                            {row.modelPriceId ? (
-                              <Box
-                                component="span"
-                                onClick={() => navigate(`/admin/model-prices/${row.modelPriceId}`)}
-                                sx={{
-                                  cursor: 'pointer',
-                                  textDecoration: 'none',
-                                  color: 'inherit',
-                                  '&:hover': {
-                                    textDecoration: 'underline'
-                                  }
-                                }}
+                      .map((row) => {
+                        const lastUsed = formatUsageTime(row.lastUsed);
+                        return (
+                          <StyledTableRow key={`${row.vendor || ""}:${row.model}`}>
+                            <StyledTableCell>
+                              <Link
+                                component="button"
+                                variant="body2"
+                                underline="hover"
+                                sx={{ fontFamily: "monospace", textAlign: "left" }}
+                                onClick={() => navigate(modelDetailPath(id, row.model))}
                               >
                                 {row.model}
-                              </Box>
-                            ) : (
-                              row.model
-                            )}
-                          </TableCell>
-                          <TableCell align="right">
-                            <div style={{ marginBottom: '4px' }}>${row.totalCost.toFixed(2)}</div>
-                            <div style={{ fontSize: '0.85em', color: 'gray' }}>
-                              (Prompt: {row.promptCost.toFixed(2)}, CW: {row.cacheWriteCost.toFixed(2)}, CR: {row.cacheReadCost.toFixed(2)}, Resp: {row.responseCost.toFixed(2)})
-                            </div>
-                          </TableCell>
-                          <TableCell align="right">
-                            <div style={{ marginBottom: '4px' }}>{(row.promptTokens + row.cacheWriteTokens + row.cacheReadTokens).toLocaleString()}</div>
-                            <div style={{ fontSize: '0.85em', color: 'gray' }}>
-                              (Prompt: {row.promptTokens.toLocaleString()}, CW: {row.cacheWriteTokens.toLocaleString()}, CR: {row.cacheReadTokens.toLocaleString()})
-                            </div>
-                          </TableCell>
-                          <TableCell align="right">
-                            {row.responseTokens.toLocaleString()}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                              </Link>
+                              {row.modelPriceId && (
+                                <Tooltip title="Edit model price">
+                                  <IconButton
+                                    size="small"
+                                    aria-label={`Edit price for ${row.model}`}
+                                    onClick={() => navigate(`/admin/model-prices/${row.modelPriceId}`)}
+                                    sx={{ ml: 0.5 }}
+                                  >
+                                    <PriceChangeIcon fontSize="inherit" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </StyledTableCell>
+                            <StyledTableCell align="right">{formatTokens(row.requestCount)}</StyledTableCell>
+                            <StyledTableCell align="right">{formatTokens(row.appCount)}</StyledTableCell>
+                            <StyledTableCell align="right">
+                              <Tooltip title={lastUsed.absolute} placement="top">
+                                <span>{lastUsed.relative}</span>
+                              </Tooltip>
+                              <div style={{ fontSize: "0.85em", color: "gray" }}>{lastUsed.absolute}</div>
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                              <div style={{ marginBottom: "4px" }}>{formatCost(row.totalCost)}</div>
+                              <div style={{ fontSize: "0.85em", color: "gray" }}>
+                                (Prompt: {row.promptCost.toFixed(2)}, CW: {row.cacheWriteCost.toFixed(2)}, CR: {row.cacheReadCost.toFixed(2)}, Resp: {row.responseCost.toFixed(2)})
+                              </div>
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                              <div style={{ marginBottom: "4px" }}>
+                                {formatTokens(row.promptTokens + row.cacheWriteTokens + row.cacheReadTokens)}
+                              </div>
+                              <div style={{ fontSize: "0.85em", color: "gray" }}>
+                                (Prompt: {formatTokens(row.promptTokens)}, CW: {formatTokens(row.cacheWriteTokens)}, CR: {formatTokens(row.cacheReadTokens)})
+                              </div>
+                            </StyledTableCell>
+                            <StyledTableCell align="right">{formatTokens(row.responseTokens)}</StyledTableCell>
+                          </StyledTableRow>
+                        );
+                      })}
                   </TableBody>
                 </Table>
               </TableContainer>
               {vendorModelCostData.length > 5 && (
                 <Box mt={2} textAlign="center">
                   <Button onClick={toggleTableExpansion}>
-                    {isTableExpanded ? "Collapse" : "Expand"}
+                    {isTableExpanded ? "Collapse" : `Show all ${vendorModelCostData.length} models`}
                   </Button>
                 </Box>
               )}
@@ -564,7 +515,7 @@ const LLMDetails = () => {
               py={4}
             >
               <Typography variant="body1" color="text.secondary">
-                No vendor and model cost data available for the selected period.
+                No models were called through this provider in the selected period.
               </Typography>
             </Box>
           )}

@@ -1,6 +1,8 @@
 package analytics
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"sort"
 	"strconv"
 	"time"
@@ -8,6 +10,61 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
 )
+
+// ScanTime is a time.Time that can be scanned from an aggregated datetime
+// column such as MAX(time_stamp). An aggregate result column has no declared
+// type, so the SQLite driver hands back the raw TEXT instead of a time.Time
+// (Postgres keeps the timestamp type). Scanning such a column straight into a
+// time.Time fails on SQLite with "unsupported Scan, storing driver.Value type
+// string into type *time.Time"; this type accepts all three representations.
+type ScanTime struct {
+	time.Time
+}
+
+var scanTimeLayouts = []string{
+	time.RFC3339Nano,
+	"2006-01-02 15:04:05.999999999-07:00",
+	"2006-01-02 15:04:05.999999999Z07:00",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02 15:04:05",
+	"2006-01-02",
+}
+
+// Scan implements sql.Scanner.
+func (s *ScanTime) Scan(value interface{}) error {
+	switch v := value.(type) {
+	case nil:
+		s.Time = time.Time{}
+		return nil
+	case time.Time:
+		s.Time = v
+		return nil
+	case string:
+		return s.parse(v)
+	case []byte:
+		return s.parse(string(v))
+	}
+	return fmt.Errorf("ScanTime: unsupported scan type %T", value)
+}
+
+func (s *ScanTime) parse(raw string) error {
+	if raw == "" {
+		s.Time = time.Time{}
+		return nil
+	}
+	for _, layout := range scanTimeLayouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			s.Time = t
+			return nil
+		}
+	}
+	return fmt.Errorf("ScanTime: cannot parse %q as a time", raw)
+}
+
+// Value implements driver.Valuer so GORM treats the type as a plain column.
+func (s ScanTime) Value() (driver.Value, error) {
+	return s.Time, nil
+}
 
 type ChartData struct {
 	Labels []string  `json:"labels"`
@@ -661,7 +718,9 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, ll
 }
 
 // GetUsage returns token usage and cost data based on provided filters
-func GetUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID, appID *uint, interactionType *models.InteractionType) (*models.MultiAxisChartData, error) {
+// modelName, when non-empty, restricts the series to a single model (matched on
+// the recorded model name, so an alias appears under its resolved name).
+func GetUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID, appID *uint, interactionType *models.InteractionType, modelName string) (*models.MultiAxisChartData, error) {
 	var results []struct {
 		Date             string
 		Tokens           int64
@@ -695,6 +754,9 @@ func GetUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID, a
 	}
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
+	}
+	if modelName != "" {
+		query = query.Where("COALESCE(NULLIF(name, ''), 'Unknown') = ?", modelName)
 	}
 
 	err := query.Group("DATE(time_stamp)").
@@ -812,6 +874,10 @@ type VendorModelCost struct {
 	ResponseTokens   int64   `json:"responseTokens"`
 	CacheWriteTokens int64   `json:"cacheWriteTokens"`
 	CacheReadTokens  int64   `json:"cacheReadTokens"`
+	// Usage columns backing the "Models in use" view on the LLM details page.
+	RequestCount int64    `json:"requestCount"`
+	AppCount     int64    `json:"appCount"`
+	LastUsed     ScanTime `json:"lastUsed"`
 }
 
 // GetTotalCostPerVendorAndModel returns the total cost per vendor and model with detailed breakdowns
@@ -824,6 +890,9 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 			COALESCE(NULLIF(llm_chat_records.name, ''), 'Unknown') as model,
 			model_prices.id as model_price_id,
 			llm_chat_records.vendor,
+			COUNT(*) as request_count,
+			COUNT(DISTINCT llm_chat_records.app_id) as app_count,
+			MAX(llm_chat_records.time_stamp) as last_used,
 			SUM(llm_chat_records.cost) as total_cost,
 			SUM(COALESCE(llm_chat_records.prompt_tokens * COALESCE(model_prices.cpit, 0) * 10000, 0)) as prompt_cost,
 			SUM(COALESCE(llm_chat_records.response_tokens * COALESCE(model_prices.cpt, 0) * 10000, 0)) as response_cost,
@@ -860,6 +929,99 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 
 	if err != nil {
 		return nil, err
+	}
+
+	return results, nil
+}
+
+// ModelAppUsage is one app's usage of a specific model under a specific LLM
+// entry. It answers "who is using model X?" with enough detail to contact the
+// app owner.
+type ModelAppUsage struct {
+	AppID        uint     `json:"appId"`
+	AppName      string   `json:"appName"`
+	AppDeleted   bool     `json:"appDeleted"`
+	OwnerUserID  uint     `json:"ownerUserId"`
+	OwnerEmail   string   `json:"ownerEmail"`
+	RequestCount int64    `json:"requestCount"`
+	TotalTokens  int64    `json:"totalTokens"`
+	TotalCost    float64  `json:"totalCost"`
+	FirstUsed    ScanTime `json:"firstUsed"`
+	LastUsed     ScanTime `json:"lastUsed"`
+}
+
+// GetAppsForModel returns every app that called the given model through the
+// given LLM entry within the date range, most recently used first. The LLM
+// scope matters: the same model name can sit under two LLM entries (two keys
+// for the same vendor), and the question is asked from one provider's page.
+// Soft-deleted apps are still returned so historical usage stays attributable;
+// they are flagged rather than hidden.
+func GetAppsForModel(db *gorm.DB, startDate, endDate time.Time, llmID uint, modelName string, interactionType *models.InteractionType) ([]ModelAppUsage, error) {
+	var rows []struct {
+		AppID        uint
+		AppName      string
+		AppDeleted   int
+		OwnerUserID  uint
+		OwnerEmail   string
+		RequestCount int64
+		TotalTokens  int64
+		TotalCost    float64
+		FirstUsed    ScanTime
+		LastUsed     ScanTime
+	}
+
+	query := db.Table("llm_chat_records").
+		Joins("LEFT JOIN apps ON apps.id = llm_chat_records.app_id").
+		Joins("LEFT JOIN users ON users.id = apps.user_id").
+		Select(`
+			llm_chat_records.app_id as app_id,
+			COALESCE(apps.name, '') as app_name,
+			CASE WHEN apps.deleted_at IS NULL THEN 0 ELSE 1 END as app_deleted,
+			COALESCE(apps.user_id, 0) as owner_user_id,
+			COALESCE(users.email, '') as owner_email,
+			COUNT(*) as request_count,
+			SUM(COALESCE(llm_chat_records.total_tokens, 0)) as total_tokens,
+			SUM(COALESCE(llm_chat_records.cost, 0)) as total_cost,
+			MIN(llm_chat_records.time_stamp) as first_used,
+			MAX(llm_chat_records.time_stamp) as last_used
+		`).
+		Where("llm_chat_records.time_stamp BETWEEN ? AND ?", startDate, endDate).
+		Where("llm_chat_records.llm_id = ?", llmID).
+		Where("COALESCE(NULLIF(llm_chat_records.name, ''), 'Unknown') = ?", modelName)
+
+	if interactionType != nil {
+		query = query.Where("llm_chat_records.interaction_type = ?", *interactionType)
+	}
+
+	err := query.
+		Group("llm_chat_records.app_id, apps.name, apps.deleted_at, apps.user_id, users.email").
+		Order("last_used DESC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]ModelAppUsage, len(rows))
+	for i, row := range rows {
+		name := row.AppName
+		deleted := row.AppDeleted == 1
+		if name == "" {
+			// No apps row at all (hard-deleted or never synced); keep the ID visible.
+			name = "Deleted app #" + strconv.Itoa(int(row.AppID))
+			deleted = true
+		}
+		results[i] = ModelAppUsage{
+			AppID:        row.AppID,
+			AppName:      name,
+			AppDeleted:   deleted,
+			OwnerUserID:  row.OwnerUserID,
+			OwnerEmail:   row.OwnerEmail,
+			RequestCount: row.RequestCount,
+			TotalTokens:  row.TotalTokens,
+			TotalCost:    row.TotalCost / 10000,
+			FirstUsed:    row.FirstUsed,
+			LastUsed:     row.LastUsed,
+		}
 	}
 
 	return results, nil

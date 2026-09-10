@@ -24,6 +24,7 @@ func setupStatsTest(t *testing.T) *gorm.DB {
 		&models.Tool{},
 		&models.ProxyLog{},
 		&models.ToolCallRecord{},
+		&models.ModelPrice{},
 	)
 	assert.NoError(t, err)
 
@@ -526,10 +527,35 @@ func TestGetUsage(t *testing.T) {
 		startDate := now.AddDate(0, 0, -1)
 		endDate := now.AddDate(0, 0, 1)
 
-		multiAxisData, err := GetUsage(db, startDate, endDate, string(models.OPENAI), &llm.ID, &app.ID, &interactionType)
+		multiAxisData, err := GetUsage(db, startDate, endDate, string(models.OPENAI), &llm.ID, &app.ID, &interactionType, "")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, multiAxisData)
+	})
+
+	t.Run("Filters by model name", func(t *testing.T) {
+		llm := &models.LLM{Name: "Model Filter LLM", Vendor: models.OPENAI}
+		db.Create(llm)
+
+		now := time.Now()
+		db.Create(&models.LLMChatRecord{LLMID: llm.ID, Vendor: string(models.OPENAI), Name: "gpt-4o", TotalTokens: 100, TimeStamp: now, InteractionType: models.ProxyInteraction})
+		db.Create(&models.LLMChatRecord{LLMID: llm.ID, Vendor: string(models.OPENAI), Name: "gpt-4o", TotalTokens: 200, TimeStamp: now, InteractionType: models.ProxyInteraction})
+		db.Create(&models.LLMChatRecord{LLMID: llm.ID, Vendor: string(models.OPENAI), Name: "gpt-3.5-turbo", TotalTokens: 5000, TimeStamp: now, InteractionType: models.ProxyInteraction})
+
+		startDate := now.AddDate(0, 0, -1)
+		endDate := now.AddDate(0, 0, 1)
+
+		filtered, err := GetUsage(db, startDate, endDate, "", &llm.ID, nil, nil, "gpt-4o")
+		assert.NoError(t, err)
+		if assert.Len(t, filtered.Labels, 1) {
+			assert.Equal(t, float64(300), filtered.Datasets[0].Data[0], "only gpt-4o tokens should be summed")
+		}
+
+		unfiltered, err := GetUsage(db, startDate, endDate, "", &llm.ID, nil, nil, "")
+		assert.NoError(t, err)
+		if assert.Len(t, unfiltered.Labels, 1) {
+			assert.Equal(t, float64(5300), unfiltered.Datasets[0].Data[0])
+		}
 	})
 }
 
@@ -586,12 +612,227 @@ func TestGetTotalCostPerVendorAndModel(t *testing.T) {
 
 		costs, err := GetTotalCostPerVendorAndModel(db, startDate, endDate, &interactionType, &llm.ID)
 
-		// Function may fail without model_prices table - that's expected
-		if err != nil {
-			assert.Contains(t, err.Error(), "model_prices")
-		} else {
-			assert.NotNil(t, costs)
+		assert.NoError(t, err)
+		assert.NotNil(t, costs)
+	})
+
+	t.Run("Returns every cost field in dollars, not the stored scaled unit", func(t *testing.T) {
+		llm := &models.LLM{Name: "Priced LLM", Vendor: models.OPENAI}
+		db.Create(llm)
+
+		// Per-token prices. Record cost is stored as dollars * 10000, and the
+		// breakdown columns are derived from these prices in the same unit.
+		price := &models.ModelPrice{
+			ModelName:    "gpt-priced",
+			Vendor:       string(models.OPENAI),
+			Currency:     "USD",
+			CPIT:         0.000010, // prompt
+			CPT:          0.000030, // response
+			CacheWritePT: 0.000012,
+			CacheReadPT:  0.000001,
 		}
+		assert.NoError(t, db.Create(price).Error)
+
+		now := time.Now()
+		promptTokens, responseTokens, cacheWrite, cacheRead := 1000, 500, 200, 400
+		dollars := 0.000010*float64(promptTokens) +
+			0.000030*float64(responseTokens) +
+			0.000012*float64(cacheWrite) +
+			0.000001*float64(cacheRead) // = 0.0100 + 0.0150 + 0.0024 + 0.0004 = 0.0278
+		db.Create(&models.LLMChatRecord{
+			LLMID:                  llm.ID,
+			AppID:                  1,
+			Vendor:                 string(models.OPENAI),
+			Name:                   "gpt-priced",
+			PromptTokens:           promptTokens,
+			ResponseTokens:         responseTokens,
+			CacheWritePromptTokens: cacheWrite,
+			CacheReadPromptTokens:  cacheRead,
+			Cost:                   dollars * 10000,
+			TimeStamp:              now,
+			InteractionType:        models.ProxyInteraction,
+		})
+
+		costs, err := GetTotalCostPerVendorAndModel(db, now.AddDate(0, 0, -1), now.AddDate(0, 0, 1), nil, &llm.ID)
+		assert.NoError(t, err)
+		if !assert.Len(t, costs, 1) {
+			return
+		}
+		row := costs[0]
+		assert.Equal(t, "gpt-priced", row.Model)
+		if assert.NotNil(t, row.ModelPriceID) {
+			assert.Equal(t, price.ID, *row.ModelPriceID)
+		}
+		assert.InDelta(t, 0.0278, row.TotalCost, 1e-9, "totalCost must be dollars")
+		assert.InDelta(t, 0.0100, row.PromptCost, 1e-9)
+		assert.InDelta(t, 0.0150, row.ResponseCost, 1e-9)
+		assert.InDelta(t, 0.0024, row.CacheWriteCost, 1e-9)
+		assert.InDelta(t, 0.0004, row.CacheReadCost, 1e-9)
+		assert.InDelta(t, row.TotalCost, row.PromptCost+row.ResponseCost+row.CacheWriteCost+row.CacheReadCost, 1e-9,
+			"breakdown must sum to the total in the same unit")
+	})
+
+	t.Run("Reports request count, distinct apps and last used per model", func(t *testing.T) {
+		llm := &models.LLM{Name: "Usage LLM", Vendor: models.OPENAI}
+		db.Create(llm)
+		appA := &models.App{Name: "App A"}
+		appB := &models.App{Name: "App B"}
+		db.Create(appA)
+		db.Create(appB)
+
+		now := time.Now().Truncate(time.Second)
+		newest := now.Add(-5 * time.Minute)
+		records := []models.LLMChatRecord{
+			{LLMID: llm.ID, AppID: appA.ID, Vendor: string(models.OPENAI), Name: "gpt-4o", TotalTokens: 10, TimeStamp: now.Add(-3 * time.Hour), InteractionType: models.ProxyInteraction},
+			{LLMID: llm.ID, AppID: appA.ID, Vendor: string(models.OPENAI), Name: "gpt-4o", TotalTokens: 10, TimeStamp: newest, InteractionType: models.ProxyInteraction},
+			{LLMID: llm.ID, AppID: appB.ID, Vendor: string(models.OPENAI), Name: "gpt-4o", TotalTokens: 10, TimeStamp: now.Add(-2 * time.Hour), InteractionType: models.ChatInteraction},
+			{LLMID: llm.ID, AppID: appB.ID, Vendor: string(models.OPENAI), Name: "gpt-3.5-turbo", TotalTokens: 10, TimeStamp: now.Add(-1 * time.Hour), InteractionType: models.ProxyInteraction},
+		}
+		for i := range records {
+			db.Create(&records[i])
+		}
+
+		startDate := now.AddDate(0, 0, -1)
+		endDate := now.AddDate(0, 0, 1)
+
+		costs, err := GetTotalCostPerVendorAndModel(db, startDate, endDate, nil, &llm.ID)
+		assert.NoError(t, err)
+
+		byModel := map[string]VendorModelCost{}
+		for _, c := range costs {
+			byModel[c.Model] = c
+		}
+		if assert.Contains(t, byModel, "gpt-4o") {
+			row := byModel["gpt-4o"]
+			assert.Equal(t, int64(3), row.RequestCount)
+			assert.Equal(t, int64(2), row.AppCount)
+			// MAX(time_stamp) comes back as raw text on SQLite; ScanTime must parse it.
+			assert.WithinDuration(t, newest, row.LastUsed.Time, time.Second)
+		}
+		if assert.Contains(t, byModel, "gpt-3.5-turbo") {
+			row := byModel["gpt-3.5-turbo"]
+			assert.Equal(t, int64(1), row.RequestCount)
+			assert.Equal(t, int64(1), row.AppCount)
+			assert.WithinDuration(t, now.Add(-1*time.Hour), row.LastUsed.Time, time.Second)
+		}
+	})
+}
+
+func TestGetAppsForModel(t *testing.T) {
+	db := setupStatsTest(t)
+
+	llm := &models.LLM{Name: "Apps LLM", Vendor: models.OPENAI}
+	otherLLM := &models.LLM{Name: "Other LLM", Vendor: models.OPENAI}
+	db.Create(llm)
+	db.Create(otherLLM)
+
+	owner := &models.User{Email: "owner@example.com"}
+	db.Create(owner)
+
+	active := &models.App{Name: "Active App", UserID: owner.ID}
+	quiet := &models.App{Name: "Quiet App"}
+	deleted := &models.App{Name: "Retired App"}
+	db.Create(active)
+	db.Create(quiet)
+	db.Create(deleted)
+	db.Delete(deleted) // soft delete: usage must stay attributable
+
+	now := time.Now().Truncate(time.Second)
+	records := []models.LLMChatRecord{
+		// active: two calls, latest 5 minutes ago
+		{LLMID: llm.ID, AppID: active.ID, Name: "gpt-3.5-turbo", Vendor: string(models.OPENAI), TotalTokens: 100, Cost: 1234, TimeStamp: now.Add(-2 * time.Hour), InteractionType: models.ProxyInteraction},
+		{LLMID: llm.ID, AppID: active.ID, Name: "gpt-3.5-turbo", Vendor: string(models.OPENAI), TotalTokens: 50, Cost: 766, TimeStamp: now.Add(-5 * time.Minute), InteractionType: models.ProxyInteraction},
+		// quiet: one call a day ago
+		{LLMID: llm.ID, AppID: quiet.ID, Name: "gpt-3.5-turbo", Vendor: string(models.OPENAI), TotalTokens: 10, TimeStamp: now.Add(-24 * time.Hour), InteractionType: models.ChatInteraction},
+		// deleted app: one call 3 hours ago
+		{LLMID: llm.ID, AppID: deleted.ID, Name: "gpt-3.5-turbo", Vendor: string(models.OPENAI), TotalTokens: 10, TimeStamp: now.Add(-3 * time.Hour), InteractionType: models.ProxyInteraction},
+		// hard-deleted / unknown app id
+		{LLMID: llm.ID, AppID: 9999, Name: "gpt-3.5-turbo", Vendor: string(models.OPENAI), TotalTokens: 10, TimeStamp: now.Add(-4 * time.Hour), InteractionType: models.ProxyInteraction},
+		// noise: outside the range, different model, different LLM entry
+		{LLMID: llm.ID, AppID: active.ID, Name: "gpt-3.5-turbo", Vendor: string(models.OPENAI), TotalTokens: 10, TimeStamp: now.AddDate(0, 0, -10), InteractionType: models.ProxyInteraction},
+		{LLMID: llm.ID, AppID: active.ID, Name: "gpt-4o", Vendor: string(models.OPENAI), TotalTokens: 10, TimeStamp: now, InteractionType: models.ProxyInteraction},
+		{LLMID: otherLLM.ID, AppID: quiet.ID, Name: "gpt-3.5-turbo", Vendor: string(models.OPENAI), TotalTokens: 10, TimeStamp: now, InteractionType: models.ProxyInteraction},
+	}
+	for i := range records {
+		db.Create(&records[i])
+	}
+
+	startDate := now.AddDate(0, 0, -2)
+	endDate := now.AddDate(0, 0, 1)
+
+	t.Run("Lists apps most recently used first with owner and counts", func(t *testing.T) {
+		apps, err := GetAppsForModel(db, startDate, endDate, llm.ID, "gpt-3.5-turbo", nil)
+		assert.NoError(t, err)
+		if !assert.Len(t, apps, 4) {
+			return
+		}
+
+		assert.Equal(t, active.ID, apps[0].AppID)
+		assert.Equal(t, "Active App", apps[0].AppName)
+		assert.False(t, apps[0].AppDeleted)
+		assert.Equal(t, owner.ID, apps[0].OwnerUserID)
+		assert.Equal(t, "owner@example.com", apps[0].OwnerEmail)
+		assert.Equal(t, int64(2), apps[0].RequestCount)
+		assert.Equal(t, int64(150), apps[0].TotalTokens)
+		assert.InDelta(t, 0.2, apps[0].TotalCost, 0.0001)
+		assert.WithinDuration(t, now.Add(-2*time.Hour), apps[0].FirstUsed.Time, time.Second)
+		assert.WithinDuration(t, now.Add(-5*time.Minute), apps[0].LastUsed.Time, time.Second)
+
+		assert.Equal(t, deleted.ID, apps[1].AppID)
+		assert.Equal(t, "Retired App", apps[1].AppName)
+		assert.True(t, apps[1].AppDeleted)
+
+		assert.Equal(t, uint(9999), apps[2].AppID)
+		assert.Equal(t, "Deleted app #9999", apps[2].AppName)
+		assert.True(t, apps[2].AppDeleted)
+
+		assert.Equal(t, quiet.ID, apps[3].AppID)
+		assert.Equal(t, "", apps[3].OwnerEmail)
+		assert.Equal(t, int64(1), apps[3].RequestCount)
+	})
+
+	t.Run("Filters by interaction type", func(t *testing.T) {
+		chat := models.ChatInteraction
+		apps, err := GetAppsForModel(db, startDate, endDate, llm.ID, "gpt-3.5-turbo", &chat)
+		assert.NoError(t, err)
+		if assert.Len(t, apps, 1) {
+			assert.Equal(t, quiet.ID, apps[0].AppID)
+		}
+	})
+
+	t.Run("Returns empty list for an unused model", func(t *testing.T) {
+		apps, err := GetAppsForModel(db, startDate, endDate, llm.ID, "claude-3-opus", nil)
+		assert.NoError(t, err)
+		assert.Empty(t, apps)
+	})
+}
+
+func TestScanTime(t *testing.T) {
+	ref := time.Date(2026, 9, 8, 10, 11, 12, 345000000, time.UTC)
+
+	cases := map[string]interface{}{
+		"time.Time":         ref,
+		"sqlite text":       "2026-09-08 10:11:12.345+00:00",
+		"sqlite text bytes": []byte("2026-09-08 10:11:12.345+00:00"),
+		"rfc3339":           "2026-09-08T10:11:12.345Z",
+	}
+	for name, value := range cases {
+		t.Run(name, func(t *testing.T) {
+			var s ScanTime
+			assert.NoError(t, s.Scan(value))
+			assert.True(t, ref.Equal(s.Time), "got %v", s.Time)
+		})
+	}
+
+	t.Run("nil scans to zero time", func(t *testing.T) {
+		var s ScanTime
+		assert.NoError(t, s.Scan(nil))
+		assert.True(t, s.IsZero())
+	})
+
+	t.Run("garbage is an error", func(t *testing.T) {
+		var s ScanTime
+		assert.Error(t, s.Scan("not a time"))
 	})
 }
 

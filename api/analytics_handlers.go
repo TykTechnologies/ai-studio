@@ -715,6 +715,7 @@ func (a *API) getVendorUsage(c *gin.Context) {
 // @Param llm_id query int false "LLM ID to filter by"
 // @Param app_id query int false "App ID to filter by"
 // @Param interaction_type query string false "Interaction type to filter by (chat/proxy)"
+// @Param model_name query string false "Model name to filter by (as recorded in usage records)"
 // @Success 200 {object} models.MultiAxisChartData
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
@@ -765,8 +766,9 @@ func (a *API) getUsage(c *gin.Context) {
 
 	vendor := c.Query("vendor")
 	interactionType := getInteractionType(c)
+	modelName := c.Query("model_name")
 
-	chartData, err := analytics.GetUsage(a.service.DB, startDate, endDate, vendor, llmID, appID, interactionType)
+	chartData, err := analytics.GetUsage(a.service.DB, startDate, endDate, vendor, llmID, appID, interactionType, modelName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Errors: []struct {
@@ -884,6 +886,79 @@ func (a *API) getTotalCostPerVendorAndModel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, costs)
+}
+
+// getAppsForModel godoc
+// @Summary Get the apps that used a model
+// @Description List every app that called the given model through the given LLM entry in the period, with request counts, cost and first/last use. Most recently used first.
+// @Tags Analytics
+// @Accept json
+// @Produce json
+// @Param start_date query string true "Start date (YYYY-MM-DD)"
+// @Param end_date query string true "End date (YYYY-MM-DD)"
+// @Param llm_id query int true "LLM ID"
+// @Param model_name query string true "Model name as recorded in usage records"
+// @Param interaction_type query string false "Interaction type to filter by (chat/proxy)"
+// @Success 200 {array} analytics.ModelAppUsage
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /analytics/apps-for-model [get]
+func (a *API) getAppsForModel(c *gin.Context) {
+	startDate, endDate, err := getDateRange(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	llmIDStr := c.Query("llm_id")
+	if llmIDStr == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Missing llm_id"}},
+		})
+		return
+	}
+	llmID, err := strconv.ParseUint(llmIDStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Invalid llm_id"}},
+		})
+		return
+	}
+
+	modelName := c.Query("model_name")
+	if modelName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "Missing model_name"}},
+		})
+		return
+	}
+
+	apps, err := analytics.GetAppsForModel(a.service.DB, startDate, endDate, uint(llmID), modelName, getInteractionType(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: "Failed to get apps for model"}},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, apps)
 }
 
 // getProxyLogsForLLM godoc
