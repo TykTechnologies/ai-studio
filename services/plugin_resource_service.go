@@ -163,6 +163,16 @@ func (s *Service) GetPluginResourceTypes() ([]models.PluginResourceType, error) 
 	return types, nil
 }
 
+// GetSubmittablePluginResourceTypes returns the active resource types that
+// accept community submissions (portal submission form).
+func (s *Service) GetSubmittablePluginResourceTypes() ([]models.PluginResourceType, error) {
+	var types models.PluginResourceTypes
+	if err := types.GetAllSubmittable(s.DB); err != nil {
+		return nil, err
+	}
+	return types, nil
+}
+
 // GetPluginResourceTypeByID returns a resource type by its ID.
 func (s *Service) GetPluginResourceTypeByID(id uint) (*models.PluginResourceType, error) {
 	prt := &models.PluginResourceType{}

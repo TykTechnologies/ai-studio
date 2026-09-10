@@ -28,7 +28,7 @@ type Submission struct {
 	ResourceID   *uint  `json:"resource_id"`                 // set after approval creates the resource
 
 	// Plugin resource type reference (only set when ResourceType == "plugin")
-	PluginResourceTypeID *uint               `json:"plugin_resource_type_id"`
+	PluginResourceTypeID *uint               `json:"plugin_resource_type_id" gorm:"index"`
 	PluginResourceType   *PluginResourceType `json:"plugin_resource_type,omitempty" gorm:"foreignKey:PluginResourceTypeID"`
 	// PluginInstanceID is the plugin-assigned instance ID created on approval
 	// (plugin instances use string IDs, unlike ResourceID).

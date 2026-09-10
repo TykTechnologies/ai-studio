@@ -54,8 +54,14 @@
     "eject": "react-scripts eject"
   },
   "jest": {
+    "moduleNameMapper": {
+      "^unist-util-visit-parents/do-not-use-color$": "<rootDir>/node_modules/unist-util-visit-parents/lib/color.js",
+      "^#minpath$": "<rootDir>/node_modules/vfile/lib/minpath.browser.js",
+      "^#minproc$": "<rootDir>/node_modules/vfile/lib/minproc.browser.js",
+      "^#minurl$": "<rootDir>/node_modules/vfile/lib/minurl.browser.js"
+    },
     "transformIgnorePatterns": [
-      "node_modules/(?!(chart.js|chartjs-adapter-date-fns|axios|react-markdown|remark-gfm|vfile|unist-util-stringify-position|unified|bail|is-plain-obj|trough|remark|mdast-util-from-markdown|mdast-util-to-string|micromark|parse-entities|character-entities|property-information|space-separated-tokens|comma-separated-tokens|hast-util-whitespace)/)"
+      "node_modules/(?!(chart.js|chartjs-adapter-date-fns|axios|react-markdown|remark-gfm|vfile[^/]*|unist-util-[^/]+|unified|bail|is-plain-obj|trough|remark|remark-[^/]+|rehype-[^/]+|mdast-util-[^/]+|micromark[^/]*|parse-entities|character-entities[^/]*|character-reference-invalid|decode-named-character-reference|property-information|space-separated-tokens|comma-separated-tokens|hast-util-[^/]+|html-url-attributes|estree-util-[^/]+|devlop|style-to-object|style-to-js|inline-style-parser|trim-lines|ccount|longest-streak|markdown-table|zwitch|escape-string-regexp|is-decimal|is-hexadecimal|is-alphanumerical|is-alphabetical|extend)/)"
     ]
   },
   "eslintConfig": {

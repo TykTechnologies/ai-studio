@@ -105,6 +105,28 @@ func TestCreateNotificationRPC(t *testing.T) {
 		require.NoError(t, service.DB.Where("title = ?", "untyped").First(&untyped).Error)
 		assert.Equal(t, "plugin:"+plugin.Name, untyped.Type)
 	})
+
+	t.Run("strips HTML and script links from plugin content before storing", func(t *testing.T) {
+		server, service, _, ctx := setupExtensionRPCTest(t, models.ServiceScopeNotificationsWrite)
+		user := &models.User{Email: "user2@test.com", Name: "User", EmailVerified: true}
+		require.NoError(t, user.Create(service.DB))
+
+		resp, err := server.CreateNotification(ctx, &pb.CreateNotificationRequest{
+			Title:   "Alert <script>alert(1)</script>",
+			Content: "**bold** <img src=x onerror=alert(1)> [go](javascript:alert(2)) [ok](https://example.com)",
+			UserId:  uint32(user.ID),
+		})
+		require.NoError(t, err)
+		assert.True(t, resp.Success)
+		var stored models.Notification
+		require.NoError(t, service.DB.Where("user_id = ?", user.ID).First(&stored).Error)
+		assert.Equal(t, "Alert alert(1)", stored.Title)
+		assert.Equal(t, "**bold**  [go](#alert(2)) [ok](https://example.com)", stored.Content)
+
+		// A title that is nothing but markup is rejected rather than stored empty.
+		_, err = server.CreateNotification(ctx, &pb.CreateNotificationRequest{Title: "<b></b>", UserId: uint32(user.ID)})
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
 }
 
 func TestRegisterResourceTypesRPC(t *testing.T) {

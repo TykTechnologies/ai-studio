@@ -1459,7 +1459,15 @@ func (s *AIStudioManagementServer) CreateNotification(ctx context.Context, req *
 		notifType = fmt.Sprintf("plugin:%s", plugin.Name)
 	}
 
-	if err := s.service.NotificationService.NotifyDirect(notificationID, notifType, title, req.Content, flags); err != nil {
+	// Plugins are not trusted authors: strip raw HTML and script-capable link
+	// schemes before the Markdown is stored and shown to administrators.
+	content := sanitizePluginNotificationContent(req.Content)
+	title = sanitizePluginNotificationContent(title)
+	if title == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "title must contain text, not only markup")
+	}
+
+	if err := s.service.NotificationService.NotifyDirect(notificationID, notifType, title, content, flags); err != nil {
 		log.Warn().Err(err).Uint("plugin_id", plugin.ID).Str("notification_id", notificationID).Msg("Plugin notification failed")
 		return &pb.CreateNotificationResponse{Success: false, Message: err.Error()}, nil
 	}

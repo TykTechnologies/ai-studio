@@ -42,4 +42,22 @@ func TestManifestResourceType_SubmissionSchemaString(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(`{"slug":"a","name":"A","submission_schema":null}`), &m))
 		assert.Equal(t, "", m.SubmissionSchemaString())
 	})
+	t.Run("malformed values are reported, not swallowed", func(t *testing.T) {
+		var m ManifestResourceType
+		require.NoError(t, json.Unmarshal([]byte(`{"slug":"a","name":"A","submission_schema":"{not json"}`), &m))
+		_, err := m.ParseSubmissionSchema()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be a JSON object")
+
+		require.NoError(t, json.Unmarshal([]byte(`{"slug":"a","name":"A","submission_schema":["array"]}`), &m))
+		_, err = m.ParseSubmissionSchema()
+		require.Error(t, err)
+
+		// ValidateManifest surfaces the same error with the resource type slug.
+		pm := PluginManifest{ID: "p", Version: "1", Name: "P", Capabilities: &PluginCapabilities{Hooks: []string{"post_auth"}},
+			ResourceTypes: []ManifestResourceType{m}}
+		err = pm.ValidateManifest()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "resource type 'a'")
+	})
 }

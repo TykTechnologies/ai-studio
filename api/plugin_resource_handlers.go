@@ -208,7 +208,40 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
+// serializePluginResourceType renders a resource type for the admin API or,
+// with portal=true, the reduced shape the portal submission form needs.
+func serializePluginResourceType(t *models.PluginResourceType, portal bool) gin.H {
+	entry := gin.H{
+		"id":                t.ID,
+		"plugin_id":         t.PluginID,
+		"slug":              t.Slug,
+		"name":              sanitizeString(t.Name),
+		"description":       sanitizeString(t.Description),
+		"icon":              sanitizeString(t.Icon),
+		"has_privacy_score": t.HasPrivacyScore,
+	}
+	if !portal {
+		entry["supports_metadata"] = t.SupportsMetadata
+		entry["supports_submissions"] = t.SupportsSubmissions
+		entry["is_active"] = t.IsActive
+		if t.FormComponentTag != "" {
+			entry["form_component"] = gin.H{
+				"tag":         t.FormComponentTag,
+				"entry_point": t.FormComponentEntry,
+			}
+		}
+	}
+	if t.SubmissionSchema != "" {
+		entry["submission_schema"] = json.RawMessage(t.SubmissionSchema)
+	}
+	if t.Plugin != nil {
+		entry["plugin_name"] = sanitizeString(t.Plugin.Name)
+	}
+	return entry
+}
+
 // listPluginResourceTypes returns all active registered resource types
+// GET /api/v1/plugin-resource-types
 func (a *API) listPluginResourceTypes(c *gin.Context) {
 	types, err := a.service.GetPluginResourceTypes()
 	if err != nil {
@@ -217,32 +250,8 @@ func (a *API) listPluginResourceTypes(c *gin.Context) {
 	}
 
 	result := make([]gin.H, 0, len(types))
-	for _, t := range types {
-		entry := gin.H{
-			"id":                   t.ID,
-			"plugin_id":            t.PluginID,
-			"slug":                 t.Slug,
-			"name":                 sanitizeString(t.Name),
-			"description":          sanitizeString(t.Description),
-			"icon":                 sanitizeString(t.Icon),
-			"supports_metadata":    t.SupportsMetadata,
-			"has_privacy_score":    t.HasPrivacyScore,
-			"supports_submissions": t.SupportsSubmissions,
-			"is_active":            t.IsActive,
-		}
-		if t.FormComponentTag != "" {
-			entry["form_component"] = gin.H{
-				"tag":         t.FormComponentTag,
-				"entry_point": t.FormComponentEntry,
-			}
-		}
-		if t.SubmissionSchema != "" {
-			entry["submission_schema"] = json.RawMessage(t.SubmissionSchema)
-		}
-		if t.Plugin != nil {
-			entry["plugin_name"] = sanitizeString(t.Plugin.Name)
-		}
-		result = append(result, entry)
+	for i := range types {
+		result = append(result, serializePluginResourceType(&types[i], false))
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": result})
@@ -252,33 +261,15 @@ func (a *API) listPluginResourceTypes(c *gin.Context) {
 // that accept community submissions, for the portal submission form.
 // GET /common/plugin-resource-types
 func (a *API) listSubmittablePluginResourceTypes(c *gin.Context) {
-	types, err := a.service.GetPluginResourceTypes()
+	types, err := a.service.GetSubmittablePluginResourceTypes()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list plugin resource types"})
 		return
 	}
 
 	result := make([]gin.H, 0, len(types))
-	for _, t := range types {
-		if !t.IsActive || !t.SupportsSubmissions {
-			continue
-		}
-		entry := gin.H{
-			"id":                t.ID,
-			"plugin_id":         t.PluginID,
-			"slug":              t.Slug,
-			"name":              sanitizeString(t.Name),
-			"description":       sanitizeString(t.Description),
-			"icon":              sanitizeString(t.Icon),
-			"has_privacy_score": t.HasPrivacyScore,
-		}
-		if t.SubmissionSchema != "" {
-			entry["submission_schema"] = json.RawMessage(t.SubmissionSchema)
-		}
-		if t.Plugin != nil {
-			entry["plugin_name"] = sanitizeString(t.Plugin.Name)
-		}
-		result = append(result, entry)
+	for i := range types {
+		result = append(result, serializePluginResourceType(&types[i], true))
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": result})

@@ -144,19 +144,34 @@ type ManifestResourceType struct {
 }
 
 // SubmissionSchemaString returns the submission schema as a JSON string,
-// unwrapping it when the manifest encoded it as a string literal.
+// unwrapping it when the manifest encoded it as a string literal. Malformed
+// values are rejected by ValidateManifest (see ParseSubmissionSchema), so a
+// loaded manifest never reaches this with a value that cannot be unwrapped.
 func (m ManifestResourceType) SubmissionSchemaString() string {
+	schema, _ := m.ParseSubmissionSchema()
+	return schema
+}
+
+// ParseSubmissionSchema returns the submission schema as a JSON string ("" when
+// absent) or an error describing why the manifest value is unusable: a string
+// literal that is not valid JSON, or a value that is not a JSON object.
+func (m ManifestResourceType) ParseSubmissionSchema() (string, error) {
 	raw := strings.TrimSpace(string(m.SubmissionSchema))
 	if raw == "" || raw == "null" {
-		return ""
+		return "", nil
 	}
 	if strings.HasPrefix(raw, "\"") {
 		var unquoted string
-		if err := json.Unmarshal(m.SubmissionSchema, &unquoted); err == nil {
-			return strings.TrimSpace(unquoted)
+		if err := json.Unmarshal(m.SubmissionSchema, &unquoted); err != nil {
+			return "", fmt.Errorf("submission_schema string literal is not valid JSON: %w", err)
 		}
+		raw = strings.TrimSpace(unquoted)
 	}
-	return raw
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+		return "", fmt.Errorf("submission_schema must be a JSON object: %w", err)
+	}
+	return raw, nil
 }
 
 // ScheduleDefinition represents a cron-based task schedule in the manifest
@@ -298,6 +313,12 @@ func (pm *PluginManifest) ValidateManifest() error {
 		}
 		if !found {
 			return fmt.Errorf("primary_hook '%s' must be included in capabilities.hooks array", pm.Capabilities.PrimaryHook)
+		}
+	}
+
+	for _, rt := range pm.ResourceTypes {
+		if _, err := rt.ParseSubmissionSchema(); err != nil {
+			return fmt.Errorf("resource type '%s': %w", rt.Slug, err)
 		}
 	}
 

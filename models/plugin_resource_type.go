@@ -59,6 +59,12 @@ func (pts *PluginResourceTypes) GetAllActive(db *gorm.DB) error {
 	return db.Where("is_active = ?", true).Preload("Plugin").Find(pts).Error
 }
 
+// GetAllSubmittable returns the active resource types that accept community
+// submissions, filtered in the database rather than in memory.
+func (pts *PluginResourceTypes) GetAllSubmittable(db *gorm.DB) error {
+	return db.Where("is_active = ? AND supports_submissions = ?", true, true).Preload("Plugin").Find(pts).Error
+}
+
 // GetByPlugin returns all resource types for a specific plugin
 func (pts *PluginResourceTypes) GetByPlugin(db *gorm.DB, pluginID uint) error {
 	return db.Where("plugin_id = ?", pluginID).Find(pts).Error
