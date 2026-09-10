@@ -89,6 +89,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		analyticsHandler, // Use microgateway analytics handler
 		&aigateway.Config{
 			Port:                  cfg.Server.Port,
+			TLSEnabled:            cfg.Server.TLSEnabled,
 			LLMTimeout:            cfg.Gateway.Timeout,
 			UnifiedRouterBasePath: cfg.Gateway.UnifiedRouterPath,
 			DisableUnifiedRouter:  cfg.Gateway.UnifiedRouterDisabled,
