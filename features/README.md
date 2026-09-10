@@ -65,6 +65,14 @@ Each feature specification below provides detailed documentation on the individu
 - Asynchronous processing for performance
 - Dashboard visualization for administrators and developers
 
+### [Audit Trail](AuditTrail.md) (Enterprise)
+- Append-only record of every management API action: actor, IP, action, resource, status
+- Field-level diffs for updates, full final state for deletes, secret redaction
+- Login, logout, SSO and failed authentication events
+- Database and/or file storage with configurable retention
+- Filtered query, summary, per-object history and CSV/JSON export API
+- Admin UI page under Governance
+
 ### [Budget Control](Budgeting.md)
 - Monthly spending caps for apps and LLMs
 - Real-time usage tracking and blocking

@@ -80,6 +80,7 @@ import ModelRouterDetails from "./components/model-routers/ModelRouterDetails";
 import ModelRouterForm from "./components/model-routers/ModelRouterForm";
 
 import ComplianceOverview from "./pages/ComplianceOverview";
+import AuditTrail from "./pages/AuditTrail";
 
 import SubmissionReviewQueue from "./pages/SubmissionReviewQueue";
 import SubmissionReview from "./pages/SubmissionReview";
@@ -155,6 +156,7 @@ const mainAdminRoutes = (
     <Route path="filters/new" element={<FilterForm />} />
 
     <Route path="compliance" element={<ComplianceOverview />} />
+    <Route path="audit" element={<AuditTrail />} />
 
     <Route path="submissions" element={<SubmissionReviewQueue />} />
     <Route path="submissions/:id" element={<SubmissionReview />} />

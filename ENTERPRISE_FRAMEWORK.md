@@ -427,6 +427,34 @@ func TestBudgetEnforcement(t *testing.T) {
 - **LDAP**: Direct LDAP server integration with custom filters
 - **Social**: OAuth-based (Google, GitHub, custom providers)
 
+
+## Audit Trail Feature Specifics
+
+### How the Audit Trail Works
+
+**Community Edition:**
+- ❌ **Recording**: Nothing is recorded
+- 🔒 **API Endpoints**: `/api/v1/audit/*` return 403 Forbidden (status endpoint reports `available: false`)
+- 🔒 **Admin UI**: Governance → Audit Trail shows the enterprise notice
+
+**Enterprise Edition:**
+- ✅ **Recording**: Every mutating and authentication request to the management API, with actor, IP, action, resource, status and a field-level diff
+- ✅ **Redaction**: Secrets never stored; changed secrets still reported as changed
+- ✅ **Storage**: Database (queryable), file (append-only), or both; configurable retention
+- ✅ **Query API**: List, get, summary, per-object history, CSV/JSON export
+- ✅ **Admin UI**: Filterable table with expandable diffs
+
+### Implementation Details
+
+- Interface: `services/audit/interface.go` - Service contract and query/summary types
+- Factory: `services/audit/factory.go` - Factory pattern
+- CE Stub: `services/audit/community.go` - No-op middleware, `ErrEnterpriseFeature` for queries
+- ENT Impl: `enterprise/features/audit/` - `service.go` (queue, sinks, queries), `middleware.go` (capture), `actions.go` (route → action), `diff.go` (snapshots, diffs, redaction)
+- Model: `models/audit_record.go` (`audit_records` table, migrated in both editions)
+- Config: `config/config.go` (`AuditConfig`, `AUDIT_*` variables)
+- API: `api/audit_handlers.go`; middleware registered in `api.NewAPI` before routes
+- Spec: `features/AuditTrail.md`; docs: `docs/site/docs/audit-trail.md`
+
 ## Plugin Security Feature Specifics
 
 ### How Plugin Security Works
