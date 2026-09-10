@@ -26,7 +26,7 @@ This guide covers the essential first steps to take within the Tyk AI Studio UI 
 
 Tyk AI Studio pre-populates OpenAI and Anthropic LLM configurations on first startup. These are already wired to placeholder secrets (`OPENAI_KEY` and `ANTHROPIC_KEY`) — you just need to fill in your actual API keys.
 
-1.  **Navigate to Secrets:** In the admin UI sidebar, go to **Governance → Secrets**.
+1.  **Navigate to Secrets:** In the admin UI sidebar, go to **Settings → Secrets**.
 2.  **Edit `OPENAI_KEY`:** Click on the `OPENAI_KEY` secret, then click **Edit** and paste your OpenAI API key.
 3.  **Edit `ANTHROPIC_KEY`:** Do the same for `ANTHROPIC_KEY` with your Anthropic API key.
 
@@ -38,7 +38,7 @@ To connect additional providers (Google Vertex AI, Ollama, Azure, etc.):
 
 1.  Navigate to **LLM Management** in the sidebar and click **Add LLM Configuration**.
 2.  Select the provider and enter the configuration details (name, model identifiers, base URL if applicable).
-3.  For the API key, create a new secret in **Governance → Secrets** and reference it as `$SECRET/YOUR_SECRET_NAME` in the API Key field.
+3.  For the API key, create a new secret in **Settings → Secrets** and reference it as `$SECRET/YOUR_SECRET_NAME` in the API Key field.
 
 For more details, see the [LLM Management](./llm-management.md) documentation.
 

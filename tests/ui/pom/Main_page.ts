@@ -13,6 +13,8 @@ export class MainPage {
     readonly DataSourcesLink: Locator;
     readonly ToolsLink: Locator;
     readonly GovernanceButton: Locator;
+    readonly AccessButton: Locator;
+    readonly SettingsButton: Locator;
     readonly UsersLink: Locator;
     readonly UserGroupsLink: Locator;
     readonly FiltersMiddlewareLink: Locator;
@@ -38,6 +40,8 @@ export class MainPage {
         this.DataSourcesLink = this.page.getByRole('link', { name: 'Data sources' });
         this.ToolsLink = this.page.getByRole('link', { name: 'Tools' });
         this.GovernanceButton = this.page.getByRole('button', { name: 'Governance' });
+        this.AccessButton = this.page.getByRole('button', { name: 'Access' });
+        this.SettingsButton = this.page.getByRole('button', { name: 'Settings' });
         this.UsersLink = this.page.getByRole('link', { name: 'Users' });
         this.UserGroupsLink = this.page.getByRole('link', { name: 'User groups' });
         this.FiltersMiddlewareLink = this.page.getByRole('link', { name: 'Filters & Middleware' });
@@ -76,12 +80,12 @@ export class MainPage {
     }
 
     async navigateToUsers() {
-        await this.GovernanceButton.click();
+        await this.AccessButton.click();
         await this.UsersLink.click();
     }
 
     async navigateToUserGroups() {
-        await this.GovernanceButton.click();
+        await this.AccessButton.click();
         await this.UserGroupsLink.click();
     }
 
@@ -91,7 +95,7 @@ export class MainPage {
     }
 
     async navigateToSecrets() {
-        await this.GovernanceButton.click();
+        await this.SettingsButton.click();
         await this.SecretsLink.click();
     }
 

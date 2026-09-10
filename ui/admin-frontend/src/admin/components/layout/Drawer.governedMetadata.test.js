@@ -36,14 +36,14 @@ const renderDrawer = () =>
     </ThemeProvider>
   );
 
-const expandGovernance = async () => {
-  fireEvent.click(await screen.findByText('Governance'));
+const expandGroup = async (label) => {
+  fireEvent.click(await screen.findByText(label));
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 350));
   });
 };
 
-describe('Drawer governed metadata navigation', () => {
+describe('Drawer admin navigation groups', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     pluginLoaderService.getSidebarMenuItems.mockResolvedValue([]);
@@ -53,16 +53,8 @@ describe('Drawer governed metadata navigation', () => {
     });
   });
 
-  it('shows the three metadata entries next to Compliance in Enterprise', async () => {
-    useAdminData.mockReturnValue(adminData(true));
-    renderDrawer();
-    await expandGovernance();
-    for (const [text, path] of [
-      ['Compliance', '/admin/compliance'],
-      ['Metadata schemas', '/admin/metadata/schemas'],
-      ['Vocabularies', '/admin/metadata/vocabularies'],
-      ['Metadata compliance', '/admin/metadata/compliance'],
-    ]) {
+  const expectLinks = (pairs) => {
+    for (const [text, path] of pairs) {
       const item = screen.getByText(text);
       expect(item).toBeInTheDocument();
       const link = item.closest('a');
@@ -70,15 +62,46 @@ describe('Drawer governed metadata navigation', () => {
         expect(link).toHaveAttribute('href', path);
       }
     }
+  };
+
+  it('groups the Enterprise governance pages under Governance', async () => {
+    useAdminData.mockReturnValue(adminData(true));
+    renderDrawer();
+    await expandGroup('Governance');
+    expectLinks([
+      ['Compliance overview', '/admin/compliance'],
+      ['Audit trail', '/admin/audit'],
+      ['Metadata schemas', '/admin/metadata/schemas'],
+      ['Metadata vocabularies', '/admin/metadata/vocabularies'],
+      ['Metadata coverage', '/admin/metadata/compliance'],
+    ]);
+    // Access and Settings pages no longer live under Governance.
+    expect(screen.queryByText('Users')).not.toBeInTheDocument();
+    expect(screen.queryByText('Secrets')).not.toBeInTheDocument();
   });
 
-  it('hides them in Community Edition', async () => {
+  it('puts identity pages under Access and system pages under Settings', async () => {
+    useAdminData.mockReturnValue(adminData(true));
+    renderDrawer();
+    await expandGroup('Access');
+    expectLinks([['Users', '/admin/users']]);
+    await expandGroup('Settings');
+    expectLinks([
+      ['Secrets', '/admin/secrets'],
+      ['Branding', '/admin/branding'],
+    ]);
+  });
+
+  it('hides the Governance group entirely in Community Edition', async () => {
     useAdminData.mockReturnValue(adminData(false));
     renderDrawer();
-    await expandGovernance();
+    expect(await screen.findByText('Access')).toBeInTheDocument();
+    expect(screen.getByText('Settings')).toBeInTheDocument();
+    expect(screen.queryByText('Governance')).not.toBeInTheDocument();
+    await expandGroup('Settings');
     expect(screen.getByText('Secrets')).toBeInTheDocument();
     expect(screen.queryByText('Metadata schemas')).not.toBeInTheDocument();
-    expect(screen.queryByText('Vocabularies')).not.toBeInTheDocument();
-    expect(screen.queryByText('Metadata compliance')).not.toBeInTheDocument();
+    expect(screen.queryByText('Metadata vocabularies')).not.toBeInTheDocument();
+    expect(screen.queryByText('Metadata coverage')).not.toBeInTheDocument();
   });
 });

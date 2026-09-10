@@ -16,7 +16,7 @@ Objects published to the AI Portal or pushed to edge gateways are consumed by pe
 
 A vocabulary is a controlled list of terms (`value`, `label`, optional description, `deprecated` flag). Fields of type *Vocabulary* or *Vocabulary (multiple values)* only accept those terms; deprecated terms remain valid but produce a warning.
 
-**Admin → Governance → Vocabularies**
+**Admin → Governance → Metadata vocabularies**
 
 ### Schemas
 
@@ -65,7 +65,7 @@ Omitting `governed_metadata` leaves stored values untouched; sending `{}` clears
 
 ## Compliance report
 
-**Admin → Governance → Metadata compliance** re-validates every LLM, Tool and Data Source against the current schemas and lists objects that are *missing*, *invalid*, *expired* (a warn-when-past date has passed), carry *warnings*, or are *valid*, with a link to fix each one.
+**Admin → Governance → Metadata coverage** re-validates every LLM, Tool and Data Source against the current schemas and lists objects that are *missing*, *invalid*, *expired* (a warn-when-past date has passed), carry *warnings*, or are *valid*, with a link to fix each one.
 
 ```http
 GET /api/v1/metadata/compliance?object_type=llm&status=missing
@@ -142,7 +142,7 @@ With `object-type` set the element loads the schema and validates live through t
 | Admin form | plugin admin web component | `<governed-metadata-fields object-type="plugin_resource:<id>:<slug>">`, or `el.schema = GetResolvedMetadataSchema(...)` payload when the admin API is not reachable |
 | Portal detail | plugin portal RPC + web component | `GetObjectMetadataForAudience(..., MetadataVisibilityPortal)` → `displayJSON` → `<governed-metadata-badges>` (`el.items`) |
 | Delete | plugin delete path | `DeleteObjectMetadata(ctx, objectType, id)` |
-| Verify | Studio admin UI | the type appears under *Applies to* in the schema form and its instances in **Governance → Metadata compliance** |
+| Verify | Studio admin UI | the type appears under *Applies to* in the schema form and its instances in **Governance → Metadata coverage** |
 
 ## Validation reference
 

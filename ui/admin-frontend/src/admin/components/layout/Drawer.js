@@ -103,9 +103,9 @@ const Drawer = () => {
         ]
       : []),
     {
-      id: 'Governance',
-      text: 'Governance',
-      icon: <Icon name="shield" />,
+      id: 'access',
+      text: 'Access',
+      icon: <Icon name="users" />,
       subItems: [
         { id: 'users', text: 'Users', path: '/admin/users' },
         ...(features.feature_groups && (!features.feature_gateway ||
@@ -116,17 +116,33 @@ const Drawer = () => {
         ...(uiOptions?.show_sso_config && config?.tibEnabled
           ? [{ id: 'sso-profiles', text: 'Identity providers', path: '/admin/sso-profiles' }]
           : []),
+      ],
+    },
+    // Governance only holds Enterprise pages, so the whole group is hidden in
+    // the Community Edition rather than showing an empty section.
+    ...(config?.is_enterprise
+      ? [
+          {
+            id: 'governance',
+            text: 'Governance',
+            icon: <Icon name="shield" />,
+            subItems: [
+              { id: 'compliance', text: 'Compliance overview', path: '/admin/compliance' },
+              { id: 'audit', text: 'Audit trail', path: '/admin/audit' },
+              { id: 'metadata-schemas', text: 'Metadata schemas', path: '/admin/metadata/schemas' },
+              { id: 'metadata-vocabularies', text: 'Metadata vocabularies', path: '/admin/metadata/vocabularies' },
+              { id: 'metadata-compliance', text: 'Metadata coverage', path: '/admin/metadata/compliance' },
+            ],
+          },
+        ]
+      : []),
+    {
+      id: 'settings',
+      text: 'Settings',
+      icon: <Icon name="gear" />,
+      subItems: [
         { id: 'secrets', text: 'Secrets', path: '/admin/secrets' },
         { id: 'branding', text: 'Branding', path: '/admin/branding' },
-        ...(config?.is_enterprise
-          ? [
-              { id: 'compliance', text: 'Compliance', path: '/admin/compliance' },
-              { id: 'metadata-schemas', text: 'Metadata schemas', path: '/admin/metadata/schemas' },
-              { id: 'metadata-vocabularies', text: 'Vocabularies', path: '/admin/metadata/vocabularies' },
-              { id: 'metadata-compliance', text: 'Metadata compliance', path: '/admin/metadata/compliance' },
-              { id: 'audit', text: 'Audit Trail', path: '/admin/audit' },
-            ]
-          : []),
       ],
     },
     ...(features.feature_gateway &&

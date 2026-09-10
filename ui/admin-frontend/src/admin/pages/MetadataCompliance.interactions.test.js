@@ -73,6 +73,6 @@ describe("MetadataCompliance interactions", () => {
   it("shows an error when the report fails", async () => {
     getMetadataComplianceReport.mockRejectedValueOnce(new Error("boom"));
     renderPage();
-    expect(await screen.findByText(/Failed to load the metadata compliance report/)).toBeInTheDocument();
+    expect(await screen.findByText(/Failed to load the metadata coverage report/)).toBeInTheDocument();
   });
 });
