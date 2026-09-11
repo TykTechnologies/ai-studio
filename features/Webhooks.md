@@ -265,6 +265,20 @@ invalid state, `422` URL policy or template, `400` validation.
 - The target detail panel in the UI shows the object's audit history from
   `GET /audit/resources/webhook_target/:id`.
 
+## Search Performance
+
+Free-text search on the delivery log and the target list is a substring
+match. On PostgreSQL the service creates `pg_trgm` GIN indexes at startup
+(`target_url_snapshot`, `topic`, `last_error` on deliveries; `name`, `url`,
+`description` on targets) and uses `ILIKE`, so those searches are
+index-assisted; if the extension cannot be created (missing privilege) a
+warning is logged and searches fall back to sequential scans. Every
+delivery search is bounded to a time window (the caller's `start_date`, or
+the last 30 days) and never touches the response snippet column. SQLite is
+single-node and scans the window. Exact delivery or event ids are matched
+directly. Use the indexed filters (`target_id`, `topic`, `status`,
+`event_id`, dates) for routine queries and free text for investigation.
+
 ## Testing
 
 - `go test ./config/ ./services/webhooks/ ./api/ ./pkg/authz/ -run Webhook`
