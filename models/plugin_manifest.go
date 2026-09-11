@@ -219,6 +219,12 @@ type UIMount struct {
 	Entry string                 `json:"entry,omitempty"` // Entry point file
 	Props map[string]interface{} `json:"props,omitempty"` // Props to pass to component
 
+	// RequiredPermission is the RBAC permission an administrator needs to
+	// see and open this page ("resource:action"). Plugin-relative forms are
+	// accepted: "read" means the plugin's own base resource, "assets:write"
+	// one of its declared sub-resources. Default: the plugin's base read.
+	RequiredPermission string `json:"required_permission,omitempty"`
+
 	// Module Federation specific
 	Remote  string `json:"remote,omitempty"`  // Remote entry point for MF
 	Exposed string `json:"exposed,omitempty"` // Exposed module name
@@ -263,6 +269,13 @@ type UIRegistry struct {
 	LoadPriority  int                    `json:"load_priority" gorm:"default:0"`
 	Scope         string                 `json:"scope" gorm:"size:20;default:admin"`    // "admin" or "portal"
 	AllowedGroups []string               `json:"allowed_groups" gorm:"serializer:json"` // Empty = all users (portal scope only)
+	// RequiredPermission is computed when the registry is served (admin
+	// scope): mount_config.required_permission resolved against the plugin,
+	// or the plugin's base read permission. Not stored.
+	RequiredPermission string `json:"required_permission,omitempty" gorm:"-"`
+	// PluginPermissionKey is the owning plugin's RBAC resource key, served
+	// alongside so plugin pages can check their own permissions. Not stored.
+	PluginPermissionKey string `json:"plugin_permission_key,omitempty" gorm:"-"`
 	CreatedAt     time.Time              `json:"created_at"`
 	UpdatedAt     time.Time              `json:"updated_at"`
 

@@ -21,6 +21,7 @@ func newCommunityService(db *gorm.DB) Service {
 func (s *communityService) Enabled() bool                                   { return false }
 func (s *communityService) SetLicenseCheck(func() bool)                     {}
 func (s *communityService) Seed(context.Context) error                      { return nil }
+func (s *communityService) RefreshSystemRoles(context.Context) error        { return nil }
 func (s *communityService) SyncAdminFlag(context.Context, ...uint) error    { return nil }
 func (s *communityService) IsLastOwner(context.Context, uint) (bool, error) { return false, nil }
 

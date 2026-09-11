@@ -3,10 +3,12 @@ package api
 import (
 	"net/http/httptest"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -56,10 +58,12 @@ func assertRoutesAnnotated(t *testing.T, api *API) {
 	assert.Empty(t, orphan, "annotations that match no registered route")
 
 	for key, e := range api.routePerms {
-		if e.resolve != nil {
+		if e.dynamic() {
 			continue
 		}
-		assert.True(t, e.perm.Valid(), "%s annotated with unknown permission %q", key, e.perm)
+		for _, p := range e.permissions(nil) {
+			assert.True(t, p.Valid(), "%s annotated with unknown permission %q", key, p)
+		}
 	}
 }
 
@@ -133,6 +137,57 @@ func TestAuthzRoutes_MetadataObjectResolver(t *testing.T) {
 	assert.Equal(t, authz.Write("datasources"), resolveFor("datasource"))
 	assert.Equal(t, authz.Write("plugins"), resolveFor("plugin_resource"))
 	assert.Equal(t, authz.Write("metadata"), resolveFor("something-else"), "unknown types fall back to schema governance")
+}
+
+// The plugin routes resolve to the platform-level permission or the
+// per-plugin one of the plugin named in the path.
+func TestAuthzRoutes_PluginResolvers(t *testing.T) {
+	api, db := setupTestAPI(t)
+	plugin := &models.Plugin{
+		Name:      "Asset catalog",
+		Command:   "/bin/true",
+		HookType:  models.HookTypeStudioUI,
+		HookTypes: []string{models.HookTypeStudioUI},
+		Manifest:  map[string]interface{}{"id": "com.example.assets"},
+	}
+	require.NoError(t, plugin.Create(db))
+	const key = "plugin:com.example.assets"
+	assert.Equal(t, key, plugin.PermissionKey())
+
+	ctxFor := func(id string, method string) *gin.Context {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Params = gin.Params{{Key: "id", Value: id}, {Key: "method", Value: method}}
+		return c
+	}
+	entry := func(method, path string) permEntry {
+		e, ok := api.routePerms[routeKey(method, path)]
+		require.True(t, ok, "%s %s", method, path)
+		require.True(t, e.dynamic())
+		return e
+	}
+	id := strconv.FormatUint(uint64(plugin.ID), 10)
+
+	get := entry("GET", "/api/v1/plugins/:id")
+	assert.Equal(t, []authz.Permission{authz.Read("plugins"), authz.Read(key)}, get.permissions(ctxFor(id, "")))
+	assert.Equal(t, authz.Read("plugins"), get.permission(ctxFor(id, "")), "the platform permission is the one a denial reports")
+	assert.Equal(t, []authz.Permission{authz.Read("plugins")}, get.permissions(ctxFor("999999", "")), "unknown plugin: platform permission only")
+
+	patch := entry("PATCH", "/api/v1/plugins/:id")
+	assert.Equal(t, []authz.Permission{authz.Write("plugins"), authz.Write(key)}, patch.permissions(ctxFor(id, "")))
+
+	rpc := entry("POST", "/api/v1/plugins/:id/rpc/:method")
+	assert.Equal(t, []authz.Permission{authz.Write(key)}, rpc.permissions(ctxFor(id, "admin_stats")))
+	assert.Equal(t, []authz.Permission{authz.Execute("plugins")}, rpc.permissions(ctxFor("999999", "x")))
+
+	// The umbrella rule makes the resolved permissions satisfiable by the
+	// legacy grant, and a per-plugin grant satisfies them without it.
+	require.NoError(t, authz.Replace(services.PluginBaseResource(plugin)))
+	t.Cleanup(func() { authz.UnregisterPlugin(key) })
+	assert.True(t, authz.NewSet(authz.Execute("plugins")).HasAny(rpc.permissions(ctxFor(id, "x"))...))
+	assert.True(t, authz.NewSet(authz.Write(key)).HasAny(rpc.permissions(ctxFor(id, "x"))...))
+	assert.False(t, authz.NewSet(authz.Read(key)).HasAny(rpc.permissions(ctxFor(id, "x"))...))
+	assert.True(t, authz.NewSet(authz.Read(key)).HasAny(get.permissions(ctxFor(id, ""))...))
+	assert.False(t, authz.NewSet(authz.Read("plugins")).HasAny(rpc.permissions(ctxFor(id, "x"))...))
 }
 
 func TestPermRouter_RejectsUnknownPermission(t *testing.T) {

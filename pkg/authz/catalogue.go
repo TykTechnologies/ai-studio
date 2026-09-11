@@ -3,6 +3,7 @@ package authz
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -25,6 +26,24 @@ type Resource struct {
 	Actions []Action `json:"actions"`
 	// Description is optional help text for the role editor.
 	Description string `json:"description,omitempty"`
+	// Plugin is the permission key of the plugin that contributed this
+	// resource ("plugin:<manifest id>"), or "" for built-in resources. The
+	// role editor groups plugin resources under their plugin.
+	Plugin string `json:"plugin,omitempty"`
+	// PluginLabel is the display name of the contributing plugin.
+	PluginLabel string `json:"plugin_label,omitempty"`
+	// Dynamic marks a resource registered at runtime (plugins) rather than
+	// in init(); dynamic resources can be replaced and unregistered.
+	Dynamic bool `json:"dynamic,omitempty"`
+}
+
+// PluginResourcePrefix starts every plugin-contributed resource key. The
+// umbrella rule in Set.Has grants all of them to holders of plugins:execute.
+const PluginResourcePrefix = "plugin:"
+
+// IsPluginResource reports whether key belongs to a plugin.
+func IsPluginResource(key string) bool {
+	return strings.HasPrefix(key, PluginResourcePrefix)
 }
 
 // Groups is the display order of catalogue groups, aligned with the admin
@@ -46,6 +65,7 @@ var Groups = []string{
 var (
 	mu        sync.RWMutex
 	registry  = map[string]Resource{}
+	version   uint64
 	groupRank = func() map[string]int {
 		m := make(map[string]int, len(Groups))
 		for i, g := range Groups {
@@ -55,25 +75,42 @@ var (
 	}()
 )
 
-// Register adds a resource to the catalogue. It panics on a duplicate key,
-// an unknown group, a missing label, or an invalid action, so mistakes
-// surface at boot (and in every test that imports the package).
-func Register(r Resource) {
+func validate(r Resource) error {
 	if r.Key == "" || r.Label == "" {
-		panic(fmt.Sprintf("authz: resource %q needs a key and a label", r.Key))
+		return fmt.Errorf("authz: resource %q needs a key and a label", r.Key)
 	}
 	if _, ok := groupRank[r.Group]; !ok {
-		panic(fmt.Sprintf("authz: resource %q has unknown group %q", r.Key, r.Group))
+		return fmt.Errorf("authz: resource %q has unknown group %q", r.Key, r.Group)
 	}
 	if len(r.Actions) == 0 {
-		panic(fmt.Sprintf("authz: resource %q has no actions", r.Key))
+		return fmt.Errorf("authz: resource %q has no actions", r.Key)
+	}
+	if r.Actions[0] != ActionRead {
+		return fmt.Errorf("authz: resource %q must offer read first", r.Key)
 	}
 	seen := map[Action]bool{}
 	for _, a := range r.Actions {
 		if !a.Valid() || seen[a] {
-			panic(fmt.Sprintf("authz: resource %q has invalid or duplicate action %q", r.Key, a))
+			return fmt.Errorf("authz: resource %q has invalid or duplicate action %q", r.Key, a)
 		}
 		seen[a] = true
+	}
+	if r.Dynamic != IsPluginResource(r.Key) {
+		return fmt.Errorf("authz: resource %q: only plugin resources (%q prefix) may be dynamic", r.Key, PluginResourcePrefix)
+	}
+	if r.Dynamic && (r.Plugin == "" || !strings.HasPrefix(r.Key, r.Plugin)) {
+		return fmt.Errorf("authz: plugin resource %q must name its plugin as the key prefix", r.Key)
+	}
+	return nil
+}
+
+// Register adds a built-in resource to the catalogue. It panics on a
+// duplicate key, an unknown group, a missing label, or an invalid action, so
+// mistakes surface at boot (and in every test that imports the package).
+// Plugin resources use Replace instead.
+func Register(r Resource) {
+	if err := validate(r); err != nil {
+		panic(err.Error())
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -83,8 +120,83 @@ func Register(r Resource) {
 	registry[r.Key] = r
 }
 
-// Catalogue returns a copy of every resource, sorted by group order then
-// label. This is the payload of GET /api/v1/rbac/permissions.
+// Replace upserts a plugin resource. It returns an error instead of
+// panicking because plugin manifests are user data, and it bumps Version so
+// clients can refresh the catalogue.
+func Replace(r Resource) error {
+	r.Dynamic = true
+	if err := validate(r); err != nil {
+		return err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if existing, ok := registry[r.Key]; ok && !existing.Dynamic {
+		return fmt.Errorf("authz: resource %q is built in and cannot be replaced", r.Key)
+	}
+	registry[r.Key] = r
+	version++
+	return nil
+}
+
+// Unregister removes a plugin resource. Built-in resources are never
+// removed. It reports whether anything changed.
+func Unregister(key string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	r, ok := registry[key]
+	if !ok || !r.Dynamic {
+		return false
+	}
+	delete(registry, key)
+	version++
+	return true
+}
+
+// UnregisterPlugin removes every resource the plugin contributed (its base
+// resource and any sub-resources) and reports how many were removed.
+func UnregisterPlugin(plugin string) int {
+	if plugin == "" {
+		return 0
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	n := 0
+	for key, r := range registry {
+		if r.Dynamic && r.Plugin == plugin {
+			delete(registry, key)
+			n++
+		}
+	}
+	if n > 0 {
+		version++
+	}
+	return n
+}
+
+// PluginResources returns the resources contributed by one plugin, sorted
+// with the base resource (key == plugin) first.
+func PluginResources(plugin string) []Resource {
+	var out []Resource
+	for _, r := range Catalogue() {
+		if r.Plugin == plugin {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// Version counts dynamic catalogue changes since boot. It is sent with
+// GET /api/v1/rbac/permissions so the UI can tell a stale copy apart.
+func Version() uint64 {
+	mu.RLock()
+	defer mu.RUnlock()
+	return version
+}
+
+// Catalogue returns a copy of every resource, sorted by group order, then
+// built-in resources by label, then plugin resources by plugin label with
+// each plugin's base resource ahead of its sub-resources. This is the
+// payload of GET /api/v1/rbac/permissions.
 func Catalogue() []Resource {
 	mu.RLock()
 	out := make([]Resource, 0, len(registry))
@@ -95,11 +207,23 @@ func Catalogue() []Resource {
 	}
 	mu.RUnlock()
 	sort.Slice(out, func(i, j int) bool {
-		gi, gj := groupRank[out[i].Group], groupRank[out[j].Group]
-		if gi != gj {
-			return gi < gj
+		a, b := out[i], out[j]
+		if ga, gb := groupRank[a.Group], groupRank[b.Group]; ga != gb {
+			return ga < gb
 		}
-		return out[i].Label < out[j].Label
+		if a.Dynamic != b.Dynamic {
+			return !a.Dynamic
+		}
+		if a.Plugin != b.Plugin {
+			if a.PluginLabel != b.PluginLabel {
+				return a.PluginLabel < b.PluginLabel
+			}
+			return a.Plugin < b.Plugin
+		}
+		if (a.Key == a.Plugin) != (b.Key == b.Plugin) {
+			return a.Key == a.Plugin
+		}
+		return a.Label < b.Label
 	})
 	return out
 }

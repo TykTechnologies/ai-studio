@@ -64,20 +64,21 @@ func (a *API) requireRoutePermission() gin.HandlerFunc {
 			return
 		}
 		key := routeKey(c.Request.Method, c.FullPath())
-		perm, annotated := a.routePermission(c)
-		if !annotated {
-			perm = authz.FullAdmin
+		perms, annotated := a.routePermission(c)
+		if !annotated || len(perms) == 0 {
+			perms = []authz.Permission{authz.FullAdmin}
 			if _, seen := warned.LoadOrStore(key, true); !seen {
 				slog.Warn("authz: route has no permission annotation; requiring full administrator access", "route", key)
 			}
 		}
+		perm := perms[0] // the primary permission, reported on denial
 		set, err := authz.Permissions(c)
 		if err != nil {
 			slog.Error("authz: could not resolve permissions; denying", "user", user.Email, "route", key, "error", err)
 			c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(perm))
 			return
 		}
-		if !set.Has(perm) {
+		if !set.HasAny(perms...) {
 			slog.Warn("authz: permission denied", "user", user.Email, "route", key, "permission", string(perm))
 			c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(perm))
 			return

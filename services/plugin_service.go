@@ -19,6 +19,19 @@ type PluginService struct {
 	db               *gorm.DB
 	ociClient        *ociplugins.OCIPluginClient
 	pluginManager    *AIStudioPluginManager // For loading plugins to get config schemas
+	permissionSync   pluginPermissionSyncer // Keeps the RBAC catalogue in step with the plugins table
+}
+
+// SetPermissionSync installs the callback that registers or removes a
+// plugin's permission resource after create, update and delete.
+func (s *PluginService) SetPermissionSync(fn pluginPermissionSyncer) {
+	s.permissionSync = fn
+}
+
+func (s *PluginService) syncPermissions(plugin *models.Plugin, removed bool) {
+	if s.permissionSync != nil && plugin != nil {
+		s.permissionSync(plugin, removed)
+	}
 }
 
 // NewPluginService creates a new plugin service
@@ -157,6 +170,7 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 	if err := plugin.Create(s.db); err != nil {
 		return nil, fmt.Errorf("failed to create plugin: %w", err)
 	}
+	s.syncPermissions(plugin, false)
 
 	return plugin, nil
 }
@@ -240,6 +254,7 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 	if err := plugin.Update(s.db); err != nil {
 		return nil, fmt.Errorf("failed to update plugin: %w", err)
 	}
+	s.syncPermissions(plugin, false)
 
 	return plugin, nil
 }
@@ -310,6 +325,7 @@ func (s *PluginService) DeletePlugin(id uint) error {
 	if err := plugin.Delete(s.db); err != nil {
 		return fmt.Errorf("failed to delete plugin: %w", err)
 	}
+	s.syncPermissions(plugin, true)
 
 	return nil
 }

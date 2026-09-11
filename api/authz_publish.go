@@ -23,13 +23,20 @@ import (
 
 // canPublish reports whether the caller may flip the live switch of resource.
 func (a *API) canPublish(c *gin.Context, resource string) bool {
+	return a.holds(c, authz.Publish(resource))
+}
+
+// holds reports whether the caller holds p, treating TestMode and requests
+// without an authorization context (legacy callers, handler tests) as
+// allowed, exactly like the route middleware does.
+func (a *API) holds(c *gin.Context, p authz.Permission) bool {
 	if a.config != nil && a.config.TestMode {
 		return true
 	}
 	if _, ok := authz.FromContext(c); !ok {
 		return true
 	}
-	return authz.Can(c, authz.Publish(resource))
+	return authz.Can(c, p)
 }
 
 // requirePublishIfChanged returns false, having written a 403, when the

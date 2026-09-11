@@ -101,6 +101,33 @@ func Parse(s string) (Permission, error) {
 	return p, nil
 }
 
+// ParseStored validates a permission as stored on a role. It accepts
+// everything Parse accepts plus a well-formed plugin permission whose
+// resource is not currently registered (the plugin is uninstalled, disabled
+// or not yet loaded), so a role keeps its plugin grants across plugin
+// lifecycle changes and stays saveable. Evaluation still drops unregistered
+// permissions (NewSetFromStrings); this only governs storage.
+func ParseStored(s string) (Permission, error) {
+	if p, err := Parse(s); err == nil {
+		return p, nil
+	}
+	p := Permission(strings.TrimSpace(s))
+	if p.WellFormedPlugin() {
+		return p, nil
+	}
+	return "", fmt.Errorf("unknown permission %q", s)
+}
+
+// WellFormedPlugin reports whether p is "plugin:<key>[:<sub>]:<action>" with a
+// known action, regardless of whether the resource is registered.
+func (p Permission) WellFormedPlugin() bool {
+	res, act := p.Resource(), p.Action()
+	if !IsPluginResource(res) || !act.Valid() {
+		return false
+	}
+	return len(res) > len(PluginResourcePrefix) && !strings.ContainsAny(res, " \t\n")
+}
+
 // String implements fmt.Stringer.
 func (p Permission) String() string { return string(p) }
 

@@ -36,6 +36,11 @@ type PluginResponse struct {
 		CreatedAt    string                 `json:"created_at"`
 		UpdatedAt    string                 `json:"updated_at"`
 	} `json:"attributes"`
+	// PermissionKey is the RBAC resource that stands for this plugin
+	// ("plugin:<manifest id>"); omitted for plugins with no admin surface.
+	// Top level rather than inside Attributes so the many hand-written
+	// Attributes literals in this package stay untouched.
+	PermissionKey string `json:"permission_key,omitempty"`
 	Relationships *struct {
 		LLMs struct {
 			Data []struct {
@@ -485,6 +490,18 @@ func (a *API) updatePlugin(c *gin.Context) {
 	// Enabling or disabling a plugin is the publish action on plugins.
 	if req.IsActive != nil && !a.requirePublishIfChanged(c, "plugins", originalPlugin.IsActive, *req.IsActive) {
 		return
+	}
+
+	// A caller admitted by the per-plugin write permission alone may change
+	// the plugin's configuration, name and description; everything else
+	// (command, hooks, namespace, activation) needs the platform permission.
+	if !a.holds(c, authz.Write("plugins")) {
+		if req.Command != nil || req.Checksum != nil || req.HookType != nil || req.Namespace != nil ||
+			req.OCIReference != nil || req.IsActive != nil || req.HookTypes != nil ||
+			(req.LoadImmediately != nil && *req.LoadImmediately) {
+			c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Write("plugins")))
+			return
+		}
 	}
 
 	plugin, err := a.service.PluginService.UpdatePlugin(uint(id), &req)
@@ -1064,6 +1081,9 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 			UpdatedAt:    plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},
 	}
+	if plugin.HasAdminSurface() {
+		response.PermissionKey = plugin.PermissionKey()
+	}
 
 	// Include LLM relationships if they exist
 	if len(plugin.LLMs) > 0 {
@@ -1373,6 +1393,23 @@ func (a *API) getUIRegistry(c *gin.Context) {
 		})
 		return
 	}
+
+	// Serve only the mounts the caller may open, each carrying the
+	// permission it requires, so the frontend never receives (or routes) a
+	// page the user cannot see.
+	visible := make([]models.UIRegistry, 0, len(entries))
+	for i := range entries {
+		entry := entries[i]
+		entry.RequiredPermission = services.RequiredPermissionOf(&entry)
+		if entry.Plugin != nil {
+			entry.PluginPermissionKey = entry.Plugin.PermissionKey()
+		}
+		if !authz.Can(c, authz.Permission(entry.RequiredPermission)) {
+			continue
+		}
+		visible = append(visible, entry)
+	}
+	entries = visible
 
 	c.JSON(http.StatusOK, gin.H{"data": entries})
 }
@@ -2038,7 +2075,7 @@ func (a *API) callPluginRPC(c *gin.Context) {
 				IsAdmin:     user.IsAdmin,
 				Groups:      extractUserGroupNames(c),
 				Metadata:    make(map[string]string),
-				Permissions: callerPermissions(c),
+				Permissions: pluginCallerPermissions(c, plugin),
 			}
 		}
 	}
@@ -2389,7 +2426,7 @@ func (a *API) callPortalPluginRPC(c *gin.Context) {
 		IsAdmin:     user.IsAdmin,
 		Groups:      groups,
 		Metadata:    make(map[string]string),
-		Permissions: callerPermissions(c),
+		Permissions: pluginCallerPermissions(c, plugin),
 	}
 
 	response, err := a.service.AIStudioPluginManager.CallPluginPortalRPC(

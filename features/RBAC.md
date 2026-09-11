@@ -163,7 +163,29 @@ Related payload changes: `/common/me` carries `permissions`, `roles`, `has_admin
 3. Add a constant to `ui/admin-frontend/src/admin/rbac/permissions.js`, a `permission` on the nav item in `Drawer.js`, and on the route descriptor in `admin/routes.js`.
 4. Add explicit audit action names in `enterprise/features/audit/actions.go` if the generic derivation reads badly.
 
-Plugin-declared permissions (`plugin:<slug>:<action>`) and scoped bindings (namespace, catalogue) are reserved for a later phase; the binding table already carries `scope_type`/`scope_id`.
+Scoped bindings (namespace, catalogue) are reserved for a later phase; the binding table already carries `scope_type`/`scope_id`.
+
+---
+
+## 7. Plugin permissions
+
+Every installed plugin with an administrator-facing surface (`studio_ui`, `portal_ui` or `resource_provider` hook) contributes one resource to the catalogue, in the Plugins group, keyed `plugin:<manifest id>` (`models.Plugin.PermissionKey`; `plugin:id-<database id>` until the manifest is known). It offers `read`, `write` and `execute`:
+
+| Permission | Opens |
+|---|---|
+| `plugin:<key>:read` | the plugin's admin pages (sidebar section, routes served by `GET /plugins/ui-registry` and `/plugins/sidebar-menu`), its detail/configuration page (`GET /plugins/:id`, `/status`, `/config-schema`) and RPC methods the manifest declares read-only |
+| `plugin:<key>:write` | any other admin RPC method (`POST /plugins/:id/rpc/:method`) and `PATCH /plugins/:id` limited to `config`, `name` and `description` |
+| `plugin:<key>:execute` | reserved for plugin-declared side-effecting methods |
+
+**Umbrella rule.** `plugins:execute` ("call plugins") implies every `plugin:*` permission (`authz.Set.Has`), so Editor and every existing custom role keep using every plugin; per-plugin grants exist to *narrow* access to one plugin. `plugins:read`/`write`/`delete`/`publish` stay the platform-level lifecycle permissions (list, install, scopes, enable, remove) and do not imply anything per plugin. Where a route accepts either, the annotation is any-of (`permRouter.HandleAny`/`HandleAnyFn`): the platform permission or the per-plugin one.
+
+**Lifecycle.** The catalogue is in memory. `services.RebuildPermissionCatalogue` registers every installed plugin at boot, before `Authz().Seed`, so the computed system roles see the full catalogue; the plugin and manifest services then call `SyncPluginPermissions` on create, update, manifest registration (which also stores the manifest on the plugin row, fixing the key) and delete, and `rbac.Service.RefreshSystemRoles` recomputes Editor/Viewer/Auditor after each change. `GET /rbac/permissions` carries `version` (and an `ETag`) so the UI refreshes its cached catalogue; the frontend also drops the cache on the `plugin-loader-refreshed` event.
+
+Viewer therefore reads (opens the pages of) every plugin; a plugin that must not be browsed by read-only roles can be marked `sensitive` in its manifest (Part 3).
+
+**Orphans.** A role may hold `plugin:*` permissions whose plugin is uninstalled or not loaded: `authz.ParseStored` accepts any well-formed plugin permission when a role is saved, `NewSetFromStrings` drops them from evaluation while the resource is absent, and the role payload lists them as `orphaned_permissions` (shown as "Not installed" chips in the role editor, removable there). Reinstalling the plugin makes them effective again.
+
+**Plugin pages.** `mount_config.required_permission` (manifest `mount.required_permission`) still overrides the page permission; it is resolved against the plugin (`services.ResolvePluginPermission`): `"read"` means the base resource, `"assets:write"` a declared sub-resource, `"plugins:execute"` the platform permission. `GET /plugins/ui-registry` and `/plugins/sidebar-menu` filter entries by the caller's permissions server-side and carry `required_permission` and `plugin_permission_key`; each plugin's sidebar section gains a "Configuration" link to `/admin/plugins/:id` for holders of the plugin's read. Plugin web components receive `pluginAPI.permissions` and `pluginAPI.can(perm)` (a full permission or a plugin-relative one such as `"write"`), and the RPC call hands the plugin the caller's permissions with the plugin's own grants expanded (`pluginCallerPermissions`), so plugin code never needs the umbrella rule: `userCtx.HasPermission("plugin:<key>:write")` is enough.
 
 ---
 

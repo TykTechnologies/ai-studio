@@ -180,6 +180,29 @@ export const hasPermission = (held, perm) => {
       if (resourceOf(h) === res) return true;
     }
   }
+  // Umbrella rule, as on the backend: plugins:execute ("call plugins")
+  // grants every plugin-contributed permission.
+  if (isPluginPermission(perm) && held.has(`plugins:execute`)) return true;
+  return false;
+};
+
+/** Plugin-contributed resources are keyed "plugin:<manifest id>[:<sub>]". */
+export const PLUGIN_RESOURCE_PREFIX = 'plugin:';
+
+export const isPluginPermission = (perm) => typeof perm === 'string' && perm.startsWith(PLUGIN_RESOURCE_PREFIX);
+
+/**
+ * Whether the held set grants anything on any plugin: the wildcard,
+ * plugins:execute (which implies every plugin permission) or an explicit
+ * per-plugin grant. Gates the plugin configuration pages, whose exact
+ * permission depends on which plugin is opened.
+ */
+export const hasPluginGrant = (held) => {
+  if (!held || held.size === 0) return false;
+  if (held.has(FULL_ADMIN) || held.has(P.PLUGINS_EXECUTE)) return true;
+  for (const h of held) {
+    if (isPluginPermission(h)) return true;
+  }
   return false;
 };
 

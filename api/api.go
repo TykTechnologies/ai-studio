@@ -834,8 +834,11 @@ func (a *API) setupRoutes() {
 
 	// Plugin routes
 	v1.POST("/plugins", authz.Write("plugins"), a.createPlugin)
-	v1.GET("/plugins/:id", authz.Read("plugins"), a.getPlugin)
-	v1.PATCH("/plugins/:id", authz.Write("plugins"), a.updatePlugin)
+	// The plugin detail (configuration view) and the config-only PATCH are
+	// open to the platform-level plugins permission or the per-plugin one;
+	// updatePlugin restricts per-plugin holders to config, name, description.
+	v1.HandleAnyFn("GET", "/plugins/:id", a.pluginOrPlatformPermission(authz.ActionRead), a.getPlugin)
+	v1.HandleAnyFn("PATCH", "/plugins/:id", a.pluginOrPlatformPermission(authz.ActionWrite), a.updatePlugin)
 	v1.POST("/plugins/:id/enable", authz.Publish("plugins"), a.enablePlugin)
 	v1.POST("/plugins/:id/disable", authz.Publish("plugins"), a.disablePlugin)
 	v1.DELETE("/plugins/:id", authz.Delete("plugins"), a.deletePlugin)
@@ -858,15 +861,17 @@ func (a *API) setupRoutes() {
 	v1.POST("/plugins/:id/manifest/parse", authz.Write("plugins"), a.parsePluginManifest)
 
 	// Plugin RPC routes
-	v1.POST("/plugins/:id/rpc/:method", authz.Execute("plugins"), a.callPluginRPC)
+	// Admin RPC needs the per-plugin write permission (plugins:execute
+	// implies it); Part 3 lets manifests declare read-only methods.
+	v1.HandleFn("POST", "/plugins/:id/rpc/:method", a.pluginRPCPermission, a.callPluginRPC)
 	v1.POST("/plugins/:id/reload", authz.Execute("plugins"), a.reloadPlugin)
 
 	// Plugin runtime status routes (for debugging)
-	v1.GET("/plugins/:id/status", authz.Read("plugins"), a.getPluginStatus)
+	v1.HandleAnyFn("GET", "/plugins/:id/status", a.pluginOrPlatformPermission(authz.ActionRead), a.getPluginStatus)
 	v1.GET("/plugins/loaded", authz.Read("plugins"), a.getLoadedPlugins)
 
 	// Plugin configuration schema routes
-	v1.GET("/plugins/:id/config-schema", authz.Read("plugins"), a.getPluginConfigSchema)
+	v1.HandleAnyFn("GET", "/plugins/:id/config-schema", a.pluginOrPlatformPermission(authz.ActionRead), a.getPluginConfigSchema)
 	v1.POST("/plugins/:id/config-schema/refresh", authz.Write("plugins"), a.refreshPluginConfigSchema)
 
 	// Plugin workflow routes (for step-by-step creation and approval)

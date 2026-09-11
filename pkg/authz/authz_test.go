@@ -94,6 +94,75 @@ func TestSet_PublishImpliesReadOnly(t *testing.T) {
 	assert.False(t, NewSet(Write("llms")).Has(Publish("llms")), "write does not imply publish")
 }
 
+func TestPluginResources_ReplaceUnregisterAndUmbrella(t *testing.T) {
+	const key = "plugin:com.example.assets"
+	t.Cleanup(func() { UnregisterPlugin(key) })
+
+	before := Version()
+	require.NoError(t, Replace(Resource{Key: key, Label: "Assets", Group: "Plugins", Plugin: key, PluginLabel: "Assets",
+		Actions: []Action{ActionRead, ActionWrite, ActionExecute}}))
+	require.NoError(t, Replace(Resource{Key: key + ":types", Label: "Asset types", Group: "Plugins", Plugin: key, PluginLabel: "Assets",
+		Actions: []Action{ActionRead, ActionWrite, ActionDelete, ActionPublish}}))
+	assert.Greater(t, Version(), before)
+
+	// Parsing and lookup work like built-ins once registered.
+	p, err := Parse(key + ":types:publish")
+	require.NoError(t, err)
+	assert.Equal(t, key+":types", p.Resource())
+	assert.Equal(t, ActionPublish, p.Action())
+	_, err = Parse(key + ":types:execute")
+	assert.Error(t, err, "action not offered")
+
+	// Plugin resources sort after built-ins within the Plugins group, base first.
+	var plugins []Resource
+	for _, r := range Catalogue() {
+		if r.Group == "Plugins" {
+			plugins = append(plugins, r)
+		}
+	}
+	require.GreaterOrEqual(t, len(plugins), 4)
+	assert.False(t, plugins[0].Dynamic)
+	assert.Equal(t, key, plugins[len(plugins)-2].Key)
+	assert.Equal(t, key+":types", plugins[len(plugins)-1].Key)
+	assert.Len(t, PluginResources(key), 2)
+
+	// Umbrella: plugins:execute grants every plugin permission; plugins:read does not.
+	assert.True(t, NewSet(Execute("plugins")).Has(Write(key)))
+	assert.True(t, NewSet(Execute("plugins")).Has(Publish(key+":types")))
+	assert.False(t, NewSet(Read("plugins")).Has(Read(key)))
+	assert.False(t, NewSet(Write("plugins")).Has(Read(key)))
+	assert.True(t, NewSet(Write(key)).Has(Read(key)), "implied read on a plugin resource")
+	assert.False(t, NewSet(Write(key)).Has(Read(key+":types")))
+	assert.True(t, NewSet(Read(key)).HasPluginGrant())
+	assert.True(t, NewSet(Execute("plugins")).HasPluginGrant())
+	assert.False(t, NewSet(Read("plugins")).HasPluginGrant())
+
+	// Replace is an upsert; Register on a plugin key panics; built-ins cannot be replaced.
+	require.NoError(t, Replace(Resource{Key: key, Label: "Assets v2", Group: "Plugins", Plugin: key, PluginLabel: "Assets v2", Actions: []Action{ActionRead}}))
+	r, ok := ResourceByKey(key)
+	require.True(t, ok)
+	assert.Equal(t, "Assets v2", r.Label)
+	assert.Error(t, Replace(Resource{Key: "llms", Label: "x", Group: "LLM management", Actions: readOnly}))
+	assert.Error(t, Replace(Resource{Key: "not-a-plugin", Label: "x", Group: "Plugins", Actions: readOnly}), "dynamic needs the plugin prefix")
+	assert.Error(t, Replace(Resource{Key: key + ":sub", Label: "x", Group: "Plugins", Plugin: "plugin:other", Actions: readOnly}), "plugin must be the key prefix")
+
+	// Stored plugin permissions survive unregistration for role storage only.
+	assert.Equal(t, 2, UnregisterPlugin(key))
+	assert.False(t, Unregister("llms"), "built-ins never unregister")
+	_, err = Parse(key + ":read")
+	assert.Error(t, err)
+	stored, err := ParseStored(key + ":read")
+	require.NoError(t, err)
+	assert.Equal(t, Permission(key+":read"), stored)
+	_, err = ParseStored("plugin::read")
+	assert.Error(t, err)
+	_, err = ParseStored(key + ":fly")
+	assert.Error(t, err)
+	_, err = ParseStored("spaceships:read")
+	assert.Error(t, err)
+	assert.True(t, NewSetFromStrings([]string{key + ":read"}).IsEmpty(), "unregistered plugin grants are not evaluated")
+}
+
 func TestPermission_Constructors(t *testing.T) {
 	assert.Equal(t, Permission("llms:read"), Read("llms"))
 	assert.Equal(t, Permission("llms:write"), Write("llms"))

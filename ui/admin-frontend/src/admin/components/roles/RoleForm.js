@@ -14,6 +14,7 @@ import Section from '../common/Section';
 import ConfirmationDialog from '../common/ConfirmationDialog';
 import EnterpriseFeatureBadge from '../common/EnterpriseFeatureBadge';
 import PermissionMatrix from './PermissionMatrix';
+import OrphanedPermissions from './OrphanedPermissions';
 import { getRole, createRole, updateRole, deleteRole } from '../../services/rbacService';
 import { isEnterpriseFeature } from '../../utils/apiErrors';
 
@@ -133,6 +134,10 @@ const RoleForm = () => {
                 Tick what this role may do. Write, delete and execute each include read. Rows marked with a shield expose sensitive data; rows marked with a key can grant access to other people.
               </Typography>
               <PermissionMatrix value={permissions} onChange={setPermissions} />
+              <OrphanedPermissions
+                permissions={permissions}
+                onRemove={(perm) => setPermissions((prev) => { const next = new Set(prev); next.delete(perm); return next; })}
+              />
             </Box>
           </Section>
 

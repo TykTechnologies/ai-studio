@@ -40,6 +40,41 @@ type Plugin struct {
 	LLMs []LLM `json:"llms,omitempty" gorm:"many2many:llm_plugins;"`
 }
 
+// PluginPermissionPrefix starts the permission resource key of every plugin;
+// it mirrors authz.PluginResourcePrefix without importing the package.
+const PluginPermissionPrefix = "plugin:"
+
+// PermissionKey is the RBAC resource key that stands for this plugin:
+// "plugin:<manifest id>" (e.g. "plugin:com.tyk.enterprise.asset-catalog")
+// so it survives an uninstall and reinstall, falling back to
+// "plugin:id-<database id>" for a plugin whose manifest is not known yet.
+// Plugin-declared sub-resources are "<PermissionKey>:<sub-key>".
+func (p *Plugin) PermissionKey() string {
+	if p == nil {
+		return ""
+	}
+	if p.Manifest != nil {
+		if id, ok := p.Manifest["id"].(string); ok {
+			id = strings.TrimSpace(id)
+			if id != "" && !strings.ContainsAny(id, ": \t\n") {
+				return PluginPermissionPrefix + id
+			}
+		}
+	}
+	return fmt.Sprintf("%sid-%d", PluginPermissionPrefix, p.ID)
+}
+
+// HasAdminSurface reports whether the plugin is something an administrator
+// uses directly (pages, portal pages, resource types) and therefore gets a
+// per-plugin permission resource. Pure request-path plugins (auth, rate
+// limiting) are governed by the platform-level plugins resource alone.
+func (p *Plugin) HasAdminSurface() bool {
+	if p == nil {
+		return false
+	}
+	return p.SupportsHookType(HookTypeStudioUI) || p.SupportsHookType(HookTypePortalUI) || p.SupportsHookType(HookTypeResourceProvider)
+}
+
 // TableName returns the table name for the Plugin model
 func (Plugin) TableName() string {
 	return "plugins"

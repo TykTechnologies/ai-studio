@@ -48,6 +48,7 @@ The Owner role can only be assigned to users (not teams) and only by another Own
 - **Operator** who can push configuration to edge gateways and test filters but not change them: clone Viewer, add `edges:execute`, `filters:execute`, `tools:execute`.
 - **Submission reviewer**: clone Viewer, add `submissions:write` and `submissions:execute`, remove everything outside Community if you prefer.
 - **LLM submitter / LLM reviewer**: a new role with `llms:read` and `llms:write` can create and edit providers but not set them active; add `llms:publish` for the reviewer who releases them. A role holding only `llms:publish` can activate and deactivate providers through the Activate action but cannot edit them.
+- **One plugin only**: every installed plugin with pages or resource types appears in the Plugins group of the matrix under its own name, with read (open its pages and configuration), write (call its actions, edit its configuration) and execute. Tick those instead of `Installed plugins: execute`, which unlocks every plugin at once. Grants on a plugin that is later uninstalled are kept on the role and listed as "Not installed" until it returns.
 - **LLM cost analyst**: a custom role with only `analytics:read` and `model-prices:read`.
 
 ## API

@@ -233,6 +233,117 @@ func TestRBAC_PublishIsSeparateFromWrite(t *testing.T) {
 	}
 }
 
+// TestRBAC_PerPluginGrants covers the per-plugin resources: a role holding
+// only plugin:<key>:read opens that plugin's configuration but not the
+// plugin list, cannot call its RPC methods, and Editor (plugins:execute)
+// reaches everything through the umbrella rule.
+func TestRBAC_PerPluginGrants(t *testing.T) {
+	f := setupRBACFixture(t)
+	db := f.api.service.DB
+
+	plugin := &models.Plugin{
+		Name: "Asset catalog", Command: "/bin/true", IsActive: true,
+		HookType: models.HookTypeStudioUI, HookTypes: []string{models.HookTypeStudioUI},
+		Manifest: map[string]interface{}{"id": "com.example.assets"},
+	}
+	require.NoError(t, plugin.Create(db))
+	other := &models.Plugin{
+		Name: "Other", Command: "/bin/true", IsActive: true,
+		HookType: models.HookTypeStudioUI, HookTypes: []string{models.HookTypeStudioUI},
+		Manifest: map[string]interface{}{"id": "com.example.other"},
+	}
+	require.NoError(t, other.Create(db))
+	f.api.service.SyncPluginPermissions(plugin)
+	f.api.service.SyncPluginPermissions(other)
+	const key = "plugin:com.example.assets"
+	t.Cleanup(func() { authz.UnregisterPlugin(key); authz.UnregisterPlugin("plugin:com.example.other") })
+
+	// The catalogue lists the plugin under the Plugins group.
+	w := f.do("GET", "/api/v1/rbac/permissions", nil, f.viewer)
+	require.Equal(t, http.StatusOK, w.Code)
+	var cat PermissionCatalogueResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &cat))
+	found := false
+	for _, r := range cat.Resources {
+		if r.Key == key {
+			found = true
+			assert.Equal(t, "Plugins", r.Group)
+			assert.Equal(t, "Asset catalog", r.Label)
+			assert.True(t, r.Dynamic)
+			assert.Equal(t, key, r.Plugin)
+		}
+	}
+	assert.True(t, found, "plugin resource in catalogue")
+	assert.NotEmpty(t, w.Header().Get("ETag"))
+
+	newUserWithRole := func(email string, perms ...string) *models.User {
+		u := models.NewUser()
+		u.Email = email
+		u.Name = email
+		u.Password = "hash"
+		u.EmailVerified = true
+		require.NoError(t, u.Create(db))
+		w := f.do("POST", "/api/v1/rbac/roles", map[string]interface{}{"name": "role-" + email, "permissions": perms}, f.owner)
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		var resp struct{ Data RoleResponse }
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		f.bind(t, "user", u.ID, uintFromString(t, resp.Data.ID))
+		return u
+	}
+	reader := newUserWithRole("plugin-reader@tyk.io", key+":read")
+	writer := newUserWithRole("plugin-writer@tyk.io", key+":write")
+	pid := fmt.Sprintf("%d", plugin.ID)
+	oid := fmt.Sprintf("%d", other.ID)
+
+	// Reader: this plugin's detail yes, the list and other plugins no.
+	w = f.do("GET", "/api/v1/plugins/"+pid, nil, reader)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), `"permission_key":"`+key+`"`)
+	w = f.do("GET", "/api/v1/plugins", nil, reader)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	w = f.do("GET", "/api/v1/plugins/"+oid, nil, reader)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "plugins:read", "denials report the platform permission")
+
+	// Reader cannot call RPC (write) nor patch; writer may patch config only.
+	w = f.do("POST", "/api/v1/plugins/"+pid+"/rpc/admin_stats", map[string]interface{}{}, reader)
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	w = f.do("PATCH", "/api/v1/plugins/"+pid, map[string]interface{}{"config": map[string]interface{}{"k": "v"}}, reader)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	w = f.do("PATCH", "/api/v1/plugins/"+pid, map[string]interface{}{"config": map[string]interface{}{"k": "v"}, "description": "d"}, writer)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = f.do("PATCH", "/api/v1/plugins/"+pid, map[string]interface{}{"command": "/bin/false"}, writer)
+	assert.Equal(t, http.StatusForbidden, w.Code, "command changes need the platform permission")
+	assert.Contains(t, w.Body.String(), "plugins:write")
+	w = f.do("PATCH", "/api/v1/plugins/"+pid, map[string]interface{}{"is_active": false}, writer)
+	assert.Equal(t, http.StatusForbidden, w.Code, "enable/disable needs plugins:publish")
+	// The writer passes the route for RPC; the plugin is not loaded, so 404 (not 403).
+	w = f.do("POST", "/api/v1/plugins/"+pid+"/rpc/admin_stats", map[string]interface{}{}, writer)
+	assert.NotEqual(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	// Editor holds plugins:execute and reaches the same routes (umbrella rule).
+	w = f.do("POST", "/api/v1/plugins/"+pid+"/rpc/admin_stats", map[string]interface{}{}, f.editor)
+	assert.NotEqual(t, http.StatusForbidden, w.Code, w.Body.String())
+	// Viewer reads plugin pages but cannot call RPC.
+	w = f.do("GET", "/api/v1/plugins/"+pid, nil, f.viewer)
+	assert.Equal(t, http.StatusOK, w.Code)
+	w = f.do("POST", "/api/v1/plugins/"+pid+"/rpc/admin_stats", map[string]interface{}{}, f.viewer)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+
+	// /rbac/me spells out the per-plugin grant and the role shows no orphans.
+	w = f.do("GET", "/api/v1/rbac/me", nil, reader)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), key+":read")
+
+	// Uninstall: the grant becomes an orphan on the role but the role stays saveable.
+	f.api.service.RemovePluginPermissions(plugin)
+	w = f.do("GET", "/api/v1/rbac/roles", nil, f.owner)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"orphaned_permissions":["`+key+`:read"]`)
+	w = f.do("GET", "/api/v1/plugins/"+pid, nil, reader)
+	assert.Equal(t, http.StatusForbidden, w.Code, "orphaned grants are not evaluated")
+}
+
 func TestRBAC_UsersListMasksAPIKeysForNonManagers(t *testing.T) {
 	f := setupRBACFixture(t)
 

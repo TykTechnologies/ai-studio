@@ -67,8 +67,36 @@ func (s Set) Has(p Permission) bool {
 		return true
 	}
 	if p.Action() == ActionRead {
-		_, ok := s.resources[p.Resource()]
-		return ok
+		if _, ok := s.resources[p.Resource()]; ok {
+			return true
+		}
+	}
+	// Umbrella rule: plugins:execute ("call plugins") grants every
+	// plugin-contributed permission. Per-plugin grants exist to narrow
+	// access, not to widen it, so existing roles keep working when a plugin
+	// starts declaring its own resources.
+	if IsPluginResource(p.Resource()) {
+		if _, ok := s.perms[P("plugins", ActionExecute)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// HasPluginGrant reports whether the set grants anything on a plugin
+// resource: the wildcard, plugins:execute, or an explicit "plugin:*" entry.
+// The UI uses it to decide whether plugin configuration pages are reachable.
+func (s Set) HasPluginGrant() bool {
+	if s.all {
+		return true
+	}
+	if _, ok := s.perms[P("plugins", ActionExecute)]; ok {
+		return true
+	}
+	for res := range s.resources {
+		if IsPluginResource(res) {
+			return true
+		}
 	}
 	return false
 }
