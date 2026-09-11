@@ -227,6 +227,8 @@ func init() {
 	Register(Resource{Key: "exports", Label: "Log exports", Group: "Governance", Sensitive: true,
 		Actions:     []Action{ActionRead, ActionWrite},
 		Description: "Bulk proxy log export jobs."})
+	Register(Resource{Key: "webhooks", Label: "Webhooks", Group: "Governance", Actions: crudx, Sensitive: true, Privileged: true,
+		Description: "Outbound webhook targets and the delivery log. Execute approves, revokes, tests and replays: it sends platform data to an external URL."})
 
 	// Settings
 	Register(Resource{Key: "secrets", Label: "Secrets", Group: "Settings", Actions: crud,

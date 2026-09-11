@@ -17,4 +17,5 @@ import (
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/plugin_security"           // Register enterprise plugin security service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/rbac"                      // Register enterprise role-based access control service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/sso"                       // Register enterprise SSO service
+	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/webhooks"                  // Register enterprise webhooks service
 )

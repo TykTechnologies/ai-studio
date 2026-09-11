@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
+	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
@@ -87,6 +88,9 @@ type API struct {
 	marketplaceManagementService  marketplace_management.Service
 	// Audit trail (ENT: records management API activity, CE: no-op)
 	auditService audit.Service
+	// webhooksFallback answers webhook routes when the service has no
+	// webhooks implementation attached (community stub semantics).
+	webhooksFallback webhooks.Service
 	auditHandler gin.HandlerFunc
 	// routePerms maps "METHOD /path" to the permission a route requires.
 	// Populated by permRouter at registration; see authz_routes.go.
@@ -102,6 +106,10 @@ func (a *API) SetAuditService(s audit.Service) {
 		a.auditHandler = s.Middleware()
 	} else {
 		a.auditHandler = nil
+	}
+	// Background services (webhooks) record through the same trail.
+	if a.service != nil {
+		a.service.SetAuditService(s)
 	}
 }
 
@@ -170,6 +178,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	}
 
 	api := &API{
+		webhooksFallback: webhooks.NewService(webhooks.Deps{}),
 		service:          service,
 		router:           router,
 		disableCORS:      disableCORS,
@@ -984,6 +993,33 @@ func (a *API) setupRoutes() {
 	v1.GET("/audit/summary", authz.Read("audit"), a.getAuditSummary)
 	v1.GET("/audit/export", authz.Read("audit"), a.exportAuditRecords)
 	v1.GET("/audit/resources/:type/:id", authz.Read("audit"), a.getAuditResourceHistory)
+
+	// Webhook routes (Enterprise feature). Approving, testing and replaying
+	// send platform data to an external URL, so they need execute; every
+	// mutation here is recorded by the audit middleware.
+	v1.GET("/webhooks/status", authz.AnyAdmin, a.getWebhooksStatus)
+	v1.GET("/webhooks/topics", authz.Read("webhooks"), a.listWebhookTopics)
+	v1.GET("/webhooks/templates/presets", authz.Read("webhooks"), a.listWebhookPresets)
+	v1.POST("/webhooks/templates/preview", authz.Read("webhooks"), a.previewWebhookTemplate)
+	v1.GET("/webhooks/targets", authz.Read("webhooks"), a.listWebhookTargets)
+	v1.POST("/webhooks/targets", authz.Write("webhooks"), a.createWebhookTarget)
+	v1.GET("/webhooks/targets/:id", authz.Read("webhooks"), a.getWebhookTarget)
+	v1.PATCH("/webhooks/targets/:id", authz.Write("webhooks"), a.updateWebhookTarget)
+	v1.DELETE("/webhooks/targets/:id", authz.Delete("webhooks"), a.deleteWebhookTarget)
+	v1.POST("/webhooks/targets/:id/approve", authz.Execute("webhooks"), a.approveWebhookTarget)
+	v1.POST("/webhooks/targets/:id/reject", authz.Execute("webhooks"), a.rejectWebhookTarget)
+	v1.POST("/webhooks/targets/:id/revoke", authz.Execute("webhooks"), a.revokeWebhookTarget)
+	v1.POST("/webhooks/targets/:id/pause", authz.Write("webhooks"), a.pauseWebhookTarget)
+	v1.POST("/webhooks/targets/:id/resume", authz.Write("webhooks"), a.resumeWebhookTarget)
+	v1.POST("/webhooks/targets/:id/rotate-secret", authz.Write("webhooks"), a.rotateWebhookSecret)
+	v1.POST("/webhooks/targets/:id/test", authz.Execute("webhooks"), a.testWebhookTarget)
+	v1.GET("/webhooks/deliveries", authz.Read("webhooks"), a.listWebhookDeliveries)
+	v1.GET("/webhooks/deliveries/export", authz.Read("webhooks"), a.exportWebhookDeliveries)
+	v1.POST("/webhooks/deliveries/replay", authz.Execute("webhooks"), a.replayWebhookDeadLetters)
+	v1.GET("/webhooks/deliveries/:id", authz.Read("webhooks"), a.getWebhookDelivery)
+	v1.POST("/webhooks/deliveries/:id/replay", authz.Execute("webhooks"), a.replayWebhookDelivery)
+	v1.POST("/webhooks/deliveries/:id/cancel", authz.Execute("webhooks"), a.cancelWebhookDelivery)
+	v1.GET("/webhooks/stats", authz.Read("webhooks"), a.getWebhookStats)
 
 	// RBAC routes (Enterprise feature; the permission catalogue is served in both editions)
 	v1.GET("/rbac/permissions", authz.AnyAdmin, a.getPermissionCatalogue)

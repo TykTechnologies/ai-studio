@@ -102,6 +102,11 @@ func InitModels(db *gorm.DB) error {
 		&MetadataVocabulary{},  // Controlled vocabularies for schema fields
 		&ObjectMetadata{},      // Governed metadata values per object
 		&ObjectMetadataAudit{}, // Governed metadata change audit trail
+		// Webhook Models (Enterprise; tables exist in CE, unused)
+		&WebhookTarget{},          // Approved outbound endpoints
+		&WebhookEvent{},           // Persisted bus events (fan-out source, replay)
+		&WebhookDelivery{},        // Per (event, target) outbox rows
+		&WebhookDeliveryAttempt{}, // Per-attempt delivery log
 	); err != nil {
 		return err
 	}

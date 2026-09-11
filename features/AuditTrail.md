@@ -192,6 +192,11 @@ Each enterprise test opens its own named shared-cache SQLite memory database so 
 
 - Record control-plane operations that do not arrive over HTTP (gRPC edge heartbeat-driven config pushes, scheduled plugin runs) via `Service.Record()`, which already exists for this purpose.
 - Per-object "History" tab on LLM/App/User detail pages backed by `GET /audit/resources/{type}/{id}`.
-- Webhook/SIEM push in addition to the file sink.
+- Webhook/SIEM push of audit records themselves in addition to the file sink.
+  (Platform events are already pushed by the Webhooks feature, see
+  `features/Webhooks.md`; the worker writes dead letters into this trail
+  through `Service.Record` as `SYSTEM` records, and every approval,
+  rejection, revocation and edit of a webhook target is classified in
+  `actions.go` with a diff of the `webhook_targets` row.)
 - License entitlement gating (`audit_trail` feature flag) in addition to edition gating.
 - Namespace scoping of records when multi-tenant namespaces reach the management API.

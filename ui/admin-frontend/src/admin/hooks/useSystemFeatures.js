@@ -11,6 +11,7 @@ const useSystemFeatures = (skipInitialFetch = false) => {
     hub_spoke_multi_tenant: false, // Enterprise-only multi-tenant namespace support
     feature_groups: false, // Enterprise-only group-based access control
     feature_model_router: false, // Enterprise-only model routing
+    feature_webhooks: false, // Enterprise-only outbound webhooks
   });
   const [loading, setLoading] = useState(!skipInitialFetch);
   const [error, setError] = useState(null);

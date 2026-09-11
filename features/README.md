@@ -90,6 +90,14 @@ Each feature specification below provides detailed documentation on the individu
 - Filtered query, summary, per-object history and CSV/JSON export API
 - Admin UI page under Governance
 
+### [Webhooks](Webhooks.md) (Enterprise)
+- Push event-bus events (`system.*` CRUD, plugin topics) to external HTTPS endpoints
+- Administrator approval of every target URL; internal addresses blocked by default
+- Preset or custom JSON payload templates with secret redaction
+- HMAC-signed deliveries, retries with backoff, dead-letter queue and replay
+- Searchable, exportable delivery log; audit trail, RBAC and notification integration
+- Admin UI pages under Governance → Webhooks
+
 ### [Budget Control](Budgeting.md)
 - Monthly spending caps for apps and LLMs
 - Real-time usage tracking and blocking

@@ -75,6 +75,9 @@ type AppConf struct {
 	// Audit Trail Configuration (Enterprise)
 	Audit AuditConfig
 
+	// Webhooks Configuration (Enterprise)
+	Webhooks WebhooksConfig
+
 	// Marketplace Configuration
 	MarketplaceEnabled      bool
 	MarketplaceIndexURL     string
@@ -514,6 +517,9 @@ func getConfigFromEnv(envFile string) *AppConf {
 	// Audit trail configuration
 	conf.Audit = getAuditConfig()
 
+	// Webhooks configuration
+	conf.Webhooks = getWebhooksConfig()
+
 	// Marketplace configuration
 	conf.MarketplaceEnabled = true // Enabled by default
 	if enabledStr := os.Getenv("MARKETPLACE_ENABLED"); enabledStr != "" {
@@ -911,6 +917,125 @@ func getAuditConfig() AuditConfig {
 
 	cfg.RedactKeys = splitCSVList(os.Getenv("AUDIT_REDACT_KEYS"))
 	cfg.RedactHeaders = splitCSVList(os.Getenv("AUDIT_REDACT_HEADERS"))
+
+	return cfg
+}
+
+// WebhooksConfig controls outbound webhook delivery (Enterprise feature):
+// event-bus events are fanned out to admin-approved HTTP targets with
+// retries, dead-lettering and a searchable delivery log.
+type WebhooksConfig struct {
+	// Enabled turns the feature on. Enterprise builds default to true.
+	Enabled bool
+	// WorkerEnabled runs the delivery worker on this node. Set false on nodes
+	// that should only manage targets (all nodes still ingest events).
+	WorkerEnabled bool
+	// WorkerCount is the number of concurrent delivery workers per node.
+	WorkerCount int
+	// MaxAttempts is the number of HTTP attempts before a delivery is dead-lettered.
+	MaxAttempts int
+	// BaseBackoff and MaxBackoff bound the exponential retry schedule.
+	BaseBackoff time.Duration
+	MaxBackoff  time.Duration
+	// RequestTimeout is the per-attempt HTTP timeout (capped at 60s).
+	RequestTimeout time.Duration
+	// AllowInternalTargets permits targets on loopback, RFC1918, link-local
+	// and other internal ranges. Off by default: webhooks are an
+	// exfiltration vector and internal services must not be reachable.
+	AllowInternalTargets bool
+	// AllowedHosts, when non-empty, restricts targets to these hosts (exact
+	// or ".suffix"). DeniedHosts always rejects, and wins over AllowedHosts.
+	AllowedHosts []string
+	DeniedHosts  []string
+	// RetentionDays deletes succeeded/cancelled deliveries older than this.
+	// DeadLetterRetentionDays does the same for dead letters. 0 keeps forever.
+	RetentionDays           int
+	DeadLetterRetentionDays int
+	// MaxResponseSnippetBytes caps the stored response body per attempt.
+	MaxResponseSnippetBytes int
+	// RequireDifferentApprover rejects approval by the admin who created the target.
+	RequireDifferentApprover bool
+	// SecretRotationGrace is how long the previous signing secret keeps
+	// producing a second signature after a rotation.
+	SecretRotationGrace time.Duration
+	// RedactKeys adds to the built-in list of JSON key fragments whose values
+	// are replaced with [REDACTED] before an event is stored or templated.
+	RedactKeys []string
+	// AuditDeliveries records every succeeded delivery in the audit trail
+	// (dead letters are always recorded). Off by default because of volume.
+	AuditDeliveries bool
+	// ShutdownDrainTimeout bounds how long Stop waits for in-flight deliveries.
+	ShutdownDrainTimeout time.Duration
+}
+
+const (
+	webhooksMaxRequestTimeout = 60 * time.Second
+	webhooksMaxWorkerCount    = 64
+	webhooksMaxAttempts       = 50
+)
+
+func getWebhooksConfig() WebhooksConfig {
+	cfg := WebhooksConfig{
+		Enabled:                 true,
+		WorkerEnabled:           true,
+		WorkerCount:             4,
+		MaxAttempts:             10,
+		BaseBackoff:             5 * time.Second,
+		MaxBackoff:              time.Hour,
+		RequestTimeout:          10 * time.Second,
+		AllowInternalTargets:    false,
+		RetentionDays:           14,
+		DeadLetterRetentionDays: 30,
+		MaxResponseSnippetBytes: 4096,
+		SecretRotationGrace:     24 * time.Hour,
+		ShutdownDrainTimeout:    15 * time.Second,
+	}
+
+	boolEnv := func(key string, dst *bool) {
+		if v := os.Getenv(key); v != "" {
+			if b, err := strconv.ParseBool(v); err == nil {
+				*dst = b
+			} else {
+				cfgLog.Warn().Msgf("Invalid %s value: %s. Using default: %t", key, v, *dst)
+			}
+		}
+	}
+	intEnv := func(key string, dst *int, min, max int) {
+		if v := os.Getenv(key); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n >= min && (max <= 0 || n <= max) {
+				*dst = n
+			} else {
+				cfgLog.Warn().Msgf("Invalid %s value: %s. Using default: %d", key, v, *dst)
+			}
+		}
+	}
+
+	boolEnv("WEBHOOKS_ENABLED", &cfg.Enabled)
+	boolEnv("WEBHOOKS_WORKER_ENABLED", &cfg.WorkerEnabled)
+	intEnv("WEBHOOKS_WORKER_COUNT", &cfg.WorkerCount, 1, webhooksMaxWorkerCount)
+	intEnv("WEBHOOKS_MAX_ATTEMPTS", &cfg.MaxAttempts, 1, webhooksMaxAttempts)
+	cfg.BaseBackoff = parseDurationWithDefault("WEBHOOKS_BASE_BACKOFF", cfg.BaseBackoff)
+	cfg.MaxBackoff = parseDurationWithDefault("WEBHOOKS_MAX_BACKOFF", cfg.MaxBackoff)
+	if cfg.MaxBackoff < cfg.BaseBackoff {
+		cfgLog.Warn().Msgf("WEBHOOKS_MAX_BACKOFF (%s) is below WEBHOOKS_BASE_BACKOFF (%s); using the base value", cfg.MaxBackoff, cfg.BaseBackoff)
+		cfg.MaxBackoff = cfg.BaseBackoff
+	}
+	cfg.RequestTimeout = parseDurationWithDefault("WEBHOOKS_REQUEST_TIMEOUT", cfg.RequestTimeout)
+	if cfg.RequestTimeout <= 0 || cfg.RequestTimeout > webhooksMaxRequestTimeout {
+		cfgLog.Warn().Msgf("WEBHOOKS_REQUEST_TIMEOUT (%s) must be between 1s and %s; using 10s", cfg.RequestTimeout, webhooksMaxRequestTimeout)
+		cfg.RequestTimeout = 10 * time.Second
+	}
+	boolEnv("WEBHOOKS_ALLOW_INTERNAL_TARGETS", &cfg.AllowInternalTargets)
+	cfg.AllowedHosts = splitCSVList(os.Getenv("WEBHOOKS_ALLOWED_HOSTS"))
+	cfg.DeniedHosts = splitCSVList(os.Getenv("WEBHOOKS_DENIED_HOSTS"))
+	intEnv("WEBHOOKS_RETENTION_DAYS", &cfg.RetentionDays, 0, 0)
+	intEnv("WEBHOOKS_DEAD_LETTER_RETENTION_DAYS", &cfg.DeadLetterRetentionDays, 0, 0)
+	intEnv("WEBHOOKS_MAX_RESPONSE_SNIPPET_BYTES", &cfg.MaxResponseSnippetBytes, 0, 64*1024)
+	boolEnv("WEBHOOKS_REQUIRE_DIFFERENT_APPROVER", &cfg.RequireDifferentApprover)
+	cfg.SecretRotationGrace = parseDurationWithDefault("WEBHOOKS_SECRET_ROTATION_GRACE", cfg.SecretRotationGrace)
+	cfg.RedactKeys = splitCSVList(os.Getenv("WEBHOOKS_REDACT_KEYS"))
+	boolEnv("WEBHOOKS_AUDIT_DELIVERIES", &cfg.AuditDeliveries)
+	cfg.ShutdownDrainTimeout = parseDurationWithDefault("WEBHOOKS_SHUTDOWN_DRAIN_TIMEOUT", cfg.ShutdownDrainTimeout)
 
 	return cfg
 }
