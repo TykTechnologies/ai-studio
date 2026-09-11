@@ -138,10 +138,14 @@ type Profile struct {
     UserGroupMapping          StringMap `gorm:"type:json"`
     UserGroupSeparator        string
     SSOOnlyForRegisteredUsers bool
+    NewUserShowPortal         bool   // provisioning default: new users see the AI Portal
+    NewUserShowChat           bool   // provisioning default: new users see Chat
     SelectedProviderType      string `json:"-"`
     UserID                    uint   `json:"-"`
 }
 ```
+
+`NewUserShowPortal` and `NewUserShowChat` are consulted only when a login creates a user. `NewProfile()` defaults both to true and `MigrateProfiles` backfills pre-existing rows to true, so upgrading never hides a surface. The API exposes them as `new_user_show_portal` / `new_user_show_chat`; on create and update an omitted field means "show" (pointer fields in `ProfileInput`).
 
 The model includes methods for CRUD operations and conversion to TIB's tap.Profile format:
 - `Create` - Persists a new profile to the database
@@ -276,6 +280,13 @@ The SSO system maps external identity provider groups to internal Midsommar grou
 - **Group Mapping:** Map external group identifiers to internal Midsommar group IDs
 - **Group Separator:** Configure the separator used in multi-group values
 - **Default Group:** Assign a default group for users without specific group mappings
+- **New User Defaults:** Whether users provisioned through this profile start with the AI Portal and/or Chat visible (`new_user_show_portal`, `new_user_show_chat`, both on by default). Applied at creation only; existing users are never rewritten.
+
+### Which profile provisioned the user
+
+The embedded Tyk Identity Broker builds the nonce request itself and its shape cannot carry the profile. Studio therefore hands the broker a per-login copy of the `tyk.TykAPI` handler whose dispatcher sets the `X-Tyk-AI-Profile-ID` header (`sso.ProfileIDHeader`) on the in-process `POST /api/sso` call. `handleNonceRequest` copies the header into `NonceTokenRequest.ProfileID`, and `HandleSSO` loads that profile for its provisioning defaults when it creates a user. An unknown or absent profile (for example an external broker) falls back to the `NewUser` defaults, so both surfaces are shown.
+
+With RBAC enabled, team membership from the claim mapping is also what grants console access: a role bound to a mapped team applies to every user the IdP places in it. A user whose teams carry no role is a plain Portal/Chat user.
 
 ### Implementation
 The group mapping process is handled in [api/auth_handlers.go](../api/auth_handlers.go):

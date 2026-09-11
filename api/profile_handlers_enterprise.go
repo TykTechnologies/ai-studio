@@ -65,6 +65,8 @@ func serializeProfile(profile *models.Profile) ProfileResponse {
 	resp.Attributes.UserGroupMapping = profile.UserGroupMapping
 	resp.Attributes.UserGroupSeparator = profile.UserGroupSeparator
 	resp.Attributes.SSOOnlyForRegisteredUsers = profile.SSOOnlyForRegisteredUsers
+	resp.Attributes.NewUserShowPortal = profile.NewUserShowPortal
+	resp.Attributes.NewUserShowChat = profile.NewUserShowChat
 	resp.Attributes.ProfileID = profile.ProfileID
 	resp.Attributes.SelectedProviderType = profile.SelectedProviderType
 
@@ -199,6 +201,8 @@ func (a *API) createProfile(c *gin.Context) {
 		UserGroupMapping:          input.Data.Attributes.UserGroupMapping,
 		UserGroupSeparator:        input.Data.Attributes.UserGroupSeparator,
 		SSOOnlyForRegisteredUsers: input.Data.Attributes.SSOOnlyForRegisteredUsers,
+		NewUserShowPortal:         boolOrDefault(input.Data.Attributes.NewUserShowPortal, true),
+		NewUserShowChat:           boolOrDefault(input.Data.Attributes.NewUserShowChat, true),
 		ProfileID:                 input.Data.Attributes.ProfileID,
 	}
 
@@ -291,6 +295,8 @@ func (a *API) updateProfile(c *gin.Context) {
 		UserGroupMapping:          input.Data.Attributes.UserGroupMapping,
 		UserGroupSeparator:        input.Data.Attributes.UserGroupSeparator,
 		SSOOnlyForRegisteredUsers: input.Data.Attributes.SSOOnlyForRegisteredUsers,
+		NewUserShowPortal:         boolOrDefault(input.Data.Attributes.NewUserShowPortal, true),
+		NewUserShowChat:           boolOrDefault(input.Data.Attributes.NewUserShowChat, true),
 		ProfileID:                 input.Data.Attributes.ProfileID,
 	}
 	profile, err := a.service.UpdateProfile(id, updatedProfile, uid)
@@ -419,4 +425,13 @@ func (a *API) getLoginPageProfile(c *gin.Context) {
 	// This endpoint is public (unauthenticated) — return only the sanitized
 	// representation, never the full profile with provider credentials.
 	c.JSON(http.StatusOK, gin.H{"data": serializeLoginPageProfile(profile)})
+}
+
+// boolOrDefault reads an optional payload flag, using def when the client
+// omitted it.
+func boolOrDefault(v *bool, def bool) bool {
+	if v == nil {
+		return def
+	}
+	return *v
 }

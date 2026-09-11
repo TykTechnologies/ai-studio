@@ -73,8 +73,10 @@ describe('UIProfile', () => {
         UserGroupMapping: {},
         UserGroupSeparator: "",
         SSOOnlyForRegisteredUsers: false,
+        NewUserShowPortal: true,
+        NewUserShowChat: true,
       });
-      
+
       // Verify that getBaseUrl was called the expected number of times
       expect(getBaseUrl).toHaveBeenCalledTimes(3);
     });
@@ -120,7 +122,9 @@ describe('UIProfile', () => {
             custom_user_group_field: 'groups',
             user_group_mapping: { admin: '1', user: '2' },
             user_group_separator: ',',
-            sso_only_for_registered_users: true
+            sso_only_for_registered_users: true,
+            new_user_show_portal: true,
+            new_user_show_chat: false
           }
         }
       };
@@ -149,6 +153,8 @@ describe('UIProfile', () => {
         UserGroupMapping: { admin: '1', user: '2' },
         UserGroupSeparator: ',',
         SSOOnlyForRegisteredUsers: true,
+        NewUserShowPortal: true,
+        NewUserShowChat: false,
         ProviderConstraints: {
           Domain: 'example.com',
           Group: 'admin'
@@ -173,7 +179,10 @@ describe('UIProfile', () => {
       // Check that only non-empty fields are included
       expect(uiProfile).toEqual({
         ID: '123',
-        SSOOnlyForRegisteredUsers: false
+        SSOOnlyForRegisteredUsers: false,
+        // Absent provisioning defaults are read as "show"
+        NewUserShowPortal: true,
+        NewUserShowChat: true
       });
     });
   });
@@ -204,7 +213,9 @@ describe('UIProfile', () => {
         CustomUserGroupField: 'groups',
         UserGroupMapping: { admin: '1', user: '2' },
         UserGroupSeparator: ',',
-        SSOOnlyForRegisteredUsers: true
+        SSOOnlyForRegisteredUsers: true,
+        NewUserShowPortal: true,
+        NewUserShowChat: false
       };
 
       const apiRequest = mapUIProfileToApi(mockUIProfile);
@@ -235,10 +246,19 @@ describe('UIProfile', () => {
             custom_user_group_field: 'groups',
             user_group_mapping: { admin: '1', user: '2' },
             user_group_separator: ',',
-            sso_only_for_registered_users: true
+            sso_only_for_registered_users: true,
+            new_user_show_portal: true,
+            new_user_show_chat: false
           }
         }
       });
+    });
+
+    test('sends provisioning defaults as visible when the UI profile omits them', () => {
+      const apiRequest = mapUIProfileToApi({ ID: '123', Name: 'Test Profile' });
+
+      expect(apiRequest.data.attributes.new_user_show_portal).toBe(true);
+      expect(apiRequest.data.attributes.new_user_show_chat).toBe(true);
     });
 
     test('handles null ProviderConstraints', () => {

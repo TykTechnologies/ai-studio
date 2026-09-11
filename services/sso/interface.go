@@ -33,10 +33,13 @@ type Service interface {
 	// ENT: Validates token, checks expiry, optionally consumes (deletes)
 	ResolveNonce(token string, consume bool) (*NonceTokenRequest, error)
 
-	// HandleSSO processes SSO authentication and user provisioning
+	// HandleSSO processes a resolved nonce: SSO authentication and user provisioning
 	// CE: Returns ErrSSONotAvailable
-	// ENT: Creates/updates user, assigns groups, sends notifications
-	HandleSSO(emailAddress, displayName, groupID string, groupsIDs []string, ssoOnlyForRegisteredUsers bool) (*models.User, error)
+	// ENT: Creates/updates user, assigns groups, sends notifications. A new
+	// user starts with the provisioning defaults of the profile named by
+	// login.ProfileID (Portal/Chat visibility); team membership follows the
+	// broker's claim mapping on every login.
+	HandleSSO(login *NonceTokenRequest) (*models.User, error)
 }
 
 // ProfileService defines the profile management service interface

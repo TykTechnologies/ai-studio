@@ -88,6 +88,33 @@ describe('UserGroupMappingSection', () => {
     expect(screen.getByTestId('data-table')).toBeInTheDocument();
   });
 
+  test('renders new user provisioning defaults', () => {
+    render(
+      <TestWrapper>
+        <UserGroupMappingSection
+          {...defaultProps}
+          profileData={{ ...mockProfileData, NewUserShowPortal: true, NewUserShowChat: false }}
+        />
+      </TestWrapper>
+    );
+
+    expect(screen.getByText('New users see the AI Portal')).toBeInTheDocument();
+    expect(screen.getByTestId('new-user-show-portal')).toHaveTextContent('Yes');
+    expect(screen.getByText('New users see Chat')).toBeInTheDocument();
+    expect(screen.getByTestId('new-user-show-chat')).toHaveTextContent('No');
+  });
+
+  test('treats missing provisioning defaults as visible', () => {
+    render(
+      <TestWrapper>
+        <UserGroupMappingSection {...defaultProps} />
+      </TestWrapper>
+    );
+
+    expect(screen.getByTestId('new-user-show-portal')).toHaveTextContent('Yes');
+    expect(screen.getByTestId('new-user-show-chat')).toHaveTextContent('Yes');
+  });
+
   test('renders with empty user group mapping', () => {
     const propsWithEmptyMapping = {
       ...defaultProps,

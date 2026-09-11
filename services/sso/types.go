@@ -11,6 +11,12 @@ const (
 	NonceLength      = 32
 	NonceTTL         = 60 * time.Second
 	DefaultGroupID   = "1"
+
+	// ProfileIDHeader carries the identity provider profile that started a
+	// login. The embedded broker's dispatcher sets it on the nonce request
+	// so provisioning can apply that profile's defaults; an external broker
+	// never sends it and new users then get the NewUser defaults.
+	ProfileIDHeader = "X-Tyk-AI-Profile-ID"
 )
 
 // Config holds SSO service configuration
@@ -28,7 +34,10 @@ type NonceTokenRequest struct {
 	GroupsIDs                 []string
 	DisplayName               string
 	SSOOnlyForRegisteredUsers bool
-	ExpiresAt                 time.Time
+	// ProfileID is the identity provider profile that produced this login,
+	// taken from ProfileIDHeader; empty when the broker did not identify one.
+	ProfileID string
+	ExpiresAt time.Time
 }
 
 // NonceTokenResponse represents the response from a nonce token creation request

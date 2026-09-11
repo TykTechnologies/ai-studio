@@ -201,7 +201,7 @@ func TestCreateUserWithTx(t *testing.T) {
 	ssoService := &SSOService{db: db}
 
 	// Test directly with the DB
-	user, err := ssoService.createUserWithTx(db, "test@example.com", "Test User")
+	user, err := ssoService.createUserWithTx(db, "test@example.com", "Test User", nil)
 
 	// Assertions
 	assert.NoError(t, err)
@@ -209,10 +209,45 @@ func TestCreateUserWithTx(t *testing.T) {
 	assert.Equal(t, "test@example.com", user.Email)
 	assert.Equal(t, "Test User", user.Name)
 	assert.False(t, user.IsAdmin)
-	assert.False(t, user.ShowChat)
-	assert.False(t, user.ShowPortal)
+	// No profile: same defaults as an admin-created user.
+	assert.True(t, user.ShowChat)
+	assert.True(t, user.ShowPortal)
 	assert.True(t, user.EmailVerified)
 	assert.False(t, user.NotificationsEnabled)
+
+	t.Run("profile provisioning defaults are applied", func(t *testing.T) {
+		profile := &models.Profile{NewUserShowPortal: true, NewUserShowChat: false}
+		user, err := ssoService.createUserWithTx(db, "portal-only@example.com", "Portal Only", profile)
+		require.NoError(t, err)
+		assert.True(t, user.ShowPortal)
+		assert.False(t, user.ShowChat)
+
+		var stored models.User
+		require.NoError(t, db.First(&stored, user.ID).Error)
+		assert.True(t, stored.ShowPortal)
+		assert.False(t, stored.ShowChat, "an explicit false must survive the insert")
+	})
+}
+
+func TestProvisioningProfile(t *testing.T) {
+	db := setupSSOTestDB(t)
+	require.NoError(t, models.MigrateProfiles(db))
+	ssoService := &SSOService{db: db}
+
+	profile := models.NewProfile()
+	profile.ProfileID = "okta"
+	profile.Name = "Okta"
+	profile.NewUserShowChat = false
+	require.NoError(t, profile.Create(db))
+
+	assert.Nil(t, ssoService.provisioningProfile(db, ""), "empty ID means no profile")
+	assert.Nil(t, ssoService.provisioningProfile(db, "does-not-exist"), "unknown ID falls back to defaults")
+
+	found := ssoService.provisioningProfile(db, "okta")
+	require.NotNil(t, found)
+	showPortal, showChat := found.ProvisioningDefaults()
+	assert.True(t, showPortal)
+	assert.False(t, showChat)
 }
 
 func TestHandleSSO(t *testing.T) {
@@ -236,7 +271,7 @@ func TestHandleSSO(t *testing.T) {
 
 	t.Run("New user with default group only", func(t *testing.T) {
 		// Test
-		user, err := ssoService.HandleSSO("test1@example.com", "Test User 1", "1", nil, false)
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{EmailAddress: "test1@example.com", DisplayName: "Test User 1", GroupID: "1"})
 
 		// Assertions
 		assert.NoError(t, err)
@@ -274,7 +309,7 @@ func TestHandleSSO(t *testing.T) {
 
 	t.Run("New user with additional group", func(t *testing.T) {
 		// Test
-		user, err := ssoService.HandleSSO("test2@example.com", "Test User 2", "2", nil, false)
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{EmailAddress: "test2@example.com", DisplayName: "Test User 2", GroupID: "2"})
 
 		// Assertions
 		assert.NoError(t, err)
@@ -304,7 +339,7 @@ func TestHandleSSO(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test
-		user, err := ssoService.HandleSSO("existing@example.com", "Updated Name", "2", nil, false)
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{EmailAddress: "existing@example.com", DisplayName: "Updated Name", GroupID: "2"})
 
 		// Assertions
 		assert.NoError(t, err)
@@ -326,7 +361,7 @@ func TestHandleSSO(t *testing.T) {
 
 	t.Run("SSO only for registered users", func(t *testing.T) {
 		// Test
-		user, err := ssoService.HandleSSO("unregistered@example.com", "Unregistered User", "1", nil, true)
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{EmailAddress: "unregistered@example.com", DisplayName: "Unregistered User", GroupID: "1", SSOOnlyForRegisteredUsers: true})
 
 		// Assertions
 		assert.Error(t, err)
@@ -346,7 +381,7 @@ func TestHandleSSO(t *testing.T) {
 		assert.Equal(t, uint(3), thirdGroup.ID)
 
 		// Test with multiple group IDs
-		user, err := ssoService.HandleSSO("multi-group@example.com", "Multi Group User", "", []string{"2", "3"}, false)
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{EmailAddress: "multi-group@example.com", DisplayName: "Multi Group User", GroupsIDs: []string{"2", "3"}})
 
 		// Assertions
 		assert.NoError(t, err)
@@ -382,7 +417,7 @@ func TestHandleSSO(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test
-		user, err := ssoService.HandleSSO("unverified@example.com", "Updated Unverified User", "2", nil, false)
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{EmailAddress: "unverified@example.com", DisplayName: "Updated Unverified User", GroupID: "2"})
 
 		// Assertions
 		assert.NoError(t, err)
@@ -422,7 +457,7 @@ func TestHandleSSO(t *testing.T) {
 		require.NoError(t, err)
 
 		// Test with same name
-		user, err := ssoService.HandleSSO("already-verified@example.com", "Already Verified User", "2", nil, false)
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{EmailAddress: "already-verified@example.com", DisplayName: "Already Verified User", GroupID: "2"})
 
 		// Assertions
 		assert.NoError(t, err)
@@ -442,6 +477,66 @@ func TestHandleSSO(t *testing.T) {
 		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, additionalGroup.ID).Count(&count).Error
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), count)
+	})
+
+	t.Run("New user takes the profile's provisioning defaults", func(t *testing.T) {
+		require.NoError(t, models.MigrateProfiles(db))
+		profile := models.NewProfile()
+		profile.ProfileID = "chat-only"
+		profile.Name = "Chat only"
+		profile.NewUserShowPortal = false
+		profile.NewUserShowChat = true
+		require.NoError(t, profile.Create(db))
+
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{
+			EmailAddress: "chat-only@example.com",
+			DisplayName:  "Chat Only",
+			GroupID:      "2",
+			ProfileID:    "chat-only",
+		})
+		require.NoError(t, err)
+		assert.False(t, user.ShowPortal)
+		assert.True(t, user.ShowChat)
+
+		// Team membership still follows the claim mapping, not the profile flags.
+		var count int64
+		err = db.Table("user_groups").Where("user_id = ? AND group_id = ?", user.ID, additionalGroup.ID).Count(&count).Error
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), count)
+	})
+
+	t.Run("Unknown profile falls back to showing everything", func(t *testing.T) {
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{
+			EmailAddress: "orphan@example.com",
+			DisplayName:  "Orphan",
+			ProfileID:    "deleted-profile",
+		})
+		require.NoError(t, err)
+		assert.True(t, user.ShowPortal)
+		assert.True(t, user.ShowChat)
+	})
+
+	t.Run("Existing user keeps admin-set flags on later logins", func(t *testing.T) {
+		require.NoError(t, models.MigrateProfiles(db))
+		profile := models.NewProfile()
+		profile.ProfileID = "hide-all"
+		profile.Name = "Hide all"
+		profile.NewUserShowPortal = false
+		profile.NewUserShowChat = false
+		require.NoError(t, profile.Create(db))
+
+		existing := &models.User{Email: "keep-flags@example.com", Name: "Keep Flags", ShowPortal: true, ShowChat: false}
+		require.NoError(t, db.Create(existing).Error)
+
+		user, err := ssoService.HandleSSO(&NonceTokenRequest{
+			EmailAddress: "keep-flags@example.com",
+			DisplayName:  "Keep Flags",
+			ProfileID:    "hide-all",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, existing.ID, user.ID)
+		assert.True(t, user.ShowPortal, "profile defaults must not rewrite an existing user")
+		assert.False(t, user.ShowChat)
 	})
 }
 

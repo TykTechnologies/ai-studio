@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
@@ -181,6 +182,51 @@ func TestCreateProfile(t *testing.T) {
 			assert.NotEmpty(t, profileAttrs["login_url"])
 			assert.NotEmpty(t, profileAttrs["callback_url"])
 		}
+	})
+
+	t.Run("Provisioning defaults: omitted means show, explicit false is kept", func(t *testing.T) {
+		newInput := func(name string, attrs map[string]interface{}) map[string]interface{} {
+			base := map[string]interface{}{
+				"name":          name,
+				"action_type":   "auth",
+				"type":          "redirect",
+				"provider_name": "SocialProvider",
+				"provider_config": map[string]interface{}{
+					"CallbackBaseURL": "http://localhost:8080/",
+					"UseProviders":    []map[string]interface{}{{"Name": "social", "Key": "k", "Secret": "s"}},
+				},
+				"default_user_group_id": "1",
+			}
+			for k, v := range attrs {
+				base[k] = v
+			}
+			return map[string]interface{}{"data": map[string]interface{}{"type": "sso-profiles", "attributes": base}}
+		}
+		attrsOf := func(w *httptest.ResponseRecorder) map[string]interface{} {
+			var response map[string]interface{}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+			return response["data"].(map[string]interface{})["attributes"].(map[string]interface{})
+		}
+
+		w := performRequest(r, "POST", "/api/v1/sso-profiles", newInput("Defaults Omitted", nil))
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		attrs := attrsOf(w)
+		assert.Equal(t, true, attrs["new_user_show_portal"])
+		assert.Equal(t, true, attrs["new_user_show_chat"])
+
+		w = performRequest(r, "POST", "/api/v1/sso-profiles", newInput("Chat Hidden", map[string]interface{}{
+			"new_user_show_portal": true,
+			"new_user_show_chat":   false,
+		}))
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		attrs = attrsOf(w)
+		assert.Equal(t, true, attrs["new_user_show_portal"])
+		assert.Equal(t, false, attrs["new_user_show_chat"])
+
+		var stored models.Profile
+		require.NoError(t, stored.Get(api.service.DB, "chat-hidden"))
+		assert.True(t, stored.NewUserShowPortal)
+		assert.False(t, stored.NewUserShowChat)
 	})
 
 	t.Run("Invalid request body", func(t *testing.T) {
@@ -788,9 +834,9 @@ func TestSerializeLoginPageProfile(t *testing.T) {
 			"CallbackBaseURL": "https://studio.example.com",
 			"UseProviders": []map[string]interface{}{
 				{
-					"Name":   "openid-connect",
-					"Key":    "super-secret-client-id",
-					"Secret": "super-secret-client-secret",
+					"Name":        "openid-connect",
+					"Key":         "super-secret-client-id",
+					"Secret":      "super-secret-client-secret",
 					"DiscoverURL": "https://onelogin.example.com/oidc/2/.well-known/openid-configuration",
 				},
 			},

@@ -146,13 +146,7 @@ func (a *API) handleSSO(c *gin.Context) {
 		return
 	}
 
-	user, err := a.ssoService.HandleSSO(
-		tokenMetadata.EmailAddress,
-		tokenMetadata.DisplayName,
-		tokenMetadata.GroupID,
-		tokenMetadata.GroupsIDs,
-		tokenMetadata.SSOOnlyForRegisteredUsers,
-	)
+	user, err := a.ssoService.HandleSSO(tokenMetadata)
 
 	if err != nil {
 		helpers.SendErrorResponse(c, err)
@@ -197,6 +191,9 @@ func (a *API) handleNonceRequest(c *gin.Context) {
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Malformed request body"))
 		return
 	}
+	// The embedded broker tags the call with the profile the login came
+	// through; the body itself is the broker's fixed shape and cannot carry it.
+	nonceRequest.ProfileID = c.GetHeader(sso.ProfileIDHeader)
 
 	if err := a.ssoService.ValidateNonceRequest(&nonceRequest); err != nil {
 		helpers.SendErrorResponse(c, err)
