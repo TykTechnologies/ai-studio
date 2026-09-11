@@ -275,7 +275,8 @@ func TestInputToModelRouter_BasicConversion(t *testing.T) {
 	input.Data.Attributes.Slug = "test-router"
 	input.Data.Attributes.Description = "A test router"
 	input.Data.Attributes.APICompat = "openai"
-	input.Data.Attributes.Active = true
+	input.Data.Attributes.Active = new(bool)
+	*input.Data.Attributes.Active = true
 	input.Data.Attributes.Namespace = "test-ns"
 	input.Data.Attributes.Pools = []ModelPoolInput{{
 		Name:               "Claude Pool",

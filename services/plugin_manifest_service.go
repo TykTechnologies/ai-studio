@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
@@ -16,8 +17,9 @@ import (
 
 // PluginManifestService handles plugin manifest parsing and UI registration
 type PluginManifestService struct {
-	db        *gorm.DB
-	ociClient *ociplugins.OCIPluginClient
+	db             *gorm.DB
+	ociClient      *ociplugins.OCIPluginClient
+	permissionSync pluginPermissionSyncer
 }
 
 // NewPluginManifestService creates a new plugin manifest service
@@ -26,6 +28,13 @@ func NewPluginManifestService(db *gorm.DB, ociClient *ociplugins.OCIPluginClient
 		db:        db,
 		ociClient: ociClient,
 	}
+}
+
+// SetPermissionSync installs the callback that refreshes a plugin's
+// permission resource once its manifest (and therefore its stable
+// permission key) is known.
+func (s *PluginManifestService) SetPermissionSync(fn pluginPermissionSyncer) {
+	s.permissionSync = fn
 }
 
 // ParsePluginManifest extracts and parses the manifest from an OCI plugin
@@ -187,6 +196,21 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 		}
 	}
 
+	// Keep the manifest on the plugin row too: the permission key
+	// ("plugin:<manifest id>") and the sidebar defaults derive from it.
+	if currentID, _ := dbPlugin.Manifest["id"].(string); currentID != manifest.ID {
+		dbPlugin.Manifest = parsedManifest
+		// Select+Updates goes through the field's JSON serializer; a bare
+		// Update("manifest", map) does not.
+		if err := s.db.Model(&dbPlugin).Select("Manifest").Updates(&dbPlugin).Error; err != nil {
+			return fmt.Errorf("failed to store manifest on plugin: %w", err)
+		}
+		if s.permissionSync != nil {
+			s.permissionSync(&dbPlugin, false)
+		}
+		plugin.Manifest = dbPlugin.Manifest
+	}
+
 	// Clear existing UI registry entries for this plugin
 	if err := s.db.Where("plugin_id = ?", plugin.ID).Delete(&models.UIRegistry{}).Error; err != nil {
 		return fmt.Errorf("failed to clear existing UI registry entries: %w", err)
@@ -220,6 +244,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 							"title":  item.Title,
 							"label":  slot.Label,
 							"icon":   slot.Icon,
+							"required_permission": item.Mount.RequiredPermission,
 						},
 						IsActive:     true,
 						LoadPriority: 0,
@@ -267,6 +292,7 @@ func (s *PluginManifestService) RegisterPluginUI(plugin *models.Plugin, manifest
 							"title":  item.Title,
 							"label":  slot.Label,
 							"icon":   slot.Icon,
+							"required_permission": item.Mount.RequiredPermission,
 						},
 						IsActive:      true,
 						LoadPriority:  0,
@@ -538,9 +564,19 @@ func (s *PluginManifestService) GetSidebarMenuItems() ([]SidebarMenuItem, error)
 				ComponentTag:       entry.ComponentTag,
 				EntryPoint:         entry.EntryPoint,
 				MountConfig:        entry.MountConfig,
-				RequiredPermission: requiredPermissionOf(entry.MountConfig),
+				RequiredPermission: requiredPermissionOf(entry.MountConfig, entry.Plugin),
 			})
 		}
+
+		// A per-plugin grant also opens the plugin's configuration page, so
+		// the section links to it; holders of plugins:read reach it from
+		// Installed Plugins as well.
+		subItems = append(subItems, SidebarSubItem{
+			ID:                 fmt.Sprintf("plugin_%d_configuration", pluginID),
+			Text:               "Configuration",
+			Path:               fmt.Sprintf("/admin/plugins/%d", pluginID),
+			RequiredPermission: ResolvePluginPermission(firstEntry.Plugin, "read"),
+		})
 
 		// Create main plugin section
 		menuItem := SidebarMenuItem{
@@ -549,7 +585,7 @@ func (s *PluginManifestService) GetSidebarMenuItems() ([]SidebarMenuItem, error)
 			Icon:               sectionIcon,
 			PluginID:           pluginID,
 			PluginName:         firstEntry.Plugin.Name,
-			RequiredPermission: requiredPermissionOf(firstEntry.MountConfig),
+			RequiredPermission: requiredPermissionOf(firstEntry.MountConfig, firstEntry.Plugin),
 			SubItems:           subItems,
 		}
 
@@ -604,9 +640,47 @@ func (s *PluginManifestService) ValidatePluginPermissions(pluginID uint, require
 	return nil
 }
 
-// DefaultPluginPagePermission is what an admin plugin page requires when its
-// manifest does not name a permission: plugin pages call plugin RPCs.
+// DefaultPluginPagePermission is what an admin plugin page requires when
+// neither its manifest nor its plugin is known: plugin pages call plugin
+// RPCs. With the plugin known the default is the plugin's own base read
+// permission ("plugin:<key>:read"), which plugins:execute implies.
 const DefaultPluginPagePermission = "plugins:execute"
+
+// ResolvePluginPermission turns a manifest permission string into a
+// catalogue permission for the plugin: "" → the default, "read" / "write"
+// / "execute" → the plugin's base resource, "assets:write" → a declared
+// sub-resource, anything containing a colon already → returned as is.
+func ResolvePluginPermission(plugin *models.Plugin, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if plugin == nil || plugin.ID == 0 {
+		if raw == "" {
+			return DefaultPluginPagePermission
+		}
+		return raw
+	}
+	key := plugin.PermissionKey()
+	switch {
+	case raw == "":
+		return key + ":read"
+	case strings.HasPrefix(raw, models.PluginPermissionPrefix):
+		return raw
+	case !strings.Contains(raw, ":"):
+		// A bare action on the plugin's base resource.
+		return key + ":" + raw
+	case strings.Count(raw, ":") == 1 && !isPlatformResource(strings.SplitN(raw, ":", 2)[0]):
+		// "<sub-resource>:<action>" on one of the plugin's declared resources.
+		return key + ":" + raw
+	default:
+		return raw
+	}
+}
+
+// isPlatformResource reports whether name is a built-in catalogue resource,
+// so "plugins:execute" in a manifest keeps meaning the platform permission.
+func isPlatformResource(name string) bool {
+	r, ok := authz.ResourceByKey(name)
+	return ok && !r.Dynamic
+}
 
 // SidebarMenuItem represents a plugin-contributed sidebar menu item
 type SidebarMenuItem struct {
@@ -638,13 +712,20 @@ type SidebarSubItem struct {
 	RequiredPermission string `json:"required_permission,omitempty"`
 }
 
-// requiredPermissionOf reads mount_config.required_permission, defaulting to
-// DefaultPluginPagePermission.
-func requiredPermissionOf(mountConfig map[string]interface{}) string {
-	if v, ok := mountConfig["required_permission"].(string); ok && v != "" {
-		return v
+// requiredPermissionOf reads mount_config.required_permission and resolves
+// it against the plugin (see ResolvePluginPermission).
+func requiredPermissionOf(mountConfig map[string]interface{}, plugin *models.Plugin) string {
+	raw, _ := mountConfig["required_permission"].(string)
+	return ResolvePluginPermission(plugin, raw)
+}
+
+// RequiredPermissionOf is the exported form for API handlers serving the
+// raw UI registry.
+func RequiredPermissionOf(entry *models.UIRegistry) string {
+	if entry == nil {
+		return DefaultPluginPagePermission
 	}
-	return DefaultPluginPagePermission
+	return requiredPermissionOf(entry.MountConfig, entry.Plugin)
 }
 
 // GetSidebarMenuItemsFor returns the sidebar sections the caller may see:

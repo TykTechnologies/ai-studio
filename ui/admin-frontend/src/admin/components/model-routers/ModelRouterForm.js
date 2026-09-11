@@ -39,6 +39,8 @@ import {
   StyledAccordion,
 } from "../../styles/sharedStyles";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import PublishSwitch from "../rbac/PublishSwitch";
+import { P } from "../../rbac/permissions";
 import { useEdition } from "../../context/EditionContext";
 
 const ModelRouterForm = () => {
@@ -469,14 +471,11 @@ const ModelRouterForm = () => {
           </Grid>
 
           <Grid item xs={12} md={6}>
-            <FormControlLabel
-              control={
-                <Switch
-                  name="active"
-                  checked={router.active}
-                  onChange={handleChange}
-                />
-              }
+            <PublishSwitch
+              permission={P.MODEL_ROUTERS_PUBLISH}
+              name="active"
+              checked={router.active}
+              onChange={handleChange}
               label="Active"
             />
           </Grid>

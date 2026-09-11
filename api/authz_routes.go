@@ -3,26 +3,54 @@ package api
 import (
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
 
-// permEntry is what the route registry stores per METHOD+path. Either a
-// fixed permission or a per-request resolver (used where the resource is
-// derived from a path parameter, e.g. governed metadata on an object).
+// permEntry is what the route registry stores per METHOD+path: a fixed
+// permission, a fixed any-of list, or a per-request resolver (used where the
+// resource is derived from a path parameter, e.g. governed metadata on an
+// object, or the per-plugin permission of a plugin route). A request passes
+// when the caller holds any one of the resolved permissions.
 type permEntry struct {
-	perm    authz.Permission
-	resolve func(*gin.Context) authz.Permission
+	perm       authz.Permission
+	anyOf      []authz.Permission
+	resolve    func(*gin.Context) authz.Permission
+	resolveAny func(*gin.Context) []authz.Permission
 }
 
+// permission returns the first (primary) permission the route needs; it is
+// what a denial reports.
 func (e permEntry) permission(c *gin.Context) authz.Permission {
-	if e.resolve != nil {
-		return e.resolve(c)
+	ps := e.permissions(c)
+	if len(ps) == 0 {
+		return authz.FullAdmin
 	}
-	return e.perm
+	return ps[0]
 }
+
+// permissions returns every permission that satisfies the route.
+func (e permEntry) permissions(c *gin.Context) []authz.Permission {
+	switch {
+	case e.resolveAny != nil:
+		return e.resolveAny(c)
+	case e.resolve != nil:
+		return []authz.Permission{e.resolve(c)}
+	case len(e.anyOf) > 0:
+		return e.anyOf
+	default:
+		return []authz.Permission{e.perm}
+	}
+}
+
+// dynamic reports whether the entry's permissions are computed per request
+// (and therefore cannot be validated at registration time).
+func (e permEntry) dynamic() bool { return e.resolve != nil || e.resolveAny != nil }
 
 // routeKey builds the registry key gin's router will produce for a route:
 // "METHOD /absolute/path". It follows gin's joinPaths so the completeness
@@ -83,6 +111,29 @@ func (r *permRouter) HandleFn(method, rel string, resolve func(*gin.Context) aut
 	r.g.Handle(method, rel, h...)
 }
 
+// HandleAny registers a route open to the holder of any one of the listed
+// permissions. The first is the primary one a denial reports.
+func (r *permRouter) HandleAny(method, rel string, perms []authz.Permission, h ...gin.HandlerFunc) {
+	if len(perms) == 0 {
+		panic(fmt.Sprintf("authz: route %s %s has an empty any-of list", method, joinRoutePath(r.g.BasePath(), rel)))
+	}
+	for _, p := range perms {
+		if !p.Valid() {
+			panic(fmt.Sprintf("authz: route %s %s annotated with unknown permission %q", method, joinRoutePath(r.g.BasePath(), rel), p))
+		}
+	}
+	r.record(method, rel, permEntry{anyOf: perms})
+	r.g.Handle(method, rel, h...)
+}
+
+// HandleAnyFn registers a route whose any-of permission list depends on
+// the request (e.g. the platform-level plugins permission or the per-plugin
+// one of the plugin named in the path).
+func (r *permRouter) HandleAnyFn(method, rel string, resolve func(*gin.Context) []authz.Permission, h ...gin.HandlerFunc) {
+	r.record(method, rel, permEntry{resolveAny: resolve})
+	r.g.Handle(method, rel, h...)
+}
+
 func (r *permRouter) record(method, rel string, e permEntry) {
 	key := routeKey(method, joinRoutePath(r.g.BasePath(), rel))
 	if _, dup := r.api.routePerms[key]; dup {
@@ -107,13 +158,79 @@ func (r *permRouter) DELETE(rel string, p authz.Permission, h ...gin.HandlerFunc
 	r.Handle("DELETE", rel, p, h...)
 }
 
-// routePermission returns the annotation for the matched route, if any.
-func (a *API) routePermission(c *gin.Context) (authz.Permission, bool) {
+// routePermission returns the annotation for the matched route, if any: the
+// full any-of list and its primary permission.
+func (a *API) routePermission(c *gin.Context) ([]authz.Permission, bool) {
 	e, ok := a.routePerms[routeKey(c.Request.Method, c.FullPath())]
 	if !ok {
-		return "", false
+		return nil, false
 	}
-	return e.permission(c), true
+	return e.permissions(c), true
+}
+
+// pluginForAuthz resolves the plugin named by the :id path parameter for the
+// permission resolvers, from the in-memory cache the plugin permission sync
+// maintains, falling back to the database for a plugin that has no admin
+// surface (and therefore no cache entry). nil for an unknown plugin, so the
+// caller falls back to the platform-level permission and the handler
+// answers 404.
+func (a *API) pluginForAuthz(c *gin.Context) *models.Plugin {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil || a.service == nil || a.service.PluginService == nil {
+		return nil
+	}
+	if info, ok := services.LookupPluginPermissionInfo(uint(id)); ok && info.Plugin != nil {
+		return info.Plugin
+	}
+	plugin, err := a.service.PluginService.GetPlugin(uint(id))
+	if err != nil || plugin == nil {
+		return nil
+	}
+	return plugin
+}
+
+// pluginPermissionKey resolves the plugin named by the :id path parameter to
+// its permission key, or "" for an unknown plugin.
+func (a *API) pluginPermissionKey(c *gin.Context) string {
+	if plugin := a.pluginForAuthz(c); plugin != nil {
+		return plugin.PermissionKey()
+	}
+	return ""
+}
+
+// pluginOrPlatformPermission resolves to [plugins:<action>, plugin:<key>:<action>]:
+// the platform-level grant or the per-plugin one both open the route.
+func (a *API) pluginOrPlatformPermission(action authz.Action) func(*gin.Context) []authz.Permission {
+	return func(c *gin.Context) []authz.Permission {
+		perms := []authz.Permission{authz.P("plugins", action)}
+		if key := a.pluginPermissionKey(c); key != "" {
+			perms = append(perms, authz.P(key, action))
+		}
+		return perms
+	}
+}
+
+// pluginRPCPermission resolves an admin RPC call to the per-plugin
+// permission of the method: what the manifest's rbac.rpc_methods declares
+// for it, else the plugin's base write. plugins:execute holders pass through
+// the umbrella rule in authz.Set.Has. A declared permission whose resource is
+// not registered (manifest drift) falls back to the base write so a typo
+// never opens a method.
+func (a *API) pluginRPCPermission(c *gin.Context) authz.Permission {
+	plugin := a.pluginForAuthz(c)
+	if plugin == nil {
+		return authz.Execute("plugins")
+	}
+	fallback := authz.P(plugin.PermissionKey(), authz.ActionWrite)
+	declared := plugin.RPCMethodPermission(c.Param("method"))
+	if declared == "" {
+		return fallback
+	}
+	p := authz.Permission(services.ResolvePluginPermission(plugin, declared))
+	if !p.Valid() {
+		return fallback
+	}
+	return p
 }
 
 // metadataObjectPermission resolves governed-metadata-on-object routes to

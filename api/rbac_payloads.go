@@ -1,6 +1,7 @@
 package api
 
 import (
+	"sort"
 	"errors"
 	"net/http"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -25,6 +27,47 @@ func callerPermissions(c *gin.Context) []string {
 		return []string{}
 	}
 	return set.List()
+}
+
+// pluginRPCMetadata is the PortalUserContext metadata handed to a plugin on
+// an RPC call: its own permission key, so the SDK's Can() can resolve
+// plugin-relative permissions.
+func pluginRPCMetadata(plugin *models.Plugin) map[string]string {
+	md := make(map[string]string)
+	if plugin != nil && plugin.HasAdminSurface() {
+		md[plugin_sdk.MetadataPluginPermissionKey] = plugin.PermissionKey()
+	}
+	return md
+}
+
+// pluginCallerPermissions is callerPermissions plus the caller's grants on
+// the plugin's own resources spelled out, so the plugin never needs to know
+// the umbrella rule (plugins:execute implies every per-plugin permission):
+// it can simply check for "plugin:<key>:write" or "plugin:<key>:assets:read".
+func pluginCallerPermissions(c *gin.Context, plugin *models.Plugin) []string {
+	set, err := authz.Permissions(c)
+	if err != nil {
+		return []string{}
+	}
+	out := set.List()
+	if set.IsFullAdmin() || plugin == nil {
+		return out
+	}
+	seen := make(map[string]bool, len(out))
+	for _, p := range out {
+		seen[p] = true
+	}
+	for _, r := range authz.PluginResources(plugin.PermissionKey()) {
+		for _, act := range r.Actions {
+			p := authz.P(r.Key, act)
+			if !seen[string(p)] && set.Has(p) {
+				seen[string(p)] = true
+				out = append(out, string(p))
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // revealAPIKeys reports whether the caller may see other users' API keys.

@@ -15,8 +15,6 @@ import {
   Grid,
   Snackbar,
   Alert,
-  Switch,
-  FormControlLabel,
   InputAdornment,
   IconButton,
   Tooltip,
@@ -57,6 +55,8 @@ import {
   fetchVendors,
 } from "../../utils/vendorUtils";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import PublishSwitch from "../rbac/PublishSwitch";
+import { P } from "../../rbac/permissions";
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -629,15 +629,11 @@ const DatasourceForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={datasource.active}
-                    onChange={handleSwitchChange}
-                    name="active"
-                    color="primary"
-                  />
-                }
+              <PublishSwitch
+                permission={P.DATASOURCES_PUBLISH}
+                checked={datasource.active}
+                onChange={handleSwitchChange}
+                name="active"
                 label="Active"
               />
             </Grid>

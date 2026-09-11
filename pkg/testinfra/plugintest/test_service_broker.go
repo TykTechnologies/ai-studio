@@ -295,6 +295,24 @@ func (s *TestManagementServer) RegisterResourceTypes(ctx context.Context, req *m
 	}, nil
 }
 
+// RegisterPermissionResources implements the RegisterPermissionResources RPC and records the specs.
+func (s *TestManagementServer) RegisterPermissionResources(ctx context.Context, req *mgmtpb.RegisterPermissionResourcesRequest) (*mgmtpb.RegisterPermissionResourcesResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.calls = append(s.calls, ServiceCall{
+		Method:    "RegisterPermissionResources",
+		Request:   req,
+		Timestamp: time.Now(),
+	})
+
+	return &mgmtpb.RegisterPermissionResourcesResponse{
+		Success:             true,
+		Registered:          uint32(len(req.Resources)),
+		PluginPermissionKey: "plugin:test",
+	}, nil
+}
+
 // GetResourceTypes returns the resource types most recently registered by the plugin.
 func (s *TestManagementServer) GetResourceTypes() []*mgmtpb.ResourceTypeSpec {
 	s.mu.RLock()

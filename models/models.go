@@ -95,6 +95,7 @@ func InitModels(db *gorm.DB) error {
 		&SubmissionActivity{},  // Submission review action audit trail
 		// Pluggable Resource Types
 		&PluginResourceType{},  // Plugin-registered resource types
+		&PluginPermissionResource{}, // Plugin-declared RBAC resources
 		&AppPluginResource{},   // App ↔ plugin resource instance associations
 		&GroupPluginResource{}, // Group ↔ plugin resource instance access control
 		// Governed Metadata Models (Enterprise)

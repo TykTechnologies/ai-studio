@@ -55,6 +55,10 @@ func (s *communityService) ResolveSchema(objectType string) (*ResolvedSchema, er
 	}, nil
 }
 
+func (s *communityService) ValidateForPublish(context.Context, string, string, map[string]interface{}) (*ValidationResult, error) {
+	return &ValidationResult{Valid: true, Errors: []FieldIssue{}, Warnings: []FieldIssue{}}, nil
+}
+
 func (s *communityService) Validate(objectType string, values map[string]interface{}) (*ValidationResult, error) {
 	return &ValidationResult{Valid: true, Errors: []FieldIssue{}, Warnings: []FieldIssue{}}, nil
 }

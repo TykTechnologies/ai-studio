@@ -97,7 +97,7 @@ import Roles from "./pages/roles/Roles";
 import RoleDetail from "./components/roles/RoleDetail";
 import RoleForm from "./components/roles/RoleForm";
 
-import { P } from "./rbac/permissions";
+import { P, hasPluginGrant } from "./rbac/permissions";
 
 /**
  * Admin route descriptors: { path | index, element, permission? }.
@@ -127,7 +127,15 @@ const mainAdminRoutes = [
   { path: "llm-settings/edit/:id", element: <LLMSettingsForm />, permission: P.LLM_SETTINGS_WRITE },
   { path: "llm-settings/new", element: <LLMSettingsForm />, permission: P.LLM_SETTINGS_WRITE },
 
-  { path: "plugins/*", element: <PluginsPage />, permission: P.PLUGINS_READ },
+  // Plugin pages: the list needs plugins:read; a plugin's configuration page
+  // is also open to whoever holds a grant on that plugin (plugins:execute or
+  // plugin:<key>:read), so the route admits any plugin grant and the API
+  // decides per plugin.
+  {
+    path: "plugins/*",
+    element: <PluginsPage />,
+    permission: { test: (access) => access.can(P.PLUGINS_READ) || hasPluginGrant(access.permissions), label: P.PLUGINS_READ },
+  },
 
   { path: "marketplace", element: <Marketplace />, permission: P.MARKETPLACE_READ },
   { path: "marketplace-settings", element: <MarketplaceSettings />, permission: P.MARKETPLACE_WRITE },

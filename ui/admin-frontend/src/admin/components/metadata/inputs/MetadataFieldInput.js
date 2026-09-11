@@ -34,7 +34,7 @@ const MetadataFieldInput = ({
 }) => {
   const id = `governed-metadata-field-${field.key}`;
   const label = field.label || field.key;
-  const helper = error || warning || field.description || '';
+  const helper = error || warning || field.description || (field.required_on_publish ? 'Required to publish' : '');
   // The browser's own constraint validation must only block the form when the
   // server would reject the save too: an enforced schema and an error-severity
   // field. Advisory schemas and warning-severity fields report, never block.

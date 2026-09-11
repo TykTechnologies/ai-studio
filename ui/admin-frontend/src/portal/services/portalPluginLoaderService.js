@@ -1,4 +1,5 @@
 import pubClient from '../../admin/utils/pubClient';
+import { getIdentity, hasPermissionNow } from '../../admin/utils/identityStore';
 
 /**
  * Portal Plugin Loader Service - Handles dynamic loading of plugin UI components for the AI Portal.
@@ -116,7 +117,14 @@ class PortalPluginLoaderService {
                 console.error(`Portal plugin RPC call failed: ${method}`, error);
                 throw error;
               }
-            }
+            },
+            // The signed-in user's administrative permissions ("*" for full
+            // administrators, empty for portal-only users), for portal pages
+            // that show extra controls to administrators.
+            get permissions() {
+              return [...(getIdentity()?.permissions || [])];
+            },
+            can: (perm) => hasPermissionNow(perm),
           };
         }
 

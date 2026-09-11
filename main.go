@@ -157,6 +157,13 @@ func main() {
 	// Wire licensing service to main service for plugin license checks
 	service.SetLicensingService(licensingService)
 
+	// Register the per-plugin permission resources of every installed plugin
+	// before the system roles are seeded, so Viewer/Editor/Auditor are
+	// computed against the full catalogue.
+	if err := service.RebuildPermissionCatalogue(); err != nil {
+		logger.Warn(fmt.Sprintf("Failed to register plugin permission resources: %v", err))
+	}
+
 	// Seed RBAC system roles and migrate legacy admin flags into bindings
 	// (Enterprise; no-op in Community Edition). Idempotent on every boot.
 	if err := service.Authz().Seed(context.Background()); err != nil {

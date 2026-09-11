@@ -348,7 +348,14 @@ const studioManifestTemplate = `{
   "assets": [
     "/assets/icon.svg",
     "/ui/webc/dashboard.js"
-  ]{{end}},
+  ],
+  "rbac": {
+    "resources": [],
+    "rpc_methods": {
+      "getData": "read",
+      "saveData": "write"
+    }
+  }{{end}},
   "compat": {
     "min_studio_version": "2.6.0",
     "min_gateway_version": "1.0.0"

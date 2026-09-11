@@ -9,11 +9,23 @@ import PermissionDeniedPanel from './PermissionDeniedPanel';
  *
  *   <RequirePermission permission={P.LLMS_READ}><LLMList /></RequirePermission>
  *   <RequirePermission anyOf={[P.A, P.B]}>...</RequirePermission>
+ *   <RequirePermission permission={{ test: (access) => ..., label: 'plugins:read' }}>...</RequirePermission>
+ *
+ * The object form is for pages whose permission is only known at runtime
+ * (plugin configuration: the platform grant or the grant on that plugin).
  */
 const RequirePermission = ({ permission, anyOf, children }) => {
-  const { can, canAny } = usePermissions();
-  const required = permission ? toArray(permission) : toArray(anyOf);
-  const allowed = permission ? can(permission) : anyOf ? canAny(required) : true;
+  const access = usePermissions();
+  const { can, canAny } = access;
+  let required;
+  let allowed;
+  if (permission && typeof permission === 'object' && typeof permission.test === 'function') {
+    required = toArray(permission.label);
+    allowed = permission.test(access);
+  } else {
+    required = permission ? toArray(permission) : toArray(anyOf);
+    allowed = permission ? can(permission) : anyOf ? canAny(required) : true;
+  }
   if (!allowed) {
     return <PermissionDeniedPanel required={required} />;
   }

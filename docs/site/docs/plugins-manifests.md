@@ -359,6 +359,42 @@ See [Resource Provider Plugins](plugins-resource-types.md) for the full guide.
 |-------|-------------|------------|
 | `resource-types.manage` | Register or deactivate the plugin's own resource types at runtime | RegisterResourceTypes |
 
+### RBAC Scopes
+
+| Scope | Description | Operations |
+|-------|-------------|------------|
+| `rbac.register` | Register the plugin's own permission resources (rows in the role editor) at runtime | RegisterPermissionResources |
+
+## Permissions (RBAC) Block
+
+Administrators assign roles built from a permission catalogue. Every plugin that declares `studio_ui`, `portal_ui` or `resource_provider` automatically contributes one resource, `plugin:<manifest id>`, with `read` (open the plugin's pages and configuration), `write` (call its admin RPC methods, edit its configuration) and `execute`. Holders of the platform permission `plugins:execute` have every plugin permission; per-plugin grants let an administrator open a single plugin to a role.
+
+The optional `rbac` block refines this:
+
+```json
+"rbac": {
+  "sensitive": false,
+  "resources": [
+    {"key": "asset-types", "label": "Asset types", "description": "Define asset classes", "actions": ["read", "write", "delete"]},
+    {"key": "assets", "label": "Assets", "actions": ["read", "write", "delete", "publish"]}
+  ],
+  "rpc_methods": {
+    "admin_list_types": "asset-types:read",
+    "admin_upsert_type": "asset-types:write",
+    "admin_release_asset": "assets:publish",
+    "admin_stats": "read"
+  }
+}
+```
+
+| Field | Notes |
+|-------|-------|
+| `sensitive` | Withholds the plugin's `read` from the read-only system roles (Viewer, Auditor), like the platform's sensitive data classes. |
+| `resources[]` | Sub-resources shown beneath the plugin in the role editor as `plugin:<manifest id>:<key>`. `key` is kebab-case and unique within the plugin; `actions` is a subset of `read`, `write`, `delete`, `execute`, `publish` with `read` first. |
+| `rpc_methods` | Permission each admin RPC method (`POST /api/v1/plugins/:id/rpc/<method>`) needs, enforced by AI Studio before the call reaches the plugin. Values are plugin-relative: `read`/`write`/`execute` name the plugin's base resource, `<key>:<action>` a declared sub-resource, and a platform permission such as `plugins:execute` or a fully qualified `plugin:...` string is used as is. Methods not listed need the base `write`. |
+
+Page-level permissions are declared per mount: `"mount": {"kind": "webc", "tag": "...", "entry": "...", "required_permission": "asset-types:read"}` (same plugin-relative forms; default: the plugin's base `read`). Resources that only exist at runtime are registered with the `rbac.register` scope through [RegisterPermissionResources](plugins-service-api.md#permission-resources-runtime), and plugin code checks the caller with `userCtx.Can("<key>:<action>")`. Portal RPC (`/common/plugins/:id/portal-rpc/...`) is not governed by roles; portal users hold none.
+
 ## UI Slot System
 
 ### Available Slots

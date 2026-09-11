@@ -4,17 +4,32 @@ import cacheService from '../utils/cacheService';
 import { CACHE_KEYS } from '../utils/constants';
 import { permissionLabel } from '../rbac/permissions';
 
-const CATALOGUE_TTL_MS = 30 * 60 * 1000;
+const CATALOGUE_TTL_MS = 5 * 60 * 1000;
+
+/** Drops the cached catalogue so the next hook instance refetches it. */
+export const invalidatePermissionCatalogue = () => {
+  cacheService.remove(CACHE_KEYS.RBAC_CATALOGUE);
+};
 
 /**
  * Loads the permission catalogue (resources, actions, grouping) that the role
- * editor and permission lists render. Cached for half an hour: it only
- * changes on upgrade.
+ * editor and permission lists render. Built-in resources only change on
+ * upgrade, but plugins add and remove their own resources at runtime, so the
+ * cache is short-lived and dropped whenever the plugin loader refreshes.
  */
 const usePermissionCatalogue = () => {
   const [catalogue, setCatalogue] = useState(() => cacheService.get(CACHE_KEYS.RBAC_CATALOGUE) || null);
   const [loading, setLoading] = useState(!catalogue);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const onPluginsChanged = () => {
+      invalidatePermissionCatalogue();
+      setCatalogue(null);
+    };
+    window.addEventListener('plugin-loader-refreshed', onPluginsChanged);
+    return () => window.removeEventListener('plugin-loader-refreshed', onPluginsChanged);
+  }, []);
 
   useEffect(() => {
     if (catalogue) return;
@@ -39,10 +54,27 @@ const usePermissionCatalogue = () => {
   const derived = useMemo(() => {
     const resources = catalogue?.resources || [];
     const groups = catalogue?.groups || [];
-    const actions = catalogue?.actions || ['read', 'write', 'delete', 'execute'];
+    const actions = catalogue?.actions || ['read', 'write', 'delete', 'execute', 'publish'];
     const byKey = new Map(resources.map((r) => [r.key, r]));
+    // Within a group, plugin-contributed resources are rendered as one
+    // sub-table per plugin after the built-ins.
     const grouped = groups
-      .map((group) => ({ group, resources: resources.filter((r) => r.group === group) }))
+      .map((group) => {
+        const inGroup = resources.filter((r) => r.group === group);
+        const builtIn = inGroup.filter((r) => !r.plugin);
+        const plugins = [];
+        inGroup
+          .filter((r) => r.plugin)
+          .forEach((r) => {
+            let entry = plugins.find((p) => p.plugin === r.plugin);
+            if (!entry) {
+              entry = { plugin: r.plugin, label: r.plugin_label || r.plugin, resources: [] };
+              plugins.push(entry);
+            }
+            entry.resources.push(r);
+          });
+        return { group, resources: inGroup, builtIn, plugins };
+      })
       .filter((g) => g.resources.length > 0);
     const label = (perm) => {
       if (!perm || perm === '*') return permissionLabel(perm);

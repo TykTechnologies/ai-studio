@@ -6,8 +6,10 @@
 //
 // A permission is "<resource>:<action>" where the resource is the plural
 // kebab-case route collection segment ("llms", "data-catalogues") and the
-// action is one of read, write, delete, execute. write, delete and execute
-// each imply read.
+// action is one of read, write, delete, execute, publish. write, delete,
+// execute and publish each imply read. publish does not imply write: it is
+// the workflow verb that makes an object live (activate, enable) and is
+// offered only by resources that have such a switch.
 //
 // Community Edition never evaluates these beyond "is the user an admin";
 // Enterprise Edition resolves a user's effective set from role bindings.
@@ -33,10 +35,16 @@ const (
 	// ActionExecute covers side-effecting operations that do not persist
 	// configuration: test, call, reload, sync, re-process.
 	ActionExecute Action = "execute"
+	// ActionPublish covers making an object live: setting an LLM, tool,
+	// datasource, app or agent active, enabling a plugin, activating a
+	// metadata schema. It is separate from write so a role can create and
+	// edit drafts without being able to release them, and an approver role
+	// can release without editing. Publish implies read, not write.
+	ActionPublish Action = "publish"
 )
 
 // Actions lists every action in display order.
-var Actions = []Action{ActionRead, ActionWrite, ActionDelete, ActionExecute}
+var Actions = []Action{ActionRead, ActionWrite, ActionDelete, ActionExecute, ActionPublish}
 
 // ActionLabels are the human labels the UI shows as matrix columns.
 var ActionLabels = map[Action]string{
@@ -44,6 +52,7 @@ var ActionLabels = map[Action]string{
 	ActionWrite:   "Write",
 	ActionDelete:  "Delete",
 	ActionExecute: "Execute",
+	ActionPublish: "Publish",
 }
 
 // Valid reports whether a is one of the four known actions.
@@ -77,6 +86,7 @@ func Read(resource string) Permission    { return P(resource, ActionRead) }
 func Write(resource string) Permission   { return P(resource, ActionWrite) }
 func Delete(resource string) Permission  { return P(resource, ActionDelete) }
 func Execute(resource string) Permission { return P(resource, ActionExecute) }
+func Publish(resource string) Permission { return P(resource, ActionPublish) }
 
 // Parse validates a raw permission string against the catalogue. FullAdmin
 // is accepted; AnyAdmin is not (it is a route sentinel, not a grant).
@@ -89,6 +99,33 @@ func Parse(s string) (Permission, error) {
 		return "", fmt.Errorf("unknown permission %q", s)
 	}
 	return p, nil
+}
+
+// ParseStored validates a permission as stored on a role. It accepts
+// everything Parse accepts plus a well-formed plugin permission whose
+// resource is not currently registered (the plugin is uninstalled, disabled
+// or not yet loaded), so a role keeps its plugin grants across plugin
+// lifecycle changes and stays saveable. Evaluation still drops unregistered
+// permissions (NewSetFromStrings); this only governs storage.
+func ParseStored(s string) (Permission, error) {
+	if p, err := Parse(s); err == nil {
+		return p, nil
+	}
+	p := Permission(strings.TrimSpace(s))
+	if p.WellFormedPlugin() {
+		return p, nil
+	}
+	return "", fmt.Errorf("unknown permission %q", s)
+}
+
+// WellFormedPlugin reports whether p is "plugin:<key>[:<sub>]:<action>" with a
+// known action, regardless of whether the resource is registered.
+func (p Permission) WellFormedPlugin() bool {
+	res, act := p.Resource(), p.Action()
+	if !IsPluginResource(res) || !act.Valid() {
+		return false
+	}
+	return len(res) > len(PluginResourcePrefix) && !strings.ContainsAny(res, " \t\n")
 }
 
 // String implements fmt.Stringer.

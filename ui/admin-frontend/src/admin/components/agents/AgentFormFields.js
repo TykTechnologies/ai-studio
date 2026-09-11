@@ -1,5 +1,7 @@
 import React from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import PublishSwitch from "../rbac/PublishSwitch";
+import { P } from "../../rbac/permissions";
 import {
   Box,
   Typography,
@@ -9,7 +11,6 @@ import {
   Select,
   MenuItem,
   Checkbox,
-  FormControlLabel,
   Chip,
   OutlinedInput,
   Divider,
@@ -197,14 +198,13 @@ const AgentFormFields = ({
       {/* Settings */}
       <Typography variant="headingMedium">Settings</Typography>
 
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={formData.isActive !== undefined ? formData.isActive : true}
-            onChange={(e) => handleChange('isActive', e.target.checked)}
-            disabled={disabled}
-          />
-        }
+      <PublishSwitch
+        permission={P.AGENTS_PUBLISH}
+        control="checkbox"
+        checked={formData.isActive !== undefined ? formData.isActive : true}
+        onChange={(e) => handleChange('isActive', e.target.checked)}
+        disabled={disabled}
+        name="isActive"
         label="Active"
       />
     </Box>

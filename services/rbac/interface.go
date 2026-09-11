@@ -138,4 +138,9 @@ type Service interface {
 	// Seed creates the system roles and migrates legacy admin flags into
 	// bindings. Idempotent. No-op in CE.
 	Seed(ctx context.Context) error
+	// RefreshSystemRoles recomputes the permissions of the computed system
+	// roles (Editor, Viewer, Auditor) from the catalogue. Called after a
+	// plugin registers or removes permission resources at runtime, so the
+	// roles reflect the catalogue without a restart. No-op in CE.
+	RefreshSystemRoles(ctx context.Context) error
 }

@@ -110,6 +110,7 @@ const (
 	AIStudioManagementService_GetLicenseInfo_FullMethodName              = "/ai_studio_management.AIStudioManagementService/GetLicenseInfo"
 	AIStudioManagementService_CreateNotification_FullMethodName          = "/ai_studio_management.AIStudioManagementService/CreateNotification"
 	AIStudioManagementService_RegisterResourceTypes_FullMethodName       = "/ai_studio_management.AIStudioManagementService/RegisterResourceTypes"
+	AIStudioManagementService_RegisterPermissionResources_FullMethodName = "/ai_studio_management.AIStudioManagementService/RegisterPermissionResources"
 )
 
 // AIStudioManagementServiceClient is the client API for AIStudioManagementService service.
@@ -237,6 +238,10 @@ type AIStudioManagementServiceClient interface {
 	// an administrator defines a new type inside the plugin. Requires
 	// resource-types.manage.
 	RegisterResourceTypes(ctx context.Context, in *RegisterResourceTypesRequest, opts ...grpc.CallOption) (*RegisterResourceTypesResponse, error)
+	// RBAC: (re)register the permission resources this plugin contributes to
+	// the role editor (sub-resources of "plugin:<manifest id>"). Requires the
+	// rbac.register scope.
+	RegisterPermissionResources(ctx context.Context, in *RegisterPermissionResourcesRequest, opts ...grpc.CallOption) (*RegisterPermissionResourcesResponse, error)
 }
 
 type aIStudioManagementServiceClient struct {
@@ -1166,6 +1171,16 @@ func (c *aIStudioManagementServiceClient) RegisterResourceTypes(ctx context.Cont
 	return out, nil
 }
 
+func (c *aIStudioManagementServiceClient) RegisterPermissionResources(ctx context.Context, in *RegisterPermissionResourcesRequest, opts ...grpc.CallOption) (*RegisterPermissionResourcesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterPermissionResourcesResponse)
+	err := c.cc.Invoke(ctx, AIStudioManagementService_RegisterPermissionResources_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AIStudioManagementServiceServer is the server API for AIStudioManagementService service.
 // All implementations must embed UnimplementedAIStudioManagementServiceServer
 // for forward compatibility.
@@ -1291,6 +1306,10 @@ type AIStudioManagementServiceServer interface {
 	// an administrator defines a new type inside the plugin. Requires
 	// resource-types.manage.
 	RegisterResourceTypes(context.Context, *RegisterResourceTypesRequest) (*RegisterResourceTypesResponse, error)
+	// RBAC: (re)register the permission resources this plugin contributes to
+	// the role editor (sub-resources of "plugin:<manifest id>"). Requires the
+	// rbac.register scope.
+	RegisterPermissionResources(context.Context, *RegisterPermissionResourcesRequest) (*RegisterPermissionResourcesResponse, error)
 	mustEmbedUnimplementedAIStudioManagementServiceServer()
 }
 
@@ -1573,6 +1592,9 @@ func (UnimplementedAIStudioManagementServiceServer) CreateNotification(context.C
 }
 func (UnimplementedAIStudioManagementServiceServer) RegisterResourceTypes(context.Context, *RegisterResourceTypesRequest) (*RegisterResourceTypesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterResourceTypes not implemented")
+}
+func (UnimplementedAIStudioManagementServiceServer) RegisterPermissionResources(context.Context, *RegisterPermissionResourcesRequest) (*RegisterPermissionResourcesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterPermissionResources not implemented")
 }
 func (UnimplementedAIStudioManagementServiceServer) mustEmbedUnimplementedAIStudioManagementServiceServer() {
 }
@@ -3227,6 +3249,24 @@ func _AIStudioManagementService_RegisterResourceTypes_Handler(srv interface{}, c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AIStudioManagementService_RegisterPermissionResources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterPermissionResourcesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AIStudioManagementServiceServer).RegisterPermissionResources(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AIStudioManagementService_RegisterPermissionResources_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AIStudioManagementServiceServer).RegisterPermissionResources(ctx, req.(*RegisterPermissionResourcesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AIStudioManagementService_ServiceDesc is the grpc.ServiceDesc for AIStudioManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3593,6 +3633,10 @@ var AIStudioManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RegisterResourceTypes",
 			Handler:    _AIStudioManagementService_RegisterResourceTypes_Handler,
+		},
+		{
+			MethodName: "RegisterPermissionResources",
+			Handler:    _AIStudioManagementService_RegisterPermissionResources_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

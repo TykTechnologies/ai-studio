@@ -317,6 +317,14 @@ func (s *studioServicesImpl) GetResolvedMetadataSchema(ctx context.Context, obje
 	}, nil
 }
 
+func (s *studioServicesImpl) ValidateObjectMetadataForPublish(ctx context.Context, objectType, objectID, valuesJSON string) (bool, string, error) {
+	resp, err := ai_studio_sdk.ValidateObjectMetadataForPublish(ctx, objectType, objectID, valuesJSON)
+	if err != nil {
+		return false, "", err
+	}
+	return resp.Valid, resp.ResultJson, nil
+}
+
 func (s *studioServicesImpl) ValidateObjectMetadata(ctx context.Context, objectType, valuesJSON string) (bool, bool, string, error) {
 	resp, err := ai_studio_sdk.ValidateObjectMetadata(ctx, objectType, valuesJSON)
 	if err != nil {
@@ -370,4 +378,29 @@ func (s *studioServicesImpl) RegisterResourceTypes(ctx context.Context, regs []R
 		return 0, 0, fmt.Errorf("resource type registration rejected: %s", resp.Message)
 	}
 	return resp.Registered, resp.Deactivated, nil
+}
+
+func (s *studioServicesImpl) RegisterPermissionResources(ctx context.Context, specs []PermissionResource, removeMissing bool) (uint32, uint32, string, error) {
+	out := make([]ai_studio_sdk.PermissionResourceSpec, 0, len(specs))
+	for _, r := range specs {
+		actions := make([]string, 0, len(r.Actions))
+		for _, a := range r.Actions {
+			actions = append(actions, string(a))
+		}
+		out = append(out, ai_studio_sdk.PermissionResourceSpec{
+			Key:         r.Key,
+			Label:       r.Label,
+			Description: r.Description,
+			Actions:     actions,
+			Sensitive:   r.Sensitive,
+		})
+	}
+	resp, err := ai_studio_sdk.RegisterPermissionResources(ctx, out, removeMissing)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	if !resp.Success {
+		return 0, 0, "", fmt.Errorf("permission resource registration rejected: %s", resp.Message)
+	}
+	return resp.Registered, resp.Removed, resp.PluginPermissionKey, nil
 }

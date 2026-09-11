@@ -11,8 +11,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  FormControlLabel,
-  Switch,
   AccordionSummary,
   AccordionDetails,
   Button,
@@ -37,6 +35,8 @@ import {
 } from '../../styles/sharedStyles';
 import pluginService, { PluginService } from '../../services/pluginService';
 import EdgeAvailabilitySection from '../common/EdgeAvailabilitySection';
+import PublishSwitch from "../rbac/PublishSwitch";
+import { P } from "../../rbac/permissions";
 import PluginConfigurationSection from './PluginConfigurationSection';
 import ScopeReviewSection from './ScopeReviewSection';
 
@@ -542,15 +542,11 @@ const PluginForm = ({ mode = 'create' }) => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.isActive}
-                    onChange={handleSwitchChange('isActive')}
-                    name="isActive"
-                    color="primary"
-                  />
-                }
+              <PublishSwitch
+                permission={P.PLUGINS_PUBLISH}
+                checked={formData.isActive}
+                onChange={handleSwitchChange('isActive')}
+                name="isActive"
                 label="Active"
               />
             </Grid>

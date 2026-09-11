@@ -227,6 +227,16 @@ type StudioServices interface {
 	// Requires the "resource-types.manage" service scope.
 	RegisterResourceTypes(ctx context.Context, regs []ResourceTypeRegistration, deactivateMissing bool) (registered uint32, deactivated uint32, err error)
 
+	// RegisterPermissionResources (re)registers the plugin's runtime RBAC
+	// resources: rows in the role editor beneath the plugin's own entry, keyed
+	// "plugin:<manifest id>:<key>". Use it for resources only known at runtime
+	// (asset classes an administrator defines); static ones belong in the
+	// manifest's "rbac.resources". With removeMissing, runtime resources absent
+	// from specs are removed (manifest-declared ones never are). Returns the
+	// counts and the plugin's permission key. Requires the "rbac.register"
+	// service scope.
+	RegisterPermissionResources(ctx context.Context, specs []PermissionResource, removeMissing bool) (registered uint32, removed uint32, pluginKey string, err error)
+
 	// ===== Governed Metadata (Enterprise) =====
 	// objectType is "llm", "tool", "datasource" or "plugin_resource:<plugin_id>:<slug>".
 	// A plugin may write "plugin_resource:self:<slug>" (see SelfResourceObjectType) for
@@ -266,6 +276,13 @@ type StudioServices interface {
 	// enforcement level. Enough to render the form in the plugin's own UI.
 	// Requires the metadata.read scope.
 	GetResolvedMetadataSchema(ctx context.Context, objectType string) (*ResolvedMetadataSchema, error)
+
+	// ValidateObjectMetadataForPublish validates the values an object will
+	// hold once it goes live (stored record for objectID merged with
+	// valuesJSON; "" objectID = being created): fields marked "required to
+	// publish" are required and the result is always enforced. Call it before
+	// moving a resource instance into a live/approved state.
+	ValidateObjectMetadataForPublish(ctx context.Context, objectType, objectID, valuesJSON string) (valid bool, resultJSON string, err error)
 
 	// ValidateObjectMetadata validates values without storing them.
 	// Requires the metadata.read scope.

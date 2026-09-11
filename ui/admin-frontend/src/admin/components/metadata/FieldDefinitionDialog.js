@@ -15,6 +15,7 @@ import {
   Select,
   Switch,
   TextField,
+  Tooltip,
 } from "@mui/material";
 
 export const FIELD_TYPES = [
@@ -39,6 +40,7 @@ export const emptyField = () => ({
   description: "",
   type: "string",
   required: false,
+  required_on_publish: false,
   severity: "error",
   vocabulary_slug: "",
   pattern: "",
@@ -66,6 +68,7 @@ export const fromForm = (form) => {
     description: form.description,
     type: form.type,
     required: Boolean(form.required),
+    required_on_publish: Boolean(form.required_on_publish),
     severity: form.severity || "error",
     portal_visible: Boolean(form.portal_visible),
     gateway_visible: Boolean(form.gateway_visible),
@@ -249,6 +252,12 @@ const FieldDefinitionDialog = ({ open, field, existingKeys = [], vocabularies = 
                 control={<Switch checked={form.required} onChange={(e) => set({ required: e.target.checked })} />}
                 label="Required"
               />
+              <Tooltip title="Optional while the object is a draft; must be filled before it can be activated or enabled. Lets a submitter save without it and a reviewer supply it when releasing.">
+                <FormControlLabel
+                  control={<Switch checked={Boolean(form.required_on_publish)} onChange={(e) => set({ required_on_publish: e.target.checked })} />}
+                  label="Required to publish"
+                />
+              </Tooltip>
               {form.type === "date" && (
                 <FormControlLabel
                   control={<Switch checked={form.warn_if_past} onChange={(e) => set({ warn_if_past: e.target.checked })} />}

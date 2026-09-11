@@ -78,7 +78,7 @@ describe('FieldDefinitionDialog', () => {
   it('fromForm drops constraints that do not apply to the type', () => {
     const base = { ...emptyField(), key: 'k', label: '', type: 'boolean', pattern: '^x', max_length: '5', min: '1', max: '2', vocabulary_slug: 'risk', warn_if_past: true };
     const out = fromForm(base);
-    expect(out).toEqual({ key: 'k', label: 'k', description: '', type: 'boolean', required: false, severity: 'error', portal_visible: false, gateway_visible: false });
+    expect(out).toEqual({ key: 'k', label: 'k', description: '', type: 'boolean', required: false, required_on_publish: false, severity: 'error', portal_visible: false, gateway_visible: false });
     expect(fromForm({ ...base, type: 'text' })).toMatchObject({ pattern: '^x', max_length: 5 });
     expect(fromForm({ ...base, type: 'date' })).toMatchObject({ warn_if_past: true });
     expect(fromForm({ ...base, type: 'multi_vocabulary' })).toMatchObject({ vocabulary_slug: 'risk' });

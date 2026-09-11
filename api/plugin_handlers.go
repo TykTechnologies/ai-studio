@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"fmt"
 	"log"
 	"net/http"
@@ -36,6 +37,11 @@ type PluginResponse struct {
 		CreatedAt    string                 `json:"created_at"`
 		UpdatedAt    string                 `json:"updated_at"`
 	} `json:"attributes"`
+	// PermissionKey is the RBAC resource that stands for this plugin
+	// ("plugin:<manifest id>"); omitted for plugins with no admin surface.
+	// Top level rather than inside Attributes so the many hand-written
+	// Attributes literals in this package stay untouched.
+	PermissionKey string `json:"permission_key,omitempty"`
 	Relationships *struct {
 		LLMs struct {
 			Data []struct {
@@ -278,6 +284,11 @@ func (a *API) createPlugin(c *gin.Context) {
 		return
 	}
 
+	// Installing an already-enabled plugin is the publish action on plugins.
+	if !a.requirePublishToCreateLive(c, "plugins", req.IsActive) {
+		return
+	}
+
 	plugin, err := a.service.PluginService.CreatePlugin(&req)
 	if err != nil {
 		errMsg := err.Error()
@@ -440,9 +451,20 @@ func (a *API) updatePlugin(c *gin.Context) {
 		return
 	}
 
-	// Try to parse as plain UpdatePluginRequest (current UI behavior for PATCH)
+	// Read the body once: the raw keys decide what a per-plugin holder may
+	// touch, and the typed request drives the update.
+	rawBody, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "could not read request body"}},
+		})
+		return
+	}
 	var req services.UpdatePluginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := json.Unmarshal(rawBody, &req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -450,6 +472,23 @@ func (a *API) updatePlugin(c *gin.Context) {
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// A caller admitted by the per-plugin write permission alone may change
+	// only the plugin's configuration, name and description (allowlist on
+	// the raw body keys, so any field added later is denied by default);
+	// everything else needs the platform permission.
+	if !a.holds(c, authz.Write("plugins")) {
+		var keys map[string]json.RawMessage
+		if err := json.Unmarshal(rawBody, &keys); err != nil {
+			keys = nil
+		}
+		for key := range keys {
+			if !pluginSelfServiceFields[key] {
+				c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Write("plugins")))
+				return
+			}
+		}
 	}
 
 	// Perform API-level security validation on the command field if it's being updated
@@ -477,6 +516,12 @@ func (a *API) updatePlugin(c *gin.Context) {
 		return
 	}
 
+	// Enabling or disabling a plugin is the publish action on plugins.
+	if req.IsActive != nil && !a.requirePublishIfChanged(c, "plugins", originalPlugin.IsActive, *req.IsActive) {
+		return
+	}
+
+
 	plugin, err := a.service.PluginService.UpdatePlugin(uint(id), &req)
 	if err != nil {
 		if err.Error() == "plugin not found: "+strconv.FormatUint(id, 10) {
@@ -499,43 +544,7 @@ func (a *API) updatePlugin(c *gin.Context) {
 	}
 
 	// Handle plugin activation state changes for AI Studio plugins
-	if plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
-		wasActive := originalPlugin.IsActive
-		isNowActive := plugin.IsActive
-
-		// Plugin was deactivated - unload it
-		if wasActive && !isNowActive {
-			log.Printf("Plugin deactivated, unloading: %s (ID: %d)", plugin.Name, plugin.ID)
-
-			if a.service.AIStudioPluginManager.IsPluginLoaded(plugin.ID) {
-				if unloadErr := a.service.AIStudioPluginManager.UnloadPlugin(plugin.ID); unloadErr != nil {
-					log.Printf("Warning: Failed to unload deactivated plugin %s: %v", plugin.Name, unloadErr)
-				} else {
-					log.Printf("✅ Successfully unloaded deactivated plugin: %s", plugin.Name)
-
-					// Clean up UI registry entries for deactivated plugin
-					if a.service.PluginManifestService != nil {
-						if unloadUIErr := a.service.PluginManifestService.UnloadPluginUI(plugin.ID); unloadUIErr != nil {
-							log.Printf("Warning: Failed to clean up UI for deactivated plugin %s: %v", plugin.Name, unloadUIErr)
-						} else {
-							log.Printf("✅ Cleaned up UI registry for deactivated plugin: %s", plugin.Name)
-						}
-					}
-				}
-			}
-		}
-
-		// Plugin was activated - load it if load_immediately is set
-		if !wasActive && isNowActive && req.LoadImmediately != nil && *req.LoadImmediately {
-			log.Printf("Plugin activated with load_immediately, loading: %s (ID: %d)", plugin.Name, plugin.ID)
-
-			if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(plugin.ID); loadErr != nil {
-				log.Printf("Warning: Failed to auto-load activated plugin %s: %v", plugin.Name, loadErr)
-			} else {
-				log.Printf("✅ Successfully loaded activated plugin: %s", plugin.Name)
-			}
-		}
-	}
+	a.applyPluginActivation(plugin, originalPlugin.IsActive, req.LoadImmediately != nil && *req.LoadImmediately)
 
 	// Auto-load AI Studio plugins if requested on update
 	if req.LoadImmediately != nil && *req.LoadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
@@ -579,6 +588,55 @@ func (a *API) updatePlugin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializePlugin(plugin)})
+}
+
+// pluginSelfServiceFields are the PATCH /plugins/:id body keys a caller holding
+// only the per-plugin write permission may send. Everything else (command,
+// checksum, hooks, namespace, OCI reference, activation, load flags) needs
+// plugins:write.
+var pluginSelfServiceFields = map[string]bool{"config": true, "name": true, "description": true}
+
+// applyPluginActivation unloads a Studio plugin that was just disabled and,
+// when loadOnActivate is set, loads one that was just enabled. Shared by the
+// PATCH update and the dedicated enable/disable routes.
+func (a *API) applyPluginActivation(plugin *models.Plugin, wasActive, loadOnActivate bool) {
+	if !plugin.SupportsHookType(models.HookTypeStudioUI) || a.service.AIStudioPluginManager == nil {
+		return
+	}
+	isNowActive := plugin.IsActive
+
+	// Plugin was deactivated - unload it
+	if wasActive && !isNowActive {
+		log.Printf("Plugin deactivated, unloading: %s (ID: %d)", plugin.Name, plugin.ID)
+
+		if a.service.AIStudioPluginManager.IsPluginLoaded(plugin.ID) {
+			if unloadErr := a.service.AIStudioPluginManager.UnloadPlugin(plugin.ID); unloadErr != nil {
+				log.Printf("Warning: Failed to unload deactivated plugin %s: %v", plugin.Name, unloadErr)
+			} else {
+				log.Printf("✅ Successfully unloaded deactivated plugin: %s", plugin.Name)
+
+				// Clean up UI registry entries for deactivated plugin
+				if a.service.PluginManifestService != nil {
+					if unloadUIErr := a.service.PluginManifestService.UnloadPluginUI(plugin.ID); unloadUIErr != nil {
+						log.Printf("Warning: Failed to clean up UI for deactivated plugin %s: %v", plugin.Name, unloadUIErr)
+					} else {
+						log.Printf("✅ Cleaned up UI registry for deactivated plugin: %s", plugin.Name)
+					}
+				}
+			}
+		}
+	}
+
+	// Plugin was activated - load it if requested
+	if !wasActive && isNowActive && loadOnActivate {
+		log.Printf("Plugin activated with load_immediately, loading: %s (ID: %d)", plugin.Name, plugin.ID)
+
+		if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(plugin.ID); loadErr != nil {
+			log.Printf("Warning: Failed to auto-load activated plugin %s: %v", plugin.Name, loadErr)
+		} else {
+			log.Printf("✅ Successfully loaded activated plugin: %s", plugin.Name)
+		}
+	}
 }
 
 // @Summary Delete plugin
@@ -1047,6 +1105,9 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 			UpdatedAt:    plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},
 	}
+	if plugin.HasAdminSurface() {
+		response.PermissionKey = plugin.PermissionKey()
+	}
 
 	// Include LLM relationships if they exist
 	if len(plugin.LLMs) > 0 {
@@ -1356,6 +1417,23 @@ func (a *API) getUIRegistry(c *gin.Context) {
 		})
 		return
 	}
+
+	// Serve only the mounts the caller may open, each carrying the
+	// permission it requires, so the frontend never receives (or routes) a
+	// page the user cannot see.
+	visible := make([]models.UIRegistry, 0, len(entries))
+	for i := range entries {
+		entry := entries[i]
+		entry.RequiredPermission = services.RequiredPermissionOf(&entry)
+		if entry.Plugin != nil {
+			entry.PluginPermissionKey = entry.Plugin.PermissionKey()
+		}
+		if !authz.Can(c, authz.Permission(entry.RequiredPermission)) {
+			continue
+		}
+		visible = append(visible, entry)
+	}
+	entries = visible
 
 	c.JSON(http.StatusOK, gin.H{"data": entries})
 }
@@ -2020,8 +2098,8 @@ func (a *API) callPluginRPC(c *gin.Context) {
 				Name:        user.Name,
 				IsAdmin:     user.IsAdmin,
 				Groups:      extractUserGroupNames(c),
-				Metadata:    make(map[string]string),
-				Permissions: callerPermissions(c),
+				Metadata:    pluginRPCMetadata(plugin),
+				Permissions: pluginCallerPermissions(c, plugin),
 			}
 		}
 	}
@@ -2371,8 +2449,8 @@ func (a *API) callPortalPluginRPC(c *gin.Context) {
 		Name:        user.Name,
 		IsAdmin:     user.IsAdmin,
 		Groups:      groups,
-		Metadata:    make(map[string]string),
-		Permissions: callerPermissions(c),
+		Metadata:    pluginRPCMetadata(plugin),
+		Permissions: pluginCallerPermissions(c, plugin),
 	}
 
 	response, err := a.service.AIStudioPluginManager.CallPluginPortalRPC(

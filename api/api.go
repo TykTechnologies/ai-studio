@@ -636,6 +636,8 @@ func (a *API) setupRoutes() {
 	v1.POST("/llms", authz.Write("llms"), a.createLLM)
 	v1.GET("/llms/:id", authz.Read("llms"), a.getLLM)
 	v1.PATCH("/llms/:id", authz.Write("llms"), a.updateLLM)
+	v1.POST("/llms/:id/activate", authz.Publish("llms"), a.activateLLM)
+	v1.POST("/llms/:id/deactivate", authz.Publish("llms"), a.deactivateLLM)
 	v1.DELETE("/llms/:id", authz.Delete("llms"), a.deleteLLM)
 	v1.GET("/llms", authz.Read("llms"), a.listLLMs)
 	v1.GET("/llms/search", authz.Read("llms"), a.searchLLMs)
@@ -667,6 +669,8 @@ func (a *API) setupRoutes() {
 	v1.POST("/datasources", authz.Write("datasources"), a.createDatasource)
 	v1.GET("/datasources/:id", authz.Read("datasources"), a.getDatasource)
 	v1.PATCH("/datasources/:id", authz.Write("datasources"), a.updateDatasource)
+	v1.POST("/datasources/:id/activate", authz.Publish("datasources"), a.activateDatasource)
+	v1.POST("/datasources/:id/deactivate", authz.Publish("datasources"), a.deactivateDatasource)
 	v1.DELETE("/datasources/:id", authz.Delete("datasources"), a.deleteDatasource)
 	v1.GET("/datasources", authz.Read("datasources"), a.listDatasources)
 	v1.GET("/datasources/search", authz.Read("datasources"), a.searchDatasources)
@@ -719,6 +723,8 @@ func (a *API) setupRoutes() {
 	v1.POST("/apps", authz.Write("apps"), a.createApp)
 	v1.GET("/apps/:id", authz.Read("apps"), a.getApp)
 	v1.PATCH("/apps/:id", authz.Write("apps"), a.updateApp)
+	v1.POST("/apps/:id/activate", authz.Publish("apps"), a.activateApp)
+	v1.POST("/apps/:id/deactivate", authz.Publish("apps"), a.deactivateApp)
 	v1.DELETE("/apps/:id", authz.Delete("apps"), a.deleteApp)
 	v1.GET("/users/:id/apps", authz.Read("apps"), a.getAppsByUserID) // Note: Param is "id" here, not "userId" as in some other handlers
 	v1.GET("/apps/by-name", authz.Read("apps"), a.getAppByName)
@@ -773,13 +779,15 @@ func (a *API) setupRoutes() {
 	v1.POST("/agents", authz.Write("agents"), a.HandleCreateAgent)                    // Create agent config (admin only)
 	v1.PUT("/agents/:id", authz.Write("agents"), a.HandleUpdateAgent)                 // Update agent config (admin only)
 	v1.DELETE("/agents/:id", authz.Delete("agents"), a.HandleDeleteAgent)              // Delete agent config (admin only)
-	v1.POST("/agents/:id/activate", authz.Write("agents"), a.HandleActivateAgent)     // Activate agent (admin only)
-	v1.POST("/agents/:id/deactivate", authz.Write("agents"), a.HandleDeactivateAgent) // Deactivate agent (admin only)
+	v1.POST("/agents/:id/activate", authz.Publish("agents"), a.HandleActivateAgent)     // Activate agent (publish)
+	v1.POST("/agents/:id/deactivate", authz.Publish("agents"), a.HandleDeactivateAgent) // Deactivate agent (publish)
 
 	// Tool routes
 	v1.POST("/tools", authz.Write("tools"), a.createTool)
 	v1.GET("/tools/:id", authz.Read("tools"), a.getTool)
 	v1.PATCH("/tools/:id", authz.Write("tools"), a.updateTool)
+	v1.POST("/tools/:id/activate", authz.Publish("tools"), a.activateTool)
+	v1.POST("/tools/:id/deactivate", authz.Publish("tools"), a.deactivateTool)
 	v1.DELETE("/tools/:id", authz.Delete("tools"), a.deleteTool)
 	v1.GET("/tools", authz.Read("tools"), a.getAllTools)
 	v1.GET("/tools/by-type", authz.Read("tools"), a.getToolsByType)
@@ -835,8 +843,13 @@ func (a *API) setupRoutes() {
 
 	// Plugin routes
 	v1.POST("/plugins", authz.Write("plugins"), a.createPlugin)
-	v1.GET("/plugins/:id", authz.Read("plugins"), a.getPlugin)
-	v1.PATCH("/plugins/:id", authz.Write("plugins"), a.updatePlugin)
+	// The plugin detail (configuration view) and the config-only PATCH are
+	// open to the platform-level plugins permission or the per-plugin one;
+	// updatePlugin restricts per-plugin holders to config, name, description.
+	v1.HandleAnyFn("GET", "/plugins/:id", a.pluginOrPlatformPermission(authz.ActionRead), a.getPlugin)
+	v1.HandleAnyFn("PATCH", "/plugins/:id", a.pluginOrPlatformPermission(authz.ActionWrite), a.updatePlugin)
+	v1.POST("/plugins/:id/enable", authz.Publish("plugins"), a.enablePlugin)
+	v1.POST("/plugins/:id/disable", authz.Publish("plugins"), a.disablePlugin)
 	v1.DELETE("/plugins/:id", authz.Delete("plugins"), a.deletePlugin)
 	v1.DELETE("/plugins/:id/data", authz.Delete("plugins"), a.clearPluginData)
 	v1.GET("/plugins", authz.Read("plugins"), a.listPlugins)
@@ -857,15 +870,17 @@ func (a *API) setupRoutes() {
 	v1.POST("/plugins/:id/manifest/parse", authz.Write("plugins"), a.parsePluginManifest)
 
 	// Plugin RPC routes
-	v1.POST("/plugins/:id/rpc/:method", authz.Execute("plugins"), a.callPluginRPC)
+	// Admin RPC needs the per-plugin write permission (plugins:execute
+	// implies it); Part 3 lets manifests declare read-only methods.
+	v1.HandleFn("POST", "/plugins/:id/rpc/:method", a.pluginRPCPermission, a.callPluginRPC)
 	v1.POST("/plugins/:id/reload", authz.Execute("plugins"), a.reloadPlugin)
 
 	// Plugin runtime status routes (for debugging)
-	v1.GET("/plugins/:id/status", authz.Read("plugins"), a.getPluginStatus)
+	v1.HandleAnyFn("GET", "/plugins/:id/status", a.pluginOrPlatformPermission(authz.ActionRead), a.getPluginStatus)
 	v1.GET("/plugins/loaded", authz.Read("plugins"), a.getLoadedPlugins)
 
 	// Plugin configuration schema routes
-	v1.GET("/plugins/:id/config-schema", authz.Read("plugins"), a.getPluginConfigSchema)
+	v1.HandleAnyFn("GET", "/plugins/:id/config-schema", a.pluginOrPlatformPermission(authz.ActionRead), a.getPluginConfigSchema)
 	v1.POST("/plugins/:id/config-schema/refresh", authz.Write("plugins"), a.refreshPluginConfigSchema)
 
 	// Plugin workflow routes (for step-by-step creation and approval)
@@ -901,7 +916,7 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/model-routers/:id", authz.Write("model-routers"), a.updateModelRouter)
 	v1.DELETE("/model-routers/:id", authz.Delete("model-routers"), a.deleteModelRouter)
 	v1.GET("/model-routers", authz.Read("model-routers"), a.listModelRouters)
-	v1.PATCH("/model-routers/:id/toggle", authz.Write("model-routers"), a.toggleModelRouterActive)
+	v1.PATCH("/model-routers/:id/toggle", authz.Publish("model-routers"), a.toggleModelRouterActive)
 
 	// Marketplace routes (only register if marketplace service is available)
 	if a.service.MarketplaceService != nil {
@@ -1057,6 +1072,8 @@ func (a *API) setupRoutes() {
 	v1.GET("/metadata/schemas/resolve", authz.Read("metadata"), a.resolveMetadataSchema)
 	v1.GET("/metadata/schemas/:id", authz.Read("metadata"), a.getMetadataSchema)
 	v1.PATCH("/metadata/schemas/:id", authz.Write("metadata"), a.updateMetadataSchema)
+	v1.POST("/metadata/schemas/:id/activate", authz.Publish("metadata"), a.activateMetadataSchema)
+	v1.POST("/metadata/schemas/:id/deactivate", authz.Publish("metadata"), a.deactivateMetadataSchema)
 	v1.DELETE("/metadata/schemas/:id", authz.Delete("metadata"), a.deleteMetadataSchema)
 	v1.GET("/metadata/vocabularies", authz.Read("metadata"), a.listMetadataVocabularies)
 	v1.POST("/metadata/vocabularies", authz.Write("metadata"), a.createMetadataVocabulary)

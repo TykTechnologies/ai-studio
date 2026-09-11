@@ -27,6 +27,7 @@ A schema is a named set of fields applied to one or more object types (or *All o
 | Key | Stored identifier (`^[a-z][a-z0-9_]*$`), unique across active schemas that overlap in object types |
 | Type | Text, multi-line text, number, yes/no, date, email, URL, user, vocabulary, multi-value vocabulary, list of text values |
 | Required + severity | *Error* blocks when the schema enforces; *Warning* only reports |
+| Required to publish | Optional while the object is a draft; the object cannot be activated or enabled until the field is filled, whatever the schema's enforcement level. Pairs with the `publish` permission: a submitter saves without it, the reviewer supplies it when releasing |
 | Constraints | Pattern, max length, min/max, vocabulary |
 | Warn when in the past | For dates such as an expiration date |
 | Visible in portal | Included (with labels resolved) in portal catalogue responses |
@@ -157,7 +158,7 @@ Every validation returns the same envelope:
 }
 ```
 
-Codes: `required`, `unknown_field`, `invalid_type`, `invalid_format`, `invalid_enum`, `pattern`, `range`, `length`, `expired`, `deprecated_term`, `user_not_found`, `hook_rejected`. A `422` from an object create/update carries one entry per hard error with `source.pointer` set to `/data/attributes/governed_metadata/<field>`.
+Codes: `required`, `required_on_publish`, `unknown_field`, `invalid_type`, `invalid_format`, `invalid_enum`, `pattern`, `range`, `length`, `expired`, `deprecated_term`, `user_not_found`, `hook_rejected`. A `422` from an object create/update carries one entry per hard error with `source.pointer` set to `/data/attributes/governed_metadata/<field>`.
 
 ## API summary
 

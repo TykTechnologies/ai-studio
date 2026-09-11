@@ -31,6 +31,8 @@ import {
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const ModelRouterList = () => {
   const navigate = useNavigate();
@@ -284,9 +286,11 @@ const ModelRouterList = () => {
         <MenuItem onClick={() => handleDelete(selectedRouter?.id)}>
           Delete Router
         </MenuItem>
-        <MenuItem onClick={() => handleToggleActive(selectedRouter)}>
-          {selectedRouter?.attributes.active ? "Deactivate" : "Activate"} Router
-        </MenuItem>
+        <Can permission={P.MODEL_ROUTERS_PUBLISH}>
+          <MenuItem onClick={() => handleToggleActive(selectedRouter)}>
+            {selectedRouter?.attributes.active ? "Deactivate" : "Activate"} Router
+          </MenuItem>
+        </Can>
       </Menu>
 
       <Snackbar

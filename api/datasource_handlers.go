@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -37,6 +39,15 @@ func (a *API) createDatasource(c *gin.Context) {
 		return
 	}
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, true) {
+		return
+	}
+
+	// Creating a datasource already active is the publish action, and needs
+	// every "required to publish" metadata field.
+	if !a.requirePublishToCreateLive(c, "datasources", input.Data.Attributes.Active) {
+		return
+	}
+	if input.Data.Attributes.Active && !a.publishGateOpen(c, models.GovernedObjectTypeDatasource, "", input.Data.Attributes.GovernedMetadata) {
 		return
 	}
 
@@ -154,8 +165,20 @@ func (a *API) updateDatasource(c *gin.Context) {
 		return
 	}
 
+	// Read the body once so the active switch can be told apart from an
+	// omitted one: absent means "keep the current value".
+	rawBody, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "could not read request body"}},
+		})
+		return
+	}
 	var input DatasourceInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := json.Unmarshal(rawBody, &input); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -175,6 +198,18 @@ func (a *API) updateDatasource(c *gin.Context) {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{Title: "Not Found", Detail: "Datasource not found"}}})
+		return
+	}
+
+	// Flipping the active switch is the publish action on datasources.
+	if _, present := llmPatchAttributeKeys(rawBody)["active"]; !present {
+		input.Data.Attributes.Active = existingDS.Active
+	}
+	if !a.requirePublishIfChanged(c, "datasources", existingDS.Active, input.Data.Attributes.Active) {
+		return
+	}
+	if !existingDS.Active && input.Data.Attributes.Active &&
+		!a.publishGateOpen(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(uint(id)), input.Data.Attributes.GovernedMetadata) {
 		return
 	}
 

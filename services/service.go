@@ -285,6 +285,15 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		logger.Debug("Wired service reference to AI Studio plugin manager for service provider injection")
 	}
 
+	// Keep the RBAC catalogue's per-plugin resources in step with the
+	// plugins table (see plugin_permissions.go).
+	if pluginService != nil {
+		pluginService.SetPermissionSync(service.syncPluginPermissionsHook)
+	}
+	if pluginManifestService != nil {
+		pluginManifestService.SetPermissionSync(service.syncPluginPermissionsHook)
+	}
+
 	return service
 }
 

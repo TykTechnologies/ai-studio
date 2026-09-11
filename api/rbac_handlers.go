@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"errors"
 	"net/http"
 	"strconv"
@@ -55,10 +56,15 @@ type RoleAttributes struct {
 	Description string    `json:"description"`
 	IsSystem    bool      `json:"is_system"`
 	Permissions []string  `json:"permissions"`
-	UsersCount  int64     `json:"users_count"`
-	GroupsCount int64     `json:"groups_count"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	// OrphanedPermissions are held permissions whose resource is not in the
+	// catalogue right now: grants on a plugin that is uninstalled or not
+	// loaded. They stay on the role and take effect again when the plugin
+	// returns; the role editor lists them separately.
+	OrphanedPermissions []string  `json:"orphaned_permissions"`
+	UsersCount          int64     `json:"users_count"`
+	GroupsCount         int64     `json:"groups_count"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // RoleResponse wraps a role in the JSON:API-style envelope used across the API.
@@ -105,19 +111,26 @@ func serializeRole(r *models.Role, counts rbac.RoleCounts) RoleResponse {
 	if perms == nil {
 		perms = []string{}
 	}
+	orphaned := []string{}
+	for _, p := range perms {
+		if !authz.Permission(p).Valid() {
+			orphaned = append(orphaned, p)
+		}
+	}
 	return RoleResponse{
 		Type: "role",
 		ID:   strconv.FormatUint(uint64(r.ID), 10),
 		Attributes: RoleAttributes{
-			Name:        r.Name,
-			Slug:        r.Slug,
-			Description: r.Description,
-			IsSystem:    r.IsSystem,
-			Permissions: perms,
-			UsersCount:  counts.Users,
-			GroupsCount: counts.Groups,
-			CreatedAt:   r.CreatedAt,
-			UpdatedAt:   r.UpdatedAt,
+			Name:                r.Name,
+			Slug:                r.Slug,
+			Description:         r.Description,
+			IsSystem:            r.IsSystem,
+			Permissions:         perms,
+			OrphanedPermissions: orphaned,
+			UsersCount:          counts.Users,
+			GroupsCount:         counts.Groups,
+			CreatedAt:           r.CreatedAt,
+			UpdatedAt:           r.UpdatedAt,
 		},
 	}
 }
@@ -178,6 +191,9 @@ type PermissionCatalogueResponse struct {
 	Groups    []string         `json:"groups"`
 	Resources []authz.Resource `json:"resources"`
 	Actions   []authz.Action   `json:"actions"`
+	// Version changes whenever a plugin registers or removes permission
+	// resources, so clients can tell a cached catalogue is stale.
+	Version uint64 `json:"version"`
 }
 
 // @Summary Get the permission catalogue
@@ -188,11 +204,14 @@ type PermissionCatalogueResponse struct {
 // @Router /rbac/permissions [get]
 // @Security BearerAuth
 func (a *API) getPermissionCatalogue(c *gin.Context) {
+	version := authz.Version()
+	c.Header("ETag", fmt.Sprintf(`"catalogue-%d"`, version))
 	c.JSON(http.StatusOK, PermissionCatalogueResponse{
 		Enabled:   a.service.Authz().Enabled(),
 		Groups:    authz.Groups,
 		Resources: authz.Catalogue(),
 		Actions:   authz.Actions,
+		Version:   version,
 	})
 }
 

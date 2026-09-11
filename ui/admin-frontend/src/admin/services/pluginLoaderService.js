@@ -1,4 +1,6 @@
 import apiClient from '../utils/apiClient';
+import { getIdentity, hasPermissionNow } from '../utils/identityStore';
+import { P, isPluginPermission } from '../rbac/permissions';
 
 /**
  * Plugin Loader Service - Handles dynamic loading of plugin UI components
@@ -95,7 +97,7 @@ class PluginLoaderService {
       }
 
       // Create a React wrapper for the Web Component with plugin context
-      const WebComponentWrapper = this.createWebComponentWrapper(component_tag, mount_config, plugin_id);
+      const WebComponentWrapper = this.createWebComponentWrapper(component_tag, mount_config, plugin_id, pluginEntry.plugin_permission_key || null);
 
       this.loadedComponents.set(component_tag, WebComponentWrapper);
 
@@ -117,7 +119,7 @@ class PluginLoaderService {
    * @param {Object} mountConfig - Mount configuration from manifest
    * @param {number} pluginId - Plugin ID for RPC calls
    */
-  createWebComponentWrapper(tagName, mountConfig = {}, pluginId = null) {
+  createWebComponentWrapper(tagName, mountConfig = {}, pluginId = null, pluginPermissionKey = null) {
     const React = window.React || require('react'); // Support both import methods
     const { useEffect, useRef } = React;
 
@@ -140,7 +142,25 @@ class PluginLoaderService {
                 console.error(`Plugin RPC call failed: ${method}`, error);
                 throw error;
               }
-            }
+            },
+            // RBAC: the permission key of this plugin ("plugin:<manifest id>"),
+            // the signed-in administrator's permissions, and can(perm), which
+            // accepts a full permission ("llms:read"), a plugin-relative
+            // action ("write") or a plugin-relative sub-resource
+            // ("assets:write"). plugins:execute counts as every plugin
+            // permission, so pages need no knowledge of the umbrella rule.
+            permissionKey: pluginPermissionKey,
+            get permissions() {
+              return [...(getIdentity()?.permissions || [])];
+            },
+            can: (perm) => {
+              if (!perm) return true;
+              const platform = Object.values(P).includes(perm);
+              const full = pluginPermissionKey && !platform && !isPluginPermission(perm)
+                ? `${pluginPermissionKey}:${perm}`
+                : perm;
+              return hasPermissionNow(full);
+            },
           };
           console.log(`Injected plugin API for plugin ${pluginId} into ${element.tagName}`);
         }

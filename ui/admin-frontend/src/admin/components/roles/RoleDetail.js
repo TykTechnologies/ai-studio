@@ -15,6 +15,7 @@ import {
 import Section from '../common/Section';
 import EnterpriseFeatureBadge from '../common/EnterpriseFeatureBadge';
 import PermissionMatrix from './PermissionMatrix';
+import OrphanedPermissions from './OrphanedPermissions';
 import CloneRoleDialog from './CloneRoleDialog';
 import RoleBadge, { SystemBadge } from './RoleBadge';
 import Can from '../rbac/Can';
@@ -121,7 +122,10 @@ const RoleDetail = () => {
             {permissions.has('*') ? (
               <Typography>Full administrator access: every permission, including managing roles and users.</Typography>
             ) : (
-              <PermissionMatrix value={permissions} readOnly showSearch={false} />
+              <>
+                <PermissionMatrix value={permissions} readOnly showSearch={false} />
+                <OrphanedPermissions permissions={permissions} />
+              </>
             )}
           </Box>
         </Section>

@@ -6,7 +6,7 @@ Roles are an **Enterprise Edition** feature. In Community Edition a user is eith
 
 ## How it works
 
-- A **permission** is `resource:action`, for example `llms:write` or `audit:read`. Actions are `read`, `write` (create and update), `delete` and `execute` (test, call, reload, sync). Write, delete and execute each include read.
+- A **permission** is `resource:action`, for example `llms:write` or `audit:read`. Actions are `read`, `write` (create and update), `delete`, `execute` (test, call, reload, sync) and `publish` (make live: set an LLM, tool, data source, app or agent active, enable a plugin, activate a metadata schema). Write, delete, execute and publish each include read. Publish does not include write, so you can build a *submitter* role that drafts providers without releasing them and a *reviewer* role that releases them: a submitter who flips the Active switch gets `403` with `"permission": "llms:publish"`, and the switch is disabled in the form.
 - A **role** is a named set of permissions.
 - Roles are **assigned to users and to teams**. Someone's access is the union of their own roles and the roles of every team they belong to, so mapping identity provider groups onto teams (see [Single Sign-On](./sso)) assigns roles automatically.
 - Permissions apply everywhere: navigation, pages, buttons, and every management API call, including calls made with a user's API key.
@@ -47,6 +47,9 @@ The Owner role can only be assigned to users (not teams) and only by another Own
 
 - **Operator** who can push configuration to edge gateways and test filters but not change them: clone Viewer, add `edges:execute`, `filters:execute`, `tools:execute`.
 - **Submission reviewer**: clone Viewer, add `submissions:write` and `submissions:execute`, remove everything outside Community if you prefer.
+- **LLM submitter / LLM reviewer**: a new role with `llms:read` and `llms:write` can create and edit providers but not set them active; add `llms:publish` for the reviewer who releases them. A role holding only `llms:publish` can activate and deactivate providers through the Activate action but cannot edit them. To make the reviewer record something (an "Approving reviewer", say), add a governance metadata field marked *Required to publish*: submitters can save without it, and activation is refused until it is filled.
+- **One plugin only**: every installed plugin with pages or resource types appears in the Plugins group of the matrix under its own name, with read (open its pages and configuration), write (call its actions, edit its configuration) and execute. Tick those instead of `Installed plugins: execute`, which unlocks every plugin at once. Grants on a plugin that is later uninstalled are kept on the role and listed as "Not installed" until it returns.
+- **Inside a plugin**: plugins can declare finer rows beneath their own entry (for example the Asset Catalog's *Asset types*, *Assets*, *Access requests* and one *Assets: &lt;type&gt;* row per asset class, each with read/write/delete/publish). Which plugin actions each row unlocks is documented by the plugin; `Installed plugins: execute` or Administrator still grants everything.
 - **LLM cost analyst**: a custom role with only `analytics:read` and `model-prices:read`.
 
 ## API

@@ -3,10 +3,12 @@ package api
 import (
 	"net/http/httptest"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -56,10 +58,12 @@ func assertRoutesAnnotated(t *testing.T, api *API) {
 	assert.Empty(t, orphan, "annotations that match no registered route")
 
 	for key, e := range api.routePerms {
-		if e.resolve != nil {
+		if e.dynamic() {
 			continue
 		}
-		assert.True(t, e.perm.Valid(), "%s annotated with unknown permission %q", key, e.perm)
+		for _, p := range e.permissions(nil) {
+			assert.True(t, p.Valid(), "%s annotated with unknown permission %q", key, p)
+		}
 	}
 }
 
@@ -102,6 +106,19 @@ func TestAuthzRoutes_RegistryLookup(t *testing.T) {
 	assert.Equal(t, authz.Read("tools"), get("GET", "/api/v1/providers").perm)
 	assert.Equal(t, authz.Read("marketplace"), get("GET", "/api/v1/admin/marketplaces").perm)
 	assert.Equal(t, authz.Write("sso-profiles"), get("POST", "/api/v1/sso-profiles").perm)
+
+	// Dedicated activate/deactivate routes carry publish, not write.
+	assert.Equal(t, authz.Publish("llms"), get("POST", "/api/v1/llms/:id/activate").perm)
+	assert.Equal(t, authz.Publish("llms"), get("POST", "/api/v1/llms/:id/deactivate").perm)
+	assert.Equal(t, authz.Publish("tools"), get("POST", "/api/v1/tools/:id/activate").perm)
+	assert.Equal(t, authz.Publish("datasources"), get("POST", "/api/v1/datasources/:id/deactivate").perm)
+	assert.Equal(t, authz.Publish("apps"), get("POST", "/api/v1/apps/:id/activate").perm)
+	assert.Equal(t, authz.Write("apps"), get("POST", "/api/v1/apps/:id/activate-credential").perm, "credential toggles stay write")
+	assert.Equal(t, authz.Publish("agents"), get("POST", "/api/v1/agents/:id/activate").perm)
+	assert.Equal(t, authz.Publish("model-routers"), get("PATCH", "/api/v1/model-routers/:id/toggle").perm)
+	assert.Equal(t, authz.Publish("plugins"), get("POST", "/api/v1/plugins/:id/enable").perm)
+	assert.Equal(t, authz.Publish("plugins"), get("POST", "/api/v1/plugins/:id/disable").perm)
+	assert.Equal(t, authz.Publish("metadata"), get("POST", "/api/v1/metadata/schemas/:id/activate").perm)
 }
 
 func TestAuthzRoutes_MetadataObjectResolver(t *testing.T) {
@@ -120,6 +137,112 @@ func TestAuthzRoutes_MetadataObjectResolver(t *testing.T) {
 	assert.Equal(t, authz.Write("datasources"), resolveFor("datasource"))
 	assert.Equal(t, authz.Write("plugins"), resolveFor("plugin_resource"))
 	assert.Equal(t, authz.Write("metadata"), resolveFor("something-else"), "unknown types fall back to schema governance")
+}
+
+// The plugin routes resolve to the platform-level permission or the
+// per-plugin one of the plugin named in the path.
+func TestAuthzRoutes_PluginResolvers(t *testing.T) {
+	api, db := setupTestAPI(t)
+	plugin := &models.Plugin{
+		Name:      "Asset catalog",
+		Command:   "/bin/true",
+		HookType:  models.HookTypeStudioUI,
+		HookTypes: []string{models.HookTypeStudioUI},
+		Manifest:  map[string]interface{}{"id": "com.example.assets"},
+	}
+	require.NoError(t, plugin.Create(db))
+	const key = "plugin:com.example.assets"
+	assert.Equal(t, key, plugin.PermissionKey())
+
+	ctxFor := func(id string, method string) *gin.Context {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Params = gin.Params{{Key: "id", Value: id}, {Key: "method", Value: method}}
+		return c
+	}
+	entry := func(method, path string) permEntry {
+		e, ok := api.routePerms[routeKey(method, path)]
+		require.True(t, ok, "%s %s", method, path)
+		require.True(t, e.dynamic())
+		return e
+	}
+	id := strconv.FormatUint(uint64(plugin.ID), 10)
+
+	get := entry("GET", "/api/v1/plugins/:id")
+	assert.Equal(t, []authz.Permission{authz.Read("plugins"), authz.Read(key)}, get.permissions(ctxFor(id, "")))
+	assert.Equal(t, authz.Read("plugins"), get.permission(ctxFor(id, "")), "the platform permission is the one a denial reports")
+	assert.Equal(t, []authz.Permission{authz.Read("plugins")}, get.permissions(ctxFor("999999", "")), "unknown plugin: platform permission only")
+
+	patch := entry("PATCH", "/api/v1/plugins/:id")
+	assert.Equal(t, []authz.Permission{authz.Write("plugins"), authz.Write(key)}, patch.permissions(ctxFor(id, "")))
+
+	rpc := entry("POST", "/api/v1/plugins/:id/rpc/:method")
+	assert.Equal(t, []authz.Permission{authz.Write(key)}, rpc.permissions(ctxFor(id, "admin_stats")))
+	assert.Equal(t, []authz.Permission{authz.Execute("plugins")}, rpc.permissions(ctxFor("999999", "x")))
+
+	// The umbrella rule makes the resolved permissions satisfiable by the
+	// legacy grant, and a per-plugin grant satisfies them without it.
+	require.NoError(t, authz.Replace(services.PluginBaseResource(plugin)))
+	t.Cleanup(func() { authz.UnregisterPlugin(key) })
+	assert.True(t, authz.NewSet(authz.Execute("plugins")).HasAny(rpc.permissions(ctxFor(id, "x"))...))
+	assert.True(t, authz.NewSet(authz.Write(key)).HasAny(rpc.permissions(ctxFor(id, "x"))...))
+	assert.False(t, authz.NewSet(authz.Read(key)).HasAny(rpc.permissions(ctxFor(id, "x"))...))
+	assert.True(t, authz.NewSet(authz.Read(key)).HasAny(get.permissions(ctxFor(id, ""))...))
+	assert.False(t, authz.NewSet(authz.Read("plugins")).HasAny(rpc.permissions(ctxFor(id, "x"))...))
+
+	// A manifest rbac block maps methods onto declared sub-resources; the
+	// sub-resources are registered from the stored manifest.
+	plugin.Manifest["rbac"] = map[string]interface{}{
+		"resources": []interface{}{
+			map[string]interface{}{"key": "assets", "label": "Assets", "actions": []interface{}{"read", "write", "publish"}},
+		},
+		"rpc_methods": map[string]interface{}{
+			"admin_stats":       "read",
+			"admin_list_assets": "assets:read",
+			"admin_release":     "assets:publish",
+			"admin_typo":        "nope:write",
+			"admin_platform":    "plugins:execute",
+		},
+	}
+	require.NoError(t, db.Model(plugin).Select("Manifest").Updates(plugin).Error)
+	api.service.SyncPluginPermissions(plugin)
+	_, ok := authz.ResourceByKey(key + ":assets")
+	require.True(t, ok, "sub-resource registered from the manifest")
+
+	assert.Equal(t, []authz.Permission{authz.Read(key)}, rpc.permissions(ctxFor(id, "admin_stats")))
+	assert.Equal(t, []authz.Permission{authz.Read(key + ":assets")}, rpc.permissions(ctxFor(id, "admin_list_assets")))
+	assert.Equal(t, []authz.Permission{authz.Publish(key + ":assets")}, rpc.permissions(ctxFor(id, "admin_release")))
+	assert.Equal(t, []authz.Permission{authz.Write(key)}, rpc.permissions(ctxFor(id, "admin_typo")), "unknown resource falls back to base write")
+	assert.Equal(t, []authz.Permission{authz.Execute("plugins")}, rpc.permissions(ctxFor(id, "admin_platform")))
+	assert.Equal(t, []authz.Permission{authz.Write(key)}, rpc.permissions(ctxFor(id, "undeclared")))
+
+	// Runtime registration adds rows beneath the plugin; removeMissing only touches runtime rows.
+	pluginKey, removed, err := api.service.RegisterPluginPermissionResources(plugin.ID, []models.PluginPermissionResource{
+		{Key: "assets-agent", Label: "Assets: Agent", Actions: models.StringList{"read", "write", "publish"}},
+	}, true)
+	require.NoError(t, err)
+	assert.Equal(t, key, pluginKey)
+	assert.Equal(t, 0, removed)
+	_, ok = authz.ResourceByKey(key + ":assets-agent")
+	assert.True(t, ok)
+	_, ok = authz.ResourceByKey(key + ":assets")
+	assert.True(t, ok, "manifest rows survive a runtime replace")
+	_, _, err = api.service.RegisterPluginPermissionResources(plugin.ID, []models.PluginPermissionResource{
+		{Key: "Bad Key", Label: "x", Actions: models.StringList{"read"}},
+	}, false)
+	assert.Error(t, err)
+	_, removed, err = api.service.RegisterPluginPermissionResources(plugin.ID, nil, true)
+	require.NoError(t, err)
+	assert.Equal(t, 1, removed)
+	_, ok = authz.ResourceByKey(key + ":assets-agent")
+	assert.False(t, ok)
+
+	// Uninstall removes everything, including the stored rows.
+	api.service.RemovePluginPermissions(plugin)
+	_, ok = authz.ResourceByKey(key + ":assets")
+	assert.False(t, ok)
+	rows, err := models.ListPluginPermissionResources(db, plugin.ID)
+	require.NoError(t, err)
+	assert.Empty(t, rows)
 }
 
 func TestPermRouter_RejectsUnknownPermission(t *testing.T) {
