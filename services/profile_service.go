@@ -175,6 +175,8 @@ func (s *Service) UpdateProfile(profileID string, updatedProfile *models.Profile
 	profile.UserGroupMapping = updatedProfile.UserGroupMapping
 	profile.UserGroupSeparator = updatedProfile.UserGroupSeparator
 	profile.SSOOnlyForRegisteredUsers = updatedProfile.SSOOnlyForRegisteredUsers
+	profile.NewUserShowPortal = updatedProfile.NewUserShowPortal
+	profile.NewUserShowChat = updatedProfile.NewUserShowChat
 
 	if isProfileIDChanged {
 		profile.ProfileID = updatedProfile.ProfileID

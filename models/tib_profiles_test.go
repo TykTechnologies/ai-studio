@@ -409,3 +409,48 @@ func TestProfile_GetLoginPageProfile(t *testing.T) {
 		assert.Equal(t, gorm.ErrRecordNotFound, err)
 	})
 }
+
+func TestNewProfile_ProvisioningDefaults(t *testing.T) {
+	p := NewProfile()
+	assert.True(t, p.NewUserShowPortal)
+	assert.True(t, p.NewUserShowChat)
+
+	showPortal, showChat := (*Profile)(nil).ProvisioningDefaults()
+	assert.True(t, showPortal, "nil profile falls back to showing the Portal")
+	assert.True(t, showChat, "nil profile falls back to showing Chat")
+
+	p.NewUserShowChat = false
+	showPortal, showChat = p.ProvisioningDefaults()
+	assert.True(t, showPortal)
+	assert.False(t, showChat)
+}
+
+func TestMigrateProfiles_BackfillsExistingRows(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+
+	// A profiles table from before the provisioning defaults existed.
+	type legacyProfile struct {
+		gorm.Model
+		ProfileID string `gorm:"index"`
+		Name      string
+	}
+	require.NoError(t, db.Table("profiles").AutoMigrate(&legacyProfile{}))
+	require.NoError(t, db.Table("profiles").Create(&legacyProfile{ProfileID: "legacy", Name: "Legacy"}).Error)
+	require.False(t, db.Migrator().HasColumn(&Profile{}, "NewUserShowPortal"))
+
+	require.NoError(t, MigrateProfiles(db))
+
+	var migrated Profile
+	require.NoError(t, migrated.Get(db, "legacy"))
+	assert.True(t, migrated.NewUserShowPortal, "pre-existing profiles keep provisioning users who can see the Portal")
+	assert.True(t, migrated.NewUserShowChat, "pre-existing profiles keep provisioning users who can see Chat")
+
+	// Running again must not touch a value an administrator has since changed.
+	migrated.NewUserShowChat = false
+	require.NoError(t, migrated.Update(db))
+	require.NoError(t, MigrateProfiles(db))
+	var again Profile
+	require.NoError(t, again.Get(db, "legacy"))
+	assert.False(t, again.NewUserShowChat)
+}

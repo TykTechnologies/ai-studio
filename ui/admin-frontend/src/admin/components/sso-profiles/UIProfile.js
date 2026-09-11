@@ -55,6 +55,9 @@ export const createEmptyProfile = () => ({
   UserGroupMapping: {},
   UserGroupSeparator: "",
   SSOOnlyForRegisteredUsers: false,
+  // Provisioning defaults for users this profile creates on first login.
+  NewUserShowPortal: true,
+  NewUserShowChat: true,
 });
 
 /**
@@ -91,7 +94,10 @@ export const mapApiToUIProfile = (apiResponse) => {
   if (attributes.user_group_separator) profile.UserGroupSeparator = attributes.user_group_separator;
   
   profile.SSOOnlyForRegisteredUsers = attributes.sso_only_for_registered_users;
-  
+  // Older backends do not send these; treat absence as "show".
+  profile.NewUserShowPortal = attributes.new_user_show_portal ?? true;
+  profile.NewUserShowChat = attributes.new_user_show_chat ?? true;
+
   const hasDomain = attributes.provider_constraints_domain;
   const hasGroup = attributes.provider_constraints_group;
   
@@ -131,7 +137,9 @@ export const mapUIProfileToApi = (uiProfile) => {
         custom_user_group_field: uiProfile.CustomUserGroupField,
         user_group_mapping: uiProfile.UserGroupMapping,
         user_group_separator: uiProfile.UserGroupSeparator,
-        sso_only_for_registered_users: uiProfile.SSOOnlyForRegisteredUsers
+        sso_only_for_registered_users: uiProfile.SSOOnlyForRegisteredUsers,
+        new_user_show_portal: uiProfile.NewUserShowPortal ?? true,
+        new_user_show_chat: uiProfile.NewUserShowChat ?? true
       }
     }
   };

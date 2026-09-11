@@ -1,9 +1,10 @@
-// go:build enterprise
+//go:build enterprise
 // +build enterprise
 
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -65,6 +66,31 @@ func TestHandleNonceRequest(t *testing.T) {
 		assert.Equal(t, "ok", response.Status)
 		assert.Equal(t, "Nonce token created", response.Message)
 		assert.NotNil(t, response.Meta)
+	})
+
+	t.Run("Profile header is carried into the nonce", func(t *testing.T) {
+		request := sso.NonceTokenRequest{
+			ForSection:   "dashboard",
+			EmailAddress: "tagged@example.com",
+		}
+		body, err := json.Marshal(request)
+		require.NoError(t, err)
+
+		req, _ := http.NewRequest("POST", "/api/sso", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(sso.ProfileIDHeader, "okta")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response sso.NonceTokenResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		require.NotNil(t, response.Meta)
+
+		resolved, err := api.ssoService.ResolveNonce(*response.Meta, false)
+		require.NoError(t, err)
+		assert.Equal(t, "okta", resolved.ProfileID)
+		assert.Equal(t, "tagged@example.com", resolved.EmailAddress)
 	})
 
 	t.Run("Invalid request body", func(t *testing.T) {

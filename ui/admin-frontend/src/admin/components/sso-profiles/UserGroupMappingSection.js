@@ -73,6 +73,27 @@ const UserGroupMappingSection = ({ profileData, groups, groupsError, getGroupNam
         </TwoColumnLayout>
       </Box>
 
+      <Box sx={{ py: 3, borderBottom: "1px solid", borderColor: "border.neutralDefaultSubdued" }}>
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mb: 2 }}>
+          New users provisioned through this identity provider start with these surfaces.
+          Existing users keep whatever an administrator has set.
+        </Typography>
+        <TwoColumnLayout>
+          <FieldGroup>
+            <FieldLabel variant="bodyLargeBold" sx={{ width: '40%' }}>New users see the AI Portal</FieldLabel>
+            <FieldValue variant="bodyLargeDefault" ml={1} data-testid="new-user-show-portal">
+              {profileData.NewUserShowPortal === false ? "No" : "Yes"}
+            </FieldValue>
+          </FieldGroup>
+          <FieldGroup>
+            <FieldLabel variant="bodyLargeBold" sx={{ minWidth: '40%', width: '40%' }}>New users see Chat</FieldLabel>
+            <FieldValue variant="bodyLargeDefault" ml={1} data-testid="new-user-show-chat">
+              {profileData.NewUserShowChat === false ? "No" : "Yes"}
+            </FieldValue>
+          </FieldGroup>
+        </TwoColumnLayout>
+      </Box>
+
       {/* User Group Mapping Table */}
       {Object.keys(profileData.UserGroupMapping || {}).length > 0 ? (
         <Box sx={{ mt: 3 }}>
