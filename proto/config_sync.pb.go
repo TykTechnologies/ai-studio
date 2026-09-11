@@ -1915,10 +1915,13 @@ type AnalyticsEvent struct {
 	RequestSizeBytes  uint32 `protobuf:"varint,24,opt,name=request_size_bytes,json=requestSizeBytes,proto3" json:"request_size_bytes,omitempty"`    // Size of request body
 	ResponseSizeBytes uint32 `protobuf:"varint,25,opt,name=response_size_bytes,json=responseSizeBytes,proto3" json:"response_size_bytes,omitempty"` // Size of response body
 	// Optional request/response data (controlled by include_request_response_data flag)
-	RequestBody   string `protobuf:"bytes,26,opt,name=request_body,json=requestBody,proto3" json:"request_body,omitempty"`    // Request body (if include_request_response_data = true)
-	ResponseBody  string `protobuf:"bytes,27,opt,name=response_body,json=responseBody,proto3" json:"response_body,omitempty"` // Response body (if include_request_response_data = true)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RequestBody  string `protobuf:"bytes,26,opt,name=request_body,json=requestBody,proto3" json:"request_body,omitempty"`    // Request body (if include_request_response_data = true)
+	ResponseBody string `protobuf:"bytes,27,opt,name=response_body,json=responseBody,proto3" json:"response_body,omitempty"` // Response body (if include_request_response_data = true)
+	// LLM failover: set when this attempt was a rung of another LLM's waterfall.
+	FailoverFromLlmId uint32 `protobuf:"varint,28,opt,name=failover_from_llm_id,json=failoverFromLlmId,proto3" json:"failover_from_llm_id,omitempty"` // Primary LLM the request failed over from (0 = primary attempt)
+	FailoverAttempt   uint32 `protobuf:"varint,29,opt,name=failover_attempt,json=failoverAttempt,proto3" json:"failover_attempt,omitempty"`           // 1-based rung index (0 = primary attempt)
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AnalyticsEvent) Reset() {
@@ -2138,6 +2141,20 @@ func (x *AnalyticsEvent) GetResponseBody() string {
 		return x.ResponseBody
 	}
 	return ""
+}
+
+func (x *AnalyticsEvent) GetFailoverFromLlmId() uint32 {
+	if x != nil {
+		return x.FailoverFromLlmId
+	}
+	return 0
+}
+
+func (x *AnalyticsEvent) GetFailoverAttempt() uint32 {
+	if x != nil {
+		return x.FailoverAttempt
+	}
+	return 0
 }
 
 // Budget usage event for pulse batching
@@ -3094,7 +3111,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xba\a\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\x96\b\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -3128,7 +3145,9 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x12request_size_bytes\x18\x18 \x01(\rR\x10requestSizeBytes\x12.\n" +
 	"\x13response_size_bytes\x18\x19 \x01(\rR\x11responseSizeBytes\x12!\n" +
 	"\frequest_body\x18\x1a \x01(\tR\vrequestBody\x12#\n" +
-	"\rresponse_body\x18\x1b \x01(\tR\fresponseBody\"\xa2\x03\n" +
+	"\rresponse_body\x18\x1b \x01(\tR\fresponseBody\x12/\n" +
+	"\x14failover_from_llm_id\x18\x1c \x01(\rR\x11failoverFromLlmId\x12)\n" +
+	"\x10failover_attempt\x18\x1d \x01(\rR\x0ffailoverAttempt\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +

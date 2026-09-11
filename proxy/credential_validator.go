@@ -667,6 +667,17 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 				return true, r
 			}
 		}
+		// Not granted directly. A failover rung inherits access from the
+		// primary the app was granted, but only when the request carries the
+		// proxy's own marker (see failover.go).
+		if cv.p.failoverGrantsAccess(r, app, llm) {
+			log.Debug().
+				Uint("app_id", app.ID).
+				Uint("llm_id", llm.ID).
+				Str("origin_slug", r.Header.Get(hdrFailoverOrigin)).
+				Msg("CheckAPICredential: access inherited via failover origin - validation PASSED")
+			return true, r
+		}
 		log.Debug().
 			Uint("app_id", app.ID).
 			Uint("required_llm_id", llm.ID).

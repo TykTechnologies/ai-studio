@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
+
+	"github.com/TykTechnologies/midsommar/v2/config"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services/audit"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
@@ -18,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
+	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"gorm.io/gorm"
 )
@@ -56,6 +61,54 @@ type Service struct {
 	SyncStatusService *SyncStatusService
 	// Role-based access control (ENT: roles and bindings, CE: admin-or-not stub)
 	RBAC rbac.Service
+	// Webhooks (Enterprise; set by InitWebhooks once the event bus is wired)
+	Webhooks webhooks.Service
+
+	// auditService is the audit trail owned by the API and attached through
+	// SetAuditService so background services (webhooks) can record non-HTTP
+	// actions. Guarded because the API is built after plugins have started.
+	auditMu      sync.RWMutex
+	auditService audit.Service
+}
+
+// SetAuditService attaches the audit trail. Called by api.SetAuditService.
+func (s *Service) SetAuditService(a audit.Service) {
+	s.auditMu.Lock()
+	s.auditService = a
+	s.auditMu.Unlock()
+}
+
+// Audit returns the attached audit trail, or nil before the API is built
+// (and always nil in proxy-only mode). Callers must handle nil.
+func (s *Service) Audit() audit.Service {
+	s.auditMu.RLock()
+	defer s.auditMu.RUnlock()
+	return s.auditService
+}
+
+// InitWebhooks builds the webhooks service (Enterprise implementation when
+// linked in, community stub otherwise). Call after SetEventBus so ingestion
+// can subscribe; the audit trail is looked up lazily through Audit().
+func (s *Service) InitWebhooks(cfg config.WebhooksConfig, version string) {
+	if s.Webhooks != nil {
+		s.Webhooks.Stop()
+	}
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "studio"
+	}
+	s.Webhooks = webhooks.NewService(webhooks.Deps{
+		DB:       s.DB,
+		Bus:      s.EventBus,
+		Notifier: s.NotificationService,
+		Audit:    s.Audit,
+		Config:   cfg,
+		NodeID:   fmt.Sprintf("%s-%d", hostname, os.Getpid()),
+		Version:  version,
+	})
+	if webhooks.IsEnterpriseAvailable() {
+		logger.Info("Webhooks service initialized")
+	}
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -279,6 +332,14 @@ func (s *Service) Cleanup() error {
 	logger.Info("Starting service cleanup...")
 
 	var errors []error
+
+	// Stop webhook delivery workers first: they write to the database, which
+	// is closed at the end of this function.
+	if s.Webhooks != nil {
+		logger.Info("Stopping webhooks service...")
+		s.Webhooks.Stop()
+		logger.Info("Webhooks service stopped")
+	}
 
 	// Stop log export service (cleanup goroutine)
 	if s.LogExportService != nil {

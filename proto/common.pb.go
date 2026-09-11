@@ -222,6 +222,7 @@ type LLMConfig struct {
 	PluginIds        []uint32 `protobuf:"varint,23,rep,packed,name=plugin_ids,json=pluginIds,proto3" json:"plugin_ids,omitempty"`              // From llm_plugins join table
 	DontLogBodies    bool     `protobuf:"varint,24,opt,name=dont_log_bodies,json=dontLogBodies,proto3" json:"dont_log_bodies,omitempty"`       // When true, suppress request/response body logging
 	GovernedMetadata string   `protobuf:"bytes,25,opt,name=governed_metadata,json=governedMetadata,proto3" json:"governed_metadata,omitempty"` // JSON object of gateway-visible governed metadata (Enterprise); empty when none
+	Failover         string   `protobuf:"bytes,26,opt,name=failover,proto3" json:"failover,omitempty"`                                         // JSON LLMFailover waterfall ({"targets":[{"llm_id":..,"model":".."}],"triggers":{..}}); empty when none
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -427,6 +428,13 @@ func (x *LLMConfig) GetDontLogBodies() bool {
 func (x *LLMConfig) GetGovernedMetadata() string {
 	if x != nil {
 		return x.GovernedMetadata
+	}
+	return ""
+}
+
+func (x *LLMConfig) GetFailover() string {
+	if x != nil {
+		return x.Failover
 	}
 	return ""
 }
@@ -2592,7 +2600,7 @@ var File_proto_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_proto_rawDesc = "" +
 	"\n" +
-	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x06\n" +
+	"\x12proto/common.proto\x12\fmicrogateway\x1a\x1fgoogle/protobuf/timestamp.proto\"\x82\a\n" +
 	"\tLLMConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2626,7 +2634,8 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"plugin_ids\x18\x17 \x03(\rR\tpluginIds\x12&\n" +
 	"\x0fdont_log_bodies\x18\x18 \x01(\bR\rdontLogBodies\x12+\n" +
-	"\x11governed_metadata\x18\x19 \x01(\tR\x10governedMetadata\"\xc1\x06\n" +
+	"\x11governed_metadata\x18\x19 \x01(\tR\x10governedMetadata\x12\x1a\n" +
+	"\bfailover\x18\x1a \x01(\tR\bfailover\"\xc1\x06\n" +
 	"\tAppConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +

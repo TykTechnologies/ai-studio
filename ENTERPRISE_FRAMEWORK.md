@@ -313,6 +313,7 @@ func TestBudgetEnforcement(t *testing.T) {
 - ❌ Custom marketplace management
 - ❌ Audit logging
 - ❌ Governed metadata (schemas, vocabularies, enforcement, compliance report)
+- ❌ Outbound webhooks (approved targets, signed delivery, retries, dead letters, delivery log)
 
 ### Enterprise Edition (ENT)
 
@@ -343,6 +344,8 @@ func TestBudgetEnforcement(t *testing.T) {
 - ✅ Governed metadata: admin-defined schemas, required fields, controlled vocabularies
 - ✅ Governed metadata enforcement (422 on create/update) and compliance report
 - ✅ Governed metadata in portal responses, edge snapshots and plugin APIs
+- ✅ Outbound webhooks: admin-approved targets, templated and redacted payloads, HMAC-signed delivery
+- ✅ Webhook retries with backoff, dead-letter queue, replay, searchable/exportable delivery log
 - ✅ Priority support
 
 ## Budget Feature Specifics
@@ -458,6 +461,39 @@ func TestBudgetEnforcement(t *testing.T) {
 - Config: `config/config.go` (`AuditConfig`, `AUDIT_*` variables)
 - API: `api/audit_handlers.go`; middleware registered in `api.NewAPI` before routes
 - Spec: `features/AuditTrail.md`; docs: `docs/site/docs/audit-trail.md`
+
+## Webhooks Feature Specifics
+
+### How Webhooks Work
+
+**Community Edition:**
+- ❌ **Delivery**: Nothing is ingested or sent; `webhook_*` tables exist but stay empty
+- 🔒 **API Endpoints**: `/api/v1/webhooks/*` return 403 Forbidden (status endpoint reports `available: false`)
+- 🔒 **Admin UI**: Governance → Webhooks shows the enterprise notice
+
+**Enterprise Edition:**
+- ✅ **Approval workflow**: Targets are created pending; an administrator approves the URL before anything is sent; URL/header changes re-pend; optional four-eyes rule
+- ✅ **URL policy**: Internal addresses blocked by default (validated on save and at dial time), allow/deny lists, no redirects
+- ✅ **Payloads**: Preset or custom `text/template` JSON with secret redaction; preview against a sample event
+- ✅ **Delivery**: Bus event persisted and fanned out in one transaction, lease-based multi-node workers, HMAC-SHA256 signatures with rotation grace, exponential backoff, dead-letter queue, replay
+- ✅ **Delivery log**: Every attempt with status code, latency, response snippet; filters, search, CSV/JSON export, retention
+- ✅ **Audit trail**: Target actions classified with diffs; dead letters recorded as `SYSTEM` records
+- ✅ **RBAC**: `webhooks` resource in the Governance group; execute gates approve/reject/revoke/test/replay
+- ✅ **Notifications**: Pending targets and dead letters notify administrators
+
+### Implementation Details
+
+- Interface: `services/webhooks/interface.go` - Service contract, DTOs and sentinel errors
+- Factory: `services/webhooks/factory.go` - `Deps` (DB, event bus, notifier, audit getter, config, node ID) and factory pattern
+- CE Stub: `services/webhooks/community.go` - `ErrEnterpriseFeature` for every operation
+- ENT Impl: `enterprise/features/webhooks/` - `service.go` (lifecycle, cache, status), `targets.go` (validation, state machine), `ingest.go` (bus → outbox), `engine.go` (claiming, workers), `sender.go` (render, sign, send, finalize), `policy.go`, `templates.go` + `presets/`, `redact.go`, `search.go`, `retention.go`
+- Models: `models/webhook.go` (`webhook_targets`, `webhook_events`, `webhook_deliveries`, `webhook_delivery_attempts`; migrated in both editions; secrets encrypted via hooks)
+- Config: `config/config.go` (`WebhooksConfig`, `WEBHOOKS_*` variables)
+- Wiring: `services.Service.InitWebhooks` from `main.go` after `SetEventBus` (standalone mode now creates a local bus); stopped first in `Service.Cleanup`
+- API: `api/webhook_handlers.go`; permissions in `pkg/authz/catalogue.go`; feature flag `feature_webhooks` in `/common/system`
+- UI: `ui/admin-frontend/src/admin/pages/Webhooks.js`, `WebhookDeliveries.js`
+- Audit classification: `enterprise/features/audit/actions.go` (webhook routes), `diff.go` (`webhook-targets` snapshot)
+- Spec: `features/Webhooks.md`; docs: `docs/site/docs/webhooks.md`
 
 ## Plugin Security Feature Specifics
 

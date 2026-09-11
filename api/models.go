@@ -3,6 +3,7 @@ package api
 import (
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 )
 
@@ -159,6 +160,9 @@ type LLMInput struct {
 			Metadata         map[string]interface{} `json:"metadata,omitempty"`
 			// Governed metadata (Enterprise). nil = untouched; {} = clear.
 			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+			// Failover waterfall. On PATCH an absent key keeps the stored
+			// value and an explicit null clears it.
+			Failover *models.LLMFailover `json:"failover,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -216,6 +220,7 @@ type LLMResponse struct {
 		DontLogBodies    bool                   `json:"dont_log_bodies"`
 		Plugins          []PluginResponse       `json:"plugins"`
 		Metadata         map[string]interface{} `json:"metadata,omitempty"`
+		Failover         *models.LLMFailover    `json:"failover,omitempty"`
 	} `json:"attributes"`
 }
 

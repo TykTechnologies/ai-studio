@@ -19,17 +19,17 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
-	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
+	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -128,7 +128,10 @@ type Proxy struct {
 	budgetService           services.BudgetServiceInterface
 	server                  *http.Server
 	llms                    map[string]*models.LLM
+	llmsByID       map[uint]*models.LLM // same entries as llms, keyed by id for failover rungs
 	datasources             map[string]*models.Datasource
+	// failoverToken authenticates the loopback failover marker (see failover.go).
+	failoverToken                string
 	mu                      sync.RWMutex
 	config                  *Config
 	credValidator              *CredentialValidator
@@ -250,6 +253,8 @@ func New(gatewayService services.ServiceInterface, budgetService services.Budget
 		gatewayService:      gatewayService,
 		budgetService:       budgetService,
 		llms:                make(map[string]*models.LLM),
+		llmsByID:            make(map[uint]*models.LLM),
+		failoverToken:       newFailoverToken(),
 		datasources:         make(map[string]*models.Datasource),
 		config:              cfg,
 		filters:             make([]*models.Filter, 0),
@@ -381,9 +386,11 @@ func (p *Proxy) loadResources() error {
 		return fmt.Errorf("failed to get datasources: %w", err)
 	}
 	newLLMs := make(map[string]*models.LLM)
+	newLLMsByID := make(map[uint]*models.LLM)
 	for i := range llms {
 		llm := llms[i]
 		newLLMs[slug.Make(llm.Name)] = &llm
+		newLLMsByID[llm.ID] = &llm
 	}
 	newDatasources := make(map[string]*models.Datasource)
 	for i := range datasources {
@@ -392,6 +399,7 @@ func (p *Proxy) loadResources() error {
 	}
 	p.mu.Lock()
 	p.llms = newLLMs
+	p.llmsByID = newLLMsByID
 	p.datasources = newDatasources
 	p.mu.Unlock()
 	return nil
@@ -407,7 +415,6 @@ func fixDoubleSlash(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
 
 // UnifiedRouterBasePath reports where the OpenRouter-style unified ingress is
 // mounted on this proxy's handler ("/v1" by default), or "" when it is disabled.
@@ -688,6 +695,11 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false)
 		return
 	}
+	// A failover rung arriving from the outer hop carries a trusted marker;
+	// keep it on the context so this attempt's analytics can say so.
+	if m, ok := p.parseFailoverMarker(r); ok {
+		r = r.WithContext(withFailoverMarker(r.Context(), m))
+	}
 
 	// Metrics: track in-flight requests and request duration. respStatus carries
 	// the status the caller ends up seeing so the duration observation can attach
@@ -779,6 +791,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		tracing.InjectOutgoing(req.Context(), req.Header)
 		// Clear the Auth header, some vendors don't use it for auth and return error if its present(e.g Google AI)
 		req.Header.Del("Authorization")
+		// The loopback failover marker is ours alone; never show it to a vendor.
+		stripFailoverHeaders(req.Header)
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
 			logger.Errorf("ERROR setting vendor auth header in director: %v", err)
 			// Cannot write http error from director. This needs robust handling or pre-flight check.
@@ -1380,6 +1394,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false)
 		return
 	}
+	// A failover rung arriving from the outer hop carries a trusted marker;
+	// keep it on the context so this attempt's analytics can say so.
+	if m, ok := p.parseFailoverMarker(r); ok {
+		r = r.WithContext(withFailoverMarker(r.Context(), m))
+	}
 
 	// Metrics: track in-flight requests and request duration. respStatus carries
 	// the status the caller ends up seeing so the duration observation can attach
@@ -1479,6 +1498,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	// Clear the Auth header, some vendors don't use it for auth and return error if its present(e.g Google AI)
 	r.Header.Del("Authorization")
 	upstreamReq.Header = r.Header.Clone()
+	// The loopback failover marker is ours alone; never show it to a vendor.
+	stripFailoverHeaders(upstreamReq.Header)
 	upstreamReq.Host = upstreamURL.Host
 	// Continue the trace into the upstream, as the non-streaming director does.
 	tracing.InjectOutgoing(upstreamReq.Context(), upstreamReq.Header)

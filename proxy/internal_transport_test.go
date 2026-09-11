@@ -71,8 +71,8 @@ func TestInternalRoutingTransport_PlainListenerKeepsDefaultTLSConfig(t *testing.
 // reused and file descriptors are not exhausted under load.
 func TestInternalRoutingClient_SharesConnectionPool(t *testing.T) {
 	p := &Proxy{config: &Config{Port: 8443, TLSEnabled: true}}
-	first := p.newInternalRoutingClient("Bearer a").Transport.(*InternalRoutingTransport)
-	second := p.newInternalRoutingClient("Bearer b").Transport.(*InternalRoutingTransport)
+	first := p.newInternalRoutingClient("Bearer a", nil).Transport.(*InternalRoutingTransport)
+	second := p.newInternalRoutingClient("Bearer b", nil).Transport.(*InternalRoutingTransport)
 	if first.underlying != second.underlying {
 		t.Fatal("each request built its own transport; the connection pool must be shared")
 	}

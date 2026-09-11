@@ -26,6 +26,7 @@ var (
 	toolCallsTotal   otelmetric.Int64Counter
 	policyBlockTotal      otelmetric.Int64Counter
 	complianceEventsTotal otelmetric.Int64Counter
+	failoverTotal         otelmetric.Int64Counter
 
 	// Histograms
 	requestDuration  otelmetric.Float64Histogram
@@ -97,6 +98,13 @@ func Init() http.Handler {
 	)
 	if err != nil {
 		panic("failed to create complianceEventsTotal counter: " + err.Error())
+	}
+
+	failoverTotal, err = meter.Int64Counter("aistudio_llm_failover_total",
+		otelmetric.WithDescription("LLM requests re-routed to a failover target"),
+	)
+	if err != nil {
+		panic("failed to create failoverTotal counter: " + err.Error())
 	}
 
 	// Register histograms
@@ -206,6 +214,22 @@ func RecordPolicyBlock(ctx context.Context, ruleName, blockType string) {
 		otelmetric.WithAttributes(
 			attribute.String("rule_name", ruleName),
 			attribute.String("block_type", blockType),
+		),
+	)
+}
+
+// RecordFailover counts one hop down an LLM's failover waterfall. reason is one
+// of a small fixed set (status_<code>, timeout, connection_error, driver_error)
+// so the label stays bounded.
+func RecordFailover(ctx context.Context, fromLLM, toLLM, reason string) {
+	if !initialized.Load() {
+		return
+	}
+	failoverTotal.Add(ctx, 1,
+		otelmetric.WithAttributes(
+			attribute.String("from_llm", fromLLM),
+			attribute.String("to_llm", toLLM),
+			attribute.String("reason", reason),
 		),
 	)
 }

@@ -37,6 +37,7 @@ message LLMConfig {
   repeated uint32 plugin_ids = 23;  // From llm_plugins join table
   bool dont_log_bodies = 24;        // When true, suppress request/response body logging
   string governed_metadata = 25;    // JSON object of gateway-visible governed metadata (Enterprise); empty when none
+  string failover = 26;             // JSON LLMFailover waterfall ({"targets":[{"llm_id":..,"model":".."}],"triggers":{..}}); empty when none
 }
 
 // AppConfig represents an application configuration with embedded relationships

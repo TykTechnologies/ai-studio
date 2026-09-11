@@ -300,6 +300,10 @@ message AnalyticsEvent {
   // Optional request/response data (controlled by include_request_response_data flag)
   string request_body = 26;       // Request body (if include_request_response_data = true)
   string response_body = 27;      // Response body (if include_request_response_data = true)
+
+  // LLM failover: set when this attempt was a rung of another LLM's waterfall.
+  uint32 failover_from_llm_id = 28; // Primary LLM the request failed over from (0 = primary attempt)
+  uint32 failover_attempt = 29;     // 1-based rung index (0 = primary attempt)
 }
 
 // Budget usage event for pulse batching

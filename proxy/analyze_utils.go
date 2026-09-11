@@ -52,6 +52,7 @@ func AnalyzeResponse(service services.ServiceInterface, llm *models.LLM, app *mo
 		l.RequestBody = ""
 		l.ResponseBody = ""
 	}
+	applyFailoverMarker(l, r.Context())
 
 	// Use WithoutCancel to preserve trace context without lifecycle coupling,
 	// since this function is called from goroutines after the HTTP response is sent.
@@ -89,6 +90,7 @@ func AnalyzeStreamingResponse(service services.ServiceInterface, llm *models.LLM
 		l.RequestBody = ""
 		l.ResponseBody = ""
 	}
+	applyFailoverMarker(l, r.Context())
 
 	// Use WithoutCancel to preserve trace context without lifecycle coupling,
 	// since this function is called from goroutines after the HTTP response is sent.

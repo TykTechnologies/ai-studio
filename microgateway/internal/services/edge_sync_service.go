@@ -274,6 +274,9 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 		if pbLLM.AllowedModels != "" {
 			llm.AllowedModels = datatypes.JSON(pbLLM.AllowedModels)
 		}
+		if pbLLM.Failover != "" {
+			llm.Failover = datatypes.JSON(pbLLM.Failover)
+		}
 		if pbLLM.AuthConfig != "" {
 			llm.AuthConfig = datatypes.JSON(pbLLM.AuthConfig)
 		}

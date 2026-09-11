@@ -114,6 +114,8 @@ graph TD
     style VP fill:#ffcc99,stroke:#333,stroke-width:2px
 ```
 
+On the OpenAI-compatible `/ai/{slug}/v1/chat/completions` hop, steps 2-13 run once per rung of the LLM's failover waterfall: if the primary's upstream fails with a triggering status, times out or cannot be reached, the same request is re-targeted at the next `(LLM, model)` rung before an error is returned to the caller (see **Failover Waterfalls** under Implementation Details).
+
 **3: Implementation Details**
 
 *   **`models.LLM` Structure:**
@@ -121,7 +123,8 @@ graph TD
     *   `APIKey`, `APIEndpoint`: References to secrets stored via **Secrets Management**.
     *   `Vendor`: Enum (`openai`, `anthropic`, etc.) used by `switches` to select the correct `LLMVendorProvider`.
     *   `DefaultModel`: Default sub-model if not specified in request.
-    *   `AllowedModels`: List of *regex patterns*. Checked by `LLMService.IsModelAllowed`. Empty list allows all.
+    *   `AllowedModels`: List of *regex patterns*. Checked by `LLMService.IsModelAllowed`. Empty list allows all. The matching rule itself lives in `pkg/modelmatch` so the proxy (request time), the LLM service (save time) and the failover validator agree.
+    *   `Failover`: Ordered waterfall of `{llm_id, model}` fallback rungs plus optional triggers (`models.LLMFailover`, JSON column via Scanner/Valuer, NULL when empty). See **Failover Waterfalls** below.
     *   `Active`: Boolean flag. Only active LLMs are loaded by the proxy during `loadResources`.
     *   `Filters`: Many-to-many relationship.
     *   `MonthlyBudget`, `BudgetStartDate`: Configuration for the **Budgeting** system.
@@ -142,6 +145,14 @@ graph TD
     *   `proxy.loadResources()` fetches active LLMs using `service.GetActiveLLMs()`.
     *   Configurations are stored in `proxy.llms` (a `map[string]*models.LLM`), keyed by slug.
     *   Access to `proxy.llms` is protected by `proxy.mu` (RWMutex). `GetLLM` uses `RLock`. `loadResources` (called by `Reload`) uses `Lock`.
+*   **Failover Waterfalls (`proxy/failover.go`, `services/llm_failover_validate.go`):**
+    *   An LLM may carry `Failover.Targets`, an ordered list of `(llm_id, model)` rungs, and `Failover.Triggers` (`status_codes`, default 408/429/500/502/503/504; `on_timeout`; `on_connection_error`; `attempt_timeout_seconds`). Only 5xx, 408 and 429 may trigger failover: other 4xx are caller or config errors every rung would repeat.
+    *   **Save-time validation** (`Service.ValidateLLMFailover`, run by `CreateLLM`/`UpdateLLM`): each rung's model must satisfy the target's `AllowedModels`; the target must exist, be active, not be the primary, have a privacy score at least the primary's, and be in the primary's namespace or global; no duplicates; at most 10 rungs. Failures are `*LLMFailoverValidationError{Index, Field, Detail}` which the API returns as 400 naming the rung. `DeleteLLM` refuses (API 409) while another LLM's waterfall references the target.
+    *   **Runtime** lives on the outer `/ai/{slug}/v1/chat/completions` hop (also reached by the unified `/v1/chat/completions` router and the Enterprise model router), the only hop holding a vendor-neutral request. `planFailover` builds `[primary, rungs...]`, re-checking each rung at request time (loaded and active, model still allowed, advisory budget check) and skipping unusable rungs with a warning. Each attempt re-targets the request at the rung's LLM and model via the loopback `/llm/call/{slug}` hop, so auth, budget, filters, vendor auth and analytics run per attempt as for a plain request. Bedrock rungs run inline through the AWS SDK with the same open-then-write split.
+    *   `shouldFailover` moves to the next rung on a triggering status, on the attempt deadline (`attempt_timeout_seconds`, default the LLM timeout), on connection errors, or when the rung's driver cannot be built; never on `context.Canceled`. Streaming retries only while no frame has been written; after the first frame the existing in-band error behaviour applies.
+    *   **Inherited access:** the app was granted the primary, not the rung. The loopback request carries `X-Tyk-Failover-Origin/Attempt/Token` (a per-process random token); `CheckAPICredential` grants access only when the token matches, the app is allowed the origin LLM and the origin's waterfall lists the target. The marker is stripped before any vendor egress and is never honoured from outside.
+    *   **Observability:** the client gets `X-Tyk-Served-LLM`, `X-Tyk-Served-Model` and `X-Tyk-Failover: true`; the response `model` echoes the model that answered. Every attempt writes its own `ProxyLog`, fallback rows carrying `FailoverFromLLMID`/`FailoverAttempt` (also carried edge→hub in `AnalyticsEvent.failover_from_llm_id/failover_attempt`); request counts should filter `failover_attempt = 0`. Metric `aistudio_llm_failover_total{from_llm,to_llm,reason}`; span attributes `aistudio.failover.*`.
+    *   **Edge sync:** `LLMConfig.failover` (JSON) rides the configuration snapshot; the microgateway stores it on `database.LLM.Failover` and `GatewayServiceAdapter` hands it to the shared proxy as `models.LLM.Failover`, so edges fail over identically. Out of scope: pass-through `/llm/call`, the Anthropic-Bedrock bridge, the deprecated `/v1/completions`, and chat sessions.
 *   **API Endpoints:** Standard RESTful endpoints under `/api/v1/` for `llms` and `llm-settings`, plus search and filtering options. Public endpoints exist for auth and potentially portal features. The root and other non-API routes serve the Admin UI.
 *   **Admin UI (`ui/admin-frontend`):** React application built using `npm`. Served statically by the Go API server from the embedded filesystem (`ui/admin-frontend/build`). Communicates with `/api/v1/*` endpoints. Includes components for managing various platform aspects.
 *   **Credential Handling:** Uses the `secrets` package. `LLMService` resolves secrets (`secrets.GetValue`) for internal use (proxy) but preserves references for API display.
