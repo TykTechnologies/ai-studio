@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
 // Model conversion functions for compatibility with midsommar models
@@ -27,6 +28,7 @@ type MidsommarLLM struct {
 	RateLimit     int                    `json:"rate_limit_rpm"`
 	Metadata      map[string]interface{} `json:"metadata,omitempty"`
 	AllowedModels []string               `json:"allowed_models,omitempty"`
+	Failover      *models.LLMFailover    `json:"failover,omitempty"`
 }
 
 type MidsommarCredential struct {
@@ -66,6 +68,14 @@ func ConvertToMidsommarLLM(dbLLM database.LLM) MidsommarLLM {
 		json.Unmarshal(dbLLM.AllowedModels, &allowedModels)
 	}
 
+	var failover *models.LLMFailover
+	if len(dbLLM.Failover) > 0 {
+		var f models.LLMFailover
+		if err := json.Unmarshal(dbLLM.Failover, &f); err == nil && f.Enabled() {
+			failover = &f
+		}
+	}
+
 	return MidsommarLLM{
 		ID:            dbLLM.ID,
 		Name:          dbLLM.Name,
@@ -81,6 +91,7 @@ func ConvertToMidsommarLLM(dbLLM database.LLM) MidsommarLLM {
 		RateLimit:     dbLLM.RateLimitRPM,
 		Metadata:      metadata,
 		AllowedModels: allowedModels,
+		Failover:      failover,
 	}
 }
 
@@ -160,6 +171,11 @@ func ConvertFromMidsommarLLM(llm MidsommarLLM) database.LLM {
 		allowedModels, _ = json.Marshal(llm.AllowedModels)
 	}
 
+	var failover []byte
+	if llm.Failover != nil && llm.Failover.Enabled() {
+		failover, _ = json.Marshal(llm.Failover)
+	}
+
 	return database.LLM{
 		Name:           llm.Name,
 		Slug:           llm.Slug,
@@ -174,6 +190,7 @@ func ConvertFromMidsommarLLM(llm MidsommarLLM) database.LLM {
 		RateLimitRPM:   llm.RateLimit,
 		Metadata:       metadata,
 		AllowedModels:  allowedModels,
+		Failover:       failover,
 	}
 }
 

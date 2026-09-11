@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -69,6 +71,7 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.Namespace,
 			input.Data.Attributes.DontLogBodies,
 			models.JSONMap(input.Data.Attributes.Metadata),
+			input.Data.Attributes.Failover,
 		)
 	} else {
 		llm, err = a.service.CreateLLM(
@@ -88,15 +91,11 @@ func (a *API) createLLM(c *gin.Context) {
 			parseBudgetStartDate(input.Data.Attributes.BudgetStartDate),
 			input.Data.Attributes.DontLogBodies,
 			models.JSONMap(input.Data.Attributes.Metadata),
+			input.Data.Attributes.Failover,
 		)
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		respondLLMServiceError(c, err)
 		return
 	}
 
@@ -242,14 +241,10 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.Namespace,
 		input.Data.Attributes.DontLogBodies,
 		models.JSONMap(input.Data.Attributes.Metadata),
+		input.Data.Attributes.Failover,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		respondLLMServiceError(c, err)
 		return
 	}
 
@@ -265,6 +260,7 @@ func (a *API) updateLLM(c *gin.Context) {
 			thisLLM.DefaultModel != input.Data.Attributes.DefaultModel ||
 			!sliceEqual(thisLLM.AllowedModels, input.Data.Attributes.AllowedModels) ||
 			len(thisLLM.Filters) != len(filters) ||
+			failoverChanged(thisLLM.Failover, input.Data.Attributes.Failover) ||
 			metadataChanged)
 
 		if activeStateChanged || (input.Data.Attributes.Active && hasChanges) {
@@ -285,6 +281,48 @@ func parseBudgetStartDate(dateStr *string) *time.Time {
 		return nil
 	}
 	return &t
+}
+
+// failoverChanged compares the stored waterfall with the incoming pointer,
+// where nil means "no waterfall" rather than "unchanged" (PATCH has already
+// restored an absent key by this point).
+func failoverChanged(existing models.LLMFailover, incoming *models.LLMFailover) bool {
+	next := models.LLMFailover{}
+	if incoming != nil {
+		next = *incoming
+	}
+	return !reflect.DeepEqual(existing, next)
+}
+
+// respondLLMServiceError maps a service failure to the right status: a
+// waterfall that fails validation is the caller's 400, naming the rung;
+// anything else stays a 500.
+func respondLLMServiceError(c *gin.Context, err error) {
+	var verr *services.LLMFailoverValidationError
+	if errors.As(err, &verr) {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+	c.JSON(http.StatusInternalServerError, ErrorResponse{
+		Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Internal Server Error", Detail: err.Error()}},
+	})
+}
+
+// failoverForResponse hides an empty waterfall from API output so LLMs that
+// never had one keep the response shape they had before the field existed.
+func failoverForResponse(f models.LLMFailover) *models.LLMFailover {
+	if !f.Enabled() {
+		return nil
+	}
+	return &f
 }
 
 func sliceEqual(a, b []string) bool {
@@ -324,6 +362,18 @@ func (a *API) deleteLLM(c *gin.Context) {
 
 	err = a.service.DeleteLLM(uint(id))
 	if err != nil {
+		// Still a failover target of another LLM: the admin has to unlink it
+		// first, which is a conflict rather than a server fault.
+		var verr *services.LLMFailoverValidationError
+		if errors.As(err, &verr) {
+			c.JSON(http.StatusConflict, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Conflict", Detail: err.Error()}},
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -602,6 +652,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			DontLogBodies    bool                   `json:"dont_log_bodies"`
 			Plugins          []PluginResponse       `json:"plugins"`
 			Metadata         map[string]interface{} `json:"metadata,omitempty"`
+			Failover         *models.LLMFailover    `json:"failover,omitempty"`
 		}{
 			Name:             llm.Name,
 			APIKey:           services.REDACTED_VALUE,
@@ -624,6 +675,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			DontLogBodies:    llm.DontLogBodies,
 			Plugins:          plugins,
 			Metadata:         redactMetadataSecrets(llm.Metadata),
+			Failover:         failoverForResponse(llm.Failover),
 		},
 	}
 }
@@ -722,6 +774,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				DontLogBodies    bool                   `json:"dont_log_bodies"`
 				Plugins          []PluginResponse       `json:"plugins"`
 				Metadata         map[string]interface{} `json:"metadata,omitempty"`
+				Failover         *models.LLMFailover    `json:"failover,omitempty"`
 			}{
 				Name:             llm.Name,
 				APIKey:           services.REDACTED_VALUE,
@@ -744,6 +797,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				DontLogBodies:    llm.DontLogBodies,
 				Plugins:          plugins,
 				Metadata:         redactMetadataSecrets(llm.Metadata),
+				Failover:         failoverForResponse(llm.Failover),
 			},
 		}
 	}

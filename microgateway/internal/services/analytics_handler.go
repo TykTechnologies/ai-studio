@@ -7,13 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/analytics"
-	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	internalPlugins "github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -519,6 +519,13 @@ func (h *MicrogatewaAnalyticsHandler) RecordProxyLog(_ context.Context, proxyLog
 	if proxyLog.LLMID != 0 {
 		llmID := proxyLog.LLMID
 		event.LLMID = &llmID
+	}
+	// Failover marker: carried through to the pulse so the hub's ProxyLog can
+	// say which primary this rung was failing over from.
+	if proxyLog.FailoverFromLLMID != nil {
+		from := *proxyLog.FailoverFromLLMID
+		event.FailoverFromLLMID = &from
+		event.FailoverAttempt = proxyLog.FailoverAttempt
 	}
 
 	// Check for router metadata (if request came through model router)

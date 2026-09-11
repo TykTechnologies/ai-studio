@@ -69,6 +69,15 @@ func mergeLLMPatch(input *LLMInput, existing *models.LLM, present map[string]jso
 	if !has("dont_log_bodies") {
 		attrs.DontLogBodies = existing.DontLogBodies
 	}
+	if !has("failover") {
+		// Absent keeps the stored waterfall; an explicit null (present, nil)
+		// clears it. A stored empty waterfall stays nil so it is not "restored"
+		// as an empty struct that reads as a change.
+		if existing.Failover.Enabled() {
+			f := existing.Failover
+			attrs.Failover = &f
+		}
+	}
 	if !has("monthly_budget") {
 		attrs.MonthlyBudget = existing.MonthlyBudget
 	}

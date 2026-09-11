@@ -572,10 +572,17 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 			responseBody = eventMetadata.ResponseBody
 		}
 
+		var failoverFrom uint32
+		if event.FailoverFromLLMID != nil {
+			failoverFrom = uint32(*event.FailoverFromLLMID)
+		}
+
 		analyticsEvents = append(analyticsEvents, &pb.AnalyticsEvent{
 			RequestId:               event.RequestID,
 			AppId:                   uint32(event.AppID),
 			LlmId:                   llmID,
+			FailoverFromLlmId: failoverFrom,
+			FailoverAttempt:   uint32(event.FailoverAttempt),
 			UserId:                  uint32(event.UserID),
 			Endpoint:                event.Endpoint,
 			Method:                  event.Method,

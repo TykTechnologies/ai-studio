@@ -20,6 +20,9 @@ import (
 type InternalRoutingTransport struct {
 	underlying   http.RoundTripper
 	originalAuth string // From the /ai/ request's Authorization header
+	// extra headers to add to every loopback request; the failover marker
+	// rides here so the inner hop can grant inherited access to a fallback.
+	extra http.Header
 }
 
 // NewInternalRoutingTransport creates a transport that passes through the original
@@ -79,12 +82,15 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 	// Strip SDK-set vendor auth headers
 	// The SDK may set these, but /llm/ will set the correct vendor auth
 	// from stored LLM credentials via vendor.ProxySetAuthHeader()
-	req.Header.Del("x-api-key")    // Anthropic
+	req.Header.Del("x-api-key")     // Anthropic
 	req.Header.Del("Authorization") // OpenAI/others (SDK may set this)
 
 	// Pass through the original client auth so /llm/ can authenticate
 	if t.originalAuth != "" {
 		req.Header.Set("Authorization", t.originalAuth)
+	}
+	for k, v := range t.extra {
+		req.Header[k] = v
 	}
 
 	return t.underlying.RoundTrip(req)

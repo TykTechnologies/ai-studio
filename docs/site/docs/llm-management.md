@@ -45,6 +45,37 @@ Administrators can configure connections to different LLM providers through the 
 
 7.  **Save:** Save the configuration.
 
+## Failover
+
+Each LLM provider can carry a **failover waterfall**: an ordered list of fallback providers, each with the model to ask it for. When the provider's upstream fails, the gateway retries the same request against each fallback in turn before returning an error, so an outage at one vendor does not become an outage for your apps.
+
+Configure it in the provider's edit form under **Failover**:
+
+1. Click **Add fallback** and pick another LLM provider.
+2. Choose the model to use on that provider. It must be one of that provider's allowed models (the picker offers them; an empty allowed-models list means any model).
+3. Order the rungs with the arrows. The first is tried first.
+
+Rules enforced when you save:
+
+- A fallback must be active, must not be the provider itself, and cannot be listed twice with the same model.
+- A fallback must have a privacy level at least as high as the provider, and must be in the same namespace or global.
+- At most 10 fallbacks per provider.
+- A provider cannot be deleted while another provider's waterfall points at it.
+
+**Access is inherited.** Apps that are allowed to use a provider are automatically routed to its fallbacks when it fails, even if they were never granted those fallbacks directly. Budgets are still enforced on the fallback provider. The edit form shows this note beside the waterfall.
+
+**When failover triggers.** By default a request moves to the next rung when the upstream answers 408, 429, 500, 502, 503 or 504, when the attempt times out, or when the upstream cannot be reached. Under **Failover Triggers (advanced)** you can narrow the status list (only 5xx, 408 and 429 are accepted: other 4xx responses are caller or configuration errors that every fallback would repeat), switch off the timeout and connection-error triggers, and set a per-attempt timeout in seconds so a hung primary does not consume the whole request budget.
+
+**What the caller sees.** The response carries `X-Tyk-Served-LLM` and `X-Tyk-Served-Model`, plus `X-Tyk-Failover: true` when a fallback answered. The `model` field in the body is the model that actually answered. If every rung fails, the error from the last rung is returned.
+
+**Scope and limits.**
+
+- Failover applies to the OpenAI-compatible chat endpoints: `/ai/{provider}/v1/chat/completions`, the unified `/v1/chat/completions` router and the Enterprise model router. The vendor-native pass-through endpoints, the Anthropic Messages bridge and chat sessions are not covered.
+- A streamed response can only fail over before its first token has been sent. After that the request is committed to the provider that started streaming.
+- Only the provider's own waterfall is consulted; a fallback's waterfall is not followed.
+- Every attempt is recorded in the proxy logs, so a request that failed over leaves one failed row for the provider and one row for the fallback that served it; fallback rows are marked with the provider they failed over from. The `aistudio_llm_failover_total` metric counts each hop by source, target and reason.
+- Edge gateways receive the waterfall with their configuration and fail over the same way.
+
 ## Model Pricing
 
 To enable cost tracking in the Analytics system, you need to define the price per token for each model.

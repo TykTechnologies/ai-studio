@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
@@ -72,7 +73,8 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 	shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time, dontLogBodies bool, metadata models.JSONMap) (*models.LLM, error) {
+	budgetStartDate *time.Time, dontLogBodies bool, metadata models.JSONMap,
+	failover *models.LLMFailover) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -91,6 +93,12 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 		Namespace:        "", // Default to global namespace
 		DontLogBodies:    dontLogBodies,
 		Metadata:         metadata,
+	}
+	if failover != nil {
+		llm.Failover = *failover
+	}
+	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
+		return nil, err
 	}
 
 	// Execute "before_create" hooks
@@ -162,7 +170,8 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 	shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time, namespace string, dontLogBodies bool, metadata models.JSONMap) (*models.LLM, error) {
+	budgetStartDate *time.Time, namespace string, dontLogBodies bool, metadata models.JSONMap,
+	failover *models.LLMFailover) (*models.LLM, error) {
 	llm := &models.LLM{
 		Name:             name,
 		APIKey:           apiKey,
@@ -181,6 +190,12 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 		Namespace:        namespace,
 		DontLogBodies:    dontLogBodies,
 		Metadata:         metadata,
+	}
+	if failover != nil {
+		llm.Failover = *failover
+	}
+	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
+		return nil, err
 	}
 
 	// Execute "before_create" hooks
@@ -251,7 +266,8 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	privacyScore int, shortDescription, longDescription, logoURL string,
 	vendor models.Vendor, active bool, filters []*models.Filter,
 	defaultModel string, allowedModels []string, monthlyBudget *float64,
-	budgetStartDate *time.Time, namespace string, dontLogBodies bool, metadata models.JSONMap) (*models.LLM, error) {
+	budgetStartDate *time.Time, namespace string, dontLogBodies bool, metadata models.JSONMap,
+	failover *models.LLMFailover) (*models.LLM, error) {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return nil, err
@@ -284,6 +300,16 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 	llm.DontLogBodies = dontLogBodies
 	if metadata != nil {
 		llm.Metadata = mergeMetadataPreservingRedacted(llm.Metadata, metadata)
+	}
+	// nil clears the waterfall. PATCH callers restore the stored value into
+	// the pointer when the key is absent, so nil here always means an
+	// explicit null.
+	llm.Failover = models.LLMFailover{}
+	if failover != nil {
+		llm.Failover = *failover
+	}
+	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
+		return nil, err
 	}
 
 	// Execute "before_update" hooks
@@ -411,21 +437,7 @@ func (s *Service) IsModelAllowed(id uint, modelName string) (bool, error) {
 		return false, err
 	}
 
-	if len(llm.AllowedModels) == 0 {
-		return true, nil // Empty list means all models are allowed
-	}
-
-	for _, pattern := range llm.AllowedModels {
-		matched, err := regexp.MatchString(pattern, modelName)
-		if err != nil {
-			return false, fmt.Errorf("invalid pattern '%s': %w", pattern, err)
-		}
-		if matched {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return modelmatch.AllowedStrict(llm.AllowedModels, modelName)
 }
 
 // UpdateLLMMetadata updates only the metadata field of an LLM.
@@ -439,6 +451,16 @@ func (s *Service) DeleteLLM(id uint) error {
 	llm, err := s.GetLLMByID(id)
 	if err != nil {
 		return err
+	}
+
+	// A deleted LLM would leave dangling rungs in other waterfalls; the proxy
+	// skips those at request time, but the admin should fix the config rather
+	// than discover a silent hole in their failover.
+	if referrers, err := s.LLMsReferencingAsFailoverTarget(id); err != nil {
+		return err
+	} else if len(referrers) > 0 {
+		return &LLMFailoverValidationError{Index: -1, Field: "targets",
+			Detail: fmt.Sprintf("LLM %q is a failover target of: %v; remove it from those waterfalls first", llm.Name, referrers)}
 	}
 
 	// Execute "before_delete" hooks

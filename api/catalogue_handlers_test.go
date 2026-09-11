@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
+
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 )
@@ -105,6 +107,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				DontLogBodies    bool                   `json:"dont_log_bodies"`
 				Metadata         map[string]interface{} `json:"metadata,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				Failover         *models.LLMFailover     `json:"failover,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "llms",
@@ -127,6 +130,7 @@ func TestCatalogueEndpoints(t *testing.T) {
 				DontLogBodies    bool                   `json:"dont_log_bodies"`
 				Metadata         map[string]interface{} `json:"metadata,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				Failover         *models.LLMFailover     `json:"failover,omitempty"`
 			}{
 				Name:             "Test LLM",
 				APIKey:           "test-api-key",

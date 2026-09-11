@@ -25,7 +25,7 @@ type LLM struct {
 	MonthlyBudget   *float64   `json:"monthly_budget" gorm:"column:monthly_budget"`
 	BudgetStartDate *time.Time `json:"budget_start_date" gorm:"column:budget_start_date"`
 	// Hub-and-Spoke Configuration
-	Namespace       string     `json:"namespace" gorm:"default:'';index:idx_llm_namespace"`
+	Namespace string `json:"namespace" gorm:"default:'';index:idx_llm_namespace"`
 	// Body logging control - when true, request/response bodies are NOT stored in proxy logs
 	DontLogBodies bool `json:"dont_log_bodies" gorm:"default:false"`
 
@@ -35,6 +35,12 @@ type LLM struct {
 
 	// Plugin-stored metadata
 	Metadata JSONMap `json:"metadata" gorm:"type:json"`
+
+	// Failover is the ordered waterfall of (LLM, model) pairs the proxy tries
+	// when this LLM's upstream fails. Empty means no failover. Stored via
+	// Scanner/Valuer rather than serializer:json because the row is an audit
+	// snapshot target and serializer-tagged fields break that map scan.
+	Failover LLMFailover `json:"failover" gorm:"type:json"`
 }
 
 const (

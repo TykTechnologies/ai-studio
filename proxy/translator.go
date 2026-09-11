@@ -9,14 +9,16 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/gosimple/slug"
 	"github.com/rs/zerolog/log"
 	"github.com/tmc/langchaingo/llms"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // getInternalLLMBaseURL returns the internal /llm/call/ URL for SDK endpoint hijacking.
@@ -71,9 +73,84 @@ func (p *Proxy) sharedLoopbackTransport() *http.Transport {
 // newInternalRoutingClient builds the HTTP client the SDK uses for the loopback
 // hop to /llm/call/{slug}: it carries the caller's Authorization header across
 // and, when the listener serves TLS, speaks HTTPS to it. Only the thin
-// per-request wrapper is allocated here; the connection pool is shared.
-func (p *Proxy) newInternalRoutingClient(originalAuth string) *http.Client {
-	return &http.Client{Transport: newInternalRoutingTransport(p.sharedLoopbackTransport(), originalAuth)}
+// per-request wrapper is allocated here; the connection pool is shared. extra
+// headers (the failover marker) are added to every loopback request.
+func (p *Proxy) newInternalRoutingClient(originalAuth string, extra http.Header) *http.Client {
+	t := newInternalRoutingTransport(p.sharedLoopbackTransport(), originalAuth)
+	t.extra = extra
+	return &http.Client{Transport: t}
+}
+
+// runDriverAttempt performs one rung of the waterfall: it builds the loopback
+// driver for a's LLM and asks it for a's model. The request is copied so the
+// caller's req.Model is never mutated (the handler echoes it and the comment
+// on ToLangchainOptions explains why that matters). streamingFunc is nil on
+// the buffered path.
+func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAttempt, req *ChatCompletionRequest,
+	streamingFunc func(context.Context, []byte) error) (*llms.ContentResponse, error) {
+	// Create internal routing HTTP client
+	// This routes SDK requests through /llm/call/ for plugin hook execution
+	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"), p.failoverHeaders(a))
+
+	// Create a modified LLM config with internal endpoint
+	// The SDK will route to /llm/call/{slug} instead of the external vendor
+	internalConf := *a.conf // Copy config
+	internalConf.APIEndpoint = p.getInternalLLMBaseURL(a.slug, a.conf.Vendor)
+	// Set a dummy API key to satisfy SDK validation (actual auth handled by /llm/)
+	// The InternalRoutingTransport strips SDK-set auth headers and passes client auth instead
+	internalConf.APIKey = "internal-routing-dummy-key"
+
+	// DEBUG: Log the internal routing setup
+	log.Debug().
+		Str("llmSlug", a.slug).
+		Str("internalEndpoint", internalConf.APIEndpoint).
+		Str("vendor", string(internalConf.Vendor)).
+		Str("model", a.model).
+		Int("attempt", a.index).
+		Int("messageCount", len(req.Messages)).
+		Msg("CreateChatCompletionHandler internal routing")
+
+	if streamingFunc == nil {
+		streamingFunc = func(ctx context.Context, chunk []byte) error { return nil }
+	}
+	// Create LLM driver with internal routing HTTP client
+	llm, err := switches.FetchDriver(&internalConf, nil, nil, streamingFunc, switches.WithHTTPClient(internalClient))
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create LLM client: %v", errDriverSetup, err)
+	}
+
+	attemptReq := *req // shallow copy: only Model differs per rung
+	attemptReq.Model = a.model
+	opts := attemptReq.ToLangchainOptions(&internalConf)
+	if streamingFunc != nil {
+		opts = append(opts, llms.WithStreamingFunc(streamingFunc))
+	}
+	messages := attemptReq.GetMessages()
+
+	// SDK call routes through /llm/call/ which executes all plugin hooks
+	// Auth, plugins, budget, analytics all happen on the /llm/call/ hop
+	return llm.GenerateContent(ctx, messages, opts...)
+}
+
+// noteFailover records one hop down the waterfall: a warning naming both
+// rungs and the reason, the failover counter, and span attributes.
+func (p *Proxy) noteFailover(r *http.Request, from, to llmAttempt, reason string, fail attemptFailure) {
+	log.Warn().
+		Str("from_llm", from.slug).
+		Str("from_model", from.model).
+		Str("to_llm", to.slug).
+		Str("to_model", to.model).
+		Int("attempt", to.index).
+		Str("reason", reason).
+		Int("status", fail.status).
+		Err(fail.err).
+		Msg("LLM failover")
+	metrics.RecordFailover(r.Context(), from.slug, to.slug, reason)
+	trace.SpanFromContext(r.Context()).SetAttributes(
+		attribute.String("aistudio.failover.reason", reason),
+		attribute.String("aistudio.failover.to", to.slug),
+		attribute.Int("aistudio.failover.attempt", to.index),
+	)
 }
 
 // Handlers
@@ -181,15 +258,9 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Bedrock uses direct AWS SDK calls (no internal routing)
-	if conf.Vendor == models.BEDROCK {
-		if req.Stream != nil && *req.Stream {
-			p.handleBedrockChatCompletionStream(w, r, conf, &req, reqBody)
-		} else {
-			p.handleBedrockChatCompletion(w, r, conf, &req, reqBody)
-		}
-		return
-	}
+	// Bedrock uses direct AWS SDK calls (no internal routing); each rung of
+	// the waterfall decides per attempt below, so a Bedrock primary can fall
+	// over to an OpenAI-shaped LLM and vice versa.
 
 	// Handle streaming if requested. Tools no longer divert to the buffered
 	// path: a client that asked for a stream and got Content-Type
@@ -199,62 +270,75 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Create internal routing HTTP client
-	// This routes SDK requests through /llm/call/ for plugin hook execution
-	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"))
+	// Walk the failover waterfall: the primary first, then each rung in turn
+	// while the failure is one the primary's triggers say to fail over on.
+	// With no waterfall this is exactly one attempt, as before.
+	plan := p.planFailover(conf, req.Model, r)
+	overall, cancelAll := context.WithTimeout(context.Background(), p.config.llmTimeout())
+	defer cancelAll()
 
-	// Create a modified LLM config with internal endpoint
-	// The SDK will route to /llm/call/{slug} instead of the external vendor
-	llmSlug := slug.Make(conf.Name)
-	internalConf := *conf // Copy config
-	internalConf.APIEndpoint = p.getInternalLLMBaseURL(llmSlug, conf.Vendor)
-	// Set a dummy API key to satisfy SDK validation (actual auth handled by /llm/)
-	// The InternalRoutingTransport strips SDK-set auth headers and passes client auth instead
-	internalConf.APIKey = "internal-routing-dummy-key"
-
-	// DEBUG: Log the internal routing setup
-	log.Debug().
-		Str("llmSlug", llmSlug).
-		Str("internalEndpoint", internalConf.APIEndpoint).
-		Str("vendor", string(internalConf.Vendor)).
-		Int("messageCount", len(req.Messages)).
-		Msg("CreateChatCompletionHandler internal routing")
-
-	// Create LLM driver with internal routing HTTP client
-	llm, err := switches.FetchDriver(&internalConf, nil, nil, func(ctx context.Context, chunk []byte) error { return nil }, switches.WithHTTPClient(internalClient))
-	if err != nil {
-		respondWithOAIError(w, http.StatusInternalServerError, "Failed to create LLM client", err, false)
-		return
+	var (
+		resp     *llms.ContentResponse
+		respBody []byte // set directly by a Bedrock rung, which builds its own response
+		served   llmAttempt
+		last     attemptFailure
+	)
+	for i, a := range plan.attempts {
+		actx, cancel := context.WithTimeout(overall, plan.attemptTimeout)
+		if a.conf.Vendor == models.BEDROCK {
+			var fail attemptFailure
+			respBody, fail = p.bedrockChatCompletionAttempt(actx, requestForAttempt(r, a), a, &req, reqBody)
+			cancel()
+			if fail.err == nil {
+				served = a
+				break
+			}
+			last = fail
+		} else {
+			var err error
+			resp, err = p.runDriverAttempt(actx, r, a, &req, nil)
+			if err == nil {
+				cancel()
+				served = a
+				break
+			}
+			last = classifyDriverError(err, actx) // before cancel: the deadline is what we ask about
+			cancel()
+		}
+		if i == plan.last() || overall.Err() != nil {
+			break
+		}
+		ok, reason := shouldFailover(last, plan.triggers)
+		if !ok {
+			break
+		}
+		p.noteFailover(r, a, plan.attempts[i+1], reason, last)
 	}
-
-	ctx := context.Background()
-	opts := req.ToLangchainOptions(&internalConf)
-	messages := req.GetMessages()
-
-	// SDK call routes through /llm/call/ which executes all plugin hooks
-	// Auth, plugins, budget, analytics all happen on the /llm/call/ hop
-	resp, err := llm.GenerateContent(ctx, messages, opts...)
-	if err != nil {
+	if resp == nil && respBody == nil {
 		// Surface the vendor's own status. An unknown model is a 404 upstream;
 		// reporting it as our 500 tells the caller to retry a request that can
 		// never succeed, and hides a client error as a server one.
-		status, _ := upstreamStatusFromError(err, http.StatusBadGateway)
-		respondWithOAIError(w, status, "failed to generate content", err, false)
+		respondWithOAIError(w, last.status, "failed to generate content", last.err, false)
 		return
 	}
+	setServedHeaders(w, served)
 
-	// Extract token usage from ContentResponse
-	usage := extractTokenUsageFromContentResponse(resp, conf.Vendor, req.CompletionCount())
+	if respBody == nil {
+		// Extract token usage from ContentResponse
+		usage := extractTokenUsageFromContentResponse(resp, served.conf.Vendor, req.CompletionCount())
 
-	// Create response with usage field populated
-	response := NewChatCompletionResponse(resp, req.Model, req.CompletionCount())
-	response.Usage = usage
+		// Create response with usage field populated. The model echoed is the
+		// one that answered: after a failover that is the rung's model, which
+		// is what the client needs to know.
+		response := NewChatCompletionResponse(resp, served.model, req.CompletionCount())
+		response.Usage = usage
 
-	// Marshal response
-	respBody, err := json.Marshal(response)
-	if err != nil {
-		respondWithOAIError(w, http.StatusInternalServerError, "Failed to marshal response", err, false)
-		return
+		// Marshal response
+		respBody, err = json.Marshal(response)
+		if err != nil {
+			respondWithOAIError(w, http.StatusInternalServerError, "Failed to marshal response", err, false)
+			return
+		}
 	}
 
 	// Send response to client
@@ -429,6 +513,12 @@ func (p *Proxy) handleChatCompletionStream(
 	completionID := "chatcmpl-" + uuid.New().String()
 	created := time.Now().Unix()
 	framesSent := 0
+	// servedModel is echoed on every chunk. It follows the attempt in flight,
+	// so after a failover the client sees the model that actually answered.
+	servedModel := req.Model
+	// attemptGen guards against a frame from an abandoned attempt arriving
+	// after the loop has moved on to the next rung.
+	attemptGen := 0
 
 	newChunk := func(delta ChatCompletionDelta) ChatCompletionChunk {
 		// delta.role belongs on the first frame and nowhere else: clients that
@@ -440,7 +530,7 @@ func (p *Proxy) handleChatCompletionStream(
 			ID:      completionID,
 			Object:  "chat.completion.chunk",
 			Created: created,
-			Model:   req.Model,
+			Model:   servedModel,
 			Choices: []ChatCompletionChunkChoice{{
 				Index:        0,
 				Delta:        delta,
@@ -460,44 +550,74 @@ func (p *Proxy) handleChatCompletionStream(
 		return nil
 	}
 
-	// Create streaming callback that formats chunks as OpenAI SSE events
-	streamingFunc := func(ctx context.Context, chunk []byte) error {
-		return send(newChunk(ChatCompletionDelta{Content: string(chunk)}))
+	// Walk the failover waterfall. A rung can only be retried while nothing
+	// has been written: once the first frame is out the response is committed
+	// to this attempt, and a later failure is reported in-band as before.
+	plan := p.planFailover(conf, req.Model, r)
+	overall, cancelAll := context.WithTimeout(context.Background(), p.config.llmTimeout())
+	defer cancelAll()
+
+	var (
+		resp   *llms.ContentResponse
+		served llmAttempt
+		last   attemptFailure
+	)
+	for i, a := range plan.attempts {
+		gen := i
+		attemptGen, servedModel = gen, a.model
+		setServedHeaders(w, a) // header map is still open: nothing written yet
+
+		// Create streaming callback that formats chunks as OpenAI SSE events
+		streamingFunc := func(ctx context.Context, chunk []byte) error {
+			if ctx.Err() != nil || attemptGen != gen {
+				return ctx.Err()
+			}
+			return send(newChunk(ChatCompletionDelta{Content: string(chunk)}))
+		}
+
+		if a.conf.Vendor == models.BEDROCK {
+			// A Bedrock rung pumps its own stream: once it opens, the response
+			// is committed to it and it writes everything through [DONE].
+			opened, fail := p.bedrockStreamAttempt(w, flusher, requestForAttempt(r, a), a, req, reqBody, completionID, created)
+			if opened {
+				return
+			}
+			last = fail
+			if i == plan.last() || overall.Err() != nil {
+				break
+			}
+			ok, reason := shouldFailover(last, plan.triggers)
+			if !ok {
+				break
+			}
+			p.noteFailover(r, a, plan.attempts[i+1], reason, last)
+			continue
+		}
+
+		actx, cancel := context.WithTimeout(overall, plan.attemptTimeout)
+		var err error
+		resp, err = p.runDriverAttempt(actx, r, a, req, streamingFunc)
+		if err == nil {
+			cancel()
+			served = a
+			break
+		}
+		last = classifyDriverError(err, actx) // before cancel: the deadline is what we ask about
+		cancel()
+		if framesSent > 0 || i == plan.last() || overall.Err() != nil {
+			break
+		}
+		ok, reason := shouldFailover(last, plan.triggers)
+		if !ok {
+			break
+		}
+		p.noteFailover(r, a, plan.attempts[i+1], reason, last)
 	}
-
-	// Create internal routing HTTP client
-	// This routes SDK requests through /llm/call/ for plugin hook execution
-	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"))
-
-	// Create a modified LLM config with internal endpoint
-	llmSlug := slug.Make(conf.Name)
-	internalConf := *conf // Copy config
-	internalConf.APIEndpoint = p.getInternalLLMBaseURL(llmSlug, conf.Vendor)
-	// Set a dummy API key to satisfy SDK validation (actual auth handled by /llm/)
-	// The InternalRoutingTransport strips SDK-set auth headers and passes client auth instead
-	internalConf.APIKey = "internal-routing-dummy-key"
-
-	// Create LLM driver with internal routing HTTP client and streaming callback
-	llmDriver, err := switches.FetchDriver(&internalConf, nil, nil, streamingFunc, switches.WithHTTPClient(internalClient))
-	if err != nil {
-		p.failStream(w, flusher, framesSent, http.StatusInternalServerError, "Failed to create LLM client", err)
+	if resp == nil {
+		p.failStream(w, flusher, framesSent, last.status, "LLM call failed", last.err)
 		return
 	}
-
-	ctx := context.Background()
-	opts := req.ToLangchainOptions(&internalConf)
-	// Add streaming function to options
-	opts = append(opts, llms.WithStreamingFunc(streamingFunc))
-	messages := req.GetMessages()
-
-	// SDK call routes through /llm/call/ which executes all plugin hooks
-	// Auth, plugins, budget, analytics all happen on the /llm/call/ hop
-	resp, err := llmDriver.GenerateContent(ctx, messages, opts...)
-	if err != nil {
-		status, _ := upstreamStatusFromError(err, http.StatusBadGateway)
-		p.failStream(w, flusher, framesSent, status, "LLM call failed", err)
-		return
-	}
+	conf = served.conf
 
 	// Fold the driver's per-content-block choices back into the single turn the
 	// caller asked for, exactly as the non-streaming path does.
@@ -529,7 +649,7 @@ func (p *Proxy) handleChatCompletionStream(
 		ID:      completionID,
 		Object:  "chat.completion.chunk",
 		Created: created,
-		Model:   req.Model,
+		Model:   servedModel,
 		Choices: []ChatCompletionChunkChoice{{
 			Index:        0,
 			Delta:        ChatCompletionDelta{}, // Empty delta for final chunk
@@ -585,6 +705,7 @@ func toolCallDelta(index int, call map[string]interface{}) ChatCompletionToolCal
 func (p *Proxy) failStream(w http.ResponseWriter, flusher http.Flusher, framesSent, status int, message string, err error) {
 	if framesSent == 0 {
 		w.Header().Del("Content-Type")
+		clearServedHeaders(w) // nobody served this request after all
 		respondWithOAIError(w, status, message, err, false)
 		return
 	}
