@@ -53,6 +53,12 @@ Every LLM endpoint below authenticates with the same App API key and enforces th
 
 The [Developer Portal](./ai-portal.md) shows each of these on an App's detail page, filled in for that App.
 
+### How the vendor URL is built
+
+Every entry point ends up sending the vendor `<LLM API endpoint path> + <the path the request carries>`, with any overlap between the two removed. So an LLM whose endpoint is `https://api.anthropic.com`, `https://api.anthropic.com/v1`, `https://my-proxy/anthropic` or `https://my-proxy/anthropic/v1` is called at `.../v1/messages` in every case, whether the request came through the Main Ingress, the OpenAI-compatible endpoint, or a vendor SDK on the vendor-native endpoint. A version segment is never doubled (`/v1/v1/...`) and never dropped. The same applies to OpenAI-compatible providers that mount their API under a prefix, such as `.../inference/v1` or `.../openai/v1`.
+
+Studio's own chat and agents use the vendor's client library directly rather than the gateway; for Anthropic, that library expects an endpoint ending in `/v1`, and Studio appends it when the configured endpoint has no version segment. If you front a vendor with your own proxy, configure the endpoint as the path your proxy expects to see immediately before the vendor's versioned path.
+
 ### 1. Main Ingress (`/v1/chat/completions`)
 
 A single OpenAI-compatible endpoint at the root of the gateway, fronting every LLM the calling App has access to. The LLM is selected per request rather than by URL, so a client can switch model or vendor without changing its base URL or credential.

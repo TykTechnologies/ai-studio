@@ -13,7 +13,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -603,8 +602,14 @@ func (p *Proxy) AddFilter(filter *models.Filter) {
 
 func (p *Proxy) cloudflareHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Keep-Alive", "timeout=300")
+		// Connection-specific headers are forbidden on HTTP/2 (RFC 9113 §8.2.2).
+		// Go's HTTP/2 server drops Connection itself but lets Keep-Alive through,
+		// and a strict client (curl ≥ 8.10) then aborts the whole response with
+		// "Invalid HTTP header field was received" before reading the body.
+		if r.ProtoMajor < 2 {
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("Keep-Alive", "timeout=300")
+		}
 		w.Header().Set("X-Accel-Buffering", "no")
 		next.ServeHTTP(w, r)
 	})
@@ -750,18 +755,11 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	proxyDirector := func(req *http.Request) {
 		req.URL.Scheme = upstreamURL.Scheme
 		req.URL.Host = upstreamURL.Host
-		// Strip the gateway prefix to get the remaining path
+		// Strip the gateway prefix to get the remaining path, then compose it
+		// with the endpoint's own path (see joinUpstreamPath for the rules).
 		remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
-		// Only combine with upstream base path if remaining path doesn't already include it
-		// e.g., /ai/ sends "/messages" which needs upstream "/v1" → "/v1/messages"
-		// but /call/ sends "/v1/messages" which already has the base path
-		if upstreamURL.Path != "" && !strings.HasPrefix(remainingPath, upstreamURL.Path) {
-			req.URL.Path = path.Join(upstreamURL.Path, remainingPath)
-			logger.Debugf("REST proxy path join: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, req.URL.Path)
-		} else {
-			req.URL.Path = remainingPath
-			logger.Debugf("REST proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
-		}
+		req.URL.Path = joinUpstreamPath(upstreamURL.Path, remainingPath)
+		logger.Debugf("REST proxy path: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, req.URL.Path)
 		req.Host = upstreamURL.Host
 		// Continue the trace into the upstream. Done before the vendor auth
 		// header so a vendor that rewrites headers wholesale cannot drop it.
@@ -1437,18 +1435,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	logger.Debugf("LLM streaming proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
 
-	// Strip the gateway prefix to get the remaining path
+	// Strip the gateway prefix to get the remaining path, then compose it with
+	// the endpoint's own path (see joinUpstreamPath for the rules).
 	remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
-	// Only combine with upstream base path if remaining path doesn't already include it
-	// e.g., /ai/ sends "/messages" which needs upstream "/v1" → "/v1/messages"
-	// but /call/ sends "/v1/messages" which already has the base path
-	if upstreamURL.Path != "" && !strings.HasPrefix(remainingPath, upstreamURL.Path) {
-		upstreamURL.Path = path.Join(upstreamURL.Path, remainingPath)
-		logger.Debugf("Stream proxy path join: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, upstreamURL.Path)
-	} else {
-		upstreamURL.Path = remainingPath
-		logger.Debugf("Stream proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
-	}
+	upstreamBasePath := upstreamURL.Path
+	upstreamURL.Path = joinUpstreamPath(upstreamBasePath, remainingPath)
+	logger.Debugf("Stream proxy path: upstreamPath=%s + remainingPath=%s = %s", upstreamBasePath, remainingPath, upstreamURL.Path)
 	upstreamURL.RawQuery = r.URL.RawQuery
 
 	// Use r.Body directly as CopyRequestBody has already replaced it with a readable one.
