@@ -39,6 +39,9 @@ This section offers insights into the expenditure associated with the usage of L
   - **Total Cost**: The cumulative cost for the model.
   - **Currency**: The unit of currency in which the cost is calculated (e.g., USD).
 
+- **Models in use (per provider)**:
+  Each LLM provider's details page (**LLMs → provider**) has a sortable "Models in use" table listing every model served through that provider in the selected period, with request count, number of distinct apps, when the model was last called, cost and token totals. Clicking a model opens a per-model view with usage charts and the list of apps that called it. See [Finding who uses a model](./llm-management.md#finding-who-uses-a-model).
+
 ---
 
 #### **Model and Tool Usage**

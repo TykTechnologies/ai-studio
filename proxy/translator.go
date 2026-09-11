@@ -21,10 +21,21 @@ import (
 
 // getInternalLLMBaseURL returns the internal /llm/call/ URL for SDK endpoint hijacking.
 // When the /ai/ endpoint routes requests through /llm/, this URL points to the local proxy.
-// The SDK handles vendor-specific path suffixes automatically (e.g., /v1/messages for Anthropic).
-// IMPORTANT: Different SDKs expect different base URL formats:
-// - OpenAI SDK expects base URL with /v1 (e.g., http://host/llm/call/openai/v1) and appends /chat/completions
-// - Anthropic SDK expects base URL without version (e.g., http://host/llm/call/claude) and appends /v1/messages
+//
+// The path the SDK appends to this base URL becomes the path the inner
+// /llm/call/ hop forwards to the vendor, so the base URL must be shaped so that
+// the resulting inner path is exactly what a native client of that vendor would
+// send. The inner hop already accepts every upstream endpoint shape for native
+// callers, and the bridge inherits that only if it produces the same path.
+//
+//   - OpenAI-compatible SDKs append /chat/completions or /completions, so the
+//     base URL carries /v1 (http://host/llm/call/openai/v1).
+//   - The langchaingo Anthropic client appends "/messages" (its own default base
+//     URL is https://api.anthropic.com/v1), so the base URL carries /v1 too. Without
+//     it the inner path is /messages, and an LLM whose endpoint is configured as
+//     https://api.anthropic.com (no /v1, a shape native callers work fine with)
+//     is proxied to https://api.anthropic.com/messages: a 404 with an empty body.
+//   - Google's clients build the full versioned path themselves.
 func (p *Proxy) getInternalLLMBaseURL(slug string, vendor models.Vendor) string {
 	scheme := "http"
 	if p.loopbackTLS() {
@@ -32,13 +43,11 @@ func (p *Proxy) getInternalLLMBaseURL(slug string, vendor models.Vendor) string 
 	}
 	baseURL := fmt.Sprintf("%s://127.0.0.1:%d/llm/call/%s", scheme, p.config.Port, slug)
 
-	// OpenAI and OpenAI-compatible SDKs expect the base URL to include /v1
-	// They then append /chat/completions or /completions directly
 	switch vendor {
-	case models.OPENAI, models.OLLAMA:
+	case models.OPENAI, models.OLLAMA, models.ANTHROPIC:
 		return baseURL + "/v1"
 	default:
-		// Other vendors (Anthropic, Google, etc.) handle their own path construction
+		// Other vendors (Google, etc.) handle their own path construction
 		return baseURL
 	}
 }

@@ -9,6 +9,7 @@ import GroupForm from "./components/groups/GroupForm";
 
 import LLMList from "./pages/LLMList";
 import LLMDetails from "./components/llms/LLMDetails";
+import LLMModelDetails from "./components/llms/LLMModelDetails";
 import LLMForm from "./components/llms/LLMForm";
 
 import LLMSettingsList from "./pages/LLMSettingsList";
@@ -115,6 +116,7 @@ const mainAdminRoutes = [
 
   { path: "llms", element: <LLMList />, permission: P.LLMS_READ },
   { path: "llms/:id", element: <LLMDetails />, permission: P.LLMS_READ },
+  { path: "llms/:id/models", element: <LLMModelDetails />, permission: P.LLMS_READ },
   { path: "llms/edit/:id", element: <LLMForm />, permission: P.LLMS_WRITE },
   { path: "llms/new", element: <LLMForm />, permission: P.LLMS_WRITE },
 

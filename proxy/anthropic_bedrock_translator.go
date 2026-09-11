@@ -244,10 +244,10 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 	responseText := st.textBuffer
 	inputTokens, outputTokens := st.inputTokens, st.outputTokens
 	cacheWrite, cacheRead := st.cacheWriteTokens, st.cacheReadTokens
-	go func() {
+	p.goAnalyze(func() {
 		recordBedrockProxyLog(p, conf, app, modelID, reqBody, responseText, r, timestamp)
 		recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), int(cacheWrite), int(cacheRead), r, timestamp)
-	}()
+	})
 }
 
 // buildConverseInputFromAnthropic maps an Anthropic Messages request to a Bedrock Converse input.

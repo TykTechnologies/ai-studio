@@ -385,3 +385,86 @@ func TestGetMostUsedLLMModels(t *testing.T) {
 		})
 	}
 }
+
+func TestGetAppsForModel(t *testing.T) {
+	db := setupAnalyticsTestDB(t)
+	api, router := setupAnalyticsTestAPI(db)
+	router.GET("/analytics/apps-for-model", api.getAppsForModel)
+
+	llm := &models.LLM{Name: "Test LLM", Vendor: models.OPENAI}
+	require.NoError(t, db.Create(llm).Error)
+	owner := &models.User{Email: "owner@example.com"}
+	require.NoError(t, db.Create(owner).Error)
+	app := &models.App{Name: "Summariser", UserID: owner.ID}
+	require.NoError(t, db.Create(app).Error)
+
+	now := time.Now().Truncate(time.Second)
+	require.NoError(t, db.Create(&models.LLMChatRecord{
+		LLMID: llm.ID, AppID: app.ID, Name: "gpt-3.5-turbo", Vendor: string(models.OPENAI),
+		TotalTokens: 42, Cost: 5000, TimeStamp: now, InteractionType: models.ProxyInteraction,
+	}).Error)
+
+	get := func(params map[string]string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/analytics/apps-for-model", nil)
+		q := req.URL.Query()
+		for k, v := range params {
+			q.Add(k, v)
+		}
+		req.URL.RawQuery = q.Encode()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	dates := map[string]string{
+		"start_date": now.AddDate(0, 0, -1).Format("2006-01-02"),
+		"end_date":   now.AddDate(0, 0, 1).Format("2006-01-02"),
+	}
+	withDates := func(extra map[string]string) map[string]string {
+		out := map[string]string{}
+		for k, v := range dates {
+			out[k] = v
+		}
+		for k, v := range extra {
+			out[k] = v
+		}
+		return out
+	}
+
+	t.Run("missing llm_id is a 400", func(t *testing.T) {
+		w := get(withDates(map[string]string{"model_name": "gpt-3.5-turbo"}))
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("invalid llm_id is a 400", func(t *testing.T) {
+		w := get(withDates(map[string]string{"llm_id": "abc", "model_name": "gpt-3.5-turbo"}))
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("missing model_name is a 400", func(t *testing.T) {
+		w := get(withDates(map[string]string{"llm_id": "1"}))
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("returns the apps using the model", func(t *testing.T) {
+		w := get(withDates(map[string]string{"llm_id": "1", "model_name": "gpt-3.5-turbo"}))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+		var response []analytics.ModelAppUsage
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		require.Len(t, response, 1)
+		assert.Equal(t, app.ID, response[0].AppID)
+		assert.Equal(t, "Summariser", response[0].AppName)
+		assert.Equal(t, "owner@example.com", response[0].OwnerEmail)
+		assert.Equal(t, int64(1), response[0].RequestCount)
+		assert.Equal(t, int64(42), response[0].TotalTokens)
+		assert.InDelta(t, 0.5, response[0].TotalCost, 0.0001)
+		assert.WithinDuration(t, now, response[0].LastUsed.Time, time.Second)
+	})
+
+	t.Run("unknown model returns an empty list not null", func(t *testing.T) {
+		w := get(withDates(map[string]string{"llm_id": "1", "model_name": "nope"}))
+		require.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "[]", w.Body.String())
+	})
+}

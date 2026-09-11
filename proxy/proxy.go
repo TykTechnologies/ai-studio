@@ -13,7 +13,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -149,6 +148,11 @@ type Proxy struct {
 	// connections are reused across requests instead of a fresh pool per call.
 	loopbackTransport *http.Transport
 	loopbackOnce      sync.Once
+
+	// analyzers counts the background analytics goroutines spawned after a
+	// response is written (see goAnalyze). They outlive the request, so anything
+	// that tears the proxy or the analytics handler down waits on it.
+	analyzers sync.WaitGroup
 }
 
 type Config struct {
@@ -603,8 +607,14 @@ func (p *Proxy) AddFilter(filter *models.Filter) {
 
 func (p *Proxy) cloudflareHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Keep-Alive", "timeout=300")
+		// Connection-specific headers are forbidden on HTTP/2 (RFC 9113 §8.2.2).
+		// Go's HTTP/2 server drops Connection itself but lets Keep-Alive through,
+		// and a strict client (curl ≥ 8.10) then aborts the whole response with
+		// "Invalid HTTP header field was received" before reading the body.
+		if r.ProtoMajor < 2 {
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("Keep-Alive", "timeout=300")
+		}
 		w.Header().Set("X-Accel-Buffering", "no")
 		next.ServeHTTP(w, r)
 	})
@@ -674,6 +684,10 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusNotFound, fmt.Sprintf("[rest] LLM not found: %s", llmSlug), nil, false)
 		return
 	}
+	if hasTraversalSegment(r.URL.Path) {
+		respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false)
+		return
+	}
 
 	// Metrics: track in-flight requests and request duration. respStatus carries
 	// the status the caller ends up seeing so the duration observation can attach
@@ -710,7 +724,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
 		// Error body for analytics should be constructed carefully if needed
-		go p.analyzeResponse(llm, app, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, r)
+		p.goAnalyze(func() {
+			p.analyzeResponse(llm, app, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, r)
+		})
 		respStatus = http.StatusForbidden
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded", err, false)
 		return
@@ -718,7 +734,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
 		respStatus = http.StatusBadRequest
 		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
-		go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
+		p.goAnalyze(func() {
+			p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
+		})
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
@@ -750,18 +768,11 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	proxyDirector := func(req *http.Request) {
 		req.URL.Scheme = upstreamURL.Scheme
 		req.URL.Host = upstreamURL.Host
-		// Strip the gateway prefix to get the remaining path
+		// Strip the gateway prefix to get the remaining path, then compose it
+		// with the endpoint's own path (see joinUpstreamPath for the rules).
 		remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/rest/%s", llmSlug))
-		// Only combine with upstream base path if remaining path doesn't already include it
-		// e.g., /ai/ sends "/messages" which needs upstream "/v1" → "/v1/messages"
-		// but /call/ sends "/v1/messages" which already has the base path
-		if upstreamURL.Path != "" && !strings.HasPrefix(remainingPath, upstreamURL.Path) {
-			req.URL.Path = path.Join(upstreamURL.Path, remainingPath)
-			logger.Debugf("REST proxy path join: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, req.URL.Path)
-		} else {
-			req.URL.Path = remainingPath
-			logger.Debugf("REST proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
-		}
+		req.URL.Path = joinUpstreamPath(upstreamURL.Path, remainingPath)
+		logger.Debugf("REST proxy path: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, req.URL.Path)
 		req.Host = upstreamURL.Host
 		// Continue the trace into the upstream. Done before the vendor auth
 		// header so a vendor that rewrites headers wholesale cannot drop it.
@@ -829,7 +840,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 				// Log with 400 status and include both the block reason and original LLM response for audit trail
 				blockedResponseBody := fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"original_response":%s}`,
 					blockMsg, string(bufferedCapture.buffer.Bytes()))
-				go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(blockedResponseBody), reqBody, r)
+				p.goAnalyze(func() {
+					p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(blockedResponseBody), reqBody, r)
+				})
 				return
 			}
 		}
@@ -837,11 +850,15 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// AI Gateway proxy writes the final (potentially modified) response to client
 		bufferedCapture.WriteToClient()
 
-		go p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
+		p.goAnalyze(func() {
+			p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
+		})
 	} else {
 		capture := newResponseCapture(w)
 		httpProxy.ServeHTTP(capture, r)
-		go p.analyzeResponse(llm, app, capture.statusCode, capture.CapturedBody(), reqBody, r)
+		p.goAnalyze(func() {
+			p.analyzeResponse(llm, app, capture.statusCode, capture.CapturedBody(), reqBody, r)
+		})
 	}
 }
 
@@ -1359,6 +1376,10 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		respondWithError(w, http.StatusNotFound, "[streaming] LLM not found", nil, false)
 		return
 	}
+	if hasTraversalSegment(r.URL.Path) {
+		respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false)
+		return
+	}
 
 	// Metrics: track in-flight requests and request duration. respStatus carries
 	// the status the caller ends up seeing so the duration observation can attach
@@ -1395,7 +1416,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
-		go p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
+		p.goAnalyze(func() {
+			p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
+		})
 		respStatus = http.StatusForbidden
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded for streaming", err, false)
 		return
@@ -1403,7 +1426,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
 		respStatus = http.StatusBadRequest
 		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
-		go p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
+		p.goAnalyze(func() {
+			p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
+		})
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
@@ -1437,18 +1462,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	logger.Debugf("LLM streaming proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
 
-	// Strip the gateway prefix to get the remaining path
+	// Strip the gateway prefix to get the remaining path, then compose it with
+	// the endpoint's own path (see joinUpstreamPath for the rules).
 	remainingPath := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/llm/stream/%s", llmSlug))
-	// Only combine with upstream base path if remaining path doesn't already include it
-	// e.g., /ai/ sends "/messages" which needs upstream "/v1" → "/v1/messages"
-	// but /call/ sends "/v1/messages" which already has the base path
-	if upstreamURL.Path != "" && !strings.HasPrefix(remainingPath, upstreamURL.Path) {
-		upstreamURL.Path = path.Join(upstreamURL.Path, remainingPath)
-		logger.Debugf("Stream proxy path join: upstreamPath=%s + remainingPath=%s = %s", upstreamURL.Path, remainingPath, upstreamURL.Path)
-	} else {
-		upstreamURL.Path = remainingPath
-		logger.Debugf("Stream proxy path passthrough: remainingPath=%s (upstreamPath=%s)", remainingPath, upstreamURL.Path)
-	}
+	upstreamBasePath := upstreamURL.Path
+	upstreamURL.Path = joinUpstreamPath(upstreamBasePath, remainingPath)
+	logger.Debugf("Stream proxy path: upstreamPath=%s + remainingPath=%s = %s", upstreamBasePath, remainingPath, upstreamURL.Path)
 	upstreamURL.RawQuery = r.URL.RawQuery
 
 	// Use r.Body directly as CopyRequestBody has already replaced it with a readable one.
@@ -1546,7 +1565,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					isErr = true
 					// Log with 400 status and include both the block reason and partial LLM response for audit trail
 					blockedResponseBody := buildFilterBlockedAnalyticsBody(blockMsg, chunkIndex, fullResponse.String())
-					go p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
+					p.goAnalyze(func() {
+						p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
+					})
 					return
 				}
 			}
@@ -1570,7 +1591,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if !isErr {
-		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
+		p.goAnalyze(func() {
+			p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
+		})
 
 		// Execute OnStreamComplete hook for plugins (e.g., caching)
 		if p.responseHookManager != nil && p.hasResponseHooks() {
@@ -1692,6 +1715,25 @@ func (p *Proxy) handleUnifiedLLMRequest(w http.ResponseWriter, r *http.Request) 
 		slog.Debug("Unified handler routing to REST", "original_path", originalPath, "rewritten_path", r.URL.Path, "llm_slug", llmSlug)
 		p.handleLLMRequest(w, r)
 	}
+}
+
+// goAnalyze runs post-response analysis (proxy logs, chat records, budget
+// tracking) in the background and tracks it, so a shutdown or a test can wait
+// for in-flight analysis with waitForAnalyzers instead of guessing with a
+// sleep. The analytics handler is process-global, and a goroutine that is still
+// recording when that handler is replaced or stopped is a data race.
+func (p *Proxy) goAnalyze(fn func()) {
+	p.analyzers.Add(1)
+	go func() {
+		defer p.analyzers.Done()
+		fn()
+	}()
+}
+
+// waitForAnalyzers blocks until every analysis goroutine started with goAnalyze
+// has finished.
+func (p *Proxy) waitForAnalyzers() {
+	p.analyzers.Wait()
 }
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {

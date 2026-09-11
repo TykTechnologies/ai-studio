@@ -60,6 +60,29 @@ To enable cost tracking in the Analytics system, you need to define the price pe
 
 The Analytics system uses these prices along with token counts from LLM interactions (recorded by the Proxy and Chat systems) to calculate usage costs.
 
+## Finding who uses a model
+
+When a vendor deprecates a model, or you want to move teams onto a newer one, you need to know which apps are still calling it. The LLM provider details page answers this without leaving the admin UI.
+
+1.  **Navigate:** Go to **LLMs** and open the provider (for example, your OpenAI entry).
+2.  **Models in use:** Below the usage charts is a "Models in use" table listing every model served through that provider in the selected date range. Each row shows:
+    *   **Requests** and **Apps**: how many calls were made and how many distinct apps made them.
+    *   **Last used**: when the model was most recently called (relative, with the exact time underneath).
+    *   **Total cost** and token totals, with the same breakdown as before.
+
+    Click any column header to sort. The default order is most recently used first. Adjust the date range picker above the table to widen or narrow the period.
+3.  **Model details:** Click a model name to open its detail view. This shows token and cost charts for that model alone, plus an **Apps using this model** table with each app's owner email, request count, tokens, cost, and the first and last time the app called the model in the period. App names link to the app's details page; owner emails are `mailto:` links so you can contact the team directly.
+
+Notes:
+
+*   Model names are recorded from the vendor's response, so an alias such as `gpt-4o` appears under the snapshot it resolved to (for example `gpt-4o-2024-08-06`).
+*   The view is scoped to the provider entry you opened. If the same model name is configured under two provider entries, each shows only its own traffic.
+*   Requests routed through edge gateways are included; they arrive via the analytics pulse and are attributed to the same provider entry and app. Edge requests with no model name are listed as `unknown-model`.
+*   "Last used" is bounded by the selected date range. An app whose most recent call falls before the range start does not appear until you widen the range.
+*   Both chat-interface and proxy traffic are counted.
+
+The data behind these views is available via the API: `GET /api/v1/analytics/total-cost-per-vendor-and-model?llm_id=…` (per-model rows, now including `requestCount`, `appCount` and `lastUsed`), `GET /api/v1/analytics/apps-for-model?llm_id=…&model_name=…` (apps for one model) and `GET /api/v1/analytics/usage?llm_id=…&model_name=…` (usage over time for one model). All accept `start_date` and `end_date` in `YYYY-MM-DD` form.
+
 ## Budget Control
 
 Tyk AI Studio allows setting monthly spending limits to control AI costs.

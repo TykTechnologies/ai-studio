@@ -15,6 +15,34 @@ definitions:
           type: string
         type: array
     type: object
+  analytics.ModelAppUsage:
+    properties:
+      appDeleted:
+        type: boolean
+      appId:
+        type: integer
+      appName:
+        type: string
+      firstUsed:
+        $ref: '#/definitions/analytics.ScanTime'
+      lastUsed:
+        $ref: '#/definitions/analytics.ScanTime'
+      ownerEmail:
+        type: string
+      ownerUserId:
+        type: integer
+      requestCount:
+        type: integer
+      totalCost:
+        type: number
+      totalTokens:
+        type: integer
+    type: object
+  analytics.ScanTime:
+    properties:
+      time.Time:
+        type: string
+    type: object
   api.AccessTokenResponse:
     properties:
       access_token:
@@ -774,6 +802,7 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
+            description: Always "default" in CE
             type: string
           session_id:
             type: string
@@ -3916,6 +3945,58 @@ paths:
       summary: Get app interactions over time
       tags:
       - Analytics
+  /analytics/apps-for-model:
+    get:
+      consumes:
+      - application/json
+      description: List every app that called the given model through the given LLM
+        entry in the period, with request counts, cost and first/last use. Most recently
+        used first.
+      parameters:
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: end_date
+        required: true
+        type: string
+      - description: LLM ID
+        in: query
+        name: llm_id
+        required: true
+        type: integer
+      - description: Model name as recorded in usage records
+        in: query
+        name: model_name
+        required: true
+        type: string
+      - description: Interaction type to filter by (chat/proxy)
+        in: query
+        name: interaction_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/analytics.ModelAppUsage'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Get the apps that used a model
+      tags:
+      - Analytics
   /analytics/budget-usage:
     get:
       consumes:
@@ -4655,6 +4736,10 @@ paths:
       - description: Interaction type to filter by (chat/proxy)
         in: query
         name: interaction_type
+        type: string
+      - description: Model name to filter by (as recorded in usage records)
+        in: query
+        name: model_name
         type: string
       produces:
       - application/json
