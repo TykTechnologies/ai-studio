@@ -147,6 +147,11 @@ service AIStudioManagementService {
     // an administrator defines a new type inside the plugin. Requires
     // resource-types.manage.
     rpc RegisterResourceTypes(RegisterResourceTypesRequest) returns (RegisterResourceTypesResponse);
+
+    // RBAC: (re)register the permission resources this plugin contributes to
+    // the role editor (sub-resources of "plugin:<manifest id>"). Requires the
+    // rbac.register scope.
+    rpc RegisterPermissionResources(RegisterPermissionResourcesRequest) returns (RegisterPermissionResourcesResponse);
 }
 
 // Notification Messages
@@ -192,6 +197,30 @@ message RegisterResourceTypesResponse {
     string message = 2;
     uint32 registered = 3;
     uint32 deactivated = 4;
+}
+
+// RBAC Permission Resource Registration Messages
+
+message PermissionResourceSpec {
+    string key = 1;                      // kebab-case, unique per plugin; becomes "plugin:<manifest id>:<key>"
+    string label = 2;                    // Human-readable name shown in the role editor
+    string description = 3;
+    repeated string actions = 4;         // Subset of read, write, delete, execute, publish; read first
+    bool sensitive = 5;                  // Withheld from read-only system roles
+}
+
+message RegisterPermissionResourcesRequest {
+    PluginContext context = 1;
+    repeated PermissionResourceSpec resources = 2;
+    bool remove_missing = 3;             // Remove runtime-registered resources not present in `resources`
+}
+
+message RegisterPermissionResourcesResponse {
+    bool success = 1;
+    string message = 2;
+    uint32 registered = 3;
+    uint32 removed = 4;
+    string plugin_permission_key = 5;    // "plugin:<manifest id>", the prefix of every registered key
 }
 
 // Common request context for all operations

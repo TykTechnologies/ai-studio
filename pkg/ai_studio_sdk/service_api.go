@@ -1831,3 +1831,39 @@ func RegisterResourceTypes(ctx context.Context, specs []ResourceTypeSpec, deacti
 		DeactivateMissing: deactivateMissing,
 	})
 }
+
+// PermissionResourceSpec describes one RBAC resource a plugin contributes
+// to the role editor; see RegisterPermissionResources.
+type PermissionResourceSpec struct {
+	Key         string   // kebab-case, unique per plugin; becomes "plugin:<manifest id>:<key>"
+	Label       string   // shown in the role editor
+	Description string   // optional help text
+	Actions     []string // subset of read, write, delete, execute, publish; read first
+	Sensitive   bool     // withheld from read-only system roles
+}
+
+// RegisterPermissionResources (re)registers the calling plugin's runtime
+// permission resources. Requires the rbac.register scope. With removeMissing
+// set, runtime resources not in specs are removed (manifest-declared ones are
+// never touched here).
+func RegisterPermissionResources(ctx context.Context, specs []PermissionResourceSpec, removeMissing bool) (*mgmtpb.RegisterPermissionResourcesResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+	resources := make([]*mgmtpb.PermissionResourceSpec, 0, len(specs))
+	for _, s := range specs {
+		resources = append(resources, &mgmtpb.PermissionResourceSpec{
+			Key:         s.Key,
+			Label:       s.Label,
+			Description: s.Description,
+			Actions:     s.Actions,
+			Sensitive:   s.Sensitive,
+		})
+	}
+	return client.RegisterPermissionResources(ctx, &mgmtpb.RegisterPermissionResourcesRequest{
+		Context:       createPluginContext(AvailableScopes.RBACRegister),
+		Resources:     resources,
+		RemoveMissing: removeMissing,
+	})
+}

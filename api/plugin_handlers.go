@@ -2074,7 +2074,7 @@ func (a *API) callPluginRPC(c *gin.Context) {
 				Name:        user.Name,
 				IsAdmin:     user.IsAdmin,
 				Groups:      extractUserGroupNames(c),
-				Metadata:    make(map[string]string),
+				Metadata:    pluginRPCMetadata(plugin),
 				Permissions: pluginCallerPermissions(c, plugin),
 			}
 		}
@@ -2425,7 +2425,7 @@ func (a *API) callPortalPluginRPC(c *gin.Context) {
 		Name:        user.Name,
 		IsAdmin:     user.IsAdmin,
 		Groups:      groups,
-		Metadata:    make(map[string]string),
+		Metadata:    pluginRPCMetadata(plugin),
 		Permissions: pluginCallerPermissions(c, plugin),
 	}
 

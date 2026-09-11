@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -26,6 +27,17 @@ func callerPermissions(c *gin.Context) []string {
 		return []string{}
 	}
 	return set.List()
+}
+
+// pluginRPCMetadata is the PortalUserContext metadata handed to a plugin on
+// an RPC call: its own permission key, so the SDK's Can() can resolve
+// plugin-relative permissions.
+func pluginRPCMetadata(plugin *models.Plugin) map[string]string {
+	md := make(map[string]string)
+	if plugin != nil && plugin.HasAdminSurface() {
+		md[plugin_sdk.MetadataPluginPermissionKey] = plugin.PermissionKey()
+	}
+	return md
 }
 
 // pluginCallerPermissions is callerPermissions plus the caller's grants on

@@ -185,6 +185,25 @@ Viewer therefore reads (opens the pages of) every plugin; a plugin that must not
 
 **Orphans.** A role may hold `plugin:*` permissions whose plugin is uninstalled or not loaded: `authz.ParseStored` accepts any well-formed plugin permission when a role is saved, `NewSetFromStrings` drops them from evaluation while the resource is absent, and the role payload lists them as `orphaned_permissions` (shown as "Not installed" chips in the role editor, removable there). Reinstalling the plugin makes them effective again.
 
+**Plugin-declared resources.** A manifest may carry an `rbac` block (`models.ManifestRBAC`, validated by `ValidateManifest`):
+
+```json
+"rbac": {
+  "sensitive": false,
+  "resources": [
+    {"key": "asset-types", "label": "Asset types", "actions": ["read", "write", "delete"]},
+    {"key": "assets", "label": "Assets", "actions": ["read", "write", "delete", "publish"]}
+  ],
+  "rpc_methods": {"admin_list_types": "asset-types:read", "admin_upsert_type": "asset-types:write", "admin_stats": "read"}
+}
+```
+
+Each resource becomes `plugin:<manifest id>:<key>` in the catalogue, listed beneath the plugin's row in the role editor. `rpc_methods` values are plugin-relative (`read` = the base resource, `assets:write` = a sub-resource, `plugins:execute` = the platform permission) and are enforced by the RPC route resolver (`api/authz_routes.go` → `pluginRPCPermission`) before the call reaches the plugin; a method that is not listed needs the base `write`, and a declared permission whose resource is not registered falls back to base `write` rather than opening the method. `sensitive: true` withholds the plugin's read from Viewer and Auditor. Declared resources are stored in `plugin_permission_resources` (`source = manifest`, replaced on every manifest registration) so the catalogue can be rebuilt at boot without the plugin process.
+
+Resources that only exist at runtime (asset classes an administrator defines) are registered through the management API: `rpc RegisterPermissionResources` (`services/grpc/plugin_permissions_server.go`, scope `rbac.register`), exposed in the SDK as `ctx.Services.Studio().RegisterPermissionResources(ctx, []plugin_sdk.PermissionResource{...}, removeMissing)`; rows are stored with `source = runtime` and `removeMissing` only prunes runtime rows. Every change refreshes the catalogue and the computed system roles.
+
+**Checking inside a plugin.** The RPC user context carries the caller's permissions with the plugin's own grants spelled out (`pluginCallerPermissions`) plus `Metadata["plugin_permission_key"]`; `userCtx.Can("write")`, `userCtx.Can("assets:publish")` and `userCtx.Can("llms:read")` resolve plugin-relative and platform permissions without the plugin knowing the umbrella rule. On an older host without the key, `Can` falls back to `IsAdmin`. The enterprise asset-catalog plugin is the reference adoption: its manifest declares the three static resources and the method map, and it registers one `assets-<type>` resource (read/write/delete/publish) per active asset type at runtime.
+
 **Plugin pages.** `mount_config.required_permission` (manifest `mount.required_permission`) still overrides the page permission; it is resolved against the plugin (`services.ResolvePluginPermission`): `"read"` means the base resource, `"assets:write"` a declared sub-resource, `"plugins:execute"` the platform permission. `GET /plugins/ui-registry` and `/plugins/sidebar-menu` filter entries by the caller's permissions server-side and carry `required_permission` and `plugin_permission_key`; each plugin's sidebar section gains a "Configuration" link to `/admin/plugins/:id` for holders of the plugin's read. Plugin web components receive `pluginAPI.permissions` and `pluginAPI.can(perm)` (a full permission or a plugin-relative one such as `"write"`), and the RPC call hands the plugin the caller's permissions with the plugin's own grants expanded (`pluginCallerPermissions`), so plugin code never needs the umbrella rule: `userCtx.HasPermission("plugin:<key>:write")` is enough.
 
 ---

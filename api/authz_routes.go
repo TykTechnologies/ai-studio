@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -194,15 +195,30 @@ func (a *API) pluginOrPlatformPermission(action authz.Action) func(*gin.Context)
 }
 
 // pluginRPCPermission resolves an admin RPC call to the per-plugin
-// permission of the method: write unless the plugin's manifest declares the
-// method read-only (see PluginManifest.RBAC). plugins:execute holders pass
-// through the umbrella rule in authz.Set.Has.
+// permission of the method: what the manifest's rbac.rpc_methods declares
+// for it, else the plugin's base write. plugins:execute holders pass through
+// the umbrella rule in authz.Set.Has. A declared permission whose resource is
+// not registered (manifest drift) falls back to the base write so a typo
+// never opens a method.
 func (a *API) pluginRPCPermission(c *gin.Context) authz.Permission {
-	key := a.pluginPermissionKey(c)
-	if key == "" {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil || a.service == nil || a.service.PluginService == nil {
 		return authz.Execute("plugins")
 	}
-	return authz.P(key, authz.ActionWrite)
+	plugin, err := a.service.PluginService.GetPlugin(uint(id))
+	if err != nil || plugin == nil {
+		return authz.Execute("plugins")
+	}
+	fallback := authz.P(plugin.PermissionKey(), authz.ActionWrite)
+	declared := plugin.RPCMethodPermission(c.Param("method"))
+	if declared == "" {
+		return fallback
+	}
+	p := authz.Permission(services.ResolvePluginPermission(plugin, declared))
+	if !p.Valid() {
+		return fallback
+	}
+	return p
 }
 
 // metadataObjectPermission resolves governed-metadata-on-object routes to

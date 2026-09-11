@@ -1,6 +1,8 @@
 package plugin_sdk
 
 import (
+	"strings"
+
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"google.golang.org/grpc"
 )
@@ -134,6 +136,105 @@ type PortalUserContext struct {
 	// "resource:action" strings; ["*"] means full administrator. Empty for
 	// portal users with no administrative role.
 	Permissions []string
+}
+
+// MetadataPluginPermissionKey is the PortalUserContext.Metadata entry that
+// carries the calling plugin's own RBAC key ("plugin:<manifest id>") so a
+// plugin can check plugin-relative permissions with Can.
+const MetadataPluginPermissionKey = "plugin_permission_key"
+
+// PermissionAction is one of the platform's permission verbs.
+type PermissionAction string
+
+const (
+	PermissionRead    PermissionAction = "read"
+	PermissionWrite   PermissionAction = "write"
+	PermissionDelete  PermissionAction = "delete"
+	PermissionExecute PermissionAction = "execute"
+	// PermissionPublish is the workflow verb: make an object live.
+	PermissionPublish PermissionAction = "publish"
+)
+
+// PermissionResource is an RBAC resource a plugin contributes to the role
+// editor beneath its own entry (see StudioServices.RegisterPermissionResources
+// and the manifest's "rbac.resources").
+type PermissionResource struct {
+	// Key is kebab-case and unique within the plugin; the platform registers
+	// it as "plugin:<manifest id>:<key>".
+	Key         string
+	Label       string
+	Description string
+	// Actions offered, read first (e.g. read, write, delete, publish).
+	Actions []PermissionAction
+	// Sensitive withholds read from read-only system roles.
+	Sensitive bool
+}
+
+// PluginPermissionKey returns the calling plugin's RBAC key
+// ("plugin:<manifest id>") as supplied by the platform, or "" on hosts that
+// predate per-plugin permissions.
+func (u *PortalUserContext) PluginPermissionKey() string {
+	if u == nil || u.Metadata == nil {
+		return ""
+	}
+	return u.Metadata[MetadataPluginPermissionKey]
+}
+
+// Can reports whether the user holds a permission on this plugin. perm may
+// be a bare action ("write" → the plugin's base resource), a sub-resource
+// permission ("assets:publish" → a resource declared by the plugin) or a
+// full platform permission ("llms:read"). The platform hands the plugin the
+// caller's permissions with its own grants spelled out, so plugins:execute
+// holders and full administrators pass without the plugin knowing the
+// umbrella rule. On a host that does not supply the plugin key, Can falls
+// back to IsAdmin so older deployments keep their admin-only behaviour.
+func (u *PortalUserContext) Can(perm string) bool {
+	if u == nil {
+		return false
+	}
+	perm = strings.TrimSpace(perm)
+	if perm == "" {
+		return true
+	}
+	key := u.PluginPermissionKey()
+	if key == "" {
+		if len(u.Permissions) == 0 {
+			return u.IsAdmin
+		}
+		if strings.HasPrefix(perm, "plugin:") || strings.Contains(perm, ":") {
+			return u.HasPermission(perm)
+		}
+		return u.IsAdmin
+	}
+	switch {
+	case strings.HasPrefix(perm, "plugin:"):
+		// already fully qualified
+	case !strings.Contains(perm, ":"):
+		perm = key + ":" + perm
+	case isPlatformPermission(perm):
+		// "llms:read" and friends are checked as they are
+	default:
+		perm = key + ":" + perm
+	}
+	return u.HasPermission(perm)
+}
+
+// isPlatformPermission recognises the built-in catalogue resources so a
+// plugin may pass "plugins:execute" or "llms:read" through Can unchanged.
+func isPlatformPermission(perm string) bool {
+	i := strings.LastIndexByte(perm, ':')
+	if i <= 0 {
+		return false
+	}
+	switch perm[:i] {
+	case "analytics", "proxy-logs", "plugins", "marketplace", "llms", "model-prices", "model-routers",
+		"datasources", "tools", "filters", "filestores", "tags", "submissions", "attestation-templates",
+		"users", "groups", "roles", "sso-profiles", "audit", "compliance", "metadata", "exports",
+		"secrets", "branding", "apps", "credentials", "edges", "chats", "agents", "llm-settings",
+		"chat-history", "catalogues", "data-catalogues", "tool-catalogues":
+		return true
+	}
+	return false
 }
 
 // HasPermission reports whether the user holds perm ("resource:action").

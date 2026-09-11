@@ -285,6 +285,26 @@ For UI plugins, create a `manifest.json`:
 }
 ```
 
+### Permissions (RBAC)
+
+Every Studio plugin with pages or resource types gets a row in the role editor (`plugin:<manifest id>` with read/write/execute; `plugins:execute` holders and administrators have it all). Declare finer rows and per-method requirements with an `rbac` block, and check the caller in `HandleRPCWithUser`:
+
+```json
+"rbac": {
+  "resources": [{"key": "assets", "label": "Assets", "actions": ["read", "write", "delete", "publish"]}],
+  "rpc_methods": {"admin_list_assets": "assets:read", "admin_release": "assets:publish", "admin_stats": "read"}
+}
+```
+
+```go
+func (p *MyPlugin) HandleRPCWithUser(method string, payload []byte, user *plugin_sdk.PortalUserContext) ([]byte, error) {
+    if !user.Can("assets:publish") { /* forbidden */ }
+    ...
+}
+```
+
+Runtime-only resources are registered with `ctx.Services.Studio().RegisterPermissionResources(...)` (scope `rbac.register`). See `docs/site/docs/plugins-manifests.md` ("Permissions (RBAC) Block") and `plugins-service-api.md` ("Permission Resources").
+
 ## Configuration Schema
 
 Provide a JSON Schema for configuration:

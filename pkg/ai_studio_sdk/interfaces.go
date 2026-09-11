@@ -134,6 +134,9 @@ type ServiceAPIScope struct {
 
 	// Resource type management scopes (ResourceProvider plugins)
 	ResourceTypesManage string
+
+	// RBAC scopes: register the plugin's own permission resources
+	RBACRegister string
 }
 
 // AvailableScopes provides constants for common service API scopes
@@ -167,6 +170,7 @@ var AvailableScopes = ServiceAPIScope{
 	MetadataWrite:         "metadata.write",
 	NotificationsWrite:    "notifications.write",
 	ResourceTypesManage:   "resource-types.manage",
+	RBACRegister:          "rbac.register",
 }
 
 // PluginContext provides context information for service API calls

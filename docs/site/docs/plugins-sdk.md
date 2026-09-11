@@ -362,6 +362,19 @@ type UIProvider interface {
 }
 ```
 
+Implement `UserAwareRPCHandler` as well to receive the calling administrator on admin RPC calls, including their RBAC permissions:
+
+```go
+func (p *MyPlugin) HandleRPCWithUser(method string, payload []byte, user *plugin_sdk.PortalUserContext) ([]byte, error) {
+    if !user.Can("write") {              // this plugin's base write; "assets:publish" for a declared sub-resource
+        return nil, fmt.Errorf("forbidden")
+    }
+    return p.HandleRPC(method, payload)
+}
+```
+
+Every plugin with pages or resource types gets a row in the role editor (`plugin:<manifest id>`: read, write, execute). Declare finer rows and per-method requirements in the manifest's `rbac` block, or register runtime resources with `RegisterPermissionResources` — see [Plugin Manifests](plugins-manifests.md#permissions-rbac-block) and [Service APIs](plugins-service-api.md#permission-resources-runtime).
+
 ### 9. ConfigProvider
 
 Provide JSON Schema for plugin configuration.

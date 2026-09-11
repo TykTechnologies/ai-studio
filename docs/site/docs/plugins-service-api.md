@@ -685,6 +685,37 @@ The plugin ID always comes from the authenticated connection, so a plugin can on
 
 Available when `ctx.Runtime == plugin_sdk.RuntimeStudio`.
 
+### Permission Resources (runtime)
+
+Every plugin with an admin surface already has a row in the role editor (`plugin:<manifest id>` with read/write/execute). Sub-resources that are known ahead of time go in the manifest's `rbac.resources` block (see [Plugin Manifests](plugins-manifests.md#permissions-rbac-block)); resources that only exist at runtime (asset classes an administrator defines inside the plugin) are registered here:
+
+Requires: `rbac.register` scope. Studio-only.
+
+```go
+registered, removed, pluginKey, err := ctx.Services.Studio().RegisterPermissionResources(ctx.Context, []plugin_sdk.PermissionResource{
+    {
+        Key:     "assets-agent",              // becomes "plugin:<manifest id>:assets-agent"
+        Label:   "Assets: Agent",
+        Actions: []plugin_sdk.PermissionAction{plugin_sdk.PermissionRead, plugin_sdk.PermissionWrite, plugin_sdk.PermissionDelete, plugin_sdk.PermissionPublish},
+    },
+}, true) // removeMissing: drop runtime resources absent from the list (manifest ones are never touched)
+```
+
+Registered rows appear under the plugin in the role editor immediately and the computed system roles (Editor, Viewer, Auditor) are refreshed. Administrators and holders of `plugins:execute` have every plugin permission; per-plugin grants narrow access.
+
+To check a permission inside an RPC handler, implement `UserAwareRPCHandler` and use the user context:
+
+```go
+func (p *MyPlugin) HandleRPCWithUser(method string, payload []byte, user *plugin_sdk.PortalUserContext) ([]byte, error) {
+    if !user.Can("assets-agent:publish") {          // plugin-relative: "<key>:<action>" or a bare action ("write")
+        return forbidden("assets-agent:publish")
+    }
+    ...
+}
+```
+
+`Can` also accepts platform permissions unchanged (`user.Can("llms:read")`). The platform hands the plugin the caller's permissions with the plugin's own grants spelled out, so `plugins:execute` holders and full administrators pass without the plugin knowing the umbrella rule; on a host older than per-plugin permissions `Can` falls back to `IsAdmin`. Admin RPC methods listed in the manifest's `rbac.rpc_methods` are enforced by the platform before the call reaches the plugin; methods not listed need the plugin's base `write`.
+
 ### LLM Operations
 
 Requires: `llms.read`, `llms.write`, or `llms.proxy` scope

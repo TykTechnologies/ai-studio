@@ -188,6 +188,61 @@ func TestAuthzRoutes_PluginResolvers(t *testing.T) {
 	assert.False(t, authz.NewSet(authz.Read(key)).HasAny(rpc.permissions(ctxFor(id, "x"))...))
 	assert.True(t, authz.NewSet(authz.Read(key)).HasAny(get.permissions(ctxFor(id, ""))...))
 	assert.False(t, authz.NewSet(authz.Read("plugins")).HasAny(rpc.permissions(ctxFor(id, "x"))...))
+
+	// A manifest rbac block maps methods onto declared sub-resources; the
+	// sub-resources are registered from the stored manifest.
+	plugin.Manifest["rbac"] = map[string]interface{}{
+		"resources": []interface{}{
+			map[string]interface{}{"key": "assets", "label": "Assets", "actions": []interface{}{"read", "write", "publish"}},
+		},
+		"rpc_methods": map[string]interface{}{
+			"admin_stats":       "read",
+			"admin_list_assets": "assets:read",
+			"admin_release":     "assets:publish",
+			"admin_typo":        "nope:write",
+			"admin_platform":    "plugins:execute",
+		},
+	}
+	require.NoError(t, db.Model(plugin).Select("Manifest").Updates(plugin).Error)
+	api.service.SyncPluginPermissions(plugin)
+	_, ok := authz.ResourceByKey(key + ":assets")
+	require.True(t, ok, "sub-resource registered from the manifest")
+
+	assert.Equal(t, []authz.Permission{authz.Read(key)}, rpc.permissions(ctxFor(id, "admin_stats")))
+	assert.Equal(t, []authz.Permission{authz.Read(key + ":assets")}, rpc.permissions(ctxFor(id, "admin_list_assets")))
+	assert.Equal(t, []authz.Permission{authz.Publish(key + ":assets")}, rpc.permissions(ctxFor(id, "admin_release")))
+	assert.Equal(t, []authz.Permission{authz.Write(key)}, rpc.permissions(ctxFor(id, "admin_typo")), "unknown resource falls back to base write")
+	assert.Equal(t, []authz.Permission{authz.Execute("plugins")}, rpc.permissions(ctxFor(id, "admin_platform")))
+	assert.Equal(t, []authz.Permission{authz.Write(key)}, rpc.permissions(ctxFor(id, "undeclared")))
+
+	// Runtime registration adds rows beneath the plugin; removeMissing only touches runtime rows.
+	pluginKey, removed, err := api.service.RegisterPluginPermissionResources(plugin.ID, []models.PluginPermissionResource{
+		{Key: "assets-agent", Label: "Assets: Agent", Actions: models.StringList{"read", "write", "publish"}},
+	}, true)
+	require.NoError(t, err)
+	assert.Equal(t, key, pluginKey)
+	assert.Equal(t, 0, removed)
+	_, ok = authz.ResourceByKey(key + ":assets-agent")
+	assert.True(t, ok)
+	_, ok = authz.ResourceByKey(key + ":assets")
+	assert.True(t, ok, "manifest rows survive a runtime replace")
+	_, _, err = api.service.RegisterPluginPermissionResources(plugin.ID, []models.PluginPermissionResource{
+		{Key: "Bad Key", Label: "x", Actions: models.StringList{"read"}},
+	}, false)
+	assert.Error(t, err)
+	_, removed, err = api.service.RegisterPluginPermissionResources(plugin.ID, nil, true)
+	require.NoError(t, err)
+	assert.Equal(t, 1, removed)
+	_, ok = authz.ResourceByKey(key + ":assets-agent")
+	assert.False(t, ok)
+
+	// Uninstall removes everything, including the stored rows.
+	api.service.RemovePluginPermissions(plugin)
+	_, ok = authz.ResourceByKey(key + ":assets")
+	assert.False(t, ok)
+	rows, err := models.ListPluginPermissionResources(db, plugin.ID)
+	require.NoError(t, err)
+	assert.Empty(t, rows)
 }
 
 func TestPermRouter_RejectsUnknownPermission(t *testing.T) {

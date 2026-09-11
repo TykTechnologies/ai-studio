@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -75,6 +76,10 @@ type PluginManifest struct {
 	// Governed metadata contributions (Enterprise): vocabularies and schemas
 	// the plugin wants registered when it is loaded.
 	Metadata *ManifestMetadata `json:"metadata,omitempty"`
+
+	// RBAC declares permission resources and per-RPC-method requirements
+	// for the role editor; see ManifestRBAC.
+	RBAC *ManifestRBAC `json:"rbac,omitempty"`
 }
 
 // ManifestMetadata declares governed-metadata vocabularies and schemas contributed by a plugin.
@@ -122,6 +127,107 @@ func isValidManifestAppliesTo(target string) bool {
 	}
 	_, err := strconv.ParseUint(parts[0], 10, 32)
 	return err == nil
+}
+
+// ManifestRBAC is the manifest's "rbac" block: the permission resources a
+// plugin contributes to the role editor and how its admin RPC methods map
+// onto them. Every plugin with an admin surface already gets a base
+// resource ("plugin:<manifest id>" with read/write/execute); this block adds
+// sub-resources ("plugin:<manifest id>:<key>") and per-method requirements.
+//
+//	"rbac": {
+//	  "sensitive": false,
+//	  "resources": [
+//	    {"key": "asset-types", "label": "Asset types", "actions": ["read","write","delete"]},
+//	    {"key": "assets", "label": "Assets", "actions": ["read","write","delete","publish"]}
+//	  ],
+//	  "rpc_methods": {
+//	    "admin_list_types": "asset-types:read",
+//	    "admin_upsert_type": "asset-types:write",
+//	    "admin_stats": "read"
+//	  }
+//	}
+//
+// rpc_methods values are plugin-relative: "read"/"write"/"execute" name the
+// base resource, "<key>:<action>" a declared sub-resource, and a value with
+// the "plugin:" prefix or a platform resource ("plugins:execute") is used as
+// is. Methods not listed need the base write.
+type ManifestRBAC struct {
+	// Sensitive withholds the plugin's read from read-only system roles
+	// (Viewer, Auditor), like the platform's sensitive data classes.
+	Sensitive bool `json:"sensitive,omitempty"`
+	// Resources are the sub-resources the plugin declares.
+	Resources []ManifestPermissionResource `json:"resources,omitempty"`
+	// RPCMethods maps admin RPC method names to the permission they need.
+	RPCMethods map[string]string `json:"rpc_methods,omitempty"`
+}
+
+// ManifestPermissionResource declares one plugin sub-resource.
+type ManifestPermissionResource struct {
+	Key         string   `json:"key"`
+	Label       string   `json:"label"`
+	Description string   `json:"description,omitempty"`
+	Actions     []string `json:"actions"`
+	Sensitive   bool     `json:"sensitive,omitempty"`
+}
+
+var permissionResourceKeyPattern = regexp.MustCompile(`^[a-z0-9]+(?:[-_][a-z0-9]+)*$`)
+
+// validPermissionActions mirrors authz.Actions without importing the
+// package (models is a leaf package).
+var validPermissionActions = map[string]bool{"read": true, "write": true, "delete": true, "execute": true, "publish": true}
+
+// Validate checks the block's shape: kebab-case keys, unique within the
+// plugin, labels present, actions known, read offered first.
+func (r *ManifestRBAC) Validate() error {
+	if r == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, res := range r.Resources {
+		if !permissionResourceKeyPattern.MatchString(res.Key) {
+			return fmt.Errorf("rbac.resources key %q must be lowercase letters, digits, '-' or '_'", res.Key)
+		}
+		if seen[res.Key] {
+			return fmt.Errorf("rbac.resources key %q declared twice", res.Key)
+		}
+		seen[res.Key] = true
+		if strings.TrimSpace(res.Label) == "" {
+			return fmt.Errorf("rbac.resources entry %q needs a label", res.Key)
+		}
+		if len(res.Actions) == 0 || res.Actions[0] != "read" {
+			return fmt.Errorf("rbac.resources entry %q must list \"read\" as its first action", res.Key)
+		}
+		actions := map[string]bool{}
+		for _, a := range res.Actions {
+			if !validPermissionActions[a] || actions[a] {
+				return fmt.Errorf("rbac.resources entry %q has invalid or duplicate action %q", res.Key, a)
+			}
+			actions[a] = true
+		}
+	}
+	for method, perm := range r.RPCMethods {
+		if strings.TrimSpace(method) == "" || strings.TrimSpace(perm) == "" {
+			return fmt.Errorf("rbac.rpc_methods entries need a method name and a permission")
+		}
+		parts := strings.Split(perm, ":")
+		if !validPermissionActions[parts[len(parts)-1]] {
+			return fmt.Errorf("rbac.rpc_methods[%q] %q must end in a known action", method, perm)
+		}
+		if len(parts) == 2 && !strings.HasPrefix(perm, PluginPermissionPrefix) {
+			if _, ok := seen[parts[0]]; !ok && !isLikelyPlatformResource(parts[0]) {
+				return fmt.Errorf("rbac.rpc_methods[%q] refers to undeclared resource %q", method, parts[0])
+			}
+		}
+	}
+	return nil
+}
+
+// isLikelyPlatformResource accepts a platform resource key by shape so a
+// manifest may reference "plugins:execute" without models importing authz;
+// the API resolves the final string against the catalogue.
+func isLikelyPlatformResource(key string) bool {
+	return permissionResourceKeyPattern.MatchString(key)
 }
 
 // ManifestResourceType declares a resource type in the plugin manifest
@@ -333,6 +439,10 @@ func (pm *PluginManifest) ValidateManifest() error {
 		if _, err := rt.ParseSubmissionSchema(); err != nil {
 			return fmt.Errorf("resource type '%s': %w", rt.Slug, err)
 		}
+	}
+
+	if err := pm.RBAC.Validate(); err != nil {
+		return err
 	}
 
 	// Governed metadata contributions (Enterprise): light structural checks so a

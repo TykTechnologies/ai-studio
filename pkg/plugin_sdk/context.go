@@ -227,6 +227,16 @@ type StudioServices interface {
 	// Requires the "resource-types.manage" service scope.
 	RegisterResourceTypes(ctx context.Context, regs []ResourceTypeRegistration, deactivateMissing bool) (registered uint32, deactivated uint32, err error)
 
+	// RegisterPermissionResources (re)registers the plugin's runtime RBAC
+	// resources: rows in the role editor beneath the plugin's own entry, keyed
+	// "plugin:<manifest id>:<key>". Use it for resources only known at runtime
+	// (asset classes an administrator defines); static ones belong in the
+	// manifest's "rbac.resources". With removeMissing, runtime resources absent
+	// from specs are removed (manifest-declared ones never are). Returns the
+	// counts and the plugin's permission key. Requires the "rbac.register"
+	// service scope.
+	RegisterPermissionResources(ctx context.Context, specs []PermissionResource, removeMissing bool) (registered uint32, removed uint32, pluginKey string, err error)
+
 	// ===== Governed Metadata (Enterprise) =====
 	// objectType is "llm", "tool", "datasource" or "plugin_resource:<plugin_id>:<slug>".
 	// A plugin may write "plugin_resource:self:<slug>" (see SelfResourceObjectType) for

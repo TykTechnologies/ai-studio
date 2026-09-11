@@ -58,9 +58,76 @@ func PluginBaseResource(plugin *models.Plugin) authz.Resource {
 	}
 }
 
+// PluginSubResource builds the catalogue entry for one declared or
+// runtime-registered sub-resource of a plugin.
+func PluginSubResource(plugin *models.Plugin, row models.PluginPermissionResource) authz.Resource {
+	base := PluginBaseResource(plugin)
+	actions := make([]authz.Action, 0, len(row.Actions))
+	for _, a := range row.Actions {
+		actions = append(actions, authz.Action(a))
+	}
+	return authz.Resource{
+		Key:         base.Key + ":" + row.Key,
+		Label:       row.Label,
+		Group:       "Plugins",
+		Actions:     actions,
+		Sensitive:   row.Sensitive,
+		Plugin:      base.Key,
+		PluginLabel: base.PluginLabel,
+		Dynamic:     true,
+		Description: row.Description,
+	}
+}
+
+// manifestPermissionRows converts the manifest's rbac.resources block into
+// table rows (source manifest).
+func manifestPermissionRows(plugin *models.Plugin) []models.PluginPermissionResource {
+	block := plugin.ManifestRBAC()
+	if block == nil {
+		return nil
+	}
+	rows := make([]models.PluginPermissionResource, 0, len(block.Resources))
+	for _, r := range block.Resources {
+		rows = append(rows, models.PluginPermissionResource{
+			Key:         r.Key,
+			Label:       r.Label,
+			Description: r.Description,
+			Actions:     models.StringList(r.Actions),
+			Sensitive:   r.Sensitive,
+			Source:      models.PluginPermissionSourceManifest,
+		})
+	}
+	return rows
+}
+
+// registerPluginResources puts the plugin's base resource and every stored
+// sub-resource into the catalogue.
+func (s *Service) registerPluginResources(plugin *models.Plugin) error {
+	base := PluginBaseResource(plugin)
+	if block := plugin.ManifestRBAC(); block != nil {
+		base.Sensitive = block.Sensitive
+	}
+	if err := authz.Replace(base); err != nil {
+		return err
+	}
+	rows, err := models.ListPluginPermissionResources(s.DB, plugin.ID)
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if err := authz.Replace(PluginSubResource(plugin, row)); err != nil {
+			logger.Warn(fmt.Sprintf("plugin permissions: could not register %s:%s: %v", base.Key, row.Key, err))
+		}
+	}
+	return nil
+}
+
 // SyncPluginPermissions registers (or refreshes) the plugin's permission
-// resource, removing a resource registered under a previous key, and drops
-// it when the plugin no longer has an administrator surface.
+// resources: the base resource, the sub-resources its manifest declares
+// (stored with source manifest, replacing the previous declaration) and any
+// runtime-registered ones. A resource registered under a previous key is
+// removed, and everything is dropped when the plugin no longer has an
+// administrator surface.
 func (s *Service) SyncPluginPermissions(plugin *models.Plugin) {
 	if plugin == nil || plugin.ID == 0 {
 		return
@@ -71,7 +138,14 @@ func (s *Service) SyncPluginPermissions(plugin *models.Plugin) {
 	}
 	changed := false
 	if plugin.HasAdminSurface() && plugin.DeletedAt.Time.IsZero() {
-		if err := authz.Replace(PluginBaseResource(plugin)); err != nil {
+		if s.DB != nil {
+			if err := models.UpsertPluginPermissionResources(s.DB, plugin.ID, models.PluginPermissionSourceManifest, manifestPermissionRows(plugin), true); err != nil {
+				logger.Warn(fmt.Sprintf("plugin permissions: could not store manifest resources for %s: %v", key, err))
+			}
+		}
+		// Re-register from scratch so sub-resources dropped from the manifest disappear.
+		authz.UnregisterPlugin(key)
+		if err := s.registerPluginResources(plugin); err != nil {
 			logger.Warn(fmt.Sprintf("plugin permissions: could not register %s: %v", key, err))
 			return
 		}
@@ -84,6 +158,40 @@ func (s *Service) SyncPluginPermissions(plugin *models.Plugin) {
 	if changed {
 		s.refreshSystemRolesAfterCatalogueChange()
 	}
+}
+
+// RegisterPluginPermissionResources stores runtime-registered sub-resources
+// for a plugin (management API) and refreshes the catalogue. With
+// removeMissing, runtime rows not in rows are deleted; manifest rows are
+// untouched. It returns the plugin's permission key.
+func (s *Service) RegisterPluginPermissionResources(pluginID uint, rows []models.PluginPermissionResource, removeMissing bool) (string, int, error) {
+	plugin := &models.Plugin{}
+	if err := plugin.Get(s.DB, pluginID); err != nil {
+		return "", 0, err
+	}
+	for i := range rows {
+		spec := models.ManifestPermissionResource{Key: rows[i].Key, Label: rows[i].Label, Description: rows[i].Description, Actions: []string(rows[i].Actions), Sensitive: rows[i].Sensitive}
+		if err := (&models.ManifestRBAC{Resources: []models.ManifestPermissionResource{spec}}).Validate(); err != nil {
+			return "", 0, err
+		}
+	}
+	before, err := models.ListPluginPermissionResources(s.DB, pluginID)
+	if err != nil {
+		return "", 0, err
+	}
+	if err := models.UpsertPluginPermissionResources(s.DB, pluginID, models.PluginPermissionSourceRuntime, rows, removeMissing); err != nil {
+		return "", 0, err
+	}
+	after, err := models.ListPluginPermissionResources(s.DB, pluginID)
+	if err != nil {
+		return "", 0, err
+	}
+	removed := 0
+	if len(before) > len(after) {
+		removed = len(before) - len(after)
+	}
+	s.SyncPluginPermissions(plugin)
+	return plugin.PermissionKey(), removed, nil
 }
 
 // RemovePluginPermissions unregisters everything the plugin contributed.
@@ -99,6 +207,11 @@ func (s *Service) RemovePluginPermissions(plugin *models.Plugin) {
 	removed := 0
 	for _, k := range keys {
 		removed += authz.UnregisterPlugin(k)
+	}
+	if s.DB != nil {
+		if err := models.DeletePluginPermissionResources(s.DB, plugin.ID); err != nil {
+			logger.Warn(fmt.Sprintf("plugin permissions: could not delete stored resources for %d: %v", plugin.ID, err))
+		}
 	}
 	if removed > 0 {
 		s.refreshSystemRolesAfterCatalogueChange()
@@ -121,7 +234,7 @@ func (s *Service) RebuildPermissionCatalogue() error {
 		if !p.HasAdminSurface() {
 			continue
 		}
-		if err := authz.Replace(PluginBaseResource(p)); err != nil {
+		if err := s.registerPluginResources(p); err != nil {
 			logger.Warn(fmt.Sprintf("plugin permissions: could not register %s: %v", p.PermissionKey(), err))
 			continue
 		}
