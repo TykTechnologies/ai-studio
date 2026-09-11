@@ -21,6 +21,7 @@ The LLM Proxy System acts as a centralized, secure, and observable gateway for a
 *   **Administrator (Admin):**
     *   **Configuration:** Uses the Midsommar API/UI (**App/LLM/Filter Management**) to:
         *   Define LLM providers (`llms` table), including vendor type, API endpoint, credentials (if applicable, though often App-specific), allowed models, budget settings, and associated Filters.
+            *   The API endpoint may be configured with or without a version segment and with or without a proxy prefix (`https://api.anthropic.com`, `https://api.anthropic.com/v1`, `https://gw/anthropic/v1`). The proxy composes the vendor URL from the endpoint path and the request path with their overlap removed (`proxy/upstream_path.go`), so every entry point (unified router, `/ai/` bridge, `/llm/call/` passthrough, streaming or not) reaches the same vendor path. The Anthropic driver used by chat appends `/v1` itself when the endpoint has no version segment (`vendors/anthropic.DriverBaseURL`).
         *   Create and manage Filters (`filters` table) containing JavaScript logic.
         *   Manage Applications (`apps` table) and potentially their credentials/associations.
         *   Manage Model Pricing (`model_prices` table) via **Pricing** features.

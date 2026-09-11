@@ -196,10 +196,39 @@ func (v *Anthropic) ProvidesEmbedder() bool {
 	return false
 }
 
+// DriverBaseURL returns the base URL to hand the langchaingo Anthropic client
+// for a configured endpoint. That client appends "/messages" to its base URL
+// (its own default is https://api.anthropic.com/v1), so an endpoint configured
+// without a version segment, whether the bare host or a proxy prefix such as
+// https://gw/anthropic, would be called at /messages and answered 404. The
+// Messages API only exists under /v1, so a version segment is appended unless
+// the endpoint already ends in one. An empty endpoint is left empty so the
+// client falls back to its default.
+func DriverBaseURL(endpoint string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if trimmed == "" {
+		return ""
+	}
+	last := trimmed[strings.LastIndex(trimmed, "/")+1:]
+	if isVersionSegment(last) {
+		return trimmed
+	}
+	return trimmed + "/v1"
+}
+
+// isVersionSegment reports whether a path segment names an API version (v1,
+// v2, v1beta, ...).
+func isVersionSegment(seg string) bool {
+	if len(seg) < 2 || seg[0] != 'v' || seg[1] < '0' || seg[1] > '9' {
+		return false
+	}
+	return true
+}
+
 func setupAnthropicDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	var opts = make([]anthropic.Option, 0)
-	if connDef.APIEndpoint != "" {
-		opts = append(opts, anthropic.WithBaseURL(connDef.APIEndpoint))
+	if baseURL := DriverBaseURL(connDef.APIEndpoint); baseURL != "" {
+		opts = append(opts, anthropic.WithBaseURL(baseURL))
 	}
 
 	if connDef.APIKey != "" {

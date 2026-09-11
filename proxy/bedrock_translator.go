@@ -388,10 +388,10 @@ func (p *Proxy) handleBedrockChatCompletionStream(
 	// Record proxy log and analytics in a single goroutine to ensure correct ordering:
 	// ProxyLog must be recorded first to create the skeleton event that ChatRecord enriches.
 	responseText := textBuffer.String()
-	go func() {
+	p.goAnalyze(func() {
 		recordBedrockProxyLog(p, conf, app, modelID, reqBody, responseText, r, timestamp)
 		recordBedrockChatRecord(p, conf, app, modelID, int(inputTokens), int(outputTokens), int(cacheWriteTokens), int(cacheReadTokens), r, timestamp)
-	}()
+	})
 }
 
 // --- Helper functions ---

@@ -429,9 +429,11 @@ func (h *harness) URLFor(surface vc.Surface, v vc.VendorConfig) string {
 // is precisely what the sdk surface exists to exercise.
 //
 // The version segment is derived from the configured endpoint rather than
-// hardcoded, because the endpoint's shape is not ours to dictate: Anthropic's
-// must carry /v1 for the langchaingo driver, so hardcoding "v1/messages" here
-// would proxy to /v1/v1/messages.
+// hardcoded so the suite sends what a real SDK pointed at that endpoint would
+// send. The gateway itself now removes any overlap between the endpoint path
+// and the request path (proxy/upstream_path.go), so "v1/messages" against a
+// /v1 endpoint would also work; deriving it keeps the suite honest about the
+// wire the SDK produces rather than relying on that.
 func nativePath(v vc.VendorConfig) string {
 	endsWithVersion := func(seg string) bool {
 		return strings.HasSuffix(strings.TrimSuffix(v.Endpoint, "/"), "/"+seg)
