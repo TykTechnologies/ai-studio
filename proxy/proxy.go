@@ -148,6 +148,11 @@ type Proxy struct {
 	// connections are reused across requests instead of a fresh pool per call.
 	loopbackTransport *http.Transport
 	loopbackOnce      sync.Once
+
+	// analyzers counts the background analytics goroutines spawned after a
+	// response is written (see goAnalyze). They outlive the request, so anything
+	// that tears the proxy or the analytics handler down waits on it.
+	analyzers sync.WaitGroup
 }
 
 type Config struct {
@@ -715,7 +720,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
 		// Error body for analytics should be constructed carefully if needed
-		go p.analyzeResponse(llm, app, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, r)
+		p.goAnalyze(func() {
+			p.analyzeResponse(llm, app, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, r)
+		})
 		respStatus = http.StatusForbidden
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded", err, false)
 		return
@@ -723,7 +730,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if err := p.screenProxyRequestByVendor(llm, r, false); err != nil {
 		respStatus = http.StatusBadRequest
 		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
-		go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
+		p.goAnalyze(func() {
+			p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
+		})
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
@@ -827,7 +836,9 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 				// Log with 400 status and include both the block reason and original LLM response for audit trail
 				blockedResponseBody := fmt.Sprintf(`{"filter_blocked":true,"block_reason":%q,"original_response":%s}`,
 					blockMsg, string(bufferedCapture.buffer.Bytes()))
-				go p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(blockedResponseBody), reqBody, r)
+				p.goAnalyze(func() {
+					p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(blockedResponseBody), reqBody, r)
+				})
 				return
 			}
 		}
@@ -835,11 +846,15 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// AI Gateway proxy writes the final (potentially modified) response to client
 		bufferedCapture.WriteToClient()
 
-		go p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
+		p.goAnalyze(func() {
+			p.analyzeResponse(llm, app, bufferedCapture.statusCode, bufferedCapture.buffer.Bytes(), reqBody, r)
+		})
 	} else {
 		capture := newResponseCapture(w)
 		httpProxy.ServeHTTP(capture, r)
-		go p.analyzeResponse(llm, app, capture.statusCode, capture.CapturedBody(), reqBody, r)
+		p.goAnalyze(func() {
+			p.analyzeResponse(llm, app, capture.statusCode, capture.CapturedBody(), reqBody, r)
+		})
 	}
 }
 
@@ -1393,7 +1408,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
 		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
-		go p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
+		p.goAnalyze(func() {
+			p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
+		})
 		respStatus = http.StatusForbidden
 		respondWithError(w, http.StatusForbidden, "Budget limit exceeded for streaming", err, false)
 		return
@@ -1401,7 +1418,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if err := p.screenProxyRequestByVendor(llm, r, true); err != nil {
 		respStatus = http.StatusBadRequest
 		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
-		go p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
+		p.goAnalyze(func() {
+			p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
+		})
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
 		return
 	}
@@ -1538,7 +1557,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					isErr = true
 					// Log with 400 status and include both the block reason and partial LLM response for audit trail
 					blockedResponseBody := buildFilterBlockedAnalyticsBody(blockMsg, chunkIndex, fullResponse.String())
-					go p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
+					p.goAnalyze(func() {
+						p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
+					})
 					return
 				}
 			}
@@ -1562,7 +1583,9 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if !isErr {
-		go p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
+		p.goAnalyze(func() {
+			p.analyzeStreamingResponse(llm, app, upstreamReq, resp.StatusCode, fullResponse.Bytes(), reqBody, responses, time.Now(), resp.Header.Get("Content-Encoding"))
+		})
 
 		// Execute OnStreamComplete hook for plugins (e.g., caching)
 		if p.responseHookManager != nil && p.hasResponseHooks() {
@@ -1684,6 +1707,25 @@ func (p *Proxy) handleUnifiedLLMRequest(w http.ResponseWriter, r *http.Request) 
 		slog.Debug("Unified handler routing to REST", "original_path", originalPath, "rewritten_path", r.URL.Path, "llm_slug", llmSlug)
 		p.handleLLMRequest(w, r)
 	}
+}
+
+// goAnalyze runs post-response analysis (proxy logs, chat records, budget
+// tracking) in the background and tracks it, so a shutdown or a test can wait
+// for in-flight analysis with waitForAnalyzers instead of guessing with a
+// sleep. The analytics handler is process-global, and a goroutine that is still
+// recording when that handler is replaced or stopped is a data race.
+func (p *Proxy) goAnalyze(fn func()) {
+	p.analyzers.Add(1)
+	go func() {
+		defer p.analyzers.Done()
+		fn()
+	}()
+}
+
+// waitForAnalyzers blocks until every analysis goroutine started with goAnalyze
+// has finished.
+func (p *Proxy) waitForAnalyzers() {
+	p.analyzers.Wait()
 }
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {

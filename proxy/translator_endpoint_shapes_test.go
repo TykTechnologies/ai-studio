@@ -78,7 +78,15 @@ func newEndpointShapeHarness(t *testing.T, vendor models.Vendor, endpointSuffix 
 	require.NoError(t, p.loadResources())
 	srv := &http.Server{Handler: p.createHandler()}
 	go func() { _ = srv.Serve(ln) }()
-	t.Cleanup(func() { _ = srv.Close() })
+	// Cleanups run last-registered first: stop accepting requests, then wait
+	// for the background analysis each request spawned, and only then (the
+	// cleanups registered above) close the fake vendor, stop analytics and
+	// close the DB. Without the wait, an analyzer still recording when the next
+	// test resets the global analytics handler is a data race.
+	t.Cleanup(func() {
+		_ = srv.Close()
+		p.waitForAnalyzers()
+	})
 	return h
 }
 
