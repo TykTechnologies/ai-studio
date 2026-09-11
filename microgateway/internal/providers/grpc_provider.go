@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -422,6 +423,15 @@ func (p *GRPCProvider) ListPlugins(namespace string, hookType string, active boo
 
 // Conversion methods from protobuf to database models
 
+// jsonOrNil turns a JSON string field into a datatypes.JSON column value,
+// keeping "" as nil so the column is NULL rather than an empty string.
+func jsonOrNil(s string) datatypes.JSON {
+	if s == "" {
+		return nil
+	}
+	return datatypes.JSON(s)
+}
+
 func (p *GRPCProvider) convertPBLLMToDatabase(pbLLM *pb.LLMConfig) *database.LLM {
 	// Convert protobuf timestamps
 	var createdAt, updatedAt time.Time
@@ -452,6 +462,8 @@ func (p *GRPCProvider) convertPBLLMToDatabase(pbLLM *pb.LLMConfig) *database.LLM
 		RateLimitRPM:    int(pbLLM.RateLimitRpm),
 		Namespace:       pbLLM.Namespace,
 		GovernedMetadata: database.GovernedMetadataJSON(pbLLM.GovernedMetadata),
+		// Failover rides as a JSON string; an empty string must stay NULL.
+		Failover: jsonOrNil(pbLLM.Failover),
 		// Note: JSON fields (Metadata, AllowedModels, AuthConfig) would need proper JSON unmarshaling
 		// For now, we'll leave them empty or implement conversion if needed
 	}

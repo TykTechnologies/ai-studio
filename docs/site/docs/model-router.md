@@ -191,9 +191,11 @@ The router will:
 
 ## Use Cases
 
-### Multi-Vendor Failover
+### Multi-Vendor Traffic Splitting
 
-Create a pool with multiple vendors for the same model pattern. If one vendor is unavailable or disabled, requests automatically go to other active vendors.
+Create a pool with multiple vendors for the same model pattern to spread traffic across them. A vendor that an administrator marks **inactive** stops receiving requests; the router does not itself detect a vendor that is failing, and it does not retry a request that fails on the vendor it picked. A weighted pool such as the one below therefore sends roughly one request in eleven to the second vendor at all times rather than only when the first is down.
+
+For request-level failover, configure a **failover waterfall** on the LLM provider itself (see [LLM Management](./llm-management.md#failover)). The router hands each request to the chosen vendor's provider, so that provider's waterfall applies: when its upstream fails, the same request is retried against the fallbacks before an error is returned.
 
 ```json
 {

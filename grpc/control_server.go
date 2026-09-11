@@ -834,6 +834,12 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				ResponseCode: int(event.StatusCode),
 				TimeStamp:    event.Timestamp.AsTime(),
 			}
+			// Failover marker: which primary this rung was failing over from.
+			if event.FailoverFromLlmId != 0 {
+				from := uint(event.FailoverFromLlmId)
+				proxyLogs[i].FailoverFromLLMID = &from
+				proxyLogs[i].FailoverAttempt = int(event.FailoverAttempt)
+			}
 
 			// Create LLMChatRecord for analytics (tokens, cost, usage tracking)
 			chatRecords[i] = &models.LLMChatRecord{
@@ -1235,6 +1241,15 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			}
 		}
 
+		// Serialize the failover waterfall the same way; empty when none so the
+		// edge stores NULL and the checksum only moves when a waterfall exists.
+		var failoverJSON string
+		if llm.Failover.Enabled() {
+			if failoverBytes, err := json.Marshal(llm.Failover); err == nil {
+				failoverJSON = string(failoverBytes)
+			}
+		}
+
 		pbLLM := &pb.LLMConfig{
 			Id:               uint32(llm.ID),
 			Name:             llm.Name,
@@ -1252,6 +1267,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			Metadata:         metadataJSON,
 			GovernedMetadata: s.governedMetadataJSON(models.GovernedObjectTypeLLM, governedLLMs[models.BuiltinObjectID(llm.ID)]),
 			AllowedModels:    allowedModelsJSON,
+			Failover:         failoverJSON,
 			Namespace:        llm.Namespace,
 			DontLogBodies:    llm.DontLogBodies,
 			FilterIds:        filterIDs,

@@ -197,6 +197,7 @@ func (s *LLMManagementServer) CreateLLM(ctx context.Context, req *pb.CreateLLMRe
 		req.GetNamespace(),
 		req.GetDontLogBodies(),
 		nil,
+		nil, // Failover is managed through the admin API
 	)
 	if err != nil {
 		log.Error().Err(err).
@@ -256,6 +257,7 @@ func (s *LLMManagementServer) UpdateLLM(ctx context.Context, req *pb.UpdateLLMRe
 		namespace, // Support namespace updates via gRPC
 		req.GetDontLogBodies(),
 		nil,
+		&existingLLM.Failover, // Preserve the waterfall; nil would clear it
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

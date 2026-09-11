@@ -34,7 +34,34 @@ func existingLLM() *models.LLM {
 		DontLogBodies:    true,
 		MonthlyBudget:    &budget,
 		Filters:          []*models.Filter{{ID: 7}},
+		Failover: models.LLMFailover{
+			Targets: []models.LLMFailoverTarget{{LLMID: 9, Model: "claude-sonnet-4"}},
+		},
 	}
+}
+
+func TestMergeLLMPatch_FailoverAbsentIsRetainedAndNullClears(t *testing.T) {
+	absent := []byte(`{"data":{"type":"llm","attributes":{"name":"Renamed"}}}`)
+	var input LLMInput
+	assert.NoError(t, json.Unmarshal(absent, &input))
+	mergeLLMPatch(&input, existingLLM(), llmPatchAttributeKeys(absent))
+	if assert.NotNil(t, input.Data.Attributes.Failover, "absent key restores the stored waterfall") {
+		assert.Equal(t, existingLLM().Failover, *input.Data.Attributes.Failover)
+	}
+
+	null := []byte(`{"data":{"type":"llm","attributes":{"failover":null}}}`)
+	input = LLMInput{}
+	assert.NoError(t, json.Unmarshal(null, &input))
+	mergeLLMPatch(&input, existingLLM(), llmPatchAttributeKeys(null))
+	assert.Nil(t, input.Data.Attributes.Failover, "an explicit null clears the waterfall")
+
+	// An LLM that never had a waterfall is not "restored" to an empty struct.
+	plain := existingLLM()
+	plain.Failover = models.LLMFailover{}
+	input = LLMInput{}
+	assert.NoError(t, json.Unmarshal(absent, &input))
+	mergeLLMPatch(&input, plain, llmPatchAttributeKeys(absent))
+	assert.Nil(t, input.Data.Attributes.Failover)
 }
 
 func TestMergeLLMPatch_OmittedFieldsAreRetained(t *testing.T) {

@@ -699,6 +699,26 @@ const LLMDetails = () => {
               // An empty list is not a deny-all: it permits everything.
               <FieldValue>All models allowed (no patterns specified)</FieldValue>
             )}
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Failover:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            {llm.attributes.failover?.targets?.length ? (
+              <Box data-testid="llm-failover-waterfall">
+                {llm.attributes.failover.targets.map((t, index) => (
+                  <FieldValue key={index}>
+                    {index + 1}. LLM #{t.llm_id} &rarr; {t.model}
+                  </FieldValue>
+                ))}
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                  Tried in order when this LLM's upstream fails. Apps allowed to
+                  use this LLM inherit access to these fallbacks.
+                </Typography>
+              </Box>
+            ) : (
+              <FieldValue>No failover configured</FieldValue>
+            )}
             <Typography
               variant="caption"
               color="text.secondary"

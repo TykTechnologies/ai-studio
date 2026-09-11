@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
-	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
-	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
@@ -943,6 +943,16 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		}
 	}
 
+	// Convert the failover waterfall from JSON. This is what the shared proxy
+	// reads, so once it is set the edge fails over exactly as the hub does.
+	var failover models.LLMFailover
+	if len(dbLLM.Failover) > 0 {
+		if err := json.Unmarshal(dbLLM.Failover, &failover); err != nil {
+			log.Error().Err(err).Uint("llm_id", dbLLM.ID).Msg("Failed to unmarshal LLM failover")
+			failover = models.LLMFailover{}
+		}
+	}
+
 	llm := models.LLM{
 		Model:         gorm.Model{ID: dbLLM.ID, CreatedAt: dbLLM.CreatedAt, UpdatedAt: dbLLM.UpdatedAt},
 		ID:            dbLLM.ID,
@@ -957,6 +967,7 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 		AllowedModels: allowedModels,
 		DontLogBodies: dbLLM.DontLogBodies,
 		Metadata:      metadata,
+		Failover:      failover,
 	}
 
 	log.Debug().

@@ -55,6 +55,9 @@ type LLM struct {
 	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
 	GovernedMetadata datatypes.JSON `gorm:"type:json" json:"governed_metadata"`
 	AllowedModels   datatypes.JSON `gorm:"type:json" json:"allowed_models"` // JSON array of regex patterns for allowed models
+	// Failover is the LLM's failover waterfall as synced from the hub
+	// (models.LLMFailover JSON); NULL when the LLM has none.
+	Failover        datatypes.JSON `gorm:"type:json" json:"failover"`
 	
 	// Authentication configuration for pluggable auth mechanisms
 	AuthMechanism   string         `gorm:"default:'token'" json:"auth_mechanism"` // "token", "oauth", "api-key", "custom"
@@ -212,6 +215,11 @@ type AnalyticsEvent struct {
 	RouterSourceModel   string // Original model name before mapping
 	RouterTargetModel   string // Model name after mapping (may be same as source)
 	RouterSelectionAlgo string // Selection algorithm used: "round_robin" or "weighted"
+
+	// LLM failover: set when this attempt was a rung of FailoverFromLLMID's
+	// waterfall; nil / 0 for a primary attempt.
+	FailoverFromLLMID *uint `gorm:"index:idx_analytics_failover_from"`
+	FailoverAttempt   int   `gorm:"default:0"`
 
 	// Timestamps
 	TimeStamp      time.Time      `gorm:"index:idx_analytics_timestamp"` // Match LLMChatRecord field name

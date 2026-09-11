@@ -997,6 +997,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			// JSON fields as strings
 			Metadata:      string(llm.Metadata),
 			AllowedModels: string(llm.AllowedModels),
+			Failover:      string(llm.Failover),
 			AuthMechanism: llm.AuthMechanism,
 			AuthConfig:    string(llm.AuthConfig),
 			

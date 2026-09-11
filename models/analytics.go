@@ -147,4 +147,10 @@ type ProxyLog struct {
 	RequestBody  string
 	ResponseBody string
 	ResponseCode int `gorm:"index:idx_proxy_logs_code;index:idx_proxy_logs_app_code_time,priority:2"`
+	// FailoverFromLLMID is set when this attempt was a rung of that LLM's
+	// failover waterfall; nil for a primary attempt. FailoverAttempt is the
+	// 1-based rung index (0 = primary). A request that failed over leaves one
+	// row per attempt, so request counts should filter failover_attempt = 0.
+	FailoverFromLLMID *uint `gorm:"index:idx_proxy_logs_failover_from"`
+	FailoverAttempt   int   `gorm:"default:0"`
 }

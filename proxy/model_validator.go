@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
 	"github.com/gorilla/mux"
 )
 
@@ -61,18 +61,11 @@ func (mv *ModelValidator) RegisterExtractor(vendor string, extractor ModelNameEx
 // The unanchored behaviour is kept deliberately: existing configurations rely
 // on substring matching, and silently anchoring them would start rejecting
 // models that are allowed today.
+//
+// The rule itself lives in pkg/modelmatch so save-time validation in the
+// service layer and request-time validation here cannot drift apart.
 func (mv *ModelValidator) IsModelAllowed(modelName string) bool {
-	if len(mv.allowedModels) == 0 {
-		return true // If no models specified, allow all
-	}
-
-	for _, pattern := range mv.allowedModels {
-		matched, err := regexp.MatchString(pattern, modelName)
-		if err == nil && matched {
-			return true
-		}
-	}
-	return false
+	return modelmatch.Allowed(mv.allowedModels, modelName)
 }
 
 func (mv *ModelValidator) ValidateRequest(body []byte) error {
