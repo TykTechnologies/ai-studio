@@ -100,6 +100,9 @@ func (a *API) createTool(c *gin.Context) {
 	} else if !a.canPublish(c, "tools") {
 		wantActive = false
 	}
+	if wantActive && !a.publishGateOpen(c, models.GovernedObjectTypeTool, "", input.Data.Attributes.GovernedMetadata) {
+		return
+	}
 
 	// Create the tool via service layer (includes auto-assignment to Default catalogue)
 	tool, err := a.service.CreateTool(
@@ -278,6 +281,10 @@ func (a *API) updateTool(c *gin.Context) {
 	// switch keeps its value.
 	if input.Data.Attributes.Active != nil {
 		if !a.requirePublishIfChanged(c, "tools", tool.Active, *input.Data.Attributes.Active) {
+			return
+		}
+		if !tool.Active && *input.Data.Attributes.Active &&
+			!a.publishGateOpen(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(tool.ID), input.Data.Attributes.GovernedMetadata) {
 			return
 		}
 		tool.Active = *input.Data.Attributes.Active

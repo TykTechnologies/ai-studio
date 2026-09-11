@@ -1754,6 +1754,24 @@ func ValidateObjectMetadata(ctx context.Context, objectType, valuesJSON string) 
 	})
 }
 
+// ValidateObjectMetadataForPublish validates the values an object will hold
+// once it goes live: the stored record for objectID (empty = being created)
+// merged with valuesJSON, with fields marked "required to publish" treated as
+// required. The result is always enforced. Requires the metadata.read scope.
+func ValidateObjectMetadataForPublish(ctx context.Context, objectType, objectID, valuesJSON string) (*mgmtpb.ValidateObjectMetadataResponse, error) {
+	client, err := getServiceClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service client unavailable: %w", err)
+	}
+	return client.ValidateObjectMetadata(ctx, &mgmtpb.ValidateObjectMetadataRequest{
+		Context:    createPluginContext(AvailableScopes.MetadataRead),
+		ObjectType: objectType,
+		ObjectId:   objectID,
+		ValuesJson: valuesJSON,
+		Publishing: true,
+	})
+}
+
 // --- Notifications ---
 
 // NotificationRequest describes an in-app notification raised by a plugin.

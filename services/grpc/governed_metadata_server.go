@@ -245,7 +245,12 @@ func (s *GovernedMetadataServer) ValidateObjectMetadata(ctx context.Context, req
 			return nil, status.Errorf(codes.InvalidArgument, "values_json must be a JSON object: %v", err)
 		}
 	}
-	result, err := s.svc().Validate(objectType, values)
+	var result *governed_metadata.ValidationResult
+	if req.GetPublishing() {
+		result, err = s.svc().ValidateForPublish(ctx, objectType, req.GetObjectId(), values)
+	} else {
+		result, err = s.svc().Validate(objectType, values)
+	}
 	if err != nil {
 		return nil, mapGovernedMetadataError(err)
 	}

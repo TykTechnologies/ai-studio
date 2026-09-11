@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/gin-gonic/gin"
 )
 
@@ -65,5 +66,33 @@ func (a *API) requirePublish(c *gin.Context, resource string) bool {
 		return true
 	}
 	c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Publish(resource)))
+	return false
+}
+
+// publishGateOpen checks the governed-metadata publish gate (Enterprise):
+// fields marked required_on_publish must be filled before an object goes
+// live. objectID is "" for an object being created; pending holds the
+// governed_metadata attribute of the request, if any, merged over the
+// stored values. On failure it answers 422 with one entry per field, code
+// required_on_publish, in the same envelope as other metadata validation
+// errors, and returns false. Permission checks come first: this gate only
+// runs for callers who may publish.
+func (a *API) publishGateOpen(c *gin.Context, objectType, objectID string, pending *map[string]interface{}) bool {
+	if !governed_metadata.IsEnterpriseAvailable() {
+		return true
+	}
+	var values map[string]interface{}
+	if pending != nil {
+		values = *pending
+	}
+	result, err := a.governedMetadata().ValidateForPublish(c.Request.Context(), objectType, objectID, values)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return false
+	}
+	if result == nil || result.Valid {
+		return true
+	}
+	writeMetadataValidationResponse(c, result)
 	return false
 }

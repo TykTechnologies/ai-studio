@@ -42,8 +42,12 @@ func (a *API) createDatasource(c *gin.Context) {
 		return
 	}
 
-	// Creating a datasource already active is the publish action.
+	// Creating a datasource already active is the publish action, and needs
+	// every "required to publish" metadata field.
 	if !a.requirePublishToCreateLive(c, "datasources", input.Data.Attributes.Active) {
+		return
+	}
+	if input.Data.Attributes.Active && !a.publishGateOpen(c, models.GovernedObjectTypeDatasource, "", input.Data.Attributes.GovernedMetadata) {
 		return
 	}
 
@@ -202,6 +206,10 @@ func (a *API) updateDatasource(c *gin.Context) {
 		input.Data.Attributes.Active = existingDS.Active
 	}
 	if !a.requirePublishIfChanged(c, "datasources", existingDS.Active, input.Data.Attributes.Active) {
+		return
+	}
+	if !existingDS.Active && input.Data.Attributes.Active &&
+		!a.publishGateOpen(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(uint(id)), input.Data.Attributes.GovernedMetadata) {
 		return
 	}
 

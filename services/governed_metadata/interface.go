@@ -289,6 +289,15 @@ type Service interface {
 	// CE: Returns {Valid: true}.
 	Validate(objectType string, values map[string]interface{}) (*ValidationResult, error)
 
+	// ValidateForPublish checks the values an object will hold once it goes
+	// live: the stored record (objectID may be "" for an object being
+	// created) merged with pending, validated with fields marked
+	// required_on_publish treated as required. Enforced is always true so
+	// callers block the publish on any error, whatever the schema's
+	// enforcement level: a field required to publish is a hard gate.
+	// CE: Returns {Valid: true}.
+	ValidateForPublish(ctx context.Context, objectType, objectID string, pending map[string]interface{}) (*ValidationResult, error)
+
 	// --- Values ---
 
 	// GetObjectMetadata returns the stored record, or ErrNotFound.

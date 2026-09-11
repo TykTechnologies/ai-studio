@@ -41,8 +41,12 @@ func (a *API) createLLM(c *gin.Context) {
 		return
 	}
 
-	// Creating a provider already active is the publish action on llms.
+	// Creating a provider already active is the publish action on llms, and
+	// needs every "required to publish" metadata field.
 	if !a.requirePublishToCreateLive(c, "llms", input.Data.Attributes.Active) {
+		return
+	}
+	if input.Data.Attributes.Active && !a.publishGateOpen(c, models.GovernedObjectTypeLLM, "", input.Data.Attributes.GovernedMetadata) {
 		return
 	}
 
@@ -221,6 +225,11 @@ func (a *API) updateLLM(c *gin.Context) {
 	// Flipping the active switch is the publish action on llms; editing an
 	// already-active provider without touching the switch is plain write.
 	if !a.requirePublishIfChanged(c, "llms", thisLLM.Active, input.Data.Attributes.Active) {
+		return
+	}
+	// Going live also needs every "required to publish" metadata field.
+	if !thisLLM.Active && input.Data.Attributes.Active &&
+		!a.publishGateOpen(c, models.GovernedObjectTypeLLM, models.BuiltinObjectID(uint(id)), input.Data.Attributes.GovernedMetadata) {
 		return
 	}
 

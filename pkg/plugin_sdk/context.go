@@ -277,6 +277,13 @@ type StudioServices interface {
 	// Requires the metadata.read scope.
 	GetResolvedMetadataSchema(ctx context.Context, objectType string) (*ResolvedMetadataSchema, error)
 
+	// ValidateObjectMetadataForPublish validates the values an object will
+	// hold once it goes live (stored record for objectID merged with
+	// valuesJSON; "" objectID = being created): fields marked "required to
+	// publish" are required and the result is always enforced. Call it before
+	// moving a resource instance into a live/approved state.
+	ValidateObjectMetadataForPublish(ctx context.Context, objectType, objectID, valuesJSON string) (valid bool, resultJSON string, err error)
+
 	// ValidateObjectMetadata validates values without storing them.
 	// Requires the metadata.read scope.
 	ValidateObjectMetadata(ctx context.Context, objectType, valuesJSON string) (valid bool, enforced bool, resultJSON string, err error)

@@ -317,6 +317,14 @@ func (s *studioServicesImpl) GetResolvedMetadataSchema(ctx context.Context, obje
 	}, nil
 }
 
+func (s *studioServicesImpl) ValidateObjectMetadataForPublish(ctx context.Context, objectType, objectID, valuesJSON string) (bool, string, error) {
+	resp, err := ai_studio_sdk.ValidateObjectMetadataForPublish(ctx, objectType, objectID, valuesJSON)
+	if err != nil {
+		return false, "", err
+	}
+	return resp.Valid, resp.ResultJson, nil
+}
+
 func (s *studioServicesImpl) ValidateObjectMetadata(ctx context.Context, objectType, valuesJSON string) (bool, bool, string, error) {
 	resp, err := ai_studio_sdk.ValidateObjectMetadata(ctx, objectType, valuesJSON)
 	if err != nil {

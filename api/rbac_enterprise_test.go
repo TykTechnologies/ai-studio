@@ -344,6 +344,55 @@ func TestRBAC_PerPluginGrants(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code, "orphaned grants are not evaluated")
 }
 
+// TestRBAC_PublishGateOnMetadata: a metadata field marked "required to
+// publish" lets a submitter save a draft without it but blocks activation
+// until it is filled, whoever holds publish.
+func TestRBAC_PublishGateOnMetadata(t *testing.T) {
+	f := setupRBACFixture(t)
+	require.NoError(t, f.api.service.GovernedMetadata().CreateSchema(&models.MetadataSchema{
+		Name: "Review", Slug: "review", AppliesTo: []string{models.GovernedObjectTypeLLM}, Enforcement: models.MetadataEnforcementAdvisory, Active: true,
+		Fields: []models.MetadataFieldDef{{Key: "approving_reviewer", Label: "Approving reviewer", Type: models.MetadataFieldTypeString, RequiredOnPublish: true}},
+	}))
+
+	body := func(attrs map[string]interface{}) map[string]interface{} {
+		base := map[string]interface{}{"name": "gpt", "vendor": "openai", "api_key": "k", "api_endpoint": "https://api.openai.com", "default_model": "gpt-4o"}
+		for k, v := range attrs {
+			base[k] = v
+		}
+		return map[string]interface{}{"data": map[string]interface{}{"attributes": base}}
+	}
+
+	// Draft without the reviewer is fine; creating live without it is not.
+	w := f.do("POST", "/api/v1/llms", body(map[string]interface{}{"active": true}), f.editor)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "required_on_publish")
+	assert.Contains(t, w.Body.String(), "/data/attributes/governed_metadata/approving_reviewer")
+
+	w = f.do("POST", "/api/v1/llms", body(map[string]interface{}{"active": false}), f.editor)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var created struct{ Data LLMResponse }
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+	id := created.Data.ID
+
+	// The dedicated route and the PATCH both refuse until the field is set.
+	w = f.do("POST", "/api/v1/llms/"+id+"/activate", nil, f.editor)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+	w = f.do("PATCH", "/api/v1/llms/"+id, map[string]interface{}{"data": map[string]interface{}{"attributes": map[string]interface{}{"active": true}}}, f.editor)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+
+	// Supplying it in the same PATCH releases the provider.
+	w = f.do("PATCH", "/api/v1/llms/"+id, map[string]interface{}{"data": map[string]interface{}{"attributes": map[string]interface{}{
+		"active": true, "governed_metadata": map[string]interface{}{"approving_reviewer": "Jane Doe"},
+	}}}, f.editor)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// Once stored, the dedicated route works on its own.
+	w = f.do("POST", "/api/v1/llms/"+id+"/deactivate", nil, f.editor)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = f.do("POST", "/api/v1/llms/"+id+"/activate", nil, f.editor)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
 func TestRBAC_UsersListMasksAPIKeysForNonManagers(t *testing.T) {
 	f := setupRBACFixture(t)
 

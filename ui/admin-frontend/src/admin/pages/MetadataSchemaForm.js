@@ -328,6 +328,9 @@ const MetadataSchemaForm = () => {
                       <StyledTableCell>{f.label}</StyledTableCell>
                       <StyledTableCell>{typeLabel(f.type)}</StyledTableCell>
                       <StyledTableCell>
+                        {f.required_on_publish && (
+                          <Chip label="Required to publish" size="small" color="info" sx={{ mr: 0.5 }} />
+                        )}
                         {f.required ? (
                           <Chip label={f.severity === "warning" ? "Required (warn)" : "Required"} size="small" color={f.severity === "warning" ? "warning" : "error"} />
                         ) : (

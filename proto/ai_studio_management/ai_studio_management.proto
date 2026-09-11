@@ -659,6 +659,11 @@ message ValidateObjectMetadataRequest {
     PluginContext context = 1;
     string object_type = 2;
     string values_json = 3;
+    // Validate for publish: fields marked required_on_publish are required
+    // and the result is always enforced. Set object_id to merge the stored
+    // values beneath values_json (empty = object being created).
+    bool publishing = 4;
+    string object_id = 5;
 }
 
 message ValidateObjectMetadataResponse {

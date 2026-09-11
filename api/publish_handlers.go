@@ -77,6 +77,9 @@ func (a *API) setLLMActive(c *gin.Context, active bool) {
 	if !ok {
 		return
 	}
+	if active && !a.publishGateOpen(c, models.GovernedObjectTypeLLM, models.BuiltinObjectID(id), nil) {
+		return
+	}
 	llm, err := a.service.SetLLMActive(id, active, currentUserID(c))
 	if err != nil {
 		writePublishError(c, err, "LLM")
@@ -117,6 +120,9 @@ func (a *API) setToolActive(c *gin.Context, active bool) {
 	if !ok {
 		return
 	}
+	if active && !a.publishGateOpen(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(id), nil) {
+		return
+	}
 	tool, err := a.service.SetToolActive(id, active, currentUserID(c))
 	if err != nil {
 		writePublishError(c, err, "Tool")
@@ -152,6 +158,9 @@ func (a *API) deactivateDatasource(c *gin.Context) { a.setDatasourceActive(c, fa
 func (a *API) setDatasourceActive(c *gin.Context, active bool) {
 	id, ok := publishTargetID(c, "datasource")
 	if !ok {
+		return
+	}
+	if active && !a.publishGateOpen(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(id), nil) {
 		return
 	}
 	ds, err := a.service.SetDatasourceActive(id, active, currentUserID(c))

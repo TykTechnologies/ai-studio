@@ -116,6 +116,10 @@ type MetadataFieldDef struct {
 
 	Required bool   `json:"required"`
 	Severity string `json:"severity,omitempty"` // error (default) | warning
+	// RequiredOnPublish makes the field mandatory only when the object goes
+	// live (activate / enable): a submitter can save a draft without it, but
+	// the publish is refused until it is filled. Independent of Required.
+	RequiredOnPublish bool `json:"required_on_publish,omitempty"`
 
 	VocabularySlug string   `json:"vocabulary_slug,omitempty"`
 	Pattern        string   `json:"pattern,omitempty"`

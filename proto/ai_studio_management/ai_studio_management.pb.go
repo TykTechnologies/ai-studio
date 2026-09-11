@@ -4466,10 +4466,15 @@ func (x *GetResolvedMetadataSchemaResponse) GetVocabulariesJson() string {
 }
 
 type ValidateObjectMetadataRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
-	ObjectType    string                 `protobuf:"bytes,2,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
-	ValuesJson    string                 `protobuf:"bytes,3,opt,name=values_json,json=valuesJson,proto3" json:"values_json,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Context    *PluginContext         `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	ObjectType string                 `protobuf:"bytes,2,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
+	ValuesJson string                 `protobuf:"bytes,3,opt,name=values_json,json=valuesJson,proto3" json:"values_json,omitempty"`
+	// Validate for publish: fields marked required_on_publish are required
+	// and the result is always enforced. Set object_id to merge the stored
+	// values beneath values_json (empty = object being created).
+	Publishing    bool   `protobuf:"varint,4,opt,name=publishing,proto3" json:"publishing,omitempty"`
+	ObjectId      string `protobuf:"bytes,5,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4521,6 +4526,20 @@ func (x *ValidateObjectMetadataRequest) GetObjectType() string {
 func (x *ValidateObjectMetadataRequest) GetValuesJson() string {
 	if x != nil {
 		return x.ValuesJson
+	}
+	return ""
+}
+
+func (x *ValidateObjectMetadataRequest) GetPublishing() bool {
+	if x != nil {
+		return x.Publishing
+	}
+	return false
+}
+
+func (x *ValidateObjectMetadataRequest) GetObjectId() string {
+	if x != nil {
+		return x.ObjectId
 	}
 	return ""
 }
@@ -14909,13 +14928,17 @@ const file_proto_ai_studio_management_ai_studio_management_proto_rawDesc = "" +
 	"jsonSchema\x12 \n" +
 	"\venforcement\x18\x03 \x01(\tR\venforcement\x12!\n" +
 	"\fschema_slugs\x18\x04 \x03(\tR\vschemaSlugs\x12+\n" +
-	"\x11vocabularies_json\x18\x05 \x01(\tR\x10vocabulariesJson\"\xa0\x01\n" +
+	"\x11vocabularies_json\x18\x05 \x01(\tR\x10vocabulariesJson\"\xdd\x01\n" +
 	"\x1dValidateObjectMetadataRequest\x12=\n" +
 	"\acontext\x18\x01 \x01(\v2#.ai_studio_management.PluginContextR\acontext\x12\x1f\n" +
 	"\vobject_type\x18\x02 \x01(\tR\n" +
 	"objectType\x12\x1f\n" +
 	"\vvalues_json\x18\x03 \x01(\tR\n" +
-	"valuesJson\"s\n" +
+	"valuesJson\x12\x1e\n" +
+	"\n" +
+	"publishing\x18\x04 \x01(\bR\n" +
+	"publishing\x12\x1b\n" +
+	"\tobject_id\x18\x05 \x01(\tR\bobjectId\"s\n" +
 	"\x1eValidateObjectMetadataResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x1a\n" +
 	"\benforced\x18\x02 \x01(\bR\benforced\x12\x1f\n" +

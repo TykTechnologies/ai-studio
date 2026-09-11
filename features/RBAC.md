@@ -46,6 +46,8 @@ Only resources with a live switch offer `publish`: `llms` (`active`), `tools` (`
 
 Editor holds `publish` on everything it can write except `plugins` (enabling a plugin stays with administrators, like installing one) and `metadata` (read-only for Editor). Viewer and Auditor never publish.
 
+Publishing an LLM, tool or data source also passes the governed-metadata publish gate: fields marked *required to publish* must be filled, or the request is answered `422` with code `required_on_publish` (`publishGateOpen` in `api/authz_publish.go`; see `features/GovernedMetadata.md`). Permission first, then the gate, so a submitter without publish sees the permission denial and never the metadata one.
+
 **Role** — a named bundle of permissions (`models.Role`). System roles are immutable and recomputed from the catalogue on every boot; custom roles hold an explicit list and never gain permissions automatically.
 
 **Binding** — a role assigned to a subject (`models.RoleBinding`): `subject_type` is `user` or `group`, `scope_type`/`scope_id` are reserved (empty string = global). A user's effective permissions are the union of their direct bindings and the bindings of every team they belong to. SSO group mapping therefore drives roles without extra configuration.
