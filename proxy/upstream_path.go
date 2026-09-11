@@ -20,6 +20,21 @@ import (
 // So the two are joined with their overlap removed: the longest run of whole
 // segments that ends the endpoint path and begins the caller's path appears
 // once. Every shape above then resolves to .../v1/messages.
+// hasTraversalSegment reports whether a request path carries a ".." segment.
+// joinUpstreamPath resolves those, so a path such as /v1/../../admin would
+// climb out of the configured endpoint prefix on the vendor host. The routers
+// this proxy is mounted in clean such paths before any handler runs, but the
+// handlers reject them explicitly so that guarantee does not depend on how the
+// proxy happens to be mounted.
+func hasTraversalSegment(requestPath string) bool {
+	for _, seg := range strings.Split(requestPath, "/") {
+		if seg == ".." {
+			return true
+		}
+	}
+	return false
+}
+
 func joinUpstreamPath(upstreamPath, remainingPath string) string {
 	base := strings.TrimSuffix(upstreamPath, "/")
 	if base == "" {

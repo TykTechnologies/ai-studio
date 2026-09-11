@@ -684,6 +684,10 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusNotFound, fmt.Sprintf("[rest] LLM not found: %s", llmSlug), nil, false)
 		return
 	}
+	if hasTraversalSegment(r.URL.Path) {
+		respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false)
+		return
+	}
 
 	// Metrics: track in-flight requests and request duration. respStatus carries
 	// the status the caller ends up seeing so the duration observation can attach
@@ -1370,6 +1374,10 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	p.mu.RUnlock()
 	if !ok {
 		respondWithError(w, http.StatusNotFound, "[streaming] LLM not found", nil, false)
+		return
+	}
+	if hasTraversalSegment(r.URL.Path) {
+		respondWithError(w, http.StatusBadRequest, "invalid request path", nil, false)
 		return
 	}
 

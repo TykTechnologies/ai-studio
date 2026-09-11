@@ -38,3 +38,24 @@ func TestJoinUpstreamPath(t *testing.T) {
 		})
 	}
 }
+
+func TestHasTraversalSegment(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want bool
+	}{
+		{"/v1/messages", false},
+		{"/v1/models/gemini-2.5:generateContent", false},
+		{"/v1/..messages", false}, // ".." inside a segment is not a traversal
+		{"/v1/../../admin", true},
+		{"/..", true},
+		{"../v1/messages", true},
+		{"/v1/messages/..", true},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			if got := hasTraversalSegment(tc.path); got != tc.want {
+				t.Fatalf("hasTraversalSegment(%q) = %v, want %v", tc.path, got, tc.want)
+			}
+		})
+	}
+}

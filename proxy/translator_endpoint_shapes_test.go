@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -299,4 +300,40 @@ func TestPassthrough_QueryStringAndLookalikePrefixSurviveJoin(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
 	assert.Equal(t, "/v1beta-compat/v1/chat/completions", gotPath)
 	assert.Equal(t, "alt=sse&key=abc", gotQuery)
+}
+
+// The router cleans ".." out of paths (a 301 to the cleaned path) before any
+// handler runs, so a traversal never reaches the join today. The handlers
+// still refuse it themselves: joinUpstreamPath resolves ".." and a request such
+// as /v1/../../admin would otherwise climb out of a configured proxy prefix on
+// the vendor host. This calls the handlers directly, below the router, to prove
+// the refusal does not depend on how the proxy is mounted.
+func TestLLMHandlers_RejectPathTraversalBelowTheRouter(t *testing.T) {
+	var upstreamCalls int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamCalls++
+	}))
+	defer upstream.Close()
+
+	p := &Proxy{config: &Config{}, llms: map[string]*models.LLM{
+		"shape-route": {Name: "Shape Route", Vendor: models.ANTHROPIC, APIEndpoint: upstream.URL + "/gw/vendor/v1"},
+	}}
+
+	for _, tc := range []struct {
+		name    string
+		path    string
+		handler http.HandlerFunc
+	}{
+		{"rest", "/llm/rest/shape-route/v1/../../admin", p.handleLLMRequest},
+		{"streaming", "/llm/stream/shape-route/v1/../../admin", p.handleStreamingLLMRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(`{"model":"claude-sonnet-5","messages":[]}`))
+			req = mux.SetURLVars(req, map[string]string{"llmSlug": "shape-route"})
+			w := httptest.NewRecorder()
+			tc.handler(w, req)
+			assert.Equal(t, http.StatusBadRequest, w.Code, "body: %s", w.Body.String())
+		})
+	}
+	assert.Equal(t, 0, upstreamCalls, "a traversal must never reach the vendor")
 }
