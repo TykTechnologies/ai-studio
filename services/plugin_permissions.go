@@ -39,6 +39,36 @@ var PluginBaseActions = []authz.Action{authz.ActionRead, authz.ActionWrite, auth
 // a key change (the manifest arriving after install) unregisters the old one.
 var pluginPermissionKeys sync.Map // uint -> string
 
+// pluginPermissionInfos caches what the route resolvers need per plugin so
+// authorising a plugin route does not hit the database: the permission key
+// and the manifest's rpc_methods map. Populated by SyncPluginPermissions and
+// RebuildPermissionCatalogue, dropped by RemovePluginPermissions.
+var pluginPermissionInfos sync.Map // uint -> PluginPermissionInfo
+
+// PluginPermissionInfo is the cached authorisation view of one plugin.
+type PluginPermissionInfo struct {
+	Key        string            // "plugin:<manifest id>"
+	RPCMethods map[string]string // manifest rbac.rpc_methods (plugin-relative)
+	Plugin     *models.Plugin    // snapshot used to resolve plugin-relative permissions
+}
+
+// LookupPluginPermissionInfo returns the cached view for a plugin ID.
+func LookupPluginPermissionInfo(pluginID uint) (PluginPermissionInfo, bool) {
+	v, ok := pluginPermissionInfos.Load(pluginID)
+	if !ok {
+		return PluginPermissionInfo{}, false
+	}
+	return v.(PluginPermissionInfo), true
+}
+
+func cachePluginPermissionInfo(plugin *models.Plugin) {
+	info := PluginPermissionInfo{Key: plugin.PermissionKey(), Plugin: plugin}
+	if block := plugin.ManifestRBAC(); block != nil {
+		info.RPCMethods = block.RPCMethods
+	}
+	pluginPermissionInfos.Store(plugin.ID, info)
+}
+
 // PluginBaseResource builds the catalogue entry for a plugin.
 func PluginBaseResource(plugin *models.Plugin) authz.Resource {
 	key := plugin.PermissionKey()
@@ -150,10 +180,14 @@ func (s *Service) SyncPluginPermissions(plugin *models.Plugin) {
 			return
 		}
 		pluginPermissionKeys.Store(plugin.ID, key)
+		cachePluginPermissionInfo(plugin)
 		changed = true
-	} else if authz.UnregisterPlugin(key) > 0 {
-		pluginPermissionKeys.Delete(plugin.ID)
-		changed = true
+	} else {
+		pluginPermissionInfos.Delete(plugin.ID)
+		if authz.UnregisterPlugin(key) > 0 {
+			pluginPermissionKeys.Delete(plugin.ID)
+			changed = true
+		}
 	}
 	if changed {
 		s.refreshSystemRolesAfterCatalogueChange()
@@ -204,6 +238,7 @@ func (s *Service) RemovePluginPermissions(plugin *models.Plugin) {
 		keys = append(keys, prev.(string))
 	}
 	pluginPermissionKeys.Delete(plugin.ID)
+	pluginPermissionInfos.Delete(plugin.ID)
 	removed := 0
 	for _, k := range keys {
 		removed += authz.UnregisterPlugin(k)
@@ -239,6 +274,7 @@ func (s *Service) RebuildPermissionCatalogue() error {
 			continue
 		}
 		pluginPermissionKeys.Store(p.ID, p.PermissionKey())
+		cachePluginPermissionInfo(p)
 	}
 	return nil
 }

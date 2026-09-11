@@ -18,7 +18,10 @@ type ModelRouterInput struct {
 			Slug        string              `json:"slug"`
 			Description string              `json:"description"`
 			APICompat   string              `json:"api_compat"`
-			Active      bool                `json:"active"`
+			// Active is the live switch. Omitted = inactive on create (the
+			// model default), unchanged on update. Setting it needs
+			// model-routers:publish.
+			Active      *bool               `json:"active"`
 			Namespace   string              `json:"namespace"`
 			Pools       []ModelPoolInput    `json:"pools"`
 		} `json:"attributes"`
@@ -182,8 +185,12 @@ func (a *API) updateModelRouter(c *gin.Context) {
 	router := a.inputToModelRouter(&input)
 	router.ID = uint(id)
 
-	// Flipping the active switch is the publish action on model-routers.
+	// Flipping the active switch is the publish action on model-routers; an
+	// omitted switch keeps the stored value rather than deactivating.
 	if existing, err := a.service.ModelRouterService.GetRouter(uint(id)); err == nil && existing != nil {
+		if input.Data.Attributes.Active == nil {
+			router.Active = existing.Active
+		}
 		if !a.requirePublishIfChanged(c, "model-routers", existing.Active, router.Active) {
 			return
 		}
@@ -382,7 +389,7 @@ func (a *API) inputToModelRouter(input *ModelRouterInput) *models.ModelRouter {
 		Slug:        input.Data.Attributes.Slug,
 		Description: input.Data.Attributes.Description,
 		APICompat:   input.Data.Attributes.APICompat,
-		Active:      input.Data.Attributes.Active,
+		Active:      input.Data.Attributes.Active != nil && *input.Data.Attributes.Active,
 		Namespace:   input.Data.Attributes.Namespace,
 		Pools:       make([]*models.ModelPool, len(input.Data.Attributes.Pools)),
 	}

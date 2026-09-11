@@ -36,9 +36,14 @@ type AgentConfigRequest struct {
 	AppID       uint                   `json:"app_id" binding:"required"`
 	Config      map[string]interface{} `json:"config"`
 	GroupIDs    []uint                 `json:"group_ids"`
-	IsActive    bool                   `json:"is_active"`
-	Namespace   string                 `json:"namespace"`
+	// IsActive is the live switch. Omitted = active on create (the historical
+	// default), unchanged on update. Setting it needs agents:publish.
+	IsActive  *bool  `json:"is_active"`
+	Namespace string `json:"namespace"`
 }
+
+// wantsActive reports the requested live state, defaulting to true on create.
+func (r *AgentConfigRequest) wantsActive() bool { return r.IsActive == nil || *r.IsActive }
 
 // HandleAgentMessage handles POST /api/agents/:id/message - sends a message to an active agent session
 func (a *API) HandleAgentMessage(c *gin.Context) {
@@ -631,8 +636,9 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 		return
 	}
 
-	// Creating an agent already active is the publish action on agents.
-	if !a.requirePublishToCreateLive(c, "agents", req.IsActive) {
+	// Asking for an active agent explicitly is the publish action on agents;
+	// an omitted switch means "active if allowed, draft otherwise".
+	if req.IsActive != nil && !a.requirePublishToCreateLive(c, "agents", *req.IsActive) {
 		return
 	}
 
@@ -647,7 +653,7 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 	if agentConfig.Config == nil {
 		agentConfig.Config = make(map[string]interface{})
 	}
-	agentConfig.IsActive = req.IsActive
+	agentConfig.IsActive = req.wantsActive()
 	agentConfig.Namespace = req.Namespace
 
 	// Create in database
@@ -664,7 +670,7 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 	// The is_active column defaults to true on insert, which turns an
 	// explicit false into true; write the requested value back when it was
 	// false, and never leave a caller without publish holding a live agent.
-	if !req.IsActive || !a.canPublish(c, "agents") {
+	if !req.wantsActive() || !a.canPublish(c, "agents") {
 		if err := agentConfig.Deactivate(a.service.DB); err != nil {
 			c.JSON(http.StatusInternalServerError, ErrorResponse{
 				Errors: []struct {
@@ -754,9 +760,12 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 		return
 	}
 
-	// Flipping the active switch is the publish action on agents.
-	if !a.requirePublishIfChanged(c, "agents", agentConfig.IsActive, req.IsActive) {
-		return
+	// Flipping the active switch is the publish action on agents; an omitted
+	// switch keeps its value.
+	if req.IsActive != nil {
+		if !a.requirePublishIfChanged(c, "agents", agentConfig.IsActive, *req.IsActive) {
+			return
+		}
 	}
 
 	// Update fields
@@ -764,7 +773,9 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 	agentConfig.Slug = slug.Make(req.Name)
 	agentConfig.Description = req.Description
 	agentConfig.Config = req.Config
-	agentConfig.IsActive = req.IsActive
+	if req.IsActive != nil {
+		agentConfig.IsActive = *req.IsActive
+	}
 	if req.Namespace != "" {
 		agentConfig.Namespace = req.Namespace
 	}

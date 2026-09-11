@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -167,19 +168,34 @@ func (a *API) routePermission(c *gin.Context) ([]authz.Permission, bool) {
 	return e.permissions(c), true
 }
 
-// pluginPermissionKey resolves the plugin named by the :id path parameter to
-// its permission key. An unknown plugin yields "" so the caller falls back
-// to the platform-level permission (and the handler answers 404).
-func (a *API) pluginPermissionKey(c *gin.Context) string {
+// pluginForAuthz resolves the plugin named by the :id path parameter for the
+// permission resolvers, from the in-memory cache the plugin permission sync
+// maintains, falling back to the database for a plugin that has no admin
+// surface (and therefore no cache entry). nil for an unknown plugin, so the
+// caller falls back to the platform-level permission and the handler
+// answers 404.
+func (a *API) pluginForAuthz(c *gin.Context) *models.Plugin {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil || a.service == nil || a.service.PluginService == nil {
-		return ""
+		return nil
+	}
+	if info, ok := services.LookupPluginPermissionInfo(uint(id)); ok && info.Plugin != nil {
+		return info.Plugin
 	}
 	plugin, err := a.service.PluginService.GetPlugin(uint(id))
 	if err != nil || plugin == nil {
-		return ""
+		return nil
 	}
-	return plugin.PermissionKey()
+	return plugin
+}
+
+// pluginPermissionKey resolves the plugin named by the :id path parameter to
+// its permission key, or "" for an unknown plugin.
+func (a *API) pluginPermissionKey(c *gin.Context) string {
+	if plugin := a.pluginForAuthz(c); plugin != nil {
+		return plugin.PermissionKey()
+	}
+	return ""
 }
 
 // pluginOrPlatformPermission resolves to [plugins:<action>, plugin:<key>:<action>]:
@@ -201,12 +217,8 @@ func (a *API) pluginOrPlatformPermission(action authz.Action) func(*gin.Context)
 // not registered (manifest drift) falls back to the base write so a typo
 // never opens a method.
 func (a *API) pluginRPCPermission(c *gin.Context) authz.Permission {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil || a.service == nil || a.service.PluginService == nil {
-		return authz.Execute("plugins")
-	}
-	plugin, err := a.service.PluginService.GetPlugin(uint(id))
-	if err != nil || plugin == nil {
+	plugin := a.pluginForAuthz(c)
+	if plugin == nil {
 		return authz.Execute("plugins")
 	}
 	fallback := authz.P(plugin.PermissionKey(), authz.ActionWrite)

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"fmt"
 	"log"
 	"net/http"
@@ -450,9 +451,20 @@ func (a *API) updatePlugin(c *gin.Context) {
 		return
 	}
 
-	// Try to parse as plain UpdatePluginRequest (current UI behavior for PATCH)
+	// Read the body once: the raw keys decide what a per-plugin holder may
+	// touch, and the typed request drives the update.
+	rawBody, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: "could not read request body"}},
+		})
+		return
+	}
 	var req services.UpdatePluginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := json.Unmarshal(rawBody, &req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -460,6 +472,23 @@ func (a *API) updatePlugin(c *gin.Context) {
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// A caller admitted by the per-plugin write permission alone may change
+	// only the plugin's configuration, name and description (allowlist on
+	// the raw body keys, so any field added later is denied by default);
+	// everything else needs the platform permission.
+	if !a.holds(c, authz.Write("plugins")) {
+		var keys map[string]json.RawMessage
+		if err := json.Unmarshal(rawBody, &keys); err != nil {
+			keys = nil
+		}
+		for key := range keys {
+			if !pluginSelfServiceFields[key] {
+				c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Write("plugins")))
+				return
+			}
+		}
 	}
 
 	// Perform API-level security validation on the command field if it's being updated
@@ -492,17 +521,6 @@ func (a *API) updatePlugin(c *gin.Context) {
 		return
 	}
 
-	// A caller admitted by the per-plugin write permission alone may change
-	// the plugin's configuration, name and description; everything else
-	// (command, hooks, namespace, activation) needs the platform permission.
-	if !a.holds(c, authz.Write("plugins")) {
-		if req.Command != nil || req.Checksum != nil || req.HookType != nil || req.Namespace != nil ||
-			req.OCIReference != nil || req.IsActive != nil || req.HookTypes != nil ||
-			(req.LoadImmediately != nil && *req.LoadImmediately) {
-			c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Write("plugins")))
-			return
-		}
-	}
 
 	plugin, err := a.service.PluginService.UpdatePlugin(uint(id), &req)
 	if err != nil {
@@ -571,6 +589,12 @@ func (a *API) updatePlugin(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"data": serializePlugin(plugin)})
 }
+
+// pluginSelfServiceFields are the PATCH /plugins/:id body keys a caller holding
+// only the per-plugin write permission may send. Everything else (command,
+// checksum, hooks, namespace, OCI reference, activation, load flags) needs
+// plugins:write.
+var pluginSelfServiceFields = map[string]bool{"config": true, "name": true, "description": true}
 
 // applyPluginActivation unloads a Studio plugin that was just disabled and,
 // when loadOnActivate is set, loads one that was just enabled. Shared by the
