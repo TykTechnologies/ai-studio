@@ -206,6 +206,11 @@ Each feature specification below provides detailed documentation on the individu
 - Analytics integration for usage tracking
 - Vendor abstraction through common interfaces
 
+### [Role-Based Access Control](RBAC.md) (Enterprise)
+- Permission catalogue (`resource:action`) shared by the API, navigation and role editor
+- Built-in Owner / Administrator / Editor / Viewer / Auditor roles plus custom roles
+- Roles bound to users and teams; effective permissions are the union
+
 ### [User Management & RBAC](UserManagement.md)
 - Authentication and authorization system
 - Role-based access control (RBAC)

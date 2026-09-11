@@ -18,6 +18,13 @@ jest.mock('../hooks/useOverviewData', () => ({
   default: jest.fn(),
 }));
 
+// Permissions: every test grants everything unless it overrides mockCan.
+const mockCan = jest.fn(() => true);
+jest.mock('../context/PermissionsContext', () => ({
+  __esModule: true,
+  usePermissions: () => ({ can: (perm) => mockCan(perm) }),
+}));
+
 // Mock the useNavigate hook
 const mockNavigate = jest.fn();
 jest.mock('react-router-dom', () => ({
@@ -122,6 +129,8 @@ const renderWithProviders = (ui, { entitlements, features, hasLLMs, loading, err
 describe('Overview Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // CRA resets mock implementations between tests; restore the default grant.
+    mockCan.mockImplementation(() => true);
   });
 
   test('renders loading state when data is loading', () => {
@@ -181,6 +190,30 @@ describe('Overview Component', () => {
     renderWithoutUserName();
     
     expect(screen.getByText(/Hi \[user name\], welcome to Tyk AI Studio!/i)).toBeInTheDocument();
+  });
+
+  test('hides create actions the role cannot perform', () => {
+    // A read-only role: keeps the docs links, loses every "Add …" button
+    // and the Quick start wizard (which creates an LLM provider).
+    mockCan.mockImplementation((perm) => perm.endsWith(':read'));
+    renderWithProviders(<Overview />);
+
+    expect(screen.queryByText('Quick start')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add LLM provider')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add Data source')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add Tool')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add user')).not.toBeInTheDocument();
+    expect(screen.getByText('Learn Filters')).toBeInTheDocument();
+    expect(screen.getAllByText('Learn more').length).toBeGreaterThan(0);
+  });
+
+  test('shows only the create actions the role allows', () => {
+    mockCan.mockImplementation((perm) => perm === 'users:write');
+    renderWithProviders(<Overview />);
+
+    expect(screen.getByText('Add user')).toBeInTheDocument();
+    expect(screen.queryByText('Add LLM provider')).not.toBeInTheDocument();
+    expect(screen.queryByText('Quick start')).not.toBeInTheDocument();
   });
 
   test('renders all infrastructure cards', () => {

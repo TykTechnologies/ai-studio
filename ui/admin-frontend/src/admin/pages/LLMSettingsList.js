@@ -30,6 +30,8 @@ import {
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const LLMSettingsList = () => {
   const navigate = useNavigate();
@@ -148,13 +150,15 @@ const LLMSettingsList = () => {
       <>
         <TitleBox top="64px">
           <Typography variant="headingXLarge">Model call settings</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddSetting}
-          >
-            Add call setting
-          </PrimaryButton>
+          <Can permission={P.LLM_SETTINGS_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddSetting}
+            >
+              Add call setting
+            </PrimaryButton>
+          </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Call Settings let you configure how Large Language Models handle prompts. These settings control parameters like response length, temperature (creativity level), and other options that shape the output when a prompt is sent to the LLM.</Typography>  
@@ -196,11 +200,13 @@ const LLMSettingsList = () => {
                       <StyledTableCell>{setting.attributes.temperature}</StyledTableCell>
                       <StyledTableCell>{setting.attributes.max_tokens}</StyledTableCell>
                       <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, setting)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
+                        <Can permission={P.LLM_SETTINGS_WRITE}>
+                          <IconButton
+                            onClick={(event) => handleMenuOpen(event, setting)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </Can>
                       </StyledTableCell>
                     </StyledTableRow>
                   ))}

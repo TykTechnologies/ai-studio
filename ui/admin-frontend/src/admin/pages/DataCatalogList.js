@@ -30,6 +30,8 @@ import {
 } from "../styles/sharedStyles";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const DataCatalogList = () => {
   const navigate = useNavigate();
@@ -141,13 +143,15 @@ const DataCatalogList = () => {
       <>
         <TitleBox top="64px">
           <Typography variant="headingXLarge">Data catalogs</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddDataCatalog}
-          >
-            Add catalog
-          </PrimaryButton>
+          <Can permission={P.DATA_CATALOGUES_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddDataCatalog}
+            >
+              Add catalog
+            </PrimaryButton>
+          </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of data sources that you can assign to specific teams to manage access easily.</Typography>  
@@ -213,11 +217,13 @@ const DataCatalogList = () => {
                         </Box>
                       </StyledTableCell>
                       <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, catalog)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
+                        <Can permission={P.DATA_CATALOGUES_WRITE}>
+                          <IconButton
+                            onClick={(event) => handleMenuOpen(event, catalog)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </Can>
                       </StyledTableCell>
                     </StyledTableRow>
                   ))}

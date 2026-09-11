@@ -30,6 +30,7 @@ import {
 } from "../styles/sharedStyles";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 
 const ModelRouterList = () => {
   const navigate = useNavigate();
@@ -72,7 +73,9 @@ const ModelRouterList = () => {
       setError("");
     } catch (error) {
       console.error("Error fetching Model Routers", error);
-      if (error.response?.status === 403) {
+      if (isPermissionDenied(error)) {
+        setError("Your role does not include access to Model Routers");
+      } else if (isEnterpriseFeature(error)) {
         setError("Model Routers require Enterprise Edition");
       } else {
         setError("Failed to load Model Routers");

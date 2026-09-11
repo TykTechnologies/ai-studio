@@ -1,8 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
-import { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes } from "../admin/routes";
+import { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes, roleRoutes } from "../admin/routes";
 import { usePluginRoutes } from "../admin/components/plugins/DynamicPluginRoute";
 import useSystemFeatures from "../admin/hooks/useSystemFeatures";
+import { withPermission } from "../admin/components/rbac/RequirePermission";
+
+// Turns route descriptors ({ path | index, element, permission }) into
+// <Route>s, wrapping each page in its permission guard.
+const renderRoutes = (defs) =>
+  defs.map((r) => (
+    <Route
+      key={r.path ?? "index"}
+      index={r.index}
+      path={r.path}
+      element={withPermission(r.element, r.permission)}
+    />
+  ));
 
 // Plugin route handler component
 const PluginRouteHandler = () => {
@@ -99,11 +112,12 @@ const AdminRoutes = ({ uiOptions }) => {
 
   return (
     <Routes>
-      {mainAdminRoutes}
-      {uiOptions?.show_sso_config && ssoRoutes}
-      {features.feature_groups && groupRoutes}
-      {features.feature_groups && catalogRoutes}
-      {features.feature_model_router && modelRouterRoutes}
+      {renderRoutes(mainAdminRoutes)}
+      {uiOptions?.show_sso_config && renderRoutes(ssoRoutes)}
+      {features.feature_groups && renderRoutes(groupRoutes)}
+      {features.feature_groups && renderRoutes(catalogRoutes)}
+      {features.feature_model_router && renderRoutes(modelRouterRoutes)}
+      {renderRoutes(roleRoutes)}
 
       {/* Dynamically registered plugin routes */}
       {pluginRoutes.map((route) => {
@@ -118,16 +132,10 @@ const AdminRoutes = ({ uiOptions }) => {
           <Route
             key={`plugin-route-${route.pluginId}-${routePath}`}
             path={routePath}
-            element={<PluginRouteHandler />}
+            element={withPermission(<PluginRouteHandler />, route.requiredPermission)}
           />
         );
       })}
-
-      {/* Debug route for testing */}
-      <Route
-        path="test-dynamic"
-        element={<div style={{padding: '20px'}}>✅ Dynamic route works!</div>}
-      />
     </Routes>
   );
 };

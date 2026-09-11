@@ -156,6 +156,12 @@ func main() {
 	// Wire licensing service to main service for plugin license checks
 	service.SetLicensingService(licensingService)
 
+	// Seed RBAC system roles and migrate legacy admin flags into bindings
+	// (Enterprise; no-op in Community Edition). Idempotent on every boot.
+	if err := service.Authz().Seed(context.Background()); err != nil {
+		logger.FatalErr("Failed to seed RBAC roles", err)
+	}
+
 	// NOTE: Plugin loading is deferred until after the event bus is wired (see below)
 	// This ensures plugins can subscribe to events during initialization
 

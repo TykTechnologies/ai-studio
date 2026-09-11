@@ -162,7 +162,9 @@ type User struct {
 
 ## 4. User Roles & Permissions
 
-The system implements a hierarchical role structure with the following roles:
+> **Enterprise Edition:** the admin-or-not model below is replaced by fine-grained roles (Owner, Administrator, Editor, Viewer, Auditor and custom roles) bound to users and teams. `IsAdmin` then means "holds Owner or Administrator" and `AccessToSSOConfig` is no longer consulted. See [RBAC.md](RBAC.md).
+
+The Community Edition implements a hierarchical role structure with the following roles:
 
 1. **Super Admin Role** (`User.IsAdmin = true` and `User.ID = 1`):
    - Only one Super Admin exists in the system (the first registered user)

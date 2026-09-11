@@ -410,6 +410,9 @@ class PluginLoaderService {
           component: entry.component_tag,
           componentTag: entry.component_tag, // Add componentTag for specific lookup
           title: entry.mount_config?.title || 'Plugin',
+          // Permission the page requires; plugin pages default to
+          // plugins:execute because they call plugin RPCs.
+          requiredPermission: entry.required_permission || entry.mount_config?.required_permission || 'plugins:execute',
           exact: true
         };
 

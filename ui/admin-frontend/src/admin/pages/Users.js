@@ -38,11 +38,16 @@ import {
 } from "../styles/sharedStyles";
 import AddIcon from "@mui/icons-material/Add";
 import PaginationControls from "../components/common/PaginationControls";
+import { usePermissions } from "../context/PermissionsContext";
+import RoleBadge from "../components/roles/RoleBadge";
 import usePagination from "../hooks/usePagination";
 import useSystemFeatures from "../hooks/useSystemFeatures";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const Users = memo(() => {
   const navigate = useNavigate();
+  const { rbacEnabled } = usePermissions();
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -276,14 +281,16 @@ const Users = memo(() => {
     <>
       <TitleBox top="64px">
         <Typography variant="headingXLarge">Users</Typography>
-        <PrimaryButton
-          variant="contained"
-          startIcon={<AddIcon />}
-          component={Link}
-          to="/admin/users/new"
-        >
-          Add user
-        </PrimaryButton>
+        <Can permission={P.USERS_WRITE}>
+          <PrimaryButton
+            variant="contained"
+            startIcon={<AddIcon />}
+            component={Link}
+            to="/admin/users/new"
+          >
+            Add user
+          </PrimaryButton>
+        </Can>
       </TitleBox>
       <Box sx={{ p: 3 }}>
         <Box sx={{ mb: 2, maxWidth: 400 }}>
@@ -333,15 +340,19 @@ const Users = memo(() => {
                 >
                   Email Verified {sortField === "email_verified" && (sortOrder === "asc" ? "↑" : "↓")}
                 </StyledTableHeaderCell>
-                <StyledTableHeaderCell
-                  onClick={() => {
-                    setSortOrder(sortField === "is_admin" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                    setSortField("is_admin");
-                  }}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  Is Admin {sortField === "is_admin" && (sortOrder === "asc" ? "↑" : "↓")}
-                </StyledTableHeaderCell>
+                {rbacEnabled ? (
+                  <StyledTableHeaderCell>Roles</StyledTableHeaderCell>
+                ) : (
+                  <StyledTableHeaderCell
+                    onClick={() => {
+                      setSortOrder(sortField === "is_admin" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                      setSortField("is_admin");
+                    }}
+                    sx={{ cursor: 'pointer' }}
+                  >
+                    Is Admin {sortField === "is_admin" && (sortOrder === "asc" ? "↑" : "↓")}
+                  </StyledTableHeaderCell>
+                )}
                 <StyledTableHeaderCell align="right">
                   Actions
                 </StyledTableHeaderCell>
@@ -362,14 +373,18 @@ const Users = memo(() => {
                       {user.attributes.email_verified ? "Yes" : "No"}
                     </StyledTableCell>
                     <StyledTableCell>
-                      {user.attributes.is_admin ? "Yes" : "No"}
+                      {rbacEnabled
+                        ? (user.attributes.roles || []).map((role) => <RoleBadge key={role.id} role={role} />)
+                        : (user.attributes.is_admin ? "Yes" : "No")}
                     </StyledTableCell>
                     <StyledTableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, user)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
+                      <Can anyOf={[P.USERS_WRITE, P.GROUPS_WRITE]}>
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, user)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </Can>
                     </StyledTableCell>
                   </StyledTableRow>
                 ))

@@ -8,6 +8,9 @@ import useAdminData from '../../hooks/useAdminData';
 import adminTheme from '../../theme';
 
 jest.mock('../../hooks/useAdminData');
+jest.mock('../../context/PermissionsContext', () => ({
+  usePermissions: () => ({ can: () => true, canAny: () => true, canAll: () => true }),
+}));
 jest.mock('../../services/pluginLoaderService', () => ({
   __esModule: true,
   default: { getSidebarMenuItems: jest.fn(), initialize: jest.fn() },

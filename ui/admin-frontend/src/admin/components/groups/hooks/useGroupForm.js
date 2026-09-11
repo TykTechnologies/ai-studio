@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { teamsService } from "../../../services/teamsService";
 import { handleApiError } from "../../../services/utils/errorHandler";
 import { CACHE_KEYS } from "../../../utils/constants";
+import { syncSubjectRoles } from "../../../services/rbacService";
+import { getIdentity } from "../../../utils/identityStore";
 
 export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [], initialToolCatalogs = []) => {
   const [name, setName] = useState("");
@@ -12,7 +14,9 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
   const [selectedCatalogs, setSelectedCatalogs] = useState(initialCatalogs);
   const [selectedDataCatalogs, setSelectedDataCatalogs] = useState(initialDataCatalogs);
   const [selectedToolCatalogs, setSelectedToolCatalogs] = useState(initialToolCatalogs);
-  
+  // Roles bound to the team (Enterprise); ids only.
+  const [selectedRoleIds, setSelectedRoleIds] = useState([]);
+
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -52,7 +56,9 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
           label: cat.attributes.name
         })));
       }
-      
+
+      setSelectedRoleIds((response.data.attributes.roles || []).map(r => Number(r.id)));
+
       setLoading(false);
     } catch (error) {
       console.error("Error fetching group", error);
@@ -97,6 +103,7 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     };
 
     try {
+      let groupId = id;
       if (id) {
         await teamsService.updateTeam(id, groupData);
 
@@ -106,13 +113,28 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
           timestamp: Date.now()
         }));
       } else {
-        await teamsService.createTeam(groupData);
+        const created = await teamsService.createTeam(groupData);
+        groupId = created?.data?.id;
 
         localStorage.setItem(CACHE_KEYS.GROUP_NOTIFICATION, JSON.stringify({
           operation: "create",
           message: "Team created successfully",
           timestamp: Date.now()
         }));
+      }
+
+      // Enterprise: make the team's role bindings match the selection.
+      if (getIdentity()?.rbacEnabled && groupId) {
+        const { failed } = await syncSubjectRoles("group", groupId, selectedRoleIds);
+        if (failed.length > 0) {
+          setSnackbar({
+            open: true,
+            message: `Team saved, but ${failed.length} role change(s) could not be applied: ${failed.map(f => f.error?.message).filter(Boolean).join("; ")}`,
+            severity: "error",
+          });
+          setLoading(false);
+          return;
+        }
       }
       navigate("/admin/groups");
     } catch (error) {
@@ -126,7 +148,7 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     } finally {
       setLoading(false);
     }
-  }, [id, name, selectedUsers, selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs, navigate]);
+  }, [id, name, selectedUsers, selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs, selectedRoleIds, navigate]);
 
   const handleDeleteClick = useCallback(() => {
     setWarningDialogOpen(true);
@@ -172,6 +194,8 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     setSelectedDataCatalogs,
     selectedToolCatalogs,
     setSelectedToolCatalogs,
+    selectedRoleIds,
+    setSelectedRoleIds,
     handleSubmit,
     snackbar,
     handleCloseSnackbar,
@@ -186,6 +210,7 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     selectedCatalogs,
     selectedDataCatalogs,
     selectedToolCatalogs,
+    selectedRoleIds,
     snackbar,
     warningDialogOpen,
     handleSubmit,

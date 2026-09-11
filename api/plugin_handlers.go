@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -1379,7 +1380,11 @@ func (a *API) getSidebarMenuItems(c *gin.Context) {
 		return
 	}
 
-	menuItems, err := a.service.PluginManifestService.GetSidebarMenuItems()
+	// Plugin pages call plugin RPCs, so entries default to plugins:execute
+	// unless the manifest names another permission.
+	menuItems, err := a.service.PluginManifestService.GetSidebarMenuItemsFor(func(required string) bool {
+		return authz.Can(c, authz.Permission(required))
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -2010,12 +2015,13 @@ func (a *API) callPluginRPC(c *gin.Context) {
 	if userInterface, ok := c.Get("user"); ok {
 		if user, ok := userInterface.(*models.User); ok && user != nil {
 			adminCtx = &pb.PortalUserContext{
-				UserId:   uint32(user.ID),
-				Email:    user.Email,
-				Name:     user.Name,
-				IsAdmin:  user.IsAdmin,
-				Groups:   extractUserGroupNames(c),
-				Metadata: make(map[string]string),
+				UserId:      uint32(user.ID),
+				Email:       user.Email,
+				Name:        user.Name,
+				IsAdmin:     user.IsAdmin,
+				Groups:      extractUserGroupNames(c),
+				Metadata:    make(map[string]string),
+				Permissions: callerPermissions(c),
 			}
 		}
 	}
@@ -2360,12 +2366,13 @@ func (a *API) callPortalPluginRPC(c *gin.Context) {
 		groups = append(groups, g.Name)
 	}
 	portalUserCtx := &pb.PortalUserContext{
-		UserId:   uint32(user.ID),
-		Email:    user.Email,
-		Name:     user.Name,
-		IsAdmin:  user.IsAdmin,
-		Groups:   groups,
-		Metadata: make(map[string]string),
+		UserId:      uint32(user.ID),
+		Email:       user.Email,
+		Name:        user.Name,
+		IsAdmin:     user.IsAdmin,
+		Groups:      groups,
+		Metadata:    make(map[string]string),
+		Permissions: callerPermissions(c),
 	}
 
 	response, err := a.service.AIStudioPluginManager.CallPluginPortalRPC(

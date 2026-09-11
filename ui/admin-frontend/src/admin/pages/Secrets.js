@@ -31,6 +31,8 @@ import {
   StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const Secrets = () => {
   const navigate = useNavigate();
@@ -189,13 +191,15 @@ const Secrets = () => {
     <>
       <TitleBox top="64px">
         <Typography variant="headingXLarge">Secrets</Typography>
-        <PrimaryButton
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAddSecret}
-        >
-          Add secret
-        </PrimaryButton>
+        <Can permission={P.SECRETS_WRITE}>
+          <PrimaryButton
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddSecret}
+          >
+            Add secret
+          </PrimaryButton>
+        </Can>
       </TitleBox>
       <ContentBox>
         {secrets.length === 0 ? (
@@ -226,11 +230,13 @@ const Secrets = () => {
                     <StyledTableCell>{secret.id}</StyledTableCell>
                     <StyledTableCell>{secret.attributes.var_name}</StyledTableCell>
                     <StyledTableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, secret)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
+                      <Can permission={P.SECRETS_WRITE}>
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, secret)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </Can>
                     </StyledTableCell>
                   </StyledTableRow>
                 ))}

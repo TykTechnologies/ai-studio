@@ -463,6 +463,12 @@ definitions:
       type:
         type: string
     type: object
+  api.CloneRoleInput:
+    description: Clone role input
+    properties:
+      name:
+        type: string
+    type: object
   api.ConfigureProviderRequest:
     properties:
       config:
@@ -815,6 +821,26 @@ definitions:
       type:
         type: string
     type: object
+  api.EffectiveAccessResponse:
+    description: Effective permissions for a user
+    properties:
+      enabled:
+        type: boolean
+      has_admin_access:
+        type: boolean
+      is_full_admin:
+        type: boolean
+      permissions:
+        items:
+          type: string
+        type: array
+      roles:
+        items:
+          $ref: '#/definitions/rbac.RoleSummary'
+        type: array
+      user_id:
+        type: integer
+    type: object
   api.ErrorResponse:
     description: Error response model
     properties:
@@ -987,6 +1013,32 @@ definitions:
             type: string
         type: object
     type: object
+  api.GroupAttributes:
+    description: Group attributes
+    properties:
+      catalogues:
+        items:
+          $ref: '#/definitions/api.CatalogueResponse'
+        type: array
+      data_catalogues:
+        items:
+          $ref: '#/definitions/api.DataCatalogueResponse'
+        type: array
+      name:
+        type: string
+      roles:
+        items:
+          $ref: '#/definitions/rbac.RoleSummary'
+        type: array
+      tool_catalogues:
+        items:
+          $ref: '#/definitions/api.ToolCatalogueResponse'
+        type: array
+      users:
+        items:
+          $ref: '#/definitions/api.UserResponse'
+        type: array
+    type: object
   api.GroupCatalogueInput:
     description: Group-Catalogue relationship input model
     properties:
@@ -1055,26 +1107,7 @@ definitions:
     description: Group response model
     properties:
       attributes:
-        properties:
-          catalogues:
-            items:
-              $ref: '#/definitions/api.CatalogueResponse'
-            type: array
-          data_catalogues:
-            items:
-              $ref: '#/definitions/api.DataCatalogueResponse'
-            type: array
-          name:
-            type: string
-          tool_catalogues:
-            items:
-              $ref: '#/definitions/api.ToolCatalogueResponse'
-            type: array
-          users:
-            items:
-              $ref: '#/definitions/api.UserResponse'
-            type: array
-        type: object
+        $ref: '#/definitions/api.GroupAttributes'
       id:
         type: string
       type:
@@ -1685,6 +1718,24 @@ definitions:
           type: string
         type: array
     type: object
+  api.PermissionCatalogueResponse:
+    description: Permission catalogue
+    properties:
+      actions:
+        items:
+          $ref: '#/definitions/authz.Action'
+        type: array
+      enabled:
+        type: boolean
+      groups:
+        items:
+          type: string
+        type: array
+      resources:
+        items:
+          $ref: '#/definitions/authz.Resource'
+        type: array
+    type: object
   api.PluginListResponse:
     properties:
       data:
@@ -2149,6 +2200,90 @@ definitions:
             type: string
         type: object
     type: object
+  api.RoleAttributes:
+    description: Role attributes
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      groups_count:
+        type: integer
+      is_system:
+        type: boolean
+      name:
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+      slug:
+        type: string
+      updated_at:
+        type: string
+      users_count:
+        type: integer
+    type: object
+  api.RoleBindingAttributes:
+    description: Role binding attributes
+    properties:
+      created_at:
+        type: string
+      role:
+        $ref: '#/definitions/rbac.RoleSummary'
+      role_id:
+        type: integer
+      scope_id:
+        type: string
+      scope_type:
+        type: string
+      subject_id:
+        type: integer
+      subject_type:
+        type: string
+    type: object
+  api.RoleBindingInput:
+    description: Role binding input model
+    properties:
+      role_id:
+        type: integer
+      subject_id:
+        type: integer
+      subject_type:
+        type: string
+    type: object
+  api.RoleBindingResponse:
+    description: Role binding response model
+    properties:
+      attributes:
+        $ref: '#/definitions/api.RoleBindingAttributes'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  api.RoleInput:
+    description: Role input model
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+    type: object
+  api.RoleResponse:
+    description: Role response model
+    properties:
+      attributes:
+        $ref: '#/definitions/api.RoleAttributes'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
   api.SecretInput:
     description: Secret input model
     properties:
@@ -2445,6 +2580,42 @@ definitions:
       type:
         type: string
     type: object
+  api.UserAttributes:
+    description: User attributes
+    properties:
+      access_to_sso_config:
+        type: boolean
+      api_key:
+        type: string
+      api_key_hint:
+        type: string
+      email:
+        type: string
+      email_verified:
+        type: boolean
+      groups:
+        items:
+          $ref: '#/definitions/api.GroupResponse'
+        type: array
+      has_api_key:
+        type: boolean
+      is_admin:
+        type: boolean
+      name:
+        type: string
+      notifications_enabled:
+        type: boolean
+      role:
+        type: string
+      roles:
+        items:
+          $ref: '#/definitions/rbac.RoleSummary'
+        type: array
+      show_chat:
+        type: boolean
+      show_portal:
+        type: boolean
+    type: object
   api.UserGroupInput:
     description: User-group relationship input model
     properties:
@@ -2474,6 +2645,8 @@ definitions:
                   type: integer
                 type: array
               is_admin:
+                description: omitted means unchanged; roles are the source of truth
+                  in Enterprise
                 type: boolean
               name:
                 type: string
@@ -2494,32 +2667,7 @@ definitions:
     description: User response model
     properties:
       attributes:
-        properties:
-          access_to_sso_config:
-            type: boolean
-          api_key:
-            type: string
-          email:
-            type: string
-          email_verified:
-            type: boolean
-          groups:
-            items:
-              $ref: '#/definitions/api.GroupResponse'
-            type: array
-          is_admin:
-            type: boolean
-          name:
-            type: string
-          notifications_enabled:
-            type: boolean
-          role:
-            type: string
-          show_chat:
-            type: boolean
-          show_portal:
-            type: boolean
-        type: object
+        $ref: '#/definitions/api.UserAttributes'
       id:
         type: string
       type:
@@ -2551,12 +2699,32 @@ definitions:
                   $ref: '#/definitions/api.ToolCatalogueResponse'
                 type: array
             type: object
+          has_admin_access:
+            description: |-
+              HasAdminAccess is true when the user holds at least one permission
+              and may therefore open the administration surface.
+            type: boolean
           is_admin:
             type: boolean
           is_super_admin:
             type: boolean
           name:
             type: string
+          permissions:
+            description: Permissions is the effective permission set; ["*"] for full
+              admins.
+            items:
+              type: string
+            type: array
+          rbac_enabled:
+            description: RBACEnabled reports whether fine-grained roles are active.
+            type: boolean
+          roles:
+            description: Roles lists the roles behind the permissions (Enterprise
+              only).
+            items:
+              $ref: '#/definitions/rbac.RoleSummary'
+            type: array
           ui_options:
             properties:
               show_chat:
@@ -2733,6 +2901,51 @@ definitions:
         type: array
       total:
         type: integer
+    type: object
+  authz.Action:
+    enum:
+    - read
+    - write
+    - delete
+    - execute
+    type: string
+    x-enum-varnames:
+    - ActionRead
+    - ActionWrite
+    - ActionDelete
+    - ActionExecute
+  authz.Resource:
+    properties:
+      actions:
+        description: Actions lists the actions this resource offers, in display order.
+        items:
+          $ref: '#/definitions/authz.Action'
+        type: array
+      description:
+        description: Description is optional help text for the role editor.
+        type: string
+      group:
+        description: Group is the navigation group the resource belongs to; see Groups.
+        type: string
+      key:
+        description: |-
+          Key is the permission resource slug: plural, kebab-case, matching the
+          route collection segment ("llms", "data-catalogues").
+        type: string
+      label:
+        description: Label is the human name, matching the admin navigation where
+          one exists.
+        type: string
+      privileged:
+        description: |-
+          Privileged marks resources whose write/delete can escalate access
+          (users, groups, roles, identity providers, plugins). The UI warns.
+        type: boolean
+      sensitive:
+        description: |-
+          Sensitive marks a data class (transcripts, logs, secrets) that is split
+          out so read can be withheld independently. The UI shows a shield.
+        type: boolean
     type: object
   compliance.AccessIssue:
     properties:
@@ -3595,6 +3808,23 @@ definitions:
       name:
         type: string
       type:
+        type: string
+    type: object
+  rbac.RoleSummary:
+    properties:
+      group_id:
+        description: when Via == "group"
+        type: integer
+      id:
+        type: integer
+      is_system:
+        type: boolean
+      name:
+        type: string
+      slug:
+        type: string
+      via:
+        description: '"direct" | "group"'
         type: string
     type: object
   services.CreateOCIPluginRequest:
@@ -14199,6 +14429,270 @@ paths:
       summary: Import OpenAPI spec
       tags:
       - providers
+  /rbac/bindings:
+    get:
+      parameters:
+      - description: user or group
+        in: query
+        name: subject_type
+        type: string
+      - description: Subject ID
+        in: query
+        name: subject_id
+        type: integer
+      - description: Role ID
+        in: query
+        name: role_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/api.RoleBindingResponse'
+              type: array
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List role bindings
+      tags:
+      - rbac
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Binding
+        in: body
+        name: binding
+        required: true
+        schema:
+          $ref: '#/definitions/api.RoleBindingInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/api.RoleBindingResponse'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Assign a role
+      tags:
+      - rbac
+  /rbac/bindings/{id}:
+    delete:
+      parameters:
+      - description: Binding ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Remove a role assignment
+      tags:
+      - rbac
+  /rbac/me:
+    get:
+      description: Returns the caller's effective permissions and the roles that grant
+        them.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.EffectiveAccessResponse'
+      security:
+      - BearerAuth: []
+      summary: Get my effective access
+      tags:
+      - rbac
+  /rbac/permissions:
+    get:
+      description: Lists every resource and action roles can grant. Available in both
+        editions; "enabled" reports whether roles are active.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.PermissionCatalogueResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the permission catalogue
+      tags:
+      - rbac
+  /rbac/roles:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/api.RoleResponse'
+              type: array
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List roles
+      tags:
+      - rbac
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Role
+        in: body
+        name: role
+        required: true
+        schema:
+          $ref: '#/definitions/api.RoleInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/api.RoleResponse'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a custom role
+      tags:
+      - rbac
+  /rbac/roles/{id}:
+    delete:
+      description: Deletes the role and every binding that references it.
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Delete a custom role
+      tags:
+      - rbac
+    get:
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/api.RoleResponse'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a role
+      tags:
+      - rbac
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Role
+        in: body
+        name: role
+        required: true
+        schema:
+          $ref: '#/definitions/api.RoleInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/api.RoleResponse'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a custom role
+      tags:
+      - rbac
+  /rbac/roles/{id}/clone:
+    post:
+      consumes:
+      - application/json
+      description: Creates a custom role with the same permissions. This is how system
+        roles are customised.
+      parameters:
+      - description: Role ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: New name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.CloneRoleInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/api.RoleResponse'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Clone a role
+      tags:
+      - rbac
+  /rbac/users/{id}/effective:
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.EffectiveAccessResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a user's effective access
+      tags:
+      - rbac
   /secrets:
     get:
       consumes:

@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import syncStatusService from '../services/syncStatusService';
 import { registerSyncStatusRefresh } from '../utils/configSyncNotifier';
+import { hasPermissionNow, subscribe } from '../utils/identityStore';
+import { P } from '../rbac/permissions';
 
 const SyncStatusContext = createContext();
 
@@ -12,16 +14,16 @@ const SyncStatusContext = createContext();
  * immediate refresh of the sync status after a config push completes,
  * rather than waiting for the next polling interval.
  *
- * Note: Only fetches for admin users since sync status is only relevant
- * to administrators managing edge gateways.
+ * Note: Only fetches for users who may read edge gateways, since sync
+ * status is only relevant to people managing them.
  */
 export const SyncStatusProvider = ({ children }) => {
   const [syncStatus, setSyncStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
 
-  // Check if user is an admin (set by App.js after auth check)
-  const isAdmin = () => window.adminEntitlements?.is_admin === true;
+  // The identity store is populated by App.js before any provider mounts.
+  const isAdmin = () => hasPermissionNow(P.EDGES_READ);
 
   const fetchSyncStatus = useCallback(async () => {
     // Only fetch sync status for admin users
@@ -43,23 +45,26 @@ export const SyncStatusProvider = ({ children }) => {
     }
   }, []);
 
-  // Initial fetch on mount (only for admins)
+  // Initial fetch on mount, and again whenever the identity changes (login,
+  // role change), for users who may read edge gateways.
   useEffect(() => {
-    // Small delay to allow App.js to set adminEntitlements after auth check
-    const timer = setTimeout(() => {
+    if (isAdmin()) {
+      fetchSyncStatus();
+    }
+    return subscribe(() => {
       if (isAdmin()) {
         fetchSyncStatus();
       }
-    }, 100);
-    return () => clearTimeout(timer);
+    });
   }, [fetchSyncStatus]);
 
-  // Auto-refresh every 30 seconds (only for admins)
+  // Auto-refresh every 30 seconds (only for users who may read edge gateways)
   useEffect(() => {
-    if (!isAdmin()) {
-      return; // No polling for non-admins
-    }
-    const interval = setInterval(fetchSyncStatus, 30000);
+    const interval = setInterval(() => {
+      if (isAdmin()) {
+        fetchSyncStatus();
+      }
+    }, 30000);
     return () => clearInterval(interval);
   }, [fetchSyncStatus]);
 

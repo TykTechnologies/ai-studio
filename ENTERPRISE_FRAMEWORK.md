@@ -861,6 +861,51 @@ ENT: User → Groups (1+) → Catalogues (filtered) → Resources (filtered)
 - CE → ENT: All users remain in Default group, all resources in Default catalogues, can now create more
 - ENT → CE: Groups/catalogues remain in database, filtering disabled, all users see all resources
 
+## Role-Based Access Control Feature Specifics
+
+### How RBAC Works
+
+**Community Edition:**
+- ✅ **Admin-or-not**: `User.IsAdmin` grants the whole management UI and API; everyone else gets the portal/chat surfaces only
+- ✅ **Permission catalogue**: `GET /api/v1/rbac/permissions` serves the catalogue (with `enabled: false`) so the UI can render it read-only
+- ✅ **Route annotations**: every `/api/v1` route is annotated with a permission; the community evaluator resolves admins to the wildcard, so behaviour is unchanged
+- ❌ **Roles and bindings**: management endpoints answer `402 Payment Required`; the Roles page shows an upgrade prompt
+- 🔒 **Tables exist** (`roles`, `role_bindings`) but are unused, keeping upgrades and downgrades lossless
+
+**Enterprise Edition:**
+- ✅ **Everything in CE**, plus:
+- ✅ **System roles**: Owner, Administrator, Editor, Viewer, Auditor, seeded on boot and recomputed from the catalogue
+- ✅ **Custom roles** built from the catalogue; system roles are cloneable, not editable
+- ✅ **Bindings to users and teams**: effective permissions are the union, so SSO group mapping drives roles
+- ✅ **Enforcement everywhere**: navigation, routes, buttons, and every API call including API-key calls
+- ✅ **Denials audited**: refused requests (reads included) land in the audit trail
+- ✅ **Licence gate**: `feature_rbac`; without it the Enterprise build behaves like CE and keeps bindings for later
+
+### Implementation Structure
+
+```
+pkg/authz/                          # Catalogue, Permission, Set, request Context, error envelope (core)
+api/authz_routes.go                 # permRouter: annotated route registration + registry
+api/authz_middleware.go             # rbacContext, requireRoutePermission (replaces AdminOnly), ssoConfigGuard
+api/rbac_handlers.go                # /api/v1/rbac/* (edition-neutral; ErrEnterpriseFeature → 402)
+api/rbac_payloads.go                # API-key masking, roles on user/team payloads, role_ids reconciliation
+models/rbac.go                      # Role, RoleBinding (migrated in both editions)
+services/rbac/                      # Service interface, single-file factory with CE fallback, community stub
+enterprise/features/rbac/           # Evaluator, seeding, Owner rules, role/binding CRUD (//go:build enterprise)
+enterprise/features/audit/          # Explicit action names for /rbac routes, denial recording
+ui/admin-frontend/src/admin/rbac/   # Permission constants; PermissionsContext, Can, RequirePermission, roles pages
+```
+
+### Key Rules
+
+- Four actions only (`read`, `write`, `delete`, `execute`); write/delete/execute imply read; no deny rules; `*` only in Owner/Administrator.
+- `roles:write` gates role and binding changes (no subset-escalation check); only Owners grant Owner; Owner is user-only; the last Owner cannot be removed or demoted.
+- `users.is_admin` is a derived cache of "holds a wildcard role", resynced on binding and team-membership changes and self-healed in `Resolve`; `PATCH /users/:id` with `is_admin` maps onto an Administrator binding.
+- Unannotated `/api/v1` routes fail closed to full-admin and `api/authz_routes_test.go` fails the build.
+- `TestMode` bypasses the middleware like it bypassed `AdminOnly`; only `TestMode = false` tests prove enforcement (`api/authz_middleware_test.go`, `api/rbac_enterprise_test.go`).
+
+Full specification: `features/RBAC.md`. User documentation: `docs/site/docs/rbac.md`.
+
 ## Enterprise Submodule Workflow
 
 ### For Developers WITH Enterprise Access

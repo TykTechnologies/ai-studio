@@ -219,6 +219,17 @@ func (a *AuthService) SSOOnly() gin.HandlerFunc {
 		c.Next()
 	}
 }
+// UserFromContext returns the user AuthMiddleware stored on the request.
+// Prefer this over inline c.Get("user") type assertions.
+func UserFromContext(c *gin.Context) (*models.User, bool) {
+	v, ok := c.Get("user")
+	if !ok {
+		return nil, false
+	}
+	user, ok := v.(*models.User)
+	return user, ok && user != nil
+}
+
 func (a *AuthService) LoadUserFromContext(c *gin.Context) (*models.User, error) {
 	userInterface, exists := c.Get("user")
 	if !exists {

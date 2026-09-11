@@ -10,6 +10,8 @@ import IconBadge from '../components/common/IconBadge';
 import { createDocsLinkHandler } from '../utils/docsLinkUtils';
 import VideoPlayer from '../components/common/VideoPlayer';
 import { QuickStartContainer } from '../components/wizards/quick-start';
+import { usePermissions } from '../context/PermissionsContext';
+import { P } from '../rbac/permissions';
 
 const SectionTitle = styled(Typography)(({ theme }) => ({
   marginBottom: theme.spacing(2),
@@ -56,6 +58,11 @@ const Overview = () => {
   const quickStartState = useQuickStart();
   const { setShowQuickStart } = quickStartState;
   const navigate = useNavigate();
+  const { can } = usePermissions();
+  // "Add …" calls to action lead to create forms, so they only show for users
+  // whose role can write that resource. Docs links stay for everyone.
+  const addAction = (permission, label, path) =>
+    can(permission) ? { label, onClick: () => navigate(path) } : undefined;
 
   const showChatCard = features?.feature_chat;
   const showAppsCard = features?.feature_gateway || features?.feature_portal;
@@ -83,14 +90,16 @@ const Overview = () => {
         <Typography variant="headingXLarge">
           Hi {userName || '[user name]'}, welcome to Tyk AI Studio!
         </Typography>
-        <PrimaryButton
-          variant="contained"
-          onClick={() => {
-            setShowQuickStart(true);
-          }}
-        >
-          Quick start
-        </PrimaryButton>
+        {can(P.LLMS_WRITE) && (
+          <PrimaryButton
+            variant="contained"
+            onClick={() => {
+              setShowQuickStart(true);
+            }}
+          >
+            Quick start
+          </PrimaryButton>
+        )}
       </TitleBox>
       <ContentBox>
         {licenseDaysLeft && (
@@ -166,10 +175,7 @@ const Overview = () => {
                 boxSizing: 'border-box'
               }}>
               <BasicCard
-                primaryAction={{ 
-                  label: 'Add LLM provider', 
-                  onClick: () => navigate('/admin/llms/new') 
-                }}
+                primaryAction={addAction(P.LLMS_WRITE, 'Add LLM provider', '/admin/llms/new')}
                 secondaryAction={{
                   label: 'Learn more',
                   onClick: createDocsLinkHandler(getDocsLink, 'llm_providers')
@@ -198,10 +204,7 @@ const Overview = () => {
                 boxSizing: 'border-box'
               }}>
               <BasicCard
-                primaryAction={{ 
-                  label: 'Add Data source', 
-                  onClick: () => navigate('/admin/datasources/new')
-                }}
+                primaryAction={addAction(P.DATASOURCES_WRITE, 'Add Data source', '/admin/datasources/new')}
                 secondaryAction={{
                   label: 'Learn more',
                   onClick: createDocsLinkHandler(getDocsLink, 'data_sources')
@@ -230,10 +233,7 @@ const Overview = () => {
                 boxSizing: 'border-box'
               }}>
               <BasicCard
-                primaryAction={{ 
-                  label: 'Add Tool', 
-                  onClick: () => navigate('/admin/tools/new')
-                }}
+                primaryAction={addAction(P.TOOLS_WRITE, 'Add Tool', '/admin/tools/new')}
                 secondaryAction={{
                   label: 'Learn more',
                   onClick: createDocsLinkHandler(getDocsLink, 'tools')
@@ -278,10 +278,7 @@ const Overview = () => {
                 boxSizing: 'border-box'
               }}>
               <BasicCard
-                primaryAction={{ 
-                  label: 'Add user', 
-                  onClick: () => navigate('/admin/users/new') 
-                }}
+                primaryAction={addAction(P.USERS_WRITE, 'Add user', '/admin/users/new')}
                 secondaryAction={{
                   label: 'Learn more',
                   onClick: createDocsLinkHandler(getDocsLink, 'rbac_user_groups')
@@ -359,11 +356,11 @@ const Overview = () => {
                 boxSizing: 'border-box'
               }}>
                 <BasicCard
-                  primaryAction={{
-                    label: 'Add Apps',
-                    onClick: () => navigate('/admin/apps/new'),
-                    disabled: !hasLLMs
-                  }}
+                  primaryAction={
+                    can(P.APPS_WRITE)
+                      ? { label: 'Add Apps', onClick: () => navigate('/admin/apps/new'), disabled: !hasLLMs }
+                      : undefined
+                  }
                   secondaryAction={{
                     label: 'Learn more',
                     onClick: createDocsLinkHandler(getDocsLink, 'apps')
@@ -394,11 +391,11 @@ const Overview = () => {
                 boxSizing: 'border-box'
               }}>
                 <BasicCard
-                  primaryAction={{
-                    label: 'Add Chats',
-                    onClick: () => navigate('/admin/chats/new'),
-                    disabled: !hasLLMs
-                  }}
+                  primaryAction={
+                    can(P.CHATS_WRITE)
+                      ? { label: 'Add Chats', onClick: () => navigate('/admin/chats/new'), disabled: !hasLLMs }
+                      : undefined
+                  }
                   secondaryAction={{
                     label: 'Learn more',
                     onClick: createDocsLinkHandler(getDocsLink, 'chats')

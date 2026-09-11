@@ -1,6 +1,9 @@
 import axios from 'axios';
 import { fetchCSRFToken } from './urlUtils';
 import { affectsGatewayConfig, notifyConfigChanged } from './configSyncNotifier';
+import { classifyAuthError } from './apiErrors';
+import { emitPermissionDenied } from './permissionDeniedBus';
+import { canAccessAdminNow } from './identityStore';
 
 let apiClientInstance = null;
 
@@ -35,9 +38,25 @@ const createApiClient = () => {
       return response;
     },
     (error) => {
-      if (error.response?.status === 401) {
+      const status = error.response?.status;
+      if (status === 401) {
         // Handle unauthorized access
         window.location.href = '/login';
+        return Promise.reject(error);
+      }
+      if (status === 403 || status === 402) {
+        // Turn authorization failures into typed errors so pages can tell a
+        // missing permission apart from a missing licence. Denied mutations
+        // are announced once, globally; reads are left to the page (a
+        // route guard normally prevents them anyway).
+        const typed = classifyAuthError(error);
+        if (typed?.isPermissionDenied) {
+          const method = (error.config?.method || 'get').toLowerCase();
+          if (method !== 'get' && !error.config?.silent403) {
+            emitPermissionDenied(typed);
+          }
+        }
+        return Promise.reject(typed);
       }
       return Promise.reject(error);
     }
@@ -73,9 +92,9 @@ export const appToolAPI = {
 
 // Plugin RPC call function for secure plugin communication
 export const pluginRPCCall = async (pluginId, method, payload = {}) => {
-  // Security: Check admin context from entitlements
-  const entitlements = window.adminEntitlements;
-  if (!entitlements?.is_admin) {
+  // Security: only users on the administration surface may call plugin RPCs;
+  // the server enforces the plugins:execute permission.
+  if (!canAccessAdminNow()) {
     throw new Error('Plugin RPC calls require admin permissions');
   }
 

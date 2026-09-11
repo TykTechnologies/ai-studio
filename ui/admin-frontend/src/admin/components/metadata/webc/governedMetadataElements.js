@@ -5,6 +5,7 @@ import { CacheProvider } from '@emotion/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { Alert, Box, Chip, Grid, Typography } from '@mui/material';
 import theme from '../../../theme';
+import { isEnterpriseFeature, isPermissionDenied } from '../../../utils/apiErrors';
 import MetadataFieldInput from '../inputs/MetadataFieldInput';
 import GovernedMetadataBadges from '../../../../portal/components/GovernedMetadataBadges';
 import {
@@ -120,7 +121,13 @@ const FieldsApp = ({ host, objectType, providedSchema, value, externalErrors, di
         if (cancelled) return;
         setSchema(null);
         setLoading(false);
-        setLoadError(error?.response?.status === 403 ? 'Governance metadata is an Enterprise feature.' : 'Could not load the governance metadata schema.');
+        setLoadError(
+          isPermissionDenied(error)
+            ? 'Your role does not include access to governance metadata.'
+            : isEnterpriseFeature(error)
+              ? 'Governance metadata is an Enterprise feature.'
+              : 'Could not load the governance metadata schema.'
+        );
         host.dispatchEvent(new CustomEvent('error', { detail: { error }, bubbles: true, composed: true }));
       });
     return () => {

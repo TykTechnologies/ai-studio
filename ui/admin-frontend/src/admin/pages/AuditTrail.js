@@ -33,6 +33,7 @@ import {
   StyledTableRow,
 } from "../styles/sharedStyles";
 import DateRangePicker from "../components/common/DateRangePicker";
+import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 
 const METHODS = ["POST", "PUT", "PATCH", "DELETE", "GET"];
 const STATUS_CLASSES = [
@@ -288,7 +289,9 @@ const AuditTrail = () => {
       });
       setSummary(summaryRes.data);
     } catch (err) {
-      if (err.response?.status === 403) {
+      if (isPermissionDenied(err)) {
+        setError("Your role does not include access to the audit trail");
+      } else if (isEnterpriseFeature(err)) {
         setStatus((s) => ({ ...(s || {}), available: false }));
       } else {
         setError(err.response?.data?.errors?.[0]?.detail || "Failed to load audit records");

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/gin-gonic/gin"
 )
@@ -65,8 +66,8 @@ func (a *API) startExport(c *gin.Context) {
 
 	currentUser := user.(*models.User)
 
-	// Only admins can export logs
-	if !currentUser.IsAdmin {
+	// Starting an export needs exports:write
+	if !authz.Can(c, authz.Write("exports")) {
 		c.JSON(http.StatusForbidden, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -191,10 +192,10 @@ func (a *API) getExport(c *gin.Context) {
 		return
 	}
 
-	currentUser := user.(*models.User)
+	_ = user // identity is checked; authorization is the permission check below
 
 	// Only admins can view exports
-	if !currentUser.IsAdmin {
+	if !authz.Can(c, authz.Read("exports")) {
 		c.JSON(http.StatusForbidden, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -285,7 +286,7 @@ func (a *API) downloadExport(c *gin.Context) {
 	currentUser := user.(*models.User)
 
 	// Only admins can download exports
-	if !currentUser.IsAdmin {
+	if !authz.Can(c, authz.Read("exports")) {
 		c.JSON(http.StatusForbidden, models.ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

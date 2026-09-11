@@ -1,82 +1,68 @@
 import { useState, useEffect, useCallback } from 'react';
-import pubClient from '../utils/pubClient';
-import cacheService from '../utils/cacheService';
-import { CACHE_KEYS } from '../utils/constants';
+import { getIdentity, refreshIdentity, subscribe } from '../utils/identityStore';
 
+const shapeOf = (identity) =>
+  identity
+    ? {
+        entitlements: identity.entitlements,
+        ui_options: identity.uiOptions,
+        userName: identity.name,
+        userId: identity.id,
+        userEmail: identity.email,
+      }
+    : null;
+
+/**
+ * Exposes the signed-in user's entitlements. Reads from the identity store
+ * populated at boot (one /common/me call for the whole app); call
+ * fetchUserEntitlements to force a refresh after something changed.
+ */
 const useUserEntitlements = (skipInitialFetch = false) => {
-  const [userEntitlements, setUserEntitlements] = useState(null);
-  const [uiOptions, setUiOptions] = useState(null);
-  const [userName, setUserName] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [userEmail, setUserEmail] = useState(null);
-  const [loading, setLoading] = useState(!skipInitialFetch);
+  const [identity, setIdentity] = useState(() => getIdentity());
+  const [loading, setLoading] = useState(!skipInitialFetch && !getIdentity());
   const [error, setError] = useState(null);
 
+  useEffect(() => subscribe((next) => setIdentity(next)), []);
+
   const fetchUserEntitlements = useCallback(async () => {
+    const current = getIdentity();
+    if (current) {
+      setIdentity(current);
+      setLoading(false);
+      return shapeOf(current);
+    }
     setLoading(true);
     setError(null);
-    
-    const cachedData = cacheService.get(CACHE_KEYS.USER_ENTITLEMENTS);
-    if (cachedData) {
-      setUserEntitlements(cachedData.entitlements);
-      setUiOptions(cachedData.ui_options);
-      setUserName(cachedData.userName);
-      setUserId(cachedData.userId);
-      setUserEmail(cachedData.userEmail);
+    try {
+      const next = await refreshIdentity();
+      setIdentity(next);
+      return shapeOf(next);
+    } catch (err) {
+      console.error('Failed to fetch user entitlements:', err);
+      setError(err);
+      throw err;
+    } finally {
       setLoading(false);
-      return cachedData;
     }
-
-    return pubClient.get('/common/me')
-      .then(response => {
-        const newData = response.data.attributes.entitlements;
-        const newUiOptions = response.data.attributes.ui_options;
-        const newUserName = response.data.attributes.name;
-        const newUserId = response.data.id;
-        const newUserEmail = response.data.attributes.email;
-        
-        setUserEntitlements(newData);
-        setUiOptions(newUiOptions);
-        setUserName(newUserName);
-        setUserId(newUserId);
-        setUserEmail(newUserEmail);
-        
-        const dataToCache = {
-          entitlements: newData,
-          ui_options: newUiOptions,
-          userName: newUserName,
-          userId: newUserId,
-          userEmail: newUserEmail
-        };
-        cacheService.set(CACHE_KEYS.USER_ENTITLEMENTS, dataToCache, 10000); // 10 seconds expiry
-        
-        return dataToCache;
-      })
-      .catch(error => {
-        console.error('Failed to fetch user entitlements:', error);
-        setError(error);
-        throw error;
-      })
-      .finally(() => {
-        setLoading(false);
-      });
   }, []);
 
   useEffect(() => {
-    if (!skipInitialFetch) {
-      fetchUserEntitlements();
+    if (!skipInitialFetch && !getIdentity()) {
+      fetchUserEntitlements().catch(() => {});
     }
   }, [fetchUserEntitlements, skipInitialFetch]);
 
+  const shape = shapeOf(identity);
+
   return {
-    userEntitlements,
-    uiOptions,
-    userName,
-    userId,
-    userEmail,
+    userEntitlements: shape?.entitlements ?? null,
+    uiOptions: shape?.ui_options ?? null,
+    userName: shape?.userName ?? null,
+    userId: shape?.userId ?? null,
+    userEmail: shape?.userEmail ?? null,
     loading,
     error,
-    fetchUserEntitlements
+    fetchUserEntitlements,
   };
 };
 

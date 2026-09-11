@@ -7,18 +7,21 @@ import AdminLayout from "../admin/components/layout/MainLayout";
 import ChatDrawer from "../admin/components/layout/ChatDrawer";
 import PortalDrawer from "../admin/components/layout/PortalDrawer";
 import { useNavigate } from "react-router-dom";
-import pubClient, { logout } from "../admin/utils/pubClient";
+import { logout } from "../admin/utils/pubClient";
 import adminTheme from "../admin/theme";
 import { DRAWER_WIDTH, CONTENT_MAX_WIDTH } from "../constants/layout";
 import useSystemFeatures from "../admin/hooks/useSystemFeatures";
+import { usePermissions } from "../admin/context/PermissionsContext";
 
 const MainLayout = () => {
   const { features } = useSystemFeatures();
+  const { identity, isFullAdmin, hasAdminAccess } = usePermissions();
   const [currentTab, setCurrentTab] = useState(null);
-  const [entitlements, setEntitlements] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
+  // Identity comes from the single /common/me fetch in App.js.
+  const entitlements = identity?.raw?.attributes || null;
 
   const getStoredPath = (tab) => {
     try {
@@ -35,21 +38,17 @@ const MainLayout = () => {
   };
 
   useEffect(() => {
-    const fetchEntitlements = async () => {
+    const initialiseTab = () => {
       if (location.pathname === '/login') {
         setLoading(false);
         return;
       }
 
       try {
-        const response = await pubClient.get("/common/me");
-        const attributes = response.data.attributes;
-        setEntitlements(attributes);
-
-        // If we're an admin user and either at root or portal dashboard,
+        // If we're a full admin and either at root or portal dashboard,
         // force redirect to admin dashboard
         if (
-          attributes.is_admin &&
+          isFullAdmin &&
           (location.pathname === "/" ||
             location.pathname === "/portal/dashboard")
         ) {
@@ -81,12 +80,13 @@ const MainLayout = () => {
 
         setLoading(false);
       } catch (error) {
-        console.error("Error fetching entitlements:", error);
+        console.error("Error initialising layout:", error);
         setLoading(false);
       }
     };
 
-    fetchEntitlements();
+    initialiseTab();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run on mount
 
   // Second useEffect to handle path changes
@@ -122,17 +122,17 @@ const MainLayout = () => {
       case "admin":
         navigate(storedPath || "/admin");
         break;
+      default:
+        break;
     }
   };
 
   if (loading) return null;
 
-  const showAdmin = entitlements?.is_admin;
+  const showAdmin = hasAdminAccess;
   const showChat = entitlements?.ui_options?.show_chat && features.feature_chat;
   const showPortal =
     entitlements?.ui_options?.show_portal && features.feature_portal;
-
-  console.log("Show flags:", { showAdmin, showChat, showPortal });
 
   const topNav = (
     <TopNavigation
@@ -158,13 +158,13 @@ const MainLayout = () => {
         <Box sx={{ display: "flex" }}>
           {topNav}
           {currentTab === "chat" && showChat && (
-            <ChatDrawer chats={entitlements.chats} open />
+            <ChatDrawer chats={entitlements?.chats} open />
           )}
           {currentTab === "portal" && showPortal && (
             <PortalDrawer
-              catalogues={entitlements.catalogues}
-              dataCatalogues={entitlements.data_catalogues}
-              toolCatalogues={entitlements.tool_catalogues}
+              catalogues={entitlements?.catalogues}
+              dataCatalogues={entitlements?.data_catalogues}
+              toolCatalogues={entitlements?.tool_catalogues}
               open
             />
           )}

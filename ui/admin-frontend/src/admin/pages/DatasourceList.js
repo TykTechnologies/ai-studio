@@ -39,6 +39,8 @@ import {
 import InfoTooltip from "../components/common/InfoTooltip";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const DatasourceList = () => {
   const navigate = useNavigate();
@@ -220,13 +222,15 @@ const DatasourceList = () => {
       <>
         <TitleBox top="64px">
           <Typography variant="headingXLarge">Data sources</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddDatasource}
-          >
-            Add data source
-          </PrimaryButton>
+          <Can permission={P.DATASOURCES_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddDatasource}
+            >
+              Add data source
+            </PrimaryButton>
+          </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Data sources let you store and access information to enhance AI conversations using Retrieval Augmented Generation (RAG). By using embedding providers to convert content into searchable vectors, your AI can deliver more accurate, informed, and engaging responses.</Typography>  
@@ -343,11 +347,13 @@ const DatasourceList = () => {
                         />
                       </StyledTableCell>
                       <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, datasource)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
+                        <Can permission={P.DATASOURCES_WRITE}>
+                          <IconButton
+                            onClick={(event) => handleMenuOpen(event, datasource)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </Can>
                       </StyledTableCell>
                     </StyledTableRow>
                   ))}

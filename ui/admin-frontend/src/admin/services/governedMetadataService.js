@@ -1,5 +1,6 @@
 import apiClient from '../utils/apiClient';
 import { handleApiError } from './utils/errorHandler';
+import { isEnterpriseFeature, isPermissionDenied } from '../utils/apiErrors';
 
 // Governed Metadata (Enterprise) service module.
 // Backend: /api/v1/metadata/* (see api/governed_metadata_handlers.go).
@@ -76,14 +77,15 @@ export const deleteMetadataSchema = async (id) => {
 
 /**
  * Resolves the merged schema for an object type.
- * Returns null when the feature is unavailable (403) so callers can hide the UI.
+ * Returns null when the feature is unavailable (Community Edition) or the
+ * caller's role may not read schemas, so callers can hide the UI either way.
  */
 export const resolveMetadataSchema = async (objectType) => {
   try {
     const response = await apiClient.get('/metadata/schemas/resolve', { params: { object_type: objectType } });
     return response.data || null;
   } catch (error) {
-    if (error.response?.status === 403) {
+    if (isEnterpriseFeature(error) || isPermissionDenied(error)) {
       return null;
     }
     throw handleApiError(error);

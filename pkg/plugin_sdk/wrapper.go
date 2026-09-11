@@ -410,8 +410,9 @@ func (w *pluginServerWrapper) Call(ctx context.Context, req *pb.CallRequest) (*p
 			Email:    req.UserContext.Email,
 			Name:     req.UserContext.Name,
 			IsAdmin:  req.UserContext.IsAdmin,
-			Groups:   req.UserContext.Groups,
-			Metadata: req.UserContext.Metadata,
+			Groups:      req.UserContext.Groups,
+			Metadata:    req.UserContext.Metadata,
+			Permissions: req.UserContext.Permissions,
 		}
 		if userCtx.Metadata == nil {
 			userCtx.Metadata = make(map[string]string)
@@ -459,8 +460,9 @@ func (w *pluginServerWrapper) PortalCall(ctx context.Context, req *pb.PortalCall
 			Email:    req.UserContext.Email,
 			Name:     req.UserContext.Name,
 			IsAdmin:  req.UserContext.IsAdmin,
-			Groups:   req.UserContext.Groups,
-			Metadata: req.UserContext.Metadata,
+			Groups:      req.UserContext.Groups,
+			Metadata:    req.UserContext.Metadata,
+			Permissions: req.UserContext.Permissions,
 		}
 	} else {
 		// Provide empty context if none passed (should not happen in practice)

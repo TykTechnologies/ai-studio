@@ -43,7 +43,7 @@ func (a *API) createGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeGroup(group)})
+	c.JSON(http.StatusCreated, gin.H{"data": a.finishGroup(c, serializeGroup(group))})
 }
 
 // @Summary Get a group by ID
@@ -80,7 +80,7 @@ func (a *API) getGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeGroup(group)})
+	c.JSON(http.StatusOK, gin.H{"data": a.finishGroup(c, serializeGroup(group))})
 }
 
 // @Summary Update a group
@@ -121,7 +121,7 @@ func (a *API) updateGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeGroup(group)})
+	c.JSON(http.StatusOK, gin.H{"data": a.finishGroup(c, serializeGroup(group))})
 }
 
 // @Summary Delete a group
@@ -207,7 +207,7 @@ func (a *API) listGroups(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeGroupsForList(groups, memberCounts)})
+	c.JSON(http.StatusOK, gin.H{"data": a.finishGroupList(c, serializeGroupsForList(groups, memberCounts))})
 }
 
 // @Summary Add a user to a group
@@ -357,7 +357,7 @@ func (a *API) listGroupUsers(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
+	c.JSON(http.StatusOK, gin.H{"data": a.finishUsers(c, serializeUsers(users))})
 }
 
 // @Summary Update group users
@@ -443,13 +443,7 @@ func serializeGroup(group *models.Group) GroupResponse {
 	response := GroupResponse{
 		Type: "groups",
 		ID:   strconv.FormatUint(uint64(group.ID), 10),
-		Attributes: struct {
-			Name           string                  `json:"name"`
-			Users          []UserResponse          `json:"users,omitempty"`
-			Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
-			DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
-			ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
-		}{
+		Attributes: GroupAttributes{
 			Name: group.Name,
 		},
 	}

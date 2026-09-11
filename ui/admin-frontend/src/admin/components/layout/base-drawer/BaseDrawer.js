@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { List, Toolbar } from '@mui/material';
 import { ThemeProvider } from '@mui/material/styles';
@@ -8,7 +8,7 @@ import adminTheme from '../../../theme';
 import { StyledDrawer, ToggleButton, MenuList } from './styles';
 import { useDrawerState } from './hooks';
 import MenuItem from './MenuItem';
-import { generateRandomId } from './utils';
+import { generateRandomId, filterMenuItems } from './utils';
 
 const BaseDrawer = ({
   id = generateRandomId(),
@@ -19,8 +19,17 @@ const BaseDrawer = ({
   customStyles = {},
   defaultOpen = true,
   defaultExpandedItems = {},
+  isItemAllowed,
 }) => {
   const STORAGE_KEY = `drawer_state_${id}`;
+
+  // Permission filtering happens once here so every drawer (admin, chat,
+  // portal, plugin sections) shares the same rule: items carry an optional
+  // `permission` and the caller decides who may see them.
+  const visibleItems = useMemo(
+    () => (isItemAllowed ? filterMenuItems(menuItems, isItemAllowed) : menuItems),
+    [menuItems, isItemAllowed]
+  );
   
   const {
     open,
@@ -29,7 +38,7 @@ const BaseDrawer = ({
     handleDrawerToggle,
     handleExpandClick,
     handlePathSelect,
-  } = useDrawerState(STORAGE_KEY, defaultOpen, defaultExpandedItems, menuItems);
+  } = useDrawerState(STORAGE_KEY, defaultOpen, defaultExpandedItems, visibleItems);
 
   const currentWidth = open ? drawerWidth : minimizedWidth;
 
@@ -46,7 +55,7 @@ const BaseDrawer = ({
         </ToggleButton>
         <MenuList customMarginTop={customStyles.marginTop} open={open}>
           <List>
-            {menuItems.map((item, index) => (
+            {visibleItems.map((item, index) => (
               <MenuItem
                 key={item.id || item.text}
                 item={item}
@@ -74,8 +83,10 @@ BaseDrawer.propTypes = {
       path: PropTypes.string,
       icon: PropTypes.node,
       subItems: PropTypes.array,
+      permission: PropTypes.oneOfType([PropTypes.string, PropTypes.arrayOf(PropTypes.string)]),
     })
   ).isRequired,
+  isItemAllowed: PropTypes.func,
   drawerWidth: PropTypes.number,
   minimizedWidth: PropTypes.number,
   showToolbar: PropTypes.bool,

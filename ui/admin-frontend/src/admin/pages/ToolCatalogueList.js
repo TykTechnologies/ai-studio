@@ -30,6 +30,8 @@ import {
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const ToolCatalogueList = memo(() => {
   const [toolCatalogues, setToolCatalogues] = useState([]);
@@ -135,13 +137,15 @@ const ToolCatalogueList = memo(() => {
     <>
       <TitleBox top="64px">
         <Typography variant="headingXLarge">Tool catalogs</Typography>
-        <PrimaryButton
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleAddToolCatalogue}
-        >
-          Add catalog
-        </PrimaryButton>
+        <Can permission={P.TOOL_CATALOGUES_WRITE}>
+          <PrimaryButton
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleAddToolCatalogue}
+          >
+            Add catalog
+          </PrimaryButton>
+        </Can>
       </TitleBox>
       <Box sx={{ p: 3 }}>
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of tools that you can assign to specific teams to manage access easily.</Typography>  
@@ -202,14 +206,16 @@ const ToolCatalogueList = memo(() => {
                       </Box>
                     </StyledTableCell>
                     <StyledTableCell align="right">
-                      <IconButton
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleMenuOpen(event, catalogue);
-                        }}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
+                      <Can permission={P.TOOL_CATALOGUES_WRITE}>
+                        <IconButton
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleMenuOpen(event, catalogue);
+                          }}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </Can>
                     </StyledTableCell>
                   </StyledTableRow>
                 ))}

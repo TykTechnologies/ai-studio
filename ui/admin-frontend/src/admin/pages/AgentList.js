@@ -36,6 +36,8 @@ import {
 import PaginationControls from '../components/common/PaginationControls';
 import usePagination from '../hooks/usePagination';
 import agentService from '../services/agentService';
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const AgentList = () => {
   const navigate = useNavigate();
@@ -213,9 +215,11 @@ const AgentList = () => {
               <SelectMenuItem value="inactive">Inactive</SelectMenuItem>
             </Select>
           </FormControl>
-          <PrimaryButton startIcon={<AddIcon />} onClick={handleCreate}>
-            Create Agent
-          </PrimaryButton>
+          <Can permission={P.AGENTS_WRITE}>
+            <PrimaryButton startIcon={<AddIcon />} onClick={handleCreate}>
+              Create Agent
+            </PrimaryButton>
+          </Can>
         </Box>
       </TitleBox>
 

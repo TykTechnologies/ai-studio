@@ -532,23 +532,25 @@ func (s *PluginManifestService) GetSidebarMenuItems() ([]SidebarMenuItem, error)
 		for _, entry := range pluginEntries {
 			title, _ := entry.MountConfig["title"].(string)
 			subItems = append(subItems, SidebarSubItem{
-				ID:           fmt.Sprintf("plugin_%d_%s", entry.PluginID, entry.ComponentTag),
-				Text:         title,
-				Path:         entry.RoutePattern,
-				ComponentTag: entry.ComponentTag,
-				EntryPoint:   entry.EntryPoint,
-				MountConfig:  entry.MountConfig,
+				ID:                 fmt.Sprintf("plugin_%d_%s", entry.PluginID, entry.ComponentTag),
+				Text:               title,
+				Path:               entry.RoutePattern,
+				ComponentTag:       entry.ComponentTag,
+				EntryPoint:         entry.EntryPoint,
+				MountConfig:        entry.MountConfig,
+				RequiredPermission: requiredPermissionOf(entry.MountConfig),
 			})
 		}
 
 		// Create main plugin section
 		menuItem := SidebarMenuItem{
-			ID:       fmt.Sprintf("plugin_%d", pluginID),
-			Label:    sectionLabel,
-			Icon:     sectionIcon,
-			PluginID: pluginID,
-			PluginName: firstEntry.Plugin.Name,
-			SubItems: subItems,
+			ID:                 fmt.Sprintf("plugin_%d", pluginID),
+			Label:              sectionLabel,
+			Icon:               sectionIcon,
+			PluginID:           pluginID,
+			PluginName:         firstEntry.Plugin.Name,
+			RequiredPermission: requiredPermissionOf(firstEntry.MountConfig),
+			SubItems:           subItems,
 		}
 
 		menuItems = append(menuItems, menuItem)
@@ -602,6 +604,10 @@ func (s *PluginManifestService) ValidatePluginPermissions(pluginID uint, require
 	return nil
 }
 
+// DefaultPluginPagePermission is what an admin plugin page requires when its
+// manifest does not name a permission: plugin pages call plugin RPCs.
+const DefaultPluginPagePermission = "plugins:execute"
+
 // SidebarMenuItem represents a plugin-contributed sidebar menu item
 type SidebarMenuItem struct {
 	ID           string                 `json:"id"`
@@ -614,7 +620,10 @@ type SidebarMenuItem struct {
 	ComponentTag string                 `json:"component_tag,omitempty"`
 	EntryPoint   string                 `json:"entry_point,omitempty"`
 	MountConfig  map[string]interface{} `json:"mount_config,omitempty"`
-	SubItems     []SidebarSubItem       `json:"sub_items,omitempty"`
+	// RequiredPermission is the permission needed to see the section
+	// (manifest mount_config.required_permission, else the default).
+	RequiredPermission string           `json:"required_permission,omitempty"`
+	SubItems           []SidebarSubItem `json:"sub_items,omitempty"`
 }
 
 // SidebarSubItem represents a sub-item within a plugin sidebar section
@@ -625,6 +634,45 @@ type SidebarSubItem struct {
 	ComponentTag string                 `json:"component_tag"`
 	EntryPoint   string                 `json:"entry_point"`
 	MountConfig  map[string]interface{} `json:"mount_config"`
+	// RequiredPermission is the permission needed to open the page.
+	RequiredPermission string `json:"required_permission,omitempty"`
+}
+
+// requiredPermissionOf reads mount_config.required_permission, defaulting to
+// DefaultPluginPagePermission.
+func requiredPermissionOf(mountConfig map[string]interface{}) string {
+	if v, ok := mountConfig["required_permission"].(string); ok && v != "" {
+		return v
+	}
+	return DefaultPluginPagePermission
+}
+
+// GetSidebarMenuItemsFor returns the sidebar sections the caller may see:
+// sub-items whose required permission the caller lacks are dropped, and a
+// section is dropped when nothing in it survives.
+func (s *PluginManifestService) GetSidebarMenuItemsFor(allowed func(requiredPermission string) bool) ([]SidebarMenuItem, error) {
+	items, err := s.GetSidebarMenuItems()
+	if err != nil {
+		return nil, err
+	}
+	if allowed == nil {
+		return items, nil
+	}
+	out := make([]SidebarMenuItem, 0, len(items))
+	for _, item := range items {
+		subItems := make([]SidebarSubItem, 0, len(item.SubItems))
+		for _, sub := range item.SubItems {
+			if allowed(sub.RequiredPermission) {
+				subItems = append(subItems, sub)
+			}
+		}
+		if len(subItems) == 0 && (item.Path == "" || !allowed(item.RequiredPermission)) {
+			continue
+		}
+		item.SubItems = subItems
+		out = append(out, item)
+	}
+	return out, nil
 }
 
 // ServePluginAsset serves plugin assets with proper path resolution

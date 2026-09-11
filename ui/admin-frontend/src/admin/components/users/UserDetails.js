@@ -39,9 +39,18 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import { IconButton, Tooltip } from "@mui/material";
 import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
 import { useEdition } from "../../context/EditionContext";
+import { usePermissions } from "../../context/PermissionsContext";
+import RoleBadge from "../roles/RoleBadge";
+import EffectivePermissionsList from "../roles/EffectivePermissionsList";
+import CollapsibleSection from "../common/CollapsibleSection";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
+import { getEffectivePermissions } from "../../services/rbacService";
 
 const UserDetails = () => {
   const { isEnterprise } = useEdition();
+  const { rbacEnabled } = usePermissions();
+  const [effectiveAccess, setEffectiveAccess] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userGroups, setUserGroups] = useState([]);
@@ -92,9 +101,27 @@ const UserDetails = () => {
     }
   };
 
+  // The server only returns another user's key to callers who may manage
+  // users; otherwise it sends a hint (the last four characters).
+  const canSeeApiKey = Boolean(user?.attributes?.api_key);
   const maskedApiKey = user?.attributes?.api_key
     ? `${user.attributes.api_key.substring(0, 4)}${"*".repeat(20)}${user.attributes.api_key.slice(-4)}`
-    : "********";
+    : user?.attributes?.api_key_hint
+      ? `${"*".repeat(24)}${user.attributes.api_key_hint}`
+      : "********";
+
+  useEffect(() => {
+    if (!rbacEnabled || !id) return undefined;
+    let cancelled = false;
+    getEffectivePermissions(id)
+      .then((data) => {
+        if (!cancelled) setEffectiveAccess(data);
+      })
+      .catch((error) => console.error("Error fetching effective permissions", error));
+    return () => {
+      cancelled = true;
+    };
+  }, [rbacEnabled, id, user?.attributes?.roles]);
 
   const fetchUserDetails = useCallback(async () => {
     try {
@@ -192,11 +219,14 @@ const UserDetails = () => {
           <Grid item xs={9}>
             <Box display="flex" alignItems="center">
               <FieldValue>{maskedApiKey}</FieldValue>
-              <Tooltip title="Copy API Key">
-                <IconButton onClick={handleCopyApiKey} size="small">
-                  <ContentCopyIcon />
-                </IconButton>
-              </Tooltip>
+              {canSeeApiKey && (
+                <Tooltip title="Copy API Key">
+                  <IconButton onClick={handleCopyApiKey} size="small">
+                    <ContentCopyIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <Can permission={P.USERS_WRITE}>
               <Tooltip title="Regenerate API Key">
                 <IconButton
                   onClick={handleRollApiKey}
@@ -206,15 +236,33 @@ const UserDetails = () => {
                   <RefreshIcon />
                 </IconButton>
               </Tooltip>
+              </Can>
             </Box>
           </Grid>
 
-          <Grid item xs={3}>
-            <FieldLabel>Admin:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{user.attributes.is_admin ? "Yes" : "No"}</FieldValue>
-          </Grid>
+          {rbacEnabled ? (
+            <>
+              <Grid item xs={3}>
+                <FieldLabel>Roles:</FieldLabel>
+              </Grid>
+              <Grid item xs={9} data-testid="user-roles">
+                {(user.attributes.roles || []).length > 0 ? (
+                  user.attributes.roles.map((role) => <RoleBadge key={role.id} role={role} />)
+                ) : (
+                  <FieldValue>No roles assigned</FieldValue>
+                )}
+              </Grid>
+            </>
+          ) : (
+            <>
+              <Grid item xs={3}>
+                <FieldLabel>Admin:</FieldLabel>
+              </Grid>
+              <Grid item xs={9}>
+                <FieldValue>{user.attributes.is_admin ? "Yes" : "No"}</FieldValue>
+              </Grid>
+            </>
+          )}
           {user.attributes.is_admin && (
             <>
               <Grid item xs={3}>
@@ -227,7 +275,7 @@ const UserDetails = () => {
               </Grid>
             </>
           )}
-          {user.attributes.is_admin && (
+          {user.attributes.is_admin && !rbacEnabled && (
             <>
               <Grid item xs={3}>
                 <FieldLabel>Access to IdP configuration:</FieldLabel>
@@ -240,6 +288,15 @@ const UserDetails = () => {
             </>
           )}
         </Grid>
+        {rbacEnabled && effectiveAccess && (
+          <Box mb={4}>
+            <CollapsibleSection title="Effective permissions" defaultExpanded={false}>
+              <Box sx={{ px: 2, pb: 2 }}>
+                <EffectivePermissionsList permissions={effectiveAccess.permissions || []} />
+              </Box>
+            </CollapsibleSection>
+          </Box>
+        )}
         <Box
           mb={2}
           display="flex"

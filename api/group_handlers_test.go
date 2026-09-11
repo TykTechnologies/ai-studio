@@ -151,7 +151,7 @@ func TestGroupEndpoints(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -165,7 +165,7 @@ func TestGroupEndpoints(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -176,7 +176,7 @@ func TestGroupEndpoints(t *testing.T) {
 					Email:                "groupuser@example.com",
 					Name:                 "Group User",
 					Password:             "password123",
-					IsAdmin:              false,
+					IsAdmin:              boolPtr(false),
 					ShowChat:             false,
 					ShowPortal:           false,
 					EmailVerified:        false,
@@ -600,7 +600,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -614,7 +614,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -625,7 +625,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					Email:                "user1@example.com",
 					Name:                 "User One",
 					Password:             "password123",
-					IsAdmin:              false,
+					IsAdmin:              boolPtr(false),
 					ShowChat:             false,
 					ShowPortal:           false,
 					EmailVerified:        false,
@@ -642,7 +642,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -656,7 +656,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -667,7 +667,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					Email:                "user2@example.com",
 					Name:                 "User Two",
 					Password:             "password123",
-					IsAdmin:              false,
+					IsAdmin:              boolPtr(false),
 					ShowChat:             false,
 					ShowPortal:           false,
 					EmailVerified:        false,
@@ -684,7 +684,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -698,7 +698,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -709,7 +709,7 @@ func TestUpdateGroupUsers(t *testing.T) {
 					Email:                "user3@example.com",
 					Name:                 "User Three",
 					Password:             "password123",
-					IsAdmin:              false,
+					IsAdmin:              boolPtr(false),
 					ShowChat:             false,
 					ShowPortal:           false,
 					EmailVerified:        false,

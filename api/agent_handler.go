@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/agent_session"
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/gin-gonic/gin"
 	"github.com/gosimple/slug"
 )
@@ -572,10 +573,10 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 		})
 		return
 	}
-	thisUser := uObj.(*models.User)
+	_ = uObj // identity is checked; authorization is the permission check below
 
 	// Check if user is admin
-	if !thisUser.IsAdmin {
+	if !authz.Can(c, authz.Write("agents")) {
 		c.JSON(http.StatusForbidden, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -684,10 +685,10 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 		})
 		return
 	}
-	thisUser := uObj.(*models.User)
+	_ = uObj // identity is checked; authorization is the permission check below
 
 	// Check if user is admin
-	if !thisUser.IsAdmin {
+	if !authz.Can(c, authz.Write("agents")) {
 		c.JSON(http.StatusForbidden, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -786,10 +787,10 @@ func (a *API) HandleDeleteAgent(c *gin.Context) {
 		})
 		return
 	}
-	thisUser := uObj.(*models.User)
+	_ = uObj // identity is checked; authorization is the permission check below
 
 	// Check if user is admin
-	if !thisUser.IsAdmin {
+	if !authz.Can(c, authz.Delete("agents")) {
 		c.JSON(http.StatusForbidden, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -848,10 +849,10 @@ func (a *API) HandleActivateAgent(c *gin.Context) {
 		})
 		return
 	}
-	thisUser := uObj.(*models.User)
+	_ = uObj // identity is checked; authorization is the permission check below
 
 	// Check if user is admin
-	if !thisUser.IsAdmin {
+	if !authz.Can(c, authz.Write("agents")) {
 		c.JSON(http.StatusForbidden, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -910,10 +911,10 @@ func (a *API) HandleDeactivateAgent(c *gin.Context) {
 		})
 		return
 	}
-	thisUser := uObj.(*models.User)
+	_ = uObj // identity is checked; authorization is the permission check below
 
 	// Check if user is admin
-	if !thisUser.IsAdmin {
+	if !authz.Can(c, authz.Write("agents")) {
 		c.JSON(http.StatusForbidden, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

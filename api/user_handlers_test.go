@@ -70,7 +70,7 @@ func TestUserEndpoints(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -84,7 +84,7 @@ func TestUserEndpoints(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -95,7 +95,7 @@ func TestUserEndpoints(t *testing.T) {
 				Email:                "test@example.com",
 				Name:                 "Test User",
 				Password:             "password123",
-				IsAdmin:              true,
+				IsAdmin:              boolPtr(true),
 				ShowChat:             true,
 				ShowPortal:           true,
 				EmailVerified:        true,
@@ -130,7 +130,7 @@ func TestUserEndpoints(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -144,7 +144,7 @@ func TestUserEndpoints(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -155,7 +155,7 @@ func TestUserEndpoints(t *testing.T) {
 				Email:    "nonexistent-group@example.com",
 				Name:     "Non-existent Group User",
 				Password: "password123",
-				IsAdmin:  false,
+				IsAdmin:  boolPtr(false),
 				Groups:   []uint{nonExistentGroupID},
 			},
 		},
@@ -218,7 +218,7 @@ func TestUserEndpoints(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -232,7 +232,7 @@ func TestUserEndpoints(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -242,7 +242,7 @@ func TestUserEndpoints(t *testing.T) {
 			}{
 				Email:                "updated@example.com",
 				Name:                 "Updated User",
-				IsAdmin:              true,
+				IsAdmin:              boolPtr(true),
 				ShowChat:             true,
 				ShowPortal:           true,
 				EmailVerified:        true,
@@ -330,7 +330,7 @@ func TestAdminPermissions(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -344,7 +344,7 @@ func TestAdminPermissions(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -355,7 +355,7 @@ func TestAdminPermissions(t *testing.T) {
 				Email:    "new-admin@example.com",
 				Name:     "New Admin User",
 				Password: "password123",
-				IsAdmin:  true, // Trying to create an admin user
+				IsAdmin:  boolPtr(true), // Trying to create an admin user
 			},
 		},
 	}
@@ -379,7 +379,7 @@ func TestAdminPermissions(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -393,7 +393,7 @@ func TestAdminPermissions(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -404,7 +404,7 @@ func TestAdminPermissions(t *testing.T) {
 				Email:    "second-admin@example.com",
 				Name:     "Second Admin User",
 				Password: "password123",
-				IsAdmin:  true,
+				IsAdmin:  boolPtr(true),
 			},
 		},
 	}
@@ -428,7 +428,7 @@ func TestAdminPermissions(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -442,7 +442,7 @@ func TestAdminPermissions(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -452,7 +452,7 @@ func TestAdminPermissions(t *testing.T) {
 			}{
 				Email:   "updated-admin@example.com",
 				Name:    "Updated Admin User",
-				IsAdmin: true,
+				IsAdmin: boolPtr(true),
 			},
 		},
 	}
@@ -481,7 +481,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -495,7 +495,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -506,7 +506,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				Email:    "test@example.com",
 				Name:     "Test User",
 				Password: "password123",
-				IsAdmin:  true,
+				IsAdmin:  boolPtr(true),
 				Groups:   []uint{},
 			},
 		},
@@ -535,7 +535,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -549,7 +549,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -560,7 +560,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				Email:    "test2@example.com",
 				Name:     "Second Test User",
 				Password: "password123",
-				IsAdmin:  false,
+				IsAdmin:  boolPtr(false),
 				Groups:   []uint{},
 			},
 		},
@@ -582,7 +582,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -596,7 +596,7 @@ func TestUserEmailUniqueness(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -633,7 +633,7 @@ func TestSkipUserQuickStart(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -647,7 +647,7 @@ func TestSkipUserQuickStart(t *testing.T) {
 				Email                string `json:"email"`
 				Name                 string `json:"name"`
 				Password             string `json:"password,omitempty"`
-				IsAdmin              bool   `json:"is_admin"`
+				IsAdmin              *bool  `json:"is_admin"`
 				ShowChat             bool   `json:"show_chat"`
 				ShowPortal           bool   `json:"show_portal"`
 				EmailVerified        bool   `json:"email_verified"`
@@ -658,7 +658,7 @@ func TestSkipUserQuickStart(t *testing.T) {
 				Email:    "quickstart@example.com",
 				Name:     "QuickStart User",
 				Password: "password123",
-				IsAdmin:  false,
+				IsAdmin:  boolPtr(false),
 				Groups:   []uint{},
 			},
 		},
@@ -695,7 +695,7 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -709,7 +709,7 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -720,7 +720,7 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					Email:    "alice@example.com",
 					Name:     "Alice Smith",
 					Password: "password123",
-					IsAdmin:  false,
+					IsAdmin:  boolPtr(false),
 					Groups:   []uint{},
 				},
 			},
@@ -732,7 +732,7 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -746,7 +746,7 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					Email                string `json:"email"`
 					Name                 string `json:"name"`
 					Password             string `json:"password,omitempty"`
-					IsAdmin              bool   `json:"is_admin"`
+					IsAdmin              *bool  `json:"is_admin"`
 					ShowChat             bool   `json:"show_chat"`
 					ShowPortal           bool   `json:"show_portal"`
 					EmailVerified        bool   `json:"email_verified"`
@@ -757,7 +757,7 @@ func TestListUsersSearchFunctionality(t *testing.T) {
 					Email:    "bob@example.com",
 					Name:     "Bob Johnson",
 					Password: "password123",
-					IsAdmin:  false,
+					IsAdmin:  boolPtr(false),
 					Groups:   []uint{},
 				},
 			},

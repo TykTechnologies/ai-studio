@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -117,11 +118,11 @@ func (a *API) createTool(c *gin.Context) {
 			}{{Title: "Unauthorized", Detail: "User not found in context"}}})
 			return
 		}
-		if u, ok := user.(*models.User); !ok || !u.IsAdmin {
+		if _, ok := user.(*models.User); !ok || !authz.Can(c, authz.Write("tools")) {
 			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Forbidden", Detail: "Only administrators can assign namespace"}}})
+			}{{Title: "Forbidden", Detail: "Assigning a namespace requires write access"}}})
 			return
 		}
 		tool.Namespace = input.Data.Attributes.Namespace
@@ -269,8 +270,8 @@ func (a *API) updateTool(c *gin.Context) {
 
 	// Namespace change requires admin authorization
 	if input.Data.Attributes.Namespace != tool.Namespace {
-		user, exists := c.Get("user")
-		if !exists || func() bool { u, ok := user.(*models.User); return !ok || !u.IsAdmin }() {
+		_, exists := c.Get("user")
+		if !exists || !authz.Can(c, authz.Write("tools")) {
 			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`

@@ -14,6 +14,7 @@ import (
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/governed_metadata"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/group_access"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/plugin_security"
+	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/rbac"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/sso"
 )
 

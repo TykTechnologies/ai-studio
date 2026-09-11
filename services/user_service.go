@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
@@ -62,6 +63,9 @@ func (s *Service) validateUserInput(dto UserDTO) error {
 		return helpers.NewBadRequestError("notifications can only be enabled for admin users")
 	}
 
+	// With roles active the flag is still validated as before but is no
+	// longer consulted for authorization: identity provider access is the
+	// sso-profiles permission.
 	if dto.AccessToSSOConfig && !dto.IsAdmin {
 		return helpers.NewBadRequestError("access to IdP configuration can only be enabled for admin users")
 	}
@@ -144,6 +148,12 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		return nil, err
 	}
 
+	// Enterprise: materialise the admin flag as an Administrator binding and
+	// pick up any roles the assigned teams carry.
+	if err := s.syncAdminBinding(user, dto.IsAdmin); err != nil {
+		return nil, err
+	}
+
 	// Execute "after_create" hooks
 	if s.HookManager != nil {
 		_, err := s.HookManager.ExecuteHooks(
@@ -210,6 +220,14 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 		return nil, err
 	}
 
+	// Enterprise: an is_admin change is an Administrator binding change,
+	// subject to the Owner rules (the last Owner cannot be demoted).
+	if s.Authz().Enabled() && dto.IsAdmin != user.IsAdmin {
+		if err := s.Authz().SetFullAdmin(context.Background(), nil, user.ID, dto.IsAdmin); err != nil {
+			return nil, rbacRuleError(err)
+		}
+	}
+
 	user.Email = dto.Email
 	user.Name = dto.Name
 	user.IsAdmin = dto.IsAdmin
@@ -270,6 +288,13 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 		return nil, err
 	}
 
+	// Team membership may have changed the roles the user inherits.
+	if newGroups != nil {
+		if err := s.syncAdminBinding(user, user.IsAdmin); err != nil {
+			return nil, err
+		}
+	}
+
 	// Execute "after_update" hooks
 	if s.HookManager != nil {
 		_, err := s.HookManager.ExecuteHooks(
@@ -294,7 +319,15 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 }
 
 func (s *Service) DeleteUser(user *models.User) error {
-	if user.GetRole() == models.RoleSuperAdmin {
+	if s.Authz().Enabled() {
+		last, err := s.Authz().IsLastOwner(context.Background(), user.ID)
+		if err != nil {
+			return err
+		}
+		if last {
+			return helpers.NewForbiddenError("the last Owner cannot be deleted")
+		}
+	} else if user.GetRole() == models.RoleSuperAdmin {
 		return helpers.NewForbiddenError("super admin user cannot be deleted")
 	}
 
@@ -357,6 +390,13 @@ func (s *Service) DeleteUser(user *models.User) error {
 	}
 
 	if err := user.DeleteGroupAssociation(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Role bindings go with the user (table exists in both editions).
+	if err := tx.Where("subject_type = ? AND subject_id = ?", models.RoleBindingSubjectUser, user.ID).
+		Delete(&models.RoleBinding{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -581,6 +621,13 @@ func (s *Service) UpdateGroupUsers(id uint, userIDs []uint) error {
 		return err
 	}
 
+	// Everyone leaving or joining may gain or lose team-derived roles.
+	affected := make([]uint, 0, len(group.Users)+len(userIDs))
+	for _, u := range group.Users {
+		affected = append(affected, u.ID)
+	}
+	affected = append(affected, userIDs...)
+
 	tx := s.DB.Begin()
 
 	users := make([]models.User, 0, len(userIDs))
@@ -593,5 +640,52 @@ func (s *Service) UpdateGroupUsers(id uint, userIDs []uint) error {
 		return err
 	}
 
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	return s.syncAdminFlags(affected...)
+}
+
+// syncAdminBinding keeps role bindings and users.is_admin consistent after a
+// user is created or changes teams. wantAdmin is the legacy flag the caller
+// asked for; in Enterprise it becomes an Administrator binding and the flag
+// is then re-read from the bindings. No-op in Community Edition.
+func (s *Service) syncAdminBinding(user *models.User, wantAdmin bool) error {
+	authz := s.Authz()
+	if !authz.Enabled() {
+		return nil
+	}
+	ctx := context.Background()
+	if wantAdmin {
+		if err := authz.SetFullAdmin(ctx, nil, user.ID, true); err != nil {
+			return rbacRuleError(err)
+		}
+	} else if err := authz.SyncAdminFlag(ctx, user.ID); err != nil {
+		return err
+	}
+	var fresh models.User
+	if err := s.DB.Select("is_admin").First(&fresh, user.ID).Error; err != nil {
+		return err
+	}
+	user.IsAdmin = fresh.IsAdmin
+	return nil
+}
+
+// syncAdminFlags recomputes users.is_admin for the given users after a team
+// membership change. No-op in Community Edition.
+func (s *Service) syncAdminFlags(userIDs ...uint) error {
+	if !s.Authz().Enabled() || len(userIDs) == 0 {
+		return nil
+	}
+	return s.Authz().SyncAdminFlag(context.Background(), userIDs...)
+}
+
+// rbacRuleError maps RBAC rule violations onto API error responses.
+func rbacRuleError(err error) error {
+	switch {
+	case errors.Is(err, rbac.ErrLastOwner), errors.Is(err, rbac.ErrOwnerRequired):
+		return helpers.NewForbiddenError(err.Error())
+	default:
+		return err
+	}
 }
