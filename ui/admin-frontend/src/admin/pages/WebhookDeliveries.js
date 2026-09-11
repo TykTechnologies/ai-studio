@@ -444,7 +444,7 @@ const WebhookDeliveries = () => {
     return (
       <Box>
         {header}
-        <DisabledNotice />
+        <DisabledNotice status={status} />
       </Box>
     );
   }
@@ -547,7 +547,7 @@ const WebhookDeliveries = () => {
                 fullWidth
                 size="small"
                 label="Search"
-                placeholder="delivery or event ID, target URL, topic, error, response"
+                placeholder="delivery or event ID, target URL, topic or error"
                 value={draft.search}
                 onChange={(e) => setDraft({ ...draft, search: e.target.value })}
                 onKeyDown={(e) => e.key === "Enter" && applyFilters()}

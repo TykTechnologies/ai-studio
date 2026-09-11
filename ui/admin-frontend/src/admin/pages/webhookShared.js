@@ -101,11 +101,19 @@ export const EnterpriseUpsell = () => (
   </Box>
 );
 
-export const DisabledNotice = () => (
+export const DisabledNotice = ({ status }) => (
   <Box sx={{ p: 3 }}>
     <Alert severity="warning">
-      Webhooks are switched off. Set <code>WEBHOOKS_ENABLED=true</code> on the AI Studio server to
-      enable them.
+      {status?.disabled_reason ? (
+        <>
+          Webhooks could not start: {status.disabled_reason}
+        </>
+      ) : (
+        <>
+          Webhooks are switched off. Set <code>WEBHOOKS_ENABLED=true</code> on the AI Studio server to
+          enable them.
+        </>
+      )}
     </Alert>
   </Box>
 );

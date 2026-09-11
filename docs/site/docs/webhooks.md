@@ -114,7 +114,9 @@ on `X-Webhook-Event-Id` if they need exactly-once processing.
 Governance → Webhooks → **Deliveries** lists every delivery with its status
 (`queued`, `in_flight`, `retrying`, `succeeded`, `dead_lettered`,
 `cancelled`), attempt count and last error. Filter by target, topic, status,
-kind, date and free text; expand a row to see every attempt (status code,
+kind, date and free text (a delivery or event id, or part of the target URL,
+topic or last error; free-text searches cover the last 30 days unless you
+set a start date); expand a row to see every attempt (status code,
 latency, response snippet), the exact payload that was sent and the redacted
 event. Dead letters can be replayed one at a time or in bulk; queued and
 retrying deliveries can be cancelled. Export the filtered log as CSV or JSON
@@ -133,8 +135,9 @@ Retention: succeeded and cancelled deliveries are kept for
   depth, retrying, in-flight and dead-lettered counts and `dropped_events`
   (events this node could not persist). The Webhooks page shows the same as a
   health pill and warning banners.
-- **Secrets at rest**: set `TYK_AI_SECRET_KEY`; custom header values and
-  signing secrets are encrypted with it.
+- **Secrets at rest**: `TYK_AI_SECRET_KEY` is required; custom header
+  values and signing secrets are encrypted with it, and the feature refuses
+  to start without it (the Webhooks page explains why).
 - **Audit**: dead letters are recorded in the audit trail as `SYSTEM`
   actions; set `WEBHOOKS_AUDIT_DELIVERIES=true` to record successes too.
 

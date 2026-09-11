@@ -224,8 +224,9 @@ Reject timestamps older than a few minutes to defeat replay.
 | `WEBHOOKS_AUDIT_DELIVERIES` | `false` | Also audit successful deliveries |
 | `WEBHOOKS_SHUTDOWN_DRAIN_TIMEOUT` | `15s` | Drain wait on shutdown |
 
-Secrets at rest require `TYK_AI_SECRET_KEY`; without it, header values and
-signing secrets are stored in plaintext (a startup warning is logged).
+`TYK_AI_SECRET_KEY` is required: the feature refuses to start without it
+(status reports `enabled: false` with a `disabled_reason`) rather than
+store header values and signing secrets in plaintext.
 
 ## API
 
@@ -240,8 +241,11 @@ permission (`status` needs any admin):
   `POST /webhooks/targets/:id/{pause|resume|rotate-secret}` (write)
 - `GET /webhooks/deliveries` (filters: `target_id`, `topic`, `status`,
   `event_id`, `kind`, `start_date`, `end_date`, `search`, `page`,
-  `page_size`, `sort`), `GET /webhooks/deliveries/:id`,
-  `GET /webhooks/deliveries/export?format=csv|json`, `GET /webhooks/stats` (read);
+  `page_size`, `sort`; `search` matches a delivery/event id exactly or a
+  substring of target URL, topic or last error, and is bounded to the last
+  30 days unless `start_date` is given), `GET /webhooks/deliveries/:id`,
+  `GET /webhooks/deliveries/export?format=csv|json` (streamed, ≤ 50,000
+  rows), `GET /webhooks/stats` (read);
   `POST /webhooks/deliveries/:id/{replay|cancel}`,
   `POST /webhooks/deliveries/replay` (bulk dead letters) (execute)
 

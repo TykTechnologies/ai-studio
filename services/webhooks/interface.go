@@ -15,6 +15,7 @@ package webhooks
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -147,7 +148,11 @@ type DeliveryQuery struct {
 	Kind     string
 	Start    time.Time
 	End      time.Time
-	Search   string // case-insensitive substring over target url, topic, last error, response snippet
+	// Search matches a delivery or event id exactly, or a case-insensitive
+	// substring of the target URL, topic or last error. Response snippets
+	// are not searched. A search with no Start is bounded to the last
+	// SearchWindow so it never scans the whole table.
+	Search string
 
 	Page     int // 1-based
 	PageSize int
@@ -197,13 +202,16 @@ type Stats struct {
 
 // Status describes the running feature so the UI can explain itself.
 type Status struct {
-	Available     bool   `json:"available"`
-	Enabled       bool   `json:"enabled"`
-	BusConnected  bool   `json:"bus_connected"`
-	WorkerEnabled bool   `json:"worker_enabled"`
-	Workers       int    `json:"workers"`
-	NodeID        string `json:"node_id,omitempty"`
-	Dialect       string `json:"dialect,omitempty"`
+	Available bool `json:"available"`
+	Enabled   bool `json:"enabled"`
+	// DisabledReason explains why Enabled is false when the operator did not
+	// switch the feature off (e.g. the secrets encryption key is missing).
+	DisabledReason string `json:"disabled_reason,omitempty"`
+	BusConnected   bool   `json:"bus_connected"`
+	WorkerEnabled  bool   `json:"worker_enabled"`
+	Workers        int    `json:"workers"`
+	NodeID         string `json:"node_id,omitempty"`
+	Dialect        string `json:"dialect,omitempty"`
 
 	QueueDepth     int64 `json:"queue_depth"`
 	Retrying       int64 `json:"retrying"`
@@ -228,7 +236,17 @@ const (
 	MaxPageSize     = 500
 	MaxExportRows   = 50000
 	MaxBulkReplay   = 500
+	// SearchWindow bounds a free-text search that names no start date.
+	SearchWindow = 30 * 24 * time.Hour
 )
+
+// ExportContentType is the Content-Type for an export in the given format.
+func ExportContentType(format string) string {
+	if format == FormatJSON {
+		return "application/json"
+	}
+	return "text/csv; charset=utf-8"
+}
 
 // StatsWindows are the windows accepted by Stats.
 var StatsWindows = map[string]time.Duration{
@@ -270,8 +288,11 @@ type Service interface {
 	CancelDelivery(ctx context.Context, actor Actor, id string) error
 	ReplayDeadLetters(ctx context.Context, actor Actor, req ReplayRequest) (*ReplayResult, error)
 	Stats(ctx context.Context, window string) (*Stats, error)
-	// Export renders matching deliveries as CSV or JSON. Returns the bytes and the content type.
-	Export(ctx context.Context, q DeliveryQuery, format string) ([]byte, string, error)
+	// Export streams matching deliveries (at most MaxExportRows) as CSV or
+	// JSON to w, batch by batch, so memory stays flat for large logs.
+	// Errors before the first write are returned; a failure mid-stream
+	// leaves a truncated document and is also returned.
+	Export(ctx context.Context, q DeliveryQuery, format string, w io.Writer) error
 
 	// Lifecycle
 	// Cleanup deletes rows past the retention windows. Returns rows removed.

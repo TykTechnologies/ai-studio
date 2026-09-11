@@ -719,7 +719,7 @@ const Webhooks = () => {
     return (
       <Box>
         {header}
-        <DisabledNotice />
+        <DisabledNotice status={status} />
       </Box>
     );
   }

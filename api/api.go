@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
+	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
@@ -87,6 +88,9 @@ type API struct {
 	marketplaceManagementService  marketplace_management.Service
 	// Audit trail (ENT: records management API activity, CE: no-op)
 	auditService audit.Service
+	// webhooksFallback answers webhook routes when the service has no
+	// webhooks implementation attached (community stub semantics).
+	webhooksFallback webhooks.Service
 	auditHandler gin.HandlerFunc
 	// routePerms maps "METHOD /path" to the permission a route requires.
 	// Populated by permRouter at registration; see authz_routes.go.
@@ -174,6 +178,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	}
 
 	api := &API{
+		webhooksFallback: webhooks.NewService(webhooks.Deps{}),
 		service:          service,
 		router:           router,
 		disableCORS:      disableCORS,

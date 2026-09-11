@@ -2,6 +2,7 @@ package webhooks
 
 import (
 	"context"
+	"io"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
@@ -98,8 +99,8 @@ func (s *communityService) Stats(ctx context.Context, window string) (*Stats, er
 	return nil, ErrEnterpriseFeature
 }
 
-func (s *communityService) Export(ctx context.Context, q DeliveryQuery, format string) ([]byte, string, error) {
-	return nil, "", ErrEnterpriseFeature
+func (s *communityService) Export(ctx context.Context, q DeliveryQuery, format string, w io.Writer) error {
+	return ErrEnterpriseFeature
 }
 
 func (s *communityService) Cleanup(ctx context.Context) (int64, error) {

@@ -20032,7 +20032,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Free text over target URL, topic, last error, response snippet",
+                        "description": "Delivery or event ID (exact), or substring of target URL, topic or last error; bounded to the last 30 days unless start_date is given",
                         "name": "search",
                         "in": "query"
                     },
@@ -22261,7 +22261,6 @@ const docTemplate = `{
                             "additionalProperties": true
                         },
                         "namespace": {
-                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "session_id": {
@@ -27364,6 +27363,10 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "dialect": {
+                    "type": "string"
+                },
+                "disabled_reason": {
+                    "description": "DisabledReason explains why Enabled is false when the operator did not\nswitch the feature off (e.g. the secrets encryption key is missing).",
                     "type": "string"
                 },
                 "dropped_events": {

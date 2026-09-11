@@ -61,6 +61,7 @@ func sharedMemoryDB(t *testing.T) *gorm.DB {
 func setupWebhooksEnterpriseAPI(t *testing.T) *webhookEntHarness {
 	t.Helper()
 	t.Setenv("AUDIT_ENABLED", "true")
+	t.Setenv("TYK_AI_SECRET_KEY", "test-encryption-key") // webhooks refuse to start without it
 	db := sharedMemoryDB(t)
 	service := apitest.SetupTestService(db)
 	service.SetEventBus(eventbridge.NewBus())

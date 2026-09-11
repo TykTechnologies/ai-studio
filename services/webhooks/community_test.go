@@ -5,6 +5,7 @@ package webhooks
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,8 +59,7 @@ func TestCommunityService(t *testing.T) {
 	assert.ErrorIs(t, err, ErrEnterpriseFeature)
 	_, err = svc.Stats(ctx, "24h")
 	assert.ErrorIs(t, err, ErrEnterpriseFeature)
-	_, _, err = svc.Export(ctx, DeliveryQuery{}, FormatCSV)
-	assert.ErrorIs(t, err, ErrEnterpriseFeature)
+	assert.ErrorIs(t, svc.Export(ctx, DeliveryQuery{}, FormatCSV, io.Discard), ErrEnterpriseFeature)
 	_, err = svc.Cleanup(ctx)
 	assert.ErrorIs(t, err, ErrEnterpriseFeature)
 

@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -12,17 +13,49 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// communityWebhooks answers for the feature when no service was attached
-// (tests that build an API without InitWebhooks): every call is refused
-// with ErrEnterpriseFeature, exactly like a CE build.
-var communityWebhooks = webhooks.NewService(webhooks.Deps{})
-
-// webhooksService returns the attached service or the community stub.
+// webhooksService returns the service attached to services.Service, or the
+// per-API community stub set up in NewAPI (tests that never call
+// InitWebhooks): every call on the stub is refused with ErrEnterpriseFeature,
+// exactly like a CE build.
 func (a *API) webhooksService() webhooks.Service {
 	if a.service != nil && a.service.Webhooks != nil {
 		return a.service.Webhooks
 	}
-	return communityWebhooks
+	return a.webhooksFallback
+}
+
+// bindOptionalJSON decodes a JSON body into dst when one is present. An empty
+// body is fine (the caller's defaults apply); anything else must parse. It
+// does not trust Content-Length, so a body sent with a wrong length is still
+// validated rather than skipped.
+func bindOptionalJSON(c *gin.Context, dst interface{}) error {
+	if c.Request.Body == nil {
+		return nil
+	}
+	err := c.ShouldBindJSON(dst)
+	if err == nil || errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
+}
+
+// exportWriter sets the download headers on the first byte written, so a
+// failure before any output can still produce a JSON error response.
+type exportWriter struct {
+	c        *gin.Context
+	format   string
+	filename string
+	started  bool
+}
+
+func (w *exportWriter) Write(p []byte) (int, error) {
+	if !w.started {
+		w.started = true
+		w.c.Header("Content-Type", webhooks.ExportContentType(w.format))
+		w.c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", w.filename))
+		w.c.Status(http.StatusOK)
+	}
+	return w.c.Writer.Write(p)
 }
 
 // webhookActor reads the authenticated administrator from the gin context.
@@ -404,11 +437,9 @@ func (a *API) targetAction(c *gin.Context, fallback string, fn func(actor webhoo
 		return
 	}
 	var in webhookReviewInput
-	if c.Request.ContentLength != 0 {
-		if err := c.ShouldBindJSON(&in); err != nil {
-			webhookBadRequest(c, "invalid request body")
-			return
-		}
+	if err := bindOptionalJSON(c, &in); err != nil {
+		webhookBadRequest(c, "invalid request body")
+		return
 	}
 	if len(in.Note) > 1024 || len(in.Reason) > 1024 {
 		webhookBadRequest(c, "note or reason is too long")
@@ -554,11 +585,9 @@ func (a *API) testWebhookTarget(c *gin.Context) {
 		return
 	}
 	var in webhookTestInput
-	if c.Request.ContentLength != 0 {
-		if err := c.ShouldBindJSON(&in); err != nil {
-			webhookBadRequest(c, "invalid request body")
-			return
-		}
+	if err := bindOptionalJSON(c, &in); err != nil {
+		webhookBadRequest(c, "invalid request body")
+		return
 	}
 	id, err := a.webhooksService().SendTest(c.Request.Context(), actor, c.Param("id"), strings.TrimSpace(in.Topic))
 	if err != nil {
@@ -582,7 +611,7 @@ func (a *API) testWebhookTarget(c *gin.Context) {
 // @Param kind query string false "event, test or replay"
 // @Param start_date query string false "Start (YYYY-MM-DD or RFC3339)"
 // @Param end_date query string false "End (YYYY-MM-DD or RFC3339)"
-// @Param search query string false "Free text over target URL, topic, last error, response snippet"
+// @Param search query string false "Delivery or event ID (exact), or substring of target URL, topic or last error; bounded to the last 30 days unless start_date is given"
 // @Param page query int false "Page (1-based)"
 // @Param page_size query int false "Page size (max 500)"
 // @Param sort query string false "asc or desc"
@@ -645,11 +674,9 @@ func (a *API) replayWebhookDelivery(c *gin.Context) {
 		return
 	}
 	var in webhookReplayInput
-	if c.Request.ContentLength != 0 {
-		if err := c.ShouldBindJSON(&in); err != nil {
-			webhookBadRequest(c, "invalid request body")
-			return
-		}
+	if err := bindOptionalJSON(c, &in); err != nil {
+		webhookBadRequest(c, "invalid request body")
+		return
 	}
 	id, err := a.webhooksService().ReplayDelivery(c.Request.Context(), actor, c.Param("id"), in.ReRender)
 	if err != nil {
@@ -697,11 +724,9 @@ func (a *API) replayWebhookDeadLetters(c *gin.Context) {
 		return
 	}
 	var req webhooks.ReplayRequest
-	if c.Request.ContentLength != 0 {
-		if err := c.ShouldBindJSON(&req); err != nil {
-			webhookBadRequest(c, "invalid request body")
-			return
-		}
+	if err := bindOptionalJSON(c, &req); err != nil {
+		webhookBadRequest(c, "invalid request body")
+		return
 	}
 	if req.Max < 0 || req.Max > webhooks.MaxBulkReplay {
 		webhookBadRequest(c, fmt.Sprintf("max must be between 1 and %d", webhooks.MaxBulkReplay))
@@ -740,14 +765,22 @@ func (a *API) exportWebhookDeliveries(c *gin.Context) {
 		webhookBadRequest(c, "format must be csv or json")
 		return
 	}
-	data, contentType, err := a.webhooksService().Export(c.Request.Context(), q, format)
-	if err != nil {
-		webhookErrorResponse(c, err, "Failed to export deliveries")
-		return
+	// Streamed batch by batch straight to the response; memory stays flat
+	// however large the log is.
+	w := &exportWriter{
+		c:        c,
+		format:   format,
+		filename: fmt.Sprintf("webhook_deliveries_%s.%s", time.Now().UTC().Format("20060102_150405"), format),
 	}
-	filename := fmt.Sprintf("webhook_deliveries_%s.%s", time.Now().UTC().Format("20060102_150405"), format)
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	c.Data(http.StatusOK, contentType, data)
+	if err := a.webhooksService().Export(c.Request.Context(), q, format, w); err != nil {
+		if !w.started {
+			webhookErrorResponse(c, err, "Failed to export deliveries")
+			return
+		}
+		// Headers are gone; the client gets a truncated file and the error
+		// is left on the context for the logger.
+		_ = c.Error(err)
+	}
 }
 
 // getWebhookStats godoc

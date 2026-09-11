@@ -306,14 +306,14 @@ type WebhookDelivery struct {
 	LastResponseSnippet string `gorm:"size:4096" json:"last_response_snippet,omitempty"`
 
 	ReplayOfID string `gorm:"size:36;index:idx_webhook_deliveries_replay_of" json:"replay_of_id,omitempty"`
-	Kind       string `gorm:"size:16" json:"kind"`
+	Kind       string `gorm:"size:16;index:idx_webhook_deliveries_kind_created,priority:1" json:"kind"`
 	// DedupeKey is "<event_id>:<target_id>" for event deliveries so a bus
 	// event that arrives twice fans out once. Test and replay rows use their
 	// own ID so they are never deduplicated.
 	DedupeKey string `gorm:"size:200;uniqueIndex:uq_webhook_deliveries_dedupe" json:"-"`
 
 	LockVersion int        `gorm:"not null;default:0" json:"-"`
-	CreatedAt   time.Time  `gorm:"index:idx_webhook_deliveries_target_created,priority:2;index:idx_webhook_deliveries_topic_created,priority:2;index:idx_webhook_deliveries_created" json:"created_at"`
+	CreatedAt   time.Time  `gorm:"index:idx_webhook_deliveries_target_created,priority:2;index:idx_webhook_deliveries_topic_created,priority:2;index:idx_webhook_deliveries_kind_created,priority:2;index:idx_webhook_deliveries_created" json:"created_at"`
 	CompletedAt *time.Time `json:"completed_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
