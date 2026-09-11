@@ -22,16 +22,29 @@ User documentation: [`docs/site/docs/rbac.md`](../docs/site/docs/rbac.md). Frame
 
 ## 1. Model
 
-**Permission** — a string `<resource>:<action>`. Resources are the plural, kebab-case route collection segments of the management API (`llms`, `data-catalogues`, `sso-profiles`). Actions are exactly four:
+**Permission** — a string `<resource>:<action>`. Resources are the plural, kebab-case route collection segments of the management API (`llms`, `data-catalogues`, `sso-profiles`). Actions are exactly five:
 
 | Action | Meaning | HTTP mapping |
 |---|---|---|
 | `read` | list, get, search, status, history, download an existing artefact | `GET` |
-| `write` | create, update, link sub-resources, activate/deactivate, approve/reject, rollback | `POST`, `PUT`, `PATCH` |
+| `write` | create, update, link sub-resources, approve/reject, rollback | `POST`, `PUT`, `PATCH` |
 | `delete` | remove a resource or a sub-resource link | `DELETE` |
 | `execute` | side-effecting operations that do not persist configuration: test, call, reload, sync, re-process | `POST` on a verb route |
+| `publish` | make an object live: set an LLM, tool, data source, app or agent active, enable a plugin, activate a metadata schema | `POST /<resource>/:id/activate|deactivate` (`enable|disable` for plugins, `PATCH /model-routers/:id/toggle`), plus the live switch inside `PATCH`/`PUT` |
 
-`write`, `delete` and `execute` each imply `read`. There are no deny rules. The single wildcard `*` is held only by the Owner and Administrator system roles.
+`write`, `delete`, `execute` and `publish` each imply `read`. `publish` does **not** imply `write` and `write` does not imply `publish`: the two are orthogonal so that a *submitter* role (`llms:write`) can draft and edit providers without releasing them, a *reviewer* role (`llms:write` + `llms:publish`) can do both, and an *approver* role (`llms:publish` only) can release without editing. There are no deny rules. The single wildcard `*` is held only by the Owner and Administrator system roles.
+
+### The publish rule
+
+Only resources with a live switch offer `publish`: `llms` (`active`), `tools` (`active`), `datasources` (`active`), `apps` (`is_active`), `agents` (`is_active`), `model-routers` (`active`), `plugins` (`is_active`) and `metadata` (schema `active`). `authz.Publishable()` lists them. Enforcement (`api/authz_publish.go`):
+
+- `PATCH`/`PUT` routes keep their `write` annotation. The handler loads the stored object and calls `requirePublishIfChanged(c, resource, before, after)`: a request that flips the switch without `publish` is answered `403 permission_denied` with `"permission": "<resource>:publish"`; a request that leaves the switch alone (or omits it) is plain write, so editing an already-live object never needs `publish`.
+- Create routes call `requirePublishToCreateLive`: asking for an active object explicitly needs `publish`. Where the column defaults to live (tools, apps, agents, metadata schemas) a caller **without** `publish` who does not mention the switch gets a draft (inactive) object rather than an error.
+- Every publishable resource has a dedicated route annotated `publish` only (`POST /llms/:id/activate`, `/deactivate`, … ; `POST /plugins/:id/enable|disable`; `PATCH /model-routers/:id/toggle`; `POST /metadata/schemas/:id/activate|deactivate`; the existing `POST /agents/:id/activate|deactivate`), backed by `services.Set*Active`, which flips only that column and fires object hooks and system events like an update. `POST /apps/:id/activate-credential` is about the credential and stays `write`.
+- `ToolInput.active` and `AppInput.is_active` are new optional (`*bool`) attributes; until this change neither flag had an admin write path.
+- Submission approval creates the object with the submitted `active` value under `submissions:write`; reviewing submissions is its own workflow.
+
+Editor holds `publish` on everything it can write except `plugins` (enabling a plugin stays with administrators, like installing one) and `metadata` (read-only for Editor). Viewer and Auditor never publish.
 
 **Role** — a named bundle of permissions (`models.Role`). System roles are immutable and recomputed from the catalogue on every boot; custom roles hold an explicit list and never gain permissions automatically.
 
@@ -65,11 +78,11 @@ Governed metadata on an object is authorised by that object's permission: `PUT /
 |---|---|---|
 | `owner` | Owner | `*`. Seeded to user ID 1. User-only binding. Only an Owner may grant or revoke Owner. The last Owner cannot be removed or demoted. |
 | `administrator` | Administrator | `*`. Bindable to users and teams. Cannot bind/unbind Owner. |
-| `editor` | Editor | Everything except: `users`/`groups` beyond read, `roles`, `sso-profiles`, `plugins`/`marketplace` write and delete, `metadata` write and delete, `audit`, `exports`, `proxy-logs`, `chat-history`. Includes `credentials:*` and `secrets:*`. |
+| `editor` | Editor | Everything except: `users`/`groups` beyond read, `roles`, `sso-profiles`, `plugins`/`marketplace` write, delete and publish, `metadata` write, delete and publish, `audit`, `exports`, `proxy-logs`, `chat-history`. Includes `credentials:*`, `secrets:*` and `publish` on LLMs, tools, data sources, apps, agents and model routers. |
 | `viewer` | Viewer | `read` on every resource except the sensitive ones. |
 | `auditor` | Auditor | Viewer plus `audit`, `compliance`, `proxy-logs`, `chat-history`, `exports` read. Never credentials or identity provider secrets. |
 
-Portal/chat-only users hold no binding; `ShowPortal`/`ShowChat` keep governing those surfaces. Operator- or analyst-style roles are a clone of Viewer with a few `execute`/`read` permissions added.
+Portal/chat-only users hold no binding; `ShowPortal`/`ShowChat` keep governing those surfaces. Operator- or analyst-style roles are a clone of Viewer with a few `execute`/`read` permissions added. Workflow roles are built from `publish`: *LLM Submitter* = `llms:read, llms:write`; *LLM Reviewer* = `llms:read, llms:write, llms:publish`; *Release approver* = `llms:publish` (and the other `*:publish` grants) with no write.
 
 ### Rules
 
@@ -137,6 +150,7 @@ Related payload changes: `/common/me` carries `permissions`, `roles`, `has_admin
 
 - One `/common/me` fetch feeds an identity store (`admin/utils/identityStore.js`) and `PermissionsProvider` (`admin/context/PermissionsContext.js`); `usePermissions()` exposes `can`, `canAny`, `canAll`, `isFullAdmin`, `hasAdminAccess`, `rbacEnabled`.
 - `<Can>` hides controls; `<RequirePermission>` wraps every admin route (`admin/routes.js` descriptors) and renders a denial panel instead of a blank page; nav items carry `permission` and `BaseDrawer` drops what the user cannot see (empty groups included).
+- `<PublishSwitch permission={P.LLMS_PUBLISH} …>` (`components/rbac/PublishSwitch.js`) renders the Active/Enabled switch of a form disabled, with a tooltip naming the missing permission, when the user lacks publish. Used by the LLM, data source, plugin, model router, agent and metadata schema forms; the Activate/Deactivate actions on the agent and model router pages are wrapped in `<Can>`. The matrix shows a fifth "Publish" column only on rows that offer it.
 - The API client turns `permission_denied`/`enterprise_required` responses into typed errors; denied mutations show one global toast. A code-less 403 keeps its historical "Community Edition" meaning during rollout.
 - Roles pages under Access: list (system/custom badge, counts), detail (read-only matrix), form (matrix with implied-read behaviour, shield/key markers), clone dialog. Users and teams get a role selector; user details show roles and effective permissions.
 
@@ -144,8 +158,8 @@ Related payload changes: `/common/me` carries `permissions`, `roles`, `has_admin
 
 ## 5. Adding a permission for a new feature
 
-1. Register the resource once in `pkg/authz/catalogue.go` (`Register(Resource{Key, Label, Group, Actions, Sensitive, Privileged})`) — the UI matrix and system roles pick it up automatically.
-2. Annotate its routes in `api/api.go` with `authz.Read/Write/Delete/Execute("<key>")`; the completeness test fails otherwise.
+1. Register the resource once in `pkg/authz/catalogue.go` (`Register(Resource{Key, Label, Group, Actions, Sensitive, Privileged})`) — the UI matrix and system roles pick it up automatically. Use `crudp`/`crudxp` when the object has a live switch, and guard that switch in the handlers with `requirePublishIfChanged` / `requirePublishToCreateLive` plus a dedicated `activate`/`deactivate` route annotated `authz.Publish`.
+2. Annotate its routes in `api/api.go` with `authz.Read/Write/Delete/Execute/Publish("<key>")`; the completeness test fails otherwise.
 3. Add a constant to `ui/admin-frontend/src/admin/rbac/permissions.js`, a `permission` on the nav item in `Drawer.js`, and on the route descriptor in `admin/routes.js`.
 4. Add explicit audit action names in `enterprise/features/audit/actions.go` if the generic derivation reads badly.
 
@@ -158,7 +172,7 @@ Plugin-declared permissions (`plugin:<slug>:<action>`) and scoped bindings (name
 - `pkg/authz/authz_test.go` — catalogue shape, parsing, set semantics.
 - `api/authz_routes_test.go` — every `/api/v1` route annotated (both editions, including the conditional marketplace block).
 - `api/authz_middleware_test.go` — TestMode off: 401/403/200 with error codes; CE management endpoints answer 402.
-- `api/rbac_enterprise_test.go` — end to end with the Enterprise evaluator: Viewer read-only, Editor cannot manage access, masked API keys, team roles flip `is_admin`, Owner rules, `role_ids` on the user payload.
+- `api/rbac_enterprise_test.go` — end to end with the Enterprise evaluator: Viewer read-only, Editor cannot manage access, masked API keys, team roles flip `is_admin`, Owner rules, `role_ids` on the user payload, and the submitter / reviewer / approver publish workflow on LLMs.
 - `enterprise/features/rbac/service_test.go` — seeding, system role shape, union across direct and team bindings, admin-flag sync and self-heal, lockout rules, unlicensed fallback.
 - Frontend: `PermissionsContext`, `identityStore`, `apiErrors`, `rbac/gating`, drawer filtering, `PermissionMatrix`, `Roles` page, `UserForm.rbac`.
 

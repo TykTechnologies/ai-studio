@@ -41,6 +41,8 @@ import {
 } from "../../styles/sharedStyles";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import { useEdition } from "../../context/EditionContext";
+import PublishSwitch from "../rbac/PublishSwitch";
+import { P } from "../../rbac/permissions";
 import pluginService from "../../services/pluginService";
 import PluginConfigDialog from './PluginConfigDialog';
 import {
@@ -763,15 +765,11 @@ const LLMForm = () => {
                   />
                 </Grid>
                 <Grid item xs={12}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={llm.active}
-                        onChange={handleSwitchChange}
-                        name="active"
-                        color="primary"
-                      />
-                    }
+                  <PublishSwitch
+                    permission={P.LLMS_PUBLISH}
+                    checked={llm.active}
+                    onChange={handleSwitchChange}
+                    name="active"
                     label="Enabled in Proxy"
                   />
                 </Grid>

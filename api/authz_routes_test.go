@@ -102,6 +102,19 @@ func TestAuthzRoutes_RegistryLookup(t *testing.T) {
 	assert.Equal(t, authz.Read("tools"), get("GET", "/api/v1/providers").perm)
 	assert.Equal(t, authz.Read("marketplace"), get("GET", "/api/v1/admin/marketplaces").perm)
 	assert.Equal(t, authz.Write("sso-profiles"), get("POST", "/api/v1/sso-profiles").perm)
+
+	// Dedicated activate/deactivate routes carry publish, not write.
+	assert.Equal(t, authz.Publish("llms"), get("POST", "/api/v1/llms/:id/activate").perm)
+	assert.Equal(t, authz.Publish("llms"), get("POST", "/api/v1/llms/:id/deactivate").perm)
+	assert.Equal(t, authz.Publish("tools"), get("POST", "/api/v1/tools/:id/activate").perm)
+	assert.Equal(t, authz.Publish("datasources"), get("POST", "/api/v1/datasources/:id/deactivate").perm)
+	assert.Equal(t, authz.Publish("apps"), get("POST", "/api/v1/apps/:id/activate").perm)
+	assert.Equal(t, authz.Write("apps"), get("POST", "/api/v1/apps/:id/activate-credential").perm, "credential toggles stay write")
+	assert.Equal(t, authz.Publish("agents"), get("POST", "/api/v1/agents/:id/activate").perm)
+	assert.Equal(t, authz.Publish("model-routers"), get("PATCH", "/api/v1/model-routers/:id/toggle").perm)
+	assert.Equal(t, authz.Publish("plugins"), get("POST", "/api/v1/plugins/:id/enable").perm)
+	assert.Equal(t, authz.Publish("plugins"), get("POST", "/api/v1/plugins/:id/disable").perm)
+	assert.Equal(t, authz.Publish("metadata"), get("POST", "/api/v1/metadata/schemas/:id/activate").perm)
 }
 
 func TestAuthzRoutes_MetadataObjectResolver(t *testing.T) {

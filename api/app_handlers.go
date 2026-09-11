@@ -59,6 +59,19 @@ func (a *API) createApp(c *gin.Context) {
 		})
 	}
 
+	// Apps default to active. Asking for an active app explicitly needs
+	// apps:publish; a caller without it gets an inactive app unless they
+	// asked for one anyway.
+	wantActive := true
+	if input.Data.Attributes.IsActive != nil {
+		wantActive = *input.Data.Attributes.IsActive
+		if !a.requirePublishToCreateLive(c, "apps", wantActive) {
+			return
+		}
+	} else if !a.canPublish(c, "apps") {
+		wantActive = false
+	}
+
 	// Use namespace-aware service method if namespace is provided
 	var app *models.App
 	var err error
@@ -119,6 +132,19 @@ func (a *API) createApp(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// The column defaults to true on insert; write the value decided above.
+	if !wantActive {
+		if app, err = a.service.SetAppActive(app.ID, false, currentUserID(c)); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"data": a.serializeAppWithPluginResources(app)})
@@ -201,6 +227,24 @@ func (a *API) updateApp(c *gin.Context) {
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 	metadata := input.Data.Attributes.Metadata
 
+	// Flipping the active switch is the publish action on apps; an omitted
+	// switch keeps its value.
+	if input.Data.Attributes.IsActive != nil {
+		existing, err := a.service.GetAppByID(uint(id))
+		if err != nil {
+			c.JSON(http.StatusNotFound, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Not Found", Detail: "App not found"}},
+			})
+			return
+		}
+		if !a.requirePublishIfChanged(c, "apps", existing.IsActive, *input.Data.Attributes.IsActive) {
+			return
+		}
+	}
+
 	// Convert plugin resource inputs to service selections
 	var pluginResources []services.PluginResourceSelection
 	for _, pr := range input.Data.Attributes.PluginResources {
@@ -266,6 +310,18 @@ func (a *API) updateApp(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	if input.Data.Attributes.IsActive != nil && app.IsActive != *input.Data.Attributes.IsActive {
+		if app, err = a.service.SetAppActive(app.ID, *input.Data.Attributes.IsActive, currentUserID(c)); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppWithPluginResources(app)})

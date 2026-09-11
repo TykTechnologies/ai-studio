@@ -74,6 +74,11 @@ func (a *API) createModelRouter(c *gin.Context) {
 
 	router := a.inputToModelRouter(&input)
 
+	// Creating a router already active is the publish action on model-routers.
+	if !a.requirePublishToCreateLive(c, "model-routers", router.Active) {
+		return
+	}
+
 	if err := a.service.ModelRouterService.CreateRouter(router); err != nil {
 		statusCode := http.StatusInternalServerError
 		if err == model_router.ErrEnterpriseFeature {
@@ -176,6 +181,13 @@ func (a *API) updateModelRouter(c *gin.Context) {
 
 	router := a.inputToModelRouter(&input)
 	router.ID = uint(id)
+
+	// Flipping the active switch is the publish action on model-routers.
+	if existing, err := a.service.ModelRouterService.GetRouter(uint(id)); err == nil && existing != nil {
+		if !a.requirePublishIfChanged(c, "model-routers", existing.Active, router.Active) {
+			return
+		}
+	}
 
 	if err := a.service.ModelRouterService.UpdateRouter(router); err != nil {
 		statusCode := http.StatusInternalServerError

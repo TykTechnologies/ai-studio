@@ -134,6 +134,105 @@ func TestRBAC_EditorWritesButCannotManageAccess(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code, "installing plugins is not an editor task")
 }
 
+// TestRBAC_PublishIsSeparateFromWrite covers the submitter / reviewer
+// workflow: a role with llms:write drafts providers but cannot make one
+// live, a role with llms:publish (and no write) can only flip the switch.
+func TestRBAC_PublishIsSeparateFromWrite(t *testing.T) {
+	f := setupRBACFixture(t)
+	db := f.api.service.DB
+
+	newUserWithRole := func(email string, perms ...string) *models.User {
+		u := models.NewUser()
+		u.Email = email
+		u.Name = email
+		u.Password = "hash"
+		u.EmailVerified = true
+		require.NoError(t, u.Create(db))
+		w := f.do("POST", "/api/v1/rbac/roles", map[string]interface{}{"name": "role-" + email, "permissions": perms}, f.owner)
+		require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+		var resp struct{ Data RoleResponse }
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		f.bind(t, "user", u.ID, uintFromString(t, resp.Data.ID))
+		return u
+	}
+	submitter := newUserWithRole("submitter@tyk.io", "llms:read", "llms:write")
+	reviewer := newUserWithRole("reviewer@tyk.io", "llms:read", "llms:write", "llms:publish")
+	approver := newUserWithRole("approver@tyk.io", "llms:publish")
+
+	llmBody := func(attrs map[string]interface{}) map[string]interface{} {
+		base := map[string]interface{}{"name": "gpt", "vendor": "openai", "api_key": "k", "api_endpoint": "https://api.openai.com", "default_model": "gpt-4o"}
+		for k, v := range attrs {
+			base[k] = v
+		}
+		return map[string]interface{}{"data": map[string]interface{}{"attributes": base}}
+	}
+
+	// Creating live needs publish; creating a draft is plain write.
+	w := f.do("POST", "/api/v1/llms", llmBody(map[string]interface{}{"active": true}), submitter)
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	assert.Equal(t, authz.CodePermissionDenied, decodeErrorCode(t, w.Body.Bytes()))
+	assert.Contains(t, w.Body.String(), "llms:publish")
+
+	w = f.do("POST", "/api/v1/llms", llmBody(map[string]interface{}{"active": false}), submitter)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	var created struct{ Data LLMResponse }
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+	id := created.Data.ID
+	assert.False(t, created.Data.Attributes.Active)
+
+	// The submitter may keep editing, but not flip the switch.
+	w = f.do("PATCH", "/api/v1/llms/"+id, map[string]interface{}{"data": map[string]interface{}{"attributes": map[string]interface{}{"short_description": "draft"}}}, submitter)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w = f.do("PATCH", "/api/v1/llms/"+id, map[string]interface{}{"data": map[string]interface{}{"attributes": map[string]interface{}{"active": true}}}, submitter)
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "llms:publish")
+	w = f.do("POST", "/api/v1/llms/"+id+"/activate", nil, submitter)
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+
+	// An approver-only role can release but not edit.
+	w = f.do("PATCH", "/api/v1/llms/"+id, map[string]interface{}{"data": map[string]interface{}{"attributes": map[string]interface{}{"short_description": "x"}}}, approver)
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "llms:write")
+	w = f.do("POST", "/api/v1/llms/"+id+"/activate", nil, approver)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var activated struct{ Data LLMResponse }
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &activated))
+	assert.True(t, activated.Data.Attributes.Active)
+
+	// Editing an already-live provider without touching the switch stays write.
+	w = f.do("PATCH", "/api/v1/llms/"+id, map[string]interface{}{"data": map[string]interface{}{"attributes": map[string]interface{}{"short_description": "live edit"}}}, submitter)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// The reviewer holds both and can deactivate through PATCH.
+	w = f.do("PATCH", "/api/v1/llms/"+id, map[string]interface{}{"data": map[string]interface{}{"attributes": map[string]interface{}{"active": false}}}, reviewer)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// Viewer cannot publish; Editor can (system role shape).
+	w = f.do("POST", "/api/v1/llms/"+id+"/activate", nil, f.viewer)
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	w = f.do("POST", "/api/v1/llms/"+id+"/activate", nil, f.editor)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// The catalogue advertises publish only where there is a live switch.
+	w = f.do("GET", "/api/v1/rbac/permissions", nil, f.viewer)
+	require.Equal(t, http.StatusOK, w.Code)
+	var cat PermissionCatalogueResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &cat))
+	assert.Contains(t, cat.Actions, authz.ActionPublish)
+	for _, r := range cat.Resources {
+		offers := false
+		for _, a := range r.Actions {
+			offers = offers || a == authz.ActionPublish
+		}
+		switch r.Key {
+		case "llms", "tools", "datasources", "apps", "agents", "model-routers", "plugins", "metadata":
+			assert.True(t, offers, r.Key)
+		default:
+			assert.False(t, offers, r.Key)
+		}
+	}
+}
+
 func TestRBAC_UsersListMasksAPIKeysForNonManagers(t *testing.T) {
 	f := setupRBACFixture(t)
 

@@ -457,6 +457,10 @@ type AppInput struct {
 			Namespace       string                 `json:"namespace,omitempty"`
 			Metadata        map[string]interface{} `json:"metadata,omitempty"`
 			PluginResources []PluginResourceInput  `json:"plugin_resources,omitempty"`
+			// IsActive is the live switch. Omitted = unchanged on update, live
+			// on create (unless the caller lacks apps:publish, in which case
+			// the app is created inactive). Setting it needs apps:publish.
+			IsActive *bool `json:"is_active,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -587,6 +591,10 @@ type ToolInput struct {
 			AuthSchemaName string   `json:"auth_schema_name"`
 			Operations     []string `json:"operations"`
 			Namespace      string   `json:"namespace"`
+			// Active is the live switch. Omitted = unchanged on update, live on
+			// create (unless the caller lacks tools:publish, in which case the
+			// tool is created inactive). Setting it needs tools:publish.
+			Active *bool `json:"active,omitempty"`
 			// Governed metadata (Enterprise). nil = untouched; {} = clear.
 			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
 		} `json:"attributes"`

@@ -6,14 +6,12 @@ import {
   Chip,
   CircularProgress,
   FormControl,
-  FormControlLabel,
   Grid,
   IconButton,
   InputLabel,
   MenuItem,
   Select,
   Snackbar,
-  Switch,
   Table,
   TableBody,
   TableContainer,
@@ -30,6 +28,8 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import { generateSlug } from "../components/wizards/quick-start/utils";
+import PublishSwitch from "../components/rbac/PublishSwitch";
+import { P } from "../rbac/permissions";
 import {
   TitleBox,
   ContentBox,
@@ -276,8 +276,11 @@ const MetadataSchemaForm = () => {
                 )}
               </Grid>
               <Grid item xs={12}>
-                <FormControlLabel
-                  control={<Switch checked={Boolean(schema.active)} onChange={(e) => set({ active: e.target.checked })} />}
+                <PublishSwitch
+                  permission={P.METADATA_PUBLISH}
+                  checked={Boolean(schema.active)}
+                  onChange={(e) => set({ active: e.target.checked })}
+                  name="active"
                   label="Active"
                 />
               </Grid>

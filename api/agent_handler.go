@@ -631,6 +631,11 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 		return
 	}
 
+	// Creating an agent already active is the publish action on agents.
+	if !a.requirePublishToCreateLive(c, "agents", req.IsActive) {
+		return
+	}
+
 	// Create agent config
 	agentConfig := models.NewAgentConfig()
 	agentConfig.Name = req.Name
@@ -654,6 +659,21 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 			}{{Title: "Database error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// The is_active column defaults to true on insert, which turns an
+	// explicit false into true; write the requested value back when it was
+	// false, and never leave a caller without publish holding a live agent.
+	if !req.IsActive || !a.canPublish(c, "agents") {
+		if err := agentConfig.Deactivate(a.service.DB); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Database error", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	// Add groups if specified
@@ -731,6 +751,11 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Agent not found", Detail: "No agent found with the provided ID"}},
 		})
+		return
+	}
+
+	// Flipping the active switch is the publish action on agents.
+	if !a.requirePublishIfChanged(c, "agents", agentConfig.IsActive, req.IsActive) {
 		return
 	}
 
@@ -852,7 +877,7 @@ func (a *API) HandleActivateAgent(c *gin.Context) {
 	_ = uObj // identity is checked; authorization is the permission check below
 
 	// Check if user is admin
-	if !authz.Can(c, authz.Write("agents")) {
+	if !authz.Can(c, authz.Publish("agents")) {
 		c.JSON(http.StatusForbidden, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -914,7 +939,7 @@ func (a *API) HandleDeactivateAgent(c *gin.Context) {
 	_ = uObj // identity is checked; authorization is the permission check below
 
 	// Check if user is admin
-	if !authz.Can(c, authz.Write("agents")) {
+	if !authz.Can(c, authz.Publish("agents")) {
 		c.JSON(http.StatusForbidden, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

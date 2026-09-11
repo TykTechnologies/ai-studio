@@ -72,6 +72,29 @@ describe('PermissionMatrix', () => {
     expect([...onChange.mock.calls[0][0]].sort()).toEqual(['llms:delete', 'llms:read', 'llms:write']);
   });
 
+  it('shows the publish column only on rows that offer it, and publish ticks read', () => {
+    usePermissionCatalogue.mockReturnValue({
+      ...catalogue,
+      actions: ['read', 'write', 'delete', 'execute', 'publish'],
+      grouped: [
+        {
+          group: 'LLM management',
+          resources: [
+            { key: 'llms', label: 'LLM providers', group: 'LLM management', actions: ['read', 'write', 'delete', 'publish'] },
+            { key: 'model-prices', label: 'Model prices', group: 'LLM management', actions: ['read', 'write', 'delete'] },
+          ],
+        },
+      ],
+    });
+    const onChange = jest.fn();
+    render(<PermissionMatrix value={new Set()} onChange={onChange} />);
+    expect(screen.getByText('Publish')).toBeInTheDocument();
+    expect(screen.getByLabelText('llms:publish')).toBeInTheDocument();
+    expect(screen.queryByLabelText('model-prices:publish')).toBeNull();
+    fireEvent.click(screen.getByLabelText('llms:publish'));
+    expect([...onChange.mock.calls[0][0]].sort()).toEqual(['llms:publish', 'llms:read']);
+  });
+
   it('is inert when readOnly and filters rows by search', () => {
     const onChange = jest.fn();
     render(<PermissionMatrix value={new Set(['audit:read'])} onChange={onChange} readOnly />);

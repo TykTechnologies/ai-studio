@@ -88,6 +88,19 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
+	// Tools default to active. Asking for an active tool explicitly needs
+	// tools:publish; a caller without it gets a draft (inactive) tool unless
+	// they asked for one anyway.
+	wantActive := true
+	if input.Data.Attributes.Active != nil {
+		wantActive = *input.Data.Attributes.Active
+		if !a.requirePublishToCreateLive(c, "tools", wantActive) {
+			return
+		}
+	} else if !a.canPublish(c, "tools") {
+		wantActive = false
+	}
+
 	// Create the tool via service layer (includes auto-assignment to Default catalogue)
 	tool, err := a.service.CreateTool(
 		input.Data.Attributes.Name,
@@ -127,6 +140,10 @@ func (a *API) createTool(c *gin.Context) {
 		}
 		tool.Namespace = input.Data.Attributes.Namespace
 	}
+
+	// The column defaults to true on insert; the follow-up Update below
+	// writes the value decided above.
+	tool.Active = wantActive
 
 	// Add operations (after tool is created and has an ID)
 	for _, op := range input.Data.Attributes.Operations {
@@ -255,6 +272,15 @@ func (a *API) updateTool(c *gin.Context) {
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
 		return
+	}
+
+	// Flipping the active switch is the publish action on tools; an omitted
+	// switch keeps its value.
+	if input.Data.Attributes.Active != nil {
+		if !a.requirePublishIfChanged(c, "tools", tool.Active, *input.Data.Attributes.Active) {
+			return
+		}
+		tool.Active = *input.Data.Attributes.Active
 	}
 
 	// Update fields

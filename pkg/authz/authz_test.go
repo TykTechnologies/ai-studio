@@ -71,11 +71,35 @@ func TestPermission_ParseAndLookup(t *testing.T) {
 	assert.Equal(t, "", FullAdmin.Resource())
 }
 
+func TestPublish_OnlyOnPublishableResources(t *testing.T) {
+	want := []string{"agents", "apps", "datasources", "llms", "metadata", "model-routers", "plugins", "tools"}
+	assert.ElementsMatch(t, want, Publishable())
+	for _, r := range Catalogue() {
+		offers := false
+		for _, a := range r.Actions {
+			offers = offers || a == ActionPublish
+		}
+		assert.Equal(t, offers, Publish(r.Key).Valid(), r.Key)
+	}
+	_, err := Parse("analytics:publish")
+	assert.Error(t, err, "publish is not offered by resources without a live switch")
+}
+
+func TestSet_PublishImpliesReadOnly(t *testing.T) {
+	s := NewSet(Publish("llms"))
+	assert.True(t, s.Has(Publish("llms")))
+	assert.True(t, s.Has(Read("llms")), "publish implies read")
+	assert.False(t, s.Has(Write("llms")), "publish does not imply write")
+	assert.False(t, s.Has(Delete("llms")))
+	assert.False(t, NewSet(Write("llms")).Has(Publish("llms")), "write does not imply publish")
+}
+
 func TestPermission_Constructors(t *testing.T) {
 	assert.Equal(t, Permission("llms:read"), Read("llms"))
 	assert.Equal(t, Permission("llms:write"), Write("llms"))
 	assert.Equal(t, Permission("llms:delete"), Delete("llms"))
 	assert.Equal(t, Permission("tools:execute"), Execute("tools"))
+	assert.Equal(t, Permission("llms:publish"), Publish("llms"))
 	assert.Equal(t, "data-catalogues", Read("data-catalogues").Resource())
 	assert.Equal(t, ActionRead, Read("data-catalogues").Action())
 }

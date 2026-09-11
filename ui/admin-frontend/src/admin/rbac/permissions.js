@@ -2,7 +2,9 @@
  * Permission vocabulary shared with the backend catalogue (pkg/authz).
  *
  * A permission is "<resource>:<action>" with actions read, write, delete and
- * execute. write, delete and execute each imply read. The single wildcard
+ * execute. write, delete and execute each imply read. publish (make live)
+ * is offered only by resources with an active/enabled switch; it implies
+ * read, not write. The single wildcard
  * "*" is held by full administrators (Owner / Administrator system roles).
  *
  * Everything in the UI references these constants so a rename is a
@@ -12,7 +14,7 @@
 
 export const FULL_ADMIN = '*';
 
-export const ACTIONS = ['read', 'write', 'delete', 'execute'];
+export const ACTIONS = ['read', 'write', 'delete', 'execute', 'publish'];
 
 const p = (resource, action) => `${resource}:${action}`;
 
@@ -26,6 +28,7 @@ export const P = Object.freeze({
   PLUGINS_WRITE: p('plugins', 'write'),
   PLUGINS_DELETE: p('plugins', 'delete'),
   PLUGINS_EXECUTE: p('plugins', 'execute'),
+  PLUGINS_PUBLISH: p('plugins', 'publish'),
   MARKETPLACE_READ: p('marketplace', 'read'),
   MARKETPLACE_WRITE: p('marketplace', 'write'),
   MARKETPLACE_DELETE: p('marketplace', 'delete'),
@@ -35,30 +38,36 @@ export const P = Object.freeze({
   LLMS_READ: p('llms', 'read'),
   LLMS_WRITE: p('llms', 'write'),
   LLMS_DELETE: p('llms', 'delete'),
+  LLMS_PUBLISH: p('llms', 'publish'),
   MODEL_PRICES_READ: p('model-prices', 'read'),
   MODEL_PRICES_WRITE: p('model-prices', 'write'),
   MODEL_PRICES_DELETE: p('model-prices', 'delete'),
   MODEL_ROUTERS_READ: p('model-routers', 'read'),
   MODEL_ROUTERS_WRITE: p('model-routers', 'write'),
   MODEL_ROUTERS_DELETE: p('model-routers', 'delete'),
+  MODEL_ROUTERS_PUBLISH: p('model-routers', 'publish'),
 
   // Context management
   DATASOURCES_READ: p('datasources', 'read'),
   DATASOURCES_WRITE: p('datasources', 'write'),
   DATASOURCES_DELETE: p('datasources', 'delete'),
   DATASOURCES_EXECUTE: p('datasources', 'execute'),
+  DATASOURCES_PUBLISH: p('datasources', 'publish'),
   TOOLS_READ: p('tools', 'read'),
   TOOLS_WRITE: p('tools', 'write'),
   TOOLS_DELETE: p('tools', 'delete'),
   TOOLS_EXECUTE: p('tools', 'execute'),
+  TOOLS_PUBLISH: p('tools', 'publish'),
   FILTERS_READ: p('filters', 'read'),
   FILTERS_WRITE: p('filters', 'write'),
   FILTERS_DELETE: p('filters', 'delete'),
   FILTERS_EXECUTE: p('filters', 'execute'),
   FILESTORES_READ: p('filestores', 'read'),
   FILESTORES_WRITE: p('filestores', 'write'),
+  FILESTORES_DELETE: p('filestores', 'delete'),
   TAGS_READ: p('tags', 'read'),
   TAGS_WRITE: p('tags', 'write'),
+  TAGS_DELETE: p('tags', 'delete'),
 
   // Community
   SUBMISSIONS_READ: p('submissions', 'read'),
@@ -88,6 +97,7 @@ export const P = Object.freeze({
   METADATA_READ: p('metadata', 'read'),
   METADATA_WRITE: p('metadata', 'write'),
   METADATA_DELETE: p('metadata', 'delete'),
+  METADATA_PUBLISH: p('metadata', 'publish'),
   EXPORTS_READ: p('exports', 'read'),
   EXPORTS_WRITE: p('exports', 'write'),
 
@@ -102,6 +112,7 @@ export const P = Object.freeze({
   APPS_READ: p('apps', 'read'),
   APPS_WRITE: p('apps', 'write'),
   APPS_DELETE: p('apps', 'delete'),
+  APPS_PUBLISH: p('apps', 'publish'),
   CREDENTIALS_READ: p('credentials', 'read'),
   CREDENTIALS_WRITE: p('credentials', 'write'),
   EDGES_READ: p('edges', 'read'),
@@ -117,10 +128,12 @@ export const P = Object.freeze({
   AGENTS_WRITE: p('agents', 'write'),
   AGENTS_DELETE: p('agents', 'delete'),
   AGENTS_EXECUTE: p('agents', 'execute'),
+  AGENTS_PUBLISH: p('agents', 'publish'),
   LLM_SETTINGS_READ: p('llm-settings', 'read'),
   LLM_SETTINGS_WRITE: p('llm-settings', 'write'),
   LLM_SETTINGS_DELETE: p('llm-settings', 'delete'),
   CHAT_HISTORY_READ: p('chat-history', 'read'),
+  CHAT_HISTORY_WRITE: p('chat-history', 'write'),
   CHAT_HISTORY_DELETE: p('chat-history', 'delete'),
 
   // Catalogs

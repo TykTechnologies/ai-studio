@@ -35,6 +35,8 @@ import {
 } from '../../styles/sharedStyles';
 import ConfirmationDialog from '../common/ConfirmationDialog';
 import agentService from '../../services/agentService';
+import Can from '../rbac/Can';
+import { P } from '../../rbac/permissions';
 
 const AgentDetail = () => {
   const navigate = useNavigate();
@@ -316,9 +318,11 @@ const AgentDetail = () => {
           >
             Edit
           </SecondaryOutlineButton>
-          <SecondaryOutlineButton onClick={handleToggleActive}>
-            {agent.isActive ? 'Deactivate' : 'Activate'}
-          </SecondaryOutlineButton>
+          <Can permission={P.AGENTS_PUBLISH}>
+            <SecondaryOutlineButton onClick={handleToggleActive}>
+              {agent.isActive ? 'Deactivate' : 'Activate'}
+            </SecondaryOutlineButton>
+          </Can>
           <DangerButton
             startIcon={<DeleteIcon />}
             onClick={() => setDeleteDialogOpen(true)}

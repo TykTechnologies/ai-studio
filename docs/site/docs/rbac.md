@@ -6,7 +6,7 @@ Roles are an **Enterprise Edition** feature. In Community Edition a user is eith
 
 ## How it works
 
-- A **permission** is `resource:action`, for example `llms:write` or `audit:read`. Actions are `read`, `write` (create and update), `delete` and `execute` (test, call, reload, sync). Write, delete and execute each include read.
+- A **permission** is `resource:action`, for example `llms:write` or `audit:read`. Actions are `read`, `write` (create and update), `delete`, `execute` (test, call, reload, sync) and `publish` (make live: set an LLM, tool, data source, app or agent active, enable a plugin, activate a metadata schema). Write, delete, execute and publish each include read. Publish does not include write, so you can build a *submitter* role that drafts providers without releasing them and a *reviewer* role that releases them: a submitter who flips the Active switch gets `403` with `"permission": "llms:publish"`, and the switch is disabled in the form.
 - A **role** is a named set of permissions.
 - Roles are **assigned to users and to teams**. Someone's access is the union of their own roles and the roles of every team they belong to, so mapping identity provider groups onto teams (see [Single Sign-On](./sso)) assigns roles automatically.
 - Permissions apply everywhere: navigation, pages, buttons, and every management API call, including calls made with a user's API key.
@@ -47,6 +47,7 @@ The Owner role can only be assigned to users (not teams) and only by another Own
 
 - **Operator** who can push configuration to edge gateways and test filters but not change them: clone Viewer, add `edges:execute`, `filters:execute`, `tools:execute`.
 - **Submission reviewer**: clone Viewer, add `submissions:write` and `submissions:execute`, remove everything outside Community if you prefer.
+- **LLM submitter / LLM reviewer**: a new role with `llms:read` and `llms:write` can create and edit providers but not set them active; add `llms:publish` for the reviewer who releases them. A role holding only `llms:publish` can activate and deactivate providers through the Activate action but cannot edit them.
 - **LLM cost analyst**: a custom role with only `analytics:read` and `model-prices:read`.
 
 ## API

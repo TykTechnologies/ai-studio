@@ -19,7 +19,10 @@ import {
 } from '../../styles/sharedStyles';
 import usePermissionCatalogue from '../../hooks/usePermissionCatalogue';
 
-const ACTION_LABELS = { read: 'Read', write: 'Write', delete: 'Delete', execute: 'Execute' };
+const ACTION_LABELS = { read: 'Read', write: 'Write', delete: 'Delete', execute: 'Execute', publish: 'Publish' };
+const ACTION_HINTS = {
+  publish: 'Make live: activate or enable the object. Does not include write, so a role can review and release without editing, or draft without releasing.',
+};
 
 /**
  * One table per catalogue group; rows are resources, columns are actions.
@@ -101,7 +104,13 @@ const PermissionMatrix = ({ value, onChange, readOnly = false, showSearch = true
                 <StyledTableHeaderCell align="center">All</StyledTableHeaderCell>
                 {actions.map((a) => (
                   <StyledTableHeaderCell key={a} align="center">
-                    {ACTION_LABELS[a] || a}
+                    {ACTION_HINTS[a] ? (
+                      <Tooltip title={ACTION_HINTS[a]}>
+                        <span>{ACTION_LABELS[a] || a}</span>
+                      </Tooltip>
+                    ) : (
+                      ACTION_LABELS[a] || a
+                    )}
                   </StyledTableHeaderCell>
                 ))}
               </TableRow>

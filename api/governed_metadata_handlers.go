@@ -243,6 +243,16 @@ func (a *API) createMetadataSchema(c *gin.Context) {
 	schema := &models.MetadataSchema{Active: true}
 	applySchemaInput(schema, &in)
 	schema.Source = models.MetadataSourceAdmin
+	// Schemas default to active. Asking for an active schema explicitly
+	// needs metadata:publish; a caller without it gets an inactive schema
+	// unless they asked for one anyway.
+	if in.Data.Attributes.Active != nil {
+		if !a.requirePublishToCreateLive(c, "metadata", schema.Active) {
+			return
+		}
+	} else if !a.canPublish(c, "metadata") {
+		schema.Active = false
+	}
 	if err := a.governedMetadata().CreateSchema(schema); writeGovernedMetadataError(c, err) {
 		return
 	}
@@ -289,6 +299,10 @@ func (a *API) updateMetadataSchema(c *gin.Context) {
 	}
 	if attrs.Enforcement == "" {
 		attrs.Enforcement = schema.Enforcement
+	}
+	// Activating or deactivating a schema is the publish action on metadata.
+	if attrs.Active != nil && !a.requirePublishIfChanged(c, "metadata", schema.Active, *attrs.Active) {
+		return
 	}
 	applySchemaInput(schema, &in)
 	if err := svc.UpdateSchema(schema); writeGovernedMetadataError(c, err) {

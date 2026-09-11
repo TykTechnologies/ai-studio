@@ -332,15 +332,17 @@ const AgentList = () => {
       >
         <MenuItem onClick={() => handleView(selectedAgent?.id)}>View Details</MenuItem>
         <MenuItem onClick={() => handleEdit(selectedAgent?.id)}>Edit</MenuItem>
-        {selectedAgent?.isActive ? (
-          <MenuItem onClick={() => openConfirmDialog('deactivate', selectedAgent)}>
-            Deactivate
-          </MenuItem>
-        ) : (
-          <MenuItem onClick={() => openConfirmDialog('activate', selectedAgent)}>
-            Activate
-          </MenuItem>
-        )}
+        <Can permission={P.AGENTS_PUBLISH}>
+          {selectedAgent?.isActive ? (
+            <MenuItem onClick={() => openConfirmDialog('deactivate', selectedAgent)}>
+              Deactivate
+            </MenuItem>
+          ) : (
+            <MenuItem onClick={() => openConfirmDialog('activate', selectedAgent)}>
+              Activate
+            </MenuItem>
+          )}
+        </Can>
         <MenuItem onClick={() => openConfirmDialog('delete', selectedAgent)}>
           Delete
         </MenuItem>

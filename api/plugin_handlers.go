@@ -278,6 +278,11 @@ func (a *API) createPlugin(c *gin.Context) {
 		return
 	}
 
+	// Installing an already-enabled plugin is the publish action on plugins.
+	if !a.requirePublishToCreateLive(c, "plugins", req.IsActive) {
+		return
+	}
+
 	plugin, err := a.service.PluginService.CreatePlugin(&req)
 	if err != nil {
 		errMsg := err.Error()
@@ -477,6 +482,11 @@ func (a *API) updatePlugin(c *gin.Context) {
 		return
 	}
 
+	// Enabling or disabling a plugin is the publish action on plugins.
+	if req.IsActive != nil && !a.requirePublishIfChanged(c, "plugins", originalPlugin.IsActive, *req.IsActive) {
+		return
+	}
+
 	plugin, err := a.service.PluginService.UpdatePlugin(uint(id), &req)
 	if err != nil {
 		if err.Error() == "plugin not found: "+strconv.FormatUint(id, 10) {
@@ -499,43 +509,7 @@ func (a *API) updatePlugin(c *gin.Context) {
 	}
 
 	// Handle plugin activation state changes for AI Studio plugins
-	if plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
-		wasActive := originalPlugin.IsActive
-		isNowActive := plugin.IsActive
-
-		// Plugin was deactivated - unload it
-		if wasActive && !isNowActive {
-			log.Printf("Plugin deactivated, unloading: %s (ID: %d)", plugin.Name, plugin.ID)
-
-			if a.service.AIStudioPluginManager.IsPluginLoaded(plugin.ID) {
-				if unloadErr := a.service.AIStudioPluginManager.UnloadPlugin(plugin.ID); unloadErr != nil {
-					log.Printf("Warning: Failed to unload deactivated plugin %s: %v", plugin.Name, unloadErr)
-				} else {
-					log.Printf("✅ Successfully unloaded deactivated plugin: %s", plugin.Name)
-
-					// Clean up UI registry entries for deactivated plugin
-					if a.service.PluginManifestService != nil {
-						if unloadUIErr := a.service.PluginManifestService.UnloadPluginUI(plugin.ID); unloadUIErr != nil {
-							log.Printf("Warning: Failed to clean up UI for deactivated plugin %s: %v", plugin.Name, unloadUIErr)
-						} else {
-							log.Printf("✅ Cleaned up UI registry for deactivated plugin: %s", plugin.Name)
-						}
-					}
-				}
-			}
-		}
-
-		// Plugin was activated - load it if load_immediately is set
-		if !wasActive && isNowActive && req.LoadImmediately != nil && *req.LoadImmediately {
-			log.Printf("Plugin activated with load_immediately, loading: %s (ID: %d)", plugin.Name, plugin.ID)
-
-			if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(plugin.ID); loadErr != nil {
-				log.Printf("Warning: Failed to auto-load activated plugin %s: %v", plugin.Name, loadErr)
-			} else {
-				log.Printf("✅ Successfully loaded activated plugin: %s", plugin.Name)
-			}
-		}
-	}
+	a.applyPluginActivation(plugin, originalPlugin.IsActive, req.LoadImmediately != nil && *req.LoadImmediately)
 
 	// Auto-load AI Studio plugins if requested on update
 	if req.LoadImmediately != nil && *req.LoadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
@@ -579,6 +553,49 @@ func (a *API) updatePlugin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializePlugin(plugin)})
+}
+
+// applyPluginActivation unloads a Studio plugin that was just disabled and,
+// when loadOnActivate is set, loads one that was just enabled. Shared by the
+// PATCH update and the dedicated enable/disable routes.
+func (a *API) applyPluginActivation(plugin *models.Plugin, wasActive, loadOnActivate bool) {
+	if !plugin.SupportsHookType(models.HookTypeStudioUI) || a.service.AIStudioPluginManager == nil {
+		return
+	}
+	isNowActive := plugin.IsActive
+
+	// Plugin was deactivated - unload it
+	if wasActive && !isNowActive {
+		log.Printf("Plugin deactivated, unloading: %s (ID: %d)", plugin.Name, plugin.ID)
+
+		if a.service.AIStudioPluginManager.IsPluginLoaded(plugin.ID) {
+			if unloadErr := a.service.AIStudioPluginManager.UnloadPlugin(plugin.ID); unloadErr != nil {
+				log.Printf("Warning: Failed to unload deactivated plugin %s: %v", plugin.Name, unloadErr)
+			} else {
+				log.Printf("✅ Successfully unloaded deactivated plugin: %s", plugin.Name)
+
+				// Clean up UI registry entries for deactivated plugin
+				if a.service.PluginManifestService != nil {
+					if unloadUIErr := a.service.PluginManifestService.UnloadPluginUI(plugin.ID); unloadUIErr != nil {
+						log.Printf("Warning: Failed to clean up UI for deactivated plugin %s: %v", plugin.Name, unloadUIErr)
+					} else {
+						log.Printf("✅ Cleaned up UI registry for deactivated plugin: %s", plugin.Name)
+					}
+				}
+			}
+		}
+	}
+
+	// Plugin was activated - load it if requested
+	if !wasActive && isNowActive && loadOnActivate {
+		log.Printf("Plugin activated with load_immediately, loading: %s (ID: %d)", plugin.Name, plugin.ID)
+
+		if _, loadErr := a.service.AIStudioPluginManager.LoadPlugin(plugin.ID); loadErr != nil {
+			log.Printf("Warning: Failed to auto-load activated plugin %s: %v", plugin.Name, loadErr)
+		} else {
+			log.Printf("✅ Successfully loaded activated plugin: %s", plugin.Name)
+		}
+	}
 }
 
 // @Summary Delete plugin

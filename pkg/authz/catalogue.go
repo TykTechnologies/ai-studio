@@ -174,7 +174,25 @@ var (
 	crud     = []Action{ActionRead, ActionWrite, ActionDelete}
 	crudx    = []Action{ActionRead, ActionWrite, ActionDelete, ActionExecute}
 	readOnly = []Action{ActionRead}
+	// Resources with a live switch (active/enabled) additionally offer
+	// publish; see ActionPublish.
+	crudp  = []Action{ActionRead, ActionWrite, ActionDelete, ActionPublish}
+	crudxp = []Action{ActionRead, ActionWrite, ActionDelete, ActionExecute, ActionPublish}
 )
+
+// Publishable returns the keys of every resource offering ActionPublish.
+func Publishable() []string {
+	var out []string
+	for _, r := range Catalogue() {
+		for _, a := range r.Actions {
+			if a == ActionPublish {
+				out = append(out, r.Key)
+				break
+			}
+		}
+	}
+	return out
+}
 
 // The built-in catalogue. Order here does not matter; Catalogue() sorts.
 // Route blocks each resource governs are documented in features/RBAC.md.
@@ -186,19 +204,23 @@ func init() {
 		Description: "Raw gateway request and response logs, including prompt and completion bodies."})
 
 	// Plugins
-	Register(Resource{Key: "plugins", Label: "Installed plugins", Group: "Plugins", Actions: crudx, Privileged: true,
-		Description: "Install, configure, approve scopes for, and call plugins. Plugins run code with the scopes they are granted."})
+	Register(Resource{Key: "plugins", Label: "Installed plugins", Group: "Plugins", Actions: crudxp, Privileged: true,
+		Description: "Install, configure, approve scopes for, and call plugins. Publish enables or disables an installed plugin. Plugins run code with the scopes they are granted."})
 	Register(Resource{Key: "marketplace", Label: "Marketplace", Group: "Plugins", Actions: crudx,
 		Description: "Browse the marketplace and manage marketplace sources."})
 
 	// LLM management
-	Register(Resource{Key: "llms", Label: "LLM providers", Group: "LLM management", Actions: crud})
+	Register(Resource{Key: "llms", Label: "LLM providers", Group: "LLM management", Actions: crudp,
+		Description: "Publish sets a provider active; only active providers are served by the gateway and offered in the portal."})
 	Register(Resource{Key: "model-prices", Label: "Model prices", Group: "LLM management", Actions: crud})
-	Register(Resource{Key: "model-routers", Label: "Model routers", Group: "LLM management", Actions: crud})
+	Register(Resource{Key: "model-routers", Label: "Model routers", Group: "LLM management", Actions: crudp,
+		Description: "Publish sets a router active; only active routers are served."})
 
 	// Context management
-	Register(Resource{Key: "datasources", Label: "Data sources", Group: "Context management", Actions: crudx})
-	Register(Resource{Key: "tools", Label: "Tools", Group: "Context management", Actions: crudx})
+	Register(Resource{Key: "datasources", Label: "Data sources", Group: "Context management", Actions: crudxp,
+		Description: "Publish sets a data source active; only active data sources are served."})
+	Register(Resource{Key: "tools", Label: "Tools", Group: "Context management", Actions: crudxp,
+		Description: "Publish sets a tool active; only active tools are served."})
 	Register(Resource{Key: "filters", Label: "Filters", Group: "Context management", Actions: crudx})
 	Register(Resource{Key: "filestores", Label: "File stores", Group: "Context management", Actions: crud})
 	Register(Resource{Key: "tags", Label: "Tags", Group: "Context management", Actions: crud})
@@ -222,8 +244,8 @@ func init() {
 	// Governance
 	Register(Resource{Key: "audit", Label: "Audit trail", Group: "Governance", Actions: readOnly, Sensitive: true})
 	Register(Resource{Key: "compliance", Label: "Compliance", Group: "Governance", Actions: readOnly})
-	Register(Resource{Key: "metadata", Label: "Metadata schemas", Group: "Governance", Actions: crud,
-		Description: "Governed metadata schemas and vocabularies. Metadata on an object is governed by that object's permission."})
+	Register(Resource{Key: "metadata", Label: "Metadata schemas", Group: "Governance", Actions: crudp,
+		Description: "Governed metadata schemas and vocabularies. Publish activates a schema. Metadata on an object is governed by that object's permission."})
 	Register(Resource{Key: "exports", Label: "Log exports", Group: "Governance", Sensitive: true,
 		Actions:     []Action{ActionRead, ActionWrite},
 		Description: "Bulk proxy log export jobs."})
@@ -234,7 +256,8 @@ func init() {
 	Register(Resource{Key: "branding", Label: "Branding", Group: "Settings", Actions: []Action{ActionRead, ActionWrite}})
 
 	// AI Portal
-	Register(Resource{Key: "apps", Label: "Apps", Group: "AI Portal", Actions: crud})
+	Register(Resource{Key: "apps", Label: "Apps", Group: "AI Portal", Actions: crudp,
+		Description: "Publish sets an app active; inactive apps cannot authenticate against the gateway."})
 	Register(Resource{Key: "credentials", Label: "Credentials", Group: "AI Portal", Actions: crud, Sensitive: true,
 		Description: "App credentials. Reading a credential reveals its secret."})
 	Register(Resource{Key: "edges", Label: "Edge gateways", Group: "AI Portal", Actions: crudx,
@@ -242,7 +265,8 @@ func init() {
 
 	// Chat
 	Register(Resource{Key: "chats", Label: "Chats", Group: "Chat", Actions: crud})
-	Register(Resource{Key: "agents", Label: "Agents", Group: "Chat", Actions: crudx})
+	Register(Resource{Key: "agents", Label: "Agents", Group: "Chat", Actions: crudxp,
+		Description: "Publish sets an agent active so it can be used in chat."})
 	Register(Resource{Key: "llm-settings", Label: "Model call settings", Group: "Chat", Actions: crud})
 	Register(Resource{Key: "chat-history", Label: "Chat history", Group: "Chat", Actions: crud, Sensitive: true,
 		Description: "Conversation transcripts."})
