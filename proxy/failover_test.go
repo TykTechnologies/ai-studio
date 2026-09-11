@@ -265,7 +265,12 @@ func newFailoverHarness(t *testing.T, servePrimary, serveFallback http.HandlerFu
 	srv := &http.Server{Handler: p.createHandler()}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() {
-		_ = srv.Close()
+		// Shutdown (not Close) waits for in-flight handlers. A streaming inner
+		// hop abandoned by a timed-out or aborted attempt is still unwinding
+		// when the test ends, and its goAnalyze must not race waitForAnalyzers.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
 		p.waitForAnalyzers()
 	})
 	return h
