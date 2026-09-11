@@ -146,6 +146,9 @@ const Drawer = () => {
               { id: 'metadata-schemas', text: 'Metadata schemas', path: '/admin/metadata/schemas', permission: P.METADATA_READ },
               { id: 'metadata-vocabularies', text: 'Metadata vocabularies', path: '/admin/metadata/vocabularies', permission: P.METADATA_READ },
               { id: 'metadata-compliance', text: 'Metadata coverage', path: '/admin/metadata/compliance', permission: P.METADATA_READ },
+              ...(features.feature_webhooks
+                ? [{ id: 'webhooks', text: 'Webhooks', path: '/admin/webhooks', permission: P.WEBHOOKS_READ }]
+                : []),
             ],
           },
         ]

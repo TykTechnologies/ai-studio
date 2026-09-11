@@ -19970,6 +19970,1071 @@
                     }
                 }
             }
+        },
+        "/webhooks/deliveries": {
+            "get": {
+                "description": "Page through deliveries with filters. Newest first unless sort=asc.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Search the delivery log",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "target_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Exact topic",
+                        "name": "topic",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated statuses: queued, in_flight, retrying, succeeded, dead_lettered, cancelled",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Event ID",
+                        "name": "event_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "event, test or replay",
+                        "name": "kind",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start (YYYY-MM-DD or RFC3339)",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End (YYYY-MM-DD or RFC3339)",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Free text over target URL, topic, last error, response snippet",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (max 500)",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "asc or desc",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.DeliveryPage"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/deliveries/export": {
+            "get": {
+                "description": "Downloads matching deliveries (max 50,000) as CSV or JSON",
+                "produces": [
+                    "text/csv",
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Export deliveries",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "csv (default) or json",
+                        "name": "format",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "file",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/deliveries/replay": {
+            "post": {
+                "description": "Replays the given delivery IDs, or every dead letter for a target (all targets when omitted), up to max (default 100, cap 500).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Replay dead letters in bulk",
+                "parameters": [
+                    {
+                        "description": "Selection",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.ReplayRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.ReplayResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/deliveries/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Get one delivery with its attempts, event and target",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Delivery ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.DeliveryDetail"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/deliveries/{id}/cancel": {
+            "post": {
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Cancel a queued or retrying delivery",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Delivery ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/deliveries/{id}/replay": {
+            "post": {
+                "description": "Enqueues a new delivery of the same event to the same target. Only terminal deliveries can be replayed.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Replay a delivery",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Delivery ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Set re_render to render the payload again from the stored event",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.webhookReplayInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "delivery_id",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/stats": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Delivery statistics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "1h, 24h (default) or 7d",
+                        "name": "window",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.Stats"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/status": {
+            "get": {
+                "description": "Reports whether webhooks are available (Enterprise), enabled, connected to the event bus, and queue depth",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Webhooks availability and health",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.Status"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/targets": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "List webhook targets",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pending, approved, rejected or revoked",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Substring over name, URL and description",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.TargetList"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "The target is created pending and receives nothing until an administrator approves it. The signing secret is returned once.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Create a webhook target (pending approval)",
+                "parameters": [
+                    {
+                        "description": "Target",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.TargetInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.createWebhookTargetResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/targets/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Get a webhook target with delivery statistics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.TargetDetail"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Cancels queued deliveries; the delivery log is kept.",
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Delete a webhook target",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Changing the URL or custom headers of an approved target sends it back to pending. Send lock_version from the last read.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Update a webhook target",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Patch",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateWebhookTargetInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.updateWebhookTargetResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/targets/{id}/approve": {
+            "post": {
+                "description": "Allows deliveries to the target's URL. Recorded in the audit trail.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Approve a webhook target",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional note",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.webhookReviewInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.WebhookTargetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/targets/{id}/pause": {
+            "post": {
+                "description": "Deliveries keep queueing but are not sent until resumed.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Pause deliveries to a target",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.WebhookTargetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/targets/{id}/reject": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Reject a pending webhook target",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reason",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.webhookReviewInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.WebhookTargetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/targets/{id}/resume": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Resume deliveries to a paused target",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.WebhookTargetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/targets/{id}/revoke": {
+            "post": {
+                "description": "Stops all deliveries and cancels queued ones.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Revoke an approved webhook target",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reason",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.webhookReviewInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.WebhookTargetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/targets/{id}/rotate-secret": {
+            "post": {
+                "description": "Returns the new secret once. The previous secret keeps producing a second signature for the configured grace period.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Rotate a target's signing secret",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.RotatedSecret"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/targets/{id}/test": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Send a test event to an approved target",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional topic for the sample event",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.webhookTestInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "delivery_id",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/templates/presets": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Built-in payload templates",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/webhooks.Preset"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/templates/preview": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Render a payload template against a sample event",
+                "parameters": [
+                    {
+                        "description": "Template to render",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.PreviewInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.PreviewResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/webhooks/topics": {
+            "get": {
+                "description": "Known system topics plus topics observed on the event bus recently",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Webhooks"
+                ],
+                "summary": "Topics a target can subscribe to",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/webhooks.TopicList"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -22826,6 +23891,13 @@
                                 "name": {
                                     "type": "string"
                                 },
+                                "new_user_show_chat": {
+                                    "type": "boolean"
+                                },
+                                "new_user_show_portal": {
+                                    "description": "Provisioning defaults for users this profile creates. Pointers so\nthat an omitted field means \"show\" rather than \"hide\".",
+                                    "type": "boolean"
+                                },
                                 "org_id": {
                                     "type": "string"
                                 },
@@ -22950,6 +24022,12 @@
                         },
                         "name": {
                             "type": "string"
+                        },
+                        "new_user_show_chat": {
+                            "type": "boolean"
+                        },
+                        "new_user_show_portal": {
+                            "type": "boolean"
                         },
                         "org_id": {
                             "type": "string"
@@ -24248,6 +25326,93 @@
                     "type": "string"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.createWebhookTargetResponse": {
+            "type": "object",
+            "properties": {
+                "signing_secret": {
+                    "type": "string"
+                },
+                "target": {
+                    "$ref": "#/definitions/models.WebhookTargetResponse"
+                }
+            }
+        },
+        "api.updateWebhookTargetInput": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "lock_version": {
+                    "type": "integer"
+                },
+                "max_concurrency": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "template_body": {
+                    "type": "string"
+                },
+                "template_preset": {
+                    "type": "string"
+                },
+                "topic_filters": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.updateWebhookTargetResponse": {
+            "type": "object",
+            "properties": {
+                "repended": {
+                    "type": "boolean"
+                },
+                "target": {
+                    "$ref": "#/definitions/models.WebhookTargetResponse"
+                }
+            }
+        },
+        "api.webhookReplayInput": {
+            "type": "object",
+            "properties": {
+                "re_render": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.webhookReviewInput": {
+            "type": "object",
+            "properties": {
+                "note": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.webhookTestInput": {
+            "type": "object",
+            "properties": {
+                "topic": {
                     "type": "string"
                 }
             }
@@ -25571,6 +26736,251 @@
                 }
             }
         },
+        "models.WebhookDelivery": {
+            "type": "object",
+            "properties": {
+                "attempt_count": {
+                    "type": "integer"
+                },
+                "completed_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "event_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_response_snippet": {
+                    "type": "string"
+                },
+                "last_status_code": {
+                    "type": "integer"
+                },
+                "lease_expires_at": {
+                    "type": "string"
+                },
+                "lease_owner": {
+                    "type": "string"
+                },
+                "max_attempts": {
+                    "type": "integer"
+                },
+                "next_attempt_at": {
+                    "type": "string"
+                },
+                "render_error": {
+                    "type": "string"
+                },
+                "rendered_payload": {
+                    "description": "RenderedPayload is produced once on the first attempt and reused by\nevery retry so receivers see byte-identical bodies.",
+                    "type": "string"
+                },
+                "replay_of_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "string"
+                },
+                "target_url": {
+                    "description": "TargetURLSnapshot is the URL at enqueue time, kept so the log stays\nmeaningful after the target is edited or deleted.",
+                    "type": "string"
+                },
+                "topic": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.WebhookDeliveryAttempt": {
+            "type": "object",
+            "properties": {
+                "attempt": {
+                    "type": "integer"
+                },
+                "delivery_id": {
+                    "type": "string"
+                },
+                "duration_ms": {
+                    "type": "integer"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "outcome": {
+                    "type": "string"
+                },
+                "request_headers": {
+                    "type": "string"
+                },
+                "response_headers": {
+                    "type": "string"
+                },
+                "response_snippet": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status_code": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.WebhookEvent": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "actor_user_id": {
+                    "type": "integer"
+                },
+                "fanout_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "object_id": {
+                    "type": "integer"
+                },
+                "object_type": {
+                    "type": "string"
+                },
+                "origin": {
+                    "type": "string"
+                },
+                "payload": {
+                    "type": "string"
+                },
+                "received_at": {
+                    "type": "string"
+                },
+                "synthetic": {
+                    "description": "Synthetic marks events created by \"send test\", not received from the bus.",
+                    "type": "boolean"
+                },
+                "topic": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.WebhookTargetResponse": {
+            "type": "object",
+            "properties": {
+                "approved_at": {
+                    "type": "string"
+                },
+                "approved_by_email": {
+                    "type": "string"
+                },
+                "approved_by_user_id": {
+                    "type": "integer"
+                },
+                "consecutive_failures": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by_email": {
+                    "type": "string"
+                },
+                "created_by_user_id": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "has_signing_secret": {
+                    "type": "boolean"
+                },
+                "header_names": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_delivery_at": {
+                    "type": "string"
+                },
+                "last_failure_at": {
+                    "type": "string"
+                },
+                "last_success_at": {
+                    "type": "string"
+                },
+                "lock_version": {
+                    "type": "integer"
+                },
+                "max_concurrency": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "paused": {
+                    "type": "boolean"
+                },
+                "rejected_reason": {
+                    "type": "string"
+                },
+                "revoked_at": {
+                    "type": "string"
+                },
+                "revoked_by_email": {
+                    "type": "string"
+                },
+                "revoked_by_user_id": {
+                    "type": "integer"
+                },
+                "revoked_reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "template_body": {
+                    "type": "string"
+                },
+                "template_preset": {
+                    "type": "string"
+                },
+                "topic_filters": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
         "providers.APISpec": {
             "type": "object",
             "properties": {
@@ -25765,6 +27175,10 @@
                 "orgID": {
                     "type": "string"
                 },
+                "profileID": {
+                    "description": "ProfileID is the identity provider profile that produced this login,\ntaken from ProfileIDHeader; empty when the broker did not identify one.",
+                    "type": "string"
+                },
                 "ssoonlyForRegisteredUsers": {
                     "type": "boolean"
                 }
@@ -25781,6 +27195,318 @@
                 },
                 "Status": {
                     "type": "string"
+                }
+            }
+        },
+        "webhooks.DeliveryDetail": {
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.WebhookDeliveryAttempt"
+                    }
+                },
+                "delivery": {
+                    "$ref": "#/definitions/models.WebhookDelivery"
+                },
+                "event": {
+                    "$ref": "#/definitions/models.WebhookEvent"
+                },
+                "target": {
+                    "$ref": "#/definitions/models.WebhookTargetResponse"
+                }
+            }
+        },
+        "webhooks.DeliveryPage": {
+            "type": "object",
+            "properties": {
+                "deliveries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.WebhookDelivery"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "webhooks.Preset": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "webhooks.PreviewInput": {
+            "type": "object",
+            "properties": {
+                "template_body": {
+                    "type": "string"
+                },
+                "template_preset": {
+                    "type": "string"
+                },
+                "topic": {
+                    "type": "string"
+                }
+            }
+        },
+        "webhooks.PreviewResult": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                },
+                "rendered": {
+                    "type": "string"
+                },
+                "valid": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "webhooks.ReplayRequest": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "max": {
+                    "type": "integer"
+                },
+                "target_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "webhooks.ReplayResult": {
+            "type": "object",
+            "properties": {
+                "replayed": {
+                    "type": "integer"
+                },
+                "skipped": {
+                    "type": "integer"
+                }
+            }
+        },
+        "webhooks.RotatedSecret": {
+            "type": "object",
+            "properties": {
+                "previous_valid_until": {
+                    "type": "string"
+                },
+                "signing_secret": {
+                    "type": "string"
+                }
+            }
+        },
+        "webhooks.Stats": {
+            "type": "object",
+            "properties": {
+                "by_status": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "by_target": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/webhooks.TargetStats"
+                    }
+                },
+                "oldest_queued_age_seconds": {
+                    "type": "integer"
+                },
+                "queue_depth": {
+                    "type": "integer"
+                },
+                "window": {
+                    "type": "string"
+                }
+            }
+        },
+        "webhooks.Status": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean"
+                },
+                "bus_connected": {
+                    "type": "boolean"
+                },
+                "dead_lettered": {
+                    "type": "integer"
+                },
+                "dialect": {
+                    "type": "string"
+                },
+                "dropped_events": {
+                    "description": "DroppedEvents counts bus events this node could not persist even after\nspilling to memory. Non-zero means at-least-once was violated.",
+                    "type": "integer"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "in_flight": {
+                    "type": "integer"
+                },
+                "last_ingest_at": {
+                    "type": "string"
+                },
+                "node_id": {
+                    "type": "string"
+                },
+                "pending_targets": {
+                    "type": "integer"
+                },
+                "queue_depth": {
+                    "type": "integer"
+                },
+                "retrying": {
+                    "type": "integer"
+                },
+                "worker_enabled": {
+                    "type": "boolean"
+                },
+                "workers": {
+                    "type": "integer"
+                }
+            }
+        },
+        "webhooks.TargetDetail": {
+            "type": "object",
+            "properties": {
+                "stats": {
+                    "$ref": "#/definitions/webhooks.TargetStats"
+                },
+                "target": {
+                    "$ref": "#/definitions/models.WebhookTargetResponse"
+                }
+            }
+        },
+        "webhooks.TargetInput": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "max_concurrency": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "signing_secret": {
+                    "description": "SigningSecret is optional; a random one is generated when empty.",
+                    "type": "string"
+                },
+                "template_body": {
+                    "type": "string"
+                },
+                "template_preset": {
+                    "type": "string"
+                },
+                "topic_filters": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "webhooks.TargetList": {
+            "type": "object",
+            "properties": {
+                "pending_count": {
+                    "type": "integer"
+                },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.WebhookTargetResponse"
+                    }
+                }
+            }
+        },
+        "webhooks.TargetStats": {
+            "type": "object",
+            "properties": {
+                "dead_lettered": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "description": "dead-lettered + cancelled",
+                    "type": "integer"
+                },
+                "in_flight": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "p50_ms": {
+                    "type": "number"
+                },
+                "p95_ms": {
+                    "type": "number"
+                },
+                "queued": {
+                    "type": "integer"
+                },
+                "retrying": {
+                    "type": "integer"
+                },
+                "succeeded": {
+                    "type": "integer"
+                },
+                "target_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "webhooks.TopicList": {
+            "type": "object",
+            "properties": {
+                "known": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "seen": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         }

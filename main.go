@@ -25,6 +25,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
@@ -376,6 +377,7 @@ func main() {
 		// Wire event bus to service for system CRUD events
 		service.SetEventBus(controlServer.GetEventBus())
 		logger.Info("Event bus wired to service for system CRUD events")
+		service.InitWebhooks(appConf.Webhooks, Version)
 
 		logger.Info("Reload coordinator created and connected to control server and namespace service")
 
@@ -394,16 +396,22 @@ func main() {
 			}
 		}()
 	} else {
-		// Non-control mode (standalone): Load plugins without event bus support
-		// Plugins will still work but won't be able to use pub/sub events
+		// Non-control mode (standalone): there is no gRPC control server, so
+		// create a node-local event bus. System CRUD events, plugin pub/sub and
+		// webhooks all work the same as in control mode; nothing is forwarded
+		// to edges because there are none.
+		localBus := eventbridge.NewBus()
 		if service.AIStudioPluginManager != nil {
-			logger.Debug("Loading AI Studio plugins (standalone mode - no event bus)...")
+			service.AIStudioPluginManager.SetEventBus(localBus, "control")
+			logger.Debug("Loading AI Studio plugins (standalone mode - local event bus)...")
 			if err := service.AIStudioPluginManager.LoadAllUIAndAgentPlugins(); err != nil {
 				logger.Warnf("Failed to load some AI Studio plugins: %v", err)
 			} else {
 				logger.Debug("AI Studio plugins loaded successfully (standalone mode)")
 			}
 		}
+		service.SetEventBus(localBus)
+		service.InitWebhooks(appConf.Webhooks, Version)
 	}
 
 	noDocsArg := appConf.DocsDisabled

@@ -90,6 +90,10 @@ export const P = Object.freeze({
   METADATA_DELETE: p('metadata', 'delete'),
   EXPORTS_READ: p('exports', 'read'),
   EXPORTS_WRITE: p('exports', 'write'),
+  WEBHOOKS_READ: p('webhooks', 'read'),
+  WEBHOOKS_WRITE: p('webhooks', 'write'),
+  WEBHOOKS_DELETE: p('webhooks', 'delete'),
+  WEBHOOKS_EXECUTE: p('webhooks', 'execute'),
 
   // Settings
   SECRETS_READ: p('secrets', 'read'),
