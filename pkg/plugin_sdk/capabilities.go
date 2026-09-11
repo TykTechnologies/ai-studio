@@ -130,6 +130,37 @@ type PortalUserContext struct {
 	IsAdmin  bool
 	Groups   []string
 	Metadata map[string]string
+	// Permissions is the caller's effective permission set as
+	// "resource:action" strings; ["*"] means full administrator. Empty for
+	// portal users with no administrative role.
+	Permissions []string
+}
+
+// HasPermission reports whether the user holds perm ("resource:action").
+// The wildcard grants everything, and any action on a resource satisfies a
+// read check for that resource, mirroring the platform's evaluator.
+func (u *PortalUserContext) HasPermission(perm string) bool {
+	if u == nil {
+		return false
+	}
+	res, act := "", ""
+	if i := len(perm) - 1; i > 0 {
+		for j := i; j >= 0; j-- {
+			if perm[j] == ':' {
+				res, act = perm[:j], perm[j+1:]
+				break
+			}
+		}
+	}
+	for _, p := range u.Permissions {
+		if p == "*" || p == perm {
+			return true
+		}
+		if act == "read" && res != "" && len(p) > len(res)+1 && p[:len(res)+1] == res+":" {
+			return true
+		}
+	}
+	return false
 }
 
 // PortalUIProvider serves portal-facing UI pages and handles portal RPC calls.

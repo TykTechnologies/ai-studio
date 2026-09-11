@@ -54,10 +54,15 @@ const Login = () => {
       if (loginResponse.data.message === "Login successful") {
         // Get user entitlements to determine where to redirect
         const userResponse = await pubClient.get("/common/me");
-        const { ui_options } = userResponse.data.attributes;
+        const { ui_options, is_admin, has_admin_access } = userResponse.data.attributes;
 
-        // Determine which dashboard to show based on permissions
-        if (ui_options?.show_portal) {
+        // Determine which dashboard to show based on permissions. Anyone
+        // holding an administrative role lands on the administration surface.
+        if (is_admin) {
+          window.location.href = "/admin/dash";
+        } else if (has_admin_access) {
+          window.location.href = "/admin";
+        } else if (ui_options?.show_portal) {
           window.location.href = "/portal/dashboard";
         } else if (ui_options?.show_chat) {
           window.location.href = "/chat/dashboard";

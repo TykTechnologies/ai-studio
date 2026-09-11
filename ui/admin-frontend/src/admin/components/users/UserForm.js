@@ -33,8 +33,21 @@ import {
   StyledTableCell,
   SecondaryLinkButton
 } from "../../styles/sharedStyles";
+import { usePermissions } from "../../context/PermissionsContext";
+import RoleSelect from "../roles/RoleSelect";
+import { listRoles, sortRoles } from "../../services/rbacService";
+import ConfirmationDialog from "../common/ConfirmationDialog";
+
+const WILDCARD_ROLE_SLUGS = ["owner", "administrator"];
 
 const UserForm = () => {
+  // With roles active (Enterprise) access is assigned through roles rather
+  // than the admin switch; the legacy flags stay for Community Edition.
+  const { rbacEnabled, identity } = usePermissions();
+  const [roleIds, setRoleIds] = useState([]);
+  const [initialRoleIds, setInitialRoleIds] = useState([]);
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [confirmSelfDemotion, setConfirmSelfDemotion] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -66,6 +79,13 @@ const UserForm = () => {
     }
   }, [id]);
 
+  useEffect(() => {
+    if (!rbacEnabled) return;
+    listRoles()
+      .then((list) => setAvailableRoles(sortRoles(list)))
+      .catch((error) => console.error("Error fetching roles", error));
+  }, [rbacEnabled]);
+
   const fetchGroups = async () => {
     try {
       const response = await apiClient.get("/groups");
@@ -92,6 +112,9 @@ const UserForm = () => {
       setEmailVerified(userData.attributes.email_verified ?? false);
       setNotificationsEnabled(userData.attributes.notifications_enabled ?? false);
       setAccessToSSOConfig(userData.attributes.access_to_sso_config ?? false);
+      const ids = (userData.attributes.roles || []).map((r) => Number(r.id));
+      setRoleIds(ids);
+      setInitialRoleIds(ids);
     } catch (error) {
       console.error("Error fetching user", error);
       setSnackbar({
@@ -133,21 +156,43 @@ const UserForm = () => {
     );
   };
 
+  // Whether the selected roles include a full-administrator role.
+  const selectedHasWildcard = roleIds.some((rid) =>
+    availableRoles.some((r) => Number(r.id) === rid && WILDCARD_ROLE_SLUGS.includes(r.attributes.slug))
+  );
+  const effectiveIsAdmin = rbacEnabled ? selectedHasWildcard : isAdmin;
+
+  const isEditingSelf = Boolean(id) && String(identity?.id) === String(id);
+  const removesOwnAdminRole =
+    rbacEnabled && isEditingSelf && identity?.isFullAdmin && !selectedHasWildcard &&
+    initialRoleIds.some((rid) => availableRoles.some((r) => Number(r.id) === rid && WILDCARD_ROLE_SLUGS.includes(r.attributes.slug)));
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm() || !isFormValid()) return;
+    if (removesOwnAdminRole && !confirmSelfDemotion) {
+      setConfirmSelfDemotion(true);
+      return;
+    }
+    await saveUser();
+  };
+
+  const saveUser = async () => {
+    setConfirmSelfDemotion(false);
     const userData = {
       data: {
         type: "User",
         attributes: {
           name,
           email,
-          is_admin: isAdmin,
+          // Roles are the source of truth in Enterprise; the admin flag is
+          // omitted so the server leaves it to the role bindings.
+          ...(rbacEnabled ? { role_ids: roleIds } : { is_admin: isAdmin }),
           show_portal: showPortal,
           show_chat: showChat,
           email_verified: emailVerified,
-          notifications_enabled: isAdmin ? notificationsEnabled : false,
-          access_to_sso_config: isAdmin ? accessToSSOConfig : false,
+          notifications_enabled: effectiveIsAdmin ? notificationsEnabled : false,
+          access_to_sso_config: !rbacEnabled && isAdmin ? accessToSSOConfig : false,
           ...(password && { password }),
         },
       },
@@ -377,16 +422,18 @@ const UserForm = () => {
             <Grid item xs={12}>
               <Grid container>
                 <Grid item xs={2}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={isAdmin}
-                        onChange={(e) => setIsAdmin(e.target.checked)}
-                        color="primary"
-                      />
-                    }
-                    label="Admin User"
-                  />
+                  {!rbacEnabled && (
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={isAdmin}
+                          onChange={(e) => setIsAdmin(e.target.checked)}
+                          color="primary"
+                        />
+                      }
+                      label="Admin User"
+                    />
+                  )}
                   <Box mt={2}>
                     <FormControlLabel
                       control={
@@ -425,7 +472,17 @@ const UserForm = () => {
                   </Box>
                 </Grid>
                 <Grid item xs={6}>
-                  {isAdmin && (
+                  {rbacEnabled && (
+                    <Box mb={2} data-testid="user-roles-field">
+                      <RoleSelect
+                        value={roleIds}
+                        onChange={setRoleIds}
+                        roles={availableRoles}
+                        helperText="Roles decide what this user can see and do in the administration UI and API. Team roles apply on top."
+                      />
+                    </Box>
+                  )}
+                  {effectiveIsAdmin && (
                     <>
                       <FormControlLabel
                         control={
@@ -437,18 +494,20 @@ const UserForm = () => {
                         }
                         label="Enable Notifications"
                       />
-                      <Box mt={2}>
-                        <FormControlLabel
-                          control={
-                            <Switch
-                              checked={accessToSSOConfig}
-                              onChange={(e) => setAccessToSSOConfig(e.target.checked)}
-                              color="primary"
-                            />
-                          }
-                          label="Enable access to IdP configuration"
-                        />
-                      </Box>
+                      {!rbacEnabled && (
+                        <Box mt={2}>
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={accessToSSOConfig}
+                                onChange={(e) => setAccessToSSOConfig(e.target.checked)}
+                                color="primary"
+                              />
+                            }
+                            label="Enable access to IdP configuration"
+                          />
+                        </Box>
+                      )}
                     </>
                   )}
                 </Grid>
@@ -546,6 +605,21 @@ const UserForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <ConfirmationDialog
+        open={confirmSelfDemotion}
+        title="Remove your own administrator role?"
+        message="You are removing the role that gives you full administrator access. You will lose access to this page and any other page your remaining roles do not cover."
+        buttonLabel="Remove my role"
+        onConfirm={saveUser}
+        onCancel={() => setConfirmSelfDemotion(false)}
+        iconName="hexagon-exclamation"
+        iconColor="background.buttonCritical"
+        titleColor="text.criticalDefault"
+        backgroundColor="background.surfaceCriticalDefault"
+        borderColor="border.criticalDefaultSubdue"
+        primaryButtonComponent="danger"
+      />
     </>
   );
 };

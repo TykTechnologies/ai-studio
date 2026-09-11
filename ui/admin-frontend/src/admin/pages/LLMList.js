@@ -31,6 +31,8 @@ import {
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const LLMList = () => {
   const navigate = useNavigate();
@@ -173,13 +175,15 @@ const LLMList = () => {
       <>
         <TitleBox top="64px">
           <Typography variant="headingXLarge">LLM providers</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddLLM}
-          >
-            Add LLM
-          </PrimaryButton>
+          <Can permission={P.LLMS_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddLLM}
+            >
+              Add LLM
+            </PrimaryButton>
+          </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">LLM providers power AI chats and can be made available to developers in the portal and gateway when set to Active. To control access, each LLM provider must be part of a catalog to be used by specific teams.</Typography>  
@@ -258,11 +262,13 @@ const LLMList = () => {
                         />
                       </StyledTableCell>
                       <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, llm)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
+                        <Can permission={P.LLMS_WRITE}>
+                          <IconButton
+                            onClick={(event) => handleMenuOpen(event, llm)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </Can>
                       </StyledTableCell>
                     </StyledTableRow>
                   ))}

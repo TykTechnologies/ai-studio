@@ -55,6 +55,12 @@ func NewUser() *User {
 	return u
 }
 
+// AdminFlag exposes IsAdmin to packages that cannot import models (see
+// pkg/authz.AdminFlagged).
+func (u *User) AdminFlag() bool {
+	return u != nil && u.IsAdmin
+}
+
 func (u *User) GenerateAPIKey() error {
 	key := make([]byte, 32)
 	_, err := rand.Read(key)

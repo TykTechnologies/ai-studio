@@ -22,11 +22,14 @@ import GroupFormBasicInfo from "./components/GroupFormBasicInfo";
 import GroupMembersSection from "./components/GroupMembersSection";
 import GroupCatalogsSection from "./components/GroupCatalogsSection";
 import GroupPluginResourcesSection from "./components/GroupPluginResourcesSection";
+import GroupRolesSection from "./components/GroupRolesSection";
+import { usePermissions } from "../../context/PermissionsContext";
 
 const GroupForm = () => {
   const { id } = useParams();
   const { features } = useSystemFeatures();
   const { getDocsLink } = useOverviewData();
+  const { rbacEnabled } = usePermissions();
 
   const {
     name,
@@ -39,6 +42,8 @@ const GroupForm = () => {
     setSelectedDataCatalogs,
     selectedToolCatalogs,
     setSelectedToolCatalogs,
+    selectedRoleIds,
+    setSelectedRoleIds,
     handleSubmit,
     snackbar,
     handleCloseSnackbar,
@@ -102,6 +107,10 @@ const GroupForm = () => {
             groupId={id}
             onSelectedUsersChange={setSelectedUsers}
           />
+
+          {rbacEnabled && (
+            <GroupRolesSection value={selectedRoleIds} onChange={setSelectedRoleIds} />
+          )}
 
           {!isGatewayOnly && (
             <GroupCatalogsSection

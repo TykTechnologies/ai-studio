@@ -3906,6 +3906,548 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/metadata/available": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Check governed metadata availability",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/compliance": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Governed metadata compliance report",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by object type",
+                        "name": "object_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by status (missing, invalid, expired, warnings, valid)",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/governed_metadata.ComplianceReport"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/object-types": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "List object types that can carry governed metadata",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/definitions/governed_metadata.ObjectTypeInfo"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/objects/{object_type}/{object_id}": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Get governed metadata for an object",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Object type",
+                        "name": "object_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Object ID",
+                        "name": "object_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Set governed metadata for an object",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Object type",
+                        "name": "object_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Object ID",
+                        "name": "object_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Values",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ObjectMetadataInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/api.MetadataValidationErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Delete governed metadata for an object",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Object type",
+                        "name": "object_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Object ID",
+                        "name": "object_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/objects/{object_type}/{object_id}/audit": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Get the governed metadata audit trail for an object",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Object type",
+                        "name": "object_type",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Object ID",
+                        "name": "object_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max entries (default 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/schemas": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "List governed metadata schemas",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Create a governed metadata schema",
+                "parameters": [
+                    {
+                        "description": "Schema",
+                        "name": "schema",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.MetadataSchemaInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/schemas/resolve": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Resolve the merged schema for an object type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Object type (llm, tool, datasource, plugin_resource:\u003cid\u003e:\u003cslug\u003e)",
+                        "name": "object_type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/governed_metadata.ResolvedSchema"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/schemas/{id}": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Get a governed metadata schema",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Schema ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Delete a governed metadata schema",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Schema ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            },
+            "patch": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Update a governed metadata schema",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Schema ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Schema",
+                        "name": "schema",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.MetadataSchemaInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/validate": {
+            "post": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Validate governed metadata values without saving",
+                "parameters": [
+                    {
+                        "description": "Values",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.ValidateMetadataInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/governed_metadata.ValidationResult"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/vocabularies": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "List controlled vocabularies",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Create a controlled vocabulary",
+                "parameters": [
+                    {
+                        "description": "Vocabulary",
+                        "name": "vocabulary",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.MetadataVocabularyInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/metadata/vocabularies/{id}": {
+            "get": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Get a controlled vocabulary",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Vocabulary ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Delete a controlled vocabulary",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Vocabulary ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "409": {
+                        "description": "Referenced by a schema field",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "tags": [
+                    "governed-metadata"
+                ],
+                "summary": "Update a controlled vocabulary",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Vocabulary ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Vocabulary",
+                        "name": "vocabulary",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.MetadataVocabularyInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/namespaces": {
             "get": {
                 "security": [
@@ -15633,6 +16175,431 @@ const docTemplate = `{
                 }
             }
         },
+        "/rbac/bindings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "List role bindings",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user or group",
+                        "name": "subject_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Subject ID",
+                        "name": "subject_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Role ID",
+                        "name": "role_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/definitions/api.RoleBindingResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Assign a role",
+                "parameters": [
+                    {
+                        "description": "Binding",
+                        "name": "binding",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.RoleBindingInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.RoleBindingResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/rbac/bindings/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Remove a role assignment",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Binding ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/rbac/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the caller's effective permissions and the roles that grant them.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Get my effective access",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.EffectiveAccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/rbac/permissions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists every resource and action roles can grant. Available in both editions; \"enabled\" reports whether roles are active.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Get the permission catalogue",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.PermissionCatalogueResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/rbac/roles": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "List roles",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/definitions/api.RoleResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Create a custom role",
+                "parameters": [
+                    {
+                        "description": "Role",
+                        "name": "role",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.RoleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.RoleResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/rbac/roles/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Get a role",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.RoleResponse"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes the role and every binding that references it.",
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Delete a custom role",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Update a custom role",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Role",
+                        "name": "role",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.RoleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.RoleResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/rbac/roles/{id}/clone": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a custom role with the same permissions. This is how system roles are customised.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Clone a role",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Role ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New name",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.CloneRoleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.RoleResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/rbac/users/{id}/effective": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rbac"
+                ],
+                "summary": "Get a user's effective access",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.EffectiveAccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/secrets": {
             "get": {
                 "security": [
@@ -19595,6 +20562,15 @@ const docTemplate = `{
                 }
             }
         },
+        "api.CloneRoleInput": {
+            "description": "Clone role input",
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "api.ConfigureProviderRequest": {
             "type": "object",
             "properties": {
@@ -19889,6 +20865,11 @@ const docTemplate = `{
                                 "embed_vendor": {
                                     "type": "string"
                                 },
+                                "governed_metadata": {
+                                    "description": "Governed metadata (Enterprise). nil = untouched; {} = clear.",
+                                    "type": "object",
+                                    "additionalProperties": true
+                                },
                                 "icon": {
                                     "type": "string"
                                 },
@@ -20006,6 +20987,12 @@ const docTemplate = `{
                         }
                     }
                 },
+                "governed_metadata": {
+                    "description": "Governed metadata (Enterprise); see LLMResponse."
+                },
+                "governed_metadata_status": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -20111,6 +21098,36 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.EffectiveAccessResponse": {
+            "description": "Effective permissions for a user",
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "has_admin_access": {
+                    "type": "boolean"
+                },
+                "is_full_admin": {
+                    "type": "boolean"
+                },
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/rbac.RoleSummary"
+                    }
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -20374,6 +21391,45 @@ const docTemplate = `{
                 }
             }
         },
+        "api.GroupAttributes": {
+            "description": "Group attributes",
+            "type": "object",
+            "properties": {
+                "catalogues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.CatalogueResponse"
+                    }
+                },
+                "data_catalogues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.DataCatalogueResponse"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/rbac.RoleSummary"
+                    }
+                },
+                "tool_catalogues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ToolCatalogueResponse"
+                    }
+                },
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.UserResponse"
+                    }
+                }
+            }
+        },
         "api.GroupCatalogueInput": {
             "description": "Group-Catalogue relationship input model",
             "type": "object",
@@ -20478,36 +21534,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "attributes": {
-                    "type": "object",
-                    "properties": {
-                        "catalogues": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.CatalogueResponse"
-                            }
-                        },
-                        "data_catalogues": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.DataCatalogueResponse"
-                            }
-                        },
-                        "name": {
-                            "type": "string"
-                        },
-                        "tool_catalogues": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.ToolCatalogueResponse"
-                            }
-                        },
-                        "users": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.UserResponse"
-                            }
-                        }
-                    }
+                    "$ref": "#/definitions/api.GroupAttributes"
                 },
                 "id": {
                     "type": "string"
@@ -20617,6 +21644,11 @@ const docTemplate = `{
                                     "items": {
                                         "type": "integer"
                                     }
+                                },
+                                "governed_metadata": {
+                                    "description": "Governed metadata (Enterprise). nil = untouched; {} = clear.",
+                                    "type": "object",
+                                    "additionalProperties": true
                                 },
                                 "logo_url": {
                                     "type": "string"
@@ -20736,6 +21768,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
+                },
+                "governed_metadata": {
+                    "description": "Governed metadata (Enterprise): admin responses carry the raw values map and a\nstatus; portal responses carry a display-ready [{key,label,type,value}] list."
+                },
+                "governed_metadata_status": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"
@@ -20952,6 +21990,120 @@ const docTemplate = `{
                             "properties": {
                                 "message": {
                                     "type": "string"
+                                }
+                            }
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "api.MetadataSchemaInput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "type": "object",
+                            "properties": {
+                                "active": {
+                                    "type": "boolean"
+                                },
+                                "applies_to": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "enforcement": {
+                                    "type": "string"
+                                },
+                                "fields": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/definitions/models.MetadataFieldDef"
+                                    }
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "order": {
+                                    "type": "integer"
+                                },
+                                "slug": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "api.MetadataValidationError": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "object",
+                    "properties": {
+                        "pointer": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.MetadataValidationErrorResponse": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.MetadataValidationError"
+                    }
+                }
+            }
+        },
+        "api.MetadataVocabularyInput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "attributes": {
+                            "type": "object",
+                            "properties": {
+                                "description": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "slug": {
+                                    "type": "string"
+                                },
+                                "terms": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/definitions/models.VocabularyTerm"
+                                    }
                                 }
                             }
                         },
@@ -21261,6 +22413,18 @@ const docTemplate = `{
                 }
             }
         },
+        "api.ObjectMetadataInput": {
+            "type": "object",
+            "properties": {
+                "merge": {
+                    "type": "boolean"
+                },
+                "values": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        },
         "api.OperationInput": {
             "description": "Operation input model",
             "type": "object",
@@ -21295,6 +22459,33 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                }
+            }
+        },
+        "api.PermissionCatalogueResponse": {
+            "description": "Permission catalogue",
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/authz.Action"
+                    }
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "resources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/authz.Resource"
                     }
                 }
             }
@@ -22005,6 +23196,132 @@ const docTemplate = `{
                 }
             }
         },
+        "api.RoleAttributes": {
+            "description": "Role attributes",
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "groups_count": {
+                    "type": "integer"
+                },
+                "is_system": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "users_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.RoleBindingAttributes": {
+            "description": "Role binding attributes",
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/rbac.RoleSummary"
+                },
+                "role_id": {
+                    "type": "integer"
+                },
+                "scope_id": {
+                    "type": "string"
+                },
+                "scope_type": {
+                    "type": "string"
+                },
+                "subject_id": {
+                    "type": "integer"
+                },
+                "subject_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.RoleBindingInput": {
+            "description": "Role binding input model",
+            "type": "object",
+            "properties": {
+                "role_id": {
+                    "type": "integer"
+                },
+                "subject_id": {
+                    "type": "integer"
+                },
+                "subject_type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.RoleBindingResponse": {
+            "description": "Role binding response model",
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/api.RoleBindingAttributes"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.RoleInput": {
+            "description": "Role input model",
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "api.RoleResponse": {
+            "description": "Role response model",
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/api.RoleAttributes"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "api.SecretInput": {
             "description": "Secret input model",
             "type": "object",
@@ -22297,6 +23614,11 @@ const docTemplate = `{
                                 "description": {
                                     "type": "string"
                                 },
+                                "governed_metadata": {
+                                    "description": "Governed metadata (Enterprise). nil = untouched; {} = clear.",
+                                    "type": "object",
+                                    "additionalProperties": true
+                                },
                                 "name": {
                                     "type": "string"
                                 },
@@ -22391,6 +23713,12 @@ const docTemplate = `{
                         }
                     }
                 },
+                "governed_metadata": {
+                    "description": "Governed metadata (Enterprise); see LLMResponse."
+                },
+                "governed_metadata_status": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -22442,6 +23770,60 @@ const docTemplate = `{
                 }
             }
         },
+        "api.UserAttributes": {
+            "description": "User attributes",
+            "type": "object",
+            "properties": {
+                "access_to_sso_config": {
+                    "type": "boolean"
+                },
+                "api_key": {
+                    "type": "string"
+                },
+                "api_key_hint": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "email_verified": {
+                    "type": "boolean"
+                },
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.GroupResponse"
+                    }
+                },
+                "has_api_key": {
+                    "type": "boolean"
+                },
+                "is_admin": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "notifications_enabled": {
+                    "type": "boolean"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/rbac.RoleSummary"
+                    }
+                },
+                "show_chat": {
+                    "type": "boolean"
+                },
+                "show_portal": {
+                    "type": "boolean"
+                }
+            }
+        },
         "api.UserGroupInput": {
             "description": "User-group relationship input model",
             "type": "object",
@@ -22485,6 +23867,7 @@ const docTemplate = `{
                                     }
                                 },
                                 "is_admin": {
+                                    "description": "omitted means unchanged; roles are the source of truth in Enterprise",
                                     "type": "boolean"
                                 },
                                 "name": {
@@ -22516,45 +23899,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "attributes": {
-                    "type": "object",
-                    "properties": {
-                        "access_to_sso_config": {
-                            "type": "boolean"
-                        },
-                        "api_key": {
-                            "type": "string"
-                        },
-                        "email": {
-                            "type": "string"
-                        },
-                        "email_verified": {
-                            "type": "boolean"
-                        },
-                        "groups": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.GroupResponse"
-                            }
-                        },
-                        "is_admin": {
-                            "type": "boolean"
-                        },
-                        "name": {
-                            "type": "string"
-                        },
-                        "notifications_enabled": {
-                            "type": "boolean"
-                        },
-                        "role": {
-                            "type": "string"
-                        },
-                        "show_chat": {
-                            "type": "boolean"
-                        },
-                        "show_portal": {
-                            "type": "boolean"
-                        }
-                    }
+                    "$ref": "#/definitions/api.UserAttributes"
                 },
                 "id": {
                     "type": "string"
@@ -22603,6 +23948,10 @@ const docTemplate = `{
                                 }
                             }
                         },
+                        "has_admin_access": {
+                            "description": "HasAdminAccess is true when the user holds at least one permission\nand may therefore open the administration surface.",
+                            "type": "boolean"
+                        },
                         "is_admin": {
                             "type": "boolean"
                         },
@@ -22611,6 +23960,24 @@ const docTemplate = `{
                         },
                         "name": {
                             "type": "string"
+                        },
+                        "permissions": {
+                            "description": "Permissions is the effective permission set; [\"*\"] for full admins.",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "rbac_enabled": {
+                            "description": "RBACEnabled reports whether fine-grained roles are active.",
+                            "type": "boolean"
+                        },
+                        "roles": {
+                            "description": "Roles lists the roles behind the permissions (Enterprise only).",
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/rbac.RoleSummary"
+                            }
                         },
                         "ui_options": {
                             "type": "object",
@@ -22684,6 +24051,18 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.ValidateMetadataInput": {
+            "type": "object",
+            "properties": {
+                "object_type": {
+                    "type": "string"
+                },
+                "values": {
+                    "type": "object",
+                    "additionalProperties": true
                 }
             }
         },
@@ -22868,6 +24247,57 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "authz.Action": {
+            "type": "string",
+            "enum": [
+                "read",
+                "write",
+                "delete",
+                "execute"
+            ],
+            "x-enum-varnames": [
+                "ActionRead",
+                "ActionWrite",
+                "ActionDelete",
+                "ActionExecute"
+            ]
+        },
+        "authz.Resource": {
+            "type": "object",
+            "properties": {
+                "actions": {
+                    "description": "Actions lists the actions this resource offers, in display order.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/authz.Action"
+                    }
+                },
+                "description": {
+                    "description": "Description is optional help text for the role editor.",
+                    "type": "string"
+                },
+                "group": {
+                    "description": "Group is the navigation group the resource belongs to; see Groups.",
+                    "type": "string"
+                },
+                "key": {
+                    "description": "Key is the permission resource slug: plural, kebab-case, matching the\nroute collection segment (\"llms\", \"data-catalogues\").",
+                    "type": "string"
+                },
+                "label": {
+                    "description": "Label is the human name, matching the admin navigation where one exists.",
+                    "type": "string"
+                },
+                "privileged": {
+                    "description": "Privileged marks resources whose write/delete can escalate access\n(users, groups, roles, identity providers, plugins). The UI warns.",
+                    "type": "boolean"
+                },
+                "sensitive": {
+                    "description": "Sensitive marks a data class (transcripts, logs, secrets) that is split\nout so read can be withheld independently. The UI shows a shield.",
+                    "type": "boolean"
                 }
             }
         },
@@ -23458,6 +24888,142 @@ const docTemplate = `{
                 }
             }
         },
+        "governed_metadata.ComplianceEntry": {
+            "type": "object",
+            "properties": {
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/governed_metadata.FieldIssue"
+                    }
+                },
+                "last_validated_at": {
+                    "type": "string"
+                },
+                "object_id": {
+                    "type": "string"
+                },
+                "object_name": {
+                    "type": "string"
+                },
+                "object_type": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "missing | invalid | warnings | expired | valid",
+                    "type": "string"
+                }
+            }
+        },
+        "governed_metadata.ComplianceReport": {
+            "type": "object",
+            "properties": {
+                "counts": {
+                    "description": "status -\u003e count",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/governed_metadata.ComplianceEntry"
+                    }
+                }
+            }
+        },
+        "governed_metadata.FieldIssue": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "field": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "governed_metadata.ObjectTypeInfo": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "source": {
+                    "description": "builtin | plugin:\u003cid\u003e",
+                    "type": "string"
+                }
+            }
+        },
+        "governed_metadata.ResolvedSchema": {
+            "type": "object",
+            "properties": {
+                "enforcement": {
+                    "type": "string"
+                },
+                "fields": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.MetadataFieldDef"
+                    }
+                },
+                "json_schema": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "object_type": {
+                    "type": "string"
+                },
+                "schema_slugs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "vocabularies": {
+                    "description": "Vocabularies holds the terms of every vocabulary referenced by Fields,\nkeyed by slug, so a consumer can render selects with labels without a\nsecond round-trip (plugins only see this via the management API).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/models.VocabularyTerm"
+                        }
+                    }
+                }
+            }
+        },
+        "governed_metadata.ValidationResult": {
+            "type": "object",
+            "properties": {
+                "enforced": {
+                    "description": "resolved schema enforcement == enforce",
+                    "type": "boolean"
+                },
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/governed_metadata.FieldIssue"
+                    }
+                },
+                "valid": {
+                    "description": "no hard errors",
+                    "type": "boolean"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/governed_metadata.FieldIssue"
+                    }
+                }
+            }
+        },
         "models.AppBudgetUsageResponse": {
             "type": "object",
             "properties": {
@@ -23658,6 +25224,58 @@ const docTemplate = `{
                 "ExportStatusExpired"
             ]
         },
+        "models.MetadataFieldDef": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "gateway_visible": {
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "max": {
+                    "type": "number"
+                },
+                "max_length": {
+                    "type": "integer"
+                },
+                "min": {
+                    "type": "number"
+                },
+                "order": {
+                    "type": "integer"
+                },
+                "pattern": {
+                    "type": "string"
+                },
+                "portal_visible": {
+                    "type": "boolean"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "severity": {
+                    "description": "error (default) | warning",
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "vocabulary_slug": {
+                    "type": "string"
+                },
+                "warn_if_past": {
+                    "description": "date fields: warn when the value is in the past",
+                    "type": "boolean"
+                }
+            }
+        },
         "models.MultiAxisChartData": {
             "type": "object",
             "properties": {
@@ -23818,6 +25436,23 @@ const docTemplate = `{
                 }
             }
         },
+        "models.VocabularyTerm": {
+            "type": "object",
+            "properties": {
+                "deprecated": {
+                    "type": "boolean"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
         "providers.APISpec": {
             "type": "object",
             "properties": {
@@ -23924,6 +25559,31 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "rbac.RoleSummary": {
+            "type": "object",
+            "properties": {
+                "group_id": {
+                    "description": "when Via == \"group\"",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_system": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "via": {
+                    "description": "\"direct\" | \"group\"",
                     "type": "string"
                 }
             }

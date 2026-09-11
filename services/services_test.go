@@ -3,6 +3,8 @@ package services
 import (
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/services/rbac"
+
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 
@@ -320,10 +322,15 @@ func TestUserService(t *testing.T) {
 		// Ensure the user is actually a super admin
 		assert.True(t, superAdmin.IsAdmin)
 
-		// Attempt to delete should fail
+		// Attempt to delete should fail. Community Edition protects the
+		// super admin; Enterprise protects the last Owner (the same user here).
 		err = service.DeleteUser(superAdmin)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "super admin user cannot be deleted")
+		if rbac.IsEnterpriseAvailable() {
+			assert.Contains(t, err.Error(), "last Owner cannot be deleted")
+		} else {
+			assert.Contains(t, err.Error(), "super admin user cannot be deleted")
+		}
 
 		// Verify super admin still exists
 		_, err = service.GetUserByID(1)

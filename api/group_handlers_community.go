@@ -59,7 +59,7 @@ func (a *API) getGroup(c *gin.Context) {
 	}
 
 	// Serialize and return
-	response := serializeGroup(defaultGroup)
+	response := a.finishGroup(c, serializeGroup(defaultGroup))
 	c.JSON(http.StatusOK, gin.H{"data": response})
 }
 
@@ -277,13 +277,7 @@ func (a *API) getUserGroups(c *gin.Context) {
 	response := GroupResponse{
 		Type: "groups",
 		ID:   strconv.FormatUint(uint64(defaultGroup.ID), 10),
-		Attributes: struct {
-			Name           string                  `json:"name"`
-			Users          []UserResponse          `json:"users,omitempty"`
-			Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
-			DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
-			ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
-		}{
+		Attributes: GroupAttributes{
 			Name: defaultGroup.Name,
 		},
 	}
@@ -396,13 +390,7 @@ func serializeGroup(group *models.Group) GroupResponse {
 	response := GroupResponse{
 		Type: "groups",
 		ID:   strconv.FormatUint(uint64(group.ID), 10),
-		Attributes: struct {
-			Name           string                  `json:"name"`
-			Users          []UserResponse          `json:"users,omitempty"`
-			Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
-			DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
-			ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
-		}{
+		Attributes: GroupAttributes{
 			Name: group.Name,
 		},
 	}

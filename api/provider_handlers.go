@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/providers"
 	"github.com/TykTechnologies/midsommar/v2/providers/direct"
 	"github.com/TykTechnologies/midsommar/v2/providers/tyk"
@@ -480,15 +481,17 @@ func (a *ProviderAPI) importSpec(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": "OpenAPI spec imported successfully"})
 }
 
-func (a *ProviderAPI) RegisterRoutes(router *gin.RouterGroup) {
+// RegisterRoutes mounts the provider routes. Providers exist to import tool
+// specifications, so they are governed by the tools permission.
+func (a *ProviderAPI) RegisterRoutes(router *permRouter) {
 	providers := router.Group("/providers")
 	{
-		providers.GET("", a.listProviders)
-		providers.POST("/:id/configure", a.configureProvider)
-		providers.GET("/:id/specs", a.getProviderSpecs)
+		providers.GET("", authz.Read("tools"), a.listProviders)
+		providers.POST("/:id/configure", authz.Write("tools"), a.configureProvider)
+		providers.GET("/:id/specs", authz.Read("tools"), a.getProviderSpecs)
 
 		// Import endpoints
-		providers.GET("/:id/import-steps", a.getImportSteps)
-		providers.POST("/direct/import", a.importSpec)
+		providers.GET("/:id/import-steps", authz.Read("tools"), a.getImportSteps)
+		providers.POST("/direct/import", authz.Write("tools"), a.importSpec)
 	}
 }

@@ -3,6 +3,8 @@ package services
 import (
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/services/rbac"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
@@ -154,7 +156,9 @@ func TestUpdateUserWithAccessToSSOConfig(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "access to IdP configuration can only be enabled for admin users")
 
-	// Test 4: Change admin user to non-admin with AccessToSSOConfig = false (should succeed)
+	// Test 4: Change admin user to non-admin with AccessToSSOConfig = false.
+	// Community Edition allows it; Enterprise refuses because this admin is
+	// the last Owner.
 	updatedUser, err := service.UpdateUser(adminUser, UserDTO{
 		Email:                adminUser.Email,
 		Name:                 adminUser.Name,
@@ -166,6 +170,11 @@ func TestUpdateUserWithAccessToSSOConfig(t *testing.T) {
 		AccessToSSOConfig:    false,
 		Groups:               []uint{},
 	})
+	if rbac.IsEnterpriseAvailable() {
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "last Owner")
+		return
+	}
 	assert.NoError(t, err)
 	assert.False(t, updatedUser.IsAdmin)
 	assert.False(t, updatedUser.AccessToSSOConfig)

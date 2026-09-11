@@ -29,6 +29,8 @@ import {
 } from "../styles/sharedStyles";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const ChatList = () => {
   const navigate = useNavigate();
@@ -180,13 +182,15 @@ const ChatList = () => {
       <>
         <TitleBox top="64px">
           <Typography variant="headingXLarge">Chats</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddChat}
-          >
-            Add chat
-          </PrimaryButton>
+          <Can permission={P.CHATS_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddChat}
+            >
+              Add chat
+            </PrimaryButton>
+          </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Chats are customized interfaces that allow users to have one-on-one conversations with specific LLM providers, tools, and data based on their needs. Access is tailored to the user's team, ensuring relevant and secure interactions.</Typography>  
@@ -247,11 +251,13 @@ const ChatList = () => {
                           .join(", ")}
                       </StyledTableCell>
                       <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, chat)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
+                        <Can permission={P.CHATS_WRITE}>
+                          <IconButton
+                            onClick={(event) => handleMenuOpen(event, chat)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </Can>
                       </StyledTableCell>
                     </StyledTableRow>
                   ))}

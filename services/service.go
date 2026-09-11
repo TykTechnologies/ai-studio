@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
+	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"gorm.io/gorm"
 )
 
@@ -53,6 +54,8 @@ type Service struct {
 	GovernedMetadataService governed_metadata.Service
 	// Sync Status (Hub-and-Spoke)
 	SyncStatusService *SyncStatusService
+	// Role-based access control (ENT: roles and bindings, CE: admin-or-not stub)
+	RBAC rbac.Service
 }
 
 func NewService(db *gorm.DB) *Service {
@@ -186,6 +189,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		HookManager:           hookManager,
 		ModelRouterService:    modelRouterSvc,
 		SyncStatusService:     syncStatusService,
+		RBAC:                  rbac.NewService(db),
 	}
 
 	// Governed metadata: hooks are optional (nil when no plugin manager); the event
@@ -352,5 +356,26 @@ func (s *Service) SetEventBus(bus eventbridge.Bus) {
 // SetLicensingService sets the licensing service for plugin license checks
 func (s *Service) SetLicensingService(svc licensing.Service) {
 	s.LicensingService = svc
+	if svc != nil {
+		// Like the other Enterprise features (groups, model router, multi-tenant),
+		// roles are on in an Enterprise build; a licence may switch them off
+		// explicitly with feature_rbac=false.
+		s.Authz().SetLicenseCheck(func() bool {
+			ent, ok := svc.Entitlement(licensing.FeatureRBAC)
+			return !ok || ent.Bool()
+		})
+	}
 	logger.Debug("Licensing service set on main service")
+}
+
+// Authz returns the RBAC service, falling back to the edition-appropriate
+// default when the Service was constructed by hand (tests).
+func (s *Service) Authz() rbac.Service {
+	if s == nil {
+		return rbac.NewService(nil)
+	}
+	if s.RBAC == nil {
+		s.RBAC = rbac.NewService(s.DB)
+	}
+	return s.RBAC
 }

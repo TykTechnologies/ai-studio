@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -49,11 +50,11 @@ func (a *API) createDatasource(c *gin.Context) {
 			}{{Title: "Unauthorized", Detail: "User not found in context"}}})
 			return
 		}
-		if u, ok := user.(*models.User); !ok || !u.IsAdmin {
+		if _, ok := user.(*models.User); !ok || !authz.Can(c, authz.Write("datasources")) {
 			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Forbidden", Detail: "Only administrators can assign namespace"}}})
+			}{{Title: "Forbidden", Detail: "Assigning a namespace requires write access"}}})
 			return
 		}
 	}
@@ -179,8 +180,8 @@ func (a *API) updateDatasource(c *gin.Context) {
 
 	// Any namespace change (including clearing to global) requires admin authorization
 	if input.Data.Attributes.Namespace != existingDS.Namespace {
-		user, exists := c.Get("user")
-		if !exists || func() bool { u, ok := user.(*models.User); return !ok || !u.IsAdmin }() {
+		_, exists := c.Get("user")
+		if !exists || !authz.Can(c, authz.Write("datasources")) {
 			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`

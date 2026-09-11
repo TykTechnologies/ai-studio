@@ -15,6 +15,7 @@ import (
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/licensing"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/marketplace_management"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/plugin_security"
+	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/rbac"
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/sso"
 )
 

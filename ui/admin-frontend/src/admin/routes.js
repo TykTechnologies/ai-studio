@@ -1,5 +1,4 @@
 import React from "react";
-import { Route } from "react-router-dom";
 import Users from "./pages/Users";
 import UserDetails from "./components/users/UserDetails";
 import UserForm from "./components/users/UserForm";
@@ -91,138 +90,148 @@ import SubmissionReviewQueue from "./pages/SubmissionReviewQueue";
 import SubmissionReview from "./pages/SubmissionReview";
 import AttestationTemplates from "./pages/AttestationTemplates";
 
-const mainAdminRoutes = (
-  <>
-    <Route index element={<Overview />} />
-    <Route path="dash" element={<Dashboard />} />
-    <Route path="dashboard" element={<Dashboard />} />
-    <Route path="branding" element={<BrandingSettings />} />
-    <Route path="users" element={<Users />} />
-    <Route path="users/:id" element={<UserDetails />} />
-    <Route path="users/:id/chat-log/:sessionId" element={<UserMessageLog />} />
-    <Route path="users/edit/:id" element={<UserForm />} />
-    <Route path="users/new" element={<UserForm />} />
+import Roles from "./pages/roles/Roles";
+import RoleDetail from "./components/roles/RoleDetail";
+import RoleForm from "./components/roles/RoleForm";
 
-    <Route path="llms" element={<LLMList />} />
-    <Route path="llms/:id" element={<LLMDetails />} />
-    <Route path="llms/edit/:id" element={<LLMForm />} />
-    <Route path="llms/new" element={<LLMForm />} />
+import { P } from "./rbac/permissions";
 
-    <Route path="llm-settings" element={<LLMSettingsList />} />
-    <Route path="llm-settings/:id" element={<LLMSettingsDetails />} />
-    <Route path="llm-settings/edit/:id" element={<LLMSettingsForm />} />
-    <Route path="llm-settings/new" element={<LLMSettingsForm />} />
+/**
+ * Admin route descriptors: { path | index, element, permission? }.
+ * `permission` is the catalogue permission the page needs; list/detail pages
+ * need read, new/edit forms need write. AdminRoutes.js wraps each element in
+ * RequirePermission, which renders a denial panel instead of a blank page.
+ */
+const mainAdminRoutes = [
+  { index: true, element: <Overview /> },
+  { path: "dash", element: <Dashboard />, permission: P.ANALYTICS_READ },
+  { path: "dashboard", element: <Dashboard />, permission: P.ANALYTICS_READ },
+  { path: "branding", element: <BrandingSettings />, permission: P.BRANDING_WRITE },
+  { path: "users", element: <Users />, permission: P.USERS_READ },
+  { path: "users/:id", element: <UserDetails />, permission: P.USERS_READ },
+  { path: "users/:id/chat-log/:sessionId", element: <UserMessageLog />, permission: P.CHAT_HISTORY_READ },
+  { path: "users/edit/:id", element: <UserForm />, permission: P.USERS_WRITE },
+  { path: "users/new", element: <UserForm />, permission: P.USERS_WRITE },
 
-    <Route path="plugins/*" element={<PluginsPage />} />
+  { path: "llms", element: <LLMList />, permission: P.LLMS_READ },
+  { path: "llms/:id", element: <LLMDetails />, permission: P.LLMS_READ },
+  { path: "llms/edit/:id", element: <LLMForm />, permission: P.LLMS_WRITE },
+  { path: "llms/new", element: <LLMForm />, permission: P.LLMS_WRITE },
 
-    <Route path="marketplace" element={<Marketplace />} />
-    <Route path="marketplace-settings" element={<MarketplaceSettings />} />
+  { path: "llm-settings", element: <LLMSettingsList />, permission: P.LLM_SETTINGS_READ },
+  { path: "llm-settings/:id", element: <LLMSettingsDetails />, permission: P.LLM_SETTINGS_READ },
+  { path: "llm-settings/edit/:id", element: <LLMSettingsForm />, permission: P.LLM_SETTINGS_WRITE },
+  { path: "llm-settings/new", element: <LLMSettingsForm />, permission: P.LLM_SETTINGS_WRITE },
 
-    <Route path="model-prices" element={<ModelPriceList />} />
-    <Route path="model-prices/:id" element={<ModelPriceDetail />} />
-    <Route path="model-prices/edit/:id" element={<ModelPriceForm />} />
-    <Route path="model-prices/new" element={<ModelPriceForm />} />
+  { path: "plugins/*", element: <PluginsPage />, permission: P.PLUGINS_READ },
 
-    <Route path="datasources" element={<DatasourceList />} />
-    <Route path="datasources/:id" element={<DatasourceDetails />} />
-    <Route path="datasources/edit/:id" element={<DatasourceForm />} />
-    <Route path="datasources/new" element={<DatasourceForm />} />
+  { path: "marketplace", element: <Marketplace />, permission: P.MARKETPLACE_READ },
+  { path: "marketplace-settings", element: <MarketplaceSettings />, permission: P.MARKETPLACE_WRITE },
 
-    <Route path="tools" element={<ToolList />} />
-    <Route path="tools/:id" element={<ToolDetails />} />
-    <Route path="tools/edit/:id" element={<ToolForm />} />
-    <Route path="tools/new" element={<ToolForm />} />
+  { path: "model-prices", element: <ModelPriceList />, permission: P.MODEL_PRICES_READ },
+  { path: "model-prices/:id", element: <ModelPriceDetail />, permission: P.MODEL_PRICES_READ },
+  { path: "model-prices/edit/:id", element: <ModelPriceForm />, permission: P.MODEL_PRICES_WRITE },
+  { path: "model-prices/new", element: <ModelPriceForm />, permission: P.MODEL_PRICES_WRITE },
 
-    <Route path="apps" element={<AppList />} />
-    <Route path="apps/:id" element={<AppDetails />} />
-    <Route path="apps/edit/:id" element={<AppForm />} />
-    <Route path="apps/new" element={<AppForm />} />
+  { path: "datasources", element: <DatasourceList />, permission: P.DATASOURCES_READ },
+  { path: "datasources/:id", element: <DatasourceDetails />, permission: P.DATASOURCES_READ },
+  { path: "datasources/edit/:id", element: <DatasourceForm />, permission: P.DATASOURCES_WRITE },
+  { path: "datasources/new", element: <DatasourceForm />, permission: P.DATASOURCES_WRITE },
 
-    <Route path="edge-gateways/*" element={<EdgeGatewaysPage />} />
+  { path: "tools", element: <ToolList />, permission: P.TOOLS_READ },
+  { path: "tools/:id", element: <ToolDetails />, permission: P.TOOLS_READ },
+  { path: "tools/edit/:id", element: <ToolForm />, permission: P.TOOLS_WRITE },
+  { path: "tools/new", element: <ToolForm />, permission: P.TOOLS_WRITE },
 
-    <Route path="agents" element={<AgentList />} />
-    <Route path="agents/:id" element={<AgentDetail />} />
-    <Route path="agents/edit/:id" element={<AgentForm />} />
-    <Route path="agents/new" element={<AgentForm />} />
+  { path: "apps", element: <AppList />, permission: P.APPS_READ },
+  { path: "apps/:id", element: <AppDetails />, permission: P.APPS_READ },
+  { path: "apps/edit/:id", element: <AppForm />, permission: P.APPS_WRITE },
+  { path: "apps/new", element: <AppForm />, permission: P.APPS_WRITE },
 
-    <Route path="chats" element={<ChatList />} />
-    <Route path="chats/:id" element={<ChatDetails />} />
-    <Route path="chats/edit/:id" element={<ChatForm />} />
-    <Route path="chats/new" element={<ChatForm />} />
+  { path: "edge-gateways/*", element: <EdgeGatewaysPage />, permission: P.EDGES_READ },
 
-    <Route path="secrets" element={<Secrets />} />
-    <Route path="secrets/:id" element={<SecretDetails />} />
-    <Route path="secrets/edit/:id" element={<SecretForm />} />
-    <Route path="secrets/new" element={<SecretForm />} />
+  { path: "agents", element: <AgentList />, permission: P.AGENTS_READ },
+  { path: "agents/:id", element: <AgentDetail />, permission: P.AGENTS_READ },
+  { path: "agents/edit/:id", element: <AgentForm />, permission: P.AGENTS_WRITE },
+  { path: "agents/new", element: <AgentForm />, permission: P.AGENTS_WRITE },
 
-    <Route path="filters" element={<FilterList />} />
-    <Route path="filters/:id" element={<FilterDetails />} />
-    <Route path="filters/edit/:id" element={<FilterForm />} />
-    <Route path="filters/new" element={<FilterForm />} />
+  { path: "chats", element: <ChatList />, permission: P.CHATS_READ },
+  { path: "chats/:id", element: <ChatDetails />, permission: P.CHATS_READ },
+  { path: "chats/edit/:id", element: <ChatForm />, permission: P.CHATS_WRITE },
+  { path: "chats/new", element: <ChatForm />, permission: P.CHATS_WRITE },
 
-    <Route path="compliance" element={<ComplianceOverview />} />
-    <Route path="audit" element={<AuditTrail />} />
+  { path: "secrets", element: <Secrets />, permission: P.SECRETS_READ },
+  { path: "secrets/:id", element: <SecretDetails />, permission: P.SECRETS_READ },
+  { path: "secrets/edit/:id", element: <SecretForm />, permission: P.SECRETS_WRITE },
+  { path: "secrets/new", element: <SecretForm />, permission: P.SECRETS_WRITE },
 
-    <Route path="submissions" element={<SubmissionReviewQueue />} />
-    <Route path="submissions/:id" element={<SubmissionReview />} />
-    <Route path="attestation-templates" element={<AttestationTemplates />} />
+  { path: "filters", element: <FilterList />, permission: P.FILTERS_READ },
+  { path: "filters/:id", element: <FilterDetails />, permission: P.FILTERS_READ },
+  { path: "filters/edit/:id", element: <FilterForm />, permission: P.FILTERS_WRITE },
+  { path: "filters/new", element: <FilterForm />, permission: P.FILTERS_WRITE },
 
-    {/* Governed metadata (Enterprise only; pages self-gate via /metadata/available) */}
-    <Route path="metadata/schemas" element={<MetadataSchemas />} />
-    <Route path="metadata/schemas/new" element={<MetadataSchemaForm />} />
-    <Route path="metadata/schemas/edit/:id" element={<MetadataSchemaForm />} />
-    <Route path="metadata/vocabularies" element={<MetadataVocabularies />} />
-    <Route path="metadata/compliance" element={<MetadataCompliance />} />
-  </>
-);
+  { path: "compliance", element: <ComplianceOverview />, permission: P.COMPLIANCE_READ },
+  { path: "audit", element: <AuditTrail />, permission: P.AUDIT_READ },
+
+  { path: "submissions", element: <SubmissionReviewQueue />, permission: P.SUBMISSIONS_READ },
+  { path: "submissions/:id", element: <SubmissionReview />, permission: P.SUBMISSIONS_READ },
+  { path: "attestation-templates", element: <AttestationTemplates />, permission: P.ATTESTATION_TEMPLATES_READ },
+
+  // Governed metadata (Enterprise only; pages self-gate via /metadata/available)
+  { path: "metadata/schemas", element: <MetadataSchemas />, permission: P.METADATA_READ },
+  { path: "metadata/schemas/new", element: <MetadataSchemaForm />, permission: P.METADATA_WRITE },
+  { path: "metadata/schemas/edit/:id", element: <MetadataSchemaForm />, permission: P.METADATA_WRITE },
+  { path: "metadata/vocabularies", element: <MetadataVocabularies />, permission: P.METADATA_READ },
+  { path: "metadata/compliance", element: <MetadataCompliance />, permission: P.METADATA_READ },
+];
 
 // SSO profile routes that will be conditionally rendered based on uiOptions.show_sso_config
-const ssoRoutes = (
-  <>
-    <Route path="sso-profiles" element={<SSOProfiles />} />
-    <Route path="sso-profiles/new" element={<SSOProfileEditor />} />
-    <Route path="sso-profiles/edit/:profileId" element={<SSOProfileEditor />} />
-    <Route path="sso-profiles/:profileId" element={<SSOProfileDetails />} />
-  </>
-);
+const ssoRoutes = [
+  { path: "sso-profiles", element: <SSOProfiles />, permission: P.SSO_PROFILES_READ },
+  { path: "sso-profiles/new", element: <SSOProfileEditor />, permission: P.SSO_PROFILES_WRITE },
+  { path: "sso-profiles/edit/:profileId", element: <SSOProfileEditor />, permission: P.SSO_PROFILES_WRITE },
+  { path: "sso-profiles/:profileId", element: <SSOProfileDetails />, permission: P.SSO_PROFILES_READ },
+];
 
 // Group routes that will be conditionally rendered based on features.feature_groups (ENT only)
-const groupRoutes = (
-  <>
-    <Route path="groups" element={<Groups />} />
-    <Route path="groups/:id" element={<GroupDetail />} />
-    <Route path="groups/edit/:id" element={<GroupForm />} />
-    <Route path="groups/new" element={<GroupForm />} />
-  </>
-);
+const groupRoutes = [
+  { path: "groups", element: <Groups />, permission: P.GROUPS_READ },
+  { path: "groups/:id", element: <GroupDetail />, permission: P.GROUPS_READ },
+  { path: "groups/edit/:id", element: <GroupForm />, permission: P.GROUPS_WRITE },
+  { path: "groups/new", element: <GroupForm />, permission: P.GROUPS_WRITE },
+];
 
 // Catalog routes that will be conditionally rendered based on features.feature_groups (ENT only)
-const catalogRoutes = (
-  <>
-    <Route path="catalogs/llms" element={<CatalogueList />} />
-    <Route path="catalogs/llms/:id" element={<CatalogueDetails />} />
-    <Route path="catalogs/llms/edit/:id" element={<CatalogueForm />} />
-    <Route path="catalogs/llms/new" element={<CatalogueForm />} />
-    <Route path="catalogs/data" element={<DataCatalogList />} />
-    <Route path="catalogs/data/:id" element={<DataCatalogDetail />} />
-    <Route path="catalogs/data/edit/:id" element={<DataCatalogForm />} />
-    <Route path="catalogs/data/new" element={<DataCatalogForm />} />
-    <Route path="catalogs/tools" element={<ToolCatalogueList />} />
-    <Route path="catalogs/tools/:id" element={<ToolCatalogueDetails />} />
-    <Route path="catalogs/tools/edit/:id" element={<ToolCatalogueForm />} />
-    <Route path="catalogs/tools/new" element={<ToolCatalogueForm />} />
-  </>
-);
+const catalogRoutes = [
+  { path: "catalogs/llms", element: <CatalogueList />, permission: P.CATALOGUES_READ },
+  { path: "catalogs/llms/:id", element: <CatalogueDetails />, permission: P.CATALOGUES_READ },
+  { path: "catalogs/llms/edit/:id", element: <CatalogueForm />, permission: P.CATALOGUES_WRITE },
+  { path: "catalogs/llms/new", element: <CatalogueForm />, permission: P.CATALOGUES_WRITE },
+  { path: "catalogs/data", element: <DataCatalogList />, permission: P.DATA_CATALOGUES_READ },
+  { path: "catalogs/data/:id", element: <DataCatalogDetail />, permission: P.DATA_CATALOGUES_READ },
+  { path: "catalogs/data/edit/:id", element: <DataCatalogForm />, permission: P.DATA_CATALOGUES_WRITE },
+  { path: "catalogs/data/new", element: <DataCatalogForm />, permission: P.DATA_CATALOGUES_WRITE },
+  { path: "catalogs/tools", element: <ToolCatalogueList />, permission: P.TOOL_CATALOGUES_READ },
+  { path: "catalogs/tools/:id", element: <ToolCatalogueDetails />, permission: P.TOOL_CATALOGUES_READ },
+  { path: "catalogs/tools/edit/:id", element: <ToolCatalogueForm />, permission: P.TOOL_CATALOGUES_WRITE },
+  { path: "catalogs/tools/new", element: <ToolCatalogueForm />, permission: P.TOOL_CATALOGUES_WRITE },
+];
 
 // Model Router routes (Enterprise only - requires feature_model_router)
-const modelRouterRoutes = (
-  <>
-    <Route path="model-routers" element={<ModelRouterList />} />
-    <Route path="model-routers/:id" element={<ModelRouterDetails />} />
-    <Route path="model-routers/edit/:id" element={<ModelRouterForm />} />
-    <Route path="model-routers/new" element={<ModelRouterForm />} />
-  </>
-);
+const modelRouterRoutes = [
+  { path: "model-routers", element: <ModelRouterList />, permission: P.MODEL_ROUTERS_READ },
+  { path: "model-routers/:id", element: <ModelRouterDetails />, permission: P.MODEL_ROUTERS_READ },
+  { path: "model-routers/edit/:id", element: <ModelRouterForm />, permission: P.MODEL_ROUTERS_WRITE },
+  { path: "model-routers/new", element: <ModelRouterForm />, permission: P.MODEL_ROUTERS_WRITE },
+];
 
-export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes };
+// Role routes (Enterprise only; the pages show an upgrade prompt in CE)
+const roleRoutes = [
+  { path: "roles", element: <Roles />, permission: P.ROLES_READ },
+  { path: "roles/:id", element: <RoleDetail />, permission: P.ROLES_READ },
+  { path: "roles/edit/:id", element: <RoleForm />, permission: P.ROLES_WRITE },
+  { path: "roles/new", element: <RoleForm />, permission: P.ROLES_WRITE },
+];
+
+export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes, roleRoutes };
 export default mainAdminRoutes;

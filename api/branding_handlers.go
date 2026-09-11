@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -34,13 +34,13 @@ func (a *API) getBrandingSettings(c *gin.Context) {
 		Type: "branding_settings",
 		ID:   "1",
 		Attributes: BrandingSettingsAttributes{
-			AppTitle:          settings.AppTitle,
-			PrimaryColor:      settings.PrimaryColor,
-			SecondaryColor:    settings.SecondaryColor,
-			BackgroundColor:   settings.BackgroundColor,
-			CustomCSS:         settings.CustomCSS,
-			HasCustomLogo:     settings.HasCustomLogo(),
-			HasCustomFavicon:  settings.HasCustomFavicon(),
+			AppTitle:         settings.AppTitle,
+			PrimaryColor:     settings.PrimaryColor,
+			SecondaryColor:   settings.SecondaryColor,
+			BackgroundColor:  settings.BackgroundColor,
+			CustomCSS:        settings.CustomCSS,
+			HasCustomLogo:    settings.HasCustomLogo(),
+			HasCustomFavicon: settings.HasCustomFavicon(),
 		},
 	}
 
@@ -72,7 +72,7 @@ func (a *API) updateBrandingSettings(c *gin.Context) {
 		})
 		return
 	}
-	currentUser := user.(*models.User)
+	_ = user // identity is checked; authorization is the branding:write check
 
 	// Parse request
 	var req UpdateBrandingSettingsRequest
@@ -116,7 +116,7 @@ func (a *API) updateBrandingSettings(c *gin.Context) {
 	}
 
 	// Update settings
-	settings, err = a.service.UpdateBrandingSettings(settings, currentUser.IsAdmin)
+	settings, err = a.service.UpdateBrandingSettings(settings, authz.Can(c, authz.Write("branding")))
 	if err != nil {
 		if err == services.ErrUnauthorized {
 			c.JSON(http.StatusForbidden, ErrorResponse{
@@ -178,7 +178,7 @@ func (a *API) uploadLogo(c *gin.Context) {
 		})
 		return
 	}
-	currentUser := user.(*models.User)
+	_ = user // identity is checked; authorization is the branding:write check
 
 	// Get file from request
 	file, header, err := c.Request.FormFile("file")
@@ -194,7 +194,7 @@ func (a *API) uploadLogo(c *gin.Context) {
 	defer file.Close()
 
 	// Upload logo
-	settings, err := a.service.UploadLogo(file, header, currentUser.IsAdmin)
+	settings, err := a.service.UploadLogo(file, header, authz.Can(c, authz.Write("branding")))
 	if err != nil {
 		if err == services.ErrUnauthorized {
 			c.JSON(http.StatusForbidden, ErrorResponse{
@@ -270,7 +270,7 @@ func (a *API) uploadFavicon(c *gin.Context) {
 		})
 		return
 	}
-	currentUser := user.(*models.User)
+	_ = user // identity is checked; authorization is the branding:write check
 
 	// Get file from request
 	file, header, err := c.Request.FormFile("file")
@@ -286,7 +286,7 @@ func (a *API) uploadFavicon(c *gin.Context) {
 	defer file.Close()
 
 	// Upload favicon
-	settings, err := a.service.UploadFavicon(file, header, currentUser.IsAdmin)
+	settings, err := a.service.UploadFavicon(file, header, authz.Can(c, authz.Write("branding")))
 	if err != nil {
 		if err == services.ErrUnauthorized {
 			c.JSON(http.StatusForbidden, ErrorResponse{
@@ -360,10 +360,10 @@ func (a *API) resetBranding(c *gin.Context) {
 		})
 		return
 	}
-	currentUser := user.(*models.User)
+	_ = user // identity is checked; authorization is the branding:write check
 
 	// Reset to defaults
-	settings, err := a.service.ResetBrandingToDefaults(currentUser.IsAdmin)
+	settings, err := a.service.ResetBrandingToDefaults(authz.Can(c, authz.Write("branding")))
 	if err != nil {
 		if err == services.ErrUnauthorized {
 			c.JSON(http.StatusForbidden, ErrorResponse{
@@ -537,9 +537,9 @@ type UpdateBrandingSettingsRequest struct {
 }
 
 type BrandingSettingsResponse struct {
-	Type       string                      `json:"type"`
-	ID         string                      `json:"id"`
-	Attributes BrandingSettingsAttributes  `json:"attributes"`
+	Type       string                     `json:"type"`
+	ID         string                     `json:"id"`
+	Attributes BrandingSettingsAttributes `json:"attributes"`
 }
 
 type BrandingSettingsAttributes struct {

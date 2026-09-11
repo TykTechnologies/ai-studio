@@ -403,6 +403,7 @@ message PortalUserContext {
     bool is_admin = 4;
     repeated string groups = 5;              // Group names the user belongs to
     map<string, string> metadata = 6;        // Additional user metadata
+    repeated string permissions = 7;         // Effective permissions ("resource:action"); ["*"] for full administrators
 }
 
 // Configuration schema messages

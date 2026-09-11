@@ -33,6 +33,8 @@ import MainLayout from "./layouts/MainLayout";
 import { NotificationProvider } from "./admin/context/NotificationContext";
 import { EditionProvider } from "./admin/context/EditionContext";
 import { SyncStatusProvider } from "./admin/context/SyncStatusContext";
+import { PermissionsProvider } from "./admin/context/PermissionsContext";
+import { setIdentity, clearIdentity } from "./admin/utils/identityStore";
 
 // Lazy loaded routes for code splitting
 const AdminRoutes = React.lazy(() => import("./routes/AdminRoutes"));
@@ -77,6 +79,7 @@ function App() {
   const [configLoaded, setConfigLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [entitlements, setEntitlements] = useState(null);
+  const [me, setMe] = useState(null);
   const [showSuccessBanner, setShowSuccessBanner] = useState(true);
   const [theme, setTheme] = useState(generateTheme()); // Dynamic theme
   const [customCSS, setCustomCSS] = useState(''); // Custom CSS
@@ -136,14 +139,21 @@ function App() {
         try {
           const response = await pubClient.get("/common/me");
           setIsAuthenticated(true);
-          const attributes = response.data.attributes;
+          const me = response.data;
+          const attributes = me.attributes;
+          // One identity fetch for the whole app: the store feeds the
+          // permissions context, the layouts and the non-React consumers.
+          const identity = setIdentity(me);
+          setMe(me);
           setEntitlements({
             is_admin: attributes.is_admin,
+            has_admin_access: identity.hasAdminAccess,
+            is_full_admin: identity.isFullAdmin,
             ui_options: attributes.ui_options,
             entitlements: attributes.entitlements,
           });
-          console.log("Is admin:", attributes.is_admin);
         } catch (authError) {
+          clearIdentity();
           if (authError.response && authError.response.status === 401) {
             setIsAuthenticated(false);
           } else {
@@ -161,18 +171,6 @@ function App() {
 
     initialize();
   }, []);
-
-  // Store admin entitlements for security checks (no global API exposure)
-  useEffect(() => {
-    if (entitlements?.is_admin) {
-      // Store entitlements globally for security checks
-      window.adminEntitlements = entitlements;
-      console.log('Admin entitlements stored');
-    } else {
-      // Clean up admin entitlements for non-admin users
-      delete window.adminEntitlements;
-    }
-  }, [entitlements]);
 
   if (loading || !configLoaded) {
     return (
@@ -207,6 +205,7 @@ function App() {
   return (
     <Router>
       <EditionProvider>
+        <PermissionsProvider identity={me}>
         <SyncStatusProvider>
         <NotificationProvider>
           <ThemeProvider theme={theme}>
@@ -223,7 +222,11 @@ function App() {
                 isAuthenticated ? (
                   <Navigate
                     to={
-                      entitlements?.is_admin ? "/admin/dash" : "/portal/dashboard"
+                      entitlements?.is_full_admin
+                        ? "/admin/dash"
+                        : entitlements?.has_admin_access
+                          ? "/admin"
+                          : "/portal/dashboard"
                     }
                     replace
                   />
@@ -310,9 +313,9 @@ function App() {
                 </Suspense>
               } />
 
-              {/* Admin Routes — guarded: non-admin users are redirected */}
+              {/* Admin Routes — guarded: users without any admin permission are redirected */}
               <Route path="/admin/*" element={
-                entitlements?.is_admin ? (
+                entitlements?.has_admin_access ? (
                   <Suspense fallback={<RouteLoadingFallback />}>
                     <AdminRoutes uiOptions={entitlements?.ui_options} />
                   </Suspense>
@@ -338,8 +341,10 @@ function App() {
                 path="/"
                 element={
                   isAuthenticated ? (
-                    entitlements?.is_admin === true ? (
+                    entitlements?.is_full_admin === true ? (
                       <Navigate to="/admin/dash" replace />
+                    ) : entitlements?.has_admin_access ? (
+                      <Navigate to="/admin" replace />
                     ) : entitlements?.ui_options?.show_portal ? (
                       <Navigate to="/portal/dashboard" replace />
                     ) : entitlements?.ui_options?.show_chat ? (
@@ -383,6 +388,7 @@ function App() {
         </ThemeProvider>
       </NotificationProvider>
       </SyncStatusProvider>
+        </PermissionsProvider>
       </EditionProvider>
     </Router>
   );

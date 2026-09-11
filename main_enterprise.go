@@ -15,5 +15,6 @@ import (
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/marketplace_management"    // Register enterprise marketplace management service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/model_router"              // Register enterprise model router service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/plugin_security"           // Register enterprise plugin security service
+	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/rbac"                      // Register enterprise role-based access control service
 	_ "github.com/TykTechnologies/midsommar/v2/enterprise/features/sso"                       // Register enterprise SSO service
 )

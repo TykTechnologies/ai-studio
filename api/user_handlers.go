@@ -4,24 +4,23 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
+// validateAdminPermissions guards changes to administrator accounts: the
+// caller must hold users:write (full administrators always do).
 func (a *API) validateAdminPermissions(c *gin.Context) error {
-	currentUser, exists := c.Get("user")
-	if !exists {
+	if _, ok := auth.UserFromContext(c); !ok {
 		return helpers.NewUnauthorizedError("User not authenticated")
 	}
 
-	u, ok := currentUser.(*models.User)
-	if !ok {
-		return helpers.NewUnauthorizedError("User not authenticated")
-	}
-
-	if !u.IsAdmin {
+	if !authz.Can(c, authz.Write("users")) {
 		return helpers.NewForbiddenError("operation only allowed for admin users")
 	}
 
@@ -54,7 +53,7 @@ func (a *API) validateUserInput(userInput UserInput, userId uint) error {
 // @Security BearerAuth
 func (a *API) createUser(c *gin.Context) {
 	var input UserInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 		return
 	}
@@ -64,7 +63,8 @@ func (a *API) createUser(c *gin.Context) {
 		return
 	}
 
-	if input.Data.Attributes.IsAdmin {
+	isAdmin := input.Data.Attributes.IsAdmin != nil && *input.Data.Attributes.IsAdmin
+	if isAdmin {
 		if err := a.validateAdminPermissions(c); err != nil {
 			helpers.SendErrorResponse(c, err)
 			return
@@ -75,7 +75,7 @@ func (a *API) createUser(c *gin.Context) {
 		Email:                input.Data.Attributes.Email,
 		Name:                 input.Data.Attributes.Name,
 		Password:             input.Data.Attributes.Password,
-		IsAdmin:              input.Data.Attributes.IsAdmin,
+		IsAdmin:              isAdmin,
 		ShowChat:             input.Data.Attributes.ShowChat,
 		ShowPortal:           input.Data.Attributes.ShowPortal,
 		EmailVerified:        input.Data.Attributes.EmailVerified,
@@ -88,7 +88,17 @@ func (a *API) createUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeUser(user)})
+	// Optional role assignment (Enterprise): role_ids on the same payload.
+	if roleIDs := bindRoleIDs(c); roleIDs != nil {
+		if !a.reconcileUserRoles(c, user.ID, *roleIDs) {
+			return
+		}
+		if fresh, err := a.service.GetUserByID(user.ID); err == nil {
+			user = fresh
+		}
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"data": a.finishUser(c, serializeUser(user))})
 }
 
 // @Summary Get a user by ID
@@ -125,7 +135,7 @@ func (a *API) getUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeUser(user)})
+	c.JSON(http.StatusOK, gin.H{"data": a.finishUser(c, serializeUser(user))})
 }
 
 // @Summary Update a user
@@ -148,7 +158,7 @@ func (a *API) updateUser(c *gin.Context) {
 	}
 
 	var input UserInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 		return
 	}
@@ -171,12 +181,19 @@ func (a *API) updateUser(c *gin.Context) {
 		}
 	}
 
+	// An omitted is_admin leaves the flag alone. The Enterprise UI manages
+	// access through roles and never sends it.
+	isAdmin := user.IsAdmin
+	if input.Data.Attributes.IsAdmin != nil {
+		isAdmin = *input.Data.Attributes.IsAdmin
+	}
+
 	updatedUser, err := a.service.UpdateUser(
 		user,
 		services.UserDTO{
 			Email:                input.Data.Attributes.Email,
 			Name:                 input.Data.Attributes.Name,
-			IsAdmin:              input.Data.Attributes.IsAdmin,
+			IsAdmin:              isAdmin,
 			ShowChat:             input.Data.Attributes.ShowChat,
 			ShowPortal:           input.Data.Attributes.ShowPortal,
 			EmailVerified:        input.Data.Attributes.EmailVerified,
@@ -190,7 +207,17 @@ func (a *API) updateUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeUser(updatedUser)})
+	// Optional role assignment (Enterprise): role_ids on the same payload.
+	if roleIDs := bindRoleIDs(c); roleIDs != nil {
+		if !a.reconcileUserRoles(c, updatedUser.ID, *roleIDs) {
+			return
+		}
+		if fresh, err := a.service.GetUserByID(updatedUser.ID); err == nil {
+			updatedUser = fresh
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": a.finishUser(c, serializeUser(updatedUser))})
 }
 
 // @Summary Delete a user
@@ -280,26 +307,14 @@ func (a *API) listUsers(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeUsers(users)})
+	c.JSON(http.StatusOK, gin.H{"data": a.finishUsers(c, serializeUsers(users))})
 }
 
 func serializeUser(user *models.User) UserResponse {
 	response := UserResponse{
 		Type: "users",
 		ID:   strconv.FormatUint(uint64(user.ID), 10),
-		Attributes: struct {
-			Email                string          `json:"email"`
-			Name                 string          `json:"name"`
-			IsAdmin              bool            `json:"is_admin"`
-			ShowChat             bool            `json:"show_chat"`
-			ShowPortal           bool            `json:"show_portal"`
-			EmailVerified        bool            `json:"email_verified"`
-			APIKey               string          `json:"api_key"`
-			NotificationsEnabled bool            `json:"notifications_enabled"`
-			AccessToSSOConfig    bool            `json:"access_to_sso_config"`
-			Role                 string          `json:"role"`
-			Groups               []GroupResponse `json:"groups,omitempty"`
-		}{
+		Attributes: UserAttributes{
 			Email:                user.Email,
 			Name:                 user.Name,
 			IsAdmin:              user.IsAdmin,
@@ -307,6 +322,7 @@ func serializeUser(user *models.User) UserResponse {
 			ShowPortal:           user.ShowPortal,
 			EmailVerified:        user.EmailVerified,
 			APIKey:               user.APIKey,
+			HasAPIKey:            user.APIKey != "",
 			NotificationsEnabled: user.NotificationsEnabled,
 			AccessToSSOConfig:    user.AccessToSSOConfig,
 			Role:                 user.GetRole(),
@@ -326,19 +342,7 @@ func serializeUsers(users models.Users) []UserResponse {
 		response := UserResponse{
 			Type: "users",
 			ID:   strconv.FormatUint(uint64(user.ID), 10),
-			Attributes: struct {
-				Email                string          `json:"email"`
-				Name                 string          `json:"name"`
-				IsAdmin              bool            `json:"is_admin"`
-				ShowChat             bool            `json:"show_chat"`
-				ShowPortal           bool            `json:"show_portal"`
-				EmailVerified        bool            `json:"email_verified"`
-				APIKey               string          `json:"api_key"`
-				NotificationsEnabled bool            `json:"notifications_enabled"`
-				AccessToSSOConfig    bool            `json:"access_to_sso_config"`
-				Role                 string          `json:"role"`
-				Groups               []GroupResponse `json:"groups,omitempty"`
-			}{
+			Attributes: UserAttributes{
 				Email:                user.Email,
 				Name:                 user.Name,
 				IsAdmin:              user.IsAdmin,
@@ -346,6 +350,7 @@ func serializeUsers(users models.Users) []UserResponse {
 				ShowPortal:           user.ShowPortal,
 				EmailVerified:        user.EmailVerified,
 				APIKey:               user.APIKey,
+				HasAPIKey:            user.APIKey != "",
 				NotificationsEnabled: user.NotificationsEnabled,
 				AccessToSSOConfig:    user.AccessToSSOConfig,
 				Role:                 user.GetRole(),
@@ -458,7 +463,11 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeUser(user)})
+	// The freshly rolled key is returned once, to whoever rolled it.
+	resp := a.finishUser(c, serializeUser(user))
+	resp.Attributes.APIKey = user.APIKey
+	resp.Attributes.APIKeyHint = ""
+	c.JSON(http.StatusOK, gin.H{"data": resp})
 }
 
 // @Summary Skip user quick start wizard

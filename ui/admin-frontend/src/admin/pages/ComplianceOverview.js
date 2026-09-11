@@ -22,6 +22,7 @@ import BudgetComplianceTab from "../components/compliance/BudgetComplianceTab";
 import ErrorsTab from "../components/compliance/ErrorsTab";
 import FilterEventsTab from "../components/compliance/FilterEventsTab";
 import AppRiskModal from "../components/compliance/AppRiskModal";
+import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 
 const ComplianceOverview = () => {
   const [loading, setLoading] = useState(true);
@@ -96,7 +97,9 @@ const ComplianceOverview = () => {
       setBudgetAlerts(budgetRes.data);
       setErrors(errorsRes.data);
     } catch (err) {
-      if (err.response?.status === 403) {
+      if (isPermissionDenied(err)) {
+        setError("Your role does not include access to the compliance overview");
+      } else if (isEnterpriseFeature(err)) {
         setIsEnterpriseAvailable(false);
       } else {
         setError("Failed to fetch compliance data");

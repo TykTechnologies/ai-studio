@@ -34,6 +34,7 @@ import {
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import marketplaceManagementService from '../services/marketplaceManagementService';
+import { isEnterpriseFeature, isPermissionDenied } from '../utils/apiErrors';
 import {
   TitleBox,
   ContentBox,
@@ -74,8 +75,13 @@ const MarketplaceSettings = () => {
     } catch (error) {
       console.error('Failed to load marketplaces:', error);
 
-      // Check if this is a 403 (Community Edition)
-      if (error.response?.status === 403) {
+      if (isPermissionDenied(error)) {
+        setSnackbar({
+          open: true,
+          message: 'Your role does not include access to marketplace sources',
+          severity: 'warning',
+        });
+      } else if (isEnterpriseFeature(error)) {
         setSnackbar({
           open: true,
           message: 'Multiple marketplace management requires Enterprise Edition',

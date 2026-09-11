@@ -181,6 +181,7 @@ MenuItem.propTypes = {
     icon: PropTypes.node,
     subItems: PropTypes.array,
     exact: PropTypes.bool,
+    permission: PropTypes.oneOfType([PropTypes.string, PropTypes.arrayOf(PropTypes.string)]),
   }).isRequired,
   depth: PropTypes.number,
   parentId: PropTypes.string,

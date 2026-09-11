@@ -86,12 +86,12 @@ func serializeToolCatalogues(toolCatalogues models.ToolCatalogues, db *gorm.DB) 
 			Type: "tool-catalogues",
 			ID:   strconv.FormatUint(uint64(tc.ID), 10),
 			Attributes: struct {
-				Name             string            `json:"name"`
-				ShortDescription string            `json:"short_description"`
-				LongDescription  string            `json:"long_description"`
-				Icon             string            `json:"icon"`
-				Tools            []ToolResponse    `json:"tools"`
-				Tags             []TagResponse     `json:"tags"`
+				Name             string         `json:"name"`
+				ShortDescription string         `json:"short_description"`
+				LongDescription  string         `json:"long_description"`
+				Icon             string         `json:"icon"`
+				Tools            []ToolResponse `json:"tools"`
+				Tags             []TagResponse  `json:"tags"`
 			}{
 				Name:             tc.Name,
 				ShortDescription: tc.ShortDescription,
@@ -112,13 +112,7 @@ func serializeGroups(groups models.Groups) []GroupResponse {
 		result[i] = GroupResponse{
 			Type: "groups",
 			ID:   strconv.FormatUint(uint64(group.ID), 10),
-			Attributes: struct {
-				Name           string                  `json:"name"`
-				Users          []UserResponse          `json:"users,omitempty"`
-				Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
-				DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
-				ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
-			}{
+			Attributes: GroupAttributes{
 				Name: group.Name,
 			},
 		}

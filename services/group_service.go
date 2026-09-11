@@ -107,7 +107,22 @@ func (s *Service) DeleteGroup(id uint) error {
 		return tx.Error
 	}
 
+	// Members lose any roles the team carried; capture them before the
+	// membership rows disappear so their admin flag can be recomputed.
+	var members []uint
+	if err := tx.Table("user_groups").Where("group_id = ?", group.ID).Pluck("user_id", &members).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	if err := group.ClearAssociations(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Role bindings go with the team (table exists in both editions).
+	if err := tx.Where("subject_type = ? AND subject_id = ?", models.RoleBindingSubjectGroup, group.ID).
+		Delete(&models.RoleBinding{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
@@ -118,6 +133,10 @@ func (s *Service) DeleteGroup(id uint) error {
 	}
 
 	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	if err := s.syncAdminFlags(members...); err != nil {
 		return err
 	}
 
@@ -140,7 +159,10 @@ func (s *Service) AddUserToGroup(userID, groupID uint) error {
 		return err
 	}
 
-	return group.AddUser(s.DB, user)
+	if err := group.AddUser(s.DB, user); err != nil {
+		return err
+	}
+	return s.syncAdminFlags(userID)
 }
 
 func (s *Service) RemoveUserFromGroup(userID, groupID uint) error {
@@ -154,7 +176,10 @@ func (s *Service) RemoveUserFromGroup(userID, groupID uint) error {
 		return err
 	}
 
-	return group.RemoveUser(s.DB, user)
+	if err := group.RemoveUser(s.DB, user); err != nil {
+		return err
+	}
+	return s.syncAdminFlags(userID)
 }
 
 func (s *Service) GetGroupUsers(groupID uint, pageSize int, pageNumber int, all bool) (models.Users, int64, int, error) {

@@ -37,6 +37,8 @@ import InfoTooltip from "../components/common/InfoTooltip";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const ModelPriceList = () => {
   const navigate = useNavigate();
@@ -207,13 +209,15 @@ const ModelPriceList = () => {
       <>
         <TitleBox top="64px">
           <Typography variant="headingXLarge">Model prices</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddPrice}
-          >
-            Add model price
-          </PrimaryButton>
+          <Can permission={P.MODEL_PRICES_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddPrice}
+            >
+              Add model price
+            </PrimaryButton>
+          </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Prices define the cost per million tokens for using different language models. You can set the cost per million tokens for input and output, the provider, and the currency. This helps track usage costs, allowing you to manage and optimize expenses when interacting with different models.</Typography>  
@@ -298,11 +302,13 @@ const ModelPriceList = () => {
                         {price.attributes.currency}
                       </StyledTableCell>
                       <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, price)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
+                        <Can permission={P.MODEL_PRICES_WRITE}>
+                          <IconButton
+                            onClick={(event) => handleMenuOpen(event, price)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </Can>
                       </StyledTableCell>
                     </StyledTableRow>
                   ))}

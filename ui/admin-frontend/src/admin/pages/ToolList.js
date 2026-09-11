@@ -33,6 +33,8 @@ import {
 } from "../styles/sharedStyles";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const ToolList = () => {
   const navigate = useNavigate();
@@ -180,13 +182,15 @@ const ToolList = () => {
           >
             Import OpenAPI
           </PrimaryOutlineButton>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddTool}
-          >
-            Add tool
-          </PrimaryButton>
+          <Can permission={P.TOOLS_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddTool}
+            >
+              Add tool
+            </PrimaryButton>
+          </Can>
         </Stack>
       </TitleBox>
       <Box sx={{ p: 3 }}>
@@ -229,11 +233,13 @@ const ToolList = () => {
                     <StyledTableCell>{tool.attributes.description}</StyledTableCell>
                     <StyledTableCell>{tool.attributes.privacy_score}</StyledTableCell>
                     <StyledTableCell align="right">
-                      <IconButton
-                        onClick={(event) => handleMenuOpen(event, tool)}
-                      >
-                        <MoreVertIcon />
-                      </IconButton>
+                      <Can permission={P.TOOLS_WRITE}>
+                        <IconButton
+                          onClick={(event) => handleMenuOpen(event, tool)}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </Can>
                     </StyledTableCell>
                   </StyledTableRow>
                 ))}

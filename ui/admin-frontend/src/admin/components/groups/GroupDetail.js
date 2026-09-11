@@ -12,10 +12,13 @@ import useTeamMembers from "./hooks/useTeamMembers";
 import useSystemFeatures from "../../hooks/useSystemFeatures";
 import GroupCatalogsDisplay from "./components/GroupCatalogsDisplay";
 import { getFeatureFlags } from "../../utils/featureUtils";
+import RoleBadge from "../roles/RoleBadge";
+import { usePermissions } from "../../context/PermissionsContext";
 
 const GroupDetail = () => {
   const navigate = useNavigate();
   const { features } = useSystemFeatures();
+  const { rbacEnabled } = usePermissions();
   
   const {
     group,
@@ -100,6 +103,24 @@ const GroupDetail = () => {
             </Typography>
           </div>
         </Section>
+
+        {/* Roles bound to the team (Enterprise) */}
+        {rbacEnabled && (
+          <Section>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }} data-testid="group-roles">
+              <Typography variant="bodyLargeBold" color="text.primary">
+                Roles
+              </Typography>
+              {(group.attributes?.roles || []).length > 0 ? (
+                group.attributes.roles.map((role) => <RoleBadge key={role.id} role={role} />)
+              ) : (
+                <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
+                  No roles assigned
+                </Typography>
+              )}
+            </div>
+          </Section>
+        )}
 
         {/* Section 2: Team Members */}
         <CollapsibleSection title="Team members" defaultExpanded>

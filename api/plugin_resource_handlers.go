@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -103,7 +104,7 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 	// For non-admins, batch-fetch all accessible plugin resources in one query
 	// to avoid N+1 per resource type.
 	var accessibleByType map[uint]map[string]bool
-	if !currentUser.IsAdmin {
+	if !authz.Can(c, authz.Write("groups")) {
 		allAccessible, err := a.service.GetAllAccessiblePluginResources(currentUser.ID)
 		if err != nil {
 			// Fail-closed: if we can't determine access, return empty

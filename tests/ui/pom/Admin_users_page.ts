@@ -40,7 +40,7 @@ export class AdminUsersPage extends PageTemplate {
         this.EmailInput = this.page.getByRole('textbox', { name: 'Email' });
         this.NameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.PasswordInput = this.page.getByRole('textbox', { name: 'Password' });
-        this.IsAdminCheckbox = this.page.getByRole('checkbox', { name: 'Is Admin' });
+        this.IsAdminCheckbox = this.page.getByRole('checkbox', { name: 'Admin User' });
         this.ShowChatCheckbox = this.page.getByRole('checkbox', { name: 'Show Chat' });
         this.ShowPortalCheckbox = this.page.getByRole('checkbox', { name: 'Show Portal' });
         this.EmailVerifiedCheckbox = this.page.getByRole('checkbox', { name: 'Email Verified' });
@@ -55,7 +55,16 @@ export class AdminUsersPage extends PageTemplate {
     }
 
     async goto() {
-        await this.page.goto('/admin/users');
+        await this.gotoAdminPath('/admin/users');
+    }
+
+    /**
+     * Filters the (paginated) list by name or email so a row can be asserted
+     * regardless of how many users the database holds.
+     */
+    async searchFor(text: string) {
+        await this.page.getByPlaceholder('Search by name or email...').fill(text);
+        await this.page.waitForTimeout(800); // debounced request
     }
 
     async createUser(params: UserParams) {
@@ -64,10 +73,14 @@ export class AdminUsersPage extends PageTemplate {
         await this.NameInput.fill(params.name);
         await this.PasswordInput.fill(params.password);
         
-        if (params.isAdmin) {
-            await this.IsAdminCheckbox.check();
-        } else {
-            await this.IsAdminCheckbox.uncheck();
+        // With roles active (Enterprise) the admin switch is replaced by a
+        // role selector; only drive the switch when it is on the page.
+        if (await this.IsAdminCheckbox.isVisible().catch(() => false)) {
+            if (params.isAdmin) {
+                await this.IsAdminCheckbox.check();
+            } else {
+                await this.IsAdminCheckbox.uncheck();
+            }
         }
         
         if (params.showChat) {
@@ -112,7 +125,7 @@ export class AdminUsersPage extends PageTemplate {
             await this.PasswordInput.fill(params.password);
         }
         
-        if (params.isAdmin !== undefined) {
+        if (params.isAdmin !== undefined && (await this.IsAdminCheckbox.isVisible().catch(() => false))) {
             if (params.isAdmin) {
                 await this.IsAdminCheckbox.check();
             } else {

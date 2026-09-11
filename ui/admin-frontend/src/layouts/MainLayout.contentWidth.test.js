@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import MainLayout from './MainLayout';
-import pubClient from '../admin/utils/pubClient';
 import useSystemFeatures from '../admin/hooks/useSystemFeatures';
+import { usePermissions } from '../admin/context/PermissionsContext';
 
 jest.mock('../admin/utils/pubClient', () => ({
   __esModule: true,
@@ -12,6 +12,9 @@ jest.mock('../admin/utils/pubClient', () => ({
   logout: jest.fn(),
 }));
 jest.mock('../admin/hooks/useSystemFeatures');
+jest.mock('../admin/context/PermissionsContext', () => ({
+  usePermissions: jest.fn(),
+}));
 jest.mock('../components/common/TopNavigation', () => ({
   __esModule: true,
   default: () => <div data-testid="top-nav" />,
@@ -58,7 +61,11 @@ const renderAt = (path) =>
 describe('MainLayout content width', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    pubClient.get.mockResolvedValue(me);
+    usePermissions.mockReturnValue({
+      identity: { raw: me.data },
+      isFullAdmin: false,
+      hasAdminAccess: false,
+    });
     useSystemFeatures.mockReturnValue({
       features: { feature_portal: true, feature_chat: true, feature_gateway: true },
     });

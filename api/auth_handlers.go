@@ -11,15 +11,17 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
-	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
-	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
+	"github.com/TykTechnologies/midsommar/v2/pkg/oauthscope"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/group_access"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
+	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -82,6 +84,7 @@ func (a *API) handleFeatureSet(c *gin.Context) {
 	featureSet["hub_spoke_multi_tenant"] = edge_management.IsEnterpriseAvailable()
 	featureSet["feature_groups"] = group_access.IsFilteringEnabled()
 	featureSet["feature_model_router"] = model_router.IsEnterpriseAvailable()
+	featureSet["feature_rbac"] = a.service.Authz().Enabled()
 
 	if cfg := config.Get(""); cfg != nil {
 		featureSet["docs_url"] = cfg.DocsURL
@@ -429,6 +432,21 @@ func (a *API) handleMe(c *gin.Context) {
 	}
 
 	skipEntitlements := c.Query("skip_entitlements") == "true"
+
+	// Effective permissions: the wildcard for admins in CE, the resolved
+	// role set in Enterprise. Resolving also repairs a stale is_admin flag,
+	// so read the flag after this.
+	perms, err := authz.Permissions(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+	rbacSvc := a.service.Authz()
 	isSuperAdmin := u.GetRole() == models.RoleSuperAdmin
 
 	var response UserWithEntitlementsResponse
@@ -438,6 +456,15 @@ func (a *API) handleMe(c *gin.Context) {
 	response.Attributes.Name = u.Name
 	response.Attributes.IsAdmin = u.IsAdmin
 	response.Attributes.IsSuperAdmin = isSuperAdmin
+	response.Attributes.HasAdminAccess = !perms.IsEmpty()
+	response.Attributes.Permissions = perms.List()
+	response.Attributes.Roles = []rbac.RoleSummary{}
+	response.Attributes.RBACEnabled = rbacSvc.Enabled()
+	if rbacSvc.Enabled() {
+		if eff, err := rbacSvc.EffectivePermissions(c.Request.Context(), u.ID); err == nil && eff.Roles != nil {
+			response.Attributes.Roles = eff.Roles
+		}
+	}
 
 	if skipEntitlements {
 		c.JSON(http.StatusOK, response)
@@ -457,7 +484,12 @@ func (a *API) handleMe(c *gin.Context) {
 
 	response.Attributes.UIOptions.ShowChat = u.ShowChat
 	response.Attributes.UIOptions.ShowPortal = u.ShowPortal
-	response.Attributes.UIOptions.ShowSSOConfig = u.IsAdmin && u.AccessToSSOConfig && sso.IsEnterpriseAvailable()
+	if rbacSvc.Enabled() {
+		// Identity provider configuration follows the sso-profiles permission.
+		response.Attributes.UIOptions.ShowSSOConfig = perms.Has(authz.Read("sso-profiles")) && sso.IsEnterpriseAvailable()
+	} else {
+		response.Attributes.UIOptions.ShowSSOConfig = u.IsAdmin && u.AccessToSSOConfig && sso.IsEnterpriseAvailable()
+	}
 	response.Attributes.UIOptions.SkipQuickStart = u.SkipQuickStart
 	response.Attributes.Entitlements.Catalogues = serializeCatalogues(entitlements.Catalogues)
 	response.Attributes.Entitlements.DataCatalogues = serializeDataCatalogues(entitlements.DataCatalogues)

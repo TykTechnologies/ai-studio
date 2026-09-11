@@ -3016,6 +3016,7 @@ type PortalUserContext struct {
 	IsAdmin       bool                   `protobuf:"varint,4,opt,name=is_admin,json=isAdmin,proto3" json:"is_admin,omitempty"`
 	Groups        []string               `protobuf:"bytes,5,rep,name=groups,proto3" json:"groups,omitempty"`                                                                               // Group names the user belongs to
 	Metadata      map[string]string      `protobuf:"bytes,6,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Additional user metadata
+	Permissions   []string               `protobuf:"bytes,7,rep,name=permissions,proto3" json:"permissions,omitempty"`                                                                     // Effective permissions ("resource:action"); ["*"] for full administrators
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3088,6 +3089,13 @@ func (x *PortalUserContext) GetGroups() []string {
 func (x *PortalUserContext) GetMetadata() map[string]string {
 	if x != nil {
 		return x.Metadata
+	}
+	return nil
+}
+
+func (x *PortalUserContext) GetPermissions() []string {
+	if x != nil {
+		return x.Permissions
 	}
 	return nil
 }
@@ -6208,14 +6216,15 @@ const file_proto_plugin_proto_rawDesc = "" +
 	"\x12PortalCallResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\tR\x04data\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\x8b\x02\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"\xad\x02\n" +
 	"\x11PortalUserContext\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\rR\x06userId\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x19\n" +
 	"\bis_admin\x18\x04 \x01(\bR\aisAdmin\x12\x16\n" +
 	"\x06groups\x18\x05 \x03(\tR\x06groups\x12C\n" +
-	"\bmetadata\x18\x06 \x03(\v2'.plugin.PortalUserContext.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\x06 \x03(\v2'.plugin.PortalUserContext.MetadataEntryR\bmetadata\x12 \n" +
+	"\vpermissions\x18\a \x03(\tR\vpermissions\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x18\n" +

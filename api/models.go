@@ -1,6 +1,10 @@
 package api
 
-import "time"
+import (
+	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/services/rbac"
+)
 
 // UserInput represents the input for user-related operations
 // @Description User input model
@@ -11,7 +15,7 @@ type UserInput struct {
 			Email                string `json:"email"`
 			Name                 string `json:"name"`
 			Password             string `json:"password,omitempty"`
-			IsAdmin              bool   `json:"is_admin"`
+			IsAdmin              *bool  `json:"is_admin"` // omitted means unchanged; roles are the source of truth in Enterprise
 			ShowChat             bool   `json:"show_chat"`
 			ShowPortal           bool   `json:"show_portal"`
 			EmailVerified        bool   `json:"email_verified"`
@@ -58,35 +62,49 @@ type UserGroupInput struct {
 // UserResponse represents the response for user-related operations
 // @Description User response model
 type UserResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
-	Attributes struct {
-		Email                string          `json:"email"`
-		Name                 string          `json:"name"`
-		IsAdmin              bool            `json:"is_admin"`
-		ShowChat             bool            `json:"show_chat"`
-		ShowPortal           bool            `json:"show_portal"`
-		EmailVerified        bool            `json:"email_verified"`
-		APIKey               string          `json:"api_key"`
-		NotificationsEnabled bool            `json:"notifications_enabled"`
-		AccessToSSOConfig    bool            `json:"access_to_sso_config"`
-		Role                 string          `json:"role"`
-		Groups               []GroupResponse `json:"groups,omitempty"`
-	} `json:"attributes"`
+	Type       string         `json:"type"`
+	ID         string         `json:"id"`
+	Attributes UserAttributes `json:"attributes"`
+}
+
+// UserAttributes is the user payload. api_key is only present when the
+// caller may see it (their own key, or they hold users:write); otherwise
+// api_key_hint carries the last four characters.
+// @Description User attributes
+type UserAttributes struct {
+	Email                string             `json:"email"`
+	Name                 string             `json:"name"`
+	IsAdmin              bool               `json:"is_admin"`
+	ShowChat             bool               `json:"show_chat"`
+	ShowPortal           bool               `json:"show_portal"`
+	EmailVerified        bool               `json:"email_verified"`
+	APIKey               string             `json:"api_key,omitempty"`
+	APIKeyHint           string             `json:"api_key_hint,omitempty"`
+	HasAPIKey            bool               `json:"has_api_key"`
+	NotificationsEnabled bool               `json:"notifications_enabled"`
+	AccessToSSOConfig    bool               `json:"access_to_sso_config"`
+	Role                 string             `json:"role"`
+	Groups               []GroupResponse    `json:"groups,omitempty"`
+	Roles                []rbac.RoleSummary `json:"roles,omitempty"`
 }
 
 // GroupResponse represents the response for group-related operations
 // @Description Group response model
 type GroupResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
-	Attributes struct {
-		Name           string                  `json:"name"`
-		Users          []UserResponse          `json:"users,omitempty"`
-		Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
-		DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
-		ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
-	} `json:"attributes"`
+	Type       string          `json:"type"`
+	ID         string          `json:"id"`
+	Attributes GroupAttributes `json:"attributes"`
+}
+
+// GroupAttributes is the group (team) payload.
+// @Description Group attributes
+type GroupAttributes struct {
+	Name           string                  `json:"name"`
+	Users          []UserResponse          `json:"users,omitempty"`
+	Catalogues     []CatalogueResponse     `json:"catalogues,omitempty"`
+	DataCatalogues []DataCatalogueResponse `json:"data_catalogues,omitempty"`
+	ToolCatalogues []ToolCatalogueResponse `json:"tool_catalogues,omitempty"`
+	Roles          []rbac.RoleSummary      `json:"roles,omitempty"`
 }
 
 // ErrorResponse represents an error response
@@ -122,18 +140,18 @@ type LLMInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name             string   `json:"name"`
-			APIKey           string   `json:"api_key"`
-			APIEndpoint      string   `json:"api_endpoint"`
-			PrivacyScore     int      `json:"privacy_score"`
-			ShortDescription string   `json:"short_description"`
-			LongDescription  string   `json:"long_description"`
-			LogoURL          string   `json:"logo_url"`
-			Vendor           string   `json:"vendor"`
-			Active           bool     `json:"active"`
-			Filters          []uint   `json:"filters"`
-			DefaultModel     string   `json:"default_model"`
-			AllowedModels    []string `json:"allowed_models"`
+			Name             string                 `json:"name"`
+			APIKey           string                 `json:"api_key"`
+			APIEndpoint      string                 `json:"api_endpoint"`
+			PrivacyScore     int                    `json:"privacy_score"`
+			ShortDescription string                 `json:"short_description"`
+			LongDescription  string                 `json:"long_description"`
+			LogoURL          string                 `json:"logo_url"`
+			Vendor           string                 `json:"vendor"`
+			Active           bool                   `json:"active"`
+			Filters          []uint                 `json:"filters"`
+			DefaultModel     string                 `json:"default_model"`
+			AllowedModels    []string               `json:"allowed_models"`
 			MonthlyBudget    *float64               `json:"monthly_budget"`
 			BudgetStartDate  *string                `json:"budget_start_date"`
 			Namespace        string                 `json:"namespace,omitempty"`
@@ -170,30 +188,30 @@ type PluginInput struct {
 // LLMResponse represents the response for LLM-related operations
 // @Description LLM response model
 type LLMResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
+	Type string `json:"type"`
+	ID   string `json:"id"`
 	// Governed metadata (Enterprise): admin responses carry the raw values map and a
 	// status; portal responses carry a display-ready [{key,label,type,value}] list.
 	GovernedMetadata       interface{} `json:"governed_metadata,omitempty"`
 	GovernedMetadataStatus string      `json:"governed_metadata_status,omitempty"`
-	Attributes struct {
-		Name             string           `json:"name"`
-		APIKey           string           `json:"api_key"`
-		HasAPIKey        bool             `json:"has_api_key"`
-		CredentialStatus string           `json:"credential_status"`
-		CredentialRef    string           `json:"credential_ref,omitempty"`
-		APIEndpoint      string           `json:"api_endpoint"`
-		PrivacyScore     int              `json:"privacy_score"`
-		ShortDescription string           `json:"short_description"`
-		LongDescription  string           `json:"long_description"`
-		LogoURL          string           `json:"logo_url"`
-		Vendor           string           `json:"vendor"`
-		Active           bool             `json:"active"`
-		Filters          []FilterResponse `json:"filters"`
-		DefaultModel     string           `json:"default_model"`
-		AllowedModels    []string         `json:"allowed_models"`
-		MonthlyBudget    *float64         `json:"monthly_budget"`
-		BudgetStartDate  *time.Time       `json:"budget_start_date"`
+	Attributes             struct {
+		Name             string                 `json:"name"`
+		APIKey           string                 `json:"api_key"`
+		HasAPIKey        bool                   `json:"has_api_key"`
+		CredentialStatus string                 `json:"credential_status"`
+		CredentialRef    string                 `json:"credential_ref,omitempty"`
+		APIEndpoint      string                 `json:"api_endpoint"`
+		PrivacyScore     int                    `json:"privacy_score"`
+		ShortDescription string                 `json:"short_description"`
+		LongDescription  string                 `json:"long_description"`
+		LogoURL          string                 `json:"logo_url"`
+		Vendor           string                 `json:"vendor"`
+		Active           bool                   `json:"active"`
+		Filters          []FilterResponse       `json:"filters"`
+		DefaultModel     string                 `json:"default_model"`
+		AllowedModels    []string               `json:"allowed_models"`
+		MonthlyBudget    *float64               `json:"monthly_budget"`
+		BudgetStartDate  *time.Time             `json:"budget_start_date"`
 		Namespace        string                 `json:"namespace"`
 		DontLogBodies    bool                   `json:"dont_log_bodies"`
 		Plugins          []PluginResponse       `json:"plugins"`
@@ -305,12 +323,12 @@ type DatasourceInput struct {
 // DatasourceResponse represents the response for datasource-related operations
 // @Description Datasource response model
 type DatasourceResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
+	Type string `json:"type"`
+	ID   string `json:"id"`
 	// Governed metadata (Enterprise); see LLMResponse.
 	GovernedMetadata       interface{} `json:"governed_metadata,omitempty"`
 	GovernedMetadataStatus string      `json:"governed_metadata_status,omitempty"`
-	Attributes struct {
+	Attributes             struct {
 		Name             string              `json:"name"`
 		ShortDescription string              `json:"short_description"`
 		LongDescription  string              `json:"long_description"`
@@ -558,9 +576,9 @@ type ToolInput struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Name           string   `json:"name"`
-			Description    string   `json:"description"`
-			ToolType       string   `json:"tool_type"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			ToolType    string `json:"tool_type"`
 			// OASSpec must be the base64 encoding of the UTF-8 OpenAPI
 			// document. Raw JSON or YAML is rejected with a 400.
 			OASSpec        string   `json:"oas_spec"`
@@ -578,12 +596,12 @@ type ToolInput struct {
 // ToolResponse represents the response for tool-related operations
 // @Description Tool response model
 type ToolResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
+	Type string `json:"type"`
+	ID   string `json:"id"`
 	// Governed metadata (Enterprise); see LLMResponse.
 	GovernedMetadata       interface{} `json:"governed_metadata,omitempty"`
 	GovernedMetadataStatus string      `json:"governed_metadata_status,omitempty"`
-	Attributes struct {
+	Attributes             struct {
 		Name           string              `json:"name"`
 		Description    string              `json:"description"`
 		ToolType       string              `json:"tool_type"`
@@ -967,7 +985,16 @@ type UserWithEntitlementsResponse struct {
 		Name         string `json:"name"`
 		IsAdmin      bool   `json:"is_admin"`
 		IsSuperAdmin bool   `json:"is_super_admin"`
-		UIOptions    struct {
+		// HasAdminAccess is true when the user holds at least one permission
+		// and may therefore open the administration surface.
+		HasAdminAccess bool `json:"has_admin_access"`
+		// Permissions is the effective permission set; ["*"] for full admins.
+		Permissions []string `json:"permissions"`
+		// Roles lists the roles behind the permissions (Enterprise only).
+		Roles []rbac.RoleSummary `json:"roles"`
+		// RBACEnabled reports whether fine-grained roles are active.
+		RBACEnabled bool `json:"rbac_enabled"`
+		UIOptions   struct {
 			ShowChat       bool `json:"show_chat"`
 			ShowPortal     bool `json:"show_portal"`
 			ShowSSOConfig  bool `json:"show_sso_config"`
@@ -1066,22 +1093,22 @@ type PaginatedProxyLogs struct {
 // FrontendConfig holds front-end configuration settings
 // @Description Front-end config model
 type FrontendConfig struct {
-	APIBaseURL           string            `json:"apiBaseURL"`
-	ProxyURL             string            `json:"proxyURL"`
-	ToolDisplayURL       string            `json:"toolDisplayURL"`
-	DataSourceDisplayURL string            `json:"dataSourceDisplayURL"`
+	APIBaseURL           string `json:"apiBaseURL"`
+	ProxyURL             string `json:"proxyURL"`
+	ToolDisplayURL       string `json:"toolDisplayURL"`
+	DataSourceDisplayURL string `json:"dataSourceDisplayURL"`
 	// UnifiedRouterPath is the base path of the gateway's unified OpenAI-compatible
 	// ingress ({base}/chat/completions), normalized as the proxy itself resolves it.
 	// Empty when the ingress is disabled, so the portal hides it instead of
 	// advertising an endpoint that would 404.
-	UnifiedRouterPath    string            `json:"unifiedRouterPath"`
-	DefaultSignUpMode    string            `json:"defaultSignUpMode"`
-	TIBEnabled           bool              `json:"tibEnabled"`
-	IsEnterprise         bool              `json:"is_enterprise"`
-	DocsLinks            map[string]string `json:"docsLinks"`
-	Branding             *BrandingConfig   `json:"branding,omitempty"`
-	DocsEnabled          bool              `json:"docsEnabled"`
-	DocsURL              string            `json:"docsURL,omitempty"`
+	UnifiedRouterPath string            `json:"unifiedRouterPath"`
+	DefaultSignUpMode string            `json:"defaultSignUpMode"`
+	TIBEnabled        bool              `json:"tibEnabled"`
+	IsEnterprise      bool              `json:"is_enterprise"`
+	DocsLinks         map[string]string `json:"docsLinks"`
+	Branding          *BrandingConfig   `json:"branding,omitempty"`
+	DocsEnabled       bool              `json:"docsEnabled"`
+	DocsURL           string            `json:"docsURL,omitempty"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend
@@ -1318,14 +1345,15 @@ type GroupListResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name               string   `json:"name"`
-		UserCount          int      `json:"user_count"`
-		CatalogueCount     int      `json:"catalogue_count"`
-		DataCatalogueCount int      `json:"data_catalogue_count"`
-		ToolCatalogueCount int      `json:"tool_catalogue_count"`
-		CatalogueNames     []string `json:"catalogue_names"`
-		DataCatalogueNames []string `json:"data_catalogue_names"`
-		ToolCatalogueNames []string `json:"tool_catalogue_names"`
+		Name               string             `json:"name"`
+		UserCount          int                `json:"user_count"`
+		CatalogueCount     int                `json:"catalogue_count"`
+		DataCatalogueCount int                `json:"data_catalogue_count"`
+		ToolCatalogueCount int                `json:"tool_catalogue_count"`
+		CatalogueNames     []string           `json:"catalogue_names"`
+		DataCatalogueNames []string           `json:"data_catalogue_names"`
+		ToolCatalogueNames []string           `json:"tool_catalogue_names"`
+		Roles              []rbac.RoleSummary `json:"roles,omitempty"`
 	} `json:"attributes"`
 }
 

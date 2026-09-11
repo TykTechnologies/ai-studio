@@ -31,6 +31,8 @@ import {
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 import useAdminData from "../hooks/useAdminData";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const FilterList = memo(() => {
   const navigate = useNavigate();
@@ -172,13 +174,15 @@ const FilterList = memo(() => {
       <>
         <TitleBox top="64px">
           <Typography variant="headingXLarge">Filters</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddFilter}
-          >
-            Add filter
-          </PrimaryButton>
+          <Can permission={P.FILTERS_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddFilter}
+            >
+              Add filter
+            </PrimaryButton>
+          </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>
@@ -218,11 +222,13 @@ const FilterList = memo(() => {
                         {filter.attributes.response_filter ? "Response" : "Request"}
                       </StyledTableCell>
                       <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, filter)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
+                        <Can permission={P.FILTERS_WRITE}>
+                          <IconButton
+                            onClick={(event) => handleMenuOpen(event, filter)}
+                          >
+                            <MoreVertIcon />
+                          </IconButton>
+                        </Can>
                       </StyledTableCell>
                     </StyledTableRow>
                   ))}

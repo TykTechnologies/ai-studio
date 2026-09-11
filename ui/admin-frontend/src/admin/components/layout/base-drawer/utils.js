@@ -41,3 +41,33 @@ export const findParentItemsForPath = (items, currentPath) => {
   
   return result;
 };
+
+/**
+ * Drops menu items the user may not see. A leaf is kept when isItemAllowed
+ * returns true for it; a group is kept only if at least one of its sub-items
+ * survives (or it has a path of its own and is allowed).
+ * @param {Array} items - menu items ({ id, text, path, permission, subItems })
+ * @param {(item: object) => boolean} isItemAllowed
+ * @returns {Array} filtered items
+ */
+export const filterMenuItems = (items, isItemAllowed = () => true) => {
+  const out = [];
+  for (const item of items || []) {
+    if (!item) continue;
+    if (Array.isArray(item.subItems) && item.subItems.length > 0) {
+      const subItems = filterMenuItems(item.subItems, isItemAllowed);
+      if (subItems.length === 0) continue;
+      if (item.permission && !isItemAllowed(item)) continue;
+      out.push({ ...item, subItems });
+      continue;
+    }
+    if (Array.isArray(item.subItems) && item.subItems.length === 0 && !item.path) {
+      // A declared-but-empty group is nothing to show.
+      continue;
+    }
+    if (isItemAllowed(item)) {
+      out.push(item);
+    }
+  }
+  return out;
+};

@@ -386,7 +386,9 @@ async function ensureDevUserExists(page: Page): Promise<void> {
 
       if (devUser) {
         console.log('Dev user already exists');
-        // Update to ensure correct settings
+        // Update to ensure correct settings. PATCH /users/:id replaces the
+        // whole attribute set, so resend the identity fields too or they are
+        // blanked.
         const updateResponse = await page.request.patch(`${config.api_url}/api/v1/users/${devUser.id}`, {
           headers,
           data: {
@@ -394,9 +396,12 @@ async function ensureDevUserExists(page: Page): Promise<void> {
               type: 'users',
               id: devUser.id,
               attributes: {
+                email: devUser.attributes?.email || config.dev_user_email,
+                name: devUser.attributes?.name || config.dev_user_name,
                 email_verified: true,
                 show_chat: true,
                 show_portal: true,
+                notifications_enabled: devUser.attributes?.notifications_enabled ?? false,
               },
             },
           },

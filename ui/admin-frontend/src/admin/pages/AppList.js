@@ -36,6 +36,8 @@ import {
 } from "../styles/sharedStyles";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import Can from "../components/rbac/Can";
+import { P } from "../rbac/permissions";
 
 const AppList = () => {
   const navigate = useNavigate();
@@ -313,13 +315,15 @@ const AppList = () => {
       <>
         <TitleBox top="64px">
           <Typography variant="headingXLarge">Apps</Typography>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddApp}
-          >
-            Add app
-          </PrimaryButton>
+          <Can permission={P.APPS_WRITE}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddApp}
+            >
+              Add app
+            </PrimaryButton>
+          </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>
@@ -431,11 +435,13 @@ const AppList = () => {
                             "Not set"}
                         </StyledTableCell>
                         <StyledTableCell align="right">
-                          <IconButton
-                            onClick={(event) => handleMenuOpen(event, app)}
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
+                          <Can permission={P.APPS_WRITE}>
+                            <IconButton
+                              onClick={(event) => handleMenuOpen(event, app)}
+                            >
+                              <MoreVertIcon />
+                            </IconButton>
+                          </Can>
                         </StyledTableCell>
                       </StyledTableRow>
                     ))
