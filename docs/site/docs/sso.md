@@ -39,7 +39,9 @@ Administrators configure SSO providers within the Tyk AI Studio administration i
     *   Map IdP attributes to Tyk AI Studio user fields (e.g., `given_name` -> First Name, `family_name` -> Last Name).
 4.  **Group Mapping (Optional but Recommended):** Configure rules to automatically assign users to Tyk AI Studio [Groups](./user-management.md) based on group information received from the IdP.
     *   *Example:* If the IdP sends a `groups` claim containing "Tyk AI Studio Admins", map this to automatically add the user to the "Administrators" group in Tyk AI Studio.
-5.  **Enable Provider:** Activate the configured IdP for user login.
+    *   Team membership is re-read from the claims on every login, so the IdP stays the source of truth. Because RBAC roles bind to teams, this is also how an IdP group grants access to the administration console.
+5.  **New User Defaults:** Choose which surfaces users provisioned through this profile start with: `new_user_show_portal` (the AI Portal) and `new_user_show_chat` (Chat). Both default to on. They are applied only when the user is first created; existing users keep whatever an administrator has set. A typical enterprise setup is "new users see the AI Portal, and land in the team their IdP group maps to", with console access coming from a role bound to that team.
+6.  **Enable Provider:** Activate the configured IdP for user login.
 
 ## Login Flow
 
@@ -51,8 +53,8 @@ When SSO is enabled:
 4.  User authenticates with the IdP (using their corporate password, MFA, etc.).
 5.  Upon successful authentication, the IdP redirects the user back to Tyk AI Studio (via TIB) with an authentication assertion (e.g., OIDC ID token, SAML response).
 6.  TIB validates the assertion and extracts user profile information.
-7.  Tyk AI Studio finds an existing user matching the unique identifier or provisions a new user account based on the received profile information (Just-In-Time Provisioning).
-8.  Group memberships may be updated based on configured mapping rules.
+7.  Tyk AI Studio finds an existing user matching the unique identifier or provisions a new user account based on the received profile information (Just-In-Time Provisioning). A newly provisioned user gets the profile's New User Defaults for Portal and Chat visibility.
+8.  Group memberships are updated based on configured mapping rules.
 9.  The user is logged into Tyk AI Studio.
 
 ## Benefits

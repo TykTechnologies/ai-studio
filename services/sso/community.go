@@ -36,6 +36,6 @@ func (s *communityService) ResolveNonce(token string, consume bool) (*NonceToken
 	return nil, ErrSSONotAvailable
 }
 
-func (s *communityService) HandleSSO(emailAddress, displayName, groupID string, groupsIDs []string, ssoOnlyForRegisteredUsers bool) (*models.User, error) {
+func (s *communityService) HandleSSO(login *NonceTokenRequest) (*models.User, error) {
 	return nil, ErrSSONotAvailable
 }

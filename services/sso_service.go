@@ -11,6 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	tykerrors "github.com/TykTechnologies/tyk-identity-broker/error"
 	"github.com/TykTechnologies/tyk-identity-broker/initializer"
 	"github.com/TykTechnologies/tyk-identity-broker/providers"
@@ -43,6 +44,7 @@ type NonceTokenRequest struct {
 	GroupsIDs                 []string
 	DisplayName               string
 	SSOOnlyForRegisteredUsers bool
+	ProfileID                 string    // identity provider profile the login came through; may be empty
 	ExpiresAt                 time.Time // New field for expiry
 }
 
@@ -103,9 +105,15 @@ func (s *SSOService) InitInternalTIB() {
 }
 
 func (s *SSOService) setCustomDispatcher() {
-	s.InternalTIB.tykAPIHandler.CustomDispatcher = func(target tyk.Endpoint,
-		method, _ string, body io.Reader,
-	) ([]byte, int, error) {
+	s.InternalTIB.tykAPIHandler.CustomDispatcher = s.dispatcherFor("")
+}
+
+// dispatcherFor returns the in-process dispatcher the broker uses to call
+// back into Studio. When bound to a profile it tags the call with that
+// profile's ID so the nonce, and therefore provisioning, knows which
+// identity provider the login came through.
+func (s *SSOService) dispatcherFor(profileID string) func(tyk.Endpoint, string, string, io.Reader) ([]byte, int, error) {
+	return func(target tyk.Endpoint, method, _ string, body io.Reader) ([]byte, int, error) {
 		preparedEndpoint := string(target)
 
 		newRequest, err := http.NewRequest(method, preparedEndpoint, body)
@@ -115,6 +123,9 @@ func (s *SSOService) setCustomDispatcher() {
 		}
 
 		newRequest.Header.Add("Authorization", s.config.APISecret)
+		if profileID != "" {
+			newRequest.Header.Set(sso.ProfileIDHeader, profileID)
+		}
 
 		recorder := httptest.NewRecorder()
 		// virtual server to process the requests from tib to portal
@@ -136,11 +147,15 @@ func (s *SSOService) setCustomDispatcher() {
 }
 
 func (s *SSOService) GetTapProfile(id string) (tap.TAProvider, *tap.Profile, error) {
+	// The broker keeps a pointer to the handler it is given, so a per-call
+	// copy bound to this profile is what tags the nonce request.
+	handler := s.InternalTIB.tykAPIHandler
+	handler.CustomDispatcher = s.dispatcherFor(id)
 	thisIdentityProvider, thisProfile, err := providers.GetTapProfile(
 		s.InternalTIB.authConfigStore,
 		s.InternalTIB.kvStore,
 		id,
-		s.InternalTIB.tykAPIHandler)
+		handler)
 	if err != nil {
 		slog.Error("Failed to get TAP profile", "id", id, "error", err.Error.Error())
 		return nil, nil, helpers.NewInternalServerError(fmt.Sprintf("Failed to get TAP profile: %s", err.Error.Error()))
@@ -198,11 +213,31 @@ func (s *SSOService) ResolveNonce(token string, consume bool) (*NonceTokenReques
 	return &tokenData, nil
 }
 
-func (s *SSOService) createUserWithTx(tx *gorm.DB, email, name string) (*models.User, error) {
+// provisioningProfile loads the identity provider profile a login came
+// through. A missing or unknown ID yields nil, which ProvisioningDefaults
+// treats as "show everything".
+func (s *SSOService) provisioningProfile(tx *gorm.DB, profileID string) *models.Profile {
+	if profileID == "" {
+		return nil
+	}
+	profile := models.NewProfile()
+	if err := profile.Get(tx, profileID); err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			slog.Error("Failed to load SSO profile for provisioning defaults", "profileID", profileID, "error", err)
+		}
+		return nil
+	}
+	return profile
+}
+
+func (s *SSOService) createUserWithTx(tx *gorm.DB, email, name string, profile *models.Profile) (*models.User, error) {
+	showPortal, showChat := profile.ProvisioningDefaults()
 	newUser := &models.User{
 		Email:         email,
 		Name:          name,
 		EmailVerified: true,
+		ShowPortal:    showPortal,
+		ShowChat:      showChat,
 	}
 
 	if err := newUser.Create(tx); err != nil {
@@ -232,7 +267,14 @@ func (s *SSOService) notifyUserCreation(user *models.User) {
 	}
 }
 
-func (s *SSOService) HandleSSO(emailAddress, displayName, groupID string, groupsIDs []string, ssoOnlyForRegisteredUsers bool) (*models.User, error) {
+func (s *SSOService) HandleSSO(login *NonceTokenRequest) (*models.User, error) {
+	if login == nil {
+		return nil, helpers.NewBadRequestError("Missing SSO login data")
+	}
+	emailAddress, displayName := login.EmailAddress, login.DisplayName
+	groupID, groupsIDs := login.GroupID, login.GroupsIDs
+	ssoOnlyForRegisteredUsers := login.SSOOnlyForRegisteredUsers
+
 	var user *models.User
 	var isNewUser bool
 
@@ -251,7 +293,7 @@ func (s *SSOService) HandleSSO(emailAddress, displayName, groupID string, groups
 				return helpers.NewForbiddenError("SSO only enabled for registered users")
 			}
 
-			newUser, err := s.createUserWithTx(tx, emailAddress, displayName)
+			newUser, err := s.createUserWithTx(tx, emailAddress, displayName, s.provisioningProfile(tx, login.ProfileID))
 			if err != nil {
 				slog.Error("Failed to create admin user", "email", emailAddress, "error", err)
 				return err

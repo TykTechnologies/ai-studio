@@ -27,16 +27,54 @@ type Profile struct {
 	UserGroupMapping          StringMap `gorm:"type:json"`
 	UserGroupSeparator        string
 	SSOOnlyForRegisteredUsers bool
-	SelectedProviderType      string `json:"-"`
-	UserID                    uint   `json:"-"`
-	User                      User   `json:"-"`
-	UseInLoginPage            bool   `json:"-"`
+	// NewUserShowPortal and NewUserShowChat are the provisioning defaults
+	// applied to users this profile creates on their first login. They are
+	// only consulted at creation time; existing users keep whatever an
+	// administrator set. Team membership comes from the claim mapping above.
+	NewUserShowPortal    bool
+	NewUserShowChat      bool
+	SelectedProviderType string `json:"-"`
+	UserID               uint   `json:"-"`
+	User                 User   `json:"-"`
+	UseInLoginPage       bool   `json:"-"`
 }
 
 type Profiles []Profile
 
 func NewProfile() *Profile {
-	return &Profile{}
+	return &Profile{
+		NewUserShowPortal: true,
+		NewUserShowChat:   true,
+	}
+}
+
+// MigrateProfiles creates or updates the profiles table. Profiles that
+// predate the provisioning defaults are backfilled to "show both surfaces",
+// which is what admin-created users get, so upgrading never hides the
+// Portal or Chat from newly provisioned SSO users.
+func MigrateProfiles(db *gorm.DB) error {
+	backfill := db.Migrator().HasTable(&Profile{}) && !db.Migrator().HasColumn(&Profile{}, "NewUserShowPortal")
+	if err := db.AutoMigrate(&Profile{}); err != nil {
+		return err
+	}
+	if !backfill {
+		return nil
+	}
+	return db.Model(&Profile{}).Where("1 = 1").Updates(map[string]interface{}{
+		"new_user_show_portal": true,
+		"new_user_show_chat":   true,
+	}).Error
+}
+
+// ProvisioningDefaults returns the surface flags a user created through
+// this profile starts with. A nil profile (login via a profile that no
+// longer exists, or an external broker that does not identify one) falls
+// back to the same defaults as NewUser.
+func (p *Profile) ProvisioningDefaults() (showPortal, showChat bool) {
+	if p == nil {
+		return true, true
+	}
+	return p.NewUserShowPortal, p.NewUserShowChat
 }
 
 func (p *Profile) Create(db *gorm.DB) error {

@@ -33,7 +33,9 @@ func (g *GormAuthRegisterBackend) Init(config interface{}) error {
 	}
 
 	g.DB = db
-	g.DB.AutoMigrate(&Profile{})
+	if err := MigrateProfiles(db); err != nil {
+		return err
+	}
 
 	return nil
 }

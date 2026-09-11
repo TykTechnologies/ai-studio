@@ -1210,6 +1210,10 @@ type ProfileInput struct {
 			UserGroupMapping          map[string]string      `json:"user_group_mapping"`
 			UserGroupSeparator        string                 `json:"user_group_separator"`
 			SSOOnlyForRegisteredUsers bool                   `json:"sso_only_for_registered_users"`
+			// Provisioning defaults for users this profile creates. Pointers so
+			// that an omitted field means "show" rather than "hide".
+			NewUserShowPortal *bool `json:"new_user_show_portal"`
+			NewUserShowChat   *bool `json:"new_user_show_chat"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -1239,6 +1243,8 @@ type ProfileResponse struct {
 		UserGroupMapping          map[string]string      `json:"user_group_mapping"`
 		UserGroupSeparator        string                 `json:"user_group_separator"`
 		SSOOnlyForRegisteredUsers bool                   `json:"sso_only_for_registered_users"`
+		NewUserShowPortal         bool                   `json:"new_user_show_portal"`
+		NewUserShowChat           bool                   `json:"new_user_show_chat"`
 		SelectedProviderType      string                 `json:"selected_provider_type"`
 		LoginURL                  string                 `json:"login_url"`
 		CallbackURL               string                 `json:"callback_url"`
