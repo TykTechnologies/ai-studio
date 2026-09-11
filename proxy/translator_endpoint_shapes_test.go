@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -319,13 +320,21 @@ func TestLLMHandlers_RejectPathTraversalBelowTheRouter(t *testing.T) {
 		"shape-route": {Name: "Shape Route", Vendor: models.ANTHROPIC, APIEndpoint: upstream.URL + "/gw/vendor/v1"},
 	}}
 
+	// net/http percent-decodes the path into r.URL.Path (the encoded form is
+	// kept in r.URL.RawPath), so an encoded ".." is seen by the check exactly
+	// like a literal one. A double-encoded "%252e%252e" decodes to the literal
+	// text "%2e%2e", which is not a traversal for us and is re-encoded on the
+	// way out, so the vendor also receives it as literal text.
 	for _, tc := range []struct {
 		name    string
 		path    string
 		handler http.HandlerFunc
 	}{
-		{"rest", "/llm/rest/shape-route/v1/../../admin", p.handleLLMRequest},
-		{"streaming", "/llm/stream/shape-route/v1/../../admin", p.handleStreamingLLMRequest},
+		{"rest literal", "/llm/rest/shape-route/v1/../../admin", p.handleLLMRequest},
+		{"rest percent-encoded", "/llm/rest/shape-route/v1/%2e%2e/%2e%2e/admin", p.handleLLMRequest},
+		{"rest encoded slash", "/llm/rest/shape-route/v1/..%2f..%2fadmin", p.handleLLMRequest},
+		{"streaming literal", "/llm/stream/shape-route/v1/../../admin", p.handleStreamingLLMRequest},
+		{"streaming percent-encoded", "/llm/stream/shape-route/v1/%2e%2e/%2e%2e/admin", p.handleStreamingLLMRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(`{"model":"claude-sonnet-5","messages":[]}`))
@@ -336,4 +345,13 @@ func TestLLMHandlers_RejectPathTraversalBelowTheRouter(t *testing.T) {
 		})
 	}
 	assert.Equal(t, 0, upstreamCalls, "a traversal must never reach the vendor")
+
+	t.Run("double-encoded dots are literal text, not a traversal", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/llm/rest/shape-route/v1/%252e%252e/x", nil)
+		assert.Equal(t, "/llm/rest/shape-route/v1/%2e%2e/x", req.URL.Path)
+		assert.False(t, hasTraversalSegment(req.URL.Path))
+		// What the vendor would receive: the literal text, encoded once more.
+		out := &url.URL{Scheme: "https", Host: "vendor", Path: joinUpstreamPath("/gw/vendor/v1", "/v1/%2e%2e/x")}
+		assert.Equal(t, "/gw/vendor/v1/%252e%252e/x", out.EscapedPath())
+	})
 }
