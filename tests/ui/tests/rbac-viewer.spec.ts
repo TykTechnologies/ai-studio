@@ -65,8 +65,11 @@ test('Viewer-derived role is read-only in the administration UI', async ({
     // --- as the read-only user ------------------------------------------------
     await loginPage.login(viewerEmail, config.password);
 
-    // Lands on the administration overview.
+    // Lands on the administration overview. A first login shows the quick
+    // start dialog; while it is open MUI marks the rest of the app aria-hidden
+    // and no role-based locator for the navigation resolves.
     await expect(page).toHaveURL(/\/admin/);
+    await adminMainPage.dismissQuickStartModal();
     await adminMainPage.navigateToLLMProviders();
     await expect(adminRolesPage.pageTitle('LLM providers')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add LLM' })).toHaveCount(0);

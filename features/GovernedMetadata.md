@@ -18,7 +18,7 @@ Field types: `string`, `text`, `number`, `boolean`, `date`, `email`, `url`, `use
 
 ### Schema resolution
 
-For an object type, every **active** schema whose `applies_to` contains the type or `*` contributes its fields, ordered by schema `order`, then field `order`. Field keys must be unique across schemas that overlap in `applies_to`; a collision is rejected when the schema is saved or activated. The resolved enforcement is `enforce` if any contributing schema enforces.
+For an object type, every **active** schema whose `applies_to` contains the type or `*` contributes its fields, ordered by schema `order`, then field `order`. Field keys must be unique across schemas that overlap in `applies_to`; a collision is rejected when the schema is saved or activated. The resolved enforcement is `enforce` if any contributing schema enforces, but enforcement stays a property of each schema: when an enforce schema shares an object type with advisory ones, the advisory schemas' `required` fields are demoted to warning severity in the merged schema (`resolve` in `enterprise/features/governed_metadata/service.go`), so adding one strict schema never turns the seeded Governance Core fields into hard gates. Only the enforce schema's own required fields and any `required_on_publish` field block.
 
 ### Validation
 

@@ -178,7 +178,7 @@ func NewAPI(service *services.Service, disableCORS bool, authService *auth.AuthS
 	}
 
 	api := &API{
-		webhooksFallback: webhooks.NewService(webhooks.Deps{}),
+		webhooksFallback: webhooks.NewCommunityService(),
 		service:          service,
 		router:           router,
 		disableCORS:      disableCORS,
