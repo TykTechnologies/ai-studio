@@ -160,6 +160,9 @@ const LLMDetails = () => {
   const [vendorModelCostData, setVendorModelCostData] = useState([]);
   const [modelSort, setModelSort] = useState({ field: "lastUsed", direction: "desc" });
   const [proxyLogs, setProxyLogs] = useState([]);
+  // id -> name for the LLMs referenced by the failover waterfall, so the
+  // detail view can name a fallback instead of printing its numeric id.
+  const [llmNames, setLLMNames] = useState({});
   const [isTableExpanded, setIsTableExpanded] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [startDate, setStartDate] = useState(
@@ -280,9 +283,29 @@ const LLMDetails = () => {
       const response = await apiClient.get(`/llms/${id}`);
       setLLM(response.data.data);
       setLoading(false);
+      fetchFailoverNames(response.data.data);
     } catch (error) {
       console.error("Error fetching LLM details", error);
       setLoading(false);
+    }
+  };
+
+  // Resolve the names of the LLMs in the failover waterfall. Best effort:
+  // on any failure the view falls back to "LLM #id".
+  const fetchFailoverNames = async (detail) => {
+    const targets = detail?.attributes?.failover?.targets || [];
+    if (targets.length === 0) {
+      return;
+    }
+    try {
+      const response = await apiClient.get(`/llms`, { params: { all: true } });
+      const names = {};
+      (response.data?.data || []).forEach((entry) => {
+        names[Number(entry.id)] = entry.attributes?.name;
+      });
+      setLLMNames(names);
+    } catch (error) {
+      console.error("Error fetching LLM names for failover", error);
     }
   };
 
@@ -699,26 +722,6 @@ const LLMDetails = () => {
               // An empty list is not a deny-all: it permits everything.
               <FieldValue>All models allowed (no patterns specified)</FieldValue>
             )}
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Failover:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            {llm.attributes.failover?.targets?.length ? (
-              <Box data-testid="llm-failover-waterfall">
-                {llm.attributes.failover.targets.map((t, index) => (
-                  <FieldValue key={index}>
-                    {index + 1}. LLM #{t.llm_id} &rarr; {t.model}
-                  </FieldValue>
-                ))}
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                  Tried in order when this LLM's upstream fails. Apps allowed to
-                  use this LLM inherit access to these fallbacks.
-                </Typography>
-              </Box>
-            ) : (
-              <FieldValue>No failover configured</FieldValue>
-            )}
             <Typography
               variant="caption"
               color="text.secondary"
@@ -729,6 +732,26 @@ const LLMDetails = () => {
               "gpt-4.*" allows all GPT-4 models — and also matches
               "legacy-gpt-4o". Anchor with ^ and $ to match the whole name.
             </Typography>
+          </Grid>
+          <Grid item xs={3}>
+            <FieldLabel>Failover:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            {llm.attributes.failover?.targets?.length ? (
+              <Box data-testid="llm-failover-waterfall">
+                {llm.attributes.failover.targets.map((t, index) => (
+                  <FieldValue key={index}>
+                    {index + 1}. {llmNames[t.llm_id] || `LLM #${t.llm_id}`} &rarr; {t.model}
+                  </FieldValue>
+                ))}
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                  Tried in order when this LLM's upstream fails. Apps allowed to
+                  use this LLM inherit access to these fallbacks.
+                </Typography>
+              </Box>
+            ) : (
+              <FieldValue>No failover configured</FieldValue>
+            )}
           </Grid>
         </Grid>
 

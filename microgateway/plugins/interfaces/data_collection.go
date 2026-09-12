@@ -63,6 +63,12 @@ type AnalyticsData struct {
 	// Request/response data (optional - for pulse transmission)
 	RequestBody            string    `json:"request_body,omitempty"`  // Request body (optional)
 	ResponseBody           string    `json:"response_body,omitempty"` // Response body (optional)
+
+	// Failover marker: the primary LLM this attempt was failing over from and
+	// the 1-based rung index. nil / 0 for a primary attempt. Carried so the
+	// pulse can report the marker to the hub's ProxyLog.
+	FailoverFromLLMID      *uint     `json:"failover_from_llm_id,omitempty"`
+	FailoverAttempt        int       `json:"failover_attempt,omitempty"`
 }
 
 // BudgetUsageData contains budget tracking information

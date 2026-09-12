@@ -165,6 +165,10 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
 						return
 					}
+					if !app.IsActive {
+						respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
+						return
+					}
 					ctx, ok := cv.authorizeToolAccess(w, r, app, toolSlug)
 					if !ok {
 						return
@@ -262,6 +266,10 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					respondWithError(w, http.StatusUnauthorized, "invalid credential", nil, true)
 					return
 				}
+				if !app.IsActive {
+					respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
+					return
+				}
 
 				// Re-check the ownership consent established. The consent screen and
 				// the token endpoint both verify it, but this is the point where the
@@ -320,6 +328,10 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 						respondWithError(w, http.StatusInternalServerError, "Failed to retrieve app", err, false)
 						return
 					}
+					if !app.IsActive {
+						respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
+						return
+					}
 
 					// An auth plugin authenticates; it does not authorise a tool. Tool
 					// requests still clear the tool ACL, so custom auth cannot be a way
@@ -355,6 +367,10 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 			cred, err := cv.service.GetCredentialBySecret(tokenString)
 			if err == nil && cred.Active {
 				app, err := cv.service.GetAppByCredentialID(cred.ID)
+				if err == nil && !app.IsActive {
+					respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
+					return
+				}
 				if err == nil {
 					// Valid app secret - add app to context like API key flow
 					ctx := context.WithValue(r.Context(), "app", app)
@@ -521,6 +537,10 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					respondWithError(w, http.StatusInternalServerError, "Failed to retrieve app", err, false)
 					return
 				}
+				if !app.IsActive {
+					respondWithError(w, http.StatusForbidden, "app is inactive", nil, true)
+					return
+				}
 
 				// As with the bearer custom-auth branch: authentication by a plugin does
 				// not authorise a tool.
@@ -617,6 +637,22 @@ func (cv *CredentialValidator) CheckAPICredential(apiKey, dsSlug, llmSlug, route
 	app, err := cv.service.GetAppByCredentialID(cred.ID)
 	if err != nil {
 		log.Debug().Err(err).Uint("cred_id", cred.ID).Int("cred_id_signed", int(cred.ID)).Msg("CheckAPICredential: GetAppByCredentialID failed")
+		return false, r
+	}
+
+	if !app.IsActive {
+		// The app's live switch (apps:publish) is off. The microgateway already
+		// refuses these; the embedded gateway has to agree or "deactivate" only
+		// takes effect at the edge.
+		log.Debug().Uint("app_id", app.ID).Msg("CheckAPICredential: App is inactive")
+		analytics.RecordProxyLog(r.Context(), &models.ProxyLog{
+			AppID:        app.ID,
+			UserID:       app.UserID,
+			ResponseCode: http.StatusForbidden,
+			TimeStamp:    time.Now(),
+			Vendor:       "auth",
+			ResponseBody: `{"error":"app_inactive","detail":"app is inactive"}`,
+		})
 		return false, r
 	}
 

@@ -315,6 +315,9 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 					// Include request/response bodies from the merged event
 					RequestBody:            mergedEvent.RequestBody,
 					ResponseBody:           mergedEvent.ResponseBody,
+					// Failover marker set by the proxy log merge above
+					FailoverFromLLMID:      mergedEvent.FailoverFromLLMID,
+					FailoverAttempt:        mergedEvent.FailoverAttempt,
 				}
 
 				// Execute analytics plugins (this buffers data in pulse plugin)
