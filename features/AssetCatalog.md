@@ -45,17 +45,31 @@ draft → experimental → in_review → approved → production → deprecated
    └──────────┴────────────┘ (send back)   deprecated → draft (revive)
 ```
 
-`approved`, `production` and `deprecated` are admin-only by default (per-type policy). Only `approved`/`production` assets are offered for App binding; non-owners only see `approved`, `production` and `deprecated` assets.
+`approved`, `production` and `deprecated` are reserved stages by default (per-type policy): entering one needs `assets:publish` or the per-type `assets-<type>:publish`, and publish holders may move any asset of the type between stages (send back). Only `approved`/`production` assets are offered for App binding; non-owners only see `approved`, `production` and `deprecated` assets.
 
 ## Rules
 
-- **Visibility**: listings visible to all portal users (visible stages only); owners/admins see everything including drafts and inactive assets.
-- **Gating**: gated fields visible to owners, admins and grantees. No approval requirement → everyone sees everything.
-- **Editing**: owners (any role) or admins; content edits require change notes; privacy score and approval flag are admin-only.
-- **Relationships**: `depends_on`, `uses`, `recommended_with`, `derived_from`, `supersedes`; `depends_on` rejects cycles; deprecating/deleting an asset with inbound `depends_on` needs an admin `force` and emits `asset.dependency_warning`.
-- **Deletion**: admin only, soft by default; hard delete only with no inbound relationships.
+- **Visibility**: listings visible to all portal users (visible stages only); owners and `assets(-<type>):read` holders see everything including drafts and inactive assets.
+- **Gating**: gated fields visible to owners, asset managers (`assets(-<type>):write`) and grantees. No approval requirement → everyone sees everything. `assets:read` alone never unmasks gated values.
+- **Editing**: owners (any role) or asset managers; content edits require change notes; privacy score and approval flag need the write row.
+- **Relationships**: `depends_on`, `uses`, `recommended_with`, `derived_from`, `supersedes`; `depends_on` rejects cycles; deprecating/deleting an asset with inbound `depends_on` needs `force` from an asset manager and emits `asset.dependency_warning`.
+- **Deletion**: `assets(-<type>):delete`, soft by default; hard delete only with no inbound relationships.
 - **Schema evolution**: additive edits any time; removing a property still in use needs `force`; assets are re-validated on their next edit.
 - **Submissions**: approval creates the asset owned by the submitter at lifecycle `approved`; idempotent on `submission_id`.
+
+## Permissions (RBAC)
+
+The plugin is the reference adoption of plugin-declared RBAC (see `docs/site/docs/plugins-manifests.md`, "Permissions (RBAC) Block"). Rows in the role editor, all under *Plugins → Asset Catalog*:
+
+| Row | Meaning |
+|---|---|
+| base `plugin:com.tyk.enterprise.asset-catalog` | **read**: open the pages, list types, call the asset methods (every catalog role starts here; without an `assets` read row the admin Assets page shows only the publicly visible stages, like the portal); **write**: catalog administrator (every row below on every type, re-seed, plugin config). |
+| `asset-types` (r/w/d) | write: define, edit, deactivate, reactivate types. |
+| `assets` (r/w/d/publish) | read: see every asset incl. drafts/inactive; write: create and edit any asset regardless of ownership, transfer ownership, revoke grants, privacy score, approval flag, `force`, see gated values and grants; delete: deactivate/hard delete; publish: enter reserved stages and move assets between stages as a reviewer. |
+| `assets-<type>` (r/w/d/publish, registered at runtime per active type via `RegisterPermissionResources`) | the same, narrowed to one type. |
+| `access-requests` (r/w) | read: list/inspect every request; write: approve, deny, cancel any pending request. |
+
+Enforcement is layered: Studio gates `POST /plugins/:id/rpc/:method` on the manifest's `rbac.rpc_methods`; the router (`rpc/router.go`) checks the same table; the catalog (`catalog/types.go` `Actor.Can*` helpers, `catalog/catalog.go`) applies the row that actually matters per asset. Because Studio can only name one fixed permission per method and the per-type rows are dynamic, the asset methods (`admin_list_assets`, `admin_create_asset`, `admin_delete_asset`, the aliases `admin_transition` / `admin_revoke_grant`) and `admin_list_types` are gated on the base read and decided in the catalog. `Actor.IsAdmin` (full administrator, or base write on the admin route) and base write on any route are the umbrella; the catalog never consults `IsAdmin` directly. The admin pages hide controls the caller cannot use (`pluginAPI.can(...)` plus the server-computed `can_edit` / `can_manage` / `can_delete` / `allowed_transitions` on `AssetView`), and the portal page relies on the server flags only. Portal RPC is not governed by roles (portal users hold none). Role recipes and their guarantees are asserted in `catalog/rbac_test.go` (`TestRoleRecipes`), `rpc/router_rbac_test.go` and `main_rbac_test.go`.
 
 ## Platform changes made for this feature (generic, reusable by any ResourceProvider plugin)
 
@@ -95,8 +109,9 @@ Topics (`asset_catalog.` prefix, configurable): `asset.created|updated|version_c
 
 ## Testing
 
-- Unit: `cd enterprise/plugins/asset-catalog && go test -tags enterprise ./...` (catalog rules, router gating, events, resource bridge, governance write/rollback/delete paths against `catalog.MemoryGovernance`, and the Studio adapter's error classification).
+- Unit: `cd enterprise/plugins/asset-catalog && go test -tags enterprise ./...` (catalog rules, router gating, RBAC role recipes, events, resource bridge, governance write/rollback/delete paths against `catalog.MemoryGovernance`, and the Studio adapter's error classification).
 - E2E: `go test -tags "e2e enterprise" ./tests/e2e/...` (boots the binary through `pkg/testinfra/plugintest`).
+- Browser: `tests/ui/tests/asset-catalog-rbac.spec.ts` (Playwright, Enterprise dev stack with the plugin binary in `/app/bin/plugins`): registers the plugin if needed, creates one role and user per recipe, and walks the admin pages as each user.
 - Core: `services/submission_plugin_test.go`, `services/grpc/plugin_extension_rpc_test.go`, `pkg/plugin_sdk/rpc_user_context_test.go`, `api/plugin_resource_types_portal_test.go`.
 
 ## Future work
