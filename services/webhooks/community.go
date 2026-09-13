@@ -15,6 +15,15 @@ func newCommunityService() Service {
 	return &communityService{}
 }
 
+// NewCommunityService returns the always-refusing stub regardless of which
+// implementation is linked in. Callers that need a placeholder rather than a
+// configured service (the API's fallback for tests that never call
+// InitWebhooks) use this so an Enterprise build does not construct, and log
+// about, a second disabled enterprise service.
+func NewCommunityService() Service {
+	return newCommunityService()
+}
+
 func (s *communityService) ListTargets(ctx context.Context, f TargetFilter) (*TargetList, error) {
 	return nil, ErrEnterpriseFeature
 }

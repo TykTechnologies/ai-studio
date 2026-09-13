@@ -462,6 +462,7 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.ToolIDs = getToolIDs(app.Tools)
 	resp.Attributes.MonthlyBudget = app.MonthlyBudget
 	resp.Attributes.BudgetStartDate = app.BudgetStartDate
+	resp.Attributes.IsActive = app.IsActive
 	resp.Attributes.IsOrphaned = app.IsOrphaned
 	resp.Attributes.Metadata = app.Metadata
 	resp.Attributes.Namespace = app.Namespace

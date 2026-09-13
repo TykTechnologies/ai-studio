@@ -37,6 +37,19 @@ const MainLayout = () => {
     return null;
   };
 
+  // Navigate to the remembered drawer selection for a tab, but only when the
+  // current URL is that tab's root (with or without a trailing slash).
+  const restoreStoredPath = (tab, root) => {
+    const path = location.pathname.replace(/\/+$/, '') || '/';
+    if (path !== root) {
+      return;
+    }
+    const storedPath = getStoredPath(tab);
+    if (storedPath && storedPath !== location.pathname) {
+      navigate(storedPath, { replace: true });
+    }
+  };
+
   useEffect(() => {
     const initialiseTab = () => {
       if (location.pathname === '/login') {
@@ -56,25 +69,19 @@ const MainLayout = () => {
           setCurrentTab("admin");
           navigate(storedAdminPath || "/admin", { replace: true });
         } else {
-          // Set initial tab based on current location
+          // Set initial tab based on current location. The stored drawer
+          // selection is only restored when the user lands on the bare tab
+          // root; a deeper URL (a bookmark, a shared link, a page refresh on
+          // /admin/llms/new) is an explicit destination and must win.
           if (location.pathname.startsWith("/admin")) {
-            const storedPath = getStoredPath('admin');
             setCurrentTab("admin");
-            if (storedPath && storedPath !== location.pathname) {
-              navigate(storedPath, { replace: true });
-            }
+            restoreStoredPath('admin', '/admin');
           } else if (location.pathname.startsWith("/chat")) {
-            const storedPath = getStoredPath('chat');
             setCurrentTab("chat");
-            if (storedPath && storedPath !== location.pathname) {
-              navigate(storedPath, { replace: true });
-            }
+            restoreStoredPath('chat', '/chat');
           } else if (location.pathname.startsWith("/portal")) {
-            const storedPath = getStoredPath('portal');
             setCurrentTab("portal");
-            if (storedPath && storedPath !== location.pathname) {
-              navigate(storedPath, { replace: true });
-            }
+            restoreStoredPath('portal', '/portal');
           }
         }
 

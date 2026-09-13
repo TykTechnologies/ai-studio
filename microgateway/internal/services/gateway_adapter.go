@@ -689,9 +689,10 @@ func (a *GatewayServiceAdapter) GetAppByCredentialID(credID uint) (*models.App, 
 
 		// Return app with the REAL AppID from auth plugin (no hardcoding, no fallback)
 		return &models.App{
-			ID:   uint(appID),
-			Name: fmt.Sprintf("Plugin Auth App %d (LLM %d)", appID, llmID),
-			LLMs: []models.LLM{llm},
+			ID:       uint(appID),
+			Name:     fmt.Sprintf("Plugin Auth App %d (LLM %d)", appID, llmID),
+			IsActive: true, // an auth plugin vouched for this request; there is no stored switch to consult
+			LLMs:     []models.LLM{llm},
 		}, nil
 	}
 	
@@ -1035,6 +1036,7 @@ func (a *GatewayServiceAdapter) convertDatabaseAppToModel(dbApp *database.App) m
 		Description:     dbApp.Description,
 		UserID:          dbApp.UserID, // Owner user ID (synced from control plane for analytics)
 		CredentialID:    dbApp.ID, // Use app ID as credential reference
+		IsActive:        dbApp.IsActive, // live switch synced from the hub; the shared proxy refuses inactive apps
 		MonthlyBudget:   &dbApp.MonthlyBudget,
 		BudgetStartDate: dbApp.BudgetStartDate,
 		LLMs:            llms,        // Include LLM associations for access control

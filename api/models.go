@@ -485,6 +485,7 @@ type AppResponse struct {
 		ToolIDs         []uint                 `json:"tool_ids"`
 		MonthlyBudget   *float64               `json:"monthly_budget"`
 		BudgetStartDate *time.Time             `json:"budget_start_date"`
+		IsActive        bool                   `json:"is_active"` // live switch (apps:publish)
 		IsOrphaned      bool                   `json:"is_orphaned"`
 		Metadata        map[string]interface{} `json:"metadata,omitempty"`
 		Namespace       string                 `json:"namespace,omitempty"`

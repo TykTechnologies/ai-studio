@@ -18,8 +18,24 @@ export class LoginPage {
         this.ForgotPasswordButton = this.page.getByText('Forgot password?');
     }
     
+    /**
+     * Opens the app root (which lands on the login form when logged out).
+     * Right after a logout the app performs its own full reload to /login; a
+     * goto that overlaps it is aborted by the browser (net::ERR_ABORTED or
+     * "interrupted by another navigation"), so retry until one completes.
+     */
     async goto() {
-        await this.page.goto(config.base_url);
+        for (let attempt = 1; ; attempt++) {
+            try {
+                await this.page.goto(config.base_url);
+                return;
+            } catch (error) {
+                if (attempt >= 3) {
+                    throw error;
+                }
+                await this.page.waitForLoadState('load').catch(() => undefined);
+            }
+        }
     }
 
     async login(email: string, password: string) {

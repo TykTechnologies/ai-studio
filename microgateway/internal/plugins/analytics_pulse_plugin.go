@@ -326,6 +326,10 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		ErrorMessage:           "",
 		TimeStamp:              req.Timestamp,
 		CreatedAt:              req.Timestamp,
+
+		// Failover marker (nil / 0 for a primary attempt)
+		FailoverFromLLMID:      req.FailoverFromLLMID,
+		FailoverAttempt:        req.FailoverAttempt,
 	}
 
 	// Store metadata for pulse transmission
