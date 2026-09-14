@@ -61,15 +61,18 @@ const AppListView = () => {
     }
   };
 
-  // Apps whose credential the list already carries (should the API start
-  // including it) are not fetched again. A disabled App is Disabled regardless
-  // of its credential, so its detail is not needed either.
+  // The list now carries credential_active (one join, no per-app fetch); the
+  // per-app detail fetch remains as a fallback for a response without it.
+  // A disabled App is Disabled regardless of its credential, so its detail
+  // is not needed either.
   const loadCredentialStates = async (appList) => {
     const states = {};
     const pending = [];
     for (const app of appList) {
       if (app.attributes.credential) {
         states[app.id] = app.attributes.credential.active;
+      } else if (typeof app.attributes.credential_active === "boolean") {
+        states[app.id] = app.attributes.credential_active;
       } else if (app.attributes.is_active !== false) {
         pending.push(app);
       }

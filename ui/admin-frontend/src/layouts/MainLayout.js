@@ -181,14 +181,7 @@ const MainLayoutContent = () => {
           {currentTab === "chat" && showChat && (
             <ChatDrawer chats={entitlements?.chats} open />
           )}
-          {currentTab === "portal" && showPortal && (
-            <PortalDrawer
-              catalogues={entitlements?.catalogues}
-              dataCatalogues={entitlements?.data_catalogues}
-              toolCatalogues={entitlements?.tool_catalogues}
-              open
-            />
-          )}
+          {currentTab === "portal" && showPortal && <PortalDrawer open />}
           <Box
             component="main"
             sx={{

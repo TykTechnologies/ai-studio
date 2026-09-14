@@ -104,6 +104,20 @@ const AppBuilder = () => {
           if (tool) setSelectedTools([tool]);
         }
 
+        // ?plugin_resource=<plugin id>:<slug>:<instance id>, from a plugin
+        // resource's catalog page. The instance id may itself contain ":".
+        const pluginResource = params.get("plugin_resource");
+        if (pluginResource) {
+          const [pluginId, slug, ...rest] = pluginResource.split(":");
+          const instanceId = rest.join(":");
+          const key = `${pluginId}:${slug}`;
+          const resourceType = (pluginResourcesResponse.data?.data || []).find(
+            (t) => `${t.plugin_id}:${t.slug}` === key,
+          );
+          const instance = resourceType?.instances?.find((inst) => String(inst.id) === instanceId);
+          if (instance) setPluginResourceSelections({ [key]: [instance] });
+        }
+
         setIsLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);

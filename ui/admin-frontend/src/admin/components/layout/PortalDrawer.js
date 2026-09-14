@@ -6,13 +6,16 @@ import Icon from '../../../components/common/Icon';
 import portalPluginLoaderService from '../../../portal/services/portalPluginLoaderService';
 import pubClient from '../../utils/pubClient';
 
-const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
+/**
+ * Portal navigation. "Browse" is the one place to find something to build
+ * with (UX review D4): the unified catalog, then one entry per asset type
+ * and per plugin resource type, each a filtered view of the same catalog.
+ * Which catalog holds an asset is a filter inside those pages, not a level
+ * of navigation.
+ */
+const PortalDrawer = ({ open }) => {
   const { features, loading: featuresLoading } = useSystemFeatures();
-  const {
-    userEntitlements,
-    uiOptions,
-    loading: entitlementsLoading
-  } = useUserEntitlements();
+  const { uiOptions, loading: entitlementsLoading } = useUserEntitlements();
   const [pluginMenuItems, setPluginMenuItems] = useState([]);
   const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
 
@@ -33,7 +36,8 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
     return () => window.removeEventListener('portal-plugin-loader-refreshed', handlePluginRefresh);
   }, []);
 
-  // Load plugin resource types for sidebar
+  // Plugin resource types with at least one instance the user can use get
+  // their own Browse entry.
   useEffect(() => {
     const loadPluginResourceTypes = async () => {
       try {
@@ -72,6 +76,24 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
         path: '/portal/apps'
       },
       {
+        id: 'browse',
+        text: 'Browse',
+        icon: <Icon name="rectangle-history" />,
+        subItems: [
+          // Exact, so a detail page under /portal/catalog/llms/3 highlights
+          // "LLM providers" (the longest match) and not "All assets".
+          { id: 'browse-all', text: 'All assets', path: '/portal/catalog', exact: true },
+          { id: 'browse-llms', text: 'LLM providers', path: '/portal/catalog/llms' },
+          { id: 'browse-datasources', text: 'Data sources', path: '/portal/catalog/datasources' },
+          { id: 'browse-tools', text: 'Tools', path: '/portal/catalog/tools' },
+          ...pluginResourceTypes.map(rt => ({
+            id: `browse-resource-${rt.plugin_id}-${rt.slug}`,
+            text: rt.name,
+            path: `/portal/catalog/resources/${rt.plugin_id}/${rt.slug}`
+          }))
+        ]
+      },
+      {
         id: 'contributions',
         text: 'Community',
         icon: <Icon name="puzzle-piece" />,
@@ -86,46 +108,6 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
             text: 'Submit Resource',
             path: '/portal/submissions/new'
           }
-        ]
-      },
-      {
-        id: 'catalogs',
-        text: 'Catalogs',
-        icon: <Icon name="rectangle-history" />,
-        subItems: [
-          {
-            id: 'llms',
-            text: 'LLM providers',
-            subItems: userEntitlements?.catalogues?.map(catalogue => ({
-              id: `llm-${catalogue.id}`,
-              text: catalogue.attributes.name,
-              path: `/portal/llms/${catalogue.id}`
-            })) || []
-          },
-          {
-            id: 'data-sources',
-            text: 'Data sources',
-            subItems: userEntitlements?.data_catalogues?.map(catalogue => ({
-              id: `db-${catalogue.id}`,
-              text: catalogue.attributes.name,
-              path: `/portal/databases/${catalogue.id}`
-            })) || []
-          },
-          {
-            id: 'tools',
-            text: 'Tools',
-            subItems: userEntitlements?.tool_catalogues?.map(catalogue => ({
-              id: `tool-${catalogue.id}`,
-              text: catalogue.attributes.name,
-              path: `/portal/tools/${catalogue.id}`
-            })) || []
-          },
-          // Dynamic plugin resource type entries
-          ...pluginResourceTypes.map(rt => ({
-            id: `plugin-resource-${rt.plugin_id}-${rt.slug}`,
-            text: rt.name,
-            path: `/portal/resources/${rt.plugin_id}/${rt.slug}`
-          }))
         ]
       },
       // Portal plugin sidebar items (dynamically loaded from plugins with portal_ui capability)
@@ -161,10 +143,9 @@ const PortalDrawer = ({ catalogues, dataCatalogues, toolCatalogues, open }) => {
       customStyles={{
         marginTop: '64px'
       }}
+      defaultOpen={open !== false}
       defaultExpandedItems={{
-        'resources': true,
-        'llms': false,
-        'databases': false
+        'browse': true,
       }}
     />
   );

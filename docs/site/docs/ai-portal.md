@@ -26,6 +26,8 @@ The main goals of the AI Portal are:
 ## Key Features
 
 *   **Chat Interface:** Access to all [Chat Experiences](./chat-interface.md) the user has permission to use, with a clean, intuitive UI for conversational interactions.
+*   **Overview:** The developer's landing page: every app they own with its status (Active, Awaiting approval, Disabled), spend against its monthly budget, when it last reached the gateway and how many requests it made in the last 30 days, followed by what they can build with (counts per asset type and the newest assets).
+*   **Browse:** One searchable catalog of every LLM provider, data source, tool and plugin resource the user's teams can use, newest first, with filters for type, vendor or store, privacy level, catalog and community submissions. Every asset has a detail page (models and allow list, privacy level, endpoint base URL, the catalogs it comes through, the user's apps that already use it); catalogs are a filter, not a level of navigation.
 *   **Documentation Hub:** Integrated documentation for available AI services, tools, and data sources.
 *   **User Profile Management:** Self-service capabilities for updating profile information and preferences.
 *   **History & Favorites:** Access to past chat sessions and ability to bookmark favorite conversations.
@@ -38,10 +40,12 @@ The main goals of the AI Portal are:
 Users access the AI Portal through a web browser at the configured URL for their Tyk AI Studio installation.
 
 1.  **Authentication:** Users log in using their credentials (username/password, SSO, or other configured authentication methods).
-2.  **Home Dashboard:** Upon login, users see a dashboard with available Chat Experiences and recent activity.
-3.  **Chat Selection:** Users can select from available Chat Experiences to start or continue conversations.
-4.  **Documentation Access:** Users can browse integrated documentation to learn about available capabilities.
-5.  **Profile Management:** Users can update their profile settings, preferences, and view usage statistics.
+2.  **Overview:** Upon login, developers land on the Overview: their apps (status, budget, last access) and the assets they can build with, with a search box that opens Browse.
+3.  **Browse:** Users search and filter one catalog of everything their teams can use, open an asset's detail page, and start an app from it ("Build app", or "Get access" for a data source). The old per-catalog pages redirect into Browse filtered by that catalog.
+4.  **Apps:** Users create apps, wait for an administrator to approve the credential, and read the endpoint documentation on the app page.
+5.  **Chat Selection:** Users can select from available Chat Experiences to start or continue conversations.
+6.  **Documentation Access:** Users can browse integrated documentation to learn about available capabilities.
+7.  **Profile Management:** Users can update their profile settings, preferences, and view usage statistics.
 
 ## Configuration (Admin)
 

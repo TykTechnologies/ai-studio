@@ -48,11 +48,14 @@ export class AIPortalPage extends PageTemplate {
     constructor(page: Page) {
         super(page);
         this.OverviewMenuButton = this.page.getByRole('link', { name: 'Overview' });
-        this.AppsMenuButton = this.page.getByRole('link', { name: 'Apps' });
-        this.CataloguesMenuButton = this.page.getByRole('button', { name: 'Catalogs' });
-        this.DatasourcesMenuButton = this.page.getByRole('button', { name: 'Data sources' });
-        this.LLMPrvidersMenuButton = this.page.getByRole('button', { name: 'LLM Providers' });
-        this.CreateANewAppButton = this.page.getByRole('button', { name: 'Create a new App' });
+        // Exact: the overview's "All apps (n)" link would otherwise match too.
+        this.AppsMenuButton = this.page.getByRole('link', { name: 'Apps', exact: true });
+        // The portal sidebar's "Browse" section (the unified catalog, one entry per asset type).
+        this.CataloguesMenuButton = this.page.getByRole('button', { name: 'Browse' });
+        this.DatasourcesMenuButton = this.page.getByRole('link', { name: 'Data sources' });
+        this.LLMPrvidersMenuButton = this.page.getByRole('link', { name: 'LLM providers' });
+        // The overview's title-bar action (its empty state repeats the same button).
+        this.CreateANewAppButton = this.page.getByRole('button', { name: 'Create app' }).first();
         this.ViewYourAppsButton = this.page.getByText('View your Apps and Credentials');
         this.Table = new TableWrapper('table', page);
         this.CreateappButton = this.page.getByRole('button', { name: 'Create app' });

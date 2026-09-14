@@ -540,7 +540,15 @@ func (a *API) setupRoutes() {
 
 	// PORTAL FEATURES
 	authed.GET("/catalogues/:id/llms", a.getCatalogueLLMs)
+	// The unified catalog: everything the caller can build with, one shape,
+	// plus per-item detail pages (portal_catalog_handlers.go).
+	authed.GET("/catalog", a.getPortalCatalog)
+	authed.GET("/catalog/llms/:id", a.getPortalCatalogLLM)
+	authed.GET("/catalog/datasources/:id", a.getPortalCatalogDatasource)
+	authed.GET("/catalog/tools/:id", a.getPortalCatalogTool)
+	authed.GET("/catalog/resources/:plugin_id/:slug/:id", a.getPortalCatalogPluginResource)
 	authed.GET("/apps", a.getUserApps)
+	authed.GET("/apps/usage-summary", a.getUserAppsUsageSummary)
 	authed.POST("/apps", a.createUserApp)
 	authed.GET("/accessible-llms", a.getUserAccessibleLLMs)
 	authed.GET("/apps/:id", a.getUserAppDetails)
