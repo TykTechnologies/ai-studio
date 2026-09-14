@@ -89,6 +89,30 @@ func (s *Service) GetCatalogueLLMs(catalogueID uint) (models.LLMs, error) {
 	return catalogue.LLMs, nil
 }
 
+// GetCatalogueActiveLLMs returns the LLMs in a catalogue that are live.
+//
+// This is the portal-facing listing. GetAccessibleLLMs already hides inactive
+// LLMs from the portal's flat list, but the per-catalogue page went through
+// GetCatalogueLLMs and showed drafts that were never approved. Admin listings
+// keep using GetCatalogueLLMs so an administrator still sees everything in the
+// catalogue.
+func (s *Service) GetCatalogueActiveLLMs(catalogueID uint) (models.LLMs, error) {
+	if _, err := s.GetCatalogueByID(catalogueID); err != nil {
+		return nil, err
+	}
+
+	var llms models.LLMs
+	err := s.DB.Model(&models.LLM{}).
+		Joins("JOIN catalogue_llms ON catalogue_llms.llm_id = llms.id").
+		Where("catalogue_llms.catalogue_id = ? AND llms.active = ?", catalogueID, true).
+		Order("llms.id").
+		Find(&llms).Error
+	if err != nil {
+		return nil, err
+	}
+	return llms, nil
+}
+
 func (s *Service) GetAllCatalogues(pageSize int, pageNumber int, all bool) (models.Catalogues, int64, int, error) {
 	var catalogues models.Catalogues
 	totalCount, totalPages, err := catalogues.GetAll(s.DB, pageSize, pageNumber, all)

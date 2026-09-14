@@ -116,6 +116,27 @@ func (s *Service) GetToolCatalogueTools(toolCatalogueID uint) (models.Tools, err
 	return toolCatalogue.Tools, nil
 }
 
+// GetToolCatalogueActiveTools is GetToolCatalogueTools restricted to live
+// tools, filtered in the database. The portal uses it: inactive tools stay
+// visible to administrators only. The catalogue lookup is kept so an unknown
+// id still reports not-found rather than an empty list.
+func (s *Service) GetToolCatalogueActiveTools(toolCatalogueID uint) (models.Tools, error) {
+	if _, err := s.GetToolCatalogueByID(toolCatalogueID); err != nil {
+		return nil, err
+	}
+
+	var tools models.Tools
+	err := s.DB.Model(&models.Tool{}).
+		Joins("JOIN tool_catalogue_tools ON tool_catalogue_tools.tool_id = tools.id").
+		Where("tool_catalogue_tools.tool_catalogue_id = ? AND tools.active = ?", toolCatalogueID, true).
+		Order("tools.id").
+		Find(&tools).Error
+	if err != nil {
+		return nil, err
+	}
+	return tools, nil
+}
+
 func (s *Service) AddTagToToolCatalogue(tagID, toolCatalogueID uint) error {
 	tag, err := s.GetTagByID(tagID)
 	if err != nil {

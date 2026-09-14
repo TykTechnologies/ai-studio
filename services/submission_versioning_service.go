@@ -176,9 +176,10 @@ func (s *Service) createResourceFromSubmissionTx(tx *gorm.DB, submission *models
 		}
 
 		// Publish into the Default tool catalogue, the way a datasource is
-		// published into the Default data catalogue. CE has no catalogue
-		// management, so Default membership is what keeps the editions
-		// behaving alike.
+		// published into the Default data catalogue. Community Edition only:
+		// CE has no catalogue management, so Default membership is what keeps
+		// the tool reachable there. Enterprise leaves membership to the
+		// reviewer's assigned_catalogues and the admin.
 		if err := s.ensureToolInDefaultCatalogueTx(tx, tool); err != nil {
 			return 0, err
 		}

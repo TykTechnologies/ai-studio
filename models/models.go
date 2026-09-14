@@ -50,6 +50,7 @@ func InitModels(db *gorm.DB) error {
 		&secrets.Secret{},
 		&LLMChatRecord{},
 		&Notification{},   // For storing notifications
+		&SecretReference{}, // Which LLMs/tools/datasources read which secret
 		&PromptTemplate{}, // For storing prompt templates
 		&OAuthClient{},
 		&AuthCode{},
@@ -114,6 +115,12 @@ func InitModels(db *gorm.DB) error {
 
 	// Migration: classify users created before auth_source existed.
 	if err := BackfillAuthSource(db); err != nil {
+		return err
+	}
+
+	// Derived data: rebuild the secret reference index from the object
+	// tables (first boot populates it, later boots repair any drift).
+	if err := BackfillSecretReferences(db); err != nil {
 		return err
 	}
 

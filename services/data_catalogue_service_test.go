@@ -89,10 +89,12 @@ func TestDataCatalogueService(t *testing.T) {
 	assert.Len(t, fetchedDataCatalogue.Datasources, 0)
 
 	// Test GetAllDataCatalogues
-	// Note: Creating a datasource without specifying a catalogue will auto-create a "Default" catalogue
+	// Note: In Community Edition creating a datasource without specifying a
+	// catalogue auto-creates a "Default" catalogue and joins it; Enterprise
+	// builds leave the datasource in no catalogue (see autoAddToDefaultCatalogue).
 	allDataCatalogues, _, _, err := service.GetAllDataCatalogues(10, 1, true)
 	assert.NoError(t, err)
-	assert.Len(t, allDataCatalogues, 2) // Test catalogue + Default catalogue
+	assert.Len(t, allDataCatalogues, 1+defaultCatalogueAutoAdds()) // Test catalogue (+ Default catalogue in CE)
 	// Find our test catalogue in the results
 	var found bool
 	for _, dc := range allDataCatalogues {
@@ -118,13 +120,14 @@ func TestDataCatalogueService(t *testing.T) {
 	assert.Equal(t, dataCatalogue.ID, dataCataloguesByTag[0].ID)
 
 	// Test GetDataCataloguesByDatasource
-	// Note: Datasource was already auto-assigned to "Default" catalogue when created
-	// Adding it to our test catalogue means it's now in 2 catalogues
+	// Note: In CE the datasource was already auto-assigned to "Default" when
+	// created, so adding it to our test catalogue puts it in 2 catalogues;
+	// in Enterprise the test catalogue is its only one.
 	err = service.AddDatasourceToDataCatalogue(dataCatalogue.ID, datasource.ID)
 	assert.NoError(t, err)
 	dataCataloguesByDatasource, err := service.GetDataCataloguesByDatasource(datasource.ID)
 	assert.NoError(t, err)
-	assert.Len(t, dataCataloguesByDatasource, 2) // Default catalogue + test catalogue
+	assert.Len(t, dataCataloguesByDatasource, 1+defaultCatalogueAutoAdds()) // test catalogue (+ Default in CE)
 	// Verify our test catalogue is in the results
 	found = false
 	for _, dc := range dataCataloguesByDatasource {
@@ -199,11 +202,12 @@ func TestDataCatalogueService_MultipleDataCataloguesScenario(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test GetDataCataloguesByDatasource
-	// Note: Datasources are auto-assigned to "Default" catalogue when created
-	// Then manually added to specific catalogues, so they're in multiple catalogues
+	// Note: In CE datasources are auto-assigned to "Default" when created and
+	// then manually added to specific catalogues; in Enterprise only the
+	// manual memberships exist.
 	dataCataloguesDs1, err := service.GetDataCataloguesByDatasource(ds1.ID)
 	assert.NoError(t, err)
-	assert.Len(t, dataCataloguesDs1, 3) // Default + dc1 + dc2
+	assert.Len(t, dataCataloguesDs1, 2+defaultCatalogueAutoAdds()) // dc1 + dc2 (+ Default in CE)
 	// Verify dc1 and dc2 are in the results
 	var hasDc1, hasDc2 bool
 	for _, dc := range dataCataloguesDs1 {
@@ -218,7 +222,7 @@ func TestDataCatalogueService_MultipleDataCataloguesScenario(t *testing.T) {
 
 	dataCataloguesDs2, err := service.GetDataCataloguesByDatasource(ds2.ID)
 	assert.NoError(t, err)
-	assert.Len(t, dataCataloguesDs2, 2) // Default + dc2
+	assert.Len(t, dataCataloguesDs2, 1+defaultCatalogueAutoAdds()) // dc2 (+ Default in CE)
 	// Verify dc2 is in the results
 	var hasDc2Only bool
 	for _, dc := range dataCataloguesDs2 {

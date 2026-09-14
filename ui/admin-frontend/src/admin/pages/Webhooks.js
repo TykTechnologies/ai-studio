@@ -795,7 +795,7 @@ const Webhooks = () => {
                   <TableRow>
                     <StyledTableCell colSpan={8} align="center">
                       <Typography color="text.secondary" sx={{ py: 3 }}>
-                        No webhook targets yet. Create one; deliveries start after an administrator approves it.
+                        No webhook targets yet. Create one, then approve it to start deliveries.
                       </Typography>
                     </StyledTableCell>
                   </TableRow>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link as RouterLink } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
@@ -7,6 +7,7 @@ import WarningIcon from "@mui/icons-material/Warning";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
 import {
   Table,
   TableBody,
@@ -21,6 +22,8 @@ import {
   Box,
   Snackbar,
   Paper,
+  Chip,
+  Link,
 } from "@mui/material";
 import {
   StyledPaper,
@@ -41,6 +44,7 @@ const Secrets = () => {
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedSecret, setSelectedSecret] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -122,6 +126,34 @@ const Secrets = () => {
 
   const handleAddSecret = () => {
     navigate("/admin/secrets/new");
+  };
+
+  // Links each LLM that references the secret as $SECRET/<name>.
+  const renderReferencedBy = (referencedBy) => {
+    const refs = Array.isArray(referencedBy) ? referencedBy : [];
+    if (refs.length === 0) {
+      return (
+        <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
+          Not referenced
+        </Typography>
+      );
+    }
+    return (
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+        {refs.map((ref, index) => (
+          <React.Fragment key={`${ref.type}-${ref.id}`}>
+            {ref.type === "llm" ? (
+              <Link component={RouterLink} to={`/admin/llms/${ref.id}`}>
+                {ref.name}
+              </Link>
+            ) : (
+              <span>{ref.name}</span>
+            )}
+            {index < refs.length - 1 ? "," : ""}
+          </React.Fragment>
+        ))}
+      </Box>
+    );
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -217,6 +249,8 @@ const Secrets = () => {
                 <TableRow>
                   <StyledTableHeaderCell>ID</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Variable Name</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Value</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Used by</StyledTableHeaderCell>
                   <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                 </TableRow>
               </TableHead>
@@ -229,6 +263,17 @@ const Secrets = () => {
                   >
                     <StyledTableCell>{secret.id}</StyledTableCell>
                     <StyledTableCell>{secret.attributes.var_name}</StyledTableCell>
+                    <StyledTableCell>
+                      {/* The list never returns the value itself, only whether one is stored. */}
+                      {secret.attributes.has_value ? (
+                        <Chip label="Set" color="success" size="small" variant="outlined" />
+                      ) : (
+                        <Chip label="Empty" color="warning" size="small" variant="outlined" />
+                      )}
+                    </StyledTableCell>
+                    <StyledTableCell onClick={(event) => event.stopPropagation()}>
+                      {renderReferencedBy(secret.attributes.referenced_by)}
+                    </StyledTableCell>
                     <StyledTableCell align="right">
                       <Can permission={P.SECRETS_WRITE}>
                         <IconButton
@@ -263,10 +308,29 @@ const Secrets = () => {
         >
           Edit secret
         </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedSecret?.id)}>
+        <MenuItem
+          onClick={() => {
+            setDeleteTarget(selectedSecret);
+            handleMenuClose();
+          }}
+        >
           Delete secret
         </MenuItem>
       </Menu>
+
+      <DeleteConfirmationDialog
+        open={Boolean(deleteTarget)}
+        resourcePath="secrets"
+        objectLabel="secret"
+        item={deleteTarget ? { id: deleteTarget.id, name: deleteTarget.attributes?.var_name } : null}
+        consequence="Deleting it removes the stored value; anything referencing it as $SECRET/name will stop authenticating."
+        onConfirm={() => {
+          const id = deleteTarget?.id;
+          setDeleteTarget(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <Snackbar
         open={snackbar.open}

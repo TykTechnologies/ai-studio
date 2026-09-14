@@ -86,7 +86,7 @@ describe('GroupsTable', () => {
     const dataTable = screen.getByTestId('mocked-datatable');
     expect(dataTable).toBeInTheDocument();
 
-    expect(screen.getByText('Columns: ID,Name,Members,Catalogues')).toBeInTheDocument();
+    expect(screen.getByText('Columns: ID,Name,Members,Catalogs')).toBeInTheDocument();
     expect(screen.getByText('Data: 1,2')).toBeInTheDocument();
     expect(screen.getByText('Pagination: Page 1, Size 10, Total 2')).toBeInTheDocument();
     expect(screen.getByText('Enable Search: true')).toBeInTheDocument();

@@ -151,17 +151,19 @@ const SubmissionReview = () => {
           },
         },
       });
-      setSnackbar({
-        open: true,
-        // Say what approval actually did: it publishes into Default, and the
-        // resource is not live until an administrator activates it.
-        message: isPluginSubmission
-          ? "Submission approved. The resource was created in the plugin and access is governed by the plugin's group settings."
-          : "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
-        severity: "success",
-      });
       setApproveDialogOpen(false);
-      setTimeout(() => navigate("/admin/submissions"), 1500);
+      navigate("/admin/submissions", {
+        state: {
+          snackbar: {
+            // Say what approval actually did: it publishes into Default, and the
+            // resource is not live until an administrator activates it.
+            message: isPluginSubmission
+              ? "Submission approved. The resource was created in the plugin and access is governed by the plugin's group settings."
+              : "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
+            severity: "success",
+          },
+        },
+      });
     } catch (err) {
       setSnackbar({
         open: true,
@@ -185,13 +187,10 @@ const SubmissionReview = () => {
           },
         },
       });
-      setSnackbar({
-        open: true,
-        message: "Submission rejected",
-        severity: "success",
-      });
       setRejectDialogOpen(false);
-      setTimeout(() => navigate("/admin/submissions"), 1500);
+      navigate("/admin/submissions", {
+        state: { snackbar: { message: "Submission rejected", severity: "success" } },
+      });
     } catch (err) {
       setSnackbar({
         open: true,
@@ -215,13 +214,10 @@ const SubmissionReview = () => {
           },
         },
       });
-      setSnackbar({
-        open: true,
-        message: "Changes requested — submitter notified",
-        severity: "success",
-      });
       setChangesDialogOpen(false);
-      setTimeout(() => navigate("/admin/submissions"), 1500);
+      navigate("/admin/submissions", {
+        state: { snackbar: { message: "Changes requested — submitter notified", severity: "success" } },
+      });
     } catch (err) {
       setSnackbar({
         open: true,

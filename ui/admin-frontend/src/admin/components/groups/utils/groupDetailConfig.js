@@ -35,7 +35,7 @@ export const lastRowStyle = {
 export const TEAM_MEMBERS_COLUMNS = [
   { field: "name", headerName: "Name", width: "30%" },
   { field: "email", headerName: "Email", width: "40%" },
-  { field: "role", headerName: "Role", width: "30%" },
+  { field: "role", headerName: "Account type", width: "30%" },
 ];
 
 export const TEAM_MEMBERS_COLUMNS_FOR_TABLE = [
@@ -81,7 +81,7 @@ export const TEAM_MEMBERS_COLUMNS_FOR_TABLE = [
   },
   {
     field: "role",
-    headerName: "Role",
+    headerName: "Account type",
     width: { md: '45%', lg: '35%' },
     renderCell: (row) => (
       <CustomSelectBadge config={roleBadgeConfigs[row.role] || roleBadgeConfigs["Chat user"]} />

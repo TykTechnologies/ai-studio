@@ -108,8 +108,8 @@ const AppList = () => {
           const statusA = getApprovalStatus(a);
           const statusB = getApprovalStatus(b);
           
-          // Define order: Approved > Inactive > Pending
-          const statusOrder = { "Approved": 0, "Inactive": 1, "Pending": 2 };
+          // Define order: Approved > Awaiting approval > No credential
+          const statusOrder = { "Approved": 0, "Awaiting approval": 1, "No credential": 2 };
           
           const comparison = statusOrder[statusA] - statusOrder[statusB];
           return sortOrder === "asc" ? comparison : -comparison;
@@ -203,15 +203,15 @@ const AppList = () => {
     const credentialId = app.attributes.credential_id;
     
     if (!credentialId) {
-      return "Pending";
+      return "No credential";
     }
     
     const credential = credentials[credentialId];
     if (!credential) {
-      return "Pending";
+      return "No credential";
     }
     
-    return credential.active ? "Approved" : "Inactive";
+    return credential.active ? "Approved" : "Awaiting approval";
   };
 
   const getUserDisplay = (app) => {
@@ -250,6 +250,33 @@ const AppList = () => {
       });
     }
     handleMenuClose();
+  };
+
+  // Approve = activate the app's credential, the same PATCH the app form
+  // sends from its "active" switch.
+  const handleApproveCredentials = async (app) => {
+    handleMenuClose();
+    const credentialId = app?.attributes?.credential_id;
+    if (!credentialId) return;
+    try {
+      await apiClient.patch(`/credentials/${credentialId}`, {
+        data: { type: "credentials", attributes: { active: true } },
+      });
+      setSnackbar({
+        open: true,
+        message: "App credentials approved",
+        severity: "success",
+      });
+      fetchCredentials();
+      fetchApps();
+    } catch (error) {
+      console.error("Error approving credentials", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to approve credentials",
+        severity: "error",
+      });
+    }
   };
 
   const handleDisableCredentials = (app) => {
@@ -470,6 +497,12 @@ const AppList = () => {
         >
           Edit app
         </MenuItem>
+        {selectedApp && getApprovalStatus(selectedApp) === "Awaiting approval" && (
+          <MenuItem onClick={() => handleApproveCredentials(selectedApp)}>
+            <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />
+            Approve credentials
+          </MenuItem>
+        )}
         <MenuItem
           onClick={() => handleDisableCredentials(selectedApp)}
           disabled={!selectedApp || getApprovalStatus(selectedApp) !== "Approved"}

@@ -111,6 +111,49 @@ func (s *Secret) GetValue() string {
 	return s.Value
 }
 
+// HasValue reports whether the secret holds a non-empty value, without
+// exposing it. Works on a row as stored (encrypted) and on one that has
+// already been decrypted: an encrypted empty string is a real ciphertext, so
+// the stored form has to be decrypted to know it is empty, while a decrypted
+// value is simply checked for emptiness.
+func (s *Secret) HasValue() bool {
+	if s.Value == "" {
+		return false
+	}
+	// A current-scheme ciphertext reveals whether its plaintext is empty from
+	// its length alone: the payload is salt || nonce || GCM(plaintext), and
+	// GCM adds exactly its tag to the plaintext length. So an encrypted empty
+	// string is always saltLength+nonceSize+tagSize bytes, and anything longer
+	// carries a value. No key derivation or decryption is needed, which keeps
+	// the secrets list cheap however many secrets it shows.
+	if strings.HasPrefix(s.Value, encVersionPrefix) {
+		payload, err := base64.URLEncoding.DecodeString(strings.TrimPrefix(s.Value, encVersionPrefix))
+		if err != nil {
+			return true // not something we wrote; treat the stored text as the value
+		}
+		return len(payload) > saltLength+gcmNonceSize+gcmTagSize
+	}
+	key := os.Getenv(midsommarSecret)
+	if key == "" {
+		return true
+	}
+	// Legacy CFB values carry no length signal, so fall back to decrypting.
+	plaintext, err := decrypt(key, s.Value)
+	if err != nil {
+		// Not a ciphertext we wrote (already decrypted by GetSecretByID/
+		// GetSecretByVarName), so the value itself is the answer.
+		return true
+	}
+	return plaintext != ""
+}
+
+// gcmNonceSize and gcmTagSize are the standard AES-GCM nonce and tag sizes
+// (cipher.NewGCM's NonceSize and Overhead) that encrypt uses.
+const (
+	gcmNonceSize = 12
+	gcmTagSize   = 16
+)
+
 var midsommarSecret = "TYK_AI_SECRET_KEY"
 
 // encrypt encrypts a value with the current scheme: a 32-byte key derived

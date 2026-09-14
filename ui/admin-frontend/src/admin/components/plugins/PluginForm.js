@@ -313,13 +313,9 @@ const PluginForm = ({ mode = 'create' }) => {
         await pluginService.createPlugin(submissionData);
       }
 
-      setSnackbar({
-        open: true,
-        message: isEdit ? 'Plugin updated successfully' : 'Plugin created successfully',
-        severity: 'success',
+      navigate('/admin/plugins', {
+        state: { snackbar: { message: isEdit ? 'Plugin updated successfully' : 'Plugin created successfully', severity: 'success' } },
       });
-
-      setTimeout(() => navigate('/admin/plugins'), 2000);
     } catch (error) {
       console.error('Error saving plugin:', error);
       setSnackbar({

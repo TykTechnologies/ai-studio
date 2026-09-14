@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -184,9 +185,39 @@ func (a *API) updateCredential(c *gin.Context) {
 			})
 			return
 		}
+
+		a.notifyAppOwnerOfApproval(c, app, credential)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeCredential(credential)})
+}
+
+// notifyAppOwnerOfApproval records an in-app notification for the app owner
+// when their credentials are approved. The email has already gone out through
+// sendCredentialsApprovedEmail, so this is stored without a second email. The
+// approving administrator is the actor and is skipped if they own the app.
+func (a *API) notifyAppOwnerOfApproval(c *gin.Context, app *models.App, creds *models.Credential) {
+	if a.service == nil || a.service.NotificationService == nil {
+		return
+	}
+
+	var actorID uint
+	if user, exists := c.Get("user"); exists {
+		if currentUser, ok := user.(*models.User); ok {
+			actorID = currentUser.ID
+		}
+	}
+
+	notificationID := fmt.Sprintf("app_credential_approved_%d", creds.ID)
+	content := fmt.Sprintf("Your app \"%s\" has been approved and its credentials are active.", app.Name)
+	if err := a.service.NotificationService.NotifyWithOptions(notificationID, "App Credentials Approved", content, app.UserID, services.NotifyOptions{
+		Type:      "app",
+		Link:      fmt.Sprintf("/portal/apps/%d", app.ID),
+		ActorID:   actorID,
+		SkipEmail: true,
+	}); err != nil {
+		slog.Warn("failed to record app approval notification", "app_id", app.ID, "error", err)
+	}
 }
 
 func (a *API) sendCredentialsApprovedEmail(app *models.App, creds *models.Credential) error {

@@ -20,6 +20,7 @@ import AddIcon from "@mui/icons-material/Add";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import { CredentialStatusDot } from "../components/llms/CredentialStatusIndicator";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
 import {
   TitleBox,
   StyledPaper,
@@ -41,6 +42,7 @@ const LLMList = () => {
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedLLM, setSelectedLLM] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -215,7 +217,7 @@ const LLMList = () => {
                       Privacy Level
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell onClick={() => handleSort("active")}>
-                      Proxied
+                      Active
                     </StyledTableHeaderCell>
                     <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
@@ -296,13 +298,32 @@ const LLMList = () => {
         >
           Edit LLM
         </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedLLM?.id)}>
+        <MenuItem
+          onClick={() => {
+            setDeleteTarget(selectedLLM);
+            handleMenuClose();
+          }}
+        >
           Delete LLM
         </MenuItem>
         <MenuItem onClick={() => handleToggleActive(selectedLLM)}>
           {selectedLLM?.attributes.active ? "Deactivate" : "Activate"} LLM
         </MenuItem>
       </Menu>
+
+      <DeleteConfirmationDialog
+        open={Boolean(deleteTarget)}
+        resourcePath="llms"
+        objectLabel="LLM"
+        item={deleteTarget ? { id: deleteTarget.id, name: deleteTarget.attributes?.name } : null}
+        consequence="Deleting it removes it from all of them; apps that only have this LLM will stop working."
+        onConfirm={() => {
+          const id = deleteTarget?.id;
+          setDeleteTarget(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <Snackbar
         open={snackbar.open}

@@ -214,15 +214,16 @@ const UserForm = () => {
         }
       }
 
-      setSnackbar({
-        open: true,
-        message: id
-          ? "User updated successfully"
-          : "User created and added to the Default team. They cannot sign in until their email is verified.",
-        severity: "success",
+      navigate("/admin/users", {
+        state: {
+          snackbar: {
+            message: id
+              ? "User updated successfully"
+              : "User created and added to the Default team. They cannot sign in until their email is verified.",
+            severity: "success",
+          },
+        },
       });
-
-      setTimeout(() => navigate("/admin/users"), 2000);
     } catch (error) {
       console.error("Error saving user", error);
       setSnackbar({

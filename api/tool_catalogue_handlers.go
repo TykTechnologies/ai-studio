@@ -591,7 +591,9 @@ func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
 		return
 	}
 
-	tools, err := a.service.GetToolCatalogueTools(uint(id))
+	// Portal users only see live tools; inactive ones stay admin-only. The
+	// filter runs in the database so inactive rows are never loaded here.
+	active, err := a.service.GetToolCatalogueActiveTools(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -601,7 +603,7 @@ func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
 	}
 
 	// Use secure response format that hides sensitive fields
-	c.JSON(http.StatusOK, a.withToolGovernedMetadata(toSecureToolResponses(tools), true))
+	c.JSON(http.StatusOK, a.withToolGovernedMetadata(toSecureToolResponses(active), true))
 }
 
 // @Summary Get tool documentation by ID

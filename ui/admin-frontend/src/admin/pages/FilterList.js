@@ -18,6 +18,7 @@ import {
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
 import EnterpriseFeatureBadge from "../components/common/EnterpriseFeatureBadge";
 import {
   StyledPaper,
@@ -42,6 +43,7 @@ const FilterList = memo(() => {
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -256,10 +258,29 @@ const FilterList = memo(() => {
         >
           Edit filter
         </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedFilter?.id)}>
+        <MenuItem
+          onClick={() => {
+            setDeleteTarget(selectedFilter);
+            handleMenuClose();
+          }}
+        >
           Delete filter
         </MenuItem>
       </Menu>
+
+      <DeleteConfirmationDialog
+        open={Boolean(deleteTarget)}
+        resourcePath="filters"
+        objectLabel="filter"
+        item={deleteTarget ? { id: deleteTarget.id, name: deleteTarget.attributes?.name } : null}
+        consequence="Deleting it removes it from all of them; the LLMs and apps that use it will run without this filter."
+        onConfirm={() => {
+          const id = deleteTarget?.id;
+          setDeleteTarget(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <Snackbar
         open={snackbar.open}

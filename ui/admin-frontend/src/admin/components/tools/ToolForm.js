@@ -1,6 +1,6 @@
 import GovernedMetadataFields, { GOVERNED_METADATA_SECTION_ID } from "../metadata/GovernedMetadataFields";
 import { extractGovernedMetadataErrors } from "../../services/governedMetadataService";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
@@ -14,6 +14,9 @@ import {
   InputAdornment,
   Chip,
   Paper,
+  Checkbox,
+  FormControlLabel,
+  FormGroup,
   AccordionSummary,
   AccordionDetails,
   IconButton,
@@ -39,6 +42,7 @@ import {
 } from "../../styles/sharedStyles";
 import { styled } from "@mui/system";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import { parseOpenAPIOperations } from "../../utils/openapiOperations";
 
 const SectionTitle = ({ children, tooltip }) => (
   <Box sx={{ display: "flex", alignItems: "center", mt: 3, mb: 2 }}>
@@ -121,6 +125,79 @@ const OperationsInput = ({ value, onChange }) => {
         autoComplete="off"
       />
     </Paper>
+  );
+};
+
+// Checklist derived from the pasted spec: checked = allowed. Operations that
+// are stored on the tool but no longer in the spec stay listed (checked) so a
+// stale entry is never dropped silently.
+const OperationsChecklist = ({ operations, selected, onChange }) => {
+  const known = new Set(operations.map((op) => op.operationId));
+  const stale = selected.filter((id) => !known.has(id));
+
+  const toggle = (operationId) => {
+    if (selected.includes(operationId)) {
+      onChange(selected.filter((id) => id !== operationId));
+    } else {
+      onChange([...selected, operationId]);
+    }
+  };
+
+  return (
+    <Box>
+      <Box sx={{ display: "flex", gap: 1, mb: 1 }}>
+        <Button size="small" onClick={() => onChange(operations.map((op) => op.operationId))}>
+          Select all
+        </Button>
+        <Button size="small" onClick={() => onChange([])}>
+          Clear
+        </Button>
+        <Typography variant="caption" color="textSecondary" sx={{ alignSelf: "center", ml: 1 }}>
+          {selected.length} of {operations.length + stale.length} allowed
+        </Typography>
+      </Box>
+      <FormGroup data-testid="operations-checklist">
+        {operations.map((op) => (
+          <FormControlLabel
+            key={op.operationId}
+            control={
+              <Checkbox
+                checked={selected.includes(op.operationId)}
+                onChange={() => toggle(op.operationId)}
+                name={op.operationId}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2" component="span" sx={{ fontFamily: "monospace" }}>
+                  {op.operationId}
+                </Typography>
+                <Typography variant="caption" color="textSecondary" component="span" sx={{ ml: 1 }}>
+                  {op.method} {op.path}
+                  {op.summary ? ` — ${op.summary}` : ""}
+                </Typography>
+              </Box>
+            }
+          />
+        ))}
+        {stale.map((operationId) => (
+          <FormControlLabel
+            key={`stale-${operationId}`}
+            control={<Checkbox checked onChange={() => toggle(operationId)} name={operationId} />}
+            label={
+              <Box>
+                <Typography variant="body2" component="span" sx={{ fontFamily: "monospace" }}>
+                  {operationId}
+                </Typography>
+                <Typography variant="caption" color="warning.main" component="span" sx={{ ml: 1 }}>
+                  not in the pasted spec
+                </Typography>
+              </Box>
+            }
+          />
+        ))}
+      </FormGroup>
+    </Box>
   );
 };
 
@@ -386,6 +463,16 @@ const ToolForm = () => {
     setTool({ ...tool, operations: Array.isArray(value) ? value : [] });
   };
 
+  // Operations offered by the pasted spec (null when it cannot be parsed).
+  const specOperations = useMemo(() => parseOpenAPIOperations(tool.oas_spec), [tool.oas_spec]);
+  const selectedOperations = useMemo(() => {
+    if (Array.isArray(tool.operations)) return tool.operations;
+    if (typeof tool.operations === "string" && tool.operations.trim()) {
+      return tool.operations.split(",").map((op) => op.trim()).filter(Boolean);
+    }
+    return [];
+  }, [tool.operations]);
+
   const handleNamespaceChange = (namespaces) => {
     const namespaceString = Array.isArray(namespaces) ? namespaces.join(', ') : namespaces;
     setTool({ ...tool, namespace: namespaceString });
@@ -470,13 +557,9 @@ const ToolForm = () => {
         await updateToolOperations(newToolId);
       }
 
-      setSnackbar({
-        open: true,
-        message: id ? "Tool updated successfully" : "Tool created successfully",
-        severity: "success",
+      navigate("/admin/tools", {
+        state: { snackbar: { message: id ? "Tool updated successfully" : "Tool created successfully", severity: "success" } },
       });
-
-      setTimeout(() => navigate("/admin/tools"), 2000);
     } catch (error) {
       if (error.response?.status === 422) {
         const fieldErrors = extractGovernedMetadataErrors(error);
@@ -683,19 +766,34 @@ const ToolForm = () => {
             </Grid>
           </Grid>
 
-          <SectionTitle tooltip="Define the operations (endpoints) that this tool can use. These should correspond to paths in your OpenAPI Specification.">
+          <SectionTitle tooltip="Tick the operations (endpoints) the LLM may call. They come from the operationId values in your OpenAPI Specification.">
             Operations
           </SectionTitle>
           <Grid container spacing={3}>
             <Grid item xs={12}>
-              <OperationsInput
-                value={tool.operations}
-                onChange={handleOperationsChange}
-              />
-              <Typography variant="caption" color="textSecondary">
-                Type an operation name and press comma or enter to add. Click on
-                a chip to remove it.
-              </Typography>
+              {specOperations && specOperations.length > 0 ? (
+                <OperationsChecklist
+                  operations={specOperations}
+                  selected={selectedOperations}
+                  onChange={handleOperationsChange}
+                />
+              ) : (
+                <>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    {tool.oas_spec && tool.oas_spec.trim()
+                      ? "The specification could not be parsed, or none of its operations has an operationId, so operations have to be typed by hand."
+                      : "Paste an OpenAPI specification above to pick operations from a list, or type them by hand."}
+                  </Alert>
+                  <OperationsInput
+                    value={tool.operations}
+                    onChange={handleOperationsChange}
+                  />
+                  <Typography variant="caption" color="textSecondary">
+                    Type an operation name and press comma or enter to add. Click on
+                    a chip to remove it.
+                  </Typography>
+                </>
+              )}
             </Grid>
           </Grid>
 

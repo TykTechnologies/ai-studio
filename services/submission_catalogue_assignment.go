@@ -171,9 +171,16 @@ func catalogueIDsFrom(assigned models.JSONMap) []uint {
 // Default, and both arrive inactive so publication is not the same as going
 // live.
 //
-// Default membership is a Community/Enterprise compatibility rule: CE has no
-// catalogue management, so anything outside Default has no CE equivalent.
+// Default membership is a Community Edition rule: CE has no catalogue
+// management, so anything outside Default has no CE equivalent. In Enterprise
+// builds catalogues are the access control and the tool stays out of every
+// catalogue until an administrator (or the reviewer, via assigned_catalogues)
+// grants it; see autoAddToDefaultCatalogue.
 func (s *Service) ensureToolInDefaultCatalogueTx(tx *gorm.DB, tool *models.Tool) error {
+	if !autoAddToDefaultCatalogue() {
+		return nil
+	}
+
 	// Tool has no back-reference to ToolCatalogue -- the relation is declared
 	// only on ToolCatalogue.Tools -- so count rows in the join table directly.
 	var count int64

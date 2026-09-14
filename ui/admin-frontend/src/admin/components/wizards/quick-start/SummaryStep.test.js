@@ -15,7 +15,7 @@ jest.mock('./utils', () => ({
   generateEndpointUrl: jest.fn((path, provider) => `/mocked${path}${provider}`),
   getBudgetLimitText: jest.fn(() => 'No budget limit'),
   getOwnerName: jest.fn(() => 'Mock Owner'),
-  getCurlExample: jest.fn((provider, name) => 'curl example'),
+  getCurlExample: jest.fn(),
   generateSlug: jest.fn(name => name.toLowerCase()),
 }));
 
@@ -30,6 +30,11 @@ const renderWithTheme = (ui) =>
 describe('SummaryStep', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // CRA resets mock implementations between tests, so set them here.
+    utils.generateEndpointUrl.mockImplementation((path, provider) => `/mocked${path}${provider}`);
+    utils.getBudgetLimitText.mockReturnValue('No budget limit');
+    utils.getOwnerName.mockReturnValue('Mock Owner');
+    utils.getCurlExample.mockImplementation((provider, name, secret) => `curl -H "Authorization: Bearer ${secret || 'YOUR_SECRET'}"`);
     // Mock clipboard
     Object.assign(navigator, {
       clipboard: { writeText: jest.fn() },
@@ -105,6 +110,36 @@ describe('SummaryStep', () => {
     });
   });
 
+  it('does not offer to skip the quick start once the app exists', () => {
+    useQuickStart.mockReturnValue(baseMockData);
+    renderWithTheme(<SummaryStep />);
+    expect(screen.queryByText('Skip quick start')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Finish' })).toBeInTheDocument();
+  });
+
+  it('reveals the secret in the Secret row and the curl example together', () => {
+    useQuickStart.mockReturnValue(baseMockData);
+    renderWithTheme(<SummaryStep />);
+    expect(utils.getCurlExample).toHaveBeenCalledWith('openai', 'OpenAI', 'secret123');
+    // Masked in both places until revealed
+    expect(screen.queryByText('secret123')).not.toBeInTheDocument();
+    expect(screen.getByText('curl -H "Authorization: Bearer ••••••••••••••••"')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show secret' }));
+    expect(screen.getByText('secret123')).toBeInTheDocument();
+    expect(screen.getByText('curl -H "Authorization: Bearer secret123"')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide secret' }));
+    expect(screen.queryByText('secret123')).not.toBeInTheDocument();
+  });
+
+  it('copies the unmasked curl command even while the secret is hidden', () => {
+    useQuickStart.mockReturnValue(baseMockData);
+    renderWithTheme(<SummaryStep />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy curl example' }));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('curl -H "Authorization: Bearer secret123"');
+  });
+
   it('renders mocked endpoints and copies REST API url', async () => {
     useQuickStart.mockReturnValue(baseMockData);
     renderWithTheme(<SummaryStep />);
@@ -112,10 +147,10 @@ describe('SummaryStep', () => {
     // Check that the generateEndpointUrl function was called with the right parameters
     expect(utils.generateEndpointUrl).toHaveBeenCalledWith('/llm/rest/', 'OpenAI');
     const copyButtons = screen.getAllByRole('button');
-    // Third copy button is REST API
-    fireEvent.click(copyButtons[2]);
+    // keyID copy, secret copy, secret show/hide, then the REST API copy
+    fireEvent.click(copyButtons[3]);
     // Check that the clipboard was called with the result of generateEndpointUrl
-    const mockedEndpoint = utils.generateEndpointUrl('/llm/rest/', 'openai');
+    const mockedEndpoint = utils.generateEndpointUrl('/llm/rest/', 'OpenAI');
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(mockedEndpoint);
     await waitFor(() => {
       expect(screen.getByText('Copied!')).toBeInTheDocument();

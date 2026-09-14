@@ -11,13 +11,26 @@ import {
 	Box,
 	Button,
 } from '@mui/material';
-import NotificationMarkdown from './NotificationMarkdown';
 import DoneIcon from '@mui/icons-material/Done';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../context/NotificationContext';
 
+const PREVIEW_LENGTH = 160;
+
+// Content is plain text now; show a short preview and let the item open its object.
+const getPreview = (content) => {
+	const text = (content || '').replace(/\s+/g, ' ').trim();
+	if (text.length <= PREVIEW_LENGTH) return text;
+	return `${text.slice(0, PREVIEW_LENGTH).trimEnd()}…`;
+};
+
+const getLink = (notification) =>
+	notification.Link ?? notification.link ?? notification.attributes?.link ?? '';
+
 const NotificationList = () => {
+	const navigate = useNavigate();
 	const [notifications, setNotifications] = useState([]);
 	const { markAsRead, markAllAsRead } = useNotifications();
 
@@ -49,6 +62,14 @@ const NotificationList = () => {
 	const handleNotificationClick = async (notification) => {
 		if (!notification.Read) {
 			await handleMarkAsRead(notification.ID);
+		}
+		const link = getLink(notification);
+		if (link) {
+			if (/^https?:\/\//i.test(link)) {
+				window.open(link, '_blank', 'noopener');
+			} else {
+				navigate(link);
+			}
 		}
 	};
 
@@ -95,13 +116,8 @@ const NotificationList = () => {
 						>
 							<ListItemText
 								primary={notification.Title}
-								secondary={
-									<Box sx={{ '& img': { maxWidth: '100%' }, '& pre': { overflow: 'auto' } }}>
-										<NotificationMarkdown>
-											{notification.Content}
-										</NotificationMarkdown>
-									</Box>
-								}
+								secondary={getPreview(notification.Content)}
+								secondaryTypographyProps={{ title: notification.Content || '' }}
 							/>
 							{!notification.Read && (
 								<ListItemSecondaryAction>

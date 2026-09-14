@@ -7,6 +7,7 @@ import {
   TextField,
   Box,
   FormControl,
+  FormHelperText,
   InputLabel,
   Select,
   MenuItem,
@@ -424,13 +425,9 @@ const LLMForm = () => {
         });
       }
 
-      setSnackbar({
-        open: true,
-        message: id ? "LLM updated successfully" : "LLM created successfully",
-        severity: "success",
+      navigate("/admin/llms", {
+        state: { snackbar: { message: id ? "LLM updated successfully" : "LLM created successfully", severity: "success" } },
       });
-
-      setTimeout(() => navigate("/admin/llms"), 2000);
     } catch (error) {
       if (error.response?.status === 422) {
         const fieldErrors = extractGovernedMetadataErrors(error);
@@ -483,7 +480,7 @@ const LLMForm = () => {
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued">LLM providers power AI assistants in chats and can be made available to developers in the portal and gateway when set to Active. To control access, each LLM provider must be part of a catalog to be used by specific teams.</Typography>  
       </Box>
       <ContentBox sx={{ pt: 0 }}>
-        <Box component="form" onSubmit={handleSubmit}>
+        <Box component="form" onSubmit={handleSubmit} noValidate>
           <SectionTitle>LLM Description</SectionTitle>
           <Grid container spacing={3}>
             <Grid item xs={12}>
@@ -525,7 +522,7 @@ const LLMForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth>
+              <FormControl fullWidth error={!!errors.vendor}>
                 <InputLabel id="llmform-vendor-label">Vendor</InputLabel>
                 <Select
                   labelId="llmform-vendor-label"
@@ -559,6 +556,7 @@ const LLMForm = () => {
                     </MenuItem>
                   ))}
                 </Select>
+                {errors.vendor && <FormHelperText>{errors.vendor}</FormHelperText>}
               </FormControl>
             </Grid>
             <Grid item xs={12}>
@@ -571,6 +569,126 @@ const LLMForm = () => {
                 helperText="Specify the default model to use for this LLM (e.g., gpt-4, claude-2)"
               />
             </Grid>
+          </Grid>
+
+          {/* Credentials sit right under the identity fields: they are what a
+              new provider needs before anything else on this form matters. */}
+          <StyledAccordion defaultExpanded>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography>Access Details</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              {llm.vendor === "bedrock" ? (
+                <>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    AWS Bedrock requires an AWS region endpoint and IAM credentials.
+                    For security, store sensitive credentials using the Secrets Manager
+                    and reference them here as <strong>$SECRET/your-secret-name</strong> or <strong>$ENV/YOUR_ENV_VAR</strong>.
+                  </Typography>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Bedrock Endpoint"
+                        name="api_endpoint"
+                        value={llm.api_endpoint}
+                        onChange={handleChange}
+                        helperText="e.g., https://bedrock-runtime.us-east-1.amazonaws.com"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="AWS Access Key ID"
+                        value={awsCreds.aws_access_key_id}
+                        onChange={(e) => setAwsCreds({ ...awsCreds, aws_access_key_id: e.target.value })}
+                        placeholder="AKIA... or $SECRET/aws-access-key-id"
+                        helperText="Enter directly or use $SECRET/name to reference a stored secret"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="AWS Secret Access Key"
+                        type={showAwsSecretKey ? "text" : "password"}
+                        value={awsCreds.aws_secret_access_key}
+                        onChange={(e) => setAwsCreds({ ...awsCreds, aws_secret_access_key: e.target.value })}
+                        placeholder="$SECRET/aws-secret-access-key"
+                        helperText="Recommended: use $SECRET/name to reference a stored secret rather than entering the key directly"
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => setShowAwsSecretKey(!showAwsSecretKey)}
+                                edge="end"
+                              >
+                                {showAwsSecretKey ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="AWS Session Token (optional)"
+                        value={awsCreds.aws_session_token}
+                        onChange={(e) => setAwsCreds({ ...awsCreds, aws_session_token: e.target.value })}
+                        placeholder="$SECRET/aws-session-token"
+                        helperText="Required only for temporary credentials (assumed roles, SSO). Use $SECRET/name for secure storage."
+                      />
+                    </Grid>
+                  </Grid>
+                </>
+              ) : (
+                <>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Some LLMs do not require an API Key for access, or have a
+                    default URL (for example Anthropic and OpenAI). If enabling an
+                    LLM for the AI Gateway, the endpoint is required for proper
+                    functioning.
+                  </Typography>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="API Endpoint"
+                        name="api_endpoint"
+                        value={llm.api_endpoint}
+                        onChange={handleChange}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="API Key"
+                        name="api_key"
+                        type={showApiKey ? "text" : "password"}
+                        value={llm.api_key}
+                        onChange={handleChange}
+                        helperText="Enter the key, or reference a stored secret as $SECRET/name or an environment variable as $ENV/NAME."
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => setShowApiKey(!showApiKey)}
+                                edge="end"
+                              >
+                                {showApiKey ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Grid>
+                  </Grid>
+                </>
+              )}
+            </AccordionDetails>
+          </StyledAccordion>
+
+          <Grid container spacing={3}>
             <Grid item xs={12}>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
@@ -691,120 +809,6 @@ const LLMForm = () => {
 
           <StyledAccordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography>Access Details</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              {llm.vendor === "bedrock" ? (
-                <>
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    AWS Bedrock requires an AWS region endpoint and IAM credentials.
-                    For security, store sensitive credentials using the Secrets Manager
-                    and reference them here as <strong>$SECRET/your-secret-name</strong> or <strong>$ENV/YOUR_ENV_VAR</strong>.
-                  </Typography>
-                  <Grid container spacing={3}>
-                    <Grid item xs={12}>
-                      <TextField
-                        fullWidth
-                        label="Bedrock Endpoint"
-                        name="api_endpoint"
-                        value={llm.api_endpoint}
-                        onChange={handleChange}
-                        helperText="e.g., https://bedrock-runtime.us-east-1.amazonaws.com"
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        fullWidth
-                        label="AWS Access Key ID"
-                        value={awsCreds.aws_access_key_id}
-                        onChange={(e) => setAwsCreds({ ...awsCreds, aws_access_key_id: e.target.value })}
-                        placeholder="AKIA... or $SECRET/aws-access-key-id"
-                        helperText="Enter directly or use $SECRET/name to reference a stored secret"
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        fullWidth
-                        label="AWS Secret Access Key"
-                        type={showAwsSecretKey ? "text" : "password"}
-                        value={awsCreds.aws_secret_access_key}
-                        onChange={(e) => setAwsCreds({ ...awsCreds, aws_secret_access_key: e.target.value })}
-                        placeholder="$SECRET/aws-secret-access-key"
-                        helperText="Recommended: use $SECRET/name to reference a stored secret rather than entering the key directly"
-                        InputProps={{
-                          endAdornment: (
-                            <InputAdornment position="end">
-                              <IconButton
-                                onClick={() => setShowAwsSecretKey(!showAwsSecretKey)}
-                                edge="end"
-                              >
-                                {showAwsSecretKey ? <VisibilityOff /> : <Visibility />}
-                              </IconButton>
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        fullWidth
-                        label="AWS Session Token (optional)"
-                        value={awsCreds.aws_session_token}
-                        onChange={(e) => setAwsCreds({ ...awsCreds, aws_session_token: e.target.value })}
-                        placeholder="$SECRET/aws-session-token"
-                        helperText="Required only for temporary credentials (assumed roles, SSO). Use $SECRET/name for secure storage."
-                      />
-                    </Grid>
-                  </Grid>
-                </>
-              ) : (
-                <>
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    Some LLMs do not require an API Key for access, or have a
-                    default URL (for example Anthropic and OpenAI). If enabling an
-                    LLM for the AI Gateway, the endpoint is required for proper
-                    functioning.
-                  </Typography>
-                  <Grid container spacing={3}>
-                    <Grid item xs={12}>
-                      <TextField
-                        fullWidth
-                        label="API Endpoint"
-                        name="api_endpoint"
-                        value={llm.api_endpoint}
-                        onChange={handleChange}
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        fullWidth
-                        label="API Key"
-                        name="api_key"
-                        type={showApiKey ? "text" : "password"}
-                        value={llm.api_key}
-                        onChange={handleChange}
-                        InputProps={{
-                          endAdornment: (
-                            <InputAdornment position="end">
-                              <IconButton
-                                onClick={() => setShowApiKey(!showApiKey)}
-                                edge="end"
-                              >
-                                {showApiKey ? <VisibilityOff /> : <Visibility />}
-                              </IconButton>
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
-                    </Grid>
-                  </Grid>
-                </>
-              )}
-            </AccordionDetails>
-          </StyledAccordion>
-
-          <StyledAccordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography>Portal Display Information</Typography>
             </AccordionSummary>
             <AccordionDetails>
@@ -828,8 +832,11 @@ const LLMForm = () => {
                     checked={llm.active}
                     onChange={handleSwitchChange}
                     name="active"
-                    label="Enabled in Proxy"
+                    label="Active"
                   />
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Available to the portal and gateway when on
+                  </Typography>
                 </Grid>
                 <Grid item xs={12}>
                   <FormControlLabel
@@ -1031,6 +1038,13 @@ const LLMForm = () => {
             defaultExpanded={false}
           />
 
+          {/* Native browser validation is off (noValidate) so the errors are
+              rendered here where tests and screen readers can see them. */}
+          {Object.keys(errors).length > 0 && (
+            <Alert severity="error" sx={{ mt: 3 }} data-testid="llm-form-errors">
+              Fix the following before saving: {Object.values(errors).join("; ")}
+            </Alert>
+          )}
           <Box mt={4}>
             <PrimaryButton variant="contained" type="submit">
               {id ? "Update LLM" : "Add LLM"}

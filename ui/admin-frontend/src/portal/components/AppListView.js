@@ -28,9 +28,15 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import pubClient from "../../admin/utils/pubClient";
+import AppStatusChip, { getAppStatus } from "./AppStatusChip";
 
 const AppListView = () => {
   const [apps, setApps] = useState([]);
+  // credential.active per app id. The list endpoint (/common/apps) serialises
+  // is_active but not the credential, which only the detail endpoint returns,
+  // so it is fetched per App once the list is in. A failed detail fetch leaves
+  // the entry undefined and the row shows "Awaiting approval", the safe reading.
+  const [credentialActiveById, setCredentialActiveById] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -44,7 +50,9 @@ const AppListView = () => {
   const fetchApps = async () => {
     try {
       const response = await pubClient.get("/common/apps");
-      setApps(response.data.data);
+      const fetchedApps = response.data.data || [];
+      setApps(fetchedApps);
+      setCredentialActiveById(await loadCredentialStates(fetchedApps));
       setLoading(false);
     } catch (err) {
       console.error("Error fetching apps:", err);
@@ -52,6 +60,38 @@ const AppListView = () => {
       setLoading(false);
     }
   };
+
+  // Apps whose credential the list already carries (should the API start
+  // including it) are not fetched again. A disabled App is Disabled regardless
+  // of its credential, so its detail is not needed either.
+  const loadCredentialStates = async (appList) => {
+    const states = {};
+    const pending = [];
+    for (const app of appList) {
+      if (app.attributes.credential) {
+        states[app.id] = app.attributes.credential.active;
+      } else if (app.attributes.is_active !== false) {
+        pending.push(app);
+      }
+    }
+    const results = await Promise.allSettled(
+      pending.map((app) => pubClient.get(`/common/apps/${app.id}`)),
+    );
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") {
+        states[pending[index].id] = result.value.data?.attributes?.credential?.active;
+      } else {
+        console.error("Error fetching app credential:", result.reason);
+      }
+    });
+    return states;
+  };
+
+  const statusOf = (app) =>
+    getAppStatus({
+      isActive: app.attributes.is_active,
+      credentialActive: credentialActiveById[app.id],
+    });
 
   const handleRowClick = (appId) => {
     navigate(`/portal/apps/${appId}`);
@@ -137,6 +177,7 @@ const AppListView = () => {
               <TableRow>
                 <StyledTableHeaderCell>Name</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Description</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Status</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Data Sources</StyledTableHeaderCell>
                 <StyledTableHeaderCell>LLMs</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Tools</StyledTableHeaderCell>
@@ -154,6 +195,9 @@ const AppListView = () => {
                     {app.attributes.name}
                   </StyledTableCell>
                   <StyledTableCell>{app.attributes.description}</StyledTableCell>
+                  <StyledTableCell>
+                    <AppStatusChip status={statusOf(app)} />
+                  </StyledTableCell>
                   <StyledTableCell>{app.attributes.datasource_ids ? app.attributes.datasource_ids.length : 0}</StyledTableCell>
                   <StyledTableCell>{app.attributes.llm_ids ? app.attributes.llm_ids.length : 0}</StyledTableCell>
                   <StyledTableCell>{app.attributes.tool_ids ? app.attributes.tool_ids.length : 0}</StyledTableCell>

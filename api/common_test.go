@@ -588,7 +588,7 @@ func TestCommon_GetUserAppsWithTools(t *testing.T) {
 }
 
 func TestCommon_GetUserAppDetailsWithTools(t *testing.T) {
-	api, _, service := setupTestAPIForCommonTests(t)
+	api, db, service := setupTestAPIForCommonTests(t)
 
 	user := createTestUserWithSettings(t, service, "detailuser@example.com", "Detail User", false, true, true, true, false)
 	toolB := createTestTool(t, service, "ToolForAppDetail")
@@ -652,6 +652,27 @@ func TestCommon_GetUserAppDetailsWithTools(t *testing.T) {
 	assert.Equal(t, createdAppResp.ID, appDetailResp.ID)
 	assert.Contains(t, appDetailResp.Attributes.ToolIDs, toolB.ID)
 	assert.Len(t, appDetailResp.Attributes.ToolIDs, 1)
+	assert.True(t, appDetailResp.Attributes.IsActive, "a new app is active")
+	assert.Contains(t, wDetail.Body.String(), `"is_active":true`)
+
+	// A disabled app reports is_active=false on the detail page, the same
+	// flag the list endpoint already serialises.
+	err = db.Model(&models.App{}).Where("id = ?", createdAppResp.ID).Update("is_active", false).Error
+	assert.NoError(t, err)
+
+	wDisabled := httptest.NewRecorder()
+	reqDisabled, _ := http.NewRequest("GET", fmt.Sprintf("/common/apps/%s", createdAppResp.ID), nil)
+	cDisabled, _ := gin.CreateTestContext(wDisabled)
+	cDisabled.Request = reqDisabled
+	cDisabled.Set("user", user)
+	cDisabled.Params = gin.Params{gin.Param{Key: "id", Value: createdAppResp.ID}}
+	api.getUserAppDetails(cDisabled)
+
+	assert.Equal(t, http.StatusOK, wDisabled.Code, wDisabled.Body.String())
+	var disabledResp AppDetailResponse
+	assert.NoError(t, json.Unmarshal(wDisabled.Body.Bytes(), &disabledResp))
+	assert.False(t, disabledResp.Attributes.IsActive)
+	assert.Contains(t, wDisabled.Body.String(), `"is_active":false`)
 }
 
 // Additional test fixtures for edge, plugin, agent, and branding tests

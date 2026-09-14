@@ -68,7 +68,8 @@ func (s *Service) CreateToolWithDB(db *gorm.DB, name, description, toolType stri
 		return nil, err
 	}
 
-	// Auto-assign to Default tool catalogue if not in any catalogue.
+	// Auto-assign to Default tool catalogue if not in any catalogue (Community
+	// Edition only; Enterprise leaves catalogue membership to the admin).
 	//
 	// Must run on `db`, not s.DB. When callers hand this a transaction (the
 	// submission approval path does), reaching for the pool instead takes a

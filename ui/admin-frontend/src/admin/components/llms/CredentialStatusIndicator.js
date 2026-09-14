@@ -78,10 +78,10 @@ export const CredentialStatusDot = ({ active, status, reference }) => {
 
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-      <Tooltip title={active ? "Proxied" : "Not proxied"}>
+      <Tooltip title={active ? "Active" : "Inactive"}>
         <FiberManualRecordIcon
           sx={{ color: active ? "green" : "red" }}
-          titleAccess={active ? "Proxied" : "Not proxied"}
+          titleAccess={active ? "Active" : "Inactive"}
         />
       </Tooltip>
       {showWarning && (

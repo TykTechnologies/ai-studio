@@ -133,16 +133,31 @@ func TestApproveSubmission_PublishesToDefaultInactive(t *testing.T) {
 	assert.False(t, tool.Active,
 		"an approved tool is published but not live until an administrator activates it")
 
-	defaultCatalogue, err := models.GetOrCreateDefaultToolCatalogue(db)
-	assert.NoError(t, err)
-
 	var count int64
 	err = db.Table("tool_catalogue_tools").
-		Where("tool_catalogue_id = ? AND tool_id = ?", defaultCatalogue.ID, tool.ID).
+		Where("tool_id = ?", tool.ID).
 		Count(&count).Error
 	assert.NoError(t, err)
-	assert.EqualValues(t, 1, count,
-		"an approved tool joins the Default catalogue, the way a datasource does")
+
+	if autoAddToDefaultCatalogue() {
+		// Community Edition: Default is the only route to the portal, so the
+		// approved tool joins it the way a datasource does.
+		defaultCatalogue, err := models.GetOrCreateDefaultToolCatalogue(db)
+		assert.NoError(t, err)
+
+		var inDefault int64
+		err = db.Table("tool_catalogue_tools").
+			Where("tool_catalogue_id = ? AND tool_id = ?", defaultCatalogue.ID, tool.ID).
+			Count(&inDefault).Error
+		assert.NoError(t, err)
+		assert.EqualValues(t, 1, inDefault,
+			"an approved tool joins the Default catalogue, the way a datasource does")
+	} else {
+		// Enterprise: catalogues are the access control, so with no
+		// assigned_catalogues the approved tool is in no catalogue at all.
+		assert.EqualValues(t, 0, count,
+			"an approved tool is not published to any catalogue unless the reviewer assigned one")
+	}
 }
 
 func TestApproveSubmission_DatasourceIsInactiveRegardlessOfPayload(t *testing.T) {

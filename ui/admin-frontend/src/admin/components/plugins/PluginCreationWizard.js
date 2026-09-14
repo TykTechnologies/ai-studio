@@ -179,12 +179,14 @@ const PluginCreationWizard = () => {
         if (pluginId) {
           await pluginService.deletePlugin(pluginId);
         }
-        setSnackbar({
-          open: true,
-          message: 'Plugin creation cancelled due to scope denial.',
-          severity: 'info',
+        navigate('/admin/plugins', {
+          state: {
+            snackbar: {
+              message: 'Plugin creation cancelled due to scope denial.',
+              severity: 'info',
+            },
+          },
         });
-        setTimeout(() => navigate('/admin/plugins'), 2000);
         return;
       } catch (err) {
         console.error('Error cleaning up plugin after scope denial:', err);
@@ -259,13 +261,9 @@ const PluginCreationWizard = () => {
           }
         }
 
-        setSnackbar({
-          open: true,
-          message: 'Plugin created successfully!',
-          severity: 'success',
+        navigate(`/admin/plugins/${pluginId}`, {
+          state: { snackbar: { message: 'Plugin created successfully!', severity: 'success' } },
         });
-
-        setTimeout(() => navigate(`/admin/plugins/${pluginId}`), 2000);
       }
     } catch (err) {
       console.error('Error updating plugin configuration:', err);
@@ -330,13 +328,9 @@ const PluginCreationWizard = () => {
       }
     }
 
-    setSnackbar({
-      open: true,
-      message: 'Plugin created successfully!',
-      severity: 'success',
+    navigate(`/admin/plugins/${pluginId}`, {
+      state: { snackbar: { message: 'Plugin created successfully!', severity: 'success' } },
     });
-
-    setTimeout(() => navigate(`/admin/plugins/${pluginId}`), 2000);
   };
 
   const handleCloseSnackbar = () => {

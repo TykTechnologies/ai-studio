@@ -362,21 +362,20 @@ const ModelRouterForm = () => {
 
       if (isEditMode) {
         await apiClient.patch(`/model-routers/${id}`, payload);
-        setSnackbar({
-          open: true,
-          message: "Model Router updated successfully",
-          severity: "success",
-        });
       } else {
         await apiClient.post("/model-routers", payload);
-        setSnackbar({
-          open: true,
-          message: "Model Router created successfully",
-          severity: "success",
-        });
       }
 
-      setTimeout(() => navigate("/admin/model-routers"), 1500);
+      navigate("/admin/model-routers", {
+        state: {
+          snackbar: {
+            message: isEditMode
+              ? "Model Router updated successfully"
+              : "Model Router created successfully",
+            severity: "success",
+          },
+        },
+      });
     } catch (error) {
       console.error("Error saving router:", error);
       setSnackbar({

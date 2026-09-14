@@ -73,7 +73,8 @@ func (a *API) getCatalogueLLMs(c *gin.Context) {
 		return
 	}
 
-	llms, err := a.service.GetCatalogueLLMs(uint(id))
+	// Portal users only see live LLMs; drafts stay admin-only until activated.
+	llms, err := a.service.GetCatalogueActiveLLMs(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -766,12 +767,16 @@ func (a *API) getUserAppDetails(c *gin.Context) {
 			MonthlyBudget   *float64         `json:"monthly_budget"`
 			BudgetStartDate *time.Time       `json:"budget_start_date"`
 			IsOrphaned      bool             `json:"is_orphaned"`
+			IsActive        bool             `json:"is_active"`
 			Credential      CredentialDetail `json:"credential"`
 		}{
 			Name:         app.Name,
 			Description:  app.Description,
 			UserID:       app.UserID,
 			CredentialID: app.CredentialID,
+			// The list endpoint already reports is_active; the detail page
+			// needs it too so it can show "Disabled" as one status.
+			IsActive: app.IsActive,
 			DatasourceIDs: func() []uint {
 				ids := make([]uint, len(app.Datasources))
 				for i, ds := range app.Datasources {

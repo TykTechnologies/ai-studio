@@ -323,13 +323,9 @@ const ChatForm = () => {
         await apiClient.post("/chats", chatData);
       }
 
-      setSnackbar({
-        open: true,
-        message: id ? "Chat updated successfully" : "Chat created successfully",
-        severity: "success",
+      navigate("/admin/chats", {
+        state: { snackbar: { message: id ? "Chat updated successfully" : "Chat created successfully", severity: "success" } },
       });
-
-      setTimeout(() => navigate("/admin/chats"), 2000);
     } catch (error) {
       console.error("Error saving chat", error);
       setSnackbar({

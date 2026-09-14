@@ -223,7 +223,7 @@ function App() {
                   <Navigate
                     to={
                       entitlements?.is_full_admin
-                        ? "/admin/dash"
+                        ? "/admin"
                         : entitlements?.has_admin_access
                           ? "/admin"
                           : "/portal/dashboard"
@@ -342,7 +342,7 @@ function App() {
                 element={
                   isAuthenticated ? (
                     entitlements?.is_full_admin === true ? (
-                      <Navigate to="/admin/dash" replace />
+                      <Navigate to="/admin" replace />
                     ) : entitlements?.has_admin_access ? (
                       <Navigate to="/admin" replace />
                     ) : entitlements?.ui_options?.show_portal ? (

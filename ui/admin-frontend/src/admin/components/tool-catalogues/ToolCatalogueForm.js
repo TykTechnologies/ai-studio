@@ -147,13 +147,9 @@ const ToolCatalogueForm = () => {
       await updateTools(newCatalogueId, desiredTools);
       await updateTags(newCatalogueId, desiredTags);
 
-      setSnackbar({
-        open: true,
-        message: `Tool catalogue ${id ? "updated" : "created"} successfully`,
-        severity: "success",
+      navigate("/admin/catalogs/tools", {
+        state: { snackbar: { message: `Tool catalogue ${id ? "updated" : "created"} successfully`, severity: "success" } },
       });
-
-      setTimeout(() => navigate("/admin/catalogs/tools"), 2000);
     } catch (error) {
       console.error("Error saving tool catalogue", error);
       setSnackbar({

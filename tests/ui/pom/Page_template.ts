@@ -12,14 +12,39 @@ export class PageTemplate {
         this.logoutButton = this.page.getByTestId('LogoutIcon');
     }
 
+    /**
+     * Saving a form redirects at once and the success snackbar shows on the
+     * destination page, so a quick follow-up action (approve right after
+     * create) can put two snackbars on screen at the same time. Match the one
+     * with the expected text rather than asserting there is exactly one.
+     */
     async expectPopupWithText(text: string) {
-        await expect(this.Popup).toBeVisible();
-        await expect(this.Popup).toHaveText(text);
+        await expect(this.Popup.filter({ hasText: text }).first()).toBeVisible();
     }
 
+    /**
+     * Logs out and waits for the login form. The check is the login page's
+     * URL plus its "Log in" button: a textbox named "Email" also matches the
+     * Users page's "Search by name or email..." box, which let a logout that
+     * had not happened pass unnoticed.
+     */
     async logOut() {
         await this.logoutButton.click();
-        await expect(this.page.getByRole('textbox', { name: 'Email' })).toBeVisible();
+        await expect(this.page).toHaveURL(/\/login/, { timeout: 15000 });
+        await expect(this.page.getByRole('button', { name: /log in/i })).toBeVisible();
+    }
+
+    /**
+     * Confirms the "Delete <name>?" dialog that row-menu deletes of LLMs,
+     * tools, secrets, datasources, filters and model routers now open
+     * (ConfirmationDialog; its title is styled text, not a heading, so the
+     * dialog is picked by that text). The confirm button is "Delete".
+     */
+    async confirmDelete(name: string) {
+        const dialog = this.page.getByRole('dialog').filter({ hasText: `Delete ${name}?` });
+        await expect(dialog).toBeVisible();
+        await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+        await expect(dialog).not.toBeVisible();
     }
 
     /**

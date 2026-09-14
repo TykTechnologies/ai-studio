@@ -269,7 +269,12 @@ func (s *SSOService) notifyUserCreation(user *models.User) {
 	title := "New User Created via SSO"
 	userFlags := models.NotifyAdmins
 
-	if err := s.notificationSvc.Notify(notificationID, title, "admin-sso-notification.tmpl", data, userFlags); err != nil {
+	if err := s.notificationSvc.NotifyTemplate(notificationID, title, "admin-sso-notification.tmpl", data, userFlags, NotifyOptions{
+		Type:    "user",
+		Link:    fmt.Sprintf("/admin/users/%d", user.ID),
+		ActorID: user.ID,
+		Summary: fmt.Sprintf("%s (%s) was created via SSO and needs a role before they can use AI Studio.", user.Name, user.Email),
+	}); err != nil {
 		slog.Error("Failed to send user creation notification", "error", err)
 	}
 }

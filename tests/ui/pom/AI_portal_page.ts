@@ -46,7 +46,7 @@ export class AIPortalPage extends PageTemplate {
         super(page);
         this.OverviewMenuButton = this.page.getByRole('link', { name: 'Overview' });
         this.AppsMenuButton = this.page.getByRole('link', { name: 'Apps' });
-        this.CataloguesMenuButton = this.page.getByRole('button', { name: 'Catalogues' });
+        this.CataloguesMenuButton = this.page.getByRole('button', { name: 'Catalogs' });
         this.DatasourcesMenuButton = this.page.getByRole('button', { name: 'Data sources' });
         this.LLMPrvidersMenuButton = this.page.getByRole('button', { name: 'LLM Providers' });
         this.CreateANewAppButton = this.page.getByRole('button', { name: 'Create a new App' });
@@ -64,7 +64,10 @@ export class AIPortalPage extends PageTemplate {
         this.DatasourcesTab = this.page.getByRole('tab', { name: 'Datasources' });
         this.ToolsTab = this.page.getByRole('tab', { name: 'Tools' });
         this.AppDetailsTitle = this.page.getByRole('heading', { name: 'App Details' });
-        this.AppStatusBadge = this.page.locator('.MuiChip-root');
+        // The single status chip on the app detail page ("Active", "Awaiting
+        // approval" or "Disabled"); the resource chips beside it are plain
+        // MuiChips too, so it is picked by test id.
+        this.AppStatusBadge = this.page.getByTestId('app-status');
         this.KeyIdValue = this.page.locator('div:has-text("Key ID") + div');
         this.SecretValue = this.page.locator('div:has-text("Secret") + div');
         this.KeyIdCopyButton = this.page.getByTestId('ContentCopyIcon').first();
@@ -139,5 +142,11 @@ export class AIPortalPage extends PageTemplate {
 
     async expectAppStatus(status: string) {
         await expect(this.AppStatusBadge).toHaveText(status);
+    }
+
+    /** Asserts the Status column of the named app's row in the My Apps table. */
+    async expectAppStatusInList(appName: string, status: string) {
+        const row = this.Table.element.locator(`tbody tr:has-text("${appName}")`).first();
+        await expect(row.getByTestId('app-status')).toHaveText(status);
     }
 }

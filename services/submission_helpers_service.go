@@ -206,12 +206,18 @@ func (s *Service) notifyAdminsOfSubmission(submission *models.Submission) {
 	content += fmt.Sprintf("- **Suggested privacy score:** %d\n", submission.SuggestedPrivacy)
 	content += fmt.Sprintf("\n[Open the submission queue](/admin/submissions/%d)", submission.ID)
 
-	if err := s.NotificationService.NotifyDirect(
+	// The submitter is the actor: an administrator submitting their own
+	// resource is not told about it.
+	if err := s.NotificationService.NotifyWithOptions(
 		notificationID,
-		"submission",
 		title,
 		content,
 		models.NotifyAdmins,
+		NotifyOptions{
+			Type:    "submission",
+			Link:    fmt.Sprintf("/admin/submissions/%d", submission.ID),
+			ActorID: submission.SubmitterID,
+		},
 	); err != nil {
 		logger.Warn(fmt.Sprintf("Failed to notify admins of submission %d: %v", submission.ID, err))
 	}
@@ -232,12 +238,20 @@ func (s *Service) notifySubmitterOfDecision(submission *models.Submission, decis
 	}
 	content += fmt.Sprintf("\n[View your contribution](/portal/submissions/%d)", submission.ID)
 
-	if err := s.NotificationService.NotifyDirect(
+	opts := NotifyOptions{
+		Type: "submission",
+		Link: fmt.Sprintf("/portal/submissions/%d", submission.ID),
+	}
+	if submission.ReviewerID != nil {
+		// A reviewer deciding on their own submission already knows.
+		opts.ActorID = *submission.ReviewerID
+	}
+	if err := s.NotificationService.NotifyWithOptions(
 		notificationID,
-		"submission",
 		title,
 		content,
 		submission.SubmitterID,
+		opts,
 	); err != nil {
 		logger.Warn(fmt.Sprintf("Failed to notify submitter of submission %d decision: %v", submission.ID, err))
 	}

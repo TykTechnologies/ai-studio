@@ -647,6 +647,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/llms/max-privacy-score", authz.Read("llms"), a.getLLMsByMaxPrivacyScore)
 	v1.GET("/llms/min-privacy-score", authz.Read("llms"), a.getLLMsByMinPrivacyScore)
 	v1.GET("/llms/privacy-score-range", authz.Read("llms"), a.getLLMsByPrivacyScoreRange)
+	v1.GET("/llms/:id/dependents", authz.Read("llms"), a.getLLMDependents)
 
 	// Catalogue routes
 	v1.POST("/catalogues", authz.Write("catalogues"), a.createCatalogue)
@@ -682,6 +683,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/datasources/:id/filestores/:filestore_id", authz.Delete("datasources"), a.removeFileStoreFromDatasource)
 	v1.POST("/datasources/:id/process-embeddings", authz.Execute("datasources"), a.ProcessFileEmbeddingHandler)
 	v1.POST("/datasources/:id/clone", authz.Write("datasources"), a.cloneDatasource)
+	v1.GET("/datasources/:id/dependents", authz.Read("datasources"), a.getDatasourceDependents)
 
 	// Data Catalogue routes
 	v1.POST("/data-catalogues", authz.Write("data-catalogues"), a.createDataCatalogue)
@@ -816,6 +818,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/tools/:id/filters/:filter_id", authz.Delete("tools"), a.removeFilterFromTool)
 	v1.GET("/tools/:id/filters", authz.Read("tools"), a.getToolFilters)
 	v1.PUT("/tools/:id/filters", authz.Write("tools"), a.setToolFilters)
+	v1.GET("/tools/:id/dependents", authz.Read("tools"), a.getToolDependents)
 
 	// Provider routes
 	providerAPI := NewProviderAPI(a)
@@ -843,6 +846,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/filters/:id", authz.Delete("filters"), a.deleteFilter)
 	v1.GET("/filters", authz.Read("filters"), a.listFilters)
 	v1.POST("/filters/test", authz.Execute("filters"), a.testFilter)
+	v1.GET("/filters/:id/dependents", authz.Read("filters"), a.getFilterDependents)
 
 	// Plugin routes
 	v1.POST("/plugins", authz.Write("plugins"), a.createPlugin)
@@ -920,6 +924,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/model-routers/:id", authz.Delete("model-routers"), a.deleteModelRouter)
 	v1.GET("/model-routers", authz.Read("model-routers"), a.listModelRouters)
 	v1.PATCH("/model-routers/:id/toggle", authz.Publish("model-routers"), a.toggleModelRouterActive)
+	v1.GET("/model-routers/:id/dependents", authz.Read("model-routers"), a.getModelRouterDependents)
 
 	// Marketplace routes (only register if marketplace service is available)
 	if a.service.MarketplaceService != nil {
@@ -1108,6 +1113,7 @@ func (a *API) setupRoutes() {
 	v1.PATCH("/secrets/:id", authz.Write("secrets"), a.updateSecret)
 	v1.DELETE("/secrets/:id", authz.Delete("secrets"), a.deleteSecret)
 	v1.GET("/secrets", authz.Read("secrets"), a.listSecrets)
+	v1.GET("/secrets/:id/dependents", authz.Read("secrets"), a.getSecretDependents)
 
 	// Branding routes
 	// Public endpoints (for frontend config loading and asset serving)

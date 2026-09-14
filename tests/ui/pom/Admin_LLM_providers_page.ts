@@ -1,6 +1,7 @@
 import { Locator, Page } from '@playwright/test';
 import { DropDownWrapper } from '@wrappers/DropDownWrapper';
 import { TableWrapper } from '@wrappers/TableWrapper';
+import { PageTemplate } from './Page_template';
 
 interface ProviderParams {
     name: string;
@@ -17,8 +18,7 @@ interface ProviderParams {
     logoUrl?: string;
 }
 
-export class AdminLLMProvidersPage {
-    readonly page: Page;
+export class AdminLLMProvidersPage extends PageTemplate {
     readonly Table: TableWrapper
     readonly AddLLMButton: Locator;
     readonly ProviderNameInput: Locator;
@@ -35,7 +35,10 @@ export class AdminLLMProvidersPage {
     readonly ApiKeyInput: Locator;
     readonly PortalDisplayInformationButton: Locator;
     readonly LogoUrlInput: Locator;
-    readonly EnabledInProxyCheckbox: Locator;
+    /** The form's "Active" switch (formerly "Enabled in Proxy"). */
+    readonly ActiveCheckbox: Locator;
+    /** The list's "Active" column header (formerly "Proxied"). */
+    readonly ActiveColumnHeader: Locator;
     readonly FiltersButton: Locator;
     readonly SaveButton: Locator;
     readonly CancelButton: Locator;
@@ -44,7 +47,7 @@ export class AdminLLMProvidersPage {
     readonly BackToLLMsLink: Locator;
 
     constructor(page: Page) {
-        this.page = page;
+        super(page);
         this.Table = new TableWrapper('table', this.page);
         this.AddLLMButton = this.page.getByText('Add LLM').first();
         this.ProviderNameInput = this.page.getByRole('textbox', { name: 'Name' });
@@ -61,7 +64,8 @@ export class AdminLLMProvidersPage {
         this.ApiKeyInput = this.page.getByRole('textbox', { name: 'API Key' });
         this.PortalDisplayInformationButton = this.page.getByRole('button', { name: 'Portal Display Information' });
         this.LogoUrlInput = this.page.getByRole('textbox', { name: 'Logo URL' });
-        this.EnabledInProxyCheckbox = this.page.getByRole('checkbox', { name: 'Enabled in Proxy' });
+        this.ActiveCheckbox = this.page.getByRole('checkbox', { name: 'Active' });
+        this.ActiveColumnHeader = this.page.getByRole('columnheader', { name: 'Active' });
         this.FiltersButton = this.page.getByRole('button', { name: 'Filters' });
         this.SaveButton = this.page.getByRole('button', { name: 'Add LLM' });
         this.CancelButton = this.page.getByRole('button', { name: 'Cancel' });
@@ -72,6 +76,12 @@ export class AdminLLMProvidersPage {
 
     async goto() {
         await this.page.goto('/admin/llm-providers');
+    }
+
+    /** Deletes an LLM from its row menu and confirms the "Delete <name>?" dialog. */
+    async deleteProvider(name: string) {
+        await this.Table.deleteRowWithText(name);
+        await this.confirmDelete(name);
     }
 
     async addProvider(params: ProviderParams) {

@@ -172,17 +172,18 @@ const ModelPriceForm = () => {
         await apiClient.post("/model-prices", priceData);
       }
 
-      setSnackbar({
-        open: true,
-        message: id
-          ? shouldRecalculate
-            ? "Model Price updated and historical costs recalculated successfully"
-            : "Model Price updated successfully"
-          : "Model Price created successfully",
-        severity: "success",
+      navigate("/admin/model-prices", {
+        state: {
+          snackbar: {
+            message: id
+              ? shouldRecalculate
+                ? "Model Price updated and historical costs recalculated successfully"
+                : "Model Price updated successfully"
+              : "Model Price created successfully",
+            severity: "success",
+          },
+        },
       });
-
-      setTimeout(() => navigate("/admin/model-prices"), 2000);
     } catch (error) {
       console.error("Error saving Model Price", error);
       setSnackbar({

@@ -136,7 +136,8 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 		return nil, err
 	}
 
-	// Auto-assign to Default catalogue if not in any catalogue
+	// Auto-assign to Default catalogue if not in any catalogue (Community
+	// Edition only; Enterprise leaves catalogue membership to the admin).
 	if err := s.ensureLLMInDefaultCatalogue(llm); err != nil {
 		// Log but don't fail - this is a convenience feature
 		logger.Warn(fmt.Sprintf("Failed to add LLM to default catalogue: %v", err))
@@ -233,7 +234,8 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 		return nil, err
 	}
 
-	// Auto-assign to Default catalogue if not in any catalogue
+	// Auto-assign to Default catalogue if not in any catalogue (Community
+	// Edition only; Enterprise leaves catalogue membership to the admin).
 	if err := s.ensureLLMInDefaultCatalogue(llm); err != nil {
 		// Log but don't fail - this is a convenience feature
 		logger.Warn(fmt.Sprintf("Failed to add LLM to default catalogue: %v", err))
@@ -443,7 +445,13 @@ func (s *Service) IsModelAllowed(id uint, modelName string) (bool, error) {
 // UpdateLLMMetadata updates only the metadata field of an LLM.
 // Used by the API to persist vendor-specific configuration (e.g., AWS credentials for Bedrock).
 func (s *Service) UpdateLLMMetadata(id uint, metadata models.JSONMap) error {
-	return s.DB.Model(&models.LLM{}).Where("id = ?", id).Update("metadata", metadata).Error
+	// Update through a loaded model so the LLM's AfterSave hook runs and the
+	// secret reference index follows any $SECRET/ values in the metadata.
+	var llm models.LLM
+	if err := s.DB.Select("id").First(&llm, id).Error; err != nil {
+		return err
+	}
+	return s.DB.Model(&llm).Update("metadata", metadata).Error
 }
 
 // The following functions remain unchanged
@@ -629,7 +637,15 @@ func (s *Service) GetLLMsByPrivacyScoreRange(min, max int) (models.LLMs, error) 
 }
 
 // ensureLLMInDefaultCatalogue adds an LLM to the Default catalogue if it's not in any catalogue
+//
+// Community Edition only. In Enterprise builds catalogues are the access
+// control, so a new LLM stays out of every catalogue until an administrator
+// grants it; see autoAddToDefaultCatalogue.
 func (s *Service) ensureLLMInDefaultCatalogue(llm *models.LLM) error {
+	if !autoAddToDefaultCatalogue() {
+		return nil
+	}
+
 	// Check if LLM is in any catalogue
 	count := s.DB.Model(llm).Association("Catalogues").Count()
 

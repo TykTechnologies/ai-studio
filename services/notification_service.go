@@ -6,6 +6,8 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,16 +31,43 @@ type NotificationService struct {
 	mu            sync.RWMutex
 }
 
+// NotifyOptions refines how a notification is recorded and delivered.
+type NotifyOptions struct {
+	// Type is stored on the record (e.g. "app", "user", "submission") and
+	// may be empty.
+	Type string
+	// Link is the in-app path the notification points at ("/admin/apps/3").
+	// Empty when there is nothing to open.
+	Link string
+	// ActorID is the user who performed the action. They are never a
+	// recipient: an administrator does not need to be told about the app they
+	// just created, and a user does not need to be told they registered.
+	ActorID uint
+	// Summary is the plain-text in-app content. When empty, the content
+	// passed to NotifyWithOptions is used after stripEmailFraming.
+	Summary string
+	// SkipEmail records the notification without sending an email, for
+	// callers that have already mailed the recipient through another path.
+	SkipEmail bool
+}
+
 // Notify creates and sends a notification using a template
 // userFlags can be a specific user ID, models.NotifyAdmins, or a combination using bitwise OR (|)
 func (s *NotificationService) Notify(notificationID string, title string, templatePath string, data interface{}, userFlags uint) error {
+	return s.NotifyTemplate(notificationID, title, templatePath, data, userFlags, NotifyOptions{})
+}
+
+// NotifyTemplate renders an email template and delivers it. The rendered
+// template is the email body; the in-app record gets opts.Summary, or the
+// rendered body with its email framing stripped when no summary is given.
+func (s *NotificationService) NotifyTemplate(notificationID string, title string, templatePath string, data interface{}, userFlags uint, opts NotifyOptions) error {
 	// Render the template
 	content, err := s.renderTemplate(templatePath, data)
 	if err != nil {
 		return fmt.Errorf("error rendering template: %v", err)
 	}
 
-	return s.NotifyDirect(notificationID, "", title, content, userFlags)
+	return s.NotifyWithOptions(notificationID, title, content, userFlags, opts)
 }
 
 // NotifyDirect creates and sends a notification with pre-rendered content
@@ -49,12 +78,31 @@ func (s *NotificationService) Notify(notificationID string, title string, templa
 // notifType is stored on the record (e.g. "submission", "plugin:asset-catalog")
 // and may be empty. userFlags follows the same convention as Notify.
 func (s *NotificationService) NotifyDirect(notificationID string, notifType string, title string, content string, userFlags uint) error {
+	return s.NotifyWithOptions(notificationID, title, content, userFlags, NotifyOptions{Type: notifType})
+}
+
+// NotifyWithOptions is the delivery core behind Notify, NotifyTemplate and
+// NotifyDirect. content is the email body; the in-app record stores
+// opts.Summary when given, otherwise content with its email framing removed.
+// The actor named in opts never receives a copy.
+func (s *NotificationService) NotifyWithOptions(notificationID string, title string, content string, userFlags uint, opts NotifyOptions) error {
 	if notificationID == "" {
 		return fmt.Errorf("notification ID is required")
 	}
 	if title == "" {
 		return fmt.Errorf("notification title is required")
 	}
+
+	inApp := opts.Summary
+	if inApp == "" {
+		inApp = stripEmailFraming(content)
+	}
+	// In-app records are plain text. Object names (apps, users, submissions)
+	// are user-supplied and end up interpolated here, so any markup is
+	// dropped before storage as defence in depth; the UI renders these as
+	// text as well.
+	inApp = stripMarkup(inApp)
+	title = stripMarkup(title)
 
 	// Handle notifications based on flags
 	if userFlags&models.NotifyAdmins != 0 {
@@ -68,15 +116,20 @@ func (s *NotificationService) NotifyDirect(notificationID string, notifType stri
 
 		// Send to each admin
 		for _, adminID := range adminIDs {
+			if adminID == opts.ActorID {
+				// The admin did this themselves; there is nothing to tell them.
+				continue
+			}
 			notification := &models.Notification{
 				UserID:         adminID,
-				Type:           notifType,
+				Type:           opts.Type,
 				Title:          title,
-				Content:        content,
+				Content:        inApp,
+				Link:           opts.Link,
 				NotificationID: fmt.Sprintf("%s_admin_%d", notificationID, adminID),
 				SentAt:         time.Now(),
 			}
-			if err := s.Send(notification); err != nil {
+			if err := s.deliver(notification, content, opts.SkipEmail); err != nil {
 				// Log error but continue with other admins
 				fmt.Printf("Error sending notification to admin %d: %v\n", adminID, err)
 			}
@@ -85,21 +138,77 @@ func (s *NotificationService) NotifyDirect(notificationID string, notifType stri
 
 	// Send to specific user if a user ID is provided
 	userID := userFlags &^ models.NotifyAdmins // Clear the admin flag to get the user ID
-	if userID != 0 {
+	if userID != 0 && userID != opts.ActorID {
 		notification := &models.Notification{
 			UserID:         userID,
-			Type:           notifType,
+			Type:           opts.Type,
 			Title:          title,
-			Content:        content,
+			Content:        inApp,
+			Link:           opts.Link,
 			NotificationID: fmt.Sprintf("%s_owner", notificationID),
 			SentAt:         time.Now(),
 		}
-		if err := s.Send(notification); err != nil {
+		if err := s.deliver(notification, content, opts.SkipEmail); err != nil {
 			return fmt.Errorf("failed to send user notification: %v", err)
 		}
 	}
 
 	return nil
+}
+
+// Email framing that has no place in an in-app notification. The templates
+// are written as emails ("Subject: ...", "Dear Administrator,", a sign-off);
+// the bell shows the same record, where that reads as noise.
+var (
+	emailSubjectLine  = regexp.MustCompile(`^\s*Subject:`)
+	emailGreetingLine = regexp.MustCompile(`^\s*(Dear|Hi|Hello)\b[^\n]{0,60}[,:]?\s*$`)
+	emailSignOffLine  = regexp.MustCompile(`^\s*(Best regards|Kind regards|Warm regards|Regards|Sincerely|Thanks|Thank you|Cheers)\s*,?\s*$`)
+	emailBoilerplate  = regexp.MustCompile(`^\s*(This is an automated (notification|message|email)|Please do not reply)`)
+	blankRuns         = regexp.MustCompile(`\n{3,}`)
+)
+
+// htmlTag matches anything that looks like an HTML/XML tag, including
+// unterminated ones at the end of the text.
+var htmlTag = regexp.MustCompile(`<[^>]*>?`)
+
+// stripMarkup removes HTML tags from text destined for an in-app
+// notification. It is deliberately blunt: notifications never carry
+// legitimate markup, and a user-chosen object name has no business
+// contributing any.
+func stripMarkup(text string) string {
+	if !strings.Contains(text, "<") {
+		return text
+	}
+	return strings.TrimSpace(htmlTag.ReplaceAllString(text, ""))
+}
+
+// stripEmailFraming turns an email body into in-app content: the subject
+// line, the greeting, the sign-off and everything after it, and "do not
+// reply" boilerplate are dropped. Content that carries none of these (the
+// markdown composed for NotifyDirect) passes through unchanged apart from
+// trimming.
+func stripEmailFraming(content string) string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	kept := make([]string, 0, len(lines))
+	atTop := true
+	for _, line := range lines {
+		if atTop {
+			if strings.TrimSpace(line) == "" || emailSubjectLine.MatchString(line) || emailGreetingLine.MatchString(line) {
+				continue
+			}
+			atTop = false
+		}
+		if emailSignOffLine.MatchString(line) {
+			break
+		}
+		if emailBoilerplate.MatchString(line) {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	out := strings.Join(kept, "\n")
+	out = blankRuns.ReplaceAllString(out, "\n\n")
+	return strings.TrimSpace(out)
 }
 
 // NewNotificationService creates a new notification service
@@ -145,8 +254,17 @@ func (s *NotificationService) ClearNotifications() {
 	s.notifications = make([]models.Notification, 0)
 }
 
-// send creates and sends a notification, preventing duplicates based on NotificationID
+// Send creates and sends a notification, preventing duplicates based on
+// NotificationID. The email body is the notification content.
 func (s *NotificationService) Send(notification *models.Notification) error {
+	return s.deliver(notification, notification.Content, false)
+}
+
+// deliver stores the notification and, unless skipEmail is set, emails
+// emailBody to the recipient. emailBody may differ from the stored content:
+// the in-app record carries a plain summary while the email keeps the full
+// template. Duplicates by NotificationID are skipped.
+func (s *NotificationService) deliver(notification *models.Notification, emailBody string, skipEmail bool) error {
 	// For testing purposes
 	s.mu.Lock()
 	s.notifications = append(s.notifications, *notification)
@@ -174,7 +292,7 @@ func (s *NotificationService) Send(notification *models.Notification) error {
 	}
 
 	// Send email if mail service is configured
-	if s.mailService != nil {
+	if s.mailService != nil && !skipEmail {
 		var email string
 		if err := s.db.Model(&models.User{}).
 			Where("id = ?", notification.UserID).
@@ -182,7 +300,7 @@ func (s *NotificationService) Send(notification *models.Notification) error {
 			return fmt.Errorf("error finding user email: %v", err)
 		}
 
-		if err := s.mailService.SendEmail(email, notification.Title, notification.Content); err != nil {
+		if err := s.mailService.SendEmail(email, notification.Title, emailBody); err != nil {
 			// Log error but don't fail the notification creation
 			fmt.Printf("Error sending email notification: %v\n", err)
 		}

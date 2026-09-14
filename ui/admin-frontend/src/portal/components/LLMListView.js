@@ -1,4 +1,3 @@
-import GovernedMetadataBadges from "./GovernedMetadataBadges";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -13,7 +12,7 @@ import {
   Container,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
-import DetailModal from "./DetailModal";
+import LLMDetailModal from "./LLMDetailModal";
 import { getVendorName, getVendorLogo } from "../../admin/utils/vendorLogos";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
 
@@ -146,33 +145,12 @@ const LLMListView = () => {
         ))}
       </Grid>
       {selectedLLM && (
-        <DetailModal
+        <LLMDetailModal
+          llm={selectedLLM}
           open={openModal}
           handleClose={handleCloseModal}
-          title={selectedLLM.attributes.name}
-        >
-          <Typography variant="body1" sx={{ mt: 2 }}>
-            {selectedLLM.attributes.long_description}
-          </Typography>
-          <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
-            <Typography variant="subtitle1">Vendor:</Typography>
-            <img
-              src={getVendorLogo(selectedLLM.attributes.vendor)}
-              alt={getVendorName(selectedLLM.attributes.vendor)}
-              style={{
-                width: 24,
-                height: 24,
-                marginLeft: 8,
-                marginRight: 8,
-                objectFit: "contain",
-              }}
-            />
-            <Typography>
-              {getVendorName(selectedLLM.attributes.vendor)}
-            </Typography>
-          </Box>
-          <GovernedMetadataBadges items={selectedLLM.governed_metadata} sx={{ mt: 2 }} />
-        </DetailModal>
+          onBuildApp={handleBuildApp}
+        />
       )}
     </Container>
   );

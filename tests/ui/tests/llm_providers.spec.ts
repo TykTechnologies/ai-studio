@@ -10,6 +10,8 @@ test('Add LLM provider', async ({ loginPage, adminLLMProvidersPage, adminMainPag
 
     await adminMainPage.dismissQuickStartModal();
     await adminMainPage.navigateToLLMProviders();
+    // The list's on/off column is "Active" (it said "Proxied").
+    await expect(adminLLMProvidersPage.ActiveColumnHeader).toBeVisible();
     await adminLLMProvidersPage.AddLLMButton.click();
     await adminLLMProvidersPage.ProviderNameInput.fill(LLMProviderName);
     await adminLLMProvidersPage.ProviderTypeDropDown.setValue('Anthropic');
@@ -18,7 +20,8 @@ test('Add LLM provider', async ({ loginPage, adminLLMProvidersPage, adminMainPag
     const rowNumber = await adminLLMProvidersPage.Table.getRowNumberWithText(LLMProviderName);
     await adminLLMProvidersPage.Table.triggerActivateAction(rowNumber);
 
-    await adminLLMProvidersPage.Table.deleteRowWithText(LLMProviderName);
+    // Deleting from the row menu opens a "Delete <name>?" confirmation.
+    await adminLLMProvidersPage.deleteProvider(LLMProviderName);
     await adminLLMProvidersPage.Table.expectRowWithTextNotExists(LLMProviderName);
 });
 
