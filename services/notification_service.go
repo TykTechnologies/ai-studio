@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"os"
@@ -51,6 +52,10 @@ type NotifyOptions struct {
 	SkipEmail bool
 }
 
+// ErrNotificationNotFound is returned when a notification does not exist
+// or does not belong to the user asking for it; callers map it to 404.
+var ErrNotificationNotFound = errors.New("notification not found")
+
 // Notify creates and sends a notification using a template
 // userFlags can be a specific user ID, models.NotifyAdmins, or a combination using bitwise OR (|)
 func (s *NotificationService) Notify(notificationID string, title string, templatePath string, data interface{}, userFlags uint) error {
@@ -71,9 +76,10 @@ func (s *NotificationService) NotifyTemplate(notificationID string, title string
 }
 
 // NotifyDirect creates and sends a notification with pre-rendered content
-// (plain text or markdown; the in-app list renders markdown). Use this when no
-// email template applies, e.g. for notifications raised by plugins or by
-// workflows whose content is composed in code.
+// (plain text or markdown; the email keeps it as given, the in-app record
+// is reduced to plain text by stripMarkup). Use this when no email template
+// applies, e.g. for notifications raised by plugins or by workflows whose
+// content is composed in code.
 //
 // notifType is stored on the record (e.g. "submission", "plugin:asset-catalog")
 // and may be empty. userFlags follows the same convention as Notify.
@@ -136,9 +142,12 @@ func (s *NotificationService) NotifyWithOptions(notificationID string, title str
 		}
 	}
 
-	// Send to specific user if a user ID is provided
+	// Send to specific user if a user ID is provided. Disabled accounts
+	// receive nothing; NotificationsEnabled is not consulted here because it
+	// is the admin fan-out consent (it cannot be set on non-admins), whereas
+	// this branch is feedback on the recipient's own object.
 	userID := userFlags &^ models.NotifyAdmins // Clear the admin flag to get the user ID
-	if userID != 0 && userID != opts.ActorID {
+	if userID != 0 && userID != opts.ActorID && !s.recipientDisabled(userID) {
 		notification := &models.Notification{
 			UserID:         userID,
 			Type:           opts.Type,
@@ -171,15 +180,36 @@ var (
 // unterminated ones at the end of the text.
 var htmlTag = regexp.MustCompile(`<[^>]*>?`)
 
-// stripMarkup removes HTML tags from text destined for an in-app
-// notification. It is deliberately blunt: notifications never carry
-// legitimate markup, and a user-chosen object name has no business
-// contributing any.
+// Markdown emphasis and links, as composed by plugins (NotifyDirect). The
+// in-app panel renders plain text, so the markers would show literally.
+var (
+	// One level of parentheses is allowed inside the URL ("(#alert(2))").
+	mdLink      = regexp.MustCompile(`\[([^\]]*)\]\((?:[^()]|\([^()]*\))*\)`)
+	mdBold      = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+	mdBoldUnder = regexp.MustCompile(`__([^_]+)__`)
+	mdCode      = regexp.MustCompile("`([^`]*)`")
+	mdItalic    = regexp.MustCompile(`\*([^*\s](?:[^*]*[^*\s])?)\*`)
+	// Underscore italics only at word boundaries, so snake_case names and
+	// identifiers such as my_app_v2 keep their underscores.
+	mdItalicUnder = regexp.MustCompile(`(^|[\s(])_([^_\s](?:[^_]*[^_\s])?)_([\s).,;:!?]|$)`)
+)
+
+// stripMarkup removes HTML tags and Markdown decoration from text destined
+// for an in-app notification, keeping the words. It is deliberately blunt:
+// notifications never carry legitimate markup, and a user-chosen object
+// name has no business contributing any. Links keep their label only.
 func stripMarkup(text string) string {
-	if !strings.Contains(text, "<") {
+	if !strings.ContainsAny(text, "<*_`[") {
 		return text
 	}
-	return strings.TrimSpace(htmlTag.ReplaceAllString(text, ""))
+	out := htmlTag.ReplaceAllString(text, "")
+	out = mdLink.ReplaceAllString(out, "$1")
+	out = mdBold.ReplaceAllString(out, "$1")
+	out = mdBoldUnder.ReplaceAllString(out, "$1")
+	out = mdCode.ReplaceAllString(out, "$1")
+	out = mdItalic.ReplaceAllString(out, "$1")
+	out = mdItalicUnder.ReplaceAllString(out, "$1$2$3")
+	return strings.TrimSpace(out)
 }
 
 // stripEmailFraming turns an email body into in-app content: the subject
@@ -291,16 +321,24 @@ func (s *NotificationService) deliver(notification *models.Notification, emailBo
 		return fmt.Errorf("error creating notification: %v", err)
 	}
 
-	// Send email if mail service is configured
+	// Send email if mail service is configured and the recipient has not
+	// switched email delivery off (the in-app record above is kept either way)
 	if s.mailService != nil && !skipEmail {
-		var email string
+		var recipient struct {
+			Email                     string
+			EmailNotificationsEnabled bool
+		}
 		if err := s.db.Model(&models.User{}).
+			Select("email", "email_notifications_enabled").
 			Where("id = ?", notification.UserID).
-			Pluck("email", &email).Error; err != nil {
+			Scan(&recipient).Error; err != nil {
 			return fmt.Errorf("error finding user email: %v", err)
 		}
+		if !recipient.EmailNotificationsEnabled {
+			return nil
+		}
 
-		if err := s.mailService.SendEmail(email, notification.Title, emailBody); err != nil {
+		if err := s.mailService.SendEmail(recipient.Email, notification.Title, emailBody); err != nil {
 			// Log error but don't fail the notification creation
 			fmt.Printf("Error sending email notification: %v\n", err)
 		}
@@ -309,19 +347,56 @@ func (s *NotificationService) deliver(notification *models.Notification, emailBo
 	return nil
 }
 
-// MarkAsRead marks a notification as read
-func (s *NotificationService) MarkAsRead(notificationID uint) error {
+// recipientDisabled reports whether the user is switched off (or gone).
+// A lookup failure counts as disabled: better to drop one notification
+// than to write to a user that cannot be read.
+func (s *NotificationService) recipientDisabled(userID uint) bool {
+	var count int64
+	if err := s.db.Model(&models.User{}).
+		Where("id = ? AND disabled = ?", userID, false).
+		Count(&count).Error; err != nil {
+		fmt.Printf("Error checking notification recipient %d: %v\n", userID, err)
+		return true
+	}
+	return count == 0
+}
+
+// MarkAsRead marks one of the user's notifications as read. A notification
+// that does not exist or belongs to someone else yields
+// ErrNotificationNotFound, so a caller cannot probe other users' ids.
+func (s *NotificationService) MarkAsRead(userID uint, notificationID uint) error {
 	result := s.db.Model(&models.Notification{}).
-		Where("id = ?", notificationID).
+		Where("id = ? AND user_id = ?", notificationID, userID).
 		Update("read", true)
 
 	if result.Error != nil {
 		return fmt.Errorf("error marking notification as read: %v", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("notification not found")
+		return ErrNotificationNotFound
 	}
 	return nil
+}
+
+// ListUserNotifications returns one page of the user's notifications,
+// newest first, with the total for that filter. unreadOnly restricts the
+// page and the total to unread ones.
+func (s *NotificationService) ListUserNotifications(userID uint, limit, offset int, unreadOnly bool) ([]models.Notification, int64, error) {
+	query := s.db.Model(&models.Notification{}).Where("user_id = ?", userID)
+	if unreadOnly {
+		query = query.Where("read = ?", false)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("error counting notifications: %v", err)
+	}
+
+	notifications := make([]models.Notification, 0)
+	if err := query.Order("sent_at DESC").Limit(limit).Offset(offset).Find(&notifications).Error; err != nil {
+		return nil, 0, fmt.Errorf("error retrieving notifications: %v", err)
+	}
+	return notifications, total, nil
 }
 
 // GetUserNotifications retrieves notifications for a specific user

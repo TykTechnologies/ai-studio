@@ -21,6 +21,7 @@ import (
 // unless the operator opted in, and the list filters work end to end.
 
 type lifecycleFixture struct {
+	api     *API
 	router  *gin.Engine
 	auth    *auth.AuthService
 	admin   *models.User
@@ -67,7 +68,7 @@ func setupLifecycleAPI(t *testing.T) *lifecycleFixture {
 	}
 	require.NoError(t, ssoUser.Create(db))
 
-	return &lifecycleFixture{router: api.router, auth: authService, admin: admin, member: member, ssoUser: ssoUser}
+	return &lifecycleFixture{api: api, router: api.router, auth: authService, admin: admin, member: member, ssoUser: ssoUser}
 }
 
 func sprintfID(format string, id uint) string {

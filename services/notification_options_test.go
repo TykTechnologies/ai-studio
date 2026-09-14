@@ -182,3 +182,27 @@ func TestNotifyWithOptions_StripsMarkupFromInAppText(t *testing.T) {
 	assert.Equal(t, "Dev created the app \"alert(1)Billing\".", got.Content)
 	assert.NotContains(t, got.Content, "<")
 }
+
+func TestStripMarkup(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"plain text untouched", "Dev created the app \"Billing\".", "Dev created the app \"Billing\"."},
+		{"html tags", "New app <img src=x onerror=alert(1)>", "New app"},
+		{"unterminated tag", "hello <script", "hello"},
+		{"bold asterisks", "Access requested for **Customer Support Triage Agent** by dev", "Access requested for Customer Support Triage Agent by dev"},
+		{"bold underscores", "__Important__ change", "Important change"},
+		{"italic asterisks", "the *only* one", "the only one"},
+		{"italic underscores", "the _only_ one (_really_)", "the only one (really)"},
+		{"snake_case survives", "app my_app_v2 and some_identifier", "app my_app_v2 and some_identifier"},
+		{"backticks", "run `make dev` now", "run make dev now"},
+		{"link keeps label", "See [the request](/admin/plugins/3/requests/9) for details", "See the request for details"},
+		{"link url with parentheses", "[go](#alert(2)) now", "go now"},
+		{"mixed", "**[Triage Agent](/x)** needs `approval`", "Triage Agent needs approval"},
+		{"lone asterisk kept", "5 * 3 = 15", "5 * 3 = 15"},
+		{"markdown plus html", "**bold** <b>html</b>", "bold html"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, stripMarkup(tc.in))
+		})
+	}
+}

@@ -4,12 +4,16 @@ import { config } from '../config';
 export class PageTemplate {
     readonly page: Page;
     readonly Popup: Locator;
+    /** The avatar at the right of the top bar; opens the account menu. */
+    readonly accountMenuButton: Locator;
+    /** "Log out" inside the account menu (only present while the menu is open). */
     readonly logoutButton: Locator;
 
     constructor(page: Page) {
         this.page = page;
         this.Popup = this.page.locator('.MuiAlert-message');
-        this.logoutButton = this.page.getByTestId('LogoutIcon');
+        this.accountMenuButton = this.page.getByRole('button', { name: 'Account menu' });
+        this.logoutButton = this.page.getByRole('menuitem', { name: 'Log out' });
     }
 
     /**
@@ -23,12 +27,15 @@ export class PageTemplate {
     }
 
     /**
-     * Logs out and waits for the login form. The check is the login page's
-     * URL plus its "Log in" button: a textbox named "Email" also matches the
-     * Users page's "Search by name or email..." box, which let a logout that
-     * had not happened pass unnoticed.
+     * Logs out through the account menu (avatar -> "Log out"; the header
+     * avatar is no longer a one-click logout) and waits for the login form.
+     * The check is the login page's URL plus its "Log in" button: a textbox
+     * named "Email" also matches the Users page's "Search by name or
+     * email..." box, which let a logout that had not happened pass unnoticed.
      */
     async logOut() {
+        await this.accountMenuButton.click();
+        await expect(this.logoutButton).toBeVisible();
         await this.logoutButton.click();
         await expect(this.page).toHaveURL(/\/login/, { timeout: 15000 });
         await expect(this.page.getByRole('button', { name: /log in/i })).toBeVisible();

@@ -190,6 +190,9 @@ func (s *NamespaceService) TriggerNamespaceReload(namespace string, initiatedBy 
 		return nil, fmt.Errorf("no active edges found in namespace '%s'", namespace)
 	}
 
+	// A push is being issued: the pending-changes preview measures from here
+	s.markNamespacePushed(dbNamespace)
+
 	// Create reload operation
 	operationID := fmt.Sprintf("ns-reload-%s-%d", namespace, time.Now().Unix())
 	
@@ -225,6 +228,9 @@ func (s *NamespaceService) TriggerEdgeReload(edgeID string, initiatedBy string) 
 		return nil, fmt.Errorf("edge '%s' is not in a reloadable state (status: %s)", edgeID, edge.Status)
 	}
 
+	// A single-edge push still ships the namespace's current configuration
+	s.markNamespacePushed(edge.Namespace)
+
 	// Use reload coordinator if available, otherwise fall back to mock implementation
 	if s.reloadCoordinator != nil {
 		// Use the distributed reload coordinator for actual gRPC coordination
@@ -246,6 +252,15 @@ func (s *NamespaceService) TriggerEdgeReload(edgeID string, initiatedBy string) 
 	}
 
 	return operation, nil
+}
+
+// markNamespacePushed stamps NamespaceSyncStatus.LastPushAt for the
+// namespace (DB spelling: "" for global). A failure is logged, not returned:
+// the reload itself must not be blocked by the bookkeeping.
+func (s *NamespaceService) markNamespacePushed(dbNamespace string) {
+	if err := models.MarkNamespacePushed(s.db, dbNamespace, time.Now()); err != nil {
+		fmt.Printf("Warning: failed to record push for namespace '%s': %v\n", dbNamespace, err)
+	}
 }
 
 // GetNamespaceStatistics returns comprehensive statistics for all namespaces

@@ -7,61 +7,39 @@ import {
 } from '@mui/material';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
-import { StyledNavLink } from '../../../styles/sharedStyles';
 import { Link } from 'react-router-dom';
 import { ParentListItem, SubListItem, ListItemIcon } from './styles';
+import { menuItemKey } from './utils';
 
+/**
+ * One node of the drawer. Which node is highlighted is decided once per
+ * drawer (see useDrawerState / findSelectedItem) and handed down as
+ * `selectedKey`; a node is selected when it is that item or one of its
+ * ancestors. Nothing here matches paths itself, so two entries can never
+ * light up at once.
+ */
 const MenuItem = ({
   item,
   depth = 0,
   parentId = null,
+  parentKey = null,
   rootParentId = null,
   open,
   expandedItems,
   onExpandClick,
-  onPathSelect,
-  selectedPath,
+  selectedKey,
   isFirstItem,
 }) => {
   const itemId = item.id || item.text;
+  const itemKey = menuItemKey(item, parentKey);
   const hasSubItems = item.subItems;
   const isExpanded = expandedItems[itemId];
   const immediateParentId = parentId || itemId;
 
-  const pathMatches = (itemPath, currentPath, exact = false) => {
-    if (!itemPath || !currentPath) return false;
-    if (exact) return itemPath === currentPath;
+  const isSelected = Boolean(
+    selectedKey && (selectedKey === itemKey || selectedKey.startsWith(`${itemKey}>`))
+  );
 
-    // Extract pathname without query string for comparison
-    const itemPathname = itemPath.split('?')[0];
-    const currentPathname = currentPath.split('?')[0];
-
-    // If item has query params, require exact match
-    if (itemPath.includes('?')) {
-      return itemPath === currentPath;
-    }
-
-    // Otherwise, match pathname or pathname prefix
-    return itemPathname === currentPathname || currentPathname.startsWith(itemPathname + '/');
-  };
-
-  const isItemSelected = (item, currentPath) => {
-    // Respect exact flag on items
-    if (item.exact) {
-      if (item.path === currentPath) return true;
-    } else if (pathMatches(item.path, currentPath, item.exact)) {
-      return true;
-    }
-    if (item.subItems) {
-      return item.subItems.some(subItem => isItemSelected(subItem, currentPath));
-    }
-    return false;
-  };
-
-  const isSelected = item.exact
-    ? selectedPath === item.path
-    : isItemSelected(item, selectedPath);
-    
   const ListItemComponent = depth === 0 ? ParentListItem : SubListItem;
 
   if (hasSubItems) {
@@ -84,6 +62,9 @@ const MenuItem = ({
           hasSubItems={hasSubItems}
           open={open}
           isFirstItem={depth === 0 && isFirstItem}
+          data-nav-depth={depth}
+          data-nav-id={itemId}
+          data-nav-selected={isSelected ? 'true' : undefined}
         >
           {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
           <ListItemText
@@ -102,12 +83,12 @@ const MenuItem = ({
                 item={subItem}
                 depth={depth + 1}
                 parentId={item.id}
+                parentKey={itemKey}
                 rootParentId={immediateParentId}
                 open={open}
                 expandedItems={expandedItems}
                 onExpandClick={onExpandClick}
-                onPathSelect={onPathSelect}
-                selectedPath={selectedPath}
+                selectedKey={selectedKey}
                 isFirstItem={index === 0}
               />
             ))}
@@ -117,50 +98,24 @@ const MenuItem = ({
     );
   }
 
-  // Determine if this item needs exact matching (has query params or exact flag)
-  const needsExactMatch = item.exact || item.path?.includes('?');
-  const isLinkSelected = pathMatches(item.path, selectedPath, needsExactMatch);
-
-  // For items needing exact match, use plain Link to avoid NavLink's automatic .active class
-  // For regular items, use NavLink with end prop for proper path matching
-  if (needsExactMatch) {
-    return (
-      <ListItemComponent
-        component={Link}
-        to={item.path}
-        depth={depth}
-        onClick={() => onPathSelect(item.path)}
-        selected={isLinkSelected}
-        disableRipple
-        disableTouchRipple
-        open={open}
-        isFirstItem={depth === 0 && isFirstItem}
-        className={isLinkSelected ? 'active' : ''}
-        style={{ textDecoration: 'none', color: 'inherit' }}
-      >
-        {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
-        <ListItemText
-          primary={item.text}
-          primaryTypographyProps={{
-            variant: depth > 0 ? 'body2' : 'body1',
-          }}
-        />
-      </ListItemComponent>
-    );
-  }
-
+  // A plain Link rather than NavLink: NavLink applies its own `.active`
+  // class from a prefix match of its own, which is exactly how "/admin"
+  // and "/admin/apps" ended up highlighted together.
   return (
     <ListItemComponent
-      component={StyledNavLink}
+      component={Link}
       to={item.path}
       depth={depth}
-      onClick={() => onPathSelect(item.path)}
-      selected={isLinkSelected}
+      selected={isSelected}
       disableRipple
       disableTouchRipple
       open={open}
       isFirstItem={depth === 0 && isFirstItem}
-      end
+      className={isSelected ? 'active' : ''}
+      style={{ textDecoration: 'none', color: 'inherit' }}
+      aria-current={isSelected ? 'page' : undefined}
+      data-nav-depth={depth}
+      data-nav-id={itemId}
     >
       {item.icon && <ListItemIcon>{item.icon}</ListItemIcon>}
       <ListItemText
@@ -185,12 +140,12 @@ MenuItem.propTypes = {
   }).isRequired,
   depth: PropTypes.number,
   parentId: PropTypes.string,
+  parentKey: PropTypes.string,
   rootParentId: PropTypes.string,
   open: PropTypes.bool.isRequired,
   expandedItems: PropTypes.object.isRequired,
   onExpandClick: PropTypes.func.isRequired,
-  onPathSelect: PropTypes.func.isRequired,
-  selectedPath: PropTypes.string,
+  selectedKey: PropTypes.string,
   isFirstItem: PropTypes.bool,
 };
 

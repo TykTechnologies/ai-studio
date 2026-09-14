@@ -39,11 +39,15 @@ The Midsommar Notification System provides a centralized mechanism for managing 
     *   Other services can potentially call `NotificationService.Notify` or `SendAdminAppNotification`.
 *   **MailService (`notifications/email.go`):** Abstraction for sending emails via SMTP. Includes `TestMailer` for testing.
 *   **API Handlers (`api/notification_handlers.go`):** Expose REST endpoints (`/common/api/v1/notifications/*`) for UI interaction (list, count, mark read). Authenticated via middleware.
-*   **Frontend UI Components (`src/admin/components/notifications/`, `src/admin/pages/`):**
-    *   `NotificationContext.js`: Manages state, fetches data, handles marking as read.
-    *   `NotificationIcon.js`: Displays bell icon and unread count badge; polls `/unread/count`.
-    *   `NotificationList.js`: Displays the list of notifications fetched from `/notifications`.
-    *   `NotificationsPage.js`: Dedicated page hosting the `NotificationList`.
+*   **Frontend UI Components (`src/admin/components/notifications/`, `src/admin/context/`, `src/pages/`):**
+    *   `NotificationContext.js`: Holds the unread count (one 60 s poll for the whole app) and the latest page of notifications (`items`, `total`, `hasMore`, `refresh`, `loadMore`, `markAsRead`, `markAllAsRead`).
+    *   `NotificationIcon.js`: The bell with the unread badge; opens `NotificationPanel` in a popover (`aria-haspopup="dialog"`).
+    *   `NotificationPanel.js`: The dropdown: latest 8 with type icon, title, one-line preview, relative time and unread dot; footer "Mark all as read" / "View all (N)".
+    *   `NotificationList.js`: The full list on `/notifications`, grouped by day (Today / Yesterday / date), unread-only toggle, "Load more" by offset.
+    *   `notificationPresentation.js`: Type-to-icon map (`app`, `user`, `submission`, `plugin:*` → extension icon, default bell), relative time, previews, day grouping.
+    *   `services/notificationService.js`: The HTTP calls (through `pubClient`) plus a tolerant reader for the lowercase `{data, meta}` response (the old capitalised shape is still accepted).
+    *   `pages/NotificationsPage.js`: Dedicated page hosting the `NotificationList`.
+    *   `components/profile/NotificationPreferencesDialog.js`: In-app / email switches (PATCH `/common/me/preferences`), reached from the account menu.
 *   **Templates (`templates/`):** HTML templates (e.g., `budget_alert.tmpl`, `admin-notify.tmpl`) used for email content formatting.
 
 **Data Flow:**
@@ -126,19 +130,22 @@ Based on system behavior and code analysis:
 
 1.  **Email:** Sent via `MailService` if SMTP is configured. Uses HTML templates from `templates/`.
 2.  **In-App UI:**
-    *   Near real-time unread count via polling (`NotificationIcon.js` hitting `/unread/count` every 60s).
-    *   Full list display on `NotificationsPage.js` (using `NotificationList.js` hitting `/notifications`).
+    *   Near real-time unread count via polling (`NotificationContext.js` hitting `/unread/count` every 60s).
+    *   Bell panel (`NotificationPanel.js`) with the latest 8; full list on `/notifications` (`NotificationList.js`) with paging.
     *   Managed state via `NotificationContext.js`.
-    *   Allows marking as read, triggering API calls.
+    *   Allows marking one or all as read, triggering API calls; clicking an item opens its `link` (in-app route or external URL).
+    *   Per-user delivery preferences (in-app, email) in the account menu's "Notification preferences" dialog.
 
 **6. UI Integration**
 
-*   **Polling:** `NotificationIcon` polls `/common/api/v1/notifications/unread/count` every 60 seconds using `fetchUnreadCount` from `NotificationContext`.
+*   **Polling:** `NotificationProvider` polls `/common/api/v1/notifications/unread/count` every 60 seconds (`UNREAD_POLL_INTERVAL_MS`); the bell only renders the count.
 *   **Display:**
-    *   `NotificationIcon` (in header/sidebar): Shows a bell icon with a badge indicating the unread count. Clicking navigates to `/notifications`.
-    *   `NotificationsPage` (route `/notifications`): Displays a list of notifications using `NotificationList`, showing title, content (markdown rendered), timestamp, and read status visually distinct for unread items.
-*   **Interaction:** Clicking a notification (or an explicit "mark read" button) triggers `NotificationContext` to call the `PUT /common/api/v1/notifications/:id/read` endpoint via its `markNotificationAsRead` function.
-*   **State Management:** `NotificationContext` fetches data (`fetchNotifications`, `fetchUnreadCount`), manages loading/error states, and provides notification data/functions (`notifications`, `unreadCount`, `markNotificationAsRead`) to consuming components.
+    *   `NotificationIcon` (in the shared top bar): Shows a bell icon with a badge indicating the unread count. Clicking opens the `NotificationPanel` popover (refetched on every open); Escape closes it.
+    *   `NotificationPanel`: The latest 8 notifications with a type icon, title, one-line plain-text preview, relative time ("5m ago") and an unread dot. Footer: "Mark all as read" and "View all (N)" → `/notifications`.
+    *   `NotificationsPage` (route `/notifications`): `NotificationList` grouped by day (Today / Yesterday / earlier dates), unread-only toggle, per-item "mark as read", "Load more (N remaining)" using `offset`, and the empty state "You're all caught up." Content is plain text (no markdown rendering).
+*   **Interaction:** Clicking a notification marks it read (`PUT /common/api/v1/notifications/:id/read`) and opens its `link`: in-app paths go through `navigate`, `http(s)` URLs open in a new tab.
+*   **State Management:** `NotificationContext` exposes `unreadCount`, `items`, `total`, `hasMore`, `loading`, `error`, `refresh({ unread, limit })`, `loadMore()`, `markAsRead(id)`, `markAllAsRead()`. Marking read updates the list and the count locally without a refetch.
+*   **Preferences:** The account menu (avatar in the top bar, `components/profile/ProfileMenu.js`) opens `NotificationPreferencesDialog`, whose two switches PATCH `/common/me/preferences` (`notifications_enabled`, `email_notifications_enabled`).
 *   **Settings:** Admins can toggle the `NotificationsEnabled` flag for users via `UserForm.js` (visible in `UserDetails.js`).
 
 **7. Code References**
@@ -153,9 +160,14 @@ Based on system behavior and code analysis:
     *   `templates/*.tmpl`
 *   **Frontend:**
     *   `src/admin/components/notifications/NotificationIcon.js`
+    *   `src/admin/components/notifications/NotificationPanel.js`
     *   `src/admin/components/notifications/NotificationList.js`
-    *   `src/admin/components/notifications/NotificationContext.js`
-    *   `src/admin/pages/NotificationsPage.js`
+    *   `src/admin/components/notifications/notificationPresentation.js`
+    *   `src/admin/context/NotificationContext.js`
+    *   `src/admin/services/notificationService.js`
+    *   `src/admin/services/meService.js`
+    *   `src/pages/NotificationsPage.js`
+    *   `src/components/profile/ProfileMenu.js`, `NotificationPreferencesDialog.js`, `ApiKeyDialog.js`
     *   `src/admin/components/users/UserForm.js`
     *   `src/admin/components/users/UserDetails.js`
 

@@ -1,31 +1,55 @@
-import React, { useEffect } from 'react';
-import { Badge, IconButton } from '@mui/material';
+import React, { useId, useState } from 'react';
+import { Badge, IconButton, Popover, Tooltip } from '@mui/material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
-import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../context/NotificationContext';
+import NotificationPanel from './NotificationPanel';
 
-const NotificationIcon = () => {
-	const navigate = useNavigate();
-	const { unreadCount, fetchUnreadCount } = useNotifications();
+/**
+ * The bell in the top bar. Shows the unread badge (polled by the
+ * NotificationProvider) and opens the NotificationPanel in a popover
+ * instead of sending the user to a full page.
+ */
+const NotificationIcon = ({ sx }) => {
+	const { unreadCount } = useNotifications();
+	const [anchorEl, setAnchorEl] = useState(null);
+	const panelId = useId();
+	const titleId = `${panelId}-title`;
+	const open = Boolean(anchorEl);
 
-	useEffect(() => {
-		fetchUnreadCount();
-		// Poll for new notifications every minute
-		const interval = setInterval(fetchUnreadCount, 60000);
+	const handleOpen = (event) => setAnchorEl(event.currentTarget);
+	const handleClose = () => setAnchorEl(null);
 
-		return () => clearInterval(interval);
-	}, [fetchUnreadCount]);
-
-	const handleClick = () => {
-		navigate('/notifications');
-	};
+	const label = unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications';
 
 	return (
-		<IconButton onClick={handleClick} sx={{ color: 'white' }}>
-			<Badge badgeContent={unreadCount} color="error">
-				<NotificationsIcon />
-			</Badge>
-		</IconButton>
+		<>
+			<Tooltip title="Notifications">
+				<IconButton
+					onClick={handleOpen}
+					sx={{ color: 'white', ...sx }}
+					aria-label={label}
+					aria-haspopup="dialog"
+					aria-expanded={open}
+					aria-controls={open ? panelId : undefined}
+					data-testid="notification-bell"
+				>
+					<Badge badgeContent={unreadCount} color="error" max={99}>
+						<NotificationsIcon />
+					</Badge>
+				</IconButton>
+			</Tooltip>
+			<Popover
+				id={panelId}
+				open={open}
+				anchorEl={anchorEl}
+				onClose={handleClose}
+				anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+				transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+				slotProps={{ paper: { role: 'dialog', 'aria-labelledby': titleId, sx: { mt: 1 } } }}
+			>
+				{open && <NotificationPanel onClose={handleClose} titleId={titleId} />}
+			</Popover>
+		</>
 	);
 };
 

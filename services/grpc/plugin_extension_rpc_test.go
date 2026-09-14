@@ -121,7 +121,9 @@ func TestCreateNotificationRPC(t *testing.T) {
 		var stored models.Notification
 		require.NoError(t, service.DB.Where("user_id = ?", user.ID).First(&stored).Error)
 		assert.Equal(t, "Alert alert(1)", stored.Title)
-		assert.Equal(t, "**bold**  [go](#alert(2)) [ok](https://example.com)", stored.Content)
+		// The sanitiser neuters the script link; the in-app record is then
+		// plain text (markdown decoration dropped, link labels kept).
+		assert.Equal(t, "bold  go ok", stored.Content)
 
 		// A title that is nothing but markup is rejected rather than stored empty.
 		_, err = server.CreateNotification(ctx, &pb.CreateNotificationRequest{Title: "<b></b>", UserId: uint32(user.ID)})

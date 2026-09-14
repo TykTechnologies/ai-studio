@@ -29,6 +29,7 @@ import edgeGatewayService from '../../services/edgeGatewayService';
 import { useSyncStatus } from '../../context/SyncStatusContext';
 import PushConfigurationModal from './PushConfigurationModal';
 import RemoveEdgeModal from './RemoveEdgeModal';
+import { formatPushTime } from './pendingChanges';
 import {
   TitleBox,
   ContentBox,
@@ -40,7 +41,7 @@ import {
 const EdgeGatewayDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { syncStatus: globalSyncStatus } = useSyncStatus();
+  const { syncStatus: globalSyncStatus, getLastPushAt } = useSyncStatus();
 
   const [edgeGateway, setEdgeGateway] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -189,6 +190,9 @@ const EdgeGatewayDetail = () => {
   const statusInfo = getStatusInfo(edgeGateway);
   const syncStatusInfo = getSyncStatusInfo(edgeGateway);
   const expectedChecksum = getExpectedChecksum(edgeGateway?.namespace);
+  // undefined when the running Studio does not report push times; null when
+  // this namespace has never been pushed.
+  const lastPushAt = getLastPushAt(edgeGateway?.namespace);
 
   return (
     <Box>
@@ -337,6 +341,17 @@ const EdgeGatewayDetail = () => {
                     />
                   )}
                 </Box>
+
+                {lastPushAt !== undefined && (
+                  <Box mb={2}>
+                    <Typography variant="body2" color="textSecondary">
+                      Last Pushed
+                    </Typography>
+                    <Typography variant="body1" data-testid="last-pushed">
+                      {lastPushAt ? formatPushTime(lastPushAt) : 'Never'}
+                    </Typography>
+                  </Box>
+                )}
 
                 <Box mb={2}>
                   <Typography variant="body2" color="textSecondary">

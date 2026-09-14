@@ -304,3 +304,39 @@ describe('saveSelectedPath', () => {
     console.error = originalConsoleError;
   });
 });
+describe('findSelectedItem', () => {
+  const { findSelectedItem } = require('./utils');
+  const items = [
+    { id: 'overview', text: 'Overview', path: '/admin', exact: true },
+    { id: 'catalogs', text: 'Catalogs', subItems: [{ id: 'catalog-llms', text: 'LLM providers', path: '/admin/catalogs/llms' }] },
+    { id: 'llm-management', text: 'LLM management', subItems: [{ id: 'llms', text: 'LLM providers', path: '/admin/llms' }] },
+    { id: 'ai-portal', text: 'AI Portal', subItems: [{ id: 'portal-apps', text: 'Apps', path: '/admin/apps' }] },
+    { id: 'chat', text: 'Chat', subItems: [{ id: 'room', text: 'Room', path: '/chat?continue_id=7' }] },
+  ];
+
+  it('matches /admin only exactly', () => {
+    expect(findSelectedItem(items, '/admin').key).toBe('overview');
+    expect(findSelectedItem(items, '/admin/apps/1').key).not.toBe('overview');
+  });
+
+  it('picks the longest matching path and reports its ancestors', () => {
+    const sel = findSelectedItem(items, '/admin/apps/1');
+    expect(sel.key).toBe('ai-portal>portal-apps');
+    expect(sel.ancestorIds).toEqual(['ai-portal']);
+  });
+
+  it('compares full paths so the catalog entry beats the bare llms entry', () => {
+    expect(findSelectedItem(items, '/admin/catalogs/llms/2').key).toBe('catalogs>catalog-llms');
+    expect(findSelectedItem(items, '/admin/llms/2').key).toBe('llm-management>llms');
+  });
+
+  it('requires an exact match, search included, for query-string paths', () => {
+    expect(findSelectedItem(items, '/chat', '?continue_id=7').key).toBe('chat>room');
+    expect(findSelectedItem(items, '/chat', '?continue_id=8')).toBeNull();
+  });
+
+  it('returns null when nothing matches', () => {
+    expect(findSelectedItem(items, '/portal/apps')).toBeNull();
+    expect(findSelectedItem([], '/admin')).toBeNull();
+  });
+});
