@@ -123,10 +123,17 @@ type CatalogFilterOption struct {
 	Name string `json:"name"`
 }
 
-// CatalogListMeta carries what the browse page needs to build its filters.
+// CatalogListMeta carries the page position and the facets the browse page
+// builds its filters from. Total is the number of items matching the query;
+// Counts, Kinds, Catalogs and ResourceTypes describe the caller's whole
+// accessible set so the filter controls do not shrink as filters are applied.
 type CatalogListMeta struct {
 	Total         int                   `json:"total"`
+	Page          int                   `json:"page"`
+	PageSize      int                   `json:"page_size"`
+	TotalPages    int                   `json:"total_pages"`
 	Counts        map[string]int        `json:"counts"`
+	Kinds         []CatalogKindFacet    `json:"kinds"`
 	Catalogs      []CatalogFilterOption `json:"catalogs"`
 	ResourceTypes []CatalogResourceType `json:"resource_types"`
 }
@@ -488,10 +495,20 @@ func portalUser(c *gin.Context) (*models.User, bool) {
 
 // getPortalCatalog godoc
 // @Summary The portal's unified catalog
-// @Description Every LLM provider, data source, tool and plugin resource the authenticated user can build an app with, in one item shape, with the catalogs each is available through. Visibility follows the user's teams and their catalogs.
+// @Description One page of the LLM providers, data sources, tools and plugin resources the authenticated user can build an app with, in one item shape, with the catalogs each is available through. Search (q), filters (type, kind, privacy, catalog, community), sort and paging (page, page_size) are applied on the server; meta carries the facets for the filter controls. Visibility follows the user's teams and their catalogs.
 // @Tags common
 // @Produce json
+// @Param q query string false "Search terms (all must match)"
+// @Param type query string false "llm | datasource | tool | plugin_resource"
+// @Param kind query string false "Vendor code, store type, protocol or <plugin id>:<slug>"
+// @Param privacy query string false "public | internal | confidential | restricted"
+// @Param catalog query string false "<type>:<catalog id>"
+// @Param community query bool false "Community submissions only"
+// @Param sort query string false "newest (default) | name | privacy_asc | privacy_desc"
+// @Param page query int false "Page number (1-based)"
+// @Param page_size query int false "Items per page (default 25, max 100)"
 // @Success 200 {object} CatalogListResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /common/catalog [get]
@@ -500,20 +517,35 @@ func (a *API) getPortalCatalog(c *gin.Context) {
 	if !ok {
 		return
 	}
+	query, ok := parseCatalogQuery(c)
+	if !ok {
+		return
+	}
 	catalog, err := a.buildPortalCatalog(c, user)
 	if err != nil {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
-	counts := map[string]int{CatalogItemLLM: 0, CatalogItemDatasource: 0, CatalogItemTool: 0, CatalogItemPluginResource: 0}
-	for _, item := range catalog.Items {
-		counts[item.Type]++
+	counts, kinds := catalogFacets(catalog.Items)
+
+	matched := make([]CatalogItem, 0, len(catalog.Items))
+	for i := range catalog.Items {
+		if query.matches(&catalog.Items[i]) {
+			matched = append(matched, catalog.Items[i])
+		}
 	}
+	sortCatalogItems(matched, query.Sort)
+	pageItems, totalPages := pageOf(matched, query.Page, query.PageSize)
+
 	c.JSON(http.StatusOK, CatalogListResponse{
-		Data: catalog.Items,
+		Data: pageItems,
 		Meta: CatalogListMeta{
-			Total:         len(catalog.Items),
+			Total:         len(matched),
+			Page:          query.Page,
+			PageSize:      query.PageSize,
+			TotalPages:    totalPages,
 			Counts:        counts,
+			Kinds:         kinds,
 			Catalogs:      catalog.Catalogs,
 			ResourceTypes: catalog.ResourceTypes,
 		},

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -309,4 +310,113 @@ func TestBudgetUsageForApp_OwnershipOnPortalRoute(t *testing.T) {
 	assert.Equal(t, http.StatusOK, call(owner))
 	assert.Equal(t, http.StatusForbidden, call(stranger))
 	assert.Equal(t, http.StatusOK, call(admin))
+}
+
+func portalGetQuery(t *testing.T, handler gin.HandlerFunc, user *models.User, rawQuery string) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/?"+rawQuery, nil)
+	c.Set("user", user)
+	handler(c)
+	return w
+}
+
+// Search, filters, sort and paging happen on the server: the client only
+// ever receives one page, and the facets describe the whole accessible set.
+func TestPortalCatalog_QuerySortAndPage(t *testing.T) {
+	api, _, service := setupTestAPIForCommonTests(t)
+
+	user := createTestUser(t, service)
+	llmCat := createTestCatalogue(t, service)
+	toolCat := createTestToolCatalogue(t, service)
+	giveUserTeam(t, service, "Platform", user.ID, []uint{llmCat.ID}, nil, []uint{toolCat.ID})
+
+	mk := func(name string, vendor models.Vendor, privacy int, model string) {
+		llm, err := service.CreateLLM(name, "api_key", "https://api.example.com",
+			privacy, name+" short", "", "", vendor, true, nil, model, []string{}, nil, nil, false, nil, nil)
+		require.NoError(t, err)
+		require.NoError(t, service.AddLLMToCatalogue(llm.ID, llmCat.ID))
+	}
+	mk("Alpha OpenAI", models.OPENAI, 10, "gpt-4o")
+	mk("Bravo Bedrock", models.BEDROCK, 60, "claude-3")
+	mk("Charlie OpenAI", models.OPENAI, 90, "gpt-4o-mini")
+	tool := createTestTool(t, service, "Delta Tool")
+	require.NoError(t, service.AddToolToToolCatalogue(tool.ID, toolCat.ID))
+
+	list := func(rawQuery string) CatalogListResponse {
+		w := portalGetQuery(t, api.getPortalCatalog, user, rawQuery)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var response CatalogListResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		return response
+	}
+	names := func(r CatalogListResponse) []string {
+		out := []string{}
+		for _, item := range r.Data {
+			out = append(out, item.Attributes.Name)
+		}
+		return out
+	}
+
+	t.Run("default is every item newest first with facets", func(t *testing.T) {
+		r := list("")
+		assert.Equal(t, 4, r.Meta.Total)
+		assert.Equal(t, 1, r.Meta.Page)
+		assert.Equal(t, catalogDefaultPageSize, r.Meta.PageSize)
+		assert.Equal(t, 1, r.Meta.TotalPages)
+		assert.Equal(t, map[string]int{"llm": 3, "datasource": 0, "tool": 1, "plugin_resource": 0}, r.Meta.Counts)
+		kinds := []string{}
+		for _, k := range r.Meta.Kinds {
+			kinds = append(kinds, k.Type+":"+k.Kind+"="+strconv.Itoa(k.Count))
+		}
+		assert.Equal(t, []string{"llm:bedrock=1", "llm:openai=2", "tool:" + models.ToolTypeREST + "=1"}, kinds)
+		// Created in this order, so newest first reverses it.
+		assert.Equal(t, []string{"Delta Tool", "Charlie OpenAI", "Bravo Bedrock", "Alpha OpenAI"}, names(r))
+	})
+
+	t.Run("search matches names, vendor labels and model names", func(t *testing.T) {
+		assert.Equal(t, []string{"Bravo Bedrock"}, names(list("q=aws")))
+		assert.Equal(t, []string{"Charlie OpenAI", "Alpha OpenAI"}, names(list("q=gpt-4o")))
+		assert.Equal(t, []string{"Alpha OpenAI"}, names(list("q=openai+alpha")))
+		assert.Empty(t, names(list("q=nothing+here")))
+	})
+
+	t.Run("filters narrow the page but not the facets", func(t *testing.T) {
+		r := list("type=llm&kind=openai")
+		assert.Equal(t, 2, r.Meta.Total)
+		assert.Equal(t, 3, r.Meta.Counts["llm"])
+		assert.Len(t, r.Meta.Kinds, 3)
+		assert.Equal(t, []string{"Charlie OpenAI"}, names(list("privacy=restricted")))
+		assert.Equal(t, []string{"Delta Tool"}, names(list("catalog=tool:"+idOf(toolCat.ID))))
+		assert.Empty(t, names(list("community=true")))
+	})
+
+	t.Run("sorts by name and privacy", func(t *testing.T) {
+		assert.Equal(t, []string{"Alpha OpenAI", "Bravo Bedrock", "Charlie OpenAI", "Delta Tool"}, names(list("sort=name")))
+		assert.Equal(t, []string{"Delta Tool", "Alpha OpenAI", "Bravo Bedrock", "Charlie OpenAI"}, names(list("sort=privacy_asc")))
+		assert.Equal(t, []string{"Charlie OpenAI", "Bravo Bedrock", "Alpha OpenAI", "Delta Tool"}, names(list("sort=privacy_desc")))
+	})
+
+	t.Run("pages", func(t *testing.T) {
+		r := list("sort=name&page_size=3")
+		assert.Equal(t, []string{"Alpha OpenAI", "Bravo Bedrock", "Charlie OpenAI"}, names(r))
+		assert.Equal(t, 4, r.Meta.Total)
+		assert.Equal(t, 2, r.Meta.TotalPages)
+		r = list("sort=name&page_size=3&page=2")
+		assert.Equal(t, []string{"Delta Tool"}, names(r))
+		assert.Equal(t, 2, r.Meta.Page)
+		r = list("sort=name&page_size=3&page=9")
+		assert.Empty(t, r.Data)
+		assert.Equal(t, 2, r.Meta.TotalPages)
+	})
+
+	t.Run("rejects values outside the vocabulary", func(t *testing.T) {
+		for _, raw := range []string{"sort=random", "privacy=secret", "type=widget", "page=0", "page_size=x"} {
+			w := portalGetQuery(t, api.getPortalCatalog, user, raw)
+			assert.Equal(t, http.StatusBadRequest, w.Code, raw)
+		}
+		// Oversized pages are clamped, not refused.
+		assert.Equal(t, catalogMaxPageSize, list("page_size=5000").Meta.PageSize)
+	})
 }

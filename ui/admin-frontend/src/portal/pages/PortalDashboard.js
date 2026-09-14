@@ -26,7 +26,6 @@ import {
   CATALOG_TYPES,
   browsePath,
   itemKey,
-  sortCatalogItems,
   typeIcon,
   typeLabel,
 } from "../utils/catalog";
@@ -40,6 +39,10 @@ import {
 
 const RECENT_LIMIT = 6;
 const APPS_LIMIT = 6;
+
+// The overview only needs the newest few assets; the counts and kinds it
+// shows are the server's facets over everything the user can use.
+const RECENT_REQUEST = { sort: "newest", page_size: RECENT_LIMIT };
 
 const CountTile = styled(Box)(({ theme }) => ({
   display: "flex",
@@ -114,7 +117,7 @@ const PortalDashboard = () => {
   const navigate = useNavigate();
   const { features, loading: featuresLoading } = useSystemFeatures();
   const { userName, uiOptions } = useUserEntitlements();
-  const catalog = usePortalCatalog();
+  const catalog = usePortalCatalog(RECENT_REQUEST);
   const [apps, setApps] = useState([]);
   const [usage, setUsage] = useState({ data: {}, spend_tracked: false });
   const [appsLoading, setAppsLoading] = useState(true);
@@ -158,9 +161,11 @@ const PortalDashboard = () => {
     return [...apps].sort((x, y) => lastAccess(y) - lastAccess(x) || Number(y.id) - Number(x.id));
   }, [apps, usage]);
 
-  const recent = useMemo(() => sortCatalogItems(catalog.items, "newest").slice(0, RECENT_LIMIT), [catalog.items]);
+  const recent = catalog.items;
   const counts = catalog.meta?.counts || {};
+  const accessibleTotal = Object.values(counts).reduce((sum, n) => sum + n, 0);
   const resourceTypes = catalog.meta?.resource_types || [];
+  const kindFacets = catalog.meta?.kinds || [];
 
   const submitSearch = (event) => {
     event.preventDefault();
@@ -334,7 +339,7 @@ const PortalDashboard = () => {
             </Box>
           ) : catalog.error ? (
             <Typography color="error">The catalog could not be loaded. Please try again later.</Typography>
-          ) : catalog.items.length === 0 ? (
+          ) : accessibleTotal === 0 ? (
             <Typography variant="bodyMediumDefault" color="text.defaultSubdued" data-testid="overview-empty-catalog">
               None of your teams has a catalog with anything active in it yet. Ask an administrator to add you to a team or publish something to one of your catalogs.
             </Typography>
@@ -357,9 +362,10 @@ const PortalDashboard = () => {
                     </CountTile>
                   ))}
                 {resourceTypes.map((rt) => {
-                  const total = catalog.items.filter(
-                    (item) => item.type === CATALOG_TYPES.PLUGIN_RESOURCE && item.attributes?.kind === `${rt.plugin_id}:${rt.slug}`,
-                  ).length;
+                  const total =
+                    kindFacets.find(
+                      (facet) => facet.type === CATALOG_TYPES.PLUGIN_RESOURCE && facet.kind === `${rt.plugin_id}:${rt.slug}`,
+                    )?.count || 0;
                   if (total === 0) return null;
                   return (
                     <CountTile

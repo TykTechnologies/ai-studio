@@ -32,11 +32,24 @@ const item = (type, id, attributes) => ({ type, id: String(id), attributes });
 
 const catalog = {
   data: [
-    item("llm", 1, { name: "Acme OpenAI", short_description: "Fast", kind: "openai", privacy_score: 40, created_at: "2026-09-01T00:00:00Z", catalogs: [] }),
     item("llm", 2, { name: "Bedrock Claude", short_description: "Long context", kind: "bedrock", privacy_score: 80, created_at: "2026-09-10T00:00:00Z", catalogs: [] }),
     item("datasource", 3, { name: "Docs index", short_description: "Docs", kind: "pgvector", privacy_score: 20, created_at: "2026-09-05T00:00:00Z", catalogs: [] }),
+    item("llm", 1, { name: "Acme OpenAI", short_description: "Fast", kind: "openai", privacy_score: 40, created_at: "2026-09-01T00:00:00Z", catalogs: [] }),
   ],
-  meta: { total: 3, counts: { llm: 2, datasource: 1, tool: 0, plugin_resource: 0 }, catalogs: [], resource_types: [] },
+  meta: {
+    total: 3,
+    page: 1,
+    page_size: 6,
+    total_pages: 1,
+    counts: { llm: 2, datasource: 1, tool: 0, plugin_resource: 0 },
+    kinds: [
+      { type: "llm", kind: "bedrock", label: "AWS Bedrock", count: 1 },
+      { type: "llm", kind: "openai", label: "OpenAI", count: 1 },
+      { type: "datasource", kind: "pgvector", count: 1 },
+    ],
+    catalogs: [],
+    resource_types: [],
+  },
 };
 
 const apps = {
@@ -116,6 +129,7 @@ describe("PortalDashboard", () => {
   it("shows counts per type and the newest assets, linking on to browse", async () => {
     renderDashboard();
     const counts = await screen.findByTestId("overview-counts");
+    expect(pubClient.get).toHaveBeenCalledWith("/common/catalog", { params: { page_size: "6", sort: "newest" } });
     expect(within(counts).getByRole("link", { name: /2\s*LLM providers/ })).toHaveAttribute("href", "/portal/catalog/llms");
     expect(within(counts).getByRole("link", { name: /1\s*Data source/ })).toHaveAttribute("href", "/portal/catalog/datasources");
     expect(within(counts).queryByText(/Tools/)).not.toBeInTheDocument();
@@ -139,7 +153,7 @@ describe("PortalDashboard", () => {
     mockApi({
       appsResponse: { data: [] },
       usageResponse: { data: {}, spend_tracked: false },
-      catalogResponse: { data: [], meta: { total: 0, counts: {}, catalogs: [], resource_types: [] } },
+      catalogResponse: { data: [], meta: { total: 0, page: 1, page_size: 6, total_pages: 1, counts: {}, kinds: [], catalogs: [], resource_types: [] } },
     });
     renderDashboard();
     expect(await screen.findByText("Create your first app")).toBeInTheDocument();

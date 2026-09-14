@@ -4,7 +4,7 @@ import {
   getVectorStoreLogo,
   getEmbedderName,
 } from "../../admin/utils/vendorUtils";
-import { privacyLevelForScore, PRIVACY_LEVELS } from "../../admin/components/common/privacy/privacyLevels";
+import { PRIVACY_LEVELS } from "../../admin/components/common/privacy/privacyLevels";
 import { generateSlug } from "../../admin/components/wizards/quick-start/utils";
 import { getConfig } from "../../config";
 
@@ -197,6 +197,10 @@ export const initialsFor = (name) => {
 };
 
 // --- search, filter, sort ---------------------------------------------------
+//
+// Search, filtering, sorting and paging happen on the server
+// (GET /common/catalog, api/portal_catalog_query.go); the client only ever
+// holds one page. These are the vocabularies the controls offer.
 
 export const SORT_OPTIONS = [
   { value: "newest", label: "Newest first" },
@@ -206,97 +210,11 @@ export const SORT_OPTIONS = [
 ];
 
 export const DEFAULT_SORT = "newest";
+export const DEFAULT_PAGE_SIZE = 25;
 
-const searchable = (item) => {
-  const a = attrs(item);
-  return [
-    a.name,
-    a.short_description,
-    a.long_description,
-    kindLabel(item),
-    itemTypeLabel(item),
-    a.default_model,
-    ...(a.allowed_models || []),
-    ...(a.operations || []),
-    ...(a.tags || []),
-    ...(a.catalogs || []).map((c) => c.name),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-};
-
-/**
- * Applies the browse filters. `type` narrows to one type, `kind` to one
- * vendor/store/protocol/resource type, `privacy` to one named level,
- * `catalog` to one "<type>:<id>" option and `community` to community
- * submissions; `q` is a case-insensitive substring over everything shown.
- */
-export const filterCatalogItems = (items, { q = "", type = "", kind = "", privacy = "", catalog = "", community = false } = {}) => {
-  const term = q.trim().toLowerCase();
-  const terms = term ? term.split(/\s+/) : [];
-  return (items || []).filter((item) => {
-    const a = attrs(item);
-    if (type && item.type !== type) return false;
-    if (kind && a.kind !== kind) return false;
-    if (privacy) {
-      const level = privacyLevelForScore(a.privacy_score);
-      if (!level || level.key !== privacy) return false;
-    }
-    if (catalog) {
-      const [catalogType, catalogId] = catalog.split(":");
-      if (item.type !== catalogType) return false;
-      if (!(a.catalogs || []).some((c) => String(c.id) === catalogId)) return false;
-    }
-    if (community && !a.community_submitted) return false;
-    if (terms.length > 0) {
-      const haystack = searchable(item);
-      if (!terms.every((t) => haystack.includes(t))) return false;
-    }
-    return true;
-  });
-};
-
-const createdAtMs = (item) => {
-  const value = attrs(item).created_at;
-  const ms = value ? new Date(value).getTime() : NaN;
-  return Number.isNaN(ms) ? 0 : ms;
-};
-
-const nameOf = (item) => String(attrs(item).name || "").toLowerCase();
-
-const privacyOf = (item) => {
-  const score = attrs(item).privacy_score;
-  return typeof score === "number" ? score : null;
-};
-
-/** Sorts a copy of the items. Newest first is the default (D4). */
-export const sortCatalogItems = (items, sort = DEFAULT_SORT) => {
-  const list = [...(items || [])];
-  const byName = (x, y) => nameOf(x).localeCompare(nameOf(y));
-  switch (sort) {
-    case "name":
-      return list.sort(byName);
-    case "privacy_asc":
-      return list.sort((x, y) => (privacyOf(x) ?? Infinity) - (privacyOf(y) ?? Infinity) || byName(x, y));
-    case "privacy_desc":
-      return list.sort((x, y) => (privacyOf(y) ?? -Infinity) - (privacyOf(x) ?? -Infinity) || byName(x, y));
-    case "newest":
-    default:
-      return list.sort((x, y) => createdAtMs(y) - createdAtMs(x) || byName(x, y));
-  }
-};
-
-/** Distinct kinds among the items, with labels, for the Kind filter. */
-export const kindOptions = (items) => {
-  const seen = new Map();
-  (items || []).forEach((item) => {
-    const kind = attrs(item).kind;
-    if (!kind || seen.has(kind)) return;
-    seen.set(kind, { value: kind, label: kindLabel(item) || kind, type: item.type });
-  });
-  return [...seen.values()].sort((x, y) => x.label.localeCompare(y.label));
-};
+/** Label for a kind facet from meta.kinds (server label, else the UI's map). */
+export const kindFacetLabel = (facet) =>
+  facet.label || kindLabel({ type: facet.type, attributes: { kind: facet.kind } }) || facet.kind;
 
 export const privacyOptions = () => PRIVACY_LEVELS.map((level) => ({ value: level.key, label: level.label }));
 

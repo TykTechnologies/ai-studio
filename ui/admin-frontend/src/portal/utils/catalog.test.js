@@ -2,13 +2,11 @@ import {
   avatarColor,
   buildAppPath,
   detailPath,
-  filterCatalogItems,
   hashString,
   initialsFor,
+  kindFacetLabel,
   kindLabel,
-  kindOptions,
   openAICompatibleBaseUrl,
-  sortCatalogItems,
 } from "./catalog";
 
 let mockConfig = {};
@@ -54,29 +52,12 @@ describe("catalog utils", () => {
     expect(buildAppPath(resource)).toBe("/portal/app/new?plugin_resource=7%3Aagent%3Aasset%3A9");
   });
 
-  it("sorts newest first by default, then by name", () => {
-    expect(sortCatalogItems(items).map((i) => i.id)).toEqual(["2", "3", "1", "4"]);
-    expect(sortCatalogItems(items, "name").map((i) => i.id)).toEqual(["1", "2", "3", "4"]);
-    expect(sortCatalogItems(items, "privacy_asc").map((i) => i.id)).toEqual(["4", "3", "1", "2"]);
-    expect(sortCatalogItems(items, "privacy_desc").map((i) => i.id)).toEqual(["2", "1", "3", "4"]);
-  });
-
-  it("filters by type, kind, privacy level, catalog, community and search", () => {
-    expect(filterCatalogItems(items, { type: "llm" }).map((i) => i.id)).toEqual(["1", "2"]);
-    expect(filterCatalogItems(items, { kind: "rest" }).map((i) => i.id)).toEqual(["4"]);
-    expect(filterCatalogItems(items, { privacy: "restricted" }).map((i) => i.id)).toEqual(["2"]);
-    expect(filterCatalogItems(items, { catalog: "llm:1" }).map((i) => i.id)).toEqual(["1"]);
-    expect(filterCatalogItems(items, { community: true }).map((i) => i.id)).toEqual(["3"]);
-    // Search covers name, model names, operations, tags and vendor labels.
-    expect(filterCatalogItems(items, { q: "gpt-4o" }).map((i) => i.id)).toEqual(["1"]);
-    expect(filterCatalogItems(items, { q: "getforecast" }).map((i) => i.id)).toEqual(["4"]);
-    expect(filterCatalogItems(items, { q: "docs" }).map((i) => i.id)).toEqual(["3"]);
-    expect(filterCatalogItems(items, { q: "openai acme" }).map((i) => i.id)).toEqual(["1"]);
-    expect(filterCatalogItems(items, { q: "nothing here" })).toEqual([]);
-  });
-
-  it("lists the distinct kinds with labels", () => {
-    expect(kindOptions(items).map((o) => o.label)).toEqual(["AWS Bedrock", "OpenAI", "pgvector", "REST"]);
+  it("labels kind facets from the server label or the UI's vendor map", () => {
+    expect(kindFacetLabel({ type: "llm", kind: "bedrock", label: "AWS Bedrock" })).toBe("AWS Bedrock");
+    expect(kindFacetLabel({ type: "llm", kind: "openai" })).toBe("OpenAI");
+    expect(kindFacetLabel({ type: "datasource", kind: "pgvector" })).toBe("pgvector");
+    expect(kindFacetLabel({ type: "tool", kind: "rest" })).toBe("REST");
+    expect(kindFacetLabel({ type: "plugin_resource", kind: "7:agent", label: "Agent" })).toBe("Agent");
   });
 
   it("builds the OpenAI-compatible base URL from the proxy URL and the slug", () => {
