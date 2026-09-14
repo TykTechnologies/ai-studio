@@ -90,7 +90,7 @@ const GovernedMetadataFields = ({ objectType, value, onChange, errors = {}, defa
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Typography variant="h6">Governance Metadata</Typography>
+          <Typography>Governance Metadata</Typography>
           <Chip label="Enterprise" size="small" color="primary" />
           {statusChip(enforcement)}
         </Box>

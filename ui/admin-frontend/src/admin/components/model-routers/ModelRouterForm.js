@@ -535,6 +535,13 @@ const ModelRouterForm = () => {
                 {errors.pools}
               </Alert>
             )}
+            {router.pools.length === 0 && !errors.pools && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                A router needs at least one pool. A pool matches incoming requests by model name
+                pattern and sends them to one or more LLM providers, trying them in priority order.
+                Add a pool to get started.
+              </Alert>
+            )}
           </Grid>
 
           {router.pools.map((pool, poolIndex) => (

@@ -18,6 +18,7 @@ const testTheme = createTheme({
       primary: "#000000",
       defaultSubdued: "#666666",
       neutralDisabled: "#999999",
+      linkDefault: "#00A6ED",
     },
     custom: {
       white: "#ffffff",

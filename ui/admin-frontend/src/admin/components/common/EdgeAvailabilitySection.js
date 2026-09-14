@@ -66,7 +66,7 @@ const EdgeAvailabilitySection = ({
           }
         }}
       >
-        <Typography variant="subtitle1" fontWeight="medium">
+        <Typography>
           {label}
           {required && <span style={{ color: 'red' }}> *</span>}
         </Typography>
