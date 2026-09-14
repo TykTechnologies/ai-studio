@@ -154,6 +154,36 @@ class EdgeGatewayService {
     }
   }
 
+  /**
+   * What has changed in a namespace since its configuration was last pushed
+   * to the edge gateways, so the push dialog can say what it is about to do.
+   * Returns { namespace, since, lastPushAt, total, changes } where `changes`
+   * is capped by the server (see `total` for the real count).
+   */
+  async getPendingChanges(namespace) {
+    try {
+      const params = namespace ? { namespace } : {};
+      const response = await apiClient.get('/sync/pending-changes', { params });
+      const data = response.data?.data || {};
+      return {
+        namespace: data.namespace ?? namespace ?? '',
+        since: data.since || null,
+        lastPushAt: data.last_push_at || null,
+        total: typeof data.total === 'number' ? data.total : (data.changes || []).length,
+        changes: (data.changes || []).map(change => ({
+          type: change.type,
+          id: change.id,
+          name: change.name,
+          change: change.change,
+          at: change.at,
+        })),
+      };
+    } catch (error) {
+      console.error('Error fetching pending changes:', error);
+      throw new Error(error.response?.data?.error || error.response?.data?.message || 'Failed to fetch pending changes');
+    }
+  }
+
   async getReloadStatus(operationId) {
     try {
       const response = await apiClient.get(`/reload-operations/${operationId}/status`);

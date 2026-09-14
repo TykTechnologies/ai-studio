@@ -530,6 +530,12 @@ func (a *API) setupRoutes() {
 	authed.Use(a.rbacContext())
 	authed.POST("/logout", a.handleLogout)
 	authed.GET("/me", a.handleMe)
+	// Self-service profile: preferences and the caller's own API key. Same
+	// policy and service path as the admin user routes, scoped to the caller.
+	authed.GET("/me/preferences", a.getMyPreferences)
+	authed.PATCH("/me/preferences", a.updateMyPreferences)
+	authed.POST("/me/api-key/roll", a.rollMyAPIKey)
+	authed.DELETE("/me/api-key", a.revokeMyAPIKey)
 	authed.GET("/system", a.handleFeatureSet)
 
 	// PORTAL FEATURES
@@ -1156,6 +1162,7 @@ func (a *API) setupRoutes() {
 	// Sync status routes (admin only - for edge gateway sync monitoring)
 	syncStatusHandlers := NewSyncStatusHandlers(a.service.SyncStatusService)
 	v1.GET("/sync/status", authz.Read("edges"), syncStatusHandlers.GetSyncStatus)
+	v1.GET("/sync/pending-changes", authz.Read("edges"), syncStatusHandlers.GetPendingChanges)
 	v1.GET("/sync/status/:namespace", authz.Read("edges"), syncStatusHandlers.GetNamespaceSyncStatus)
 	v1.GET("/sync/audit", authz.Read("edges"), syncStatusHandlers.GetSyncAuditLog)
 

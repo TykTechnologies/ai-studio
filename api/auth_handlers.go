@@ -468,6 +468,14 @@ func (a *API) handleMe(c *gin.Context) {
 		}
 	}
 
+	response.Attributes.AccountType = u.GetRole()
+	response.Attributes.AuthSource = u.AuthSource
+	response.Attributes.HasAPIKey = u.APIKey != ""
+	response.Attributes.APIKeyLastUsedAt = u.APIKeyLastUsedAt
+	response.Attributes.NotificationsEnabled = u.NotificationsEnabled
+	response.Attributes.EmailNotificationsEnabled = u.EmailNotificationsEnabled
+	response.Attributes.SSOAPIKeysAllowed = a.userMayHoldAPIKey(u)
+
 	if skipEntitlements {
 		c.JSON(http.StatusOK, response)
 		return

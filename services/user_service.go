@@ -203,19 +203,24 @@ func (a *Service) GetUserByAPIKey(apiKey string) (*models.User, error) {
 	return user, nil
 }
 
-func (a *Service) GenerateAPIKeyForUser(id uint) error {
+// GenerateAPIKeyForUser issues a new key for the user and returns it, so
+// callers need not read the row back.
+func (a *Service) GenerateAPIKeyForUser(id uint) (string, error) {
 	user, err := a.GetUserByID(id)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if err := user.GenerateAPIKey(); err != nil {
-		return err
+		return "", err
 	}
 
 	// Column update: a whole-struct Save here would clobber the login and
 	// key-use stamps written concurrently by the auth middleware.
-	return a.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("api_key", user.APIKey).Error
+	if err := a.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("api_key", user.APIKey).Error; err != nil {
+		return "", err
+	}
+	return user.APIKey, nil
 }
 
 // RevokeAPIKeyForUser clears the user's API key; the key stops working

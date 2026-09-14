@@ -1024,7 +1024,21 @@ type UserWithEntitlementsResponse struct {
 		Roles []rbac.RoleSummary `json:"roles"`
 		// RBACEnabled reports whether fine-grained roles are active.
 		RBACEnabled bool `json:"rbac_enabled"`
-		UIOptions   struct {
+
+		// Profile fields for the signed-in user's own menu. AccountType is
+		// the legacy role label the users list shows as "role"; the key
+		// itself is never included here (see POST /common/me/api-key/roll).
+		AccountType               string     `json:"account_type"`
+		AuthSource                string     `json:"auth_source"`
+		HasAPIKey                 bool       `json:"has_api_key"`
+		APIKeyLastUsedAt          *time.Time `json:"api_key_last_used_at"`
+		NotificationsEnabled      bool       `json:"notifications_enabled"`
+		EmailNotificationsEnabled bool       `json:"email_notifications_enabled"`
+		// SSOAPIKeysAllowed is whether this user may hold an API key under
+		// the ALLOW_SSO_USER_API_KEYS policy (always true for non-SSO users).
+		SSOAPIKeysAllowed bool `json:"sso_api_keys_allowed"`
+
+		UIOptions struct {
 			ShowChat       bool `json:"show_chat"`
 			ShowPortal     bool `json:"show_portal"`
 			ShowSSOConfig  bool `json:"show_sso_config"`

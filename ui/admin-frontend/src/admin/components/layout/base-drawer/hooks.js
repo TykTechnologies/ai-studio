@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { findParentItemsForPath } from './utils';
+import { findSelectedItem } from './utils';
 
 export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems, menuItems = []) => {
   const getInitialState = () => {
@@ -27,34 +27,41 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems, me
   const initialState = getInitialState();
   const [open, setOpen] = useState(initialState.open);
   const [expandedItems, setExpandedItems] = useState(initialState.expanded);
+  // The last visited path is persisted so the tab switcher in MainLayout can
+  // return to it; it is NOT what decides the highlight (see `selection`).
   const [selectedPath, setSelectedPath] = useState(initialState.selectedPath);
   const location = useLocation();
-  
+
+  // The highlighted item is derived from the URL on every render rather than
+  // from stored state, so a deep link, a browser back button or a redirect
+  // all light up the right entry. Longest path wins: /admin/apps/1 selects
+  // "Apps", not "Overview".
+  const selection = useMemo(
+    () => findSelectedItem(menuItems, location.pathname, location.search),
+    [menuItems, location.pathname, location.search]
+  );
+  const selectedKey = selection?.key || null;
+
   useEffect(() => {
-    // Include search params for exact matching (e.g., continue_id)
-    const path = location.pathname + location.search;
-    setSelectedPath(path);
+    // Include search params so a chat room link (continue_id) is restored too.
+    setSelectedPath(location.pathname + location.search);
 
-    if (menuItems.length > 0) {
-      // Use full path with search for finding parent items
-      let parentIds = findParentItemsForPath(menuItems, path);
-
-      // Fallback to pathname only if no match found with search params
-      if (parentIds.length === 0) {
-        parentIds = findParentItemsForPath(menuItems, location.pathname);
-      }
-
-      if (parentIds.length > 0) {
-        setExpandedItems((prevState) => {
-          const newState = { ...prevState };
-          parentIds.forEach(parentId => {
-            newState[parentId] = true;
-          });
-          return newState;
+    // Open every group on the way to the selected item, leaving the groups
+    // the user expanded or collapsed themselves as they were.
+    const parentIds = selection?.ancestorIds || [];
+    if (parentIds.length > 0) {
+      setExpandedItems((prevState) => {
+        if (parentIds.every((id) => prevState[id])) {
+          return prevState;
+        }
+        const newState = { ...prevState };
+        parentIds.forEach((parentId) => {
+          newState[parentId] = true;
         });
-      }
+        return newState;
+      });
     }
-  }, [location.pathname, location.search, menuItems]);
+  }, [location.pathname, location.search, selection]);
 
   useEffect(() => {
     try {
@@ -86,16 +93,11 @@ export const useDrawerState = (storageKey, defaultOpen, defaultExpandedItems, me
     });
   };
 
-  const handlePathSelect = (path) => {
-    setSelectedPath(path);
-  };
-
   return {
     open,
     expandedItems,
-    selectedPath,
+    selectedKey,
     handleDrawerToggle,
     handleExpandClick,
-    handlePathSelect,
   };
 };

@@ -45,6 +45,33 @@ func (h *SyncStatusHandlers) GetSyncStatus(c *gin.Context) {
 	})
 }
 
+// GetPendingChanges handles GET /api/v1/sync/pending-changes?namespace=default
+// @Summary Preview what a push would change
+// @Description List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use "global" (or omit) for the global namespace.
+// @Tags sync
+// @Param namespace query string false "Namespace (default: global)"
+// @Produce json
+// @Success 200 {object} map[string]services.PendingChanges
+// @Router /api/v1/sync/pending-changes [get]
+// @Security BearerAuth
+func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
+	namespace := c.Query("namespace")
+	if namespace != "" && namespace != "global" {
+		if err := validateNamespace(namespace); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	changes, err := h.syncStatusService.GetPendingChanges(namespace)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": changes})
+}
+
 // GetNamespaceSyncStatus handles GET /api/v1/sync/status/:namespace
 // @Summary Get sync status for namespace
 // @Description Get detailed synchronization status for a specific namespace

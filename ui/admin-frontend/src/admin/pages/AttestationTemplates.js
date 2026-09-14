@@ -1,17 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import apiClient from "../utils/apiClient";
 import {
   Typography,
   Box,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableContainer,
   CircularProgress,
   Alert,
   Snackbar,
-  IconButton,
   Chip,
   Dialog,
   DialogTitle,
@@ -27,17 +21,9 @@ import {
   Switch,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import {
-  TitleBox,
-  ContentBox,
-  PrimaryButton,
-  StyledPaper,
-  StyledTableHeaderCell,
-  StyledTableCell,
-  StyledTableRow,
-} from "../styles/sharedStyles";
+import DataTable from "../components/common/DataTable";
+import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import { TitleBox, ContentBox, PrimaryButton } from "../styles/sharedStyles";
 
 // The single source of truth for the applies_to_type vocabulary: the create
 // form's options and the table's chip both read from here, so the table can
@@ -75,6 +61,9 @@ const AttestationTemplates = () => {
     message: "",
     severity: "success",
   });
+  // The list is small and the endpoint has no search parameter, so the
+  // shared table's search box filters the loaded rows here.
+  const [searchTerm, setSearchTerm] = useState("");
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -192,6 +181,85 @@ const AttestationTemplates = () => {
     }
   };
 
+  const visibleTemplates = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return templates;
+    return templates.filter((template) =>
+      [template.name, template.text, appliesToLabel(template.applies_to_type)]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term))
+    );
+  }, [templates, searchTerm]);
+
+  const columns = useMemo(
+    () => [
+      {
+        field: "name",
+        headerName: "Name",
+        renderCell: (template) => (
+          <Typography variant="body2" fontWeight="medium" noWrap>
+            {template.name}
+          </Typography>
+        ),
+      },
+      {
+        field: "text",
+        headerName: "Text",
+        renderCell: (template) => (
+          <Typography variant="body2" sx={{ maxWidth: 420 }}>
+            {template.text}
+          </Typography>
+        ),
+      },
+      {
+        field: "applies_to_type",
+        headerName: "Applies To",
+        renderCell: (template) => (
+          <Chip label={appliesToLabel(template.applies_to_type)} size="small" variant="outlined" />
+        ),
+      },
+      {
+        field: "required",
+        headerName: "Required",
+        renderCell: (template) =>
+          template.required ? (
+            <Chip label="Required" size="small" color="error" />
+          ) : (
+            <Chip label="Optional" size="small" variant="outlined" />
+          ),
+      },
+      {
+        field: "active",
+        headerName: "Active",
+        renderCell: (template) => (
+          <Chip
+            label={template.active ? "Active" : "Inactive"}
+            size="small"
+            color={template.active ? "success" : "default"}
+          />
+        ),
+      },
+      { field: "sort_order", headerName: "Order", renderCell: (template) => template.sort_order },
+    ],
+    []
+  );
+
+  const rowActions = useMemo(
+    () => [
+      { key: "edit", label: "Edit", onClick: handleOpenEdit },
+      {
+        key: "delete",
+        label: "Delete",
+        danger: true,
+        onClick: (template) => {
+          setTemplateToDelete(template);
+          setDeleteDialogOpen(true);
+        },
+      },
+    ],
+    []
+  );
+
   return (
     <>
       <TitleBox top="64px">
@@ -201,108 +269,32 @@ const AttestationTemplates = () => {
         </PrimaryButton>
       </TitleBox>
 
-      <ContentBox sx={{ pt: 0 }}>
-        {loading && <CircularProgress />}
+      <ContentBox>
         {error && <Alert severity="error">{error}</Alert>}
-        {!loading && !error && (
-          <TableContainer component={StyledPaper}>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableHeaderCell>Name</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Text</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Applies To</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Required</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Active</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Order</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Actions</StyledTableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {templates.length === 0 ? (
-                  <TableRow>
-                    <StyledTableCell colSpan={7} align="center">
-                      <Typography color="text.secondary" sx={{ py: 3 }}>
-                        No attestation templates yet. Create one to require
-                        submitters to agree to terms before submitting.
-                      </Typography>
-                    </StyledTableCell>
-                  </TableRow>
-                ) : (
-                  templates.map((template) => (
-                    <StyledTableRow key={template.id}>
-                      <StyledTableCell>
-                        <Typography variant="body2" fontWeight="medium">
-                          {template.name}
-                        </Typography>
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            maxWidth: 300,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {template.text}
-                        </Typography>
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Chip
-                          label={appliesToLabel(template.applies_to_type)}
-                          size="small"
-                          variant="outlined"
-                        />
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {template.required ? (
-                          <Chip
-                            label="Required"
-                            size="small"
-                            color="error"
-                          />
-                        ) : (
-                          <Chip
-                            label="Optional"
-                            size="small"
-                            variant="outlined"
-                          />
-                        )}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Chip
-                          label={template.active ? "Active" : "Inactive"}
-                          size="small"
-                          color={template.active ? "success" : "default"}
-                        />
-                      </StyledTableCell>
-                      <StyledTableCell>{template.sort_order}</StyledTableCell>
-                      <StyledTableCell>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleOpenEdit(template)}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => {
-                            setTemplateToDelete(template);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+        {!error && (
+          <DataTable
+            ariaLabel="Attestation templates"
+            columns={columns}
+            data={visibleTemplates}
+            loading={loading}
+            enableSearch
+            searchTerm={searchTerm}
+            onSearch={setSearchTerm}
+            searchPlaceholder="Search templates by name or text..."
+            getRowLabel={(template) => template.name}
+            actions={rowActions}
+            emptyState={
+              !searchTerm ? (
+                <EmptyStateWidget
+                  title="No attestation templates yet"
+                  description="Create one to require submitters to agree to terms before submitting."
+                  buttonText="Add Template"
+                  buttonIcon={<AddIcon />}
+                  onButtonClick={handleOpenCreate}
+                />
+              ) : undefined
+            }
+          />
         )}
       </ContentBox>
 

@@ -106,10 +106,10 @@ This approach balances performance (no need to sync every credential change) wit
 
 When any edge gateways are out of sync, a warning banner appears at the top of the admin UI. The banner:
 
-- Shows the number of edges requiring updates
-- Provides a direct link to the Edge Gateways page
+- Says what is waiting: "3 changes not yet pushed to 1 edge gateway in namespace default" (the change count comes from the pending-changes lookup below; an older Studio falls back to the edge count alone)
+- Opens the Push Configuration modal directly, and links to the Edge Gateways page
 - Automatically disappears when all edges are synchronized
-- Updates immediately after pushing configuration
+- After a push, refreshes at once and then every 3 seconds (for up to 30 seconds) until the edges have acknowledged
 
 ## Pushing Configuration
 
@@ -121,6 +121,10 @@ Click the **Push Configuration** button to open the push modal. You can choose t
 
 1. **Push to All Namespaces:** Sends configuration to all connected edge gateways
 2. **Push to Specific Namespace:** Sends configuration only to edges in a selected namespace (Enterprise)
+
+Before you confirm, the modal lists **what will be pushed** for the chosen scope: every object that was created, updated or deleted since the namespace's last push, grouped by type (LLM providers, Apps, Tools, Data sources, Filters, Model prices, Model routers, Plugins, OAuth clients, Access tokens), each with a link to its admin page where one exists. A summary line reads "12 changes since the last push at 13:12"; when nothing has changed the button becomes **Push anyway**, since a push can still be useful after an edge has been re-registered. With "All Namespaces" selected, each namespace gets its own collapsible block.
+
+The Edge Gateways list and each gateway's detail page show **Last pushed HH:MM** for the namespace.
 
 ### Push Process
 
@@ -190,6 +194,8 @@ Returns sync status for all namespaces:
 }
 ```
 
+Each namespace summary also carries `last_push_at` (null until the first push).
+
 ### Get Namespace Sync Status
 
 ```
@@ -197,6 +203,31 @@ GET /api/v1/sync/status/:namespace
 ```
 
 Returns detailed sync status for a specific namespace, including per-edge status.
+
+### Get Pending Changes
+
+```
+GET /api/v1/sync/pending-changes?namespace=default
+```
+
+Returns what has changed in a namespace since its last push, as shown in the push modal's preview:
+
+```json
+{
+  "data": {
+    "namespace": "default",
+    "since": "2024-01-15T10:30:00Z",
+    "last_push_at": "2024-01-15T10:30:00Z",
+    "total": 2,
+    "changes": [
+      { "type": "llm", "id": 3, "name": "OpenAI", "change": "updated", "at": "2024-01-15T11:02:00Z" },
+      { "type": "app", "id": 9, "name": "Support bot", "change": "created", "at": "2024-01-15T10:45:00Z" }
+    ]
+  }
+}
+```
+
+`changes` is capped at 200 entries; `total` is the real count.
 
 ### Trigger Configuration Reload
 

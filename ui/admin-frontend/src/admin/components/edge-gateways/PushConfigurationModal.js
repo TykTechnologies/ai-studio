@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -23,11 +23,13 @@ import edgeGatewayService from '../../services/edgeGatewayService';
 import useNamespaces from '../../hooks/useNamespaces';
 import useSystemFeatures from '../../hooks/useSystemFeatures';
 import { useSyncStatus } from '../../context/SyncStatusContext';
+import usePendingChanges from './usePendingChanges';
+import PendingChangesPreview from './PendingChangesPreview';
 
 const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
   const { getAvailableNamespaces } = useNamespaces();
   const { features } = useSystemFeatures();
-  const { refreshSyncStatus } = useSyncStatus();
+  const { refreshSyncStatus, notifyConfigPushed, syncStatus } = useSyncStatus();
 
   // Default to 'all' on every edition. On Enterprise this used to open on
   // 'namespace' with nothing selected, so the modal appeared with its submit
@@ -41,6 +43,21 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
   const [success, setSuccess] = useState(null);
 
   const availableNamespaces = getAvailableNamespaces();
+
+  // Which namespaces the preview describes: the chosen one, or -- for "all" --
+  // every namespace the sync status knows about, the ones with something
+  // pending first so they open at the top.
+  const previewNamespaces = useMemo(() => {
+    if (targetType === 'namespace') {
+      return selectedNamespace ? [selectedNamespace] : [];
+    }
+    const summaries = syncStatus?.data || [];
+    const pending = summaries.filter((ns) => (ns.pending_count || 0) > 0 || (ns.stale_count || 0) > 0);
+    const rest = summaries.filter((ns) => !pending.includes(ns));
+    return [...pending, ...rest].map((ns) => ns.namespace || 'default');
+  }, [targetType, selectedNamespace, syncStatus]);
+
+  const pending = usePendingChanges(previewNamespaces, open && !success);
 
   const handleClose = () => {
     if (!loading) {
@@ -88,11 +105,14 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
         onSuccess();
       }
 
-      // Refresh sync status after a successful push
-      // Use a series of refreshes to catch the status update as edges sync
-      refreshSyncStatus();
-      setTimeout(() => refreshSyncStatus(), 2000);  // Refresh again after 2s
-      setTimeout(() => refreshSyncStatus(), 5000);  // And again after 5s
+      // Refresh sync status after a successful push. The edges acknowledge
+      // over their next heartbeat, so the provider keeps polling for a short
+      // while until nothing is pending any more (or gives up after 30 s).
+      if (notifyConfigPushed) {
+        notifyConfigPushed();
+      } else {
+        refreshSyncStatus();
+      }
     } catch (err) {
       console.error('Error pushing configuration:', err);
       setError(err.message);
@@ -108,6 +128,12 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
       ? 'Select a namespace to push to, or choose All Namespaces.'
       : '';
 
+  // When the preview says nothing has changed the push is still allowed
+  // (a gateway may have been re-registered, or someone wants a fresh load),
+  // but the button says so.
+  const nothingToPush = previewNamespaces.length > 0 && pending.total === 0;
+  const submitLabel = loading ? 'Pushing...' : nothingToPush ? 'Push anyway' : 'Push Configuration';
+
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
@@ -116,7 +142,7 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
           Push Configuration
         </Box>
       </DialogTitle>
-      
+
       <DialogContent>
         <Typography variant="body2" color="textSecondary" paragraph>
           Push the latest configuration to edge gateways. This will reload all affected edge instances
@@ -175,6 +201,15 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
           </Alert>
         )}
 
+        {/* What the push will actually change, so the user is not confirming blind. */}
+        {!success && (
+          <PendingChangesPreview
+            namespaces={previewNamespaces}
+            byNamespace={pending.byNamespace}
+            onNavigate={handleClose}
+          />
+        )}
+
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
@@ -217,7 +252,7 @@ const PushConfigurationModal = ({ open, onClose, onSuccess }) => {
             disabled={loading || !isValid}
             startIcon={loading ? <CircularProgress size={16} /> : <PushIcon />}
           >
-            {loading ? 'Pushing...' : 'Push Configuration'}
+            {submitLabel}
           </Button>
         )}
       </DialogActions>

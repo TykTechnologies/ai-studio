@@ -415,6 +415,20 @@ func optionalBoolQuery(c *gin.Context, name string) *bool {
 	return &b
 }
 
+// userMayHoldAPIKey applies the ALLOW_SSO_USER_API_KEYS policy: an
+// identity-provider account holds no credential the provider cannot revoke,
+// unless the operator has opted in. Shared by the admin route and the
+// self-service route so both refuse the same users.
+func (a *API) userMayHoldAPIKey(user *models.User) bool {
+	return !user.IsSSOOrigin() || a.auth.Config.AllowSSOUserAPIKeys
+}
+
+// errSSOUserAPIKeysForbidden is the 403 both roll routes return.
+func errSSOUserAPIKeysForbidden() helpers.ErrorResponse {
+	return helpers.NewForbiddenError(
+		"API keys are not issued to SSO-provisioned users (set ALLOW_SSO_USER_API_KEYS=true to permit this)")
+}
+
 // @Summary Roll API Key
 // @Description Issue a new API key for a user, replacing any existing one. Refused for SSO-provisioned users unless ALLOW_SSO_USER_API_KEYS is set.
 // @Tags users
@@ -443,13 +457,13 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 
 	// An identity-provider account holds no credential the provider cannot
 	// revoke, unless the operator has opted in.
-	if user.IsSSOOrigin() && !a.auth.Config.AllowSSOUserAPIKeys {
-		helpers.SendErrorResponse(c, helpers.NewForbiddenError(
-			"API keys are not issued to SSO-provisioned users (set ALLOW_SSO_USER_API_KEYS=true to permit this)"))
+	if !a.userMayHoldAPIKey(user) {
+		helpers.SendErrorResponse(c, errSSOUserAPIKeysForbidden())
 		return
 	}
 
-	if err := a.service.GenerateAPIKeyForUser(uint(id)); err != nil {
+	key, err := a.service.GenerateAPIKeyForUser(uint(id))
+	if err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}
@@ -462,7 +476,7 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 
 	// The freshly rolled key is returned once, to whoever rolled it.
 	resp := a.finishUser(c, serializeUser(user))
-	resp.Attributes.APIKey = user.APIKey
+	resp.Attributes.APIKey = key
 	resp.Attributes.APIKeyHint = ""
 	c.JSON(http.StatusOK, gin.H{"data": resp})
 }

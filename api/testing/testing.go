@@ -50,6 +50,7 @@ func SetupTestService(db *gorm.DB) *services.Service {
 		EdgeService:         edgeService,
 		NamespaceService:    namespaceService,
 		PluginService:       pluginService,
+		SyncStatusService:   services.NewSyncStatusService(db),
 		// Enterprise builds get the real service (factory registered via init), CE the stub.
 		GovernedMetadataService: governed_metadata.NewService(db, governed_metadata.Deps{}),
 		RBAC:                    rbac.NewService(db),

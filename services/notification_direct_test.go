@@ -40,7 +40,9 @@ func TestNotifyDirect(t *testing.T) {
 		assert.Contains(t, recipients, user.ID)
 		assert.NotContains(t, recipients, mutedAdmin.ID)
 		assert.Equal(t, "access_request", recipients[user.ID].Type)
-		assert.Equal(t, "**bold** body", recipients[user.ID].Content)
+		// The in-app panel is plain text: markdown decoration is dropped,
+		// the words are kept (the email still carries the original body).
+		assert.Equal(t, "bold body", recipients[user.ID].Content)
 		assert.Equal(t, "Access requested", recipients[admin.ID].Title)
 	})
 

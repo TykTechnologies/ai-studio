@@ -1,6 +1,7 @@
 import React from 'react';
-import { Box, Chip, Divider, Grid, Typography } from '@mui/material';
+import { Box, Chip, Grid } from '@mui/material';
 import { FieldLabel, FieldValue } from '../../styles/sharedStyles';
+import Section from '../common/Section';
 import useResolvedMetadataSchema from '../../hooks/useResolvedMetadataSchema';
 
 const STATUS_COLOR = { valid: 'success', warnings: 'warning', invalid: 'error' };
@@ -45,21 +46,18 @@ const renderValue = (field, raw, vocabulary, usersById) => {
 };
 
 /**
- * Read-only "Governance Metadata" block for admin detail pages.
- * Renders nothing in CE or when no schema fields apply.
+ * Read-only "Governance Metadata" section for admin detail pages, rendered
+ * as one more bordered Section so it sits in the page like its neighbours
+ * rather than as a loose block between them. Renders nothing in CE or when
+ * no schema fields apply.
  */
-const GovernedMetadataSummary = ({ objectType, values, status, withDivider = true, title = 'Governance Metadata' }) => {
+const GovernedMetadataSummary = ({ objectType, values, status, title = 'Governance Metadata' }) => {
   const { fields, vocabulariesBySlug, usersById, loading } = useResolvedMetadataSchema(objectType);
   if (loading || fields.length === 0) return null;
   const data = values || {};
 
   return (
-    <>
-      {withDivider && <Divider sx={{ my: 3 }} />}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <Typography variant="h6">{title}</Typography>
-        <MetadataStatusChip status={status} />
-      </Box>
+    <Section title={title} actions={<MetadataStatusChip status={status} />}>
       <Grid container spacing={2}>
         {fields.map((field) => (
           <React.Fragment key={field.key}>
@@ -74,7 +72,7 @@ const GovernedMetadataSummary = ({ objectType, values, status, withDivider = tru
           </React.Fragment>
         ))}
       </Grid>
-    </>
+    </Section>
   );
 };
 

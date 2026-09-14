@@ -1,13 +1,12 @@
 import React from "react";
-import LogoutIcon from "@mui/icons-material/Logout";
 import { styled } from "@mui/material/styles";
 import { Box, Typography, Chip } from "@mui/material";
 import NotificationIcon from "../../admin/components/notifications/NotificationIcon";
+import ProfileMenu from "../profile/ProfileMenu";
 import DocsIcon from "./DocsIcon";
 import Icon from "./Icon";
 import { getConfig } from "../../config";
 
-import { logout } from "../../admin/utils/pubClient";
 import { createDocsLinkHandler } from "../../admin/utils/docsLinkUtils";
 import useOverviewData from "../../admin/hooks/useOverviewData";
 import { useEdition } from "../../admin/context/EditionContext";
@@ -20,7 +19,6 @@ import {
   TabsContainer,
   StyledTabs,
   StyledTab,
-  StyledLogoutButton,
   TabIndicatorProps,
 } from "./styles";
 
@@ -146,9 +144,8 @@ const TopNavigation = ({
           <DocsIcon docsUrl={config.docsURL} />
         )}
         <NotificationIcon sx={{ mr: 1 }} />
-        <StyledLogoutButton onClick={logout}>
-          <LogoutIcon />
-        </StyledLogoutButton>
+        {/* Avatar with the account menu (profile, API key, preferences, log out). */}
+        <ProfileMenu onLogout={onLogout} />
       </StyledToolbar>
     </StyledAppBar>
   );

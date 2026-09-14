@@ -4,6 +4,39 @@ import WarningBanner from './WarningBanner';
 import { useSyncStatus } from '../../context/SyncStatusContext';
 import PushConfigurationModal from '../edge-gateways/PushConfigurationModal';
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * The banner's headline. With the pending-changes lookup available it says
+ * what is waiting ("3 changes not yet pushed to 1 edge gateway in namespace
+ * default"); without it (older Studio, transient error) it falls back to the
+ * edge counts alone.
+ */
+export const buildSyncMessage = (pendingNamespaces, pendingChanges) => {
+  const edges = pendingNamespaces.reduce(
+    (sum, ns) => sum + (ns.pending_count || 0) + (ns.stale_count || 0),
+    0
+  );
+  const names = pendingNamespaces.map((ns) => ns.namespace || 'default');
+  const known = pendingChanges && names.every((name) => pendingChanges[name]);
+  const changes = known ? names.reduce((sum, name) => sum + (pendingChanges[name].total || 0), 0) : null;
+
+  const where =
+    names.length > 1
+      ? ` across ${plural(names.length, 'namespace')}`
+      : names.length === 1
+        ? ` in namespace "${names[0]}"`
+        : '';
+
+  let message;
+  if (changes !== null && changes > 0) {
+    message = `${plural(changes, 'change')} not yet pushed to ${plural(edges, 'edge gateway')}${where}`;
+  } else {
+    message = `${plural(edges, 'edge gateway')} ${edges === 1 ? 'has' : 'have'} configuration updates pending${where}`;
+  }
+  return `${message}. Changes you have saved are not live on those gateways until you push.`;
+};
+
 /**
  * SyncStatusBanner displays a warning banner when edge gateways are out of sync
  * with the control plane configuration.
@@ -17,7 +50,7 @@ import PushConfigurationModal from '../edge-gateways/PushConfigurationModal';
  */
 const SyncStatusBanner = () => {
   const navigate = useNavigate();
-  const { syncStatus, hasPendingSync, pendingCount } = useSyncStatus();
+  const { syncStatus, hasPendingSync, pendingCount, pendingChanges } = useSyncStatus();
   const [dismissed, setDismissed] = useState(false);
   const [lastPendingCount, setLastPendingCount] = useState(0);
   const [pushOpen, setPushOpen] = useState(false);
@@ -35,23 +68,9 @@ const SyncStatusBanner = () => {
     return null;
   }
 
-  // Calculate totals
   const pendingNamespaces = syncStatus?.data?.filter(ns =>
     (ns.pending_count > 0 || ns.stale_count > 0)) || [];
-  const totalPending = pendingNamespaces.reduce((sum, ns) =>
-    sum + (ns.pending_count || 0), 0);
-  const totalStale = pendingNamespaces.reduce((sum, ns) =>
-    sum + (ns.stale_count || 0), 0);
-
-  // Build message
-  let message = `${totalPending + totalStale} edge gateway(s) have configuration updates pending`;
-  if (pendingNamespaces.length > 1) {
-    message += ` across ${pendingNamespaces.length} namespace(s)`;
-  } else if (pendingNamespaces.length === 1 && pendingNamespaces[0].namespace) {
-    message += ` in namespace "${pendingNamespaces[0].namespace || 'default'}"`;
-  }
-  message +=
-    '. Changes you have saved are not live on those gateways until you push.';
+  const message = buildSyncMessage(pendingNamespaces, pendingChanges);
 
   // The banner named the problem and then sent the user two nav sections away
   // to do something about it, which is most of the distance between "I saved

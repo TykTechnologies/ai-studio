@@ -41,6 +41,7 @@ import useSystemFeatures from '../../hooks/useSystemFeatures';
 import { useSyncStatus } from '../../context/SyncStatusContext';
 import PushConfigurationModal from './PushConfigurationModal';
 import RemoveEdgeModal from './RemoveEdgeModal';
+import { formatPushTime } from './pendingChanges';
 import {
   TitleBox,
   ContentBox,
@@ -56,7 +57,7 @@ const EdgeGatewayList = () => {
   const navigate = useNavigate();
   const { getAvailableNamespaces } = useNamespaces();
   const { features } = useSystemFeatures();
-  const { syncStatus: globalSyncStatus } = useSyncStatus();
+  const { syncStatus: globalSyncStatus, getLastPushAt } = useSyncStatus();
 
   const [edgeGateways, setEdgeGateways] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -194,6 +195,31 @@ const EdgeGatewayList = () => {
 
   const availableNamespaces = getAvailableNamespaces();
 
+  // "Last pushed 13:12" for the namespace being looked at -- or one entry per
+  // namespace with edges when the list is unfiltered -- so the sync chips
+  // have a point of reference. Hidden when the running Studio does not
+  // report push times.
+  const renderLastPushed = () => {
+    const names = selectedNamespace && selectedNamespace !== 'all'
+      ? [selectedNamespace]
+      : (globalSyncStatus?.data || []).map(ns => ns.namespace || 'default');
+    const entries = names
+      .map(name => ({ name, at: getLastPushAt(name) }))
+      .filter(entry => entry.at !== undefined);
+    if (entries.length === 0) return null;
+    return (
+      <Typography variant="caption" color="textSecondary" data-testid="last-pushed">
+        {entries.map((entry, i) => (
+          <span key={entry.name}>
+            {i > 0 && ' \u00b7 '}
+            {entries.length > 1 && `${entry.name === 'global' ? 'Global' : entry.name}: `}
+            Last pushed {entry.at ? formatPushTime(entry.at) : 'never'}
+          </span>
+        ))}
+      </Typography>
+    );
+  };
+
   return (
     <Box sx={{ p: 0 }}>
       <TitleBox top="64px">
@@ -223,7 +249,7 @@ const EdgeGatewayList = () => {
       <Box sx={{ p: 3 }}>
         {/* Namespace Filter - Enterprise Edition only */}
         {features.hub_spoke_multi_tenant && (
-          <Box mb={3}>
+          <Box mb={3} display="flex" alignItems="center" gap={2} flexWrap="wrap">
             <FormControl size="small" style={{ minWidth: 200 }}>
               <InputLabel id="edgegatewaylist-filter-by-namespace-label">Filter by Namespace</InputLabel>
               <Select
@@ -240,17 +266,21 @@ const EdgeGatewayList = () => {
                 ))}
               </Select>
             </FormControl>
+            {renderLastPushed()}
           </Box>
         )}
 
         {/* Community Edition - Show info banner */}
         {!features.hub_spoke_multi_tenant && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Multi-tenant namespace support is available in Enterprise Edition.{' '}
-            <Link href="https://tyk.io/enterprise" target="_blank" rel="noopener">
-              Learn more
-            </Link>
-          </Alert>
+          <>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Multi-tenant namespace support is available in Enterprise Edition.{' '}
+              <Link href="https://tyk.io/enterprise" target="_blank" rel="noopener">
+                Learn more
+              </Link>
+            </Alert>
+            <Box mb={2}>{renderLastPushed()}</Box>
+          </>
         )}
 
         {error && (

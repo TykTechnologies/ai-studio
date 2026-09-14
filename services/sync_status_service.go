@@ -23,11 +23,14 @@ type NamespaceSyncSummary struct {
 	ExpectedChecksum string    `json:"expected_checksum"`
 	ConfigVersion    string    `json:"config_version"`
 	LastConfigChange time.Time `json:"last_config_change"`
-	SyncedCount      int64     `json:"synced_count"`
-	PendingCount     int64     `json:"pending_count"`
-	StaleCount       int64     `json:"stale_count"`
-	UnknownCount     int64     `json:"unknown_count"`
-	TotalEdges       int64     `json:"total_edges"`
+	// LastPushAt is when a push was last issued for the namespace; nil
+	// until the first one.
+	LastPushAt   *time.Time `json:"last_push_at"`
+	SyncedCount  int64      `json:"synced_count"`
+	PendingCount int64      `json:"pending_count"`
+	StaleCount   int64      `json:"stale_count"`
+	UnknownCount int64      `json:"unknown_count"`
+	TotalEdges   int64      `json:"total_edges"`
 }
 
 // GetNamespaceSyncSummary returns sync status for all namespaces
@@ -48,6 +51,7 @@ func (s *SyncStatusService) GetNamespaceSyncSummary() ([]NamespaceSyncSummary, e
 			ExpectedChecksum: ns.ExpectedChecksum,
 			ConfigVersion:    ns.ConfigVersion,
 			LastConfigChange: ns.LastConfigChange,
+			LastPushAt:       ns.LastPushAt,
 		}
 
 		// Count edges by sync status for this namespace
@@ -80,6 +84,7 @@ func (s *SyncStatusService) GetNamespaceSyncStatus(namespace string) (*Namespace
 		ExpectedChecksum: status.ExpectedChecksum,
 		ConfigVersion:    status.ConfigVersion,
 		LastConfigChange: status.LastConfigChange,
+		LastPushAt:       status.LastPushAt,
 	}
 
 	// Get edges in namespace with their sync status

@@ -135,6 +135,9 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	namespaceService := NewNamespaceService(db, edgeService)
 	edgeManagementService := edge_management.NewService(db)
 	syncStatusService := NewSyncStatusService(db)
+	if err := EnsurePendingChangeIndexes(db); err != nil {
+		logger.Warnf("Could not create pending-change indexes: %v", err)
+	}
 
 	// Initialize plugin services with OCI support
 	var pluginService *PluginService

@@ -86,6 +86,12 @@ export class AIPortalPage extends PageTemplate {
         await this.page.goto('/portal/apps');
     }
 
+    /** The sidebar highlights one entry, derived from the URL (aria-current). */
+    async expectNavSelected(linkName: string) {
+        await expect(this.page.getByRole('link', { name: linkName, exact: true })).toHaveAttribute('aria-current', 'page');
+        await expect(this.page.locator('a[aria-current="page"][data-nav-id]')).toHaveCount(1);
+    }
+
     /** Chip for a resource currently selected in any of the builder's pickers. */
     relationshipChip(name: string): Locator {
         return this.page.getByTestId('relationship-picker').locator('.MuiChip-root').filter({ hasText: name });

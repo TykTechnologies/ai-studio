@@ -1,4 +1,4 @@
-import { Locator, Page } from '@playwright/test';
+import { Locator, Page, expect } from '@playwright/test';
 
 export class AdminMainPage {
     readonly page: Page;
@@ -25,6 +25,11 @@ export class AdminMainPage {
     readonly CatalogsButton: Locator;
     readonly ModelCallSettingsLink: Locator;
     readonly BannerButton: Locator;
+    readonly OverviewLink: Locator;
+    readonly EdgeGatewaysLink: Locator;
+    readonly PluginsButton: Locator;
+    /** Top-level sidebar entries (groups and links) in the order they render. */
+    readonly TopLevelNavItems: Locator;
 
     constructor(page: Page) {
         this.page = page;
@@ -51,6 +56,54 @@ export class AdminMainPage {
         this.CatalogsButton = this.page.getByRole('button', { name: 'Catalogs' });
         this.ModelCallSettingsLink = this.page.getByRole('link', { name: 'Model call settings' });
         this.BannerButton = this.page.getByRole('banner').getByRole('button').filter({ hasText: /^$/ });
+        this.OverviewLink = this.page.getByRole('link', { name: 'Overview' });
+        this.EdgeGatewaysLink = this.page.getByRole('link', { name: 'Edge Gateways' });
+        this.PluginsButton = this.page.getByRole('button', { name: 'Plugins', exact: true });
+        this.TopLevelNavItems = this.page.locator('[data-nav-depth="0"]');
+    }
+
+    /** Labels of the top-level sidebar entries, top to bottom. */
+    async topLevelNavLabels(): Promise<string[]> {
+        await this.TopLevelNavItems.first().waitFor();
+        return this.TopLevelNavItems.allTextContents();
+    }
+
+    /**
+     * Expects `group` to render directly after `before` in the sidebar
+     * (Catalogs after Access, plugin sections after Governance, ...).
+     */
+    async expectNavGroupAfter(group: string, before: string) {
+        const labels = await this.topLevelNavLabels();
+        const index = labels.indexOf(before);
+        expect(index, `"${before}" is in the sidebar: ${labels.join(', ')}`).toBeGreaterThanOrEqual(0);
+        expect(labels[index + 1], `"${group}" follows "${before}" in ${labels.join(', ')}`).toBe(group);
+    }
+
+    /** The sidebar link that is highlighted for the current page (aria-current). */
+    selectedNavLink(): Locator {
+        return this.page.locator('a[aria-current="page"][data-nav-id]');
+    }
+
+    /** Asserts that exactly this link is highlighted and its group is open. */
+    async expectNavSelected(linkName: string, group?: string) {
+        const link = this.page.getByRole('link', { name: linkName, exact: true });
+        await expect(link).toHaveAttribute('aria-current', 'page');
+        await expect(this.selectedNavLink()).toHaveCount(1);
+        if (group) {
+            await expect(this.page.locator(`[data-nav-depth="0"][data-nav-selected="true"]`)).toHaveText(group);
+        }
+    }
+
+    async expectNavNotSelected(linkName: string) {
+        await expect(this.page.getByRole('link', { name: linkName, exact: true })).not.toHaveAttribute('aria-current', 'page');
+    }
+
+    async navigateToEdgeGateways() {
+        await this.AiPortalButton.click();
+        if (!await this.EdgeGatewaysLink.isVisible()) {
+            await this.AiPortalButton.click();
+        }
+        await this.EdgeGatewaysLink.click();
     }
 
     async navigateToAnalytics() {

@@ -60,8 +60,14 @@ type User struct {
 	AccessToSSOConfig    bool
 	SkipQuickStart       bool
 	APIKey               string
-	NotificationsEnabled bool    `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
-	Groups               []Group `json:"groups" gorm:"many2many:user_groups;"`
+	NotificationsEnabled bool `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
+	// EmailNotificationsEnabled is the user's own delivery preference: when
+	// false, notifications are still recorded for the bell but no email is
+	// sent. Defaults on. GORM's default:true turns an explicit false into
+	// true on insert, so it is only ever switched off through a column
+	// update (SetEmailNotificationsEnabled).
+	EmailNotificationsEnabled bool    `json:"email_notifications_enabled" gorm:"default:true"`
+	Groups                    []Group `json:"groups" gorm:"many2many:user_groups;"`
 
 	// Provenance and activity. AuthSource is one of the AuthSource*
 	// constants; SSOProfileID is the identity provider profile that
@@ -123,6 +129,35 @@ func TouchAPIKeyUse(db *gorm.DB, userID uint) error {
 // RevokeAPIKey clears the user's API key. Column update: see TouchAPIKeyUse.
 func RevokeAPIKey(db *gorm.DB, userID uint) error {
 	return db.Model(&User{}).Where("id = ?", userID).Update("api_key", "").Error
+}
+
+// SetEmailNotificationsEnabled stores the user's email delivery preference.
+// Column update: a Save of a struct carrying false would work, but an
+// insert would not (default:true), so every writer goes through here.
+func SetEmailNotificationsEnabled(db *gorm.DB, userID uint, enabled bool) error {
+	return SetNotificationPreferences(db, userID, nil, &enabled)
+}
+
+// SetNotificationPreferences stores whichever of the two notification
+// flags are given (nil leaves a flag alone) in one column update.
+func SetNotificationPreferences(db *gorm.DB, userID uint, inApp, email *bool) error {
+	updates := map[string]interface{}{}
+	if inApp != nil {
+		updates["notifications_enabled"] = *inApp
+	}
+	if email != nil {
+		updates["email_notifications_enabled"] = *email
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return db.Model(&User{}).Where("id = ?", userID).Updates(updates).Error
+}
+
+// SetNotificationsEnabled stores the in-app (admin fan-out) notification
+// flag. Column update: see TouchAPIKeyUse.
+func SetNotificationsEnabled(db *gorm.DB, userID uint, enabled bool) error {
+	return SetNotificationPreferences(db, userID, &enabled, nil)
 }
 
 // SetDisabled flips the account switch. Disabling also drops the live
