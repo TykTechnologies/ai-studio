@@ -66,6 +66,15 @@ services:
         else
           CGO_ENABLED=1 go build -o /app/tmp/studio . || exit 1;
         fi;
+        # The asset-catalog RBAC spec registers the plugin from
+        # file:///app/bin/plugins/asset-catalog, so build it here with the same
+        # toolchain and module cache. Plugin modules keep go.sum out of git, so
+        # tidy first. AI_STUDIO_PLUGIN_ALLOWED_DIRS (below) admits the directory.
+        if [ "$$TARGET_EDITION" = "enterprise" ] && [ -d /app/enterprise/plugins/asset-catalog ]; then
+          echo "Building asset-catalog plugin...";
+          mkdir -p /app/bin/plugins;
+          (cd /app/enterprise/plugins/asset-catalog && go mod tidy && CGO_ENABLED=0 go build -tags enterprise -o /app/bin/plugins/asset-catalog .) || exit 1;
+        fi;
         echo "Starting AI Studio...";
         exec /app/tmp/studio -env=/app/dev/.env
       '
@@ -95,6 +104,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_AI_KEY: ${ANTHROPIC_AI_KEY:-}
       ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+      # Plugin binaries built by the command above; file:// plugin commands
+      # outside this directory are refused by the path validator.
+      AI_STUDIO_PLUGIN_ALLOWED_DIRS: /app/bin/plugins
     depends_on:
       postgres:
         condition: service_healthy
