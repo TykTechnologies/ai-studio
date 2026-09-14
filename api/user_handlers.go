@@ -291,6 +291,9 @@ func (a *API) listUsers(c *gin.Context) {
 		PageNumber:     pageNumber,
 		All:            all,
 		Sort:           sort,
+		AuthSource:     c.Query("auth_source"),
+		HasAPIKey:      optionalBoolQuery(c, "has_api_key"),
+		Disabled:       optionalBoolQuery(c, "disabled"),
 	}
 
 	users, totalCount, totalPages, err := a.service.ListUsers(params)
@@ -326,6 +329,13 @@ func serializeUser(user *models.User) UserResponse {
 			NotificationsEnabled: user.NotificationsEnabled,
 			AccessToSSOConfig:    user.AccessToSSOConfig,
 			Role:                 user.GetRole(),
+			AuthSource:           user.AuthSource,
+			SSOProfileID:         user.SSOProfileID,
+			LastLoginAt:          user.LastLoginAt,
+			LastLoginMethod:      user.LastLoginMethod,
+			APIKeyLastUsedAt:     user.APIKeyLastUsedAt,
+			Disabled:             user.Disabled,
+			DisabledAt:           user.DisabledAt,
 		},
 	}
 
@@ -338,30 +348,8 @@ func serializeUser(user *models.User) UserResponse {
 
 func serializeUsers(users models.Users) []UserResponse {
 	result := make([]UserResponse, len(users))
-	for i, user := range users {
-		response := UserResponse{
-			Type: "users",
-			ID:   strconv.FormatUint(uint64(user.ID), 10),
-			Attributes: UserAttributes{
-				Email:                user.Email,
-				Name:                 user.Name,
-				IsAdmin:              user.IsAdmin,
-				ShowChat:             user.ShowChat,
-				ShowPortal:           user.ShowPortal,
-				EmailVerified:        user.EmailVerified,
-				APIKey:               user.APIKey,
-				HasAPIKey:            user.APIKey != "",
-				NotificationsEnabled: user.NotificationsEnabled,
-				AccessToSSOConfig:    user.AccessToSSOConfig,
-				Role:                 user.GetRole(),
-			},
-		}
-
-		if len(user.Groups) > 0 {
-			response.Attributes.Groups = serializeGroups(user.Groups)
-		}
-
-		result[i] = response
+	for i := range users {
+		result[i] = serializeUser(&users[i])
 	}
 	return result
 }
@@ -413,14 +401,29 @@ func (a *API) getUserAccessibleCatalogues(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": response})
 }
 
+// optionalBoolQuery parses a tri-state query flag: absent → nil, otherwise
+// the parsed bool (unparseable values are treated as absent).
+func optionalBoolQuery(c *gin.Context, name string) *bool {
+	v := c.Query(name)
+	if v == "" {
+		return nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return nil
+	}
+	return &b
+}
+
 // @Summary Roll API Key
-// @Description Generate a new API key for a user
+// @Description Issue a new API key for a user, replacing any existing one. Refused for SSO-provisioned users unless ALLOW_SSO_USER_API_KEYS is set.
 // @Tags users
 // @Accept json
 // @Produce json
 // @Param id path int true "User ID"
 // @Success 200 {object} UserResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /users/{id}/roll-api-key [post]
@@ -428,38 +431,32 @@ func (a *API) getUserAccessibleCatalogues(c *gin.Context) {
 func (a *API) rollUserAPIKey(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Bad Request", Detail: "Invalid user ID"}},
-		})
-		return
-	}
-
-	err = a.service.GenerateAPIKeyForUser(uint(id))
-	if err != nil {
-		status := http.StatusInternalServerError
-		title := "Internal Server Error"
-		detail := err.Error()
-
-		c.JSON(status, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: title, Detail: detail}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid user ID"))
 		return
 	}
 
 	user, err := a.service.GetUserByID(uint(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: err.Error()}},
-		})
+		helpers.SendErrorResponse(c, helpers.NewNotFoundError("User not found"))
+		return
+	}
+
+	// An identity-provider account holds no credential the provider cannot
+	// revoke, unless the operator has opted in.
+	if user.IsSSOOrigin() && !a.auth.Config.AllowSSOUserAPIKeys {
+		helpers.SendErrorResponse(c, helpers.NewForbiddenError(
+			"API keys are not issued to SSO-provisioned users (set ALLOW_SSO_USER_API_KEYS=true to permit this)"))
+		return
+	}
+
+	if err := a.service.GenerateAPIKeyForUser(uint(id)); err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+
+	user, err = a.service.GetUserByID(uint(id), "Groups")
+	if err != nil {
+		helpers.SendErrorResponse(c, err)
 		return
 	}
 
@@ -468,6 +465,100 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 	resp.Attributes.APIKey = user.APIKey
 	resp.Attributes.APIKeyHint = ""
 	c.JSON(http.StatusOK, gin.H{"data": resp})
+}
+
+// @Summary Revoke API Key
+// @Description Clear a user's API key. The key stops working immediately; the user shows as having none issued.
+// @Tags users
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} UserResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /users/{id}/api-key [delete]
+// @Security BearerAuth
+func (a *API) revokeUserAPIKey(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid user ID"))
+		return
+	}
+
+	if err := a.service.RevokeAPIKeyForUser(uint(id)); err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+
+	user, err := a.service.GetUserByID(uint(id), "Groups")
+	if err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": a.finishUser(c, serializeUser(user))})
+}
+
+// @Summary Disable user
+// @Description Switch a user account off. Every authentication path (session, API key, password, SSO, OAuth) refuses the user until re-enabled; the live session is dropped and the credentials of apps the user owns are deactivated.
+// @Tags users
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} UserResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /users/{id}/disable [post]
+// @Security BearerAuth
+func (a *API) disableUser(c *gin.Context) {
+	a.setUserDisabled(c, true)
+}
+
+// @Summary Enable user
+// @Description Switch a disabled user account back on. App credentials deactivated by the disable are not re-activated.
+// @Tags users
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} UserResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /users/{id}/enable [post]
+// @Security BearerAuth
+func (a *API) enableUser(c *gin.Context) {
+	a.setUserDisabled(c, false)
+}
+
+func (a *API) setUserDisabled(c *gin.Context, disabled bool) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("Invalid user ID"))
+		return
+	}
+
+	var actorID uint
+	if actor, ok := auth.UserFromContext(c); ok {
+		actorID = actor.ID
+	}
+
+	target, err := a.service.GetUserByID(uint(id))
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewNotFoundError("User not found"))
+		return
+	}
+	if target.IsAdmin {
+		if err := a.validateAdminPermissions(c); err != nil {
+			helpers.SendErrorResponse(c, err)
+			return
+		}
+	}
+
+	user, err := a.service.SetUserDisabled(actorID, uint(id), disabled)
+	if err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": a.finishUser(c, serializeUser(user))})
 }
 
 // @Summary Skip user quick start wizard

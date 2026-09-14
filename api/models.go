@@ -87,6 +87,19 @@ type UserAttributes struct {
 	Role                 string             `json:"role"`
 	Groups               []GroupResponse    `json:"groups,omitempty"`
 	Roles                []rbac.RoleSummary `json:"roles,omitempty"`
+
+	// Provenance and activity. auth_source is local | admin | sso;
+	// sso_profile_id names the identity provider profile that provisioned
+	// (or last signed in) the user.
+	AuthSource       string     `json:"auth_source"`
+	SSOProfileID     string     `json:"sso_profile_id,omitempty"`
+	LastLoginAt      *time.Time `json:"last_login_at,omitempty"`
+	LastLoginMethod  string     `json:"last_login_method,omitempty"`
+	APIKeyLastUsedAt *time.Time `json:"api_key_last_used_at,omitempty"`
+
+	// Account switch. A disabled user cannot authenticate by any means.
+	Disabled   bool       `json:"disabled"`
+	DisabledAt *time.Time `json:"disabled_at,omitempty"`
 }
 
 // GroupResponse represents the response for group-related operations
@@ -1123,6 +1136,10 @@ type FrontendConfig struct {
 	Branding          *BrandingConfig   `json:"branding,omitempty"`
 	DocsEnabled       bool              `json:"docsEnabled"`
 	DocsURL           string            `json:"docsURL,omitempty"`
+	// AllowSSOUserAPIKeys mirrors ALLOW_SSO_USER_API_KEYS so the console can
+	// hide key issuance for SSO-provisioned users instead of offering a
+	// button that returns 403.
+	AllowSSOUserAPIKeys bool `json:"allowSSOUserAPIKeys"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend

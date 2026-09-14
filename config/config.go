@@ -33,6 +33,13 @@ type AppConf struct {
 	SMTPPass             string
 	FromEmail            string
 	AllowRegistrations   bool
+	// AllowSSOUserAPIKeys lets administrators issue a user API key to an
+	// account provisioned through SSO. Off by default: an IdP-managed user
+	// should hold no credential the IdP cannot revoke.
+	AllowSSOUserAPIKeys bool
+	// SSOAPIKeyLiveness bounds how long an SSO-provisioned user's API key
+	// keeps working without a fresh SSO login (0 disables the check).
+	SSOAPIKeyLiveness time.Duration
 	AdminEmail           string
 	SiteURL              string
 	ProxyURL             string
@@ -555,6 +562,19 @@ func getConfigFromEnv(envFile string) *AppConf {
 
 	// Session duration configuration
 	conf.SessionDuration = parseDurationWithDefault("SESSION_DURATION", 6*time.Hour)
+
+	// User API keys for SSO-provisioned accounts: issuance is opt-in, and
+	// an issued key only works while the user keeps signing in through the
+	// identity provider (Go durations, so 30 days is "720h").
+	if v := os.Getenv("ALLOW_SSO_USER_API_KEYS"); v != "" {
+		allow, err := strconv.ParseBool(v)
+		if err != nil {
+			cfgLog.Warn().Msgf("Warning: Invalid ALLOW_SSO_USER_API_KEYS value: %s", v)
+		} else {
+			conf.AllowSSOUserAPIKeys = allow
+		}
+	}
+	conf.SSOAPIKeyLiveness = parseDurationWithDefault("SSO_API_KEY_LIVENESS", 30*24*time.Hour)
 
 	// Max resource payload size for submissions (default: 5MB)
 	conf.MaxResourcePayloadSize = 5 * 1024 * 1024

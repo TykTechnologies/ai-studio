@@ -608,6 +608,9 @@ func (a *API) setupRoutes() {
 	v1.GET("/users", authz.Read("users"), a.listUsers)
 	v1.GET("/users/:id/catalogues", authz.Read("users"), a.getUserAccessibleCatalogues)
 	v1.POST("/users/:id/roll-api-key", authz.Write("users"), a.rollUserAPIKey)
+	v1.DELETE("/users/:id/api-key", authz.Write("users"), a.revokeUserAPIKey)
+	v1.POST("/users/:id/disable", authz.Write("users"), a.disableUser)
+	v1.POST("/users/:id/enable", authz.Write("users"), a.enableUser)
 	v1.POST("/users/:id/skip-quick-start", authz.Write("users"), a.skipUserQuickStart)
 
 	// Group routes
@@ -1259,6 +1262,7 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		Branding:             brandingConfig,
 		DocsEnabled:          !config.Get("").DocsDisabled,
 		DocsURL:              config.Get("").DocsURL,
+		AllowSSOUserAPIKeys:  config.Get("").AllowSSOUserAPIKeys,
 	}
 
 	c.JSON(http.StatusOK, cfg)

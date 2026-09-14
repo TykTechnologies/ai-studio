@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -42,7 +43,32 @@ type Config struct {
 	TIBAPISecret           string
 	TIBEnabled             bool
 	OCIConfig              interface{} // Holds OCI configuration for plugin security
+
+	// AllowSSOUserAPIKeys permits issuing API keys to SSO-provisioned
+	// users; SSOAPIKeyLiveness rejects such a key once the user has gone
+	// that long without an SSO login (0 = no limit). See config.Config.
+	AllowSSOUserAPIKeys bool
+	SSOAPIKeyLiveness   time.Duration
+	// APIKeyTouchInterval throttles the api_key_last_used_at stamp (zero
+	// means the default); SyncAPIKeyTouch stamps on every request, on the
+	// request goroutine, which is what tests on a shared SQLite DB need.
+	APIKeyTouchInterval time.Duration
+	SyncAPIKeyTouch     bool
 }
+
+// defaultAPIKeyTouchInterval keeps the last-used stamp to one write per
+// user per interval rather than one per request.
+const defaultAPIKeyTouchInterval = 5 * time.Minute
+
+// Context key under which the middleware records how the request was
+// authenticated, so downstream consumers (the audit trail) can tell a
+// browser session from an API key. Defined on models so packages that
+// cannot import auth can read it.
+const (
+	AuthMethodKey     = models.AuthMethodContextKey
+	AuthMethodSession = models.AuthMethodSession
+	AuthMethodAPIKey  = models.AuthMethodAPIKey
+)
 
 // Ensure AuthService implements models.EmailSender
 var _ models.EmailSender = (*AuthService)(nil)
@@ -54,6 +80,10 @@ type AuthService struct {
 	TokenStore          map[string]*models.User
 	MailService         *notifications.MailService // Exported for testing
 	NotificationService *services.NotificationService
+
+	// apiKeyTouched holds the last time each user's key-use stamp was
+	// written (user ID → time.Time), see touchAPIKey.
+	apiKeyTouched sync.Map
 }
 
 func NewAuthService(config *Config, mailService *notifications.MailService, service services.ServiceInterface, notificationService *services.NotificationService) *AuthService {
@@ -99,33 +129,38 @@ func (a *AuthService) SetUserSession(c *gin.Context, user *models.User) error {
 func (a *AuthService) Login(c *gin.Context, email, password string) error {
 	user, err := a.Config.Service.AuthenticateUser(email, password)
 	if err != nil {
-		if errors.Is(err, services.EmailNotVerifiedError) {
+		switch {
+		case errors.Is(err, services.EmailNotVerifiedError):
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Email unverified, please verify email or contact your administrator"})
-			return fmt.Errorf("unauthorized: %w", err)
+		case errors.Is(err, services.UserDisabledError):
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Account disabled, contact your administrator"})
+		default:
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
 		}
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
 		return fmt.Errorf("unauthorized: %w", err)
 	}
 
+	// SetUserSession saves the whole struct, which persists the stamp.
+	user.StampLogin(models.LoginMethodPassword)
 	return a.SetUserSession(c, user)
 }
 
 func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
 	// Try to get auth from cookie first
 	cookie, err := c.Cookie(a.Config.CookieName)
-	if err == nil {
+	if err == nil && cookie != "" {
 		// Cookie exists, validate it
 		user := &models.User{}
-		if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil {
+		if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil && !user.Disabled {
+			c.Set(AuthMethodKey, AuthMethodSession)
 			return user
 		}
 	}
 
 	// Try to get token from query parameter
-	token := c.Query("token")
-	if token != "" {
-		user, err := a.Config.Service.GetUserByAPIKey(token)
-		if err == nil && user.EmailVerified {
+	if token := c.Query("token"); token != "" {
+		if user := a.userForAPIKey(token); user != nil {
+			c.Set(AuthMethodKey, AuthMethodAPIKey)
 			return user
 		}
 	}
@@ -134,16 +169,78 @@ func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
 	authHeader := c.Request.Header.Get("Authorization")
 	if authHeader != "" {
 		parts := strings.Split(authHeader, " ")
-		if len(parts) == 2 {
-			apiKey := parts[1]
-			user, err := a.Config.Service.GetUserByAPIKey(apiKey)
-			if err == nil && user.EmailVerified {
+		if len(parts) == 2 && parts[1] != "" {
+			if user := a.userForAPIKey(parts[1]); user != nil {
+				c.Set(AuthMethodKey, AuthMethodAPIKey)
 				return user
 			}
 		}
 	}
 
 	return nil
+}
+
+// userForAPIKey resolves an API key to a usable account: the key must
+// exist, the address must be verified, the account must not be disabled
+// and, for SSO-provisioned users, the key is only honoured while the user
+// keeps signing in through the identity provider (SSOAPIKeyLiveness).
+// Successful use is stamped on the user, throttled per APIKeyTouchInterval.
+func (a *AuthService) userForAPIKey(apiKey string) *models.User {
+	user, err := a.Config.Service.GetUserByAPIKey(apiKey)
+	if err != nil || user == nil {
+		return nil
+	}
+	if !user.EmailVerified || user.Disabled {
+		return nil
+	}
+	if !a.ssoKeyAlive(user) {
+		slog.Warn("API key rejected: SSO user has not signed in within the liveness window",
+			"user_id", user.ID, "liveness", a.Config.SSOAPIKeyLiveness)
+		return nil
+	}
+	a.touchAPIKey(user.ID)
+	return user
+}
+
+// ssoKeyAlive applies the liveness window to SSO-origin users. A user who
+// has never completed an SSO login, or whose last interactive login was by
+// password, has no proof of standing with the IdP and is rejected.
+func (a *AuthService) ssoKeyAlive(user *models.User) bool {
+	window := a.Config.SSOAPIKeyLiveness
+	if window <= 0 || !user.IsSSOOrigin() {
+		return true
+	}
+	if user.LastLoginAt == nil || user.LastLoginMethod != models.LoginMethodSSO {
+		return false
+	}
+	return time.Since(*user.LastLoginAt) <= window
+}
+
+// touchAPIKey records key use at most once per interval per user, off the
+// request path. The interval defaults to five minutes.
+func (a *AuthService) touchAPIKey(userID uint) {
+	// Test harnesses share an in-memory SQLite DB per test; a goroutine
+	// outliving the test would write into the next test's database.
+	if a.Config.SyncAPIKeyTouch || a.Config.TestMode {
+		if err := models.TouchAPIKeyUse(a.Config.DB, userID); err != nil {
+			slog.Warn("Failed to stamp API key use", "user_id", userID, "error", err)
+		}
+		return
+	}
+	interval := a.Config.APIKeyTouchInterval
+	if interval <= 0 {
+		interval = defaultAPIKeyTouchInterval
+	}
+	now := time.Now()
+	if last, ok := a.apiKeyTouched.Load(userID); ok && now.Sub(last.(time.Time)) < interval {
+		return
+	}
+	a.apiKeyTouched.Store(userID, now)
+	go func() {
+		if err := models.TouchAPIKeyUse(a.Config.DB, userID); err != nil {
+			slog.Warn("Failed to stamp API key use", "user_id", userID, "error", err)
+		}
+	}()
 }
 
 func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
@@ -271,10 +368,17 @@ func (a *AuthService) Logout(c *gin.Context) error {
 	return nil
 }
 
+// ErrUserDisabled is returned by the password-reset flow for a disabled
+// account, so a user the IdP has switched off cannot mint a local password.
+var ErrUserDisabled = errors.New("account is disabled")
+
 func (a *AuthService) ResetPassword(email string) error {
 	user := &models.User{}
 	if err := user.GetByEmail(a.Config.DB, email); err != nil {
 		return err
+	}
+	if user.Disabled {
+		return ErrUserDisabled
 	}
 
 	resetToken, err := a.generateToken()
@@ -323,6 +427,9 @@ func (a *AuthService) ValidateResetToken(token string) (*models.User, error) {
 
 	if time.Now().After(user.ResetTokenExpiry) {
 		return nil, errors.New("reset token has expired")
+	}
+	if user.Disabled {
+		return nil, ErrUserDisabled
 	}
 
 	return user, nil

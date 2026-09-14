@@ -288,6 +288,21 @@ The embedded Tyk Identity Broker builds the nonce request itself and its shape c
 
 With RBAC enabled, team membership from the claim mapping is also what grants console access: a role bound to a mapped team applies to every user the IdP places in it. A user whose teams carry no role is a plain Portal/Chat user.
 
+### Provenance, API keys and deprovisioning
+
+`createUserWithTx` (core and the Enterprise copy in `enterprise/features/sso/service.go`) builds the user with a struct literal on purpose: an identity-provider account gets **no password and no API key**. It stamps `AuthSource = sso`, `SSOProfileID` (when the profile is known) and the first `LastLoginAt`/`LastLoginMethod = sso`. Every later `HandleSSO` for an existing user refreshes the login stamp, fills `SSOProfileID` if it was empty, and leaves `AuthSource` alone: a user who registered locally and now signs in through the IdP is still `local` in origin.
+
+`HandleSSO` checks `Disabled` immediately after the email lookup and returns 403 **before** it touches the name, forces `EmailVerified`, or replaces team memberships. The administrator's switch therefore survives IdP logins; nothing in the SSO path re-enables an account.
+
+API keys for SSO-provisioned users are governed by two settings, threaded from `config.Config` into `auth.Config`:
+
+| Setting | Default | Effect |
+|---|---|---|
+| `ALLOW_SSO_USER_API_KEYS` | `false` | `POST /users/{id}/roll-api-key` returns 403 for `auth_source = sso`; the console hides the Issue button (the flag is exposed as `allowSSOUserAPIKeys` in `/auth/config`). Existing keys are not touched; revoke them from the user page. |
+| `SSO_API_KEY_LIVENESS` | `720h` | An SSO-origin user's key only authenticates while their last interactive login was through SSO and within this window. `0` disables the check. A password login (after a reset) does not count, so the key stays dead until the next SSO login. |
+
+There is still no SCIM ingress: deprovisioning at the IdP is reflected by the liveness window for keys, by the six-hour session lifetime for browsers, and by the administrator's Disable action for everything at once.
+
 ### Implementation
 The group mapping process is handled in [api/auth_handlers.go](../api/auth_handlers.go):
 
