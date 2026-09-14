@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -93,9 +94,11 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 	currentUser := user.(*models.User)
 
 	// One visibility rule for the AppBuilder and the portal catalog
-	// (portal_catalog_handlers.go): types with the instances this caller may
-	// use. Nil means nothing is registered or the plugin manager is down.
-	resourceTypes, err := a.accessiblePluginResourceInstances(c, currentUser)
+	// (services.AccessiblePluginResourceInstances): types with the instances
+	// this caller may use; callers who manage teams see every instance. Nil
+	// means nothing is registered or the plugin manager is down; an error
+	// resolving the caller's grants fails closed.
+	resourceTypes, err := a.service.AccessiblePluginResourceInstances(currentUser.ID, authz.Can(c, authz.Write("groups")), nil)
 	if err != nil || resourceTypes == nil {
 		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
 		return
@@ -104,6 +107,14 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 	result := make([]gin.H, 0, len(resourceTypes))
 	for _, rt := range resourceTypes {
 		objectType := models.PluginResourceObjectType(rt.Type.PluginID, rt.Type.Slug)
+		var governed map[string]*models.ObjectMetadata
+		if rt.Type.SupportsMetadata && len(rt.Instances) > 0 {
+			ids := make([]string, 0, len(rt.Instances))
+			for _, inst := range rt.Instances {
+				ids = append(ids, inst.Id)
+			}
+			governed = a.governedMetadataFor(objectType, ids)
+		}
 		instances := make([]gin.H, 0, len(rt.Instances))
 		for _, inst := range rt.Instances {
 			item := gin.H{
@@ -112,7 +123,7 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 				"description":   sanitizeString(inst.Description),
 				"privacy_score": inst.PrivacyScore,
 			}
-			if rec := rt.Governed[inst.Id]; rec != nil {
+			if rec := governed[inst.Id]; rec != nil {
 				item["governed_metadata"] = a.portalGovernedView(objectType, rec)
 			}
 			instances = append(instances, item)

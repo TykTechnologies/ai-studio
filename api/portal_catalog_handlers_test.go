@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,8 +145,14 @@ func TestPortalCatalog_DetailEndpoints(t *testing.T) {
 	require.NoError(t, service.AddToolToToolCatalogue(tool.ID, toolCat.ID))
 
 	// Price table for the vendor: the allow list admits gpt-4o and
-	// gpt-4o-mini, not o1.
-	_, err = service.CreateModelPrice("gpt-4o", "openai", 0.00001, 0.0000025, 0, 0, "USD")
+	// gpt-4o-mini, not o1. Prices are stored per token; the catalog reports
+	// them per million tokens.
+	const (
+		gpt4oOutputPerToken = 0.00001
+		gpt4oInputPerToken  = 0.0000025
+		perMillion          = 1_000_000
+	)
+	_, err = service.CreateModelPrice("gpt-4o", "openai", gpt4oOutputPerToken, gpt4oInputPerToken, 0, 0, "USD")
 	require.NoError(t, err)
 	_, err = service.CreateModelPrice("gpt-4o-mini", "openai", 0.0000006, 0.00000015, 0, 0, "USD")
 	require.NoError(t, err)
@@ -166,8 +173,8 @@ func TestPortalCatalog_DetailEndpoints(t *testing.T) {
 		assert.Equal(t, "gpt-4o", attrs.Models[0].Name)
 		assert.True(t, attrs.Models[0].IsDefault)
 		require.NotNil(t, attrs.Models[0].InputPricePerMillion)
-		assert.InDelta(t, 2.5, *attrs.Models[0].InputPricePerMillion, 0.0001)
-		assert.InDelta(t, 10, *attrs.Models[0].OutputPricePerMillion, 0.0001)
+		assert.InDelta(t, gpt4oInputPerToken*perMillion, *attrs.Models[0].InputPricePerMillion, 0.0001)
+		assert.InDelta(t, gpt4oOutputPerToken*perMillion, *attrs.Models[0].OutputPricePerMillion, 0.0001)
 		assert.Equal(t, "gpt-4o-mini", attrs.Models[1].Name)
 		assert.False(t, attrs.Models[1].IsDefault)
 
@@ -237,22 +244,28 @@ func TestUserAppsUsageSummary(t *testing.T) {
 	llm := createTestLLM(t, service, "LLM")
 	require.NoError(t, service.AddLLMToCatalogue(llm.ID, llmCat.ID))
 
-	budget := 100.0
-	mine, err := service.CreateApp("Mine", "", user.ID, nil, []uint{llm.ID}, nil, &budget, nil, nil)
+	// A budget window that started a week ago, so which records count
+	// toward spend does not depend on today's date.
+	monthlyBudget := 100.0
+	now := time.Now()
+	budgetStart := now.AddDate(0, 0, -7)
+	mine, err := service.CreateApp("Mine", "", user.ID, nil, []uint{llm.ID}, nil, &monthlyBudget, &budgetStart, nil)
 	require.NoError(t, err)
 	quiet, err := service.CreateApp("Quiet", "", user.ID, nil, []uint{llm.ID}, nil, nil, nil, nil)
 	require.NoError(t, err)
 	theirs, err := service.CreateApp("Theirs", "", other.ID, nil, []uint{llm.ID}, nil, nil, nil, nil)
 	require.NoError(t, err)
 
-	// The same table the app page's charts and the budget spend read.
-	now := time.Now()
+	// The same table the app page's charts and the budget spend read. Cost
+	// is stored x10000, so 5000 is fifty cents.
 	records := []models.LLMChatRecord{
-		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.Add(-48 * time.Hour), TotalTokens: 10},
-		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.Add(-1 * time.Hour), TotalTokens: 10},
+		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.Add(-48 * time.Hour), TotalTokens: 10, Cost: 5000},
+		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.Add(-1 * time.Hour), TotalTokens: 10, Cost: 5000},
+		// Before the budget window but inside 30 days: a request, not spend.
+		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.AddDate(0, 0, -10), TotalTokens: 10, Cost: 5000},
 		// Older than the window: counts for last access, not for requests_30d.
-		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.Add(-45 * 24 * time.Hour), TotalTokens: 10},
-		{AppID: theirs.ID, LLMID: llm.ID, TimeStamp: now.Add(-1 * time.Hour), TotalTokens: 10},
+		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.Add(-45 * 24 * time.Hour), TotalTokens: 10, Cost: 5000},
+		{AppID: theirs.ID, LLMID: llm.ID, TimeStamp: now.Add(-1 * time.Hour), TotalTokens: 10, Cost: 5000},
 	}
 	for i := range records {
 		require.NoError(t, db.Create(&records[i]).Error)
@@ -270,10 +283,19 @@ func TestUserAppsUsageSummary(t *testing.T) {
 	active := response.Data[idOf(mine.ID)]
 	require.NotNil(t, active.LastAccessAt)
 	assert.WithinDuration(t, now.Add(-1*time.Hour), *active.LastAccessAt, time.Minute)
-	assert.Equal(t, int64(2), active.Requests30d)
+	assert.Equal(t, int64(3), active.Requests30d)
 	require.NotNil(t, active.MonthlyBudget)
 	assert.Equal(t, 100.0, *active.MonthlyBudget)
 	require.NotNil(t, active.Percentage)
+	if budget.IsEnterpriseAvailable() {
+		// Two records inside the budget window: $1.00 of $100.
+		assert.True(t, response.SpendTracked)
+		assert.InDelta(t, 1.0, active.CurrentSpend, 0.0001)
+		assert.InDelta(t, 1.0, *active.Percentage, 0.0001)
+	} else {
+		assert.False(t, response.SpendTracked)
+		assert.Equal(t, 0.0, active.CurrentSpend)
+	}
 
 	idle := response.Data[idOf(quiet.ID)]
 	assert.Nil(t, idle.LastAccessAt)

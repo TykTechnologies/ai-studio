@@ -6,14 +6,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
-	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -29,10 +28,11 @@ import (
 //
 // Visibility is exactly the rule the per-catalog pages applied: the caller's
 // teams -> their catalogs -> the active objects in them (the
-// models.User.GetAccessible* queries) and, for plugin resources, the teams'
-// resource grants. Nothing here widens that. The catalogs an item is
-// reachable through are reported so the UI can explain why it is visible and
-// offer them as a filter.
+// models.Accessible*Query queries, the same joins as User.GetAccessible*)
+// and, for plugin resources, the teams' resource grants
+// (services.AccessiblePluginResourceInstances). Nothing here widens that.
+// The catalogs an item is reachable through are reported so the UI can
+// explain why it is visible and offer them as a filter.
 
 // Catalog item types.
 const (
@@ -149,13 +149,6 @@ type CatalogItemResponse struct {
 	Data CatalogItem `json:"data"`
 }
 
-// portalCatalog is everything one caller can see, assembled once per request.
-type portalCatalog struct {
-	Items         []CatalogItem
-	Catalogs      []CatalogFilterOption
-	ResourceTypes []CatalogResourceType
-}
-
 func intPtr(v int) *int { return &v }
 
 func timePtr(t time.Time) *time.Time {
@@ -165,196 +158,274 @@ func timePtr(t time.Time) *time.Time {
 	return &t
 }
 
+func uintID(id uint) string { return strconv.FormatUint(uint64(id), 10) }
+
+// --- the caller's catalogues, per type ------------------------------------
+
+// accessibleCatalogues is the caller's catalogues of one type: the filter
+// options, and the id -> name map used to label an item's memberships.
+type accessibleCatalogues struct {
+	ids     []uint
+	names   map[uint]string
+	options []CatalogFilterOption
+}
+
+func (a *API) accessibleCataloguesFor(typ string, user *models.User) (accessibleCatalogues, error) {
+	out := accessibleCatalogues{names: map[uint]string{}, options: []CatalogFilterOption{}}
+	add := func(id uint, name string) {
+		out.ids = append(out.ids, id)
+		out.names[id] = cleanText(name)
+		out.options = append(out.options, CatalogFilterOption{Type: typ, ID: uintID(id), Name: cleanText(name)})
+	}
+	switch typ {
+	case CatalogItemLLM:
+		cats, err := user.GetAccessibleCatalogues(a.service.DB)
+		if err != nil {
+			return out, err
+		}
+		for _, cat := range cats {
+			add(cat.ID, cat.Name)
+		}
+	case CatalogItemDatasource:
+		cats, err := user.GetAccessibleDataCatalogues(a.service.DB)
+		if err != nil {
+			return out, err
+		}
+		for _, cat := range cats {
+			add(cat.ID, cat.Name)
+		}
+	case CatalogItemTool:
+		cats, err := user.GetAccessibleToolCatalogues(a.service.DB)
+		if err != nil {
+			return out, err
+		}
+		for _, cat := range cats {
+			add(cat.ID, cat.Name)
+		}
+	}
+	return out, nil
+}
+
 func catalogRefs(ids []uint, names map[uint]string) []CatalogRef {
 	refs := make([]CatalogRef, 0, len(ids))
 	for _, id := range ids {
 		if name, ok := names[id]; ok {
-			refs = append(refs, CatalogRef{ID: strconv.FormatUint(uint64(id), 10), Name: name})
+			refs = append(refs, CatalogRef{ID: uintID(id), Name: name})
 		}
 	}
 	sort.Slice(refs, func(i, j int) bool { return refs[i].Name < refs[j].Name })
 	return refs
 }
 
-// buildPortalCatalog assembles the caller's catalog. Each type is one
-// accessible-objects query, one catalog membership query and one governed
-// metadata lookup; plugin resources are fetched from their plugins as the
-// AppBuilder does.
-func (a *API) buildPortalCatalog(c *gin.Context, user *models.User) (*portalCatalog, error) {
+// --- loading database-backed items -----------------------------------------
+
+// catalogPage describes which rows to load: every match, or one SQL page.
+type catalogPage struct {
+	order  string
+	offset int
+	limit  int
+}
+
+// loadCatalogItems runs a type's base query with the given scope and
+// returns the matching rows as catalog items, with their catalog
+// memberships and governed metadata attached. Memberships and governed
+// metadata are one query each for the rows loaded.
+func (a *API) loadCatalogItems(user *models.User, src *catalogSource, scope func(*gorm.DB) *gorm.DB, page catalogPage) ([]CatalogItem, error) {
 	db := a.service.DB
-	out := &portalCatalog{Items: []CatalogItem{}, Catalogs: []CatalogFilterOption{}, ResourceTypes: []CatalogResourceType{}}
-
-	// --- LLM providers ---
-	llmCatalogues, err := user.GetAccessibleCatalogues(db)
-	if err != nil {
-		return nil, err
+	query := src.base(db, user.ID).Scopes(scope).Group(src.table + ".id")
+	if page.order != "" {
+		query = query.Order(page.order)
 	}
-	llmCatIDs := make([]uint, 0, len(llmCatalogues))
-	llmCatNames := make(map[uint]string, len(llmCatalogues))
-	for _, cat := range llmCatalogues {
-		llmCatIDs = append(llmCatIDs, cat.ID)
-		llmCatNames[cat.ID] = cat.Name
-		out.Catalogs = append(out.Catalogs, CatalogFilterOption{Type: CatalogItemLLM, ID: strconv.FormatUint(uint64(cat.ID), 10), Name: cat.Name})
-	}
-	llms, err := user.GetAccessibleLLMs(db)
-	if err != nil {
-		return nil, err
-	}
-	llmMembership, err := models.LLMCatalogueMemberships(db, llmCatIDs)
-	if err != nil {
-		return nil, err
-	}
-	llmIDs := make([]string, 0, len(llms))
-	for _, llm := range llms {
-		llmIDs = append(llmIDs, strconv.FormatUint(uint64(llm.ID), 10))
-	}
-	llmGoverned := a.governedMetadataFor(models.GovernedObjectTypeLLM, llmIDs)
-	for i := range llms {
-		llm := &llms[i]
-		item := CatalogItem{Type: CatalogItemLLM, ID: strconv.FormatUint(uint64(llm.ID), 10)}
-		item.Attributes = CatalogItemAttributes{
-			Name:             llm.Name,
-			ShortDescription: llm.ShortDescription,
-			LongDescription:  llm.LongDescription,
-			LogoURL:          llm.LogoURL,
-			Kind:             string(llm.Vendor),
-			PrivacyScore:     intPtr(llm.PrivacyScore),
-			Tags:             []string{},
-			Catalogs:         catalogRefs(llmMembership[llm.ID], llmCatNames),
-			CreatedAt:        timePtr(llm.CreatedAt),
-			UpdatedAt:        timePtr(llm.UpdatedAt),
-			DefaultModel:     llm.DefaultModel,
-			AllowedModels:    llm.AllowedModels,
-		}
-		if llmGoverned != nil {
-			item.GovernedMetadata = a.portalGovernedView(models.GovernedObjectTypeLLM, llmGoverned[item.ID])
-		}
-		out.Items = append(out.Items, item)
+	if page.limit > 0 {
+		query = query.Offset(page.offset).Limit(page.limit)
 	}
 
-	// --- Data sources ---
-	dataCatalogues, err := user.GetAccessibleDataCatalogues(db)
-	if err != nil {
-		return nil, err
-	}
-	dataCatIDs := make([]uint, 0, len(dataCatalogues))
-	dataCatNames := make(map[uint]string, len(dataCatalogues))
-	for _, cat := range dataCatalogues {
-		dataCatIDs = append(dataCatIDs, cat.ID)
-		dataCatNames[cat.ID] = cat.Name
-		out.Catalogs = append(out.Catalogs, CatalogFilterOption{Type: CatalogItemDatasource, ID: strconv.FormatUint(uint64(cat.ID), 10), Name: cat.Name})
-	}
-	datasources, err := user.GetAccessibleDataSources(db)
-	if err != nil {
-		return nil, err
-	}
-	dsMembership, err := models.DatasourceCatalogueMemberships(db, dataCatIDs)
-	if err != nil {
-		return nil, err
-	}
-	dsIDs := make([]string, 0, len(datasources))
-	for _, ds := range datasources {
-		dsIDs = append(dsIDs, strconv.FormatUint(uint64(ds.ID), 10))
-	}
-	dsGoverned := a.governedMetadataFor(models.GovernedObjectTypeDatasource, dsIDs)
-	// Tags are not loaded by the accessible query; one query for all of them.
-	dsTags, err := datasourceTagNames(db, datasources)
-	if err != nil {
-		return nil, err
-	}
-	for i := range datasources {
-		ds := &datasources[i]
-		item := CatalogItem{Type: CatalogItemDatasource, ID: strconv.FormatUint(uint64(ds.ID), 10)}
-		tags := dsTags[ds.ID]
-		if tags == nil {
-			tags = []string{}
+	var items []CatalogItem
+	var idOf func(i int) uint
+	var memberships func(db *gorm.DB, catalogueIDs []uint) (map[uint][]uint, error)
+	var objectType string
+
+	switch src.typ {
+	case CatalogItemLLM:
+		var llms []models.LLM
+		if err := query.Find(&llms).Error; err != nil {
+			return nil, err
 		}
-		item.Attributes = CatalogItemAttributes{
-			Name:               ds.Name,
-			ShortDescription:   ds.ShortDescription,
-			LongDescription:    ds.LongDescription,
-			LogoURL:            ds.Icon,
-			Kind:               ds.DBSourceType,
-			PrivacyScore:       intPtr(ds.PrivacyScore),
-			CommunitySubmitted: ds.CommunitySubmitted,
-			Tags:               tags,
-			Catalogs:           catalogRefs(dsMembership[ds.ID], dataCatNames),
-			CreatedAt:          timePtr(ds.CreatedAt),
-			UpdatedAt:          timePtr(ds.UpdatedAt),
-			EmbedVendor:        string(ds.EmbedVendor),
-			EmbedModel:         ds.EmbedModel,
+		items = make([]CatalogItem, len(llms))
+		for i := range llms {
+			items[i] = llmCatalogItem(&llms[i])
 		}
-		if dsGoverned != nil {
-			item.GovernedMetadata = a.portalGovernedView(models.GovernedObjectTypeDatasource, dsGoverned[item.ID])
+		idOf = func(i int) uint { return llms[i].ID }
+		memberships, objectType = models.LLMCatalogueMemberships, models.GovernedObjectTypeLLM
+	case CatalogItemDatasource:
+		var datasources []models.Datasource
+		if err := query.Preload("Tags").Find(&datasources).Error; err != nil {
+			return nil, err
 		}
-		out.Items = append(out.Items, item)
+		items = make([]CatalogItem, len(datasources))
+		for i := range datasources {
+			items[i] = datasourceCatalogItem(&datasources[i])
+		}
+		idOf = func(i int) uint { return datasources[i].ID }
+		memberships, objectType = models.DatasourceCatalogueMemberships, models.GovernedObjectTypeDatasource
+	case CatalogItemTool:
+		var tools []models.Tool
+		if err := query.Find(&tools).Error; err != nil {
+			return nil, err
+		}
+		items = make([]CatalogItem, len(tools))
+		for i := range tools {
+			items[i] = toolCatalogItem(&tools[i])
+		}
+		idOf = func(i int) uint { return tools[i].ID }
+		memberships, objectType = models.ToolCatalogueMemberships, models.GovernedObjectTypeTool
+	default:
+		return nil, nil
+	}
+	if len(items) == 0 {
+		return []CatalogItem{}, nil
 	}
 
-	// --- Tools ---
-	toolCatalogues, err := user.GetAccessibleToolCatalogues(db)
+	catalogues, err := a.accessibleCataloguesFor(src.typ, user)
 	if err != nil {
 		return nil, err
 	}
-	toolCatIDs := make([]uint, 0, len(toolCatalogues))
-	toolCatNames := make(map[uint]string, len(toolCatalogues))
-	for _, cat := range toolCatalogues {
-		toolCatIDs = append(toolCatIDs, cat.ID)
-		toolCatNames[cat.ID] = cat.Name
-		out.Catalogs = append(out.Catalogs, CatalogFilterOption{Type: CatalogItemTool, ID: strconv.FormatUint(uint64(cat.ID), 10), Name: cat.Name})
-	}
-	tools, err := user.GetAccessibleTools(db)
+	membership, err := memberships(db, catalogues.ids)
 	if err != nil {
 		return nil, err
 	}
-	toolMembership, err := models.ToolCatalogueMemberships(db, toolCatIDs)
+	ids := make([]string, len(items))
+	for i := range items {
+		ids[i] = items[i].ID
+	}
+	governed := a.governedMetadataFor(objectType, ids)
+	for i := range items {
+		items[i].Attributes.Catalogs = catalogRefs(membership[idOf(i)], catalogues.names)
+		if governed != nil {
+			items[i].GovernedMetadata = a.portalGovernedView(objectType, governed[items[i].ID])
+		}
+	}
+	return items, nil
+}
+
+func llmCatalogItem(llm *models.LLM) CatalogItem {
+	return CatalogItem{Type: CatalogItemLLM, ID: uintID(llm.ID), Attributes: CatalogItemAttributes{
+		Name:             cleanText(llm.Name),
+		ShortDescription: cleanText(llm.ShortDescription),
+		LongDescription:  cleanText(llm.LongDescription),
+		LogoURL:          llm.LogoURL,
+		Kind:             string(llm.Vendor),
+		PrivacyScore:     intPtr(llm.PrivacyScore),
+		Tags:             []string{},
+		Catalogs:         []CatalogRef{},
+		CreatedAt:        timePtr(llm.CreatedAt),
+		UpdatedAt:        timePtr(llm.UpdatedAt),
+		DefaultModel:     cleanText(llm.DefaultModel),
+		AllowedModels:    cleanTexts(llm.AllowedModels),
+	}}
+}
+
+func datasourceCatalogItem(ds *models.Datasource) CatalogItem {
+	tags := make([]string, 0, len(ds.Tags))
+	for _, tag := range ds.Tags {
+		tags = append(tags, cleanText(tag.Name))
+	}
+	return CatalogItem{Type: CatalogItemDatasource, ID: uintID(ds.ID), Attributes: CatalogItemAttributes{
+		Name:               cleanText(ds.Name),
+		ShortDescription:   cleanText(ds.ShortDescription),
+		LongDescription:    cleanText(ds.LongDescription),
+		LogoURL:            ds.Icon,
+		Kind:               ds.DBSourceType,
+		PrivacyScore:       intPtr(ds.PrivacyScore),
+		CommunitySubmitted: ds.CommunitySubmitted,
+		Tags:               tags,
+		Catalogs:           []CatalogRef{},
+		CreatedAt:          timePtr(ds.CreatedAt),
+		UpdatedAt:          timePtr(ds.UpdatedAt),
+		EmbedVendor:        string(ds.EmbedVendor),
+		EmbedModel:         cleanText(ds.EmbedModel),
+	}}
+}
+
+func toolCatalogItem(tool *models.Tool) CatalogItem {
+	return CatalogItem{Type: CatalogItemTool, ID: uintID(tool.ID), Attributes: CatalogItemAttributes{
+		Name:               cleanText(tool.Name),
+		ShortDescription:   cleanText(tool.Description),
+		Kind:               tool.ToolType,
+		PrivacyScore:       intPtr(tool.PrivacyScore),
+		CommunitySubmitted: tool.CommunitySubmitted,
+		Tags:               []string{},
+		Catalogs:           []CatalogRef{},
+		CreatedAt:          timePtr(tool.CreatedAt),
+		UpdatedAt:          timePtr(tool.UpdatedAt),
+		Operations:         cleanTexts(tool.GetOperations()),
+	}}
+}
+
+// countCatalogItems counts the type's matching objects.
+func (a *API) countCatalogItems(user *models.User, src *catalogSource, scope func(*gorm.DB) *gorm.DB) (int, error) {
+	var n int64
+	err := src.base(a.service.DB, user.ID).Scopes(scope).Distinct(src.table + ".id").Count(&n).Error
+	return int(n), err
+}
+
+// kindFacetsFor counts the type's accessible objects per kind; the sum is
+// the type's total.
+func (a *API) kindFacetsFor(user *models.User, src *catalogSource) ([]CatalogKindFacet, int, error) {
+	var rows []struct {
+		Kind  string
+		Count int
+	}
+	err := src.base(a.service.DB, user.ID).
+		Select(src.kindCol + " AS kind, COUNT(DISTINCT " + src.table + ".id) AS count").
+		Group(src.kindCol).
+		Scan(&rows).Error
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	toolIDs := make([]string, 0, len(tools))
-	for _, tool := range tools {
-		toolIDs = append(toolIDs, strconv.FormatUint(uint64(tool.ID), 10))
-	}
-	toolGoverned := a.governedMetadataFor(models.GovernedObjectTypeTool, toolIDs)
-	for i := range tools {
-		tool := &tools[i]
-		// The per-catalog page hides tools that are switched off; the
-		// accessible query does not filter on it, so it is applied here.
-		if !tool.Active {
+	total := 0
+	facets := make([]CatalogKindFacet, 0, len(rows))
+	for _, row := range rows {
+		total += row.Count
+		if row.Kind == "" {
 			continue
 		}
-		item := CatalogItem{Type: CatalogItemTool, ID: strconv.FormatUint(uint64(tool.ID), 10)}
-		item.Attributes = CatalogItemAttributes{
-			Name:               tool.Name,
-			ShortDescription:   tool.Description,
-			Kind:               tool.ToolType,
-			PrivacyScore:       intPtr(tool.PrivacyScore),
-			CommunitySubmitted: tool.CommunitySubmitted,
-			Tags:               []string{},
-			Catalogs:           catalogRefs(toolMembership[tool.ID], toolCatNames),
-			CreatedAt:          timePtr(tool.CreatedAt),
-			UpdatedAt:          timePtr(tool.UpdatedAt),
-			Operations:         tool.GetOperations(),
-		}
-		if toolGoverned != nil {
-			item.GovernedMetadata = a.portalGovernedView(models.GovernedObjectTypeTool, toolGoverned[item.ID])
-		}
-		out.Items = append(out.Items, item)
+		facets = append(facets, CatalogKindFacet{Type: src.typ, Kind: row.Kind, Label: catalogVendorNames[row.Kind], Count: row.Count})
 	}
+	return facets, total, nil
+}
 
-	// --- Plugin resources ---
-	resourceTypes, err := a.accessiblePluginResourceInstances(c, user)
+// --- plugin resources --------------------------------------------------------
+
+// pluginResourceItems turns the plugin resource types the caller may use
+// into catalog items (all of them; the query is applied by the caller). The
+// visibility rule lives in services.AccessiblePluginResourceInstances; team
+// managers see every instance.
+func (a *API) pluginResourceItems(c *gin.Context, user *models.User, only *services.PluginResourceTypeKey) ([]CatalogItem, []CatalogResourceType, error) {
+	seeAll := authz.Can(c, authz.Write("groups"))
+	resourceTypes, err := a.service.AccessiblePluginResourceInstances(user.ID, seeAll, only)
 	if err != nil {
-		return nil, err
+		// Fail closed: an unknown grant set means no plugin resources.
+		return []CatalogItem{}, []CatalogResourceType{}, nil
 	}
+	items := []CatalogItem{}
+	types := make([]CatalogResourceType, 0, len(resourceTypes))
 	for _, rt := range resourceTypes {
 		ref := CatalogResourceType{PluginID: rt.Type.PluginID, Slug: rt.Type.Slug, Name: sanitizeString(rt.Type.Name), Icon: sanitizeString(rt.Type.Icon)}
-		out.ResourceTypes = append(out.ResourceTypes, ref)
-		kind := strconv.FormatUint(uint64(rt.Type.PluginID), 10) + ":" + rt.Type.Slug
+		types = append(types, ref)
+		kind := uintID(rt.Type.PluginID) + ":" + rt.Type.Slug
 		objectType := models.PluginResourceObjectType(rt.Type.PluginID, rt.Type.Slug)
+		var governed map[string]*models.ObjectMetadata
+		if rt.Type.SupportsMetadata && len(rt.Instances) > 0 {
+			ids := make([]string, 0, len(rt.Instances))
+			for _, inst := range rt.Instances {
+				ids = append(ids, inst.Id)
+			}
+			governed = a.governedMetadataFor(objectType, ids)
+		}
 		for _, inst := range rt.Instances {
 			refCopy := ref
-			item := CatalogItem{Type: CatalogItemPluginResource, ID: inst.Id}
-			item.Attributes = CatalogItemAttributes{
+			item := CatalogItem{Type: CatalogItemPluginResource, ID: inst.Id, Attributes: CatalogItemAttributes{
 				Name:             sanitizeString(inst.Name),
 				ShortDescription: sanitizeString(inst.Description),
 				Kind:             kind,
@@ -362,121 +433,20 @@ func (a *API) buildPortalCatalog(c *gin.Context, user *models.User) (*portalCata
 				Tags:             []string{},
 				Catalogs:         []CatalogRef{},
 				ResourceType:     &refCopy,
-			}
+			}}
 			if rt.Type.HasPrivacyScore {
 				item.Attributes.PrivacyScore = intPtr(int(inst.PrivacyScore))
 			}
-			if rt.Governed != nil {
-				item.GovernedMetadata = a.portalGovernedView(objectType, rt.Governed[inst.Id])
+			if governed != nil {
+				item.GovernedMetadata = a.portalGovernedView(objectType, governed[inst.Id])
 			}
-			out.Items = append(out.Items, item)
+			items = append(items, item)
 		}
 	}
-
-	return out, nil
+	return items, types, nil
 }
 
-// datasourceTagNames loads tag names for the given data sources in one query.
-func datasourceTagNames(db *gorm.DB, datasources []models.Datasource) (map[uint][]string, error) {
-	out := make(map[uint][]string)
-	if len(datasources) == 0 {
-		return out, nil
-	}
-	ids := make([]uint, 0, len(datasources))
-	for _, ds := range datasources {
-		ids = append(ids, ds.ID)
-	}
-	var rows []struct {
-		DatasourceID uint
-		Name         string
-	}
-	err := db.Table("datasource_tags").
-		Select("datasource_tags.datasource_id AS datasource_id, tags.name AS name").
-		Joins("JOIN tags ON tags.id = datasource_tags.tag_id").
-		Where("datasource_tags.datasource_id IN ?", ids).
-		Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		out[row.DatasourceID] = append(out[row.DatasourceID], row.Name)
-	}
-	return out, nil
-}
-
-// accessibleResourceType is one plugin resource type with the instances the
-// caller may use.
-type accessibleResourceType struct {
-	Type      models.PluginResourceType
-	Instances []*pb.ResourceInstanceProto
-	Governed  map[string]*models.ObjectMetadata
-}
-
-// accessiblePluginResourceInstances returns every active plugin resource type
-// with the active instances the caller can use: all of them for callers who
-// manage teams, otherwise the instances granted to the caller's teams. It is
-// the visibility rule of GET /common/accessible-plugin-resources, shared so
-// the catalog and the AppBuilder never disagree. Types whose plugin cannot be
-// reached are returned with no instances.
-func (a *API) accessiblePluginResourceInstances(c *gin.Context, user *models.User) ([]accessibleResourceType, error) {
-	types, err := a.service.GetPluginResourceTypes()
-	if err != nil || len(types) == 0 || a.service.AIStudioPluginManager == nil {
-		return nil, nil
-	}
-
-	var accessibleByType map[uint]map[string]bool
-	if !authz.Can(c, authz.Write("groups")) {
-		allAccessible, err := a.service.GetAllAccessiblePluginResources(user.ID)
-		if err != nil {
-			// Fail closed: an unknown grant set means no plugin resources.
-			return nil, nil
-		}
-		accessibleByType = make(map[uint]map[string]bool)
-		for _, gpr := range allAccessible {
-			if accessibleByType[gpr.PluginResourceTypeID] == nil {
-				accessibleByType[gpr.PluginResourceTypeID] = make(map[string]bool)
-			}
-			accessibleByType[gpr.PluginResourceTypeID][gpr.InstanceID] = true
-		}
-	}
-
-	// Each type is one RPC to its plugin; they run concurrently and each
-	// goroutine writes only its own slot.
-	result := make([]accessibleResourceType, len(types))
-	var wg sync.WaitGroup
-	for i, rt := range types {
-		result[i].Type = rt
-		wg.Add(1)
-		go func(idx int, rt models.PluginResourceType) {
-			defer wg.Done()
-			protoInstances, err := a.service.AIStudioPluginManager.ListResourceInstances(rt.PluginID, rt.Slug)
-			if err != nil {
-				return
-			}
-			accessibleSet := accessibleByType[rt.ID] // nil for team managers
-			instances := make([]*pb.ResourceInstanceProto, 0, len(protoInstances))
-			for _, inst := range protoInstances {
-				if !inst.IsActive {
-					continue
-				}
-				if accessibleByType != nil && !accessibleSet[inst.Id] {
-					continue
-				}
-				instances = append(instances, inst)
-			}
-			result[idx].Instances = instances
-			if rt.SupportsMetadata && len(instances) > 0 {
-				ids := make([]string, 0, len(instances))
-				for _, inst := range instances {
-					ids = append(ids, inst.Id)
-				}
-				result[idx].Governed = a.governedMetadataFor(models.PluginResourceObjectType(rt.PluginID, rt.Slug), ids)
-			}
-		}(i, rt)
-	}
-	wg.Wait()
-	return result, nil
-}
+// --- handlers ----------------------------------------------------------------
 
 // portalUser reads the authenticated user or writes a 401.
 func portalUser(c *gin.Context) (*models.User, bool) {
@@ -521,58 +491,141 @@ func (a *API) getPortalCatalog(c *gin.Context) {
 	if !ok {
 		return
 	}
-	catalog, err := a.buildPortalCatalog(c, user)
+
+	// Facets over the whole accessible set: aggregates for the database
+	// types, the plugin instances (which the plugins list in full anyway).
+	counts := map[string]int{CatalogItemLLM: 0, CatalogItemDatasource: 0, CatalogItemTool: 0, CatalogItemPluginResource: 0}
+	kinds := []CatalogKindFacet{}
+	catalogs := []CatalogFilterOption{}
+	for i := range catalogSources {
+		src := &catalogSources[i]
+		facets, total, err := a.kindFacetsFor(user, src)
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return
+		}
+		counts[src.typ] = total
+		kinds = append(kinds, facets...)
+		cats, err := a.accessibleCataloguesFor(src.typ, user)
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return
+		}
+		catalogs = append(catalogs, cats.options...)
+	}
+	pluginItems, resourceTypes, err := a.pluginResourceItems(c, user, nil)
 	if err != nil {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
-	counts, kinds := catalogFacets(catalog.Items)
+	counts[CatalogItemPluginResource] = len(pluginItems)
+	pluginKinds := map[string]*CatalogKindFacet{}
+	for i := range pluginItems {
+		a := &pluginItems[i].Attributes
+		if facet, ok := pluginKinds[a.Kind]; ok {
+			facet.Count++
+			continue
+		}
+		pluginKinds[a.Kind] = &CatalogKindFacet{Type: CatalogItemPluginResource, Kind: a.Kind, Label: a.KindLabel, Count: 1}
+	}
+	for _, facet := range pluginKinds {
+		kinds = append(kinds, *facet)
+	}
+	sortKindFacets(kinds)
 
-	matched := make([]CatalogItem, 0, len(catalog.Items))
-	for i := range catalog.Items {
-		if query.matches(&catalog.Items[i]) {
-			matched = append(matched, catalog.Items[i])
+	meta := CatalogListMeta{
+		Page:          query.Page,
+		PageSize:      query.PageSize,
+		Counts:        counts,
+		Kinds:         kinds,
+		Catalogs:      catalogs,
+		ResourceTypes: resourceTypes,
+	}
+
+	// One database type: filter, order and page in SQL.
+	if src := catalogSourceFor(query.Type); src != nil {
+		if !src.applies(query) {
+			meta.Total, meta.TotalPages = 0, 1
+			c.JSON(http.StatusOK, CatalogListResponse{Data: []CatalogItem{}, Meta: meta})
+			return
+		}
+		scope := src.scope(query)
+		total, err := a.countCatalogItems(user, src, scope)
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return
+		}
+		items, err := a.loadCatalogItems(user, src, scope, catalogPage{
+			order:  src.order(query.Sort),
+			offset: (query.Page - 1) * query.PageSize,
+			limit:  query.PageSize,
+		})
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return
+		}
+		meta.Total, meta.TotalPages = total, totalPagesFor(total, query.PageSize)
+		c.JSON(http.StatusOK, CatalogListResponse{Data: items, Meta: meta})
+		return
+	}
+
+	// Every type, or plugin resources: each database type contributes its
+	// SQL-filtered rows, plugin resources are matched here, and the union is
+	// ordered and paged.
+	matched := []CatalogItem{}
+	for i := range catalogSources {
+		src := &catalogSources[i]
+		if !src.applies(query) {
+			continue
+		}
+		items, err := a.loadCatalogItems(user, src, src.scope(query), catalogPage{})
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return
+		}
+		matched = append(matched, items...)
+	}
+	if query.Type == "" || query.Type == CatalogItemPluginResource {
+		for i := range pluginItems {
+			if query.matches(&pluginItems[i]) {
+				matched = append(matched, pluginItems[i])
+			}
 		}
 	}
 	sortCatalogItems(matched, query.Sort)
 	pageItems, totalPages := pageOf(matched, query.Page, query.PageSize)
-
-	c.JSON(http.StatusOK, CatalogListResponse{
-		Data: pageItems,
-		Meta: CatalogListMeta{
-			Total:         len(matched),
-			Page:          query.Page,
-			PageSize:      query.PageSize,
-			TotalPages:    totalPages,
-			Counts:        counts,
-			Kinds:         kinds,
-			Catalogs:      catalog.Catalogs,
-			ResourceTypes: catalog.ResourceTypes,
-		},
-	})
+	meta.Total, meta.TotalPages = len(matched), totalPages
+	c.JSON(http.StatusOK, CatalogListResponse{Data: pageItems, Meta: meta})
 }
 
-// findCatalogItem answers a detail request: the item if the caller can see
-// it, otherwise 404. Anything outside the caller's visibility is "not found"
-// rather than "forbidden" so the endpoint never confirms that an id exists.
-func (a *API) findCatalogItem(c *gin.Context, itemType, id string) (*CatalogItem, bool) {
+// findCatalogItem answers a detail request for a database-backed type: the
+// one item if the caller can see it, otherwise 404. The base query carries
+// the visibility rule, so a single-row query is the check. Anything outside
+// the caller's visibility is "not found" rather than "forbidden" so the
+// endpoint never confirms that an id exists.
+func (a *API) findCatalogItem(c *gin.Context, typ, id string) (*CatalogItem, bool) {
 	user, ok := portalUser(c)
 	if !ok {
 		return nil, false
 	}
-	catalog, err := a.buildPortalCatalog(c, user)
+	src := catalogSourceFor(typ)
+	numericID, err := strconv.ParseUint(id, 10, 64)
+	if src == nil || err != nil {
+		simpleError(c, http.StatusNotFound, "Not Found", "No such item is available to you")
+		return nil, false
+	}
+	items, err := a.loadCatalogItems(user, src, func(db *gorm.DB) *gorm.DB {
+		return db.Where(src.table+".id = ?", numericID)
+	}, catalogPage{})
 	if err != nil {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return nil, false
 	}
-	for i := range catalog.Items {
-		item := &catalog.Items[i]
-		if item.Type == itemType && item.ID == id {
-			return item, true
-		}
+	if len(items) == 0 {
+		simpleError(c, http.StatusNotFound, "Not Found", "No such item is available to you")
+		return nil, false
 	}
-	simpleError(c, http.StatusNotFound, "Not Found", "No such item is available to you")
-	return nil, false
+	return &items[0], true
 }
 
 // getPortalCatalogLLM godoc
@@ -694,16 +747,28 @@ func (a *API) getPortalCatalogTool(c *gin.Context) {
 // @Failure 404 {object} ErrorResponse
 // @Router /common/catalog/resources/{plugin_id}/{slug}/{id} [get]
 func (a *API) getPortalCatalogPluginResource(c *gin.Context) {
-	kind := c.Param("plugin_id") + ":" + c.Param("slug")
-	item, ok := a.findCatalogItem(c, CatalogItemPluginResource, c.Param("id"))
+	user, ok := portalUser(c)
 	if !ok {
 		return
 	}
-	if item.Attributes.Kind != kind {
+	pluginID, err := strconv.ParseUint(c.Param("plugin_id"), 10, 64)
+	if err != nil {
 		simpleError(c, http.StatusNotFound, "Not Found", "No such item is available to you")
 		return
 	}
-	c.JSON(http.StatusOK, CatalogItemResponse{Data: *item})
+	// One type's instances only; the plugin lists them in one RPC.
+	items, _, err := a.pluginResourceItems(c, user, &services.PluginResourceTypeKey{PluginID: uint(pluginID), Slug: c.Param("slug")})
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	for i := range items {
+		if items[i].ID == c.Param("id") {
+			c.JSON(http.StatusOK, CatalogItemResponse{Data: items[i]})
+			return
+		}
+	}
+	simpleError(c, http.StatusNotFound, "Not Found", "No such item is available to you")
 }
 
 // AppUsageSummary is one app's budget position and recent activity for the
@@ -747,32 +812,46 @@ func (a *API) getUserAppsUsageSummary(c *gin.Context) {
 	}
 	now := time.Now()
 	appIDs := make([]uint, 0, len(apps))
-	for _, app := range apps {
-		appIDs = append(appIDs, app.ID)
-	}
-	activity, err := analytics.GetAppActivity(a.service.DB, appIDs, now.AddDate(0, 0, -30))
-	if err != nil {
-		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
-		return
-	}
-
-	data := make(map[string]AppUsageSummary, len(apps))
+	windows := make([]analytics.AppSpendWindow, 0, len(apps))
+	starts := make(map[uint]time.Time, len(apps))
 	for _, app := range apps {
 		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 		if app.BudgetStartDate != nil {
 			start = *app.BudgetStartDate
 		}
-		spent := 0.0
-		if a.service.Budget != nil {
-			if value, err := a.service.Budget.GetMonthlySpending(app.ID, start, now); err == nil {
-				spent = value
-			}
+		appIDs = append(appIDs, app.ID)
+		windows = append(windows, analytics.AppSpendWindow{AppID: app.ID, Start: start})
+		starts[app.ID] = start
+	}
+
+	// Two grouped queries for every app: activity, and spend since each
+	// app's budget start (the budget service's own figure, computed the same
+	// way -- SUM(cost)/10000 over llm_chat_records -- but for all apps at
+	// once; spending is an Enterprise feature, so Community Edition reports
+	// zero and says so).
+	activity, err := analytics.GetAppActivity(a.service.DB, appIDs, now.AddDate(0, 0, -30))
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	spendTracked := budget.IsEnterpriseAvailable()
+	spending := map[uint]float64{}
+	if spendTracked {
+		spending, err = analytics.GetAppSpending(a.service.DB, windows, now)
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return
 		}
+	}
+
+	data := make(map[string]AppUsageSummary, len(apps))
+	for _, app := range apps {
+		spent := spending[app.ID]
 		summary := AppUsageSummary{
-			AppID:           strconv.FormatUint(uint64(app.ID), 10),
+			AppID:           uintID(app.ID),
 			CurrentSpend:    spent,
 			MonthlyBudget:   app.MonthlyBudget,
-			BudgetStartDate: start,
+			BudgetStartDate: starts[app.ID],
 		}
 		if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 			pct := (spent / *app.MonthlyBudget) * 100
@@ -784,5 +863,5 @@ func (a *API) getUserAppsUsageSummary(c *gin.Context) {
 		}
 		data[summary.AppID] = summary
 	}
-	c.JSON(http.StatusOK, AppUsageSummaryResponse{Data: data, SpendTracked: budget.IsEnterpriseAvailable()})
+	c.JSON(http.StatusOK, AppUsageSummaryResponse{Data: data, SpendTracked: spendTracked})
 }

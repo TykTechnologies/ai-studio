@@ -7,9 +7,12 @@ import (
 	"log"
 	"strings"
 
+	"sync"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/xeipuuv/gojsonschema"
 )
 
@@ -514,4 +517,83 @@ func (s *Service) refreshInstanceDetails(resourceTypeSlug, instanceID string) {
 	}
 
 	log.Printf("Warning: instance %s not found in plugin response during refresh", instanceID)
+}
+
+// AccessiblePluginResourceType is one plugin resource type with the active
+// instances a user may use.
+type AccessiblePluginResourceType struct {
+	Type      models.PluginResourceType
+	Instances []*pb.ResourceInstanceProto
+}
+
+// AccessiblePluginResourceInstances is the one visibility rule for plugin
+// resources in the portal, shared by GET /common/accessible-plugin-resources
+// (the AppBuilder) and the portal catalog: every active resource type with
+// its active instances, all of them when seeAll is set (callers who manage
+// teams), otherwise only the instances granted to the user's teams. `only`
+// restricts the lookup to one type. Each type is one RPC to its plugin, run
+// concurrently; a type whose plugin cannot be reached is returned with no
+// instances. Nil is returned when nothing is registered or the plugin
+// manager is not running.
+func (s *Service) AccessiblePluginResourceInstances(userID uint, seeAll bool, only *PluginResourceTypeKey) ([]AccessiblePluginResourceType, error) {
+	if s.AIStudioPluginManager == nil {
+		return nil, nil
+	}
+	types, err := s.GetPluginResourceTypes()
+	if err != nil || len(types) == 0 {
+		return nil, err
+	}
+	if only != nil {
+		filtered := types[:0]
+		for _, rt := range types {
+			if rt.PluginID == only.PluginID && rt.Slug == only.Slug {
+				filtered = append(filtered, rt)
+			}
+		}
+		types = filtered
+	}
+
+	var accessibleByType map[uint]map[string]bool
+	if !seeAll {
+		allAccessible, err := s.GetAllAccessiblePluginResources(userID)
+		if err != nil {
+			// Fail closed: an unknown grant set means no plugin resources.
+			return nil, err
+		}
+		accessibleByType = make(map[uint]map[string]bool)
+		for _, gpr := range allAccessible {
+			if accessibleByType[gpr.PluginResourceTypeID] == nil {
+				accessibleByType[gpr.PluginResourceTypeID] = make(map[string]bool)
+			}
+			accessibleByType[gpr.PluginResourceTypeID][gpr.InstanceID] = true
+		}
+	}
+
+	result := make([]AccessiblePluginResourceType, len(types))
+	var wg sync.WaitGroup
+	for i, rt := range types {
+		result[i].Type = rt
+		wg.Add(1)
+		go func(idx int, rt models.PluginResourceType) {
+			defer wg.Done()
+			protoInstances, err := s.AIStudioPluginManager.ListResourceInstances(rt.PluginID, rt.Slug)
+			if err != nil {
+				return
+			}
+			accessibleSet := accessibleByType[rt.ID] // nil when seeAll
+			instances := make([]*pb.ResourceInstanceProto, 0, len(protoInstances))
+			for _, inst := range protoInstances {
+				if !inst.IsActive {
+					continue
+				}
+				if accessibleByType != nil && !accessibleSet[inst.Id] {
+					continue
+				}
+				instances = append(instances, inst)
+			}
+			result[idx].Instances = instances
+		}(i, rt)
+	}
+	wg.Wait()
+	return result, nil
 }

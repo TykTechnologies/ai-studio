@@ -48,3 +48,40 @@ func DatasourceCatalogueMemberships(db *gorm.DB, catalogueIDs []uint) (map[uint]
 func ToolCatalogueMemberships(db *gorm.DB, catalogueIDs []uint) (map[uint][]uint, error) {
 	return catalogueMemberships(db, "tool_catalogue_tools", "tool_catalogue_id", "tool_id", catalogueIDs)
 }
+
+// Base queries for the objects a user can use, one per type. They are the
+// GetAccessible* rules (the user's teams -> their catalogues -> active
+// objects) as composable queries, so the portal catalog can add its filters
+// (WHERE on the object's columns or the catalogue's name), count facets with
+// aggregates, and order and page in SQL instead of loading every accessible
+// row. The joins produce one row per (object, catalogue); callers group by
+// the object's id or count DISTINCT ids.
+
+func AccessibleLLMQuery(db *gorm.DB, userID uint) *gorm.DB {
+	return db.Model(&LLM{}).
+		Joins("JOIN catalogue_llms ON catalogue_llms.llm_id = llms.id").
+		Joins("JOIN catalogues ON catalogues.id = catalogue_llms.catalogue_id").
+		Joins("JOIN group_catalogues ON group_catalogues.catalogue_id = catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_catalogues.group_id").
+		Where("user_groups.user_id = ? AND llms.active = ?", userID, true)
+}
+
+func AccessibleDatasourceQuery(db *gorm.DB, userID uint) *gorm.DB {
+	return db.Model(&Datasource{}).
+		Joins("JOIN data_catalogue_data_sources ON data_catalogue_data_sources.datasource_id = datasources.id").
+		Joins("JOIN data_catalogues ON data_catalogues.id = data_catalogue_data_sources.data_catalogue_id").
+		Joins("JOIN group_datacatalogues ON group_datacatalogues.data_catalogue_id = data_catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_datacatalogues.group_id").
+		Where("user_groups.user_id = ? AND datasources.active = ?", userID, true)
+}
+
+// AccessibleToolQuery filters on tools.active, which the per-catalogue portal
+// page also applies (GetAccessibleTools itself does not).
+func AccessibleToolQuery(db *gorm.DB, userID uint) *gorm.DB {
+	return db.Model(&Tool{}).
+		Joins("JOIN tool_catalogue_tools ON tool_catalogue_tools.tool_id = tools.id").
+		Joins("JOIN tool_catalogues ON tool_catalogues.id = tool_catalogue_tools.tool_catalogue_id").
+		Joins("JOIN group_toolcatalogues ON group_toolcatalogues.tool_catalogue_id = tool_catalogues.id").
+		Joins("JOIN user_groups ON user_groups.group_id = group_toolcatalogues.group_id").
+		Where("user_groups.user_id = ? AND tools.active = ?", userID, true)
+}

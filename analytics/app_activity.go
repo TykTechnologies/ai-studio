@@ -55,3 +55,43 @@ func GetAppActivity(db *gorm.DB, appIDs []uint, since time.Time) (map[uint]*AppA
 	}
 	return out, nil
 }
+
+// AppSpendWindow names an app and the start of its budget period.
+type AppSpendWindow struct {
+	AppID uint
+	Start time.Time
+}
+
+// GetAppSpending returns each app's spend between its own window start and
+// `end`, in the same units as the budget service (llm_chat_records.cost is
+// stored x10000; see proxy/analyze_utils.go). One query for every app: each
+// app contributes an (app_id, start) predicate, so a user with twenty apps
+// costs one round trip rather than twenty. Apps with no records are absent.
+func GetAppSpending(db *gorm.DB, windows []AppSpendWindow, end time.Time) (map[uint]float64, error) {
+	out := make(map[uint]float64, len(windows))
+	if len(windows) == 0 {
+		return out, nil
+	}
+	query := db.Model(&models.LLMChatRecord{}).
+		Select("app_id, COALESCE(SUM(cost), 0) AS spent").
+		Where("time_stamp <= ?", end)
+	scope := db
+	for i, w := range windows {
+		if i == 0 {
+			scope = scope.Where("(app_id = ? AND time_stamp >= ?)", w.AppID, w.Start)
+		} else {
+			scope = scope.Or("(app_id = ? AND time_stamp >= ?)", w.AppID, w.Start)
+		}
+	}
+	var rows []struct {
+		AppID uint
+		Spent float64
+	}
+	if err := query.Where(scope).Group("app_id").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.AppID] = row.Spent / 10000.0
+	}
+	return out, nil
+}
