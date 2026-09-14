@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -104,8 +105,10 @@ func (s *SyncStatusService) GetPendingChanges(namespace string) (*PendingChanges
 		if err != nil {
 			return nil, err
 		}
+		classified := 0
 		for _, row := range rows {
 			if change, ok := classifyPendingChange(row, result.Since); ok {
+				classified++
 				changes = append(changes, PendingChange{
 					Type:   src.typ,
 					ID:     row.ID,
@@ -115,13 +118,25 @@ func (s *SyncStatusService) GetPendingChanges(namespace string) (*PendingChanges
 				})
 			}
 		}
+		// Each source is fetched newest-first and capped at maxPendingChanges,
+		// so a full page means the table may hold more: count those rather
+		// than load them, since only the newest maxPendingChanges overall are
+		// returned anyway.
+		if len(rows) < maxPendingChanges {
+			result.Total += classified
+		} else {
+			n, err := s.pendingCountFor(src, namespace, result.Since)
+			if err != nil {
+				return nil, err
+			}
+			result.Total += int(n)
+		}
 	}
 
 	sort.SliceStable(changes, func(i, j int) bool {
 		return changes[i].At.After(changes[j].At)
 	})
 
-	result.Total = len(changes)
 	if len(changes) > maxPendingChanges {
 		changes = changes[:maxPendingChanges]
 	}
@@ -131,12 +146,15 @@ func (s *SyncStatusService) GetPendingChanges(namespace string) (*PendingChanges
 	return result, nil
 }
 
-// pendingRowsFor fetches the candidate rows of one source. Soft-deleted rows
-// are included (Unscoped) only when there is a reference point to compare
-// their deletion against.
-func (s *SyncStatusService) pendingRowsFor(src pendingChangeSource, namespace string, since *time.Time) ([]pendingChangeRow, error) {
-	query := s.db.Model(src.model).
-		Select(src.nameExpr + " AS name, id, created_at, updated_at, deleted_at")
+// pendingQueryFor builds the candidate-row query of one source. Soft-deleted
+// rows are included (Unscoped) only when there is a reference point to
+// compare their deletion against. The time filter uses updated_at and
+// deleted_at only: GORM stamps updated_at alongside created_at on insert, so
+// a row created after the push is also updated after it, and a soft delete
+// leaves updated_at alone. Both columns are indexed
+// (EnsurePendingChangeIndexes), which keeps the OR to two index scans.
+func (s *SyncStatusService) pendingQueryFor(src pendingChangeSource, namespace string, since *time.Time) *gorm.DB {
+	query := s.db.Model(src.model)
 
 	if src.namespaced {
 		if namespace == "" {
@@ -148,14 +166,54 @@ func (s *SyncStatusService) pendingRowsFor(src pendingChangeSource, namespace st
 
 	if since != nil {
 		query = query.Unscoped().
-			Where("(created_at > ? OR updated_at > ? OR deleted_at > ?)", *since, *since, *since)
+			Where("(updated_at > ? OR deleted_at > ?)", *since, *since)
 	}
+	return query
+}
 
+// pendingRowsFor fetches the newest maxPendingChanges candidate rows of one
+// source. The order key is the time of the change the row will be reported
+// with (deletion time for a deleted row, otherwise its last update), so the
+// per-source pages merge into the correct overall newest-first list.
+func (s *SyncStatusService) pendingRowsFor(src pendingChangeSource, namespace string, since *time.Time) ([]pendingChangeRow, error) {
 	var rows []pendingChangeRow
-	if err := query.Scan(&rows).Error; err != nil {
+	err := s.pendingQueryFor(src, namespace, since).
+		Select(src.nameExpr + " AS name, id, created_at, updated_at, deleted_at").
+		Order("COALESCE(deleted_at, updated_at) DESC").
+		Limit(maxPendingChanges).
+		Scan(&rows).Error
+	if err != nil {
 		return nil, err
 	}
 	return rows, nil
+}
+
+// pendingCountFor counts the candidate rows of one source.
+func (s *SyncStatusService) pendingCountFor(src pendingChangeSource, namespace string, since *time.Time) (int64, error) {
+	var n int64
+	err := s.pendingQueryFor(src, namespace, since).Count(&n).Error
+	return n, err
+}
+
+// EnsurePendingChangeIndexes creates the updated_at index each source table
+// needs for the since-last-push filter (gorm.Model indexes deleted_at
+// already). Idempotent; run once at start-up after the tables exist.
+func EnsurePendingChangeIndexes(db *gorm.DB) error {
+	if db == nil {
+		return nil // tests build a Service without a database
+	}
+	for _, src := range pendingChangeSources {
+		stmt := &gorm.Statement{DB: db}
+		if err := stmt.Parse(src.model); err != nil {
+			return fmt.Errorf("pending changes: parse %s model: %w", src.typ, err)
+		}
+		table := stmt.Schema.Table
+		sql := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_updated_at ON %s (updated_at)", table, table)
+		if err := db.Exec(sql).Error; err != nil {
+			return fmt.Errorf("pending changes: index %s.updated_at: %w", table, err)
+		}
+	}
+	return nil
 }
 
 type pendingChangeKind struct {

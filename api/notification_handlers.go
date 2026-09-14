@@ -56,10 +56,14 @@ func (h *NotificationHandlers) ListNotifications(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	unread, err := h.notificationService.GetUnreadCount(currentUser.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	// An unread-only listing has already counted the unread rows.
+	unread := total
+	if !unreadOnly {
+		unread, err = h.notificationService.GetUnreadCount(currentUser.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

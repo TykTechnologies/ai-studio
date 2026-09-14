@@ -71,10 +71,12 @@ func TestGenerateAPIKeyForUser_DoesNotClobberStamps(t *testing.T) {
 	user := &models.User{Email: "stamped@example.com", Disabled: true}
 	require.NoError(t, db.Create(user).Error)
 
-	require.NoError(t, service.GenerateAPIKeyForUser(user.ID))
+	key, err := service.GenerateAPIKeyForUser(user.ID)
+	require.NoError(t, err)
 	stored, err := service.GetUserByID(user.ID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, stored.APIKey)
+	assert.Equal(t, key, stored.APIKey, "the returned key is the stored one")
 	assert.True(t, stored.Disabled, "a column update must not touch other fields")
 }
 

@@ -462,7 +462,8 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 		return
 	}
 
-	if err := a.service.GenerateAPIKeyForUser(uint(id)); err != nil {
+	key, err := a.service.GenerateAPIKeyForUser(uint(id))
+	if err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}
@@ -475,7 +476,7 @@ func (a *API) rollUserAPIKey(c *gin.Context) {
 
 	// The freshly rolled key is returned once, to whoever rolled it.
 	resp := a.finishUser(c, serializeUser(user))
-	resp.Attributes.APIKey = user.APIKey
+	resp.Attributes.APIKey = key
 	resp.Attributes.APIKeyHint = ""
 	c.JSON(http.StatusOK, gin.H{"data": resp})
 }

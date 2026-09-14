@@ -184,3 +184,48 @@ func TestReload_StampsLastPush(t *testing.T) {
 	require.NoError(t, afterEdge.GetByNamespace(db, "default"))
 	assert.True(t, afterEdge.LastPushAt.After(first), "a single-edge reload also counts as a push")
 }
+
+func TestEnsurePendingChangeIndexes_IsIdempotent(t *testing.T) {
+	db := apitest.SetupTestDB(t)
+	require.NoError(t, services.EnsurePendingChangeIndexes(db))
+	require.NoError(t, services.EnsurePendingChangeIndexes(db), "second run is a no-op")
+	assert.True(t, db.Migrator().HasIndex(&models.LLM{}, "idx_llms_updated_at"))
+	assert.True(t, db.Migrator().HasIndex(&models.AccessToken{}, "idx_access_tokens_updated_at"))
+}
+
+// A table with more changes than the cap returns the newest ones and still
+// reports the true total, without loading every row.
+func TestPendingChanges_CapsPerSourceAndKeepsTotal(t *testing.T) {
+	db := apitest.SetupTestDB(t)
+	svc := services.NewSyncStatusService(db)
+
+	push := time.Now().Add(-time.Hour)
+	require.NoError(t, models.MarkNamespacePushed(db, "edge-1", push))
+
+	const extra = 5
+	for i := 0; i < 200+extra; i++ {
+		llm := &models.LLM{Name: "llm", Namespace: "edge-1"}
+		require.NoError(t, db.Create(llm).Error)
+		// Older ids changed earlier; the newest id is the newest change.
+		at := push.Add(time.Duration(i+1) * time.Second)
+		setTimes(t, db, &models.LLM{}, llm.ID, at, at)
+	}
+	// One deleted tool, newer than every LLM, must survive the cap.
+	tool := &models.Tool{Name: "Gone", Namespace: "edge-1"}
+	require.NoError(t, db.Create(tool).Error)
+	setTimes(t, db, &models.Tool{}, tool.ID, push.Add(-time.Hour), push.Add(-time.Hour))
+	require.NoError(t, db.Delete(tool).Error)
+
+	pc, err := svc.GetPendingChanges("edge-1")
+	require.NoError(t, err)
+	assert.Equal(t, 200+extra+1, pc.Total)
+	require.Len(t, pc.Changes, 200)
+	assert.Equal(t, "tool", pc.Changes[0].Type, "the newest change leads")
+	assert.Equal(t, services.PendingChangeDeleted, pc.Changes[0].Change)
+	for i := 1; i < len(pc.Changes); i++ {
+		assert.False(t, pc.Changes[i].At.After(pc.Changes[i-1].At), "ordered by at desc")
+	}
+	// The oldest `extra` LLM changes are the ones dropped.
+	oldest := pc.Changes[len(pc.Changes)-1]
+	assert.True(t, oldest.At.After(push.Add(extra*time.Second)), "the newest 199 LLM changes are kept")
+}

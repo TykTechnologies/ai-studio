@@ -141,18 +141,13 @@ func (a *API) rollMyAPIKey(c *gin.Context) {
 
 	// GenerateAPIKeyForUser writes the api_key column only, so the session
 	// token behind the caller's cookie is untouched and they stay signed in.
-	if err := a.service.GenerateAPIKeyForUser(u.ID); err != nil {
-		helpers.SendErrorResponse(c, err)
-		return
-	}
-
-	fresh, err := a.service.GetUserByID(u.ID)
+	key, err := a.service.GenerateAPIKeyForUser(u.ID)
 	if err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"api_key": fresh.APIKey}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"api_key": key}})
 }
 
 // @Summary Revoke my API key
