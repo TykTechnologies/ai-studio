@@ -11,7 +11,10 @@ jest.mock("../utils/apiClient", () => ({
   __esModule: true,
   default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
-jest.mock("../components/rbac/Can", () => ({ children }) => <>{children}</>);
+// Can's render-prop form (children as a function) is used to gate the table.
+jest.mock("../components/rbac/Can", () => ({ children }) => (
+  <>{typeof children === "function" ? children(true) : children}</>
+));
 jest.mock("../../components/common/Icon", () => (props) => <div data-testid="mock-icon">{props.name}</div>);
 const mockNavigate = jest.fn();
 jest.mock("react-router-dom", () => ({
@@ -20,10 +23,10 @@ jest.mock("react-router-dom", () => ({
 }));
 
 const apps = [
-  { id: "1", attributes: { name: "Approved App", description: "", user_id: 1, credential_id: 11 } },
-  { id: "2", attributes: { name: "Waiting App", description: "", user_id: 1, credential_id: 12 } },
-  { id: "3", attributes: { name: "Bare App", description: "", user_id: 1, credential_id: null } },
-  { id: "4", attributes: { name: "Off App", description: "", user_id: 1, credential_id: 11, is_active: false } },
+  { id: "1", attributes: { name: "Approved App", description: "", user_id: 1, credential_id: 11, credential_active: true } },
+  { id: "2", attributes: { name: "Waiting App", description: "", user_id: 1, credential_id: 12, credential_active: false } },
+  { id: "3", attributes: { name: "Bare App", description: "", user_id: 1, credential_id: null, credential_active: null } },
+  { id: "4", attributes: { name: "Off App", description: "", user_id: 1, credential_id: 11, credential_active: true, is_active: false } },
 ];
 
 const renderList = () =>
@@ -40,7 +43,7 @@ describe("AppList status labels and approval", () => {
     jest.clearAllMocks();
     apiClient.get.mockImplementation((url) => {
       if (url === "/apps") return Promise.resolve({ data: { data: apps }, headers: { "x-total-count": "4", "x-total-pages": "1" } });
-      if (url === "/credentials")
+      if (url === "/credentials") // no longer requested by the list; kept so an accidental call is harmless
         return Promise.resolve({
           data: {
             data: [

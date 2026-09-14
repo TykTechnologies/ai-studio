@@ -23,7 +23,12 @@ export const useToolCreation = () => {
         description: toolConfig.description,
         tool_type: 'REST',
         oas_spec: toolConfig.oas_spec,
-        privacy_score: toolConfig.privacy_score || 50,
+        // Store what was entered. `|| 50` used to turn an explicit 0 into 50
+        // (UX review F-06); only an empty field falls back to the wizard's
+        // default of 25 (Public), the same default index.js starts with.
+        privacy_score: toolConfig.privacy_score === '' || toolConfig.privacy_score == null
+          ? 25
+          : Number(toolConfig.privacy_score),
         auth_schema_name: authDetails.name || toolConfig.auth_schema_name,
         auth_key: toolConfig.auth_key || '',
         file_stores: [],

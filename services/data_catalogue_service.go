@@ -110,9 +110,10 @@ func (s *Service) RemoveDatasourceFromDataCatalogue(dataCatalogueID, datasourceI
 	return dataCatalogue.RemoveDatasource(s.DB, datasource)
 }
 
-func (s *Service) GetAllDataCatalogues(pageSize int, pageNumber int, all bool) (models.DataCatalogues, int64, int, error) {
+func (s *Service) GetAllDataCatalogues(pageSize int, pageNumber int, all bool, opts ...ListOptions) (models.DataCatalogues, int64, int, error) {
 	var dataCatalogues models.DataCatalogues
-	totalCount, totalPages, err := dataCatalogues.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := dataCatalogues.GetAll(s.DB, pageSize, pageNumber, all,
+		firstListOptions(opts).Scopes("name")...)
 	if err != nil {
 		return nil, 0, 0, err
 	}

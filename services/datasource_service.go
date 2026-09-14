@@ -367,9 +367,10 @@ func (s *Service) CloneDatasource(sourceDatasourceID uint) (*models.Datasource, 
 	return cloned, nil
 }
 
-func (s *Service) GetAllDatasources(pageSize int, pageNumber int, all bool) (models.Datasources, int64, int, error) {
+func (s *Service) GetAllDatasources(pageSize int, pageNumber int, all bool, opts ...ListOptions) (models.Datasources, int64, int, error) {
 	var datasources models.Datasources
-	totalCount, totalPages, err := datasources.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := datasources.GetAll(s.DB, pageSize, pageNumber, all,
+		firstListOptions(opts).Scopes("name", "short_description")...)
 	if err != nil {
 		return nil, 0, 0, err
 	}

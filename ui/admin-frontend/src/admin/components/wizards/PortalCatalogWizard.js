@@ -14,10 +14,12 @@ import {
   FormControl,
   InputLabel,
   Typography,
+  Box,
 } from "@mui/material";
 import apiClient from "../../utils/apiClient";
 import { getVendorCodes, getVendorName } from "../../utils/vendorLogos";
 import modelPresets from "../../utils/modelPresets";
+import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 
 const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
   const [activeStep, setActiveStep] = useState(0);
@@ -79,7 +81,7 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
           attributes: {
             name: formData.vendorName,
             vendor: formData.vendor,
-            privacy_score: formData.privacyLevel,
+            privacy_score: Number(formData.privacyLevel),
             api_endpoint: formData.apiEndpoint,
             api_key: formData.apiKey,
             active: true,
@@ -179,16 +181,16 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
               onChange={handleInputChange}
               required
             />
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Privacy Level"
-              name="privacyLevel"
-              type="number"
-              value={formData.privacyLevel}
-              onChange={handleInputChange}
-              required
-            />
+            <Box sx={{ mt: 2, mb: 1 }}>
+              <PrivacyLevelInput
+                value={formData.privacyLevel}
+                onChange={(score) =>
+                  setFormData((prevData) => ({ ...prevData, privacyLevel: score }))
+                }
+                name="privacyLevel"
+                required
+              />
+            </Box>
             {formData.vendor !== "openai" &&
               formData.vendor !== "anthropic" && (
                 <TextField

@@ -89,8 +89,9 @@ export class MainPage {
         await this.UserGroupsLink.click();
     }
 
+    /** Filters sit under Context management (next to Data sources and Tools). */
     async navigateToFiltersMiddleware() {
-        await this.GovernanceButton.click();
+        await this.ContextManagementButton.click();
         await this.FiltersMiddlewareLink.click();
     }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import PrivacyLevelChip from "../../admin/components/common/privacy/PrivacyLevelChip";
 import pubClient from "../../admin/utils/pubClient";
 import {
   Container,
@@ -1145,9 +1146,13 @@ const SubmissionForm = () => {
             <AccordionDetails>
               <Grid container spacing={2}>
                 <Grid item xs={12}>
-                  <Typography id="suggested-privacy-label" gutterBottom>
-                    Suggested privacy level
-                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                    <Typography id="suggested-privacy-label">
+                      Suggested privacy level
+                    </Typography>
+                    {/* The named level the score falls in, same chip as the admin pages. */}
+                    <PrivacyLevelChip score={meta.suggested_privacy} />
+                  </Box>
                   {/* The slider carried no accessible name, and a value that
                       decides whether the resource can ever be used deserves a
                       typable input, not only a drag target. */}
@@ -1181,8 +1186,8 @@ const SubmissionForm = () => {
                     />
                   </Box>
                   <Typography variant="caption" color="text.secondary">
-                    0 = public data, 100 = highly sensitive. Admin will set the
-                    final score.
+                    Public 0–25, Internal 26–50, Confidential 51–75, Restricted
+                    76–100. An admin sets the final level on approval.
                   </Typography>
                 </Grid>
                 <Grid item xs={12}>

@@ -110,6 +110,9 @@ const GroupsTable = ({
       enableSearch={true}
       onSearch={handleSearch}
       searchTerm={searchTerm}
+      // useGroups debounces the request itself, so the box reports at once.
+      searchDebounceMs={0}
+      ariaLabel="Teams"
       searchPlaceholder="Search by name"
       sortConfig={sortConfig}
       onSortChange={handleSortChange}

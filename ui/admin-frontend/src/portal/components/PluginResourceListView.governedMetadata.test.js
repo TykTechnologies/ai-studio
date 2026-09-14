@@ -60,7 +60,7 @@ describe("PluginResourceListView governed metadata badges", () => {
     expect(screen.getByText("Lifecycle state: Active")).toBeInTheDocument();
     expect(screen.getAllByTestId("governed-metadata-badges")).toHaveLength(1);
     expect(screen.getByText("Refund prompt")).toBeInTheDocument();
-    expect(screen.getByText("Privacy: 40")).toBeInTheDocument();
+    expect(screen.getByTestId("privacy-level-chip")).toHaveTextContent("Internal · 40");
     expect(screen.queryByText("Other type")).not.toBeInTheDocument();
   });
 

@@ -113,9 +113,10 @@ func (s *Service) GetCatalogueActiveLLMs(catalogueID uint) (models.LLMs, error) 
 	return llms, nil
 }
 
-func (s *Service) GetAllCatalogues(pageSize int, pageNumber int, all bool) (models.Catalogues, int64, int, error) {
+func (s *Service) GetAllCatalogues(pageSize int, pageNumber int, all bool, opts ...ListOptions) (models.Catalogues, int64, int, error) {
 	var catalogues models.Catalogues
-	totalCount, totalPages, err := catalogues.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := catalogues.GetAll(s.DB, pageSize, pageNumber, all,
+		firstListOptions(opts).Scopes("name")...)
 	if err != nil {
 		return nil, 0, 0, err
 	}

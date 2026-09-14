@@ -1,69 +1,49 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  Typography,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Menu,
-  MenuItem,
-  Snackbar,
-  Box,
-  Chip,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import { Typography, Alert, Box, Chip } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import DataTable from "../components/common/DataTable";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+
+const chips = (items, labelOf) => (
+  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+    {(items || []).map((item) => (
+      <Chip
+        key={item.id}
+        label={labelOf(item)}
+        size="small"
+        sx={{ marginRight: 0.5, marginBottom: 0.5 }}
+      />
+    ))}
+  </Box>
+);
 
 const DataCatalogList = () => {
   const navigate = useNavigate();
   const [dataCatalogs, setDataCatalogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedCatalog, setSelectedCatalog] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
   const fetchDataCatalogs = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/data-catalogues", {
-        params: {
-          page,
-          page_size: pageSize,
-        },
-      });
+      const response = await apiClient.get("/data-catalogues", { params: queryParams });
       setDataCatalogs(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -75,40 +55,31 @@ const DataCatalogList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, updatePaginationData]);
+  }, [queryParams, updatePaginationData]);
 
   useEffect(() => {
     fetchDataCatalogs();
   }, [fetchDataCatalogs]);
 
-  const handleMenuOpen = (event, catalog) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedCatalog(catalog);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  // No /bulk endpoint for data catalogues: deletes go one request per item.
+  const bulk = useBulkActions({
+    items: dataCatalogs,
+    resource: "data-catalogues",
+    singular: "data catalog",
+    plural: "data catalogs",
+    notify,
+    refresh: fetchDataCatalogs,
+  });
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/data-catalogues/${id}`);
-      setSnackbar({
-        open: true,
-        message: "Data catalog deleted successfully",
-        severity: "success",
-      });
+      notify("Data catalog deleted successfully");
       fetchDataCatalogs();
     } catch (error) {
       console.error("Error deleting data catalog", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete data catalog",
-        severity: "error",
-      });
+      notify("Failed to delete data catalog", "error");
     }
-    handleMenuClose();
   };
 
   const handleEdit = (id) => {
@@ -119,20 +90,34 @@ const DataCatalogList = () => {
     navigate("/admin/catalogs/data/new");
   };
 
-  const handleCatalogClick = (id) => {
-    navigate(`/admin/catalogs/data/${id}`);
+  const handleCatalogClick = (catalog) => {
+    navigate(`/admin/catalogs/data/${catalog.id}`);
   };
 
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
+  const columns = useMemo(() => [
+    { field: "name", headerName: "Name", sortable: true, renderCell: (catalog) => catalog.attributes.name },
+    { field: "short_description", headerName: "Description", renderCell: (catalog) => catalog.attributes.short_description },
+    {
+      field: "datasources",
+      headerName: "Data sources",
+      renderCell: (catalog) => chips(catalog.attributes.datasources, (datasource) => datasource.attributes.name),
+    },
+    {
+      field: "tags",
+      headerName: "Tags",
+      renderCell: (catalog) => chips(catalog.attributes.tags, (tag) => tag.attributes.name),
+    },
+  ], []);
 
-  if (loading && dataCatalogs.length === 0) {
-    return <CircularProgress />;
-  }
+  const rowActions = [
+    { key: "edit", label: "Edit data catalog", onClick: (catalog) => handleEdit(catalog.id) },
+    { key: "delete", label: "Delete data catalog", onClick: (catalog) => handleDelete(catalog.id) },
+  ];
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && dataCatalogs.length === 0) {
     return <Alert severity="error">{error}</Alert>;
@@ -154,120 +139,52 @@ const DataCatalogList = () => {
           </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of data sources that you can assign to specific teams to manage access easily.</Typography>  
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of data sources that you can assign to specific teams to manage access easily.</Typography>
         </Box>
         <ContentBox>
-          {dataCatalogs.length === 0 ? (
-            <EmptyStateWidget
-              title="No data catalogs found"
-              description="Click the button below to add a new data catalog."
-              buttonText="Add Data Catalog"
-              buttonIcon={<AddIcon />}
-              onButtonClick={handleAddDataCatalog}
-            />
-          ) : (
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell>Name</StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Data sources</StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Tags</StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {dataCatalogs.map((catalog) => (
-                    <StyledTableRow
-                      key={catalog.id}
-                      onClick={() => handleCatalogClick(catalog.id)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <StyledTableCell>{catalog.attributes.name}</StyledTableCell>
-                      <StyledTableCell>
-                        {catalog.attributes.short_description}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Box
-                          sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
-                        >
-                          {catalog.attributes.datasources.map((datasource) => (
-                            <Chip
-                              key={datasource.id}
-                              label={datasource.attributes.name}
-                              size="small"
-                              sx={{ marginRight: 0.5, marginBottom: 0.5 }}
-                            />
-                          ))}
-                        </Box>
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Box
-                          sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
-                        >
-                          {catalog.attributes.tags.map((tag) => (
-                            <Chip
-                              key={tag.id}
-                              label={tag.attributes.name}
-                              size="small"
-                              sx={{ marginRight: 0.5, marginBottom: 0.5 }}
-                            />
-                          ))}
-                        </Box>
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        <Can permission={P.DATA_CATALOGUES_WRITE}>
-                          <IconButton
-                            onClick={(event) => handleMenuOpen(event, catalog)}
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
-                        </Can>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <PaginationControls
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
+          <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+          <Can permission={P.DATA_CATALOGUES_WRITE}>
+            {(canWrite) => (
+              <DataTable
+                {...tableProps}
+                ariaLabel="Data catalogs"
+                searchPlaceholder="Search data catalogs by name..."
+                columns={columns}
+                data={dataCatalogs}
+                loading={loading}
+                onRowClick={handleCatalogClick}
+                actions={canWrite ? rowActions : undefined}
+                {...(canWrite ? bulk.selectionProps : {})}
+                bulkActions={canWrite ? bulkActions : undefined}
+                emptyState={
+                  !searchTerm ? (
+                    <EmptyStateWidget
+                      title="No data catalogs found"
+                      description="Click the button below to add a new data catalog."
+                      buttonText="Add Data Catalog"
+                      buttonIcon={<AddIcon />}
+                      onButtonClick={canWrite ? handleAddDataCatalog : undefined}
+                    />
+                  ) : undefined
+                }
               />
-            </StyledPaper>
-          )}
+            )}
+          </Can>
         </ContentBox>
       </>
 
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={() => handleEdit(selectedCatalog?.id)}>
-          Edit data catalog
-        </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedCatalog?.id)}>
-          Delete data catalog
-        </MenuItem>
-      </Menu>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath={null}
+        objectLabel="data catalog"
+        objectLabelPlural="data catalogs"
+        items={bulk.deleteDialogItems}
+        consequence="Teams assigned these catalogs lose access to the data sources in them."
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <FeedbackSnackbar {...snackbarProps} />
     </>
   );
 };

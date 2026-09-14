@@ -152,6 +152,23 @@ func (a *API) getFilterDependents(c *gin.Context) {
 	})
 }
 
+// @Summary Get app dependents
+// @Description List the agents that reference an app (agent_configs.app_id); the other arrays are always present and empty
+// @Tags apps
+// @Produce json
+// @Param id path int true "App ID"
+// @Success 200 {object} DependentsResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Router /apps/{id}/dependents [get]
+// @Security BearerAuth
+func (a *API) getAppDependents(c *gin.Context) {
+	a.respondDependents(c, dependentsLookup{
+		exists: func(id uint) (bool, error) { return a.rowExists(&models.App{}, id) },
+		fetch:  a.service.GetAppDependents,
+	})
+}
+
 // @Summary Get model router dependents
 // @Description List what references a model router (nothing in the data model does today, so the arrays are empty)
 // @Tags model-routers

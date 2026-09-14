@@ -9,9 +9,9 @@ import {
   Typography,
   CircularProgress,
   Container,
-  Chip,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
+import PrivacyLevelChip from "../../admin/components/common/privacy/PrivacyLevelChip";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
 
 /**
@@ -108,13 +108,7 @@ const PluginResourceListView = () => {
                     </Typography>
                   )}
                   {inst.privacy_score > 0 && (
-                    <Chip
-                      label={`Privacy: ${inst.privacy_score}`}
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                      sx={{ mb: 1 }}
-                    />
+                    <PrivacyLevelChip score={inst.privacy_score} sx={{ mb: 1 }} />
                   )}
                   <GovernedMetadataBadges items={inst.governed_metadata} sx={{ mt: 1 }} />
                 </CardContent>

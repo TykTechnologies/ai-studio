@@ -61,6 +61,8 @@ import {
 } from "../../utils/vendorUtils";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import PublishSwitch from "../rbac/PublishSwitch";
+import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
+import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
 import { P } from "../../rbac/permissions";
 
 const SectionTitle = ({ children }) => (
@@ -307,7 +309,7 @@ const DatasourceForm = () => {
       newErrors.db_source_type = "Vector Database Type is required";
     if (!datasource.embed_vendor.trim())
       newErrors.embed_vendor = "Embedding Service Vendor is required";
-    if (datasource.privacy_score < 0 || datasource.privacy_score > 100)
+    if (!isValidPrivacyScore(datasource.privacy_score))
       newErrors.privacy_score = "Privacy level must be between 0 and 100";
     if (!datasource.user_id) newErrors.user_id = "User is required";
     setErrors(newErrors);
@@ -645,25 +647,13 @@ const DatasourceForm = () => {
               )}
             </Grid>
             <Grid item xs={12}>
-              <Typography variant="subtitle2" gutterBottom>
-                Privacy levels
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLM providers with lower privacy levels can’t access higher-level data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
-              </Typography>
-              <TextField
-                fullWidth
-                name="privacy_score"
-                type="number"
+              {/* One privacy control everywhere (UX review M4): a named level
+                  with the 0–100 score alongside. */}
+              <PrivacyLevelInput
                 value={datasource.privacy_score}
-                onChange={handleChange}
+                onChange={(score) => setDatasource((prev) => ({ ...prev, privacy_score: score }))}
                 error={!!errors.privacy_score}
                 helperText={errors.privacy_score}
-                inputProps={{
-                  min: 0,
-                  max: 100,
-                  step: 1,
-                }}
               />
             </Grid>
             <Grid item xs={12}>

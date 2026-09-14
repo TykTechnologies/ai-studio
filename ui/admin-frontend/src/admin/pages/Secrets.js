@@ -1,74 +1,75 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import apiClient from "../utils/apiClient";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
 import WarningIcon from "@mui/icons-material/Warning";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import DataTable from "../components/common/DataTable";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
   Typography,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Menu,
-  MenuItem,
   Box,
-  Snackbar,
   Paper,
   Chip,
   Link,
 } from "@mui/material";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+
+// Links each LLM that references the secret as $SECRET/<name>.
+const renderReferencedBy = (referencedBy) => {
+  const refs = Array.isArray(referencedBy) ? referencedBy : [];
+  if (refs.length === 0) {
+    return (
+      <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
+        Not referenced
+      </Typography>
+    );
+  }
+  return (
+    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+      {refs.map((ref, index) => (
+        <React.Fragment key={`${ref.type}-${ref.id}`}>
+          {ref.type === "llm" ? (
+            <Link component={RouterLink} to={`/admin/llms/${ref.id}`}>
+              {ref.name}
+            </Link>
+          ) : (
+            <span>{ref.name}</span>
+          )}
+          {index < refs.length - 1 ? "," : ""}
+        </React.Fragment>
+      ))}
+    </Box>
+  );
+};
+
+const secretName = (secret) => secret?.attributes?.var_name || String(secret?.id ?? "");
 
 const Secrets = () => {
   const navigate = useNavigate();
   const [secrets, setSecrets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedSecret, setSelectedSecret] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
   const fetchSecrets = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/secrets", {
-        params: {
-          page,
-          page_size: pageSize,
-        },
-      });
+      const response = await apiClient.get("/secrets", { params: queryParams });
       setSecrets(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -84,40 +85,31 @@ const Secrets = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, updatePaginationData]);
+  }, [queryParams, updatePaginationData]);
 
   useEffect(() => {
     fetchSecrets();
   }, [fetchSecrets]);
 
-  const handleMenuOpen = (event, secret) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedSecret(secret);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const bulk = useBulkActions({
+    items: secrets,
+    resource: "secrets",
+    singular: "secret",
+    plural: "secrets",
+    nameOf: secretName,
+    notify,
+    refresh: fetchSecrets,
+  });
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/secrets/${id}`);
-      setSnackbar({
-        open: true,
-        message: "Secret deleted successfully",
-        severity: "success",
-      });
+      notify("Secret deleted successfully");
       fetchSecrets();
     } catch (error) {
       console.error("Error deleting secret", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete secret",
-        severity: "error",
-      });
+      notify("Failed to delete secret", "error");
     }
-    handleMenuClose();
   };
 
   const handleSecretClick = (secret) => {
@@ -128,44 +120,37 @@ const Secrets = () => {
     navigate("/admin/secrets/new");
   };
 
-  // Links each LLM that references the secret as $SECRET/<name>.
-  const renderReferencedBy = (referencedBy) => {
-    const refs = Array.isArray(referencedBy) ? referencedBy : [];
-    if (refs.length === 0) {
-      return (
-        <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
-          Not referenced
-        </Typography>
-      );
-    }
-    return (
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
-        {refs.map((ref, index) => (
-          <React.Fragment key={`${ref.type}-${ref.id}`}>
-            {ref.type === "llm" ? (
-              <Link component={RouterLink} to={`/admin/llms/${ref.id}`}>
-                {ref.name}
-              </Link>
-            ) : (
-              <span>{ref.name}</span>
-            )}
-            {index < refs.length - 1 ? "," : ""}
-          </React.Fragment>
-        ))}
-      </Box>
-    );
-  };
+  const columns = useMemo(() => [
+    { field: "id", headerName: "ID", sortable: true },
+    { field: "var_name", headerName: "Variable Name", sortable: true, renderCell: (secret) => secret.attributes.var_name },
+    {
+      field: "has_value",
+      headerName: "Value",
+      // The list never returns the value itself, only whether one is stored.
+      renderCell: (secret) =>
+        secret.attributes.has_value ? (
+          <Chip label="Set" color="success" size="small" variant="outlined" />
+        ) : (
+          <Chip label="Empty" color="warning" size="small" variant="outlined" />
+        ),
+    },
+    {
+      field: "referenced_by",
+      headerName: "Used by",
+      cellProps: () => ({ onClick: (event) => event.stopPropagation() }),
+      renderCell: (secret) => renderReferencedBy(secret.attributes.referenced_by),
+    },
+  ], []);
 
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
+  const rowActions = useMemo(() => [
+    { key: "edit", label: "Edit secret", onClick: (secret) => navigate(`/admin/secrets/edit/${secret.id}`) },
+    { key: "delete", label: "Delete secret", onClick: (secret) => setDeleteTarget(secret) },
+  ], [navigate]);
 
-  if (loading && secrets.length === 0) {
-    return <CircularProgress />;
-  }
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && secrets.length === 0) {
     return (
@@ -234,89 +219,36 @@ const Secrets = () => {
         </Can>
       </TitleBox>
       <ContentBox>
-        {secrets.length === 0 ? (
-          <EmptyStateWidget
-            title="No secrets found"
-            description="Click the button below to add a new secret."
-            buttonText="Add Secret"
-            buttonIcon={<AddIcon />}
-            onButtonClick={handleAddSecret}
-          />
-        ) : (
-          <StyledPaper>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableHeaderCell>ID</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Variable Name</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Value</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Used by</StyledTableHeaderCell>
-                  <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {secrets.map((secret) => (
-                  <StyledTableRow
-                    key={secret.id}
-                    onClick={() => handleSecretClick(secret)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <StyledTableCell>{secret.id}</StyledTableCell>
-                    <StyledTableCell>{secret.attributes.var_name}</StyledTableCell>
-                    <StyledTableCell>
-                      {/* The list never returns the value itself, only whether one is stored. */}
-                      {secret.attributes.has_value ? (
-                        <Chip label="Set" color="success" size="small" variant="outlined" />
-                      ) : (
-                        <Chip label="Empty" color="warning" size="small" variant="outlined" />
-                      )}
-                    </StyledTableCell>
-                    <StyledTableCell onClick={(event) => event.stopPropagation()}>
-                      {renderReferencedBy(secret.attributes.referenced_by)}
-                    </StyledTableCell>
-                    <StyledTableCell align="right">
-                      <Can permission={P.SECRETS_WRITE}>
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, secret)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
-                      </Can>
-                    </StyledTableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <PaginationControls
-              page={page}
-              pageSize={pageSize}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              onPageSizeChange={handlePageSizeChange}
+        <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+        <Can permission={P.SECRETS_WRITE}>
+          {(canWrite) => (
+            <DataTable
+              {...tableProps}
+              ariaLabel="Secrets"
+              searchPlaceholder="Search secrets by variable name..."
+              columns={columns}
+              data={secrets}
+              loading={loading}
+              onRowClick={handleSecretClick}
+              getRowLabel={secretName}
+              actions={canWrite ? rowActions : undefined}
+              {...(canWrite ? bulk.selectionProps : {})}
+              bulkActions={canWrite ? bulkActions : undefined}
+              emptyState={
+                !searchTerm ? (
+                  <EmptyStateWidget
+                    title="No secrets found"
+                    description="Click the button below to add a new secret."
+                    buttonText="Add Secret"
+                    buttonIcon={<AddIcon />}
+                    onButtonClick={canWrite ? handleAddSecret : undefined}
+                  />
+                ) : undefined
+              }
             />
-          </StyledPaper>
-        )}
+          )}
+        </Can>
       </ContentBox>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem
-          onClick={() => navigate(`/admin/secrets/edit/${selectedSecret?.id}`)}
-        >
-          Edit secret
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setDeleteTarget(selectedSecret);
-            handleMenuClose();
-          }}
-        >
-          Delete secret
-        </MenuItem>
-      </Menu>
 
       <DeleteConfirmationDialog
         open={Boolean(deleteTarget)}
@@ -332,20 +264,18 @@ const Secrets = () => {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath="secrets"
+        objectLabel="secret"
+        objectLabelPlural="secrets"
+        items={bulk.deleteDialogItems}
+        consequence="Deleting them removes the stored values; anything referencing them as $SECRET/name will stop authenticating."
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
+
+      <FeedbackSnackbar {...snackbarProps} />
     </>
   );
 };

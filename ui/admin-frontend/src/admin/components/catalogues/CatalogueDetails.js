@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import Section from "../common/Section";
+import { CatalogueTeamsSection } from "../common/UsedBySection";
 import {
   Typography,
   CircularProgress,
@@ -21,12 +23,6 @@ import {
   FieldValue,
   PrimaryButton,
 } from "../../styles/sharedStyles";
-
-const SectionTitle = ({ children }) => (
-  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
-    {children}
-  </Typography>
-);
 
 const CatalogueDetails = () => {
   const [catalogue, setCatalogue] = useState(null);
@@ -81,48 +77,50 @@ const CatalogueDetails = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>Catalog Information</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Name:</FieldLabel>
+        <Section title="Catalog Information">
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Name:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{catalogue.attributes.name}</FieldValue>
+            </Grid>
+            {catalogue.attributes.description && (
+              <>
+                <Grid item xs={3}>
+                  <FieldLabel>Description:</FieldLabel>
+                </Grid>
+                <Grid item xs={9}>
+                  <FieldValue>{catalogue.attributes.description}</FieldValue>
+                </Grid>
+              </>
+            )}
           </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{catalogue.attributes.name}</FieldValue>
-          </Grid>
-          {catalogue.attributes.description && (
-            <>
-              <Grid item xs={3}>
-                <FieldLabel>Description:</FieldLabel>
-              </Grid>
-              <Grid item xs={9}>
-                <FieldValue>{catalogue.attributes.description}</FieldValue>
-              </Grid>
-            </>
-          )}
-        </Grid>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
+        <Section title="LLM providers in this catalog">
+          <List>
+            {llms.length > 0 ? (
+              llms.map((llm) => (
+                <React.Fragment key={llm.id}>
+                  <ListItem>
+                    <ListItemText
+                      primary={llm.attributes.name}
+                      secondary={llm.attributes.short_description}
+                    />
+                  </ListItem>
+                  <Divider />
+                </React.Fragment>
+              ))
+            ) : (
+              <ListItem>
+                <ListItemText primary="No LLM providers in this catalog" />
+              </ListItem>
+            )}
+          </List>
+        </Section>
 
-        <SectionTitle>LLM providers in this catalog</SectionTitle>
-        <List>
-          {llms.length > 0 ? (
-            llms.map((llm) => (
-              <React.Fragment key={llm.id}>
-                <ListItem>
-                  <ListItemText
-                    primary={llm.attributes.name}
-                    secondary={llm.attributes.short_description}
-                  />
-                </ListItem>
-                <Divider />
-              </React.Fragment>
-            ))
-          ) : (
-            <ListItem>
-              <ListItemText primary="No LLM providers in this catalog" />
-            </ListItem>
-          )}
-        </List>
+        <CatalogueTeamsSection resourcePath="catalogues" id={id} />
 
         <Box mt={4}>
           <PrimaryButton

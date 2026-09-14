@@ -236,6 +236,8 @@ func (a *API) deleteSecret(c *gin.Context) {
 // @Param page_size query int false "Number of items per page"
 // @Param page query int false "Page number"
 // @Param all query bool false "Return all records without pagination"
+// @Param search query string false "Case-insensitive substring match on name and description fields"
+// @Param sort query string false "Sort field, prefix with - for descending. One of: id, name (var_name), created_at, updated_at"
 // @Success 200 {object} SecretListResponse
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse "When TYK_AI_SECRET_KEY is not set"
@@ -246,8 +248,12 @@ func (a *API) listSecrets(c *gin.Context) {
 		return
 	}
 	pageSize, pageNumber, all := getPaginationParams(c)
+	opts, ok := parseListQuery(c, secretSortFields)
+	if !ok {
+		return
+	}
 
-	secrets, totalCount, totalPages, err := secrets.ListSecrets(a.config.DB, pageSize, pageNumber, all)
+	secrets, totalCount, totalPages, err := secrets.ListSecrets(a.config.DB, pageSize, pageNumber, all, opts.Scopes("var_name")...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

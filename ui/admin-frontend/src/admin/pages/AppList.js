@@ -1,42 +1,25 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useDebounce } from "use-debounce";
 import apiClient from "../utils/apiClient";
 import { deactivateCredential } from "../services/appService";
 import { APP_STATUS, APP_STATUS_ORDER, getAppStatus } from "../../utils/appStatus";
-import SearchInput from "../components/common/SearchInput";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  Typography,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Menu,
-  MenuItem,
-  Snackbar,
-  Box,
-  Chip,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import { Typography, Alert, Box, Chip } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import WarningIcon from "@mui/icons-material/Warning";
 import SecurityIcon from "@mui/icons-material/Security";
+import DataTable from "../components/common/DataTable";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import ConfirmationDialog from "../components/common/ConfirmationDialog";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
 
@@ -44,77 +27,46 @@ const AppList = () => {
   const navigate = useNavigate();
   const [apps, setApps] = useState([]);
   const [users, setUsers] = useState({});
-  const [credentials, setCredentials] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedApp, setSelectedApp] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
   const [confirmDialog, setConfirmDialog] = useState({
     open: false,
     appId: null,
     appName: "",
   });
-  const [sortField, setSortField] = useState("id");
-  const [sortOrder, setSortOrder] = useState("desc");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
-  const isFirstRender = useRef(true);
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, sortConfig, updatePaginationData, searchTerm, tableProps } = useListQuery({
+    initialSort: { field: "id", direction: "desc" },
+  });
 
   const fetchApps = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Handle special sort fields that need custom handling
-      let sortParam = sortField;
-      if (sortField === "approval_status") {
-        // Use a default sort field since approval status is calculated client-side
-        sortParam = "id";
-      } else if (sortField === "monthly_budget") {
-        // Use the correct field name for the API
-        sortParam = "monthly_budget";
-      }
-
-      const params = {
-        page,
-        page_size: pageSize,
-        sort: `${sortOrder === "desc" ? "-" : ""}${sortParam}`,
-      };
-
-      // Only include search param if 2+ characters entered
-      if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
-        params.search = debouncedSearchTerm;
+      const params = { ...queryParams };
+      // Approval status is calculated client-side, so the server sorts by id
+      // and the page is re-ordered below.
+      if (sortConfig?.field === "approval_status") {
+        params.sort = sortConfig.direction === "desc" ? "-id" : "id";
       }
 
       const response = await apiClient.get("/apps", { params });
-      
+
       let appsData = response.data.data || [];
-      
+
       // If sorting by approval status, we need to sort client-side
-      if (sortField === "approval_status") {
+      if (sortConfig?.field === "approval_status") {
         appsData = [...appsData].sort((a, b) => {
           const statusA = getApprovalStatus(a);
           const statusB = getApprovalStatus(b);
-          
+
           // Order: Active > Awaiting approval > No credential > Disabled
           const comparison = APP_STATUS_ORDER[statusA] - APP_STATUS_ORDER[statusB];
-          return sortOrder === "asc" ? comparison : -comparison;
+          return sortConfig.direction === "asc" ? comparison : -comparison;
         });
       }
-      
+
       setApps(appsData);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -126,47 +78,16 @@ const AppList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortField, sortOrder, updatePaginationData, credentials, debouncedSearchTerm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryParams, sortConfig, updatePaginationData]);
 
   useEffect(() => {
     fetchApps();
   }, [fetchApps]);
 
-  // Reset to page 1 when search term changes (but not on initial render)
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    handlePageChange(1);
-  }, [debouncedSearchTerm, handlePageChange]);
-
-  const handleSearch = useCallback((value) => {
-    setSearchTerm(value);
-  }, []);
-
   useEffect(() => {
     fetchUsers();
-    fetchCredentials();
   }, []);
-
-  const fetchCredentials = async () => {
-    try {
-      const response = await apiClient.get("/credentials", {
-        params: {
-          all: true,
-          page_size: 1000
-        }
-      });
-      const credentialMap = {};
-      response.data.data.forEach((credential) => {
-        credentialMap[credential.id] = credential.attributes;
-      });
-      setCredentials(credentialMap);
-    } catch (error) {
-      console.error("Error fetching credentials", error);
-    }
-  };
 
   const fetchUsers = async () => {
     try {
@@ -188,25 +109,25 @@ const AppList = () => {
     }
   };
 
-  const handleMenuOpen = (event, app) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedApp(app);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const bulk = useBulkActions({
+    items: apps,
+    resource: "apps",
+    singular: "app",
+    plural: "apps",
+    notify,
+    refresh: fetchApps,
+  });
 
   // Same words as the portal (utils/appStatus.js): Active, Awaiting approval,
   // No credential, Disabled.
+  // The list response carries credential_active (null when the app has no
+  // credential), so no separate credentials fetch is needed.
   const getApprovalStatus = (app) => {
-    const credentialId = app.attributes.credential_id;
-    const credential = credentialId ? credentials[credentialId] : null;
+    const credentialActive = app.attributes.credential_active;
     return getAppStatus({
       isActive: app.attributes.is_active,
-      hasCredential: Boolean(credential),
-      credentialActive: credential?.active,
+      hasCredential: credentialActive !== null && credentialActive !== undefined,
+      credentialActive: Boolean(credentialActive),
     });
   };
 
@@ -224,54 +145,35 @@ const AppList = () => {
         </Box>
       );
     }
-    
+
     return users[app.attributes.user_id] || "Unknown";
   };
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/apps/${id}`);
-      setSnackbar({
-        open: true,
-        message: "App deleted successfully",
-        severity: "success",
-      });
+      notify("App deleted successfully");
       fetchApps();
     } catch (error) {
       console.error("Error deleting app", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete app",
-        severity: "error",
-      });
+      notify("Failed to delete app", "error");
     }
-    handleMenuClose();
   };
 
   // Approve = activate the app's credential, the same PATCH the app form
   // sends from its "active" switch.
   const handleApproveCredentials = async (app) => {
-    handleMenuClose();
     const credentialId = app?.attributes?.credential_id;
     if (!credentialId) return;
     try {
       await apiClient.patch(`/credentials/${credentialId}`, {
         data: { type: "credentials", attributes: { active: true } },
       });
-      setSnackbar({
-        open: true,
-        message: "App credentials approved",
-        severity: "success",
-      });
-      fetchCredentials();
+      notify("App credentials approved");
       fetchApps();
     } catch (error) {
       console.error("Error approving credentials", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to approve credentials",
-        severity: "error",
-      });
+      notify("Failed to approve credentials", "error");
     }
   };
 
@@ -281,27 +183,17 @@ const AppList = () => {
       appId: app.id,
       appName: app.attributes.name,
     });
-    handleMenuClose();
   };
 
   const handleConfirmDisableCredentials = async () => {
     try {
       await deactivateCredential(confirmDialog.appId);
-      setSnackbar({
-        open: true,
-        message: "App credentials disabled successfully",
-        severity: "success",
-      });
+      notify("App credentials disabled successfully");
       // Refresh credentials and apps data
-      fetchCredentials();
       fetchApps();
     } catch (error) {
       console.error("Error disabling credentials", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to disable credentials",
-        severity: "error",
-      });
+      notify("Failed to disable credentials", "error");
     }
     setConfirmDialog({ open: false, appId: null, appName: "" });
   };
@@ -314,20 +206,50 @@ const AppList = () => {
     navigate(`/admin/apps/${app.id}`);
   };
 
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
-
   const handleAddApp = () => {
     navigate("/admin/apps/new");
   };
 
-  if (loading && apps.length === 0) {
-    return <CircularProgress />;
-  }
+  const columns = [
+    { field: "id", headerName: "ID", sortable: true },
+    { field: "name", headerName: "Name", sortable: true, renderCell: (app) => app.attributes.name },
+    { field: "description", headerName: "Description", sortable: true, renderCell: (app) => app.attributes.description },
+    { field: "user_id", headerName: "User", sortable: true, renderCell: (app) => getUserDisplay(app) },
+    { field: "approval_status", headerName: "Status", sortable: true, renderCell: (app) => getApprovalStatus(app) },
+    {
+      field: "monthly_budget",
+      headerName: "Budget",
+      sortable: true,
+      renderCell: (app) =>
+        app.attributes.monthly_budget
+          ? `$${parseFloat(app.attributes.monthly_budget).toFixed(2)}`
+          : "Not set",
+    },
+  ];
+
+  const rowActions = [
+    { key: "edit", label: "Edit app", onClick: (app) => navigate(`/admin/apps/edit/${app.id}`) },
+    {
+      key: "approve",
+      label: "Approve credentials",
+      icon: <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />,
+      hidden: (app) => !app || getApprovalStatus(app) !== APP_STATUS.AWAITING_APPROVAL,
+      onClick: handleApproveCredentials,
+    },
+    {
+      key: "disable",
+      label: "Disable credentials",
+      icon: <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />,
+      disabled: (app) => !app || getApprovalStatus(app) !== APP_STATUS.ACTIVE,
+      onClick: handleDisableCredentials,
+    },
+    { key: "delete", label: "Delete app", onClick: (app) => handleDelete(app.id) },
+  ];
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: true }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && apps.length === 0) {
     return <Alert severity="error">{error}</Alert>;
@@ -352,179 +274,49 @@ const AppList = () => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to LLMs and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with LLMs or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>
         </Box>
         <ContentBox>
-          <Box sx={{ mb: 2, maxWidth: 400 }}>
-            <SearchInput
-              value={searchTerm}
-              onChange={handleSearch}
-              placeholder="Search by name, description, or user..."
-            />
-          </Box>
-          {apps.length === 0 && !debouncedSearchTerm ? (
-            <EmptyStateWidget
-              title="No apps configured yet"
-              description="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search data sources. Click the button below to add a new app configuration."
-              buttonText="Add App"
-              buttonIcon={<AddIcon />}
-              onButtonClick={handleAddApp}
-            />
-          ) : (
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell
-                      onClick={() => {
-                        setSortOrder(sortField === "id" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                        setSortField("id");
-                      }}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      ID {sortField === "id" && (sortOrder === "asc" ? "↑" : "↓")}
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => {
-                        setSortOrder(sortField === "name" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                        setSortField("name");
-                      }}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      Name {sortField === "name" && (sortOrder === "asc" ? "↑" : "↓")}
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => {
-                        setSortOrder(sortField === "description" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                        setSortField("description");
-                      }}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      Description {sortField === "description" && (sortOrder === "asc" ? "↑" : "↓")}
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => {
-                        setSortOrder(sortField === "user_id" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                        setSortField("user_id");
-                      }}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      User {sortField === "user_id" && (sortOrder === "asc" ? "↑" : "↓")}
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => {
-                        setSortOrder(sortField === "approval_status" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                        setSortField("approval_status");
-                      }}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      Status {sortField === "approval_status" && (sortOrder === "asc" ? "↑" : "↓")}
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => {
-                        setSortOrder(sortField === "monthly_budget" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                        setSortField("monthly_budget");
-                      }}
-                      sx={{ cursor: 'pointer' }}
-                    >
-                      Budget {sortField === "monthly_budget" && (sortOrder === "asc" ? "↑" : "↓")}
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {apps.length === 0 && debouncedSearchTerm ? (
-                    <TableRow>
-                      <StyledTableCell colSpan={7} align="center">
-                        No apps found matching "{debouncedSearchTerm}"
-                      </StyledTableCell>
-                    </TableRow>
-                  ) : (
-                    apps.map((app) => (
-                      <StyledTableRow
-                        key={app.id}
-                        onClick={() => handleAppClick(app)}
-                        sx={{ cursor: "pointer" }}
-                      >
-                        <StyledTableCell>{app.id}</StyledTableCell>
-                        <StyledTableCell>{app.attributes.name}</StyledTableCell>
-                        <StyledTableCell>{app.attributes.description}</StyledTableCell>
-                        <StyledTableCell>
-                          {getUserDisplay(app)}
-                        </StyledTableCell>
-                        <StyledTableCell>
-                          {getApprovalStatus(app)}
-                        </StyledTableCell>
-                        <StyledTableCell>
-                          {app.attributes.monthly_budget ?
-                            `$${parseFloat(app.attributes.monthly_budget).toFixed(2)}` :
-                            "Not set"}
-                        </StyledTableCell>
-                        <StyledTableCell align="right">
-                          <Can permission={P.APPS_WRITE}>
-                            <IconButton
-                              onClick={(event) => handleMenuOpen(event, app)}
-                            >
-                              <MoreVertIcon />
-                            </IconButton>
-                          </Can>
-                        </StyledTableCell>
-                      </StyledTableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-              <PaginationControls
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
+          <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+          <Can permission={P.APPS_WRITE}>
+            {(canWrite) => (
+              <DataTable
+                {...tableProps}
+                ariaLabel="Apps"
+                searchPlaceholder="Search by name, description, or user..."
+                columns={columns}
+                data={apps}
+                loading={loading}
+                onRowClick={handleAppClick}
+                actions={canWrite ? rowActions : undefined}
+                {...(canWrite ? bulk.selectionProps : {})}
+                bulkActions={canWrite ? bulkActions : undefined}
+                emptyMessage={searchTerm ? `No apps found matching "${searchTerm}"` : "No apps found"}
+                emptyState={
+                  !searchTerm ? (
+                    <EmptyStateWidget
+                      title="No apps configured yet"
+                      description="Apps are requests by users to access LLMs and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with LLMs, or use the portal data source API to search data sources. Click the button below to add a new app configuration."
+                      buttonText="Add App"
+                      buttonIcon={<AddIcon />}
+                      onButtonClick={canWrite ? handleAddApp : undefined}
+                    />
+                  ) : undefined
+                }
               />
-            </StyledPaper>
-          )}
+            )}
+          </Can>
         </ContentBox>
       </>
 
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem
-          onClick={() => navigate(`/admin/apps/edit/${selectedApp?.id}`)}
-        >
-          Edit app
-        </MenuItem>
-        {selectedApp && getApprovalStatus(selectedApp) === APP_STATUS.AWAITING_APPROVAL && (
-          <MenuItem onClick={() => handleApproveCredentials(selectedApp)}>
-            <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />
-            Approve credentials
-          </MenuItem>
-        )}
-        <MenuItem
-          onClick={() => handleDisableCredentials(selectedApp)}
-          disabled={!selectedApp || getApprovalStatus(selectedApp) !== APP_STATUS.ACTIVE}
-        >
-          <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />
-          Disable credentials
-        </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedApp?.id)}>
-          Delete app
-        </MenuItem>
-      </Menu>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath={null}
+        objectLabel="app"
+        objectLabelPlural="apps"
+        items={bulk.deleteDialogItems}
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <FeedbackSnackbar {...snackbarProps} />
 
       <ConfirmationDialog
         open={confirmDialog.open}

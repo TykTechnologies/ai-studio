@@ -1,4 +1,7 @@
 import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
+import Section from "../common/Section";
+import UsedBySection from "../common/UsedBySection";
+import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
@@ -18,7 +21,6 @@ import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   PrimaryOutlineButton,
@@ -36,12 +38,6 @@ import {
   getEmbedderName,
   getEmbedderLogo,
 } from "../../utils/vendorUtils";
-
-const SectionTitle = ({ children }) => (
-  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
-    {children}
-  </Typography>
-);
 
 const DatasourceDetails = () => {
   const [datasource, setDatasource] = useState(null);
@@ -125,98 +121,91 @@ const DatasourceDetails = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>Basic Information</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Name:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{datasource.attributes.name}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Short Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{datasource.attributes.short_description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Owner:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{owner ? owner.attributes.name : "Unknown"}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Vector Database Type:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <img
-                src={getVectorStoreLogo(datasource.attributes.db_source_type)}
-                alt={getVectorStoreName(datasource.attributes.db_source_type)}
-                style={{
-                  width: 24,
-                  height: 24,
-                  marginRight: 8,
-                  objectFit: "contain",
-                }}
-              />
-              <FieldValue>
-                {getVectorStoreName(datasource.attributes.db_source_type)}
-              </FieldValue>
-            </Box>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Embedding Service Vendor:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <img
-                src={getEmbedderLogo(datasource.attributes.embed_vendor)}
-                alt={getEmbedderName(datasource.attributes.embed_vendor)}
-                style={{
-                  width: 24,
-                  height: 24,
-                  marginRight: 8,
-                  objectFit: "contain",
-                }}
-              />
-              <FieldValue>
-                {getEmbedderName(datasource.attributes.embed_vendor)}
-              </FieldValue>
-            </Box>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Privacy Level:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <FieldValue>{datasource.attributes.privacy_score}</FieldValue>
-              <Tooltip
-                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the data source."
-                placement="top"
-              >
-                <HelpOutlineIcon
-                  sx={{ ml: 1, fontSize: 20, color: "text.secondary" }}
+        <Section title="Basic Information">
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Name:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{datasource.attributes.name}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Short Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{datasource.attributes.short_description}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Owner:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{owner ? owner.attributes.name : "Unknown"}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Vector Database Type:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <img
+                  src={getVectorStoreLogo(datasource.attributes.db_source_type)}
+                  alt={getVectorStoreName(datasource.attributes.db_source_type)}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    marginRight: 8,
+                    objectFit: "contain",
+                  }}
                 />
-              </Tooltip>
-            </Box>
+                <FieldValue>
+                  {getVectorStoreName(datasource.attributes.db_source_type)}
+                </FieldValue>
+              </Box>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Embedding Service Vendor:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <img
+                  src={getEmbedderLogo(datasource.attributes.embed_vendor)}
+                  alt={getEmbedderName(datasource.attributes.embed_vendor)}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    marginRight: 8,
+                    objectFit: "contain",
+                  }}
+                />
+                <FieldValue>
+                  {getEmbedderName(datasource.attributes.embed_vendor)}
+                </FieldValue>
+              </Box>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Privacy Level:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <PrivacyLevelChip score={datasource.attributes.privacy_score} />
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Active:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>
+                <FiberManualRecordIcon
+                  sx={{
+                    color: datasource.attributes.active ? "green" : "red",
+                    verticalAlign: "middle",
+                    marginRight: 1,
+                  }}
+                />
+                {datasource.attributes.active ? "Active" : "Inactive"}
+              </FieldValue>
+            </Grid>
           </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Active:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>
-              <FiberManualRecordIcon
-                sx={{
-                  color: datasource.attributes.active ? "green" : "red",
-                  verticalAlign: "middle",
-                  marginRight: 1,
-                }}
-              />
-              {datasource.attributes.active ? "Active" : "Inactive"}
-            </FieldValue>
-          </Grid>
-        </Grid>
+        </Section>
+
+        <UsedBySection resourcePath="datasources" id={id} objectLabel="data source" />
 
         <StyledAccordion>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>

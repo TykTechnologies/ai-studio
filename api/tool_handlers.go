@@ -62,6 +62,9 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
+	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
+		return
+	}
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeTool, input.Data.Attributes.GovernedMetadata, true) {
 		return
 	}
@@ -276,6 +279,9 @@ func (a *API) updateTool(c *gin.Context) {
 		})
 		return
 	}
+	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
+		return
+	}
 
 	// Flipping the active switch is the publish action on tools; an omitted
 	// switch keeps its value.
@@ -381,14 +387,20 @@ func (a *API) deleteTool(c *gin.Context) {
 // @Tags tools
 // @Accept json
 // @Produce json
+// @Param search query string false "Case-insensitive substring match on name and description fields"
+// @Param sort query string false "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at, privacy_score, active"
 // @Success 200 {array} ToolResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /tools [get]
 // @Security BearerAuth
 func (a *API) getAllTools(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	opts, ok := parseListQuery(c, toolSortFields)
+	if !ok {
+		return
+	}
 
-	tools, totalCount, totalPages, err := a.service.GetAllTools(pageSize, pageNumber, all)
+	tools, totalCount, totalPages, err := a.service.GetAllTools(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

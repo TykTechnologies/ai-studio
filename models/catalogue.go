@@ -56,10 +56,15 @@ func (c *Catalogue) GetCatalogueLLMs(db *gorm.DB) error {
 	return db.Model(c).Association("LLMs").Find(&c.LLMs)
 }
 
-func (c *Catalogues) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+func (c *Catalogues) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&Catalogue{})
 
+	// Optional search/sort scopes (services.ListOptions); applied before the
+	// count so X-Total-Count reflects the filtered set.
+	for _, scope := range scopes {
+		query = scope(query)
+	}
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
 	}

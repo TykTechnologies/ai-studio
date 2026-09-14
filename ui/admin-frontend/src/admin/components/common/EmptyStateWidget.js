@@ -1,6 +1,7 @@
 import React from "react";
 import { Paper, Typography, Box, Link } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import { PrimaryButton } from "../../styles/sharedStyles";
 // Import the image directly so it gets bundled with the JS
 import emptyStateImage from "./empty-state.png";
 
@@ -8,8 +9,20 @@ const EmptyStateWidget = ({
   title,
   description,
   learnMoreLink,
-  actions,
-}) => (
+  actions: actionsProp,
+  // Shorthand for the common single-button case; ignored when `actions` is given.
+  buttonText,
+  buttonIcon,
+  onButtonClick,
+}) => {
+  const actions =
+    actionsProp ||
+    (buttonText && onButtonClick ? (
+      <PrimaryButton variant="contained" startIcon={buttonIcon} onClick={onButtonClick}>
+        {buttonText}
+      </PrimaryButton>
+    ) : null);
+  return (
   <Paper
     sx={{
       p: 2,
@@ -58,6 +71,7 @@ const EmptyStateWidget = ({
       </Box>
     </Box>
   </Paper>
-);
+  );
+};
 
 export default EmptyStateWidget;

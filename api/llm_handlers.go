@@ -38,6 +38,9 @@ func (a *API) createLLM(c *gin.Context) {
 		})
 		return
 	}
+	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
+		return
+	}
 
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeLLM, input.Data.Attributes.GovernedMetadata, true) {
 		return
@@ -220,6 +223,9 @@ func (a *API) updateLLM(c *gin.Context) {
 	// values rather than pointers, meant an omitted field arrived as its zero
 	// value and was written -- so {"filters":[3]} wiped the provider.
 	mergeLLMPatch(&input, thisLLM, llmPatchAttributeKeys(rawBody))
+	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
+		return
+	}
 
 	// Flipping the active switch is the publish action on llms; editing an
 	// already-active provider without touching the switch is plain write.
@@ -413,14 +419,20 @@ func (a *API) deleteLLM(c *gin.Context) {
 // @Tags llms
 // @Accept json
 // @Produce json
+// @Param search query string false "Case-insensitive substring match on name and description fields"
+// @Param sort query string false "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at, privacy_score, active, vendor"
 // @Success 200 {array} LLMResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /llms [get]
 // @Security BearerAuth
 func (a *API) listLLMs(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	opts, ok := parseListQuery(c, llmSortFields)
+	if !ok {
+		return
+	}
 
-	llms, totalCount, totalPages, err := a.service.GetAllLLMs(pageSize, pageNumber, all)
+	llms, totalCount, totalPages, err := a.service.GetAllLLMs(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

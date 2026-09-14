@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import Section from "../common/Section";
+import UsedBySection from "../common/UsedBySection";
 import {
   Typography,
   CircularProgress,
   Box,
   Grid,
-  Divider,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -63,45 +64,46 @@ const FilterDetails = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Name:</FieldLabel>
+        <Section title="Filter Information">
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Name:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{filter.attributes.name}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{filter.attributes.description}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Type:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>
+                {filter.attributes.response_filter ? "Response Filter" : "Request Filter"}
+              </FieldValue>
+            </Grid>
           </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{filter.attributes.name}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{filter.attributes.description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Type:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>
-              {filter.attributes.response_filter ? "Response Filter" : "Request Filter"}
-            </FieldValue>
-          </Grid>
-        </Grid>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
+        <UsedBySection resourcePath="filters" id={id} objectLabel="filter" />
 
-        <Typography variant="h6" gutterBottom>
-          Script
-        </Typography>
-        <Box
-          sx={{
-            backgroundColor: "#f5f5f5",
-            padding: 2,
-            borderRadius: 1,
-            whiteSpace: "pre-wrap",
-            fontFamily: "monospace",
-          }}
-        >
-          {filter.attributes.script}
-        </Box>
+        <Section title="Script">
+          <Box
+            sx={{
+              backgroundColor: "#f5f5f5",
+              padding: 2,
+              borderRadius: 1,
+              whiteSpace: "pre-wrap",
+              fontFamily: "monospace",
+            }}
+          >
+            {filter.attributes.script}
+          </Box>
+        </Section>
 
         <Box mt={4} display="flex" justifyContent="flex-end">
           <PrimaryButton

@@ -28,7 +28,10 @@ export class AdminLLMProvidersPage extends PageTemplate {
     readonly DefaultModelInput: Locator;
     readonly MonthlyBudgetInput: Locator;
     readonly BudgetStartDateInput: Locator;
+    /** The 0–100 number half of the privacy control (name="privacy_score"). */
     readonly PrivacyScoreInput: Locator;
+    /** The named-level half of the privacy control (Public / Internal / Confidential / Restricted). */
+    readonly PrivacyLevelSelect: Locator;
     readonly ModelPatternInput: Locator;
     readonly AccessDetailsButton: Locator;
     readonly ApiEndpointInput: Locator;
@@ -58,6 +61,7 @@ export class AdminLLMProvidersPage extends PageTemplate {
         this.MonthlyBudgetInput = this.page.getByRole('spinbutton', { name: 'Monthly Budget' });
         this.BudgetStartDateInput = this.page.getByRole('textbox', { name: 'Budget Start Date' });
         this.PrivacyScoreInput = this.page.locator('input[name="privacy_score"]');
+        this.PrivacyLevelSelect = this.page.getByRole('combobox', { name: 'Privacy level' });
         this.ModelPatternInput = this.page.getByRole('textbox', { name: 'Model Pattern' });
         this.AccessDetailsButton = this.page.getByRole('button', { name: 'Access Details' });
         this.ApiEndpointInput = this.page.getByRole('textbox', { name: 'API Endpoint' });
@@ -76,6 +80,18 @@ export class AdminLLMProvidersPage extends PageTemplate {
 
     async goto() {
         await this.page.goto('/admin/llm-providers');
+    }
+
+    /** Picks a named privacy level from the select; the score follows to the band's default. */
+    async selectPrivacyLevel(level: 'Public' | 'Internal' | 'Confidential' | 'Restricted') {
+        await this.PrivacyLevelSelect.click();
+        await this.page.getByRole('option', { name: new RegExp(`^${level} \\(`) }).click();
+    }
+
+    /** The named level currently shown by the privacy control, e.g. "Confidential". */
+    async privacyLevelText(): Promise<string> {
+        const text = (await this.PrivacyLevelSelect.textContent()) || '';
+        return text.replace(/\s*\(.*$/, '').trim();
     }
 
     /** Deletes an LLM from its row menu and confirms the "Delete <name>?" dialog. */

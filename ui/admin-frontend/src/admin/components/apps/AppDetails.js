@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import Section from "../common/Section";
+import UsedBySection from "../common/UsedBySection";
 import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
@@ -14,7 +16,6 @@ import {
   Box,
   Grid,
   Button,
-  Divider,
   Chip,
   Table,
   TableBody,
@@ -49,7 +50,6 @@ import {
   FieldLabel,
   FieldValue,
   PrimaryButton,
-  StyledPaper,
   StyledTableCell,
   StyledTableHeaderCell,
   StyledTableRow,
@@ -74,12 +74,6 @@ ChartJS.register(
   Tooltip,
   Legend,
   TimeScale,
-);
-
-const SectionTitle = ({ children }) => (
-  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
-    {children}
-  </Typography>
 );
 
 const ExpandableMessage = ({ message, isCode = false }) => {
@@ -649,265 +643,269 @@ const AppDetails = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>Token Usage</SectionTitle>
-        <Box height={300} mb={4}>
-          <Line options={tokenChartOptions} data={tokenChartData} />
-        </Box>
+        <Section title="Token Usage">
+          <Box height={300} mb={4}>
+            <Line options={tokenChartOptions} data={tokenChartData} />
+          </Box>
+        </Section>
 
-        <SectionTitle>Cost</SectionTitle>
-        <Box height={300} mb={4}>
-          <Line options={costChartOptions} data={costChartData} />
-        </Box>
+        <Section title="Cost">
+          <Box height={300} mb={4}>
+            <Line options={costChartOptions} data={costChartData} />
+          </Box>
+        </Section>
 
-        <SectionTitle>App Interactions</SectionTitle>
-        <Box height={300} mb={4}>
-          <Line options={interactionsChartOptions} data={interactionsChartData} />
-        </Box>
-        <Box mt={2} mb={4}>
-          <DateRangePicker
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={handleStartDateChange}
-            onEndDateChange={handleEndDateChange}
-          />
-        </Box>
+        <Section title="App Interactions">
+          <Box height={300} mb={4}>
+            <Line options={interactionsChartOptions} data={interactionsChartData} />
+          </Box>
+          <Box mt={2} mb={4}>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={handleStartDateChange}
+              onEndDateChange={handleEndDateChange}
+            />
+          </Box>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>App Information</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Name:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{app.attributes.name}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{app.attributes.description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>User:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>
-              {app.attributes.is_orphaned ? (
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Chip
-                    icon={<WarningIcon />}
-                    label="Orphaned App"
-                    color="warning"
-                    size="small"
-                    variant="outlined"
-                  />
-                  <Typography variant="caption" color="text.secondary">
-                    (Original user has been deleted)
-                  </Typography>
-                </Box>
-              ) : user ? (
-                user.attributes.name
-              ) : (
-                "Loading..."
-              )}
-            </FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>LLM providers:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box display="flex" flexWrap="wrap" gap={1}>
-              {llms.map((llm) => (
-                <Chip key={llm.id} label={llm.attributes.name} />
-              ))}
-            </Box>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Data sources:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box display="flex" flexWrap="wrap" gap={1}>
-              {datasources.map((datasource) => (
-                <Chip key={datasource.id} label={datasource.attributes.name} />
-              ))}
-            </Box>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Tools:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box display="flex" flexWrap="wrap" gap={1}>
-              {tools.length > 0 ? (
-                tools.map((tool) => (
-                  <Chip key={tool.id || `tool-${Math.random()}`} label={tool.attributes?.name || 'Unnamed tool'} />
-                ))
-              ) : (
-                <Typography variant="body2">No tools associated.</Typography>
-              )}
-            </Box>
-          </Grid>
-          {/* Plugin Resources */}
-          {pluginResources.length > 0 && pluginResources.map((pr) => (
-            <React.Fragment key={`pr-${pr.plugin_id}-${pr.resource_type_slug}`}>
-              <Grid item xs={3}>
-                <FieldLabel>{pr.resource_type_name || pr.resource_type_slug}:</FieldLabel>
-              </Grid>
-              <Grid item xs={9}>
-                <Box display="flex" flexWrap="wrap" gap={1}>
-                  {(pr.instance_ids || []).map((instanceId) => (
-                    <Chip key={instanceId} label={instanceId} />
-                  ))}
-                </Box>
-              </Grid>
-            </React.Fragment>
-          ))}
-          <Grid item xs={3}>
-            <FieldLabel>Agents:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            {agentsLoading ? (
-              <CircularProgress size={20} />
-            ) : agents.length > 0 ? (
+        <Section title="App Information">
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Name:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{app.attributes.name}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{app.attributes.description}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>User:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>
+                {app.attributes.is_orphaned ? (
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Chip
+                      icon={<WarningIcon />}
+                      label="Orphaned App"
+                      color="warning"
+                      size="small"
+                      variant="outlined"
+                    />
+                    <Typography variant="caption" color="text.secondary">
+                      (Original user has been deleted)
+                    </Typography>
+                  </Box>
+                ) : user ? (
+                  user.attributes.name
+                ) : (
+                  "Loading..."
+                )}
+              </FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>LLM providers:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
               <Box display="flex" flexWrap="wrap" gap={1}>
-                {agents.map((agent) => (
-                  <Chip
-                    key={agent.id}
-                    label={agent.name}
-                    component={RouterLink}
-                    to={`/admin/agents/${agent.id}`}
-                    clickable
-                    color={agent.isActive ? 'primary' : 'default'}
-                  />
+                {llms.map((llm) => (
+                  <Chip key={llm.id} label={llm.attributes.name} />
                 ))}
               </Box>
-            ) : (
-              <Typography variant="body2">No agents using this app.</Typography>
-            )}
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Monthly Budget:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <FieldValue>
-                {formatBudgetDisplay({
-                  monthlyBudget: app.attributes.monthly_budget,
-                  currentUsage: budgetUsageData?.current_usage,
-                  percentage: budgetUsageData?.percentage,
-                  budgetStartDate: app.attributes.budget_start_date || budgetUsageData?.start_date
-                })}
-              </FieldValue>
-              {app.attributes.monthly_budget && isEnterprise && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => setResetBudgetDialogOpen(true)}
-                >
-                  Reset Budget
-                </Button>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Data sources:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <Box display="flex" flexWrap="wrap" gap={1}>
+                {datasources.map((datasource) => (
+                  <Chip key={datasource.id} label={datasource.attributes.name} />
+                ))}
+              </Box>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Tools:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <Box display="flex" flexWrap="wrap" gap={1}>
+                {tools.length > 0 ? (
+                  tools.map((tool) => (
+                    <Chip key={tool.id || `tool-${Math.random()}`} label={tool.attributes?.name || 'Unnamed tool'} />
+                  ))
+                ) : (
+                  <Typography variant="body2">No tools associated.</Typography>
+                )}
+              </Box>
+            </Grid>
+            {/* Plugin Resources */}
+            {pluginResources.length > 0 && pluginResources.map((pr) => (
+              <React.Fragment key={`pr-${pr.plugin_id}-${pr.resource_type_slug}`}>
+                <Grid item xs={3}>
+                  <FieldLabel>{pr.resource_type_name || pr.resource_type_slug}:</FieldLabel>
+                </Grid>
+                <Grid item xs={9}>
+                  <Box display="flex" flexWrap="wrap" gap={1}>
+                    {(pr.instance_ids || []).map((instanceId) => (
+                      <Chip key={instanceId} label={instanceId} />
+                    ))}
+                  </Box>
+                </Grid>
+              </React.Fragment>
+            ))}
+            <Grid item xs={3}>
+              <FieldLabel>Agents:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              {agentsLoading ? (
+                <CircularProgress size={20} />
+              ) : agents.length > 0 ? (
+                <Box display="flex" flexWrap="wrap" gap={1}>
+                  {agents.map((agent) => (
+                    <Chip
+                      key={agent.id}
+                      label={agent.name}
+                      component={RouterLink}
+                      to={`/admin/agents/${agent.id}`}
+                      clickable
+                      color={agent.isActive ? 'primary' : 'default'}
+                    />
+                  ))}
+                </Box>
+              ) : (
+                <Typography variant="body2">No agents using this app.</Typography>
               )}
-            </Box>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Monthly Budget:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <FieldValue>
+                  {formatBudgetDisplay({
+                    monthlyBudget: app.attributes.monthly_budget,
+                    currentUsage: budgetUsageData?.current_usage,
+                    percentage: budgetUsageData?.percentage,
+                    budgetStartDate: app.attributes.budget_start_date || budgetUsageData?.start_date
+                  })}
+                </FieldValue>
+                {app.attributes.monthly_budget && isEnterprise && (
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => setResetBudgetDialogOpen(true)}
+                  >
+                    Reset Budget
+                  </Button>
+                )}
+              </Box>
+            </Grid>
           </Grid>
-        </Grid>
+        </Section>
+
+        <UsedBySection resourcePath="apps" id={id} objectLabel="app" />
 
         {credential && (
           <>
-            <Divider sx={{ my: 3 }} />
-            <SectionTitle>Credential Information</SectionTitle>
-            <Grid container spacing={2}>
-              <Grid item xs={3}>
-                <FieldLabel>Key ID:</FieldLabel>
-              </Grid>
-              <Grid item xs={9}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <FieldValue>{credential.attributes.key_id}</FieldValue>
-                  <IconButton
-                    size="small"
-                    onClick={() =>
-                      handleCopyToClipboard(
-                        credential.attributes.key_id,
-                        "Key ID",
-                      )
-                    }
-                    sx={{ ml: 1 }}
-                  >
-                    <ContentCopyIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              </Grid>
-              <Grid item xs={3}>
-                <FieldLabel>Secret:</FieldLabel>
-              </Grid>
-              <Grid item xs={9}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <FieldValue>********</FieldValue>
-                  <IconButton
-                    size="small"
-                    onClick={() =>
-                      handleCopyToClipboard(
-                        credential.attributes.secret,
-                        "Secret",
-                      )
-                    }
-                    sx={{ ml: 1 }}
-                  >
-                    <ContentCopyIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              </Grid>
-              <Grid item xs={3}>
-                <FieldLabel>Status:</FieldLabel>
-              </Grid>
-              <Grid item xs={9}>
-                {/* Same words as the apps list and the portal (utils/appStatus.js). */}
-                <FieldValue data-testid="app-status">
-                  {getAppStatus({
-                    isActive: app?.attributes?.is_active,
-                    credentialActive: credential.attributes.active,
-                  })}
-                </FieldValue>
-              </Grid>
-              {!credential.attributes.active && (
-                <Grid item xs={12}>
-                  <Box mt={2}>
-                    <PrimaryOutlineButton
-                      variant="contained"
-                      color="primary"
-                      onClick={handleApproveApp}
+            <Section title="Credential Information">
+              <Grid container spacing={2}>
+                <Grid item xs={3}>
+                  <FieldLabel>Key ID:</FieldLabel>
+                </Grid>
+                <Grid item xs={9}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <FieldValue>{credential.attributes.key_id}</FieldValue>
+                    <IconButton
+                      size="small"
+                      onClick={() =>
+                        handleCopyToClipboard(
+                          credential.attributes.key_id,
+                          "Key ID",
+                        )
+                      }
+                      sx={{ ml: 1 }}
                     >
-                      Approve this App
-                    </PrimaryOutlineButton>
+                      <ContentCopyIcon fontSize="small" />
+                    </IconButton>
                   </Box>
                 </Grid>
-              )}
-            </Grid>
+                <Grid item xs={3}>
+                  <FieldLabel>Secret:</FieldLabel>
+                </Grid>
+                <Grid item xs={9}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <FieldValue>********</FieldValue>
+                    <IconButton
+                      size="small"
+                      onClick={() =>
+                        handleCopyToClipboard(
+                          credential.attributes.secret,
+                          "Secret",
+                        )
+                      }
+                      sx={{ ml: 1 }}
+                    >
+                      <ContentCopyIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Grid>
+                <Grid item xs={3}>
+                  <FieldLabel>Status:</FieldLabel>
+                </Grid>
+                <Grid item xs={9}>
+                  {/* Same words as the apps list and the portal (utils/appStatus.js). */}
+                  <FieldValue data-testid="app-status">
+                    {getAppStatus({
+                      isActive: app?.attributes?.is_active,
+                      credentialActive: credential.attributes.active,
+                    })}
+                  </FieldValue>
+                </Grid>
+                {!credential.attributes.active && (
+                  <Grid item xs={12}>
+                    <Box mt={2}>
+                      <PrimaryOutlineButton
+                        variant="contained"
+                        color="primary"
+                        onClick={handleApproveApp}
+                      >
+                        Approve this App
+                      </PrimaryOutlineButton>
+                    </Box>
+                  </Grid>
+                )}
+              </Grid>
+            </Section>
+
           </>
         )}
 
-        <Divider sx={{ my: 3 }} />
-
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <SectionTitle>Proxy Logs</SectionTitle>
-          {isEnterprise && (
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={() => setExportModalOpen(true)}
-              size="small"
-            >
-              Export
-            </Button>
-          )}
-        </Box>
-        <Box sx={{ mb: 2, maxWidth: 400 }}>
-          <SearchInput
-            value={proxyLogSearchTerm}
-            onChange={handleProxyLogSearch}
-            placeholder="Search request or response..."
-          />
-        </Box>
-        <StyledPaper>
+        <Section
+          title="Proxy Logs"
+          actions={
+            isEnterprise && (
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={() => setExportModalOpen(true)}
+                size="small"
+              >
+                Export
+              </Button>
+            )
+          }
+        >
+          <Box sx={{ mb: 2, maxWidth: 400 }}>
+            <SearchInput
+              value={proxyLogSearchTerm}
+              onChange={handleProxyLogSearch}
+              placeholder="Search request or response..."
+            />
+          </Box>
           <TableContainer sx={{ maxWidth: "100%", overflowX: "auto" }}>
             <Table sx={{ tableLayout: "fixed", width: "100%" }}>
               <TableHead>
@@ -989,7 +987,7 @@ const AppDetails = () => {
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
           />
-        </StyledPaper>
+        </Section>
 
         <Box
           mt={4}

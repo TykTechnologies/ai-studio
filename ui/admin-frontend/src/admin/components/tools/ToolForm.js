@@ -47,6 +47,11 @@ import {
 } from "../../../components/unsaved-changes";
 import { styled } from "@mui/system";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
+import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
+import PublishSwitch from "../rbac/PublishSwitch";
+import { P } from "../../rbac/permissions";
+import { usePermissions } from "../../context/PermissionsContext";
 import { parseOpenAPIOperations } from "../../utils/openapiOperations";
 
 const SectionTitle = ({ children, tooltip }) => (
@@ -242,14 +247,20 @@ const filterDirectionLabel = (filter) =>
     : "Request filter — runs on arguments sent to the tool";
 
 const ToolForm = () => {
+  const { can } = usePermissions();
   const [tool, setTool] = useState({
     name: "",
     description: "",
     privacy_score: 0,
+    // Tools default to live, but the API rejects an explicit `active: true`
+    // from a caller without tools:publish, so start a new tool off for them
+    // (the switch is disabled for them anyway and the API would have saved
+    // a draft).
+    active: can(P.TOOLS_PUBLISH),
     auth_schema_name: "",
     auth_key: "",
     oas_spec: "",
-    operations: "",
+    operations: [], // the API expects a string array; "" was rejected on create
     namespace: "",
   });
   const [errors, setErrors] = useState({});
@@ -490,7 +501,7 @@ const ToolForm = () => {
     if (!tool.name.trim()) newErrors.name = "Name is required";
     if (!tool.description.trim())
       newErrors.description = "Description is required";
-    if (tool.privacy_score < 0 || tool.privacy_score > 100)
+    if (!isValidPrivacyScore(tool.privacy_score))
       newErrors.privacy_score = "Privacy level must be between 0 and 100";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -544,7 +555,9 @@ const ToolForm = () => {
         type: "Tool",
         attributes: {
           ...tool,
+          operations: selectedOperations,
           privacy_score: Number(tool.privacy_score),
+          active: Boolean(tool.active),
           tool_type: "REST",
           oas_spec: tool.oas_spec ? btoa(tool.oas_spec) : "",
           governed_metadata: governedMetadata,
@@ -746,26 +759,28 @@ const ToolForm = () => {
               />
             </Grid>
             <Grid item xs={12}>
-              <Typography variant="subtitle2" gutterBottom>
-                Privacy levels
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLM providers with lower privacy levels can’t access higher-level data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
-              </Typography>
-              <TextField
-                fullWidth
-                name="privacy_score"
-                type="number"
+              {/* One privacy control everywhere (UX review M4): a named level
+                  with the 0–100 score alongside. */}
+              <PrivacyLevelInput
                 value={tool.privacy_score}
-                onChange={handleChange}
+                onChange={(score) => setTool((prev) => ({ ...prev, privacy_score: score }))}
                 error={!!errors.privacy_score}
                 helperText={errors.privacy_score}
-                inputProps={{
-                  min: 0,
-                  max: 100,
-                  step: 1,
-                }}
               />
+            </Grid>
+            <Grid item xs={12}>
+              {/* Same live switch as the LLM and data source forms (UX review
+                  M4b). The API needs tools:publish to turn it on. */}
+              <PublishSwitch
+                permission={P.TOOLS_PUBLISH}
+                checked={tool.active}
+                onChange={(e) => setTool((prev) => ({ ...prev, active: e.target.checked }))}
+                name="active"
+                label="Active"
+              />
+              <Typography variant="caption" color="text.secondary" display="block">
+                Available to the portal and gateway when on
+              </Typography>
             </Grid>
           </Grid>
 

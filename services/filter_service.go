@@ -80,6 +80,14 @@ func (s *Service) GetAllFilters(pageSize int, pageNumber int, all bool) ([]model
 	return filter.GetAll(s.DB, pageSize, pageNumber, all)
 }
 
+// ListFilters is GetAllFilters with the admin list's search and sort. It is
+// a separate method because GetAllFilters' signature is fixed by
+// ServiceInterface, which the microgateway adapter also implements.
+func (s *Service) ListFilters(pageSize int, pageNumber int, all bool, opts ListOptions) ([]models.Filter, int64, int, error) {
+	filter := models.NewFilter()
+	return filter.GetAll(s.DB, pageSize, pageNumber, all, opts.Scopes("name", "description")...)
+}
+
 // GetAllFiltersWithFilters returns all filters with namespace filtering
 // Note: is_active filtering not supported by main Filter model (only microgateway Filter has this field)
 func (s *Service) GetAllFiltersWithFilters(pageSize int, pageNumber int, all bool, namespace string) ([]models.Filter, int64, int, error) {

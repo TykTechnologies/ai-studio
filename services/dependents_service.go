@@ -247,6 +247,21 @@ func (s *Service) GetModelRouterDependents(routerID uint) (*Dependents, error) {
 	return newDependents().finalize(), nil
 }
 
+// GetAppDependents lists what references an app: the agents configured to
+// run as it (agent_configs.app_id). Chats do not reference apps, and an
+// app's plugin resource bindings (app_plugin_resources) are its own
+// configuration, cleared by DeleteApp, rather than dependents.
+func (s *Service) GetAppDependents(appID uint) (*Dependents, error) {
+	d := newDependents()
+	var err error
+
+	if d.Agents, err = dependentRefs(s.DB, &models.AgentConfig{}, "agent_configs",
+		"", "agent_configs.app_id = ?", appID); err != nil {
+		return nil, err
+	}
+	return d.finalize(), nil
+}
+
 // GetSecretDependents lists the LLMs, tools and datasources that read a
 // secret through a $SECRET/<name> reference.
 func (s *Service) GetSecretDependents(varName string) (*Dependents, error) {

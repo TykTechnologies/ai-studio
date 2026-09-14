@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
+import { formatPrivacyLevel } from "../common/privacy/privacyLevels";
 import {
   TextField,
   Box,
@@ -584,7 +585,7 @@ const AppForm = () => {
                     getOptionLabel={(inst) => inst?.name ?? String(inst?.id ?? "")}
                     getOptionSecondary={(inst) =>
                       rt.has_privacy_score && inst.privacy_score > 0
-                        ? `Privacy: ${inst.privacy_score}`
+                        ? `Privacy: ${formatPrivacyLevel(inst.privacy_score)}`
                         : undefined
                     }
                   />

@@ -38,6 +38,9 @@ func (a *API) createDatasource(c *gin.Context) {
 		})
 		return
 	}
+	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
+		return
+	}
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, true) {
 		return
 	}
@@ -187,6 +190,9 @@ func (a *API) updateDatasource(c *gin.Context) {
 		})
 		return
 	}
+	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
+		return
+	}
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, false) {
 		return
 	}
@@ -304,14 +310,20 @@ func (a *API) deleteDatasource(c *gin.Context) {
 // @Tags datasources
 // @Accept json
 // @Produce json
+// @Param search query string false "Case-insensitive substring match on name and description fields"
+// @Param sort query string false "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at, privacy_score, active"
 // @Success 200 {array} DatasourceResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /datasources [get]
 // @Security BearerAuth
 func (a *API) listDatasources(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	opts, ok := parseListQuery(c, datasourceSortFields)
+	if !ok {
+		return
+	}
 
-	datasources, totalCount, totalPages, err := a.service.GetAllDatasources(pageSize, pageNumber, all)
+	datasources, totalCount, totalPages, err := a.service.GetAllDatasources(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

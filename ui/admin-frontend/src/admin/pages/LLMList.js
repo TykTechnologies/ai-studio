@@ -1,37 +1,20 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  Typography,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Menu,
-  MenuItem,
-  Snackbar,
-  Box,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import { Typography, Alert, Box } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import { CredentialStatusDot } from "../components/llms/CredentialStatusIndicator";
+import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
+import DataTable from "../components/common/DataTable";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
-import {
-  TitleBox,
-  StyledPaper,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
-  PrimaryButton,
-} from "../styles/sharedStyles";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
+import { TitleBox, PrimaryButton } from "../styles/sharedStyles";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
 
@@ -40,36 +23,15 @@ const LLMList = () => {
   const [llms, setLLMs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedLLM, setSelectedLLM] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
   const fetchLLMs = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/llms", {
-        params: {
-          page,
-          page_size: pageSize,
-          sort_by: sortConfig.key,
-          sort_direction: sortConfig.direction,
-        },
-      });
+      const response = await apiClient.get("/llms", { params: queryParams });
       setLLMs(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -81,92 +43,121 @@ const LLMList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortConfig, updatePaginationData]);
+  }, [queryParams, updatePaginationData]);
 
   useEffect(() => {
     fetchLLMs();
   }, [fetchLLMs]);
 
-  const handleMenuOpen = (event, llm) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedLLM(llm);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const bulk = useBulkActions({
+    items: llms,
+    resource: "llms",
+    singular: "LLM provider",
+    plural: "LLM providers",
+    notify,
+    refresh: fetchLLMs,
+  });
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/llms/${id}`);
-      setSnackbar({
-        open: true,
-        message: "LLM provider deleted successfully",
-        severity: "success",
-      });
+      notify("LLM provider deleted successfully");
       fetchLLMs();
     } catch (error) {
       console.error("Error deleting LLM", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete LLM",
-        severity: "error",
-      });
+      notify("Failed to delete LLM", "error");
     }
-    handleMenuClose();
   };
 
-  const handleToggleActive = async (llm) => {
+  const handleToggleActive = useCallback(async (llm) => {
     try {
       const updatedLLM = {
         ...llm,
         attributes: { ...llm.attributes, active: !llm.attributes.active },
       };
       await apiClient.patch(`/llms/${llm.id}`, { data: updatedLLM });
-      setSnackbar({
-        open: true,
-        message: `LLM ${updatedLLM.attributes.active ? "activated" : "deactivated"} successfully`,
-        severity: "success",
-      });
+      notify(`LLM ${updatedLLM.attributes.active ? "activated" : "deactivated"} successfully`);
       fetchLLMs();
     } catch (error) {
       console.error("Error toggling LLM active state", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to update LLM active state",
-        severity: "error",
-      });
+      notify("Failed to update LLM active state", "error");
     }
-    handleMenuClose();
-  };
+  }, [fetchLLMs, notify]);
 
   const handleLLMClick = (llm) => {
     navigate(`/admin/llms/${llm.id}`);
-  };
-
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  const handleSort = (key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
   };
 
   const handleAddLLM = () => {
     navigate("/admin/llms/new");
   };
 
-  if (loading && llms.length === 0) {
-    return <CircularProgress />;
-  }
+  const columns = useMemo(() => [
+    { field: "name", headerName: "Name", sortable: true, renderCell: (llm) => llm.attributes.name },
+    { field: "short_description", headerName: "Short Description", renderCell: (llm) => llm.attributes.short_description },
+    {
+      field: "vendor",
+      headerName: "Vendor",
+      sortable: true,
+      renderCell: (llm) => (
+        <Box sx={{ display: "flex", alignItems: "center" }}>
+          <img
+            src={getVendorLogo(llm.attributes.vendor)}
+            alt={getVendorName(llm.attributes.vendor)}
+            style={{
+              width: 24,
+              height: 24,
+              marginRight: 8,
+              objectFit: "contain",
+            }}
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src =
+                process.env.PUBLIC_URL +
+                "/images/placeholder-logo.png";
+            }}
+          />
+          {getVendorName(llm.attributes.vendor)}
+        </Box>
+      ),
+    },
+    {
+      field: "privacy_score",
+      headerName: "Privacy Level",
+      sortable: true,
+      renderCell: (llm) => <PrivacyLevelChip score={llm.attributes.privacy_score} />,
+    },
+    {
+      field: "active",
+      headerName: "Active",
+      sortable: true,
+      renderCell: (llm) => (
+        // The dot alone read as live even when the provider pointed at an
+        // empty secret, so a fresh instance looked fully configured and the
+        // first call failed.
+        <CredentialStatusDot
+          active={llm.attributes.active}
+          status={llm.attributes.credential_status}
+          reference={llm.attributes.credential_ref}
+        />
+      ),
+    },
+  ], []);
+
+  const rowActions = useMemo(() => [
+    { key: "edit", label: "Edit LLM provider", onClick: (llm) => navigate(`/admin/llms/edit/${llm.id}`) },
+    { key: "delete", label: "Delete LLM provider", onClick: (llm) => setDeleteTarget(llm) },
+    {
+      key: "toggle",
+      label: (llm) => `${llm?.attributes?.active ? "Deactivate" : "Activate"} LLM provider`,
+      onClick: handleToggleActive,
+    },
+  ], [navigate, handleToggleActive]);
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: true }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && llms.length === 0) {
     return <Alert severity="error">{error}</Alert>;
@@ -188,128 +179,39 @@ const LLMList = () => {
           </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">LLM providers power AI chats and can be made available to developers in the portal and gateway when set to Active. To control access, each LLM provider must be part of a catalog to be used by specific teams.</Typography>  
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">LLM providers power AI chats and can be made available to developers in the portal and gateway when set to Active. To control access, each LLM provider must be part of a catalog to be used by specific teams.</Typography>
         </Box>
         <Box sx={{ p: 3 }}>
-          {llms.length === 0 ? (
-            <EmptyStateWidget
-              title="Want to start working with your favourite LLM?"
-              description="Click the button below to add a new LLM configuration to use in your chat room."
-              buttonText="Add LLM provider"
-              buttonIcon={<AddIcon />}
-              onButtonClick={handleAddLLM}
-            />
-          ) : (
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
-                      Name
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Short Description</StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("vendor")}>
-                      Vendor
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => handleSort("privacy_score")}
-                    >
-                      Privacy Level
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("active")}>
-                      Active
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {llms.map((llm) => (
-                    <StyledTableRow
-                      key={llm.id}
-                      onClick={() => handleLLMClick(llm)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <StyledTableCell>{llm.attributes.name}</StyledTableCell>
-                      <StyledTableCell>{llm.attributes.short_description}</StyledTableCell>
-                      <StyledTableCell>
-                        <Box sx={{ display: "flex", alignItems: "center" }}>
-                          <img
-                            src={getVendorLogo(llm.attributes.vendor)}
-                            alt={getVendorName(llm.attributes.vendor)}
-                            style={{
-                              width: 24,
-                              height: 24,
-                              marginRight: 8,
-                              objectFit: "contain",
-                            }}
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.src =
-                                process.env.PUBLIC_URL +
-                                "/images/placeholder-logo.png";
-                            }}
-                          />
-                          {getVendorName(llm.attributes.vendor)}
-                        </Box>
-                      </StyledTableCell>
-                      <StyledTableCell>{llm.attributes.privacy_score}</StyledTableCell>
-                      <StyledTableCell>
-                        {/* The dot alone read as live even when the provider
-                            pointed at an empty secret, so a fresh instance
-                            looked fully configured and the first call failed. */}
-                        <CredentialStatusDot
-                          active={llm.attributes.active}
-                          status={llm.attributes.credential_status}
-                          reference={llm.attributes.credential_ref}
-                        />
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        <Can permission={P.LLMS_WRITE}>
-                          <IconButton
-                            onClick={(event) => handleMenuOpen(event, llm)}
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
-                        </Can>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <PaginationControls
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
+          <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+          <Can permission={P.LLMS_WRITE}>
+            {(canWrite) => (
+              <DataTable
+                {...tableProps}
+                ariaLabel="LLM providers"
+                searchPlaceholder="Search LLM providers by name..."
+                columns={columns}
+                data={llms}
+                loading={loading}
+                onRowClick={handleLLMClick}
+                actions={canWrite ? rowActions : undefined}
+                {...(canWrite ? bulk.selectionProps : {})}
+                bulkActions={canWrite ? bulkActions : undefined}
+                emptyState={
+                  !searchTerm ? (
+                    <EmptyStateWidget
+                      title="Want to start working with your favourite LLM?"
+                      description="Click the button below to add a new LLM configuration to use in your chat room."
+                      buttonText="Add LLM provider"
+                      buttonIcon={<AddIcon />}
+                      onButtonClick={canWrite ? handleAddLLM : undefined}
+                    />
+                  ) : undefined
+                }
               />
-            </StyledPaper>
-          )}
+            )}
+          </Can>
         </Box>
       </>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem
-          onClick={() => navigate(`/admin/llms/edit/${selectedLLM?.id}`)}
-        >
-          Edit LLM provider
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setDeleteTarget(selectedLLM);
-            handleMenuClose();
-          }}
-        >
-          Delete LLM provider
-        </MenuItem>
-        <MenuItem onClick={() => handleToggleActive(selectedLLM)}>
-          {selectedLLM?.attributes.active ? "Deactivate" : "Activate"} LLM provider
-        </MenuItem>
-      </Menu>
 
       <DeleteConfirmationDialog
         open={Boolean(deleteTarget)}
@@ -325,20 +227,18 @@ const LLMList = () => {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath="llms"
+        objectLabel="LLM provider"
+        objectLabelPlural="LLM providers"
+        items={bulk.deleteDialogItems}
+        consequence="Deleting them removes them from all of those; apps that only have these LLM providers will stop working."
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
+
+      <FeedbackSnackbar {...snackbarProps} />
     </Box>
   );
 };

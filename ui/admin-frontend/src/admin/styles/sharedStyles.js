@@ -452,7 +452,10 @@ export const SectionContainer = styled(Paper)(({ theme }) => ({
   boxShadow: "none",
 }));
 
-export const SectionHeader = styled(Box)(({ theme, isExpanded, isCollapsible = true }) => ({
+export const SectionHeader = styled(Box, {
+  // Layout-only props; keep them off the DOM element.
+  shouldForwardProp: (prop) => prop !== "isExpanded" && prop !== "isCollapsible",
+})(({ theme, isExpanded, isCollapsible = true }) => ({
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",

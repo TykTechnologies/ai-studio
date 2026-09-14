@@ -66,6 +66,33 @@ describe("LLMForm validation and layout", () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
+  it("edits privacy as a named level plus score, and keeps the two in sync", async () => {
+    renderForm();
+    await screen.findByRole("button", { name: "Add LLM provider" });
+    const score = screen.getByRole("spinbutton", { name: "Privacy level score" });
+    const level = screen.getByTestId("privacy-level-select");
+    // Starts at 0 = Public.
+    expect(score).toHaveValue(0);
+    expect(level).toHaveValue("public");
+    expect(
+      screen.getByText("LLM providers can only be used with tools and data sources at or below their level."),
+    ).toBeInTheDocument();
+    // Choosing Confidential sets the default score for the band.
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /Privacy level/ }));
+    fireEvent.click(screen.getByText("Confidential (51–75)"));
+    expect(score).toHaveValue(75);
+    // Typing a score moves the level.
+    fireEvent.change(score, { target: { value: "10" } });
+    expect(level).toHaveValue("public");
+    // The number is what gets sent.
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Claude" } });
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /Vendor/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /Anthropic/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms", expect.anything()));
+    expect(apiClient.post.mock.calls.find((c) => c[0] === "/llms")[1].data.attributes.privacy_score).toBe(10);
+  });
+
   it("shows Access Details expanded with the credential hint, and labels the live switch Active", async () => {
     renderForm();
     await screen.findByRole("button", { name: "Add LLM provider" });

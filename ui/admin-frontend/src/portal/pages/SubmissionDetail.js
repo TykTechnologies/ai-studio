@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import pubClient from "../../admin/utils/pubClient";
+import PrivacyLevelChip from "../../admin/components/common/privacy/PrivacyLevelChip";
 import {
   Container,
   Typography,
@@ -139,15 +140,19 @@ const SubmissionDetail = () => {
             <Typography variant="h6" gutterBottom>
               Governance
             </Typography>
-            <Typography variant="body2">
-              <strong>Suggested privacy level:</strong>{" "}
-              {submission.suggested_privacy}
-            </Typography>
-            {submission.final_privacy_score != null && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
               <Typography variant="body2">
-                <strong>Final privacy level:</strong>{" "}
-                {submission.final_privacy_score}
+                <strong>Suggested privacy level:</strong>
               </Typography>
+              <PrivacyLevelChip score={submission.suggested_privacy} />
+            </Box>
+            {submission.final_privacy_score != null && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                <Typography variant="body2">
+                  <strong>Final privacy level:</strong>
+                </Typography>
+                <PrivacyLevelChip score={submission.final_privacy_score} />
+              </Box>
             )}
             {submission.privacy_justification && (
               <Typography variant="body2" sx={{ mt: 1 }}>

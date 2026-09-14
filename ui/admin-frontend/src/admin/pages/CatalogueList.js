@@ -2,17 +2,8 @@ import React, { useState, useEffect, useCallback, memo, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
   Typography,
-  IconButton,
-  CircularProgress,
   Alert,
-  Menu,
-  MenuItem,
-  Snackbar,
   Box,
   Dialog,
   DialogTitle,
@@ -22,22 +13,22 @@ import {
   Select,
   FormControl,
   InputLabel,
+  MenuItem,
   Chip,
 } from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
+import DataTable from "../components/common/DataTable";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
 
@@ -46,37 +37,20 @@ const CatalogueList = memo(() => {
   const [catalogues, setCatalogues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
   const [selectedCatalogue, setSelectedCatalogue] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState("");
   const [availableLLMs, setAvailableLLMs] = useState([]);
   const [catalogueLLMs, setCatalogueLLMs] = useState([]);
   const [selectedLLM, setSelectedLLM] = useState("");
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
   const fetchCatalogues = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/catalogues", {
-        params: {
-          page,
-          page_size: pageSize,
-        },
-      });
+      const response = await apiClient.get("/catalogues", { params: queryParams });
       setCatalogues(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -88,44 +62,34 @@ const CatalogueList = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, updatePaginationData]);
+  }, [queryParams, updatePaginationData]);
 
   useEffect(() => {
     fetchCatalogues();
   }, [fetchCatalogues]);
 
-  const handleMenuOpen = useCallback((event, catalogue) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedCatalogue(catalogue);
-  }, []);
-
-  const handleMenuClose = useCallback(() => {
-    setAnchorEl(null);
-  }, []);
+  // No /bulk endpoint for catalogues: deletes go one request per item.
+  const bulk = useBulkActions({
+    items: catalogues,
+    resource: "catalogues",
+    singular: "catalog",
+    plural: "catalogs",
+    notify,
+    refresh: fetchCatalogues,
+  });
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/catalogues/${id}`);
-      setCatalogues(catalogues.filter((catalogue) => catalogue.id !== id));
-      setSnackbar({
-        open: true,
-        message: "Catalog deleted successfully",
-        severity: "success",
-      });
+      setCatalogues((current) => current.filter((catalogue) => catalogue.id !== id));
+      notify("Catalog deleted successfully");
     } catch (error) {
       console.error("Error deleting catalog", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete catalog",
-        severity: "error",
-      });
+      notify("Failed to delete catalog", "error");
     }
-    handleMenuClose();
   };
 
-  const handleEdit = (event, id) => {
-    event.stopPropagation();
+  const handleEdit = (id) => {
     navigate(`/admin/catalogs/llms/edit/${id}`);
   };
 
@@ -134,20 +98,12 @@ const CatalogueList = memo(() => {
       await apiClient.post(`/catalogues/${selectedCatalogue.id}/llms`, {
         data: { id: selectedLLM, type: "LLM" },
       });
-      setSnackbar({
-        open: true,
-        message: "LLM added to catalog successfully",
-        severity: "success",
-      });
+      notify("LLM added to catalog successfully");
       setModalOpen(false);
       fetchCatalogues();
     } catch (error) {
       console.error("Error adding LLM to catalog", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to add LLM to catalog",
-        severity: "error",
-      });
+      notify("Failed to add LLM to catalog", "error");
     }
   };
 
@@ -156,24 +112,17 @@ const CatalogueList = memo(() => {
       await apiClient.delete(
         `/catalogues/${selectedCatalogue.id}/llms/${selectedLLM}`,
       );
-      setSnackbar({
-        open: true,
-        message: "LLM removed from catalog successfully",
-        severity: "success",
-      });
+      notify("LLM removed from catalog successfully");
       setModalOpen(false);
       fetchCatalogues();
     } catch (error) {
       console.error("Error removing LLM from catalog", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to remove LLM from catalog",
-        severity: "error",
-      });
+      notify("Failed to remove LLM from catalog", "error");
     }
   };
 
-  const handleOpenModal = async (type) => {
+  const handleOpenModal = async (type, catalogue) => {
+    setSelectedCatalogue(catalogue);
     setModalType(type);
     if (type === "add") {
       try {
@@ -187,7 +136,7 @@ const CatalogueList = memo(() => {
     } else if (type === "remove") {
       try {
         const response = await apiClient.get(
-          `/catalogues/${selectedCatalogue.id}/llms`,
+          `/catalogues/${catalogue.id}/llms`,
         );
         setCatalogueLLMs(response.data.data);
       } catch (error) {
@@ -202,19 +151,12 @@ const CatalogueList = memo(() => {
     setSelectedLLM("");
   };
 
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
-
   const handleAddCatalogue = () => {
     navigate("/admin/catalogs/llms/new");
   };
 
-  const handleCatalogueClick = (id) => {
-    navigate(`/admin/catalogs/llms/${id}`);
+  const handleCatalogueClick = (catalogue) => {
+    navigate(`/admin/catalogs/llms/${catalogue.id}`);
   };
 
   const getLLMNames = useCallback((catalogue) => {
@@ -229,9 +171,37 @@ const CatalogueList = memo(() => {
     return [];
   }, []);
 
-  if (loading && catalogues.length === 0) {
-    return <CircularProgress />;
-  }
+  const columns = useMemo(() => [
+    { field: "name", headerName: "Name", sortable: true, renderCell: (catalogue) => catalogue.attributes.name },
+    {
+      field: "llms",
+      headerName: "LLM providers",
+      renderCell: (catalogue) => (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+          {getLLMNames(catalogue).map((llmName, index) => (
+            <Chip
+              key={index}
+              label={llmName}
+              size="small"
+              sx={{ marginRight: 0.5, marginBottom: 0.5 }}
+            />
+          ))}
+        </Box>
+      ),
+    },
+  ], [getLLMNames]);
+
+  const rowActions = [
+    { key: "edit", label: "Edit catalog", onClick: (catalogue) => handleEdit(catalogue.id) },
+    { key: "delete", label: "Delete catalog", onClick: (catalogue) => handleDelete(catalogue.id) },
+    { key: "add-llm", label: "Add LLM to catalog", onClick: (catalogue) => handleOpenModal("add", catalogue) },
+    { key: "remove-llm", label: "Remove LLM from catalog", onClick: (catalogue) => handleOpenModal("remove", catalogue) },
+  ];
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && catalogues.length === 0) {
     return <Alert severity="error">{error}</Alert>;
@@ -253,92 +223,39 @@ const CatalogueList = memo(() => {
           </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of LLM providers that you can assign to specific teams to manage access easily.</Typography>  
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of LLM providers that you can assign to specific teams to manage access easily.</Typography>
         </Box>
         <ContentBox>
-          {catalogues.length === 0 ? (
-            <EmptyStateWidget
-              title="No catalogs found"
-              description="Click the button below to add a new catalog."
-              buttonText="Add Catalog"
-              buttonIcon={<AddIcon />}
-              onButtonClick={handleAddCatalogue}
-            />
-          ) : (
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell>Name</StyledTableHeaderCell>
-                    <StyledTableHeaderCell>LLM providers</StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {catalogues.map((catalogue) => (
-                    <StyledTableRow
-                      key={catalogue.id}
-                      onClick={() => handleCatalogueClick(catalogue.id)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <StyledTableCell>{catalogue.attributes.name}</StyledTableCell>
-                      <StyledTableCell>
-                        <Box
-                          sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}
-                        >
-                          {getLLMNames(catalogue).map((llmName, index) => (
-                            <Chip
-                              key={index}
-                              label={llmName}
-                              size="small"
-                              sx={{ marginRight: 0.5, marginBottom: 0.5 }}
-                            />
-                          ))}
-                        </Box>
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        <Can permission={P.CATALOGUES_WRITE}>
-                          <IconButton
-                            onClick={(event) => handleMenuOpen(event, catalogue)}
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
-                        </Can>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <PaginationControls
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
+          <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+          <Can permission={P.CATALOGUES_WRITE}>
+            {(canWrite) => (
+              <DataTable
+                {...tableProps}
+                ariaLabel="LLM catalogs"
+                searchPlaceholder="Search catalogs by name..."
+                columns={columns}
+                data={catalogues}
+                loading={loading}
+                onRowClick={handleCatalogueClick}
+                actions={canWrite ? rowActions : undefined}
+                {...(canWrite ? bulk.selectionProps : {})}
+                bulkActions={canWrite ? bulkActions : undefined}
+                emptyState={
+                  !searchTerm ? (
+                    <EmptyStateWidget
+                      title="No catalogs found"
+                      description="Click the button below to add a new catalog."
+                      buttonText="Add Catalog"
+                      buttonIcon={<AddIcon />}
+                      onButtonClick={canWrite ? handleAddCatalogue : undefined}
+                    />
+                  ) : undefined
+                }
               />
-            </StyledPaper>
-          )}
+            )}
+          </Can>
         </ContentBox>
       </>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={(event) => handleEdit(event, selectedCatalogue?.id)}>
-          Edit catalog
-        </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedCatalogue?.id)}>
-          Delete catalog
-        </MenuItem>
-        <MenuItem onClick={() => handleOpenModal("add")}>
-          Add LLM to catalog
-        </MenuItem>
-        <MenuItem onClick={() => handleOpenModal("remove")}>
-          Remove LLM from catalog
-        </MenuItem>
-      </Menu>
 
       <Dialog open={modalOpen} onClose={handleCloseModal}>
         <DialogTitle>
@@ -381,20 +298,18 @@ const CatalogueList = memo(() => {
         </DialogActions>
       </Dialog>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath={null}
+        objectLabel="catalog"
+        objectLabelPlural="catalogs"
+        items={bulk.deleteDialogItems}
+        consequence="Teams assigned these catalogs lose access to the LLM providers in them."
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
+
+      <FeedbackSnackbar {...snackbarProps} />
     </>
   );
 });

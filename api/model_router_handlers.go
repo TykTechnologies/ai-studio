@@ -277,19 +277,30 @@ func (a *API) deleteModelRouter(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param page_size query int false "Number of items per page"
-// @Param page_number query int false "Page number"
+// @Param page query int false "Page number"
+// @Param page_number query int false "Page number (legacy alias of page)"
 // @Param all query bool false "Return all items without pagination"
+// @Param search query string false "Case-insensitive substring match on name and description"
+// @Param sort query string false "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at, active"
 // @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Unsupported sort field"
 // @Failure 402 {object} ErrorResponse "Enterprise feature required"
 // @Failure 500 {object} ErrorResponse
 // @Router /model-routers [get]
 // @Security BearerAuth
 func (a *API) listModelRouters(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	pageNumber, _ := strconv.Atoi(c.DefaultQuery("page_number", "1"))
+	// This list predates the shared pagination helper and named its page
+	// parameter page_number; page is accepted too so it matches every other
+	// list, and page_number keeps working for existing callers.
+	pageNumber, _ := strconv.Atoi(c.DefaultQuery("page", c.DefaultQuery("page_number", "1")))
 	all := c.Query("all") == "true"
+	opts, ok := parseListQuery(c, modelRouterSortFields)
+	if !ok {
+		return
+	}
 
-	routers, totalCount, totalPages, err := a.service.ModelRouterService.ListRouters(pageSize, pageNumber, all)
+	routers, totalCount, totalPages, err := a.service.ListModelRouters(pageSize, pageNumber, all, opts)
 	if err != nil {
 		statusCode := http.StatusInternalServerError
 		if err == model_router.ErrEnterpriseFeature {

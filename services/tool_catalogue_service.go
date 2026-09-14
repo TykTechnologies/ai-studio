@@ -54,9 +54,10 @@ func (s *Service) DeleteToolCatalogue(id uint) error {
 	return toolCatalogue.Delete(s.DB)
 }
 
-func (s *Service) GetAllToolCatalogues(pageSize int, pageNumber int, all bool) (models.ToolCatalogues, int64, int, error) {
+func (s *Service) GetAllToolCatalogues(pageSize int, pageNumber int, all bool, opts ...ListOptions) (models.ToolCatalogues, int64, int, error) {
 	var toolCatalogues models.ToolCatalogues
-	totalCount, totalPages, err := toolCatalogues.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := toolCatalogues.GetAll(s.DB, pageSize, pageNumber, all,
+		firstListOptions(opts).Scopes("name")...)
 	if err != nil {
 		return nil, 0, 0, err
 	}
