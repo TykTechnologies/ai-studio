@@ -113,3 +113,21 @@ func TestEncryptDecrypt(t *testing.T) {
 		})
 	}
 }
+
+// HasValue must answer without decrypting for current-scheme ciphertexts:
+// an encrypted empty string is exactly salt+nonce+tag bytes, anything longer
+// carries a value. Legacy and plaintext values still resolve correctly.
+func TestHasValue_LengthCheckForCurrentScheme(t *testing.T) {
+	t.Setenv(midsommarSecret, "hasvalue-key")
+
+	emptyCipher, err := encrypt("hasvalue-key", "")
+	assert.NoError(t, err)
+	valueCipher, err := encrypt("hasvalue-key", "x")
+	assert.NoError(t, err)
+
+	assert.False(t, (&Secret{Value: ""}).HasValue())
+	assert.False(t, (&Secret{Value: emptyCipher}).HasValue(), "encrypted empty string is no value")
+	assert.True(t, (&Secret{Value: valueCipher}).HasValue())
+	assert.True(t, (&Secret{Value: "already-decrypted-plaintext"}).HasValue())
+	assert.True(t, (&Secret{Value: "v2:not-base64!!"}).HasValue(), "unreadable stored text counts as a value rather than hiding it")
+}

@@ -97,6 +97,12 @@ func (s *NotificationService) NotifyWithOptions(notificationID string, title str
 	if inApp == "" {
 		inApp = stripEmailFraming(content)
 	}
+	// In-app records are plain text. Object names (apps, users, submissions)
+	// are user-supplied and end up interpolated here, so any markup is
+	// dropped before storage as defence in depth; the UI renders these as
+	// text as well.
+	inApp = stripMarkup(inApp)
+	title = stripMarkup(title)
 
 	// Handle notifications based on flags
 	if userFlags&models.NotifyAdmins != 0 {
@@ -160,6 +166,21 @@ var (
 	emailBoilerplate  = regexp.MustCompile(`^\s*(This is an automated (notification|message|email)|Please do not reply)`)
 	blankRuns         = regexp.MustCompile(`\n{3,}`)
 )
+
+// htmlTag matches anything that looks like an HTML/XML tag, including
+// unterminated ones at the end of the text.
+var htmlTag = regexp.MustCompile(`<[^>]*>?`)
+
+// stripMarkup removes HTML tags from text destined for an in-app
+// notification. It is deliberately blunt: notifications never carry
+// legitimate markup, and a user-chosen object name has no business
+// contributing any.
+func stripMarkup(text string) string {
+	if !strings.Contains(text, "<") {
+		return text
+	}
+	return strings.TrimSpace(htmlTag.ReplaceAllString(text, ""))
+}
 
 // stripEmailFraming turns an email body into in-app content: the subject
 // line, the greeting, the sign-off and everything after it, and "do not

@@ -591,21 +591,15 @@ func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
 		return
 	}
 
-	tools, err := a.service.GetToolCatalogueTools(uint(id))
+	// Portal users only see live tools; inactive ones stay admin-only. The
+	// filter runs in the database so inactive rows are never loaded here.
+	active, err := a.service.GetToolCatalogueActiveTools(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{"Internal Server Error", err.Error()}}})
 		return
-	}
-
-	// Portal users only see live tools; inactive ones stay admin-only.
-	active := make(models.Tools, 0, len(tools))
-	for _, tool := range tools {
-		if tool.Active {
-			active = append(active, tool)
-		}
 	}
 
 	// Use secure response format that hides sensitive fields

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -124,9 +125,18 @@ func (s *Service) GetLLMDependents(llmID uint) (*Dependents, error) {
 	// Failover targets live in a JSON column. Querying JSON portably across
 	// SQLite and Postgres is not worth it for a table this small, so scan the
 	// rows that have a waterfall at all and match in Go.
+	// The LIKE pre-filter keeps the scan to rows whose serialised waterfall
+	// mentions this id at all (json.Marshal writes `"llm_id":3,` or
+	// `"llm_id":3}`); the Go match below is still what decides, so a false
+	// positive from the text match (e.g. inside a model name) is harmless.
+	// TODO: switch to native JSON operators (Postgres jsonb @>) if failover
+	// tables grow large enough for this to show up; SQLite keeps it portable.
+	idText := strconv.FormatUint(uint64(llmID), 10)
 	var primaries []models.LLM
 	if err := s.DB.Select("id", "name", "failover").
 		Where("failover IS NOT NULL AND id <> ?", llmID).
+		Where("CAST(failover AS TEXT) LIKE ? OR CAST(failover AS TEXT) LIKE ?",
+			"%\"llm_id\":"+idText+",%", "%\"llm_id\":"+idText+"}%").
 		Order("id").
 		Find(&primaries).Error; err != nil {
 		return nil, err
@@ -245,7 +255,7 @@ func (s *Service) GetModelRouterDependents(routerID uint) (*Dependents, error) {
 // GetSecretDependents lists the LLMs, tools and datasources that read a
 // secret through a $SECRET/<name> reference.
 func (s *Service) GetSecretDependents(varName string) (*Dependents, error) {
-	refs, err := s.SecretReferences()
+	refs, err := s.secretReferences(varName)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +283,44 @@ func (s *Service) GetSecretDependents(varName string) (*Dependents, error) {
 // Fields checked: LLM api_key, api_endpoint and string metadata values
 // (Bedrock keys live there); tool auth_key; datasource db_conn_api_key and
 // embed_api_key. Each object appears at most once per secret.
+//
+// The database does the narrowing: only rows whose credential columns start
+// with the $SECRET/ prefix (or whose JSON metadata contains it) are loaded,
+// so the cost is proportional to the number of secret-backed objects, not to
+// the size of the tables.
 func (s *Service) SecretReferences() (map[string][]SecretReference, error) {
+	return s.secretReferences("")
+}
+
+// secretReferences is SecretReferences narrowed to one secret when varName
+// is non-empty: the credential columns are matched for equality with the
+// exact reference and the JSON metadata for the quoted reference, so the
+// per-secret dependents endpoint touches only the rows that name it.
+func (s *Service) secretReferences(varName string) (map[string][]SecretReference, error) {
+	// exactRef is the literal reference for one secret; prefix matching is
+	// used when every secret is wanted. LIKE wildcards in secret names are
+	// escaped so a name such as OPENAI_KEY matches only itself.
+	const escape = " ESCAPE '\\'"
+	var (
+		colMatch  string // predicate for a plain credential column
+		jsonMatch string // predicate for the serialised metadata map
+		colArgs   []interface{}
+		jsonArg   interface{}
+	)
+	if varName == "" {
+		colMatch = "%s LIKE ?" + escape
+		colArgs = []interface{}{likeEscape(secretRefPrefix) + "%"}
+		jsonMatch = "CAST(%s AS TEXT) LIKE ?" + escape
+		jsonArg = "%" + likeEscape(secretRefPrefix) + "%"
+	} else {
+		colMatch = "%s = ?"
+		colArgs = []interface{}{secretRefPrefix + varName}
+		jsonMatch = "CAST(%s AS TEXT) LIKE ?" + escape
+		jsonArg = "%\"" + likeEscape(secretRefPrefix+varName) + "\"%"
+	}
+	col := func(name string) (string, []interface{}) { return fmt.Sprintf(colMatch, name), colArgs }
+	jsonCol := func(name string) (string, []interface{}) { return fmt.Sprintf(jsonMatch, name), []interface{}{jsonArg} }
+
 	out := map[string][]SecretReference{}
 	seen := map[string]map[string]bool{} // secret name -> "type:id"
 
@@ -289,44 +336,58 @@ func (s *Service) SecretReferences() (map[string][]SecretReference, error) {
 		out[name] = append(out[name], ref)
 	}
 
+	keyMatch, keyArgs := col("api_key")
+	endpointMatch, endpointArgs := col("api_endpoint")
+	metaMatch, metaArgs := jsonCol("metadata")
 	var llms []models.LLM
-	if err := s.DB.Select("id", "name", "api_key", "api_endpoint", "metadata").Order("id").Find(&llms).Error; err != nil {
+	llmArgs := append(append(append([]interface{}{}, keyArgs...), endpointArgs...), metaArgs...)
+	if err := s.DB.Select("id", "name", "api_key", "api_endpoint", "metadata").
+		Where("("+keyMatch+") OR ("+endpointMatch+") OR ("+metaMatch+")", llmArgs...).
+		Order("id").Find(&llms).Error; err != nil {
 		return nil, err
 	}
 	for _, llm := range llms {
 		ref := SecretReference{Type: "llm", ID: llm.ID, Name: llm.Name}
 		for _, v := range []string{llm.APIKey, llm.APIEndpoint} {
-			if name, ok := secretNameFromReference(v); ok {
+			if name, ok := secretNameFromReference(v); ok && (varName == "" || name == varName) {
 				add(name, ref)
 			}
 		}
 		for _, v := range llm.Metadata {
 			if str, isStr := v.(string); isStr {
-				if name, ok := secretNameFromReference(str); ok {
+				if name, ok := secretNameFromReference(str); ok && (varName == "" || name == varName) {
 					add(name, ref)
 				}
 			}
 		}
 	}
 
+	authMatch, authArgs := col("auth_key")
 	var tools []models.Tool
-	if err := s.DB.Select("id", "name", "auth_key").Order("id").Find(&tools).Error; err != nil {
+	if err := s.DB.Select("id", "name", "auth_key").
+		Where(authMatch, authArgs...).
+		Order("id").Find(&tools).Error; err != nil {
 		return nil, err
 	}
 	for _, tool := range tools {
-		if name, ok := secretNameFromReference(tool.AuthKey); ok {
+		if name, ok := secretNameFromReference(tool.AuthKey); ok && (varName == "" || name == varName) {
 			add(name, SecretReference{Type: "tool", ID: tool.ID, Name: tool.Name})
 		}
 	}
 
+	dbKeyMatch, dbKeyArgs := col("db_conn_api_key")
+	embedMatch, embedArgs := col("embed_api_key")
 	var datasources []models.Datasource
-	if err := s.DB.Select("id", "name", "db_conn_api_key", "embed_api_key").Order("id").Find(&datasources).Error; err != nil {
+	dsArgs := append(append([]interface{}{}, dbKeyArgs...), embedArgs...)
+	if err := s.DB.Select("id", "name", "db_conn_api_key", "embed_api_key").
+		Where("("+dbKeyMatch+") OR ("+embedMatch+")", dsArgs...).
+		Order("id").Find(&datasources).Error; err != nil {
 		return nil, err
 	}
 	for _, ds := range datasources {
 		ref := SecretReference{Type: "datasource", ID: ds.ID, Name: ds.Name}
 		for _, v := range []string{ds.DBConnAPIKey, ds.EmbedAPIKey} {
-			if name, ok := secretNameFromReference(v); ok {
+			if name, ok := secretNameFromReference(v); ok && (varName == "" || name == varName) {
 				add(name, ref)
 			}
 		}
@@ -342,6 +403,13 @@ func (s *Service) SecretReferences() (map[string][]SecretReference, error) {
 		})
 	}
 	return out, nil
+}
+
+// likeEscape escapes the LIKE wildcards (and the escape character itself) in
+// a literal so it can be embedded in a pattern that runs with ESCAPE '\'.
+func likeEscape(literal string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(literal)
 }
 
 // secretNameFromReference returns the secret name a $SECRET/<name> reference

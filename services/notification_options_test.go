@@ -165,3 +165,20 @@ func TestStripEmailFraming(t *testing.T) {
 		})
 	}
 }
+
+// Object names are user-supplied and interpolated into in-app text, so any
+// markup in them is dropped before the record is stored.
+func TestNotifyWithOptions_StripsMarkupFromInAppText(t *testing.T) {
+	db, ns, admin1, _, _ := setupNotificationOptionsTest(t)
+
+	err := ns.NotifyWithOptions("xss_1", "New app <img src=x onerror=alert(1)>", "body", models.NotifyAdmins, NotifyOptions{
+		Type:    "app",
+		Summary: "Dev created the app \"<script>alert(1)</script>Billing\".",
+	})
+	require.NoError(t, err)
+
+	got := storedNotifications(t, db, "xss_1")[admin1.ID]
+	assert.Equal(t, "New app", got.Title)
+	assert.Equal(t, "Dev created the app \"alert(1)Billing\".", got.Content)
+	assert.NotContains(t, got.Content, "<")
+}

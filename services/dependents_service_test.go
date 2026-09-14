@@ -253,3 +253,72 @@ func TestSecretReferences(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, none.Total)
 }
+
+// A secret whose name contains LIKE wildcards must match only itself: the
+// per-secret lookup escapes the name, so OPENAI_KEY does not pick up
+// OPENAIXKEY, and metadata references are found by the quoted reference.
+func TestGetSecretDependents_TargetedMatching(t *testing.T) {
+	db := setupDependentsTestDB(t)
+	s := NewService(db)
+
+	wanted := &models.LLM{Name: "Wanted", APIKey: "$SECRET/OPENAI_KEY", Active: true}
+	require.NoError(t, db.Create(wanted).Error)
+	decoy := &models.LLM{Name: "Decoy", APIKey: "$SECRET/OPENAIXKEY", Active: true}
+	require.NoError(t, db.Create(decoy).Error)
+	longer := &models.LLM{Name: "Longer", APIKey: "$SECRET/OPENAI_KEY_2", Active: true}
+	require.NoError(t, db.Create(longer).Error)
+	viaMetadata := &models.LLM{Name: "Bedrock", Active: true,
+		Metadata: models.JSONMap{"aws_secret_access_key": "$SECRET/OPENAI_KEY", "note": "mentions $SECRET/OPENAI_KEY_2 in text"}}
+	require.NoError(t, db.Create(viaMetadata).Error)
+	tool := &models.Tool{Name: "CRM", AuthKey: "$SECRET/OPENAI_KEY", Active: true}
+	require.NoError(t, db.Create(tool).Error)
+
+	deps, err := s.GetSecretDependents("OPENAI_KEY")
+	require.NoError(t, err)
+	assert.Equal(t, []DependentRef{{ID: wanted.ID, Name: "Wanted"}, {ID: viaMetadata.ID, Name: "Bedrock"}}, deps.LLMs)
+	assert.Equal(t, []DependentRef{{ID: tool.ID, Name: "CRM"}}, deps.Tools)
+	assert.Equal(t, 3, deps.Total)
+
+	deps2, err := s.GetSecretDependents("OPENAI_KEY_2")
+	require.NoError(t, err)
+	assert.Equal(t, []DependentRef{{ID: longer.ID, Name: "Longer"}}, deps2.LLMs,
+		"a quoted mention inside free text is not a reference; only whole-value references count")
+
+	all, err := s.SecretReferences()
+	require.NoError(t, err)
+	assert.Len(t, all["OPENAI_KEY"], 3)
+	assert.Len(t, all["OPENAIXKEY"], 1)
+	assert.Len(t, all["OPENAI_KEY_2"], 1)
+}
+
+// The portal's tool-catalogue listing filters inactive tools in the database;
+// an unknown catalogue is still an error rather than an empty list.
+func TestGetToolCatalogueActiveTools(t *testing.T) {
+	db := setupDependentsTestDB(t)
+	s := NewService(db)
+
+	catalogue, err := s.CreateToolCatalogue("Ops tools", "", "", "")
+	require.NoError(t, err)
+
+	live := &models.Tool{Name: "Live", Active: true}
+	require.NoError(t, db.Create(live).Error)
+	draft := &models.Tool{Name: "Draft"}
+	require.NoError(t, db.Create(draft).Error)
+	// gorm:"default:true" turns an explicit false into true on insert, so
+	// deactivate with an update, as the activate/deactivate endpoints do.
+	require.NoError(t, db.Model(draft).Update("active", false).Error)
+	require.NoError(t, catalogue.AddTool(db, live))
+	require.NoError(t, catalogue.AddTool(db, draft))
+
+	all, err := s.GetToolCatalogueTools(catalogue.ID)
+	require.NoError(t, err)
+	assert.Len(t, all, 2, "administrators still see the draft")
+
+	active, err := s.GetToolCatalogueActiveTools(catalogue.ID)
+	require.NoError(t, err)
+	require.Len(t, active, 1)
+	assert.Equal(t, "Live", active[0].Name)
+
+	_, err = s.GetToolCatalogueActiveTools(catalogue.ID + 100)
+	assert.Error(t, err)
+}
