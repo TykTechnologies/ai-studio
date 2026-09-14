@@ -8,16 +8,18 @@ import (
 )
 
 // AppActivity is the portal overview's per-app activity summary: when the
-// app's credential last reached the gateway and how many requests it made in
-// the window. Both come from proxy_logs in one grouped query over the caller's
-// apps, so the overview costs one round trip however many apps there are.
+// app last completed an LLM interaction and how many it made in the window.
+//
+// It reads llm_chat_records, the same table the app page's token, cost and
+// interaction charts and the budget spend are computed from, so the overview
+// never disagrees with the app page (proxy_logs also records rejected and
+// failed attempts, which the app page does not count). One grouped query
+// over the caller's apps, so the overview costs one round trip however many
+// apps there are.
 type AppActivity struct {
 	AppID        uint
 	LastAccessAt *time.Time
-	// Requests counts primary attempts only (failover_attempt = 0), the same
-	// rule the analytics pages use, so a request that failed over is one
-	// request and not one per rung.
-	Requests int64
+	Requests     int64
 }
 
 type appActivityRow struct {
@@ -27,16 +29,16 @@ type appActivityRow struct {
 }
 
 // GetAppActivity returns activity keyed by app id for the given apps. Apps
-// with no proxy log rows are absent from the map.
+// with no chat records are absent from the map.
 func GetAppActivity(db *gorm.DB, appIDs []uint, since time.Time) (map[uint]*AppActivity, error) {
 	out := make(map[uint]*AppActivity)
 	if len(appIDs) == 0 {
 		return out, nil
 	}
 	var rows []appActivityRow
-	err := db.Model(&models.ProxyLog{}).
+	err := db.Model(&models.LLMChatRecord{}).
 		Select("app_id, MAX(time_stamp) AS last_access, "+
-			"SUM(CASE WHEN time_stamp >= ? AND failover_attempt = 0 THEN 1 ELSE 0 END) AS requests", since).
+			"SUM(CASE WHEN time_stamp >= ? THEN 1 ELSE 0 END) AS requests", since).
 		Where("app_id IN ?", appIDs).
 		Group("app_id").
 		Scan(&rows).Error

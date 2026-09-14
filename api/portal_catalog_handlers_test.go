@@ -227,8 +227,8 @@ func TestCatalogModels_AllowListAndPrices(t *testing.T) {
 
 func TestUserAppsUsageSummary(t *testing.T) {
 	api, db, service := setupTestAPIForCommonTests(t)
-	// Proxy logs live outside InitModels (the analytics writer migrates them).
-	require.NoError(t, db.AutoMigrate(&models.ProxyLog{}))
+	// Chat records live outside InitModels (the analytics writer migrates them).
+	require.NoError(t, db.AutoMigrate(&models.LLMChatRecord{}))
 
 	user := createTestUser(t, service)
 	other := createTestUserWithSettings(t, service, "other@example.com", "Other", false, true, true, true, false)
@@ -245,18 +245,17 @@ func TestUserAppsUsageSummary(t *testing.T) {
 	theirs, err := service.CreateApp("Theirs", "", other.ID, nil, []uint{llm.ID}, nil, nil, nil, nil)
 	require.NoError(t, err)
 
+	// The same table the app page's charts and the budget spend read.
 	now := time.Now()
-	logs := []models.ProxyLog{
-		{AppID: mine.ID, TimeStamp: now.Add(-48 * time.Hour), ResponseCode: 200},
-		{AppID: mine.ID, TimeStamp: now.Add(-2 * time.Hour), ResponseCode: 200},
-		// A failover rung is not a request of its own.
-		{AppID: mine.ID, TimeStamp: now.Add(-1 * time.Hour), ResponseCode: 200, FailoverAttempt: 1},
+	records := []models.LLMChatRecord{
+		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.Add(-48 * time.Hour), TotalTokens: 10},
+		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.Add(-1 * time.Hour), TotalTokens: 10},
 		// Older than the window: counts for last access, not for requests_30d.
-		{AppID: mine.ID, TimeStamp: now.Add(-45 * 24 * time.Hour), ResponseCode: 200},
-		{AppID: theirs.ID, TimeStamp: now.Add(-1 * time.Hour), ResponseCode: 200},
+		{AppID: mine.ID, LLMID: llm.ID, TimeStamp: now.Add(-45 * 24 * time.Hour), TotalTokens: 10},
+		{AppID: theirs.ID, LLMID: llm.ID, TimeStamp: now.Add(-1 * time.Hour), TotalTokens: 10},
 	}
-	for i := range logs {
-		require.NoError(t, db.Create(&logs[i]).Error)
+	for i := range records {
+		require.NoError(t, db.Create(&records[i]).Error)
 	}
 
 	w := portalGet(t, api.getUserAppsUsageSummary, user)
