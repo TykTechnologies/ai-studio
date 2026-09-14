@@ -499,25 +499,11 @@ func (s *PluginService) GetActivePluginsInNamespace(namespace string) ([]models.
 	return plugins, nil
 }
 
-// isValidHookType validates hook type values (copied from microgateway)
+// isValidHookType validates hook type values against the model's canonical
+// list so that hook types added there (portal_ui, resource_provider, ...) are
+// accepted on update as well as on create.
 func isValidHookType(hookType string) bool {
-	validTypes := []string{
-		models.HookTypePreAuth,
-		models.HookTypeAuth,
-		models.HookTypePostAuth,
-		models.HookTypeOnResponse,
-		models.HookTypeDataCollection,
-		models.HookTypeStudioUI,
-		models.HookTypeAgent,
-		models.HookTypeObjectHooks,
-		models.HookTypeCustomEndpoint,
-	}
-	for _, validType := range validTypes {
-		if hookType == validType {
-			return true
-		}
-	}
-	return false
+	return models.IsValidHookType(hookType)
 }
 
 // validatePluginCommand performs security validation on plugin commands
