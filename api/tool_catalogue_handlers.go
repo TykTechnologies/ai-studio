@@ -246,13 +246,19 @@ func (a *API) deleteToolCatalogue(c *gin.Context) {
 // @Description Get a list of all tool catalogues
 // @Tags tool-catalogues
 // @Produce json
+// @Param search query string false "Case-insensitive substring match on name and description fields"
+// @Param sort query string false "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at"
 // @Success 200 {array} ToolCatalogueResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /tool-catalogues [get]
 func (a *API) listToolCatalogues(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	opts, ok := parseListQuery(c, catalogueSortFields)
+	if !ok {
+		return
+	}
 
-	toolCatalogues, totalCount, totalPages, err := a.service.GetAllToolCatalogues(pageSize, pageNumber, all)
+	toolCatalogues, totalCount, totalPages, err := a.service.GetAllToolCatalogues(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`

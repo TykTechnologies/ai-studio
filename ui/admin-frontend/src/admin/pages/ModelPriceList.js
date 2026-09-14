@@ -1,85 +1,58 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
-  Table,
-  TableBody,
   Button,
-  TableHead,
-  TableRow,
   Typography,
-  IconButton,
-  CircularProgress,
   Alert,
-  Menu,
-  MenuItem,
-  Snackbar,
   Box,
   DialogActions,
   TextField,
 } from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
+import DataTable from "../components/common/DataTable";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
   StyledDialog,
   StyledDialogTitle,
   StyledDialogContent,
 } from "../styles/sharedStyles";
-import InfoTooltip from "../components/common/InfoTooltip";
 import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+
+const perMillion = (price, field) =>
+  `${((price.attributes[field] || 0) * 1000000).toFixed(2)} ${price.attributes.currency}`;
+
+const priceName = (price) => price?.attributes?.model_name || String(price?.id ?? "");
 
 const ModelPriceList = () => {
   const navigate = useNavigate();
   const [modelPrices, setModelPrices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
   const [selectedPrice, setSelectedPrice] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
   const [openUpdatePriceModal, setOpenUpdatePriceModal] = useState(false);
-  const [updatedPrice, setUpdatedPrice] = useState(0);
   const [updatedOutputPrice, setUpdatedOutputPrice] = useState(0);
   const [updatedInputPrice, setUpdatedInputPrice] = useState(0);
   const [updatedCacheWritePrice, setUpdatedCacheWritePrice] = useState(0);
   const [updatedCacheReadPrice, setUpdatedCacheReadPrice] = useState(0);
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
   const fetchModelPrices = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/model-prices", {
-        params: {
-          page,
-          page_size: pageSize,
-          sort_by: sortConfig.key,
-          sort_direction: sortConfig.direction,
-        },
-      });
+      const response = await apiClient.get("/model-prices", { params: queryParams });
       setModelPrices(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -91,73 +64,50 @@ const ModelPriceList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortConfig, updatePaginationData]);
+  }, [queryParams, updatePaginationData]);
 
   useEffect(() => {
     fetchModelPrices();
   }, [fetchModelPrices]);
 
-  const handleMenuOpen = (event, price) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedPrice(price);
-  };
+  // No /bulk endpoint for model prices: deletes go one request per item.
+  const bulk = useBulkActions({
+    items: modelPrices,
+    resource: "model-prices",
+    singular: "model price",
+    plural: "model prices",
+    nameOf: priceName,
+    notify,
+    refresh: fetchModelPrices,
+  });
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleDelete = async (id) => {
+  const handleDelete = useCallback(async (id) => {
     try {
       await apiClient.delete(`/model-prices/${id}`);
-      setSnackbar({
-        open: true,
-        message: "Model Price deleted successfully",
-        severity: "success",
-      });
+      notify("Model Price deleted successfully");
       fetchModelPrices();
     } catch (error) {
       console.error("Error deleting Model Price", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete Model Price",
-        severity: "error",
-      });
+      notify("Failed to delete Model Price", "error");
     }
-    handleMenuClose();
-  };
+  }, [fetchModelPrices, notify]);
 
   const handlePriceClick = (price) => {
     navigate(`/admin/model-prices/${price.id}`);
-  };
-
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  const handleSort = (key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
   };
 
   const handleAddPrice = () => {
     navigate("/admin/model-prices/new");
   };
 
-  const handleOpenUpdatePriceModal = () => {
-    setUpdatedOutputPrice(selectedPrice.attributes.cpt * 1000000);
-    setUpdatedInputPrice(selectedPrice.attributes.cpit * 1000000);
-    setUpdatedCacheWritePrice(selectedPrice.attributes.cache_write_pt * 1000000);
-    setUpdatedCacheReadPrice(selectedPrice.attributes.cache_read_pt * 1000000);
+  const handleOpenUpdatePriceModal = useCallback((price) => {
+    setSelectedPrice(price);
+    setUpdatedOutputPrice(price.attributes.cpt * 1000000);
+    setUpdatedInputPrice(price.attributes.cpit * 1000000);
+    setUpdatedCacheWritePrice(price.attributes.cache_write_pt * 1000000);
+    setUpdatedCacheReadPrice(price.attributes.cache_read_pt * 1000000);
     setOpenUpdatePriceModal(true);
-    handleMenuClose();
-  };
+  }, []);
 
   const handleCloseUpdatePriceModal = () => {
     setOpenUpdatePriceModal(false);
@@ -178,27 +128,50 @@ const ModelPriceList = () => {
         },
       });
 
-      setSnackbar({
-        open: true,
-        message: "Model Price updated successfully",
-        severity: "success",
-      });
+      notify("Model Price updated successfully");
 
       handleCloseUpdatePriceModal();
       fetchModelPrices();
     } catch (error) {
       console.error("Error updating Model Price", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to update Model Price",
-        severity: "error",
-      });
+      notify("Failed to update Model Price", "error");
     }
   };
 
-  if (loading && modelPrices.length === 0) {
-    return <CircularProgress />;
-  }
+  const columns = useMemo(() => [
+    { field: "name", headerName: "Model Name", sortable: true, renderCell: (price) => price.attributes.model_name },
+    {
+      field: "vendor",
+      headerName: "Vendor",
+      sortable: true,
+      renderCell: (price) => (
+        <Box display="flex" alignItems="center">
+          <img
+            src={getVendorLogo(price.attributes.vendor)}
+            alt={price.attributes.vendor}
+            style={{ width: 24, height: 24, marginRight: 8 }}
+          />
+          {getVendorName(price.attributes.vendor)}
+        </Box>
+      ),
+    },
+    { field: "cpit", headerName: "Cost per Million Input Tokens", renderCell: (price) => perMillion(price, "cpit") },
+    { field: "cpt", headerName: "Cost per Million Output Tokens", renderCell: (price) => perMillion(price, "cpt") },
+    { field: "cache_write_pt", headerName: "Cost per Million Cache Write Tokens", renderCell: (price) => perMillion(price, "cache_write_pt") },
+    { field: "cache_read_pt", headerName: "Cost per Million Cache Read Tokens", renderCell: (price) => perMillion(price, "cache_read_pt") },
+    { field: "currency", headerName: "Currency", renderCell: (price) => price.attributes.currency },
+  ], []);
+
+  const rowActions = useMemo(() => [
+    { key: "update", label: "Update model price", onClick: handleOpenUpdatePriceModal },
+    { key: "edit", label: "Edit model price", onClick: (price) => navigate(`/admin/model-prices/edit/${price.id}`) },
+    { key: "delete", label: "Delete model price", onClick: (price) => handleDelete(price.id) },
+  ], [handleOpenUpdatePriceModal, navigate, handleDelete]);
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && modelPrices.length === 0) {
     return <Alert severity="error">{error}</Alert>;
@@ -220,129 +193,40 @@ const ModelPriceList = () => {
           </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Prices define the cost per million tokens for using different language models. You can set the cost per million tokens for input and output, the provider, and the currency. This helps track usage costs, allowing you to manage and optimize expenses when interacting with different models.</Typography>  
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model Prices define the cost per million tokens for using different language models. You can set the cost per million tokens for input and output, the provider, and the currency. This helps track usage costs, allowing you to manage and optimize expenses when interacting with different models.</Typography>
         </Box>
         <ContentBox>
-          {modelPrices.length === 0 ? (
-            <EmptyStateWidget
-              title="No Model Prices yet"
-              description="Model Prices define the cost per token for different language models. This is reflected in analytics recorded in the AI Gateway and from conversations in Chatrooms. Click the button below to add a new Model Price."
-              buttonText="Add Model Price"
-              buttonIcon={<AddIcon />}
-              onButtonClick={handleAddPrice}
-            />
-          ) : (
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell
-                      onClick={() => handleSort("model_name")}
-                    >
-                      Model Name
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("vendor")}>
-                      Vendor
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("cpit")}>
-                      Cost per Million Input Tokens
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("cpt")}>
-                      Cost per Million Output Tokens
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("cache_write_pt")}>
-                      Cost per Million Cache Write Tokens
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("cache_read_pt")}>
-                      Cost per Million Cache Read Tokens
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => handleSort("currency")}
-                    >
-                      Currency
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">
-                      Actions
-                    </StyledTableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {modelPrices.map((price) => (
-                    <StyledTableRow
-                      key={price.id}
-                      onClick={() => handlePriceClick(price)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <StyledTableCell>
-                        {price.attributes.model_name}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Box display="flex" alignItems="center">
-                          <img
-                            src={getVendorLogo(price.attributes.vendor)}
-                            alt={price.attributes.vendor}
-                            style={{ width: 24, height: 24, marginRight: 8 }}
-                          />
-                          {getVendorName(price.attributes.vendor)}
-                        </Box>
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {`${(price.attributes.cpit * 1000000).toFixed(2)} ${price.attributes.currency}`}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {`${(price.attributes.cpt * 1000000).toFixed(2)} ${price.attributes.currency}`}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {`${(price.attributes.cache_write_pt * 1000000).toFixed(2)} ${price.attributes.currency}`}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {`${(price.attributes.cache_read_pt * 1000000).toFixed(2)} ${price.attributes.currency}`}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {price.attributes.currency}
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        <Can permission={P.MODEL_PRICES_WRITE}>
-                          <IconButton
-                            onClick={(event) => handleMenuOpen(event, price)}
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
-                        </Can>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <PaginationControls
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
+          <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+          <Can permission={P.MODEL_PRICES_WRITE}>
+            {(canWrite) => (
+              <DataTable
+                {...tableProps}
+                ariaLabel="Model prices"
+                searchPlaceholder="Search model prices by model name..."
+                columns={columns}
+                data={modelPrices}
+                loading={loading}
+                onRowClick={handlePriceClick}
+                getRowLabel={priceName}
+                actions={canWrite ? rowActions : undefined}
+                {...(canWrite ? bulk.selectionProps : {})}
+                bulkActions={canWrite ? bulkActions : undefined}
+                emptyState={
+                  !searchTerm ? (
+                    <EmptyStateWidget
+                      title="No Model Prices yet"
+                      description="Model Prices define the cost per token for different language models. This is reflected in analytics recorded in the AI Gateway and from conversations in Chatrooms. Click the button below to add a new Model Price."
+                      buttonText="Add Model Price"
+                      buttonIcon={<AddIcon />}
+                      onButtonClick={canWrite ? handleAddPrice : undefined}
+                    />
+                  ) : undefined
+                }
               />
-            </StyledPaper>
-          )}
+            )}
+          </Can>
         </ContentBox>
       </>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={handleOpenUpdatePriceModal}>Update model price</MenuItem>
-        <MenuItem
-          onClick={() =>
-            navigate(`/admin/model-prices/edit/${selectedPrice?.id}`)
-          }
-        >
-          Edit model price
-        </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedPrice?.id)}>
-          Delete model price
-        </MenuItem>
-      </Menu>
 
       <StyledDialog
         open={openUpdatePriceModal}
@@ -397,20 +281,17 @@ const ModelPriceList = () => {
         </DialogActions>
       </StyledDialog>
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath={null}
+        objectLabel="model price"
+        objectLabelPlural="model prices"
+        items={bulk.deleteDialogItems}
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
+
+      <FeedbackSnackbar {...snackbarProps} />
     </>
   );
 };

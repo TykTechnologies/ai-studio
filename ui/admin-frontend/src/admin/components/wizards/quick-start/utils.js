@@ -1,3 +1,4 @@
+import { PRIVACY_LEVELS, privacyLevelForScore } from '../../common/privacy/privacyLevels';
 import { getConfig } from "../../../../config";
 
 export const generateSlug = (name) => {
@@ -162,19 +163,22 @@ export const validatePassword = (passwordCriteria) => {
   }
 };
 
-export const PRIVACY_LEVEL_SCORES = {
-  public: 25,
-  internal: 50,
-  confidential: 75,
-  restricted: 100
-};
+// The quick-start keeps its named options, but the labels, descriptions and
+// default scores come from the one privacy scale in
+// components/common/privacy/privacyLevels.js so it never drifts from the
+// LLM, tool and data source forms (UX review M4).
+export const PRIVACY_LEVEL_SCORES = Object.fromEntries(
+  PRIVACY_LEVELS.map((level) => [level.key, level.defaultScore])
+);
 
-export const PRIVACY_LEVEL_OPTIONS = [
-  { value: 'public', label: 'Public', description: 'Safe to share data (e.g. blogs, press releases)' },
-  { value: 'internal', label: 'Internal', description: 'Limited to users within the org. (e.g. reports, policies)' },
-  { value: 'confidential', label: 'Confidential', description: 'Sensitive data (e.g. financials, strategies)' },
-  { value: 'restricted', label: 'Restricted', description: 'PII or personal data (e.g. names, emails, costumer info)' }
-];
+export const PRIVACY_LEVEL_OPTIONS = PRIVACY_LEVELS.map((level) => ({
+  value: level.key,
+  label: level.label,
+  description: level.description
+}));
+
+/** The named level a stored privacy_score falls in ("public" when unset). */
+export const privacyLevelKeyForScore = (score) => privacyLevelForScore(score)?.key || 'public';
 
 export const PRIVACY_BADGE_CONFIGS = {
   public: {

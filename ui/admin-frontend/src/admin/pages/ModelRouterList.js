@@ -1,75 +1,41 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  Typography,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Menu,
-  MenuItem,
-  Snackbar,
-  Box,
-  Chip,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import { Typography, Alert, Box, Chip } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+import DataTable from "../components/common/DataTable";
+import ActiveStatusDot from "../components/common/ActiveStatusDot";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import {
   TitleBox,
-  StyledPaper,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 import Can from "../components/rbac/Can";
+import { usePermissions } from "../context/PermissionsContext";
 import { P } from "../rbac/permissions";
 
 const ModelRouterList = () => {
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const [routers, setRouters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedRouter, setSelectedRouter] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
   const fetchRouters = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/model-routers", {
-        params: {
-          page,
-          page_size: pageSize,
-          sort_by: sortConfig.key,
-          sort_direction: sortConfig.direction,
-        },
-      });
+      const response = await apiClient.get("/model-routers", { params: queryParams });
       setRouters(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -87,88 +53,84 @@ const ModelRouterList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortConfig, updatePaginationData]);
+  }, [queryParams, updatePaginationData]);
 
   useEffect(() => {
     fetchRouters();
   }, [fetchRouters]);
 
-  const handleMenuOpen = (event, router) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedRouter(router);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const bulk = useBulkActions({
+    items: routers,
+    resource: "model-routers",
+    singular: "model router",
+    plural: "model routers",
+    notify,
+    refresh: fetchRouters,
+  });
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/model-routers/${id}`);
-      setSnackbar({
-        open: true,
-        message: "Model Router deleted successfully",
-        severity: "success",
-      });
+      notify("Model Router deleted successfully");
       fetchRouters();
     } catch (error) {
       console.error("Error deleting Model Router", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete Model Router",
-        severity: "error",
-      });
+      notify("Failed to delete Model Router", "error");
     }
-    handleMenuClose();
   };
 
-  const handleToggleActive = async (router) => {
+  const handleToggleActive = useCallback(async (router) => {
     try {
       await apiClient.patch(`/model-routers/${router.id}/toggle`);
-      setSnackbar({
-        open: true,
-        message: `Model Router ${!router.attributes.active ? "activated" : "deactivated"} successfully`,
-        severity: "success",
-      });
+      notify(`Model Router ${!router.attributes.active ? "activated" : "deactivated"} successfully`);
       fetchRouters();
     } catch (error) {
       console.error("Error toggling Model Router active state", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to update Model Router active state",
-        severity: "error",
-      });
+      notify("Failed to update Model Router active state", "error");
     }
-    handleMenuClose();
-  };
+  }, [fetchRouters, notify]);
 
   const handleRouterClick = (router) => {
     navigate(`/admin/model-routers/${router.id}`);
-  };
-
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  const handleSort = (key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
   };
 
   const handleAddRouter = () => {
     navigate("/admin/model-routers/new");
   };
 
-  if (loading && routers.length === 0) {
-    return <CircularProgress />;
-  }
+  const columns = useMemo(() => [
+    { field: "name", headerName: "Name", sortable: true, renderCell: (router) => router.attributes.name },
+    {
+      field: "slug",
+      headerName: "Slug",
+      renderCell: (router) => <Chip label={router.attributes.slug} size="small" variant="outlined" />,
+    },
+    { field: "description", headerName: "Description", renderCell: (router) => router.attributes.description || "-" },
+    { field: "pools", headerName: "Pools", renderCell: (router) => `${router.attributes.pools?.length || 0} pool(s)` },
+    {
+      field: "active",
+      headerName: "Status",
+      sortable: true,
+      renderCell: (router) => <ActiveStatusDot active={router.attributes.active} showLabel />,
+    },
+  ], []);
+
+  const canPublish = can(P.MODEL_ROUTERS_PUBLISH);
+  const rowActions = useMemo(() => [
+    { key: "edit", label: "Edit Router", onClick: (router) => navigate(`/admin/model-routers/edit/${router.id}`) },
+    { key: "delete", label: "Delete Router", onClick: (router) => setDeleteTarget(router) },
+    {
+      key: "toggle",
+      label: (router) => `${router?.attributes?.active ? "Deactivate" : "Activate"} Router`,
+      onClick: handleToggleActive,
+      hidden: () => !canPublish,
+    },
+  ], [navigate, handleToggleActive, canPublish]);
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && routers.length === 0) {
     return <Alert severity="error">{error}</Alert>;
@@ -195,110 +157,36 @@ const ModelRouterList = () => {
           </Typography>
         </Box>
         <Box sx={{ p: 3 }}>
-          {routers.length === 0 ? (
-            <EmptyStateWidget
-              title="Create your first Model Router"
-              description="Model Routers let you define pools of LLM vendors and route requests based on model name patterns. Great for load balancing and failover."
-              buttonText="Add Router"
-              buttonIcon={<AddIcon />}
-              onButtonClick={handleAddRouter}
-            />
-          ) : (
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
-                      Name
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("slug")}>
-                      Slug
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Pools</StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("active")}>
-                      Status
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {routers.map((router) => (
-                    <StyledTableRow
-                      key={router.id}
-                      onClick={() => handleRouterClick(router)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <StyledTableCell>{router.attributes.name}</StyledTableCell>
-                      <StyledTableCell>
-                        <Chip
-                          label={router.attributes.slug}
-                          size="small"
-                          variant="outlined"
-                        />
-                      </StyledTableCell>
-                      <StyledTableCell>{router.attributes.description || "-"}</StyledTableCell>
-                      <StyledTableCell>
-                        {router.attributes.pools?.length || 0} pool(s)
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                          <FiberManualRecordIcon
-                            sx={{
-                              color: router.attributes.active ? "green" : "red",
-                              fontSize: 12,
-                            }}
-                          />
-                          {router.attributes.active ? "Active" : "Inactive"}
-                        </Box>
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, router)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <PaginationControls
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
+          <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+          <Can permission={P.MODEL_ROUTERS_WRITE}>
+            {(canWrite) => (
+              <DataTable
+                {...tableProps}
+                ariaLabel="Model routers"
+                searchPlaceholder="Search model routers by name..."
+                columns={columns}
+                data={routers}
+                loading={loading}
+                onRowClick={handleRouterClick}
+                actions={rowActions}
+                {...(canWrite ? bulk.selectionProps : {})}
+                bulkActions={canWrite ? bulkActions : undefined}
+                emptyState={
+                  !searchTerm ? (
+                    <EmptyStateWidget
+                      title="Create your first Model Router"
+                      description="Model Routers let you define pools of LLM vendors and route requests based on model name patterns. Great for load balancing and failover."
+                      buttonText="Add Router"
+                      buttonIcon={<AddIcon />}
+                      onButtonClick={handleAddRouter}
+                    />
+                  ) : undefined
+                }
               />
-            </StyledPaper>
-          )}
+            )}
+          </Can>
         </Box>
       </>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem
-          onClick={() => navigate(`/admin/model-routers/edit/${selectedRouter?.id}`)}
-        >
-          Edit Router
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setDeleteTarget(selectedRouter);
-            handleMenuClose();
-          }}
-        >
-          Delete Router
-        </MenuItem>
-        <Can permission={P.MODEL_ROUTERS_PUBLISH}>
-          <MenuItem onClick={() => handleToggleActive(selectedRouter)}>
-            {selectedRouter?.attributes.active ? "Deactivate" : "Activate"} Router
-          </MenuItem>
-        </Can>
-      </Menu>
 
       <DeleteConfirmationDialog
         open={Boolean(deleteTarget)}
@@ -314,20 +202,18 @@ const ModelRouterList = () => {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath="model-routers"
+        objectLabel="model router"
+        objectLabelPlural="model routers"
+        items={bulk.deleteDialogItems}
+        consequence="Deleting them removes them from all of those; requests routed through them will fail."
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
+
+      <FeedbackSnackbar {...snackbarProps} />
     </Box>
   );
 };

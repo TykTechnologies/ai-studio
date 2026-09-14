@@ -1,36 +1,22 @@
-import React, { useState, useEffect, useCallback, memo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  Typography,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Menu,
-  MenuItem,
-  Snackbar,
-  Box,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import { Typography, CircularProgress, Alert, Box } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import DataTable from "../components/common/DataTable";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import EnterpriseFeatureBadge from "../components/common/EnterpriseFeatureBadge";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
 } from "../styles/sharedStyles";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import useAdminData from "../hooks/useAdminData";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
@@ -41,37 +27,17 @@ const FilterList = memo(() => {
   const [filters, setFilters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedFilter, setSelectedFilter] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
   const fetchFilters = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/filters", {
-        params: {
-          page,
-          page_size: pageSize,
-          sort_by: sortConfig.key,
-          sort_direction: sortConfig.direction,
-        },
-      });
-      setFilters(response.data || []);
+      const response = await apiClient.get("/filters", { params: queryParams });
+      // The filters endpoint returns a bare array, not a { data } envelope.
+      setFilters(Array.isArray(response.data) ? response.data : response.data?.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
       updatePaginationData(totalCount, totalPages);
@@ -82,71 +48,62 @@ const FilterList = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortConfig, updatePaginationData]);
+  }, [queryParams, updatePaginationData]);
 
   useEffect(() => {
     fetchFilters();
   }, [fetchFilters]);
 
-  const handleMenuOpen = useCallback((event, filter) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedFilter(filter);
-  }, []);
-
-  const handleMenuClose = useCallback(() => {
-    setAnchorEl(null);
-  }, []);
+  const bulk = useBulkActions({
+    items: filters,
+    resource: "filters",
+    singular: "filter",
+    plural: "filters",
+    notify,
+    refresh: fetchFilters,
+  });
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/filters/${id}`);
-      setSnackbar({
-        open: true,
-        message: "Filter deleted successfully",
-        severity: "success",
-      });
+      notify("Filter deleted successfully");
       fetchFilters();
     } catch (error) {
       console.error("Error deleting filter", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete filter",
-        severity: "error",
-      });
+      notify("Failed to delete filter", "error");
     }
-    handleMenuClose();
   };
 
   const handleFilterClick = useCallback((filter) => {
     navigate(`/admin/filters/${filter.id}`);
   }, [navigate]);
 
-  const handleCloseSnackbar = useCallback((event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  }, [snackbar]);
-
-  const handleSort = useCallback((key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
-  }, [sortConfig]);
-
   const handleAddFilter = useCallback(() => {
     navigate("/admin/filters/new");
   }, [navigate]);
 
+  const columns = useMemo(() => [
+    { field: "name", headerName: "Name", sortable: true, renderCell: (filter) => filter.attributes.name },
+    { field: "description", headerName: "Description", renderCell: (filter) => filter.attributes.description },
+    {
+      field: "response_filter",
+      headerName: "Type",
+      renderCell: (filter) => (filter.attributes.response_filter ? "Response" : "Request"),
+    },
+  ], []);
+
+  const rowActions = useMemo(() => [
+    { key: "edit", label: "Edit filter", onClick: (filter) => navigate(`/admin/filters/edit/${filter.id}`) },
+    { key: "delete", label: "Delete filter", onClick: (filter) => setDeleteTarget(filter) },
+  ], [navigate]);
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
+    [bulk.run, bulk.requestDelete],
+  );
+
   // Wait for config to load before checking enterprise status
   if (configLoading) {
-    return <CircularProgress />;
-  }
-
-  if (loading && filters.length === 0) {
     return <CircularProgress />;
   }
 
@@ -190,83 +147,36 @@ const FilterList = memo(() => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>
         </Box>
         <ContentBox>
-          {filters.length === 0 ? (
-            <EmptyStateWidget
-              title="No filters created yet"
-              description="Click the button below to add a new filter."
-              buttonText="Add Filter"
-              buttonIcon={<AddIcon />}
-              onButtonClick={handleAddFilter}
-            />
-          ) : (
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
-                      Name
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Description</StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Type</StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filters.map((filter) => (
-                    <StyledTableRow
-                      key={filter.id}
-                      onClick={() => handleFilterClick(filter)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <StyledTableCell>{filter.attributes.name}</StyledTableCell>
-                      <StyledTableCell>{filter.attributes.description}</StyledTableCell>
-                      <StyledTableCell>
-                        {filter.attributes.response_filter ? "Response" : "Request"}
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        <Can permission={P.FILTERS_WRITE}>
-                          <IconButton
-                            onClick={(event) => handleMenuOpen(event, filter)}
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
-                        </Can>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <PaginationControls
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
+          <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+          <Can permission={P.FILTERS_WRITE}>
+            {(canWrite) => (
+              <DataTable
+                {...tableProps}
+                ariaLabel="Filters"
+                searchPlaceholder="Search filters by name..."
+                columns={columns}
+                data={filters}
+                loading={loading}
+                onRowClick={handleFilterClick}
+                actions={canWrite ? rowActions : undefined}
+                {...(canWrite ? bulk.selectionProps : {})}
+                bulkActions={canWrite ? bulkActions : undefined}
+                emptyState={
+                  !searchTerm ? (
+                    <EmptyStateWidget
+                      title="No filters created yet"
+                      description="Click the button below to add a new filter."
+                      buttonText="Add Filter"
+                      buttonIcon={<AddIcon />}
+                      onButtonClick={canWrite ? handleAddFilter : undefined}
+                    />
+                  ) : undefined
+                }
               />
-            </StyledPaper>
-          )}
+            )}
+          </Can>
         </ContentBox>
       </>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem
-          onClick={() => navigate(`/admin/filters/edit/${selectedFilter?.id}`)}
-        >
-          Edit filter
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setDeleteTarget(selectedFilter);
-            handleMenuClose();
-          }}
-        >
-          Delete filter
-        </MenuItem>
-      </Menu>
 
       <DeleteConfirmationDialog
         open={Boolean(deleteTarget)}
@@ -282,20 +192,18 @@ const FilterList = memo(() => {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath="filters"
+        objectLabel="filter"
+        objectLabelPlural="filters"
+        items={bulk.deleteDialogItems}
+        consequence="Deleting them removes them from all of those; the LLMs and apps that use them will run without these filters."
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
+
+      <FeedbackSnackbar {...snackbarProps} />
     </>
   );
 });

@@ -11,7 +11,10 @@ jest.mock("../utils/apiClient", () => ({
   __esModule: true,
   default: { get: jest.fn(), delete: jest.fn() },
 }));
-jest.mock("../components/rbac/Can", () => ({ children }) => <>{children}</>);
+// Can's render-prop form (children as a function) is used to gate the table.
+jest.mock("../components/rbac/Can", () => ({ children }) => (
+  <>{typeof children === "function" ? children(true) : children}</>
+));
 jest.mock("../../components/common/Icon", () => (props) => <div data-testid="mock-icon">{props.name}</div>);
 jest.mock("react-router-dom", () => ({
   ...jest.requireActual("react-router-dom"),

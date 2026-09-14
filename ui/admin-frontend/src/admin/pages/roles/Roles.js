@@ -1,41 +1,46 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AddIcon from '@mui/icons-material/Add';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { Alert, Tooltip, Typography } from '@mui/material';
 import {
-  Alert,
-  Box,
-  CircularProgress,
-  IconButton,
-  Menu,
-  MenuItem,
-  Snackbar,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import {
-  StyledPaper,
   TitleBox,
   ContentBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
 } from '../../styles/sharedStyles';
+import DataTable from '../../components/common/DataTable';
 import EmptyStateWidget from '../../components/common/EmptyStateWidget';
 import EnterpriseFeatureBadge from '../../components/common/EnterpriseFeatureBadge';
 import ConfirmationDialog from '../../components/common/ConfirmationDialog';
+import BulkDeleteConfirmationDialog from '../../components/common/BulkDeleteConfirmationDialog';
+import BulkResultAlert from '../../components/common/BulkResultAlert';
+import FeedbackSnackbar, { useFeedbackSnackbar } from '../../components/common/FeedbackSnackbar';
 import CloneRoleDialog from '../../components/roles/CloneRoleDialog';
 import { SystemBadge } from '../../components/roles/RoleBadge';
 import Can from '../../components/rbac/Can';
 import { usePermissions } from '../../context/PermissionsContext';
 import { P } from '../../rbac/permissions';
+import useBulkActions, { standardBulkActions } from '../../hooks/useBulkActions';
 import { listRoles, deleteRole, cloneRole, sortRoles } from '../../services/rbacService';
 import { isEnterpriseFeature, isPermissionDenied } from '../../utils/apiErrors';
+
+const SYSTEM_ROLE_REASON = 'System roles cannot be edited. Clone it to customise.';
+
+// /rbac/roles takes no search or sort parameters, so both happen here.
+const matchesSearch = (role, term) => {
+  if (!term) return true;
+  const needle = term.toLowerCase();
+  const a = role.attributes || {};
+  return [a.name, a.slug, a.description].some((value) => String(value || '').toLowerCase().includes(needle));
+};
+
+const compareRoles = (sortConfig) => (left, right) => {
+  const field = sortConfig?.field;
+  const direction = sortConfig?.direction === 'desc' ? -1 : 1;
+  const l = left.attributes?.[field];
+  const r = right.attributes?.[field];
+  if (typeof l === 'number' && typeof r === 'number') return (l - r) * direction;
+  return String(l ?? '').localeCompare(String(r ?? ''), undefined, { sensitivity: 'base' }) * direction;
+};
 
 const Roles = () => {
   const navigate = useNavigate();
@@ -44,12 +49,13 @@ const Roles = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [enterpriseAvailable, setEnterpriseAvailable] = useState(true);
-  const [anchorEl, setAnchorEl] = useState(null);
   const [selected, setSelected] = useState(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState(null);
+  const { notify, snackbarProps } = useFeedbackSnackbar();
 
   const canManage = can(P.ROLES_WRITE);
 
@@ -76,14 +82,21 @@ const Roles = () => {
     fetchRoles();
   }, [fetchRoles]);
 
-  const openMenu = (event, role) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelected(role);
-  };
-  const closeMenu = () => setAnchorEl(null);
+  const visibleRoles = useMemo(() => {
+    const filtered = roles.filter((role) => matchesSearch(role, searchTerm));
+    return sortConfig?.field ? [...filtered].sort(compareRoles(sortConfig)) : filtered;
+  }, [roles, searchTerm, sortConfig]);
 
-  const notify = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
+  const bulk = useBulkActions({
+    items: visibleRoles,
+    resource: 'rbac/roles',
+    singular: 'role',
+    plural: 'roles',
+    notify,
+    refresh: fetchRoles,
+    viaBulkEndpoint: false,
+    deleteOne: deleteRole,
+  });
 
   const handleDelete = async () => {
     if (!selected) return;
@@ -115,6 +128,69 @@ const Roles = () => {
     }
   };
 
+  const columns = useMemo(() => [
+    { field: 'name', headerName: 'Name', sortable: true, renderCell: (role) => role.attributes.name },
+    { field: 'is_system', headerName: 'Type', renderCell: (role) => <SystemBadge isSystem={role.attributes.is_system} /> },
+    { field: 'description', headerName: 'Description', sortable: true, renderCell: (role) => role.attributes.description },
+    {
+      field: 'permissions',
+      headerName: 'Permissions',
+      align: 'right',
+      renderCell: (role) => {
+        const a = role.attributes;
+        const permCount = a.permissions?.includes('*') ? 'All' : (a.permissions?.length ?? 0);
+        return (
+          <Tooltip title={a.permissions?.includes('*') ? 'Full administrator access' : (a.permissions || []).slice(0, 12).join(', ')}>
+            <span>{permCount}</span>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      field: 'users_count',
+      headerName: 'Assigned to',
+      align: 'right',
+      sortable: true,
+      renderCell: (role) => {
+        const a = role.attributes;
+        return `${a.users_count} ${a.users_count === 1 ? 'user' : 'users'}, ${a.groups_count} ${a.groups_count === 1 ? 'team' : 'teams'}`;
+      },
+    },
+  ], []);
+
+  const rowActions = useMemo(() => [
+    { key: 'view', label: 'View role', onClick: (role) => navigate(`/admin/roles/${role.id}`) },
+    { key: 'clone', label: 'Clone role', onClick: (role) => { setSelected(role); setCloneOpen(true); } },
+    {
+      key: 'edit',
+      label: 'Edit role',
+      disabled: (role) => Boolean(role?.attributes?.is_system),
+      disabledReason: SYSTEM_ROLE_REASON,
+      onClick: (role) => navigate(`/admin/roles/edit/${role.id}`),
+    },
+    {
+      key: 'delete',
+      label: 'Delete role',
+      disabled: (role) => Boolean(role?.attributes?.is_system),
+      disabledReason: SYSTEM_ROLE_REASON,
+      onClick: (role) => { setSelected(role); setDeleteOpen(true); },
+    },
+  ], [navigate]);
+
+  const bulkActions = useMemo(
+    () =>
+      standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }).map((action) =>
+        action.key === 'delete'
+          ? {
+              ...action,
+              disabled: (items) => items.some((role) => role.attributes?.is_system),
+              disabledReason: 'System roles cannot be deleted; clear them from the selection.',
+            }
+          : action,
+      ),
+    [bulk.run, bulk.requestDelete],
+  );
+
   if (!enterpriseAvailable) {
     return (
       <>
@@ -131,10 +207,6 @@ const Roles = () => {
     );
   }
 
-  if (loading && roles.length === 0) {
-    return <CircularProgress />;
-  }
-
   return (
     <>
       <TitleBox top="64px">
@@ -147,82 +219,36 @@ const Roles = () => {
       </TitleBox>
       <ContentBox>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {roles.length === 0 && !error ? (
-          <EmptyStateWidget
-            title="No roles found"
-            description="System roles are created automatically. Add a custom role to tailor access."
-            buttonText={canManage ? 'Add role' : undefined}
-            buttonIcon={canManage ? <AddIcon /> : undefined}
-            onButtonClick={canManage ? () => navigate('/admin/roles/new') : undefined}
-          />
-        ) : (
-          <StyledPaper>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableHeaderCell>Name</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Type</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Description</StyledTableHeaderCell>
-                  <StyledTableHeaderCell align="right">Permissions</StyledTableHeaderCell>
-                  <StyledTableHeaderCell align="right">Assigned to</StyledTableHeaderCell>
-                  <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {roles.map((role) => {
-                  const a = role.attributes;
-                  const permCount = a.permissions?.includes('*') ? 'All' : (a.permissions?.length ?? 0);
-                  return (
-                    <StyledTableRow
-                      key={role.id}
-                      onClick={() => navigate(`/admin/roles/${role.id}`)}
-                      sx={{ cursor: 'pointer' }}
-                      data-testid={`role-row-${a.slug}`}
-                    >
-                      <StyledTableCell>{a.name}</StyledTableCell>
-                      <StyledTableCell><SystemBadge isSystem={a.is_system} /></StyledTableCell>
-                      <StyledTableCell>{a.description}</StyledTableCell>
-                      <StyledTableCell align="right">
-                        <Tooltip title={a.permissions?.includes('*') ? 'Full administrator access' : (a.permissions || []).slice(0, 12).join(', ')}>
-                          <span>{permCount}</span>
-                        </Tooltip>
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        {a.users_count} {a.users_count === 1 ? 'user' : 'users'}, {a.groups_count} {a.groups_count === 1 ? 'team' : 'teams'}
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        {canManage && (
-                          <IconButton onClick={(e) => openMenu(e, role)} aria-label={`Actions for ${a.name}`}>
-                            <MoreVertIcon />
-                          </IconButton>
-                        )}
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </StyledPaper>
-        )}
+        <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+        <DataTable
+          ariaLabel="Roles"
+          enableSearch
+          searchTerm={searchTerm}
+          onSearch={setSearchTerm}
+          searchPlaceholder="Search roles by name..."
+          sortConfig={sortConfig}
+          onSortChange={setSortConfig}
+          columns={columns}
+          data={visibleRoles}
+          loading={loading}
+          onRowClick={(role) => navigate(`/admin/roles/${role.id}`)}
+          rowProps={(role) => ({ 'data-testid': `role-row-${role.attributes.slug}` })}
+          actions={canManage ? rowActions : undefined}
+          {...(canManage ? bulk.selectionProps : {})}
+          bulkActions={canManage ? bulkActions : undefined}
+          emptyState={
+            !searchTerm && !error ? (
+              <EmptyStateWidget
+                title="No roles found"
+                description="System roles are created automatically. Add a custom role to tailor access."
+                buttonText={canManage ? 'Add role' : undefined}
+                buttonIcon={canManage ? <AddIcon /> : undefined}
+                onButtonClick={canManage ? () => navigate('/admin/roles/new') : undefined}
+              />
+            ) : undefined
+          }
+        />
       </ContentBox>
-
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={closeMenu}>
-        <MenuItem onClick={() => { closeMenu(); navigate(`/admin/roles/${selected?.id}`); }}>View role</MenuItem>
-        <MenuItem onClick={() => { closeMenu(); setCloneOpen(true); }}>Clone role</MenuItem>
-        {selected?.attributes?.is_system ? (
-          <Tooltip title="System roles cannot be edited. Clone it to customise." placement="left">
-            <Box>
-              <MenuItem disabled>Edit role</MenuItem>
-              <MenuItem disabled>Delete role</MenuItem>
-            </Box>
-          </Tooltip>
-        ) : (
-          <Box>
-            <MenuItem onClick={() => { closeMenu(); navigate(`/admin/roles/edit/${selected?.id}`); }}>Edit role</MenuItem>
-            <MenuItem onClick={() => { closeMenu(); setDeleteOpen(true); }}>Delete role</MenuItem>
-          </Box>
-        )}
-      </Menu>
 
       <CloneRoleDialog open={cloneOpen} role={selected} busy={busy} onConfirm={handleClone} onCancel={() => setCloneOpen(false)} />
 
@@ -241,16 +267,17 @@ const Roles = () => {
         primaryButtonComponent="danger"
       />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={() => setSnackbar((s) => ({ ...s, open: false }))} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath={null}
+        objectLabel="role"
+        objectLabelPlural="roles"
+        items={bulk.deleteDialogItems}
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
+
+      <FeedbackSnackbar {...snackbarProps} />
     </>
   );
 };

@@ -26,6 +26,7 @@ import {
 
 import { getVendorCodes, getVendorName } from "../../utils/vendorLogos";
 import modelPresets from "../../utils/modelPresets";
+import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 
 import { getVendorLogo } from "../../utils/vendorLogos";
 
@@ -253,16 +254,16 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                     onChange={handleInputChange}
                     required
                   />
-                  <TextField
-                    fullWidth
-                    margin="normal"
-                    label="Privacy Level"
-                    name="privacyLevel"
-                    type="number"
-                    value={formData.privacyLevel}
-                    onChange={handleInputChange}
-                    required
-                  />
+                  <Box sx={{ mt: 2, mb: 1 }}>
+                    <PrivacyLevelInput
+                      value={formData.privacyLevel}
+                      onChange={(score) =>
+                        setFormData((prevData) => ({ ...prevData, privacyLevel: score }))
+                      }
+                      name="privacyLevel"
+                      required
+                    />
+                  </Box>
                   {formData.vendor !== "openai" &&
                     formData.vendor !== "anthropic" && (
                       <TextField

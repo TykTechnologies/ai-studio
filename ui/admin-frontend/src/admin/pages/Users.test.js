@@ -11,7 +11,10 @@ jest.mock("../utils/apiClient", () => ({
   __esModule: true,
   default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
-jest.mock("../components/rbac/Can", () => ({ children }) => <>{children}</>);
+// Can's render-prop form (children as a function) is used to gate the table.
+jest.mock("../components/rbac/Can", () => ({ children }) => (
+  <>{typeof children === "function" ? children(true) : children}</>
+));
 jest.mock("../context/PermissionsContext", () => ({
   usePermissions: () => ({ rbacEnabled: false, can: () => true, canAny: () => true, canAll: () => true }),
 }));

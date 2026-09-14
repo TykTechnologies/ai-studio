@@ -1,53 +1,42 @@
-import React, { useState, useEffect, useCallback, memo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useDebounce } from "use-debounce";
 import apiClient from "../utils/apiClient";
-import SearchInput from "../components/common/SearchInput";
 import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
   Typography,
   Button,
-  IconButton,
-  CircularProgress,
   Alert,
-  Menu,
   MenuItem,
   DialogActions,
   FormControl,
   InputLabel,
   Select,
-  Snackbar,
   TextField,
   Box,
+  Chip,
 } from "@mui/material";
 import { Link } from "react-router-dom";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import {
-  StyledPaper,
   TitleBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
   StyledDialogContent,
   StyledDialogTitle,
   StyledDialog,
 } from "../styles/sharedStyles";
 import AddIcon from "@mui/icons-material/Add";
-import PaginationControls from "../components/common/PaginationControls";
+import DataTable from "../components/common/DataTable";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import { usePermissions } from "../context/PermissionsContext";
 import RoleBadge from "../components/roles/RoleBadge";
 import CustomSelectBadge from "../components/common/CustomSelectBadge";
 import { roleBadgeConfigs } from "../components/groups/utils/roleBadgeConfig";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import useSystemFeatures from "../hooks/useSystemFeatures";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
 import { authSourceLabel, setUserDisabled } from "../services/userService";
-import { Chip } from "@mui/material";
 
 const ORIGIN_OPTIONS = [
   { value: "", label: "Any origin" },
@@ -66,33 +55,25 @@ const STATUS_OPTIONS = [
   { value: "true", label: "Disabled" },
 ];
 
+const userLabel = (user) => user?.attributes?.name || user?.attributes?.email || String(user?.id ?? "");
+
 const Users = memo(() => {
   const navigate = useNavigate();
-  const { rbacEnabled } = usePermissions();
+  const { rbacEnabled, can } = usePermissions();
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [sortField, setSortField] = useState("id");
-  const [sortOrder, setSortOrder] = useState("asc");
-  const [anchorEl, setAnchorEl] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [openAddToGroupModal, setOpenAddToGroupModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState("");
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
   // Origin / API key / status filters; "" means any.
   const [originFilter, setOriginFilter] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const isFirstRender = useRef(true);
   const { features } = useSystemFeatures();
 
   // Helper function to check if we're in gateway-only mode
@@ -104,28 +85,20 @@ const Users = memo(() => {
     );
   };
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, handlePageChange, tableProps } = useListQuery({
+    initialSort: { field: "id", direction: "asc" },
+  });
+
+  // A filter change starts again from page 1, like a search does.
+  const applyFilter = (setter) => (event) => {
+    setter(event.target.value);
+    handlePageChange(1);
+  };
 
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {
-        page,
-        page_size: pageSize,
-        sort: `${sortOrder === "desc" ? "-" : ""}${sortField}`,
-      };
-
-      // Only include search param if 2+ characters entered
-      if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
-        params.search = debouncedSearchTerm;
-      }
+      const params = { ...queryParams };
       if (originFilter) params.auth_source = originFilter;
       if (apiKeyFilter) params.has_api_key = apiKeyFilter;
       if (statusFilter) params.disabled = statusFilter;
@@ -142,7 +115,7 @@ const Users = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, updatePaginationData, sortField, sortOrder, debouncedSearchTerm, originFilter, apiKeyFilter, statusFilter]);
+  }, [queryParams, updatePaginationData, originFilter, apiKeyFilter, statusFilter]);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -155,85 +128,58 @@ const Users = memo(() => {
 
   useEffect(() => {
     fetchUsers();
-    fetchGroups();
-  }, [fetchUsers, fetchGroups]);
+  }, [fetchUsers]);
 
-  // Reset to page 1 when search term or a filter changes (but not on initial render)
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    handlePageChange(1);
-  }, [debouncedSearchTerm, originFilter, apiKeyFilter, statusFilter, handlePageChange]);
+    fetchGroups();
+  }, [fetchGroups]);
 
-  const handleSearch = useCallback((value) => {
-    setSearchTerm(value);
-  }, []);
-
-  const handleMenuOpen = useCallback((event, user) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedUser(user);
-  }, []);
-
-  const handleMenuClose = useCallback(() => {
-    setAnchorEl(null);
-  }, []);
+  // No /bulk endpoint for users: deletes go one request per item.
+  const bulk = useBulkActions({
+    items: users,
+    resource: "users",
+    singular: "user",
+    plural: "users",
+    nameOf: userLabel,
+    notify,
+    refresh: fetchUsers,
+  });
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/users/${id}`);
-      setSnackbar({
-        open: true,
-        message: "User deleted successfully",
-        severity: "success",
-      });
+      notify("User deleted successfully");
       fetchUsers();
     } catch (error) {
       console.error("Error deleting user", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete user",
-        severity: "error",
-      });
+      notify("Failed to delete user", "error");
     }
-    handleMenuClose();
   };
 
   const handleUserClick = useCallback((user) => {
     navigate(`/admin/users/${user.id}`);
   }, [navigate]);
 
-  const handleToggleDisabled = async () => {
-    if (!selectedUser) return;
-    const disable = !selectedUser.attributes.disabled;
+  const handleToggleDisabled = async (user) => {
+    if (!user) return;
+    const disable = !user.attributes.disabled;
     try {
-      await setUserDisabled(selectedUser.id, disable);
-      setSnackbar({
-        open: true,
-        message: disable ? "User disabled" : "User enabled",
-        severity: "success",
-      });
+      await setUserDisabled(user.id, disable);
+      notify(disable ? "User disabled" : "User enabled");
       fetchUsers();
     } catch (error) {
       console.error("Error updating user status", error);
-      setSnackbar({
-        open: true,
-        message: error?.message || (disable ? "Failed to disable user" : "Failed to enable user"),
-        severity: "error",
-      });
+      notify(error?.message || (disable ? "Failed to disable user" : "Failed to enable user"), "error");
     }
-    handleMenuClose();
   };
 
-  const handleAddToGroup = useCallback(() => {
+  const handleAddToGroup = useCallback((user) => {
+    setSelectedUser(user);
     if (groups.length === 0) {
       setIsAddingGroup(true);
     }
     setOpenAddToGroupModal(true);
-    handleMenuClose();
-  }, [groups.length, handleMenuClose]);
+  }, [groups.length]);
 
   const handleCloseAddToGroupModal = useCallback(() => {
     setOpenAddToGroupModal(false);
@@ -242,11 +188,7 @@ const Users = memo(() => {
 
   const handleAddUserToGroup = async () => {
     if (!selectedGroup || !selectedUser) {
-      setSnackbar({
-        open: true,
-        message: "Please select a team",
-        severity: "warning",
-      });
+      notify("Please select a team", "warning");
       return;
     }
 
@@ -257,30 +199,18 @@ const Users = memo(() => {
           type: "users",
         },
       });
-      setSnackbar({
-        open: true,
-        message: "User added to team successfully",
-        severity: "success",
-      });
+      notify("User added to team successfully");
       handleCloseAddToGroupModal();
       fetchUsers();
     } catch (error) {
       console.error("Error adding user to group", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to add user to team",
-        severity: "error",
-      });
+      notify("Failed to add user to team", "error");
     }
   };
 
   const handleAddNewGroup = async () => {
     if (!newGroupName.trim()) {
-      setSnackbar({
-        open: true,
-        message: "Team name cannot be empty",
-        severity: "warning",
-      });
+      notify("Team name cannot be empty", "warning");
       return;
     }
 
@@ -297,31 +227,84 @@ const Users = memo(() => {
       setGroups([...groups, newGroup]);
       setNewGroupName("");
       setIsAddingGroup(false);
-      setSnackbar({
-        open: true,
-        message: "New team added successfully",
-        severity: "success",
-      });
+      notify("New team added successfully");
     } catch (error) {
       console.error("Error adding new group", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to add new team",
-        severity: "error",
-      });
+      notify("Failed to add new team", "error");
     }
   };
 
-  const handleCloseSnackbar = useCallback((event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  }, [snackbar]);
+  const columns = useMemo(() => [
+    { field: "id", headerName: "ID", sortable: true },
+    { field: "name", headerName: "Name", sortable: true, renderCell: (user) => user.attributes.name },
+    { field: "email", headerName: "Email", sortable: true, renderCell: (user) => user.attributes.email },
+    {
+      field: "email_verified",
+      headerName: "Email Verified",
+      sortable: true,
+      renderCell: (user) => (user.attributes.email_verified ? "Yes" : "No"),
+    },
+    {
+      field: "auth_source",
+      headerName: "Origin",
+      sortable: true,
+      cellProps: (user) => ({ "data-testid": `user-origin-${user.id}` }),
+      renderCell: (user) => authSourceLabel(user.attributes.auth_source),
+    },
+    {
+      field: "has_api_key",
+      headerName: "API key",
+      cellProps: (user) => ({ "data-testid": `user-api-key-${user.id}` }),
+      renderCell: (user) => (user.attributes.has_api_key ? "Issued" : "None"),
+    },
+    {
+      field: "disabled",
+      headerName: "Status",
+      sortable: true,
+      cellProps: (user) => ({ "data-testid": `user-status-${user.id}` }),
+      renderCell: (user) =>
+        user.attributes.disabled ? (
+          <Chip label="Disabled" size="small" color="warning" variant="outlined" />
+        ) : (
+          <Chip label="Active" size="small" color="success" variant="outlined" />
+        ),
+    },
+    rbacEnabled
+      ? {
+          field: "roles",
+          headerName: "Roles",
+          renderCell: (user) => (user.attributes.roles || []).map((role) => <RoleBadge key={role.id} role={role} />),
+        }
+      : {
+          field: "is_admin",
+          headerName: "Account type",
+          sortable: true,
+          renderCell: (user) => (
+            <CustomSelectBadge config={roleBadgeConfigs[user.attributes.role] || roleBadgeConfigs["Chat user"]} />
+          ),
+        },
+  ], [rbacEnabled]);
 
-  if (loading && users.length === 0) {
-    return <CircularProgress />;
-  }
+  const canWriteUsers = can(P.USERS_WRITE);
+  const gatewayOnly = isGatewayOnlyMode();
+  const rowActions = [
+    // Only show Add to Team if not in gateway-only mode
+    { key: "add-to-team", label: "Add to team", onClick: handleAddToGroup, hidden: () => gatewayOnly },
+    { key: "edit", label: "Edit user", onClick: (user) => navigate(`/admin/users/edit/${user.id}`) },
+    {
+      key: "toggle-disabled",
+      label: (user) => (user?.attributes?.disabled ? "Enable user" : "Disable user"),
+      onClick: handleToggleDisabled,
+      hidden: () => !canWriteUsers,
+      "data-testid": "user-toggle-disabled",
+    },
+    { key: "delete", label: "Delete user", onClick: (user) => handleDelete(user.id) },
+  ];
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && users.length === 0) {
     return <Alert severity="error">{error}</Alert>;
@@ -343,20 +326,15 @@ const Users = memo(() => {
         </Can>
       </TitleBox>
       <Box sx={{ p: 3 }}>
+        <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+        {/* The search box is DataTable's; the filters sit beside it. */}
         <Box sx={{ mb: 2, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
-          <Box sx={{ width: 400, maxWidth: "100%" }}>
-            <SearchInput
-              value={searchTerm}
-              onChange={handleSearch}
-              placeholder="Search by name or email..."
-            />
-          </Box>
           <TextField
             select
             size="small"
             label="Origin"
             value={originFilter}
-            onChange={(e) => setOriginFilter(e.target.value)}
+            onChange={applyFilter(setOriginFilter)}
             sx={{ minWidth: 160 }}
             inputProps={{ "data-testid": "users-filter-origin" }}
           >
@@ -369,7 +347,7 @@ const Users = memo(() => {
             size="small"
             label="API key"
             value={apiKeyFilter}
-            onChange={(e) => setApiKeyFilter(e.target.value)}
+            onChange={applyFilter(setApiKeyFilter)}
             sx={{ minWidth: 130 }}
             inputProps={{ "data-testid": "users-filter-api-key" }}
           >
@@ -382,7 +360,7 @@ const Users = memo(() => {
             size="small"
             label="Status"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={applyFilter(setStatusFilter)}
             sx={{ minWidth: 130 }}
             inputProps={{ "data-testid": "users-filter-status" }}
           >
@@ -391,165 +369,24 @@ const Users = memo(() => {
             ))}
           </TextField>
         </Box>
-        <StyledPaper>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <StyledTableHeaderCell
-                  onClick={() => {
-                    setSortOrder(sortField === "id" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                    setSortField("id");
-                  }}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  ID {sortField === "id" && (sortOrder === "asc" ? "↑" : "↓")}
-                </StyledTableHeaderCell>
-                <StyledTableHeaderCell
-                  onClick={() => {
-                    setSortOrder(sortField === "name" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                    setSortField("name");
-                  }}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  Name {sortField === "name" && (sortOrder === "asc" ? "↑" : "↓")}
-                </StyledTableHeaderCell>
-                <StyledTableHeaderCell
-                  onClick={() => {
-                    setSortOrder(sortField === "email" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                    setSortField("email");
-                  }}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  Email {sortField === "email" && (sortOrder === "asc" ? "↑" : "↓")}
-                </StyledTableHeaderCell>
-                <StyledTableHeaderCell
-                  onClick={() => {
-                    setSortOrder(sortField === "email_verified" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                    setSortField("email_verified");
-                  }}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  Email Verified {sortField === "email_verified" && (sortOrder === "asc" ? "↑" : "↓")}
-                </StyledTableHeaderCell>
-                <StyledTableHeaderCell
-                  onClick={() => {
-                    setSortOrder(sortField === "auth_source" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                    setSortField("auth_source");
-                  }}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  Origin {sortField === "auth_source" && (sortOrder === "asc" ? "↑" : "↓")}
-                </StyledTableHeaderCell>
-                <StyledTableHeaderCell>API key</StyledTableHeaderCell>
-                <StyledTableHeaderCell
-                  onClick={() => {
-                    setSortOrder(sortField === "disabled" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                    setSortField("disabled");
-                  }}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  Status {sortField === "disabled" && (sortOrder === "asc" ? "↑" : "↓")}
-                </StyledTableHeaderCell>
-                {rbacEnabled ? (
-                  <StyledTableHeaderCell>Roles</StyledTableHeaderCell>
-                ) : (
-                  <StyledTableHeaderCell
-                    onClick={() => {
-                      setSortOrder(sortField === "is_admin" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
-                      setSortField("is_admin");
-                    }}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    Account type {sortField === "is_admin" && (sortOrder === "asc" ? "↑" : "↓")}
-                  </StyledTableHeaderCell>
-                )}
-                <StyledTableHeaderCell align="right">
-                  Actions
-                </StyledTableHeaderCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {users.length > 0 ? (
-                users.map((user) => (
-                  <StyledTableRow
-                    key={user.id}
-                    onClick={() => handleUserClick(user)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <StyledTableCell>{user.id}</StyledTableCell>
-                    <StyledTableCell>{user.attributes.name}</StyledTableCell>
-                    <StyledTableCell>{user.attributes.email}</StyledTableCell>
-                    <StyledTableCell>
-                      {user.attributes.email_verified ? "Yes" : "No"}
-                    </StyledTableCell>
-                    <StyledTableCell data-testid={`user-origin-${user.id}`}>
-                      {authSourceLabel(user.attributes.auth_source)}
-                    </StyledTableCell>
-                    <StyledTableCell data-testid={`user-api-key-${user.id}`}>
-                      {user.attributes.has_api_key ? "Issued" : "None"}
-                    </StyledTableCell>
-                    <StyledTableCell data-testid={`user-status-${user.id}`}>
-                      {user.attributes.disabled ? (
-                        <Chip label="Disabled" size="small" color="warning" variant="outlined" />
-                      ) : (
-                        <Chip label="Active" size="small" color="success" variant="outlined" />
-                      )}
-                    </StyledTableCell>
-                    <StyledTableCell>
-                      {rbacEnabled
-                        ? (user.attributes.roles || []).map((role) => <RoleBadge key={role.id} role={role} />)
-                        : <CustomSelectBadge config={roleBadgeConfigs[user.attributes.role] || roleBadgeConfigs["Chat user"]} />}
-                    </StyledTableCell>
-                    <StyledTableCell align="right">
-                      <Can anyOf={[P.USERS_WRITE, P.GROUPS_WRITE]}>
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, user)}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
-                      </Can>
-                    </StyledTableCell>
-                  </StyledTableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <StyledTableCell colSpan={9}>No users found</StyledTableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          <PaginationControls
-            page={page}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-          />
-        </StyledPaper>
-
-        <Menu
-          anchorEl={anchorEl}
-          open={Boolean(anchorEl)}
-          onClose={handleMenuClose}
-        >
-          {/* Only show Add to Team if not in gateway-only mode */}
-          {!isGatewayOnlyMode() && (
-            <MenuItem onClick={handleAddToGroup}>Add to team</MenuItem>
+        <Can anyOf={[P.USERS_WRITE, P.GROUPS_WRITE]}>
+          {(canAct) => (
+            <DataTable
+              {...tableProps}
+              ariaLabel="Users"
+              searchPlaceholder="Search by name or email..."
+              columns={columns}
+              data={users}
+              loading={loading}
+              onRowClick={handleUserClick}
+              getRowLabel={userLabel}
+              actions={canAct ? rowActions : undefined}
+              {...(canWriteUsers ? bulk.selectionProps : {})}
+              bulkActions={canWriteUsers ? bulkActions : undefined}
+              emptyMessage="No users found"
+            />
           )}
-          <MenuItem
-            onClick={() => navigate(`/admin/users/edit/${selectedUser?.id}`)}
-          >
-            Edit user
-          </MenuItem>
-          <Can permission={P.USERS_WRITE}>
-            <MenuItem onClick={handleToggleDisabled} data-testid="user-toggle-disabled">
-              {selectedUser?.attributes?.disabled ? "Enable user" : "Disable user"}
-            </MenuItem>
-          </Can>
-          <MenuItem onClick={() => handleDelete(selectedUser?.id)}>
-            Delete user
-          </MenuItem>
-        </Menu>
+        </Can>
 
         <StyledDialog
           open={openAddToGroupModal}
@@ -605,20 +442,17 @@ const Users = memo(() => {
           </DialogActions>
         </StyledDialog>
 
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        >
-          <Alert
-            onClose={handleCloseSnackbar}
-            severity={snackbar.severity}
-            sx={{ width: "100%" }}
-          >
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
+        <BulkDeleteConfirmationDialog
+          open={bulk.deleteDialogOpen}
+          resourcePath={null}
+          objectLabel="user"
+          objectLabelPlural="users"
+          items={bulk.deleteDialogItems}
+          onConfirm={bulk.confirmDelete}
+          onCancel={bulk.cancelDelete}
+        />
+
+        <FeedbackSnackbar {...snackbarProps} />
       </Box>
     </>
   );

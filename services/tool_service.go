@@ -281,9 +281,10 @@ func (s *Service) GetToolBySlug(slug string) (*models.Tool, error) {
 }
 
 // GetAllTools retrieves all tools
-func (s *Service) GetAllTools(pageSize int, pageNumber int, all bool) ([]models.Tool, int64, int, error) {
+func (s *Service) GetAllTools(pageSize int, pageNumber int, all bool, opts ...ListOptions) ([]models.Tool, int64, int, error) {
 	var tools models.Tools
-	totalCount, totalPages, err := tools.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := tools.GetAll(s.DB, pageSize, pageNumber, all,
+		firstListOptions(opts).Scopes("name", "description")...)
 	if err != nil {
 		return nil, 0, 0, err
 	}

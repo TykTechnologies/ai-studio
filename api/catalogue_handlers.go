@@ -189,14 +189,20 @@ func (a *API) deleteCatalogue(c *gin.Context) {
 // @Tags catalogues
 // @Accept json
 // @Produce json
+// @Param search query string false "Case-insensitive substring match on name and description fields"
+// @Param sort query string false "Sort field, prefix with - for descending. One of: id, name, created_at, updated_at"
 // @Success 200 {array} CatalogueResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /catalogues [get]
 // @Security BearerAuth
 func (a *API) listCatalogues(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	opts, ok := parseListQuery(c, catalogueSortFields)
+	if !ok {
+		return
+	}
 
-	catalogues, totalCount, totalPages, err := a.service.GetAllCatalogues(pageSize, pageNumber, all)
+	catalogues, totalCount, totalPages, err := a.service.GetAllCatalogues(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

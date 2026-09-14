@@ -94,3 +94,26 @@ test('Edit LLM provider name shows confirmation dialog', async ({ loginPage, adm
 
 
 
+
+test('Privacy control keeps the named level and the score in sync', async ({ loginPage, adminLLMProvidersPage, adminMainPage }) => {
+    await loginPage.goto();
+    await loginPage.login(config.admin_email, config.password);
+    await adminMainPage.dismissQuickStartModal();
+    await adminMainPage.navigateToLLMProviders();
+    await adminLLMProvidersPage.AddLLMButton.click();
+
+    // A new provider starts at 0, which is Public.
+    await expect(adminLLMProvidersPage.PrivacyScoreInput).toHaveValue('0');
+    expect(await adminLLMProvidersPage.privacyLevelText()).toBe('Public');
+
+    // Choosing Confidential moves the score to the band default (75).
+    await adminLLMProvidersPage.selectPrivacyLevel('Confidential');
+    await expect(adminLLMProvidersPage.PrivacyScoreInput).toHaveValue('75');
+
+    // Typing a score moves the level to its band.
+    await adminLLMProvidersPage.PrivacyScoreInput.fill('10');
+    await expect(adminLLMProvidersPage.PrivacyScoreInput).toHaveValue('10');
+    await expect(adminLLMProvidersPage.PrivacyLevelSelect).toContainText('Public');
+
+    await adminLLMProvidersPage.CancelButton.click();
+});

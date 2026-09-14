@@ -457,6 +457,13 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.Description = app.Description
 	resp.Attributes.UserID = app.UserID
 	resp.Attributes.CredentialID = app.CredentialID
+	// The credential is preloaded by every app query (App.Get, Apps.List*,
+	// Apps.Search), so this is one join, not a query per row. It stays null
+	// when the app has no credential or the credential was not loaded.
+	if app.CredentialID != 0 && app.Credential.ID == app.CredentialID {
+		active := app.Credential.Active
+		resp.Attributes.CredentialActive = &active
+	}
 	resp.Attributes.DatasourceIDs = getDatasourceIDs(app.Datasources)
 	resp.Attributes.LLMIDs = getLLMIDs(app.LLMs)
 	resp.Attributes.ToolIDs = getToolIDs(app.Tools)

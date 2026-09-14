@@ -4,11 +4,12 @@ import '@testing-library/jest-dom';
 
 // Mock dependencies
 jest.mock('@mui/material', () => ({
-  Typography: ({ children, variant, color, ...props }) => (
+  Typography: ({ children, variant, color, component, ...props }) => (
     <div data-testid="typography" data-variant={variant} data-color={color} {...props}>
       {children}
     </div>
-  )
+  ),
+  Box: ({ children, sx, ...props }) => <div {...props}>{children}</div>,
 }));
 
 // Mock the styled components from sharedStyles
@@ -72,7 +73,7 @@ describe('Section Component', () => {
   test('renders title with correct typography variant', () => {
     render(<Section title="Test Title" />);
     
-    const titleElement = screen.getByTestId('typography');
+    const titleElement = screen.getAllByTestId('typography')[0];
     expect(titleElement).toHaveAttribute('data-variant', 'headingMedium');
     expect(titleElement).toHaveAttribute('data-color', 'text.primary');
     expect(titleElement).toHaveTextContent('Test Title');
@@ -102,5 +103,33 @@ describe('Section Component', () => {
     
     const content = screen.getByTestId('section-content');
     expect(content).toHaveTextContent('Test Paragraph');
+  });
+
+  // The title/description/actions header shared by the detail pages (M5).
+  test('renders the description under the title and actions on the right', () => {
+    render(
+      <Section title="Used by" description="Everything that references this." actions={<button type="button">Export</button>}>
+        <p>body</p>
+      </Section>
+    );
+
+    const header = screen.getByTestId('section-header');
+    expect(header).toHaveTextContent('Used by');
+    expect(header).toHaveTextContent('Everything that references this.');
+    expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument();
+    expect(screen.getByTestId('section-content')).toHaveTextContent('body');
+  });
+
+  test('renders a header for actions alone, and none when there is neither title nor actions', () => {
+    const { unmount } = render(<Section actions={<span>act</span>} />);
+    expect(screen.getByTestId('section-header')).toHaveTextContent('act');
+    unmount();
+    render(<Section>x</Section>);
+    expect(screen.queryByTestId('section-header')).not.toBeInTheDocument();
+  });
+
+  test('passes data attributes through to the container', () => {
+    render(<Section title="T" data-testid="my-section">x</Section>);
+    expect(screen.getByTestId('my-section')).toBeInTheDocument();
   });
 });

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import Section from "../common/Section";
+import { CatalogueTeamsSection } from "../common/UsedBySection";
 import {
   Typography,
   CircularProgress,
@@ -22,12 +24,6 @@ import {
   FieldValue,
   PrimaryButton,
 } from "../../styles/sharedStyles";
-
-const SectionTitle = ({ children }) => (
-  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
-    {children}
-  </Typography>
-);
 
 const ToolCatalogueDetails = () => {
   const [catalogue, setCatalogue] = useState(null);
@@ -69,70 +65,71 @@ const ToolCatalogueDetails = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>Catalog Description</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Name:</FieldLabel>
+        <Section title="Catalog Description">
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Name:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{catalogue.attributes.name}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Short Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{catalogue.attributes.short_description}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Long Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{catalogue.attributes.long_description}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Icon:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{catalogue.attributes.icon}</FieldValue>
+            </Grid>
           </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{catalogue.attributes.name}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Short Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{catalogue.attributes.short_description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Long Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{catalogue.attributes.long_description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Icon:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{catalogue.attributes.icon}</FieldValue>
-          </Grid>
-        </Grid>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
+        <Section title="Tools">
+          <List>
+            {catalogue.attributes.tools &&
+            catalogue.attributes.tools.length > 0 ? (
+              catalogue.attributes.tools.map((tool) => (
+                <React.Fragment key={tool.id}>
+                  <ListItem>
+                    <ListItemText
+                      primary={tool.attributes.name}
+                      secondary={tool.attributes.description}
+                    />
+                  </ListItem>
+                  <Divider />
+                </React.Fragment>
+              ))
+            ) : (
+              <ListItem>
+                <ListItemText primary="No tools in this catalog" />
+              </ListItem>
+            )}
+          </List>
+        </Section>
 
-        <SectionTitle>Tools</SectionTitle>
-        <List>
-          {catalogue.attributes.tools &&
-          catalogue.attributes.tools.length > 0 ? (
-            catalogue.attributes.tools.map((tool) => (
-              <React.Fragment key={tool.id}>
-                <ListItem>
-                  <ListItemText
-                    primary={tool.attributes.name}
-                    secondary={tool.attributes.description}
-                  />
-                </ListItem>
-                <Divider />
-              </React.Fragment>
-            ))
-          ) : (
-            <ListItem>
-              <ListItemText primary="No tools in this catalog" />
-            </ListItem>
-          )}
-        </List>
+        <Section title="Tags">
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+            {catalogue.attributes.tags && catalogue.attributes.tags.length > 0 ? (
+              catalogue.attributes.tags.map((tag) => (
+                <Chip key={tag.id} label={tag.attributes.name} />
+              ))
+            ) : (
+              <Typography>No tags for this catalog</Typography>
+            )}
+          </Box>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>Tags</SectionTitle>
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-          {catalogue.attributes.tags && catalogue.attributes.tags.length > 0 ? (
-            catalogue.attributes.tags.map((tag) => (
-              <Chip key={tag.id} label={tag.attributes.name} />
-            ))
-          ) : (
-            <Typography>No tags for this catalog</Typography>
-          )}
-        </Box>
+        <CatalogueTeamsSection resourcePath="tool-catalogues" id={id} />
 
         <Box
           mt={4}

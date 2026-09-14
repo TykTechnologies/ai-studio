@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import Section from "../common/Section";
+import { CatalogueTeamsSection } from "../common/UsedBySection";
 import {
   Typography,
   CircularProgress,
@@ -22,12 +24,6 @@ import {
   FieldValue,
   PrimaryButton,
 } from "../../styles/sharedStyles";
-
-const SectionTitle = ({ children }) => (
-  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
-    {children}
-  </Typography>
-);
 
 const DataCatalogDetail = () => {
   const [catalog, setCatalog] = useState(null);
@@ -70,74 +66,75 @@ const DataCatalogDetail = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>Catalog Information</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Name:</FieldLabel>
+        <Section title="Catalog Information">
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Name:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{catalog.attributes.name}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Short Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{catalog.attributes.short_description}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Long Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{catalog.attributes.long_description}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Icon:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{catalog.attributes.icon}</FieldValue>
+            </Grid>
           </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{catalog.attributes.name}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Short Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{catalog.attributes.short_description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Long Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{catalog.attributes.long_description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Icon:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{catalog.attributes.icon}</FieldValue>
-          </Grid>
-        </Grid>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
+        <Section title="Data sources">
+          <List>
+            {catalog.attributes.datasources &&
+            catalog.attributes.datasources.length > 0 ? (
+              catalog.attributes.datasources.map((datasource) => (
+                <React.Fragment key={datasource.id}>
+                  <ListItem>
+                    <ListItemText
+                      primary={datasource.attributes.name}
+                      secondary={datasource.attributes.short_description}
+                    />
+                  </ListItem>
+                  <Divider />
+                </React.Fragment>
+              ))
+            ) : (
+              <ListItem>
+                <ListItemText primary="No data sources in this catalog" />
+              </ListItem>
+            )}
+          </List>
+        </Section>
 
-        <SectionTitle>Data sources</SectionTitle>
-        <List>
-          {catalog.attributes.datasources &&
-          catalog.attributes.datasources.length > 0 ? (
-            catalog.attributes.datasources.map((datasource) => (
-              <React.Fragment key={datasource.id}>
-                <ListItem>
-                  <ListItemText
-                    primary={datasource.attributes.name}
-                    secondary={datasource.attributes.short_description}
-                  />
-                </ListItem>
-                <Divider />
-              </React.Fragment>
-            ))
-          ) : (
-            <ListItem>
-              <ListItemText primary="No data sources in this catalog" />
-            </ListItem>
-          )}
-        </List>
+        <Section title="Tags">
+          <Box>
+            {catalog.attributes.tags && catalog.attributes.tags.length > 0 ? (
+              catalog.attributes.tags.map((tag) => (
+                <Chip
+                  key={tag.id}
+                  label={tag.attributes.name}
+                  sx={{ mr: 1, mb: 1 }}
+                />
+              ))
+            ) : (
+              <Typography>No tags for this catalog</Typography>
+            )}
+          </Box>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>Tags</SectionTitle>
-        <Box>
-          {catalog.attributes.tags && catalog.attributes.tags.length > 0 ? (
-            catalog.attributes.tags.map((tag) => (
-              <Chip
-                key={tag.id}
-                label={tag.attributes.name}
-                sx={{ mr: 1, mb: 1 }}
-              />
-            ))
-          ) : (
-            <Typography>No tags for this catalog</Typography>
-          )}
-        </Box>
+        <CatalogueTeamsSection resourcePath="data-catalogues" id={id} />
 
         <Box mt={4}>
           <PrimaryButton

@@ -1,34 +1,20 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  Typography,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Menu,
-  MenuItem,
-  Snackbar,
-  Box,
-  Chip,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import { Typography, Alert, Box, Chip } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+import DataTable from "../components/common/DataTable";
+import ActiveStatusDot from "../components/common/ActiveStatusDot";
+import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import {
   TitleBox,
   ContentBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
-  StyledPaper,
 } from "../styles/sharedStyles";
 import {
   getVectorStoreName,
@@ -37,9 +23,8 @@ import {
   getEmbedderLogo,
   fetchVendors,
 } from "../utils/vendorUtils";
-import InfoTooltip from "../components/common/InfoTooltip";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
 
@@ -48,37 +33,17 @@ const DatasourceList = () => {
   const [datasources, setDatasources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedDatasource, setSelectedDatasource] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
-  const [vendors, setVendors] = useState({ embedders: [], vectorStores: [] });
+  // Populated once so the vendor name/logo helpers can resolve display names.
+  const [, setVendors] = useState({ embedders: [], vectorStores: [] });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
   const fetchDatasources = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/datasources", {
-        params: {
-          page,
-          page_size: pageSize,
-          sort_by: sortConfig.key,
-          sort_direction: sortConfig.direction,
-        },
-      });
+      const response = await apiClient.get("/datasources", { params: queryParams });
       setDatasources(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -90,7 +55,7 @@ const DatasourceList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortConfig, updatePaginationData]);
+  }, [queryParams, updatePaginationData]);
 
   useEffect(() => {
     const initializePage = async () => {
@@ -101,37 +66,27 @@ const DatasourceList = () => {
     initializePage();
   }, [fetchDatasources]);
 
-  const handleMenuOpen = (event, datasource) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedDatasource(datasource);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const bulk = useBulkActions({
+    items: datasources,
+    resource: "datasources",
+    singular: "data source",
+    plural: "data sources",
+    notify,
+    refresh: fetchDatasources,
+  });
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/datasources/${id}`);
-      setSnackbar({
-        open: true,
-        message: "Data source deleted successfully",
-        severity: "success",
-      });
+      notify("Data source deleted successfully");
       fetchDatasources();
     } catch (error) {
       console.error("Error deleting datasource", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete data source",
-        severity: "error",
-      });
+      notify("Failed to delete data source", "error");
     }
-    handleMenuClose();
   };
 
-  const handleToggleActive = async (datasource) => {
+  const handleToggleActive = useCallback(async (datasource) => {
     try {
       const updatedDatasource = {
         data: {
@@ -140,80 +95,127 @@ const DatasourceList = () => {
           attributes: {
             ...datasource.attributes,
             active: !datasource.attributes.active,
-            tags: datasource.attributes.tags.map((tag) => tag.attributes.name),
+            tags: (datasource.attributes.tags || []).map((tag) => tag.attributes.name),
           },
         },
       };
       await apiClient.patch(`/datasources/${datasource.id}`, updatedDatasource);
-      setSnackbar({
-        open: true,
-        message: `Data source ${
-          updatedDatasource.data.attributes.active ? "activated" : "deactivated"
-        } successfully`,
-        severity: "success",
-      });
+      notify(
+        `Data source ${updatedDatasource.data.attributes.active ? "activated" : "deactivated"} successfully`,
+      );
       fetchDatasources();
     } catch (error) {
       console.error("Error toggling datasource active state", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to update data source active state",
-        severity: "error",
-      });
+      notify("Failed to update data source active state", "error");
     }
-    handleMenuClose();
-  };
+  }, [fetchDatasources, notify]);
 
-  const handleCloneDatasource = async (datasource) => {
+  const handleCloneDatasource = useCallback(async (datasource) => {
     try {
       // Use server-side clone endpoint that preserves API keys
       const response = await apiClient.post(`/datasources/${datasource.id}/clone`);
       const newDatasourceId = response.data.data.id;
 
-      setSnackbar({
-        open: true,
-        message: "Data source cloned successfully",
-        severity: "success",
-      });
+      notify("Data source cloned successfully");
 
       navigate(`/admin/datasources/edit/${newDatasourceId}`);
     } catch (error) {
       console.error("Error cloning datasource:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to clone data source",
-        severity: "error",
-      });
+      notify("Failed to clone data source", "error");
     }
-    handleMenuClose();
-  };
+  }, [navigate, notify]);
 
   const handleDatasourceClick = (datasource) => {
     navigate(`/admin/datasources/${datasource.id}`);
-  };
-
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  const handleSort = (key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
   };
 
   const handleAddDatasource = () => {
     navigate("/admin/datasources/new");
   };
 
-  if (loading && datasources.length === 0) {
-    return <CircularProgress />;
-  }
+  const columns = useMemo(() => [
+    { field: "name", headerName: "Name", sortable: true, renderCell: (d) => d.attributes.name },
+    { field: "short_description", headerName: "Short Description", renderCell: (d) => d.attributes.short_description },
+    {
+      field: "db_source_type",
+      headerName: "DB Source Type",
+      renderCell: (datasource) => (
+        <Box sx={{ display: "flex", alignItems: "center" }}>
+          <img
+            src={getVectorStoreLogo(datasource.attributes.db_source_type)}
+            alt={getVectorStoreName(datasource.attributes.db_source_type)}
+            style={{
+              width: 24,
+              height: 24,
+              marginRight: 8,
+              objectFit: "contain",
+            }}
+          />
+          {getVectorStoreName(datasource.attributes.db_source_type)}
+        </Box>
+      ),
+    },
+    {
+      field: "embed_vendor",
+      headerName: "Embed Vendor",
+      renderCell: (datasource) => (
+        <Box sx={{ display: "flex", alignItems: "center" }}>
+          <img
+            src={getEmbedderLogo(datasource.attributes.embed_vendor)}
+            alt={getEmbedderName(datasource.attributes.embed_vendor)}
+            style={{
+              width: 24,
+              height: 24,
+              marginRight: 8,
+              objectFit: "contain",
+            }}
+          />
+          {getEmbedderName(datasource.attributes.embed_vendor)}
+        </Box>
+      ),
+    },
+    {
+      field: "privacy_score",
+      headerName: "Privacy Level",
+      sortable: true,
+      renderCell: (d) => <PrivacyLevelChip score={d.attributes.privacy_score} />,
+    },
+    {
+      field: "tags",
+      headerName: "Tags",
+      renderCell: (datasource) =>
+        (datasource.attributes.tags || []).map((tag) => (
+          <Chip
+            key={tag.id}
+            label={tag.attributes.name}
+            size="small"
+            sx={{ mr: 0.5, mb: 0.5 }}
+          />
+        )),
+    },
+    {
+      field: "active",
+      headerName: "Active",
+      sortable: true,
+      renderCell: (d) => <ActiveStatusDot active={d.attributes.active} />,
+    },
+  ], []);
+
+  const rowActions = useMemo(() => [
+    { key: "edit", label: "Edit data source", onClick: (d) => navigate(`/admin/datasources/edit/${d.id}`) },
+    { key: "clone", label: "Clone data source", onClick: handleCloneDatasource },
+    { key: "delete", label: "Delete data source", onClick: (d) => setDeleteTarget(d) },
+    {
+      key: "toggle",
+      label: (d) => `${d?.attributes?.active ? "Deactivate" : "Activate"} data source`,
+      onClick: handleToggleActive,
+    },
+  ], [navigate, handleCloneDatasource, handleToggleActive]);
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: true }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && datasources.length === 0) {
     return <Alert severity="error">{error}</Alert>;
@@ -235,172 +237,39 @@ const DatasourceList = () => {
           </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Data sources let you store and access information to enhance AI conversations using Retrieval Augmented Generation (RAG). By using embedding providers to convert content into searchable vectors, your AI can deliver more accurate, informed, and engaging responses.</Typography>  
-        </Box>  
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Data sources let you store and access information to enhance AI conversations using Retrieval Augmented Generation (RAG). By using embedding providers to convert content into searchable vectors, your AI can deliver more accurate, informed, and engaging responses.</Typography>
+        </Box>
         <ContentBox>
-          {datasources.length === 0 ? (
-            <EmptyStateWidget
-              title="No vector DBs yet"
-              description="Vector data sources are used to store and retrieve data to enhance LLM response effectiveness. These can be created using embedding providers that vectorize the content you wish to search, and make for an excellent way to enhance your chat room value for your users, or to better inform responses in your AI Applications."
-              buttonText="Add data source"
-              buttonIcon={<AddIcon />}
-              onButtonClick={handleAddDatasource}
-            />
-          ) : (
-            <StyledPaper>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <StyledTableHeaderCell onClick={() => handleSort("name")}>
-                      Name
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Short Description</StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => handleSort("db_source_type")}
-                    >
-                      DB Source Type
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("embed_vendor")}>
-                      Embed Vendor
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell
-                      onClick={() => handleSort("privacy_score")}
-                    >
-                      Privacy Level
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Tags</StyledTableHeaderCell>
-                    <StyledTableHeaderCell onClick={() => handleSort("active")}>
-                      Active
-                    </StyledTableHeaderCell>
-                    <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {datasources.map((datasource) => (
-                    <StyledTableRow
-                      key={datasource.id}
-                      onClick={() => handleDatasourceClick(datasource)}
-                      sx={{ cursor: "pointer" }}
-                    >
-                      <StyledTableCell>{datasource.attributes.name}</StyledTableCell>
-                      <StyledTableCell>
-                        {datasource.attributes.short_description}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Box sx={{ display: "flex", alignItems: "center" }}>
-                          <img
-                            src={getVectorStoreLogo(
-                              datasource.attributes.db_source_type,
-                            )}
-                            alt={getVectorStoreName(
-                              datasource.attributes.db_source_type,
-                            )}
-                            style={{
-                              width: 24,
-                              height: 24,
-                              marginRight: 8,
-                              objectFit: "contain",
-                            }}
-                          />
-                          {getVectorStoreName(
-                            datasource.attributes.db_source_type,
-                          )}
-                        </Box>
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <Box sx={{ display: "flex", alignItems: "center" }}>
-                          <img
-                            src={getEmbedderLogo(
-                              datasource.attributes.embed_vendor,
-                            )}
-                            alt={getEmbedderName(
-                              datasource.attributes.embed_vendor,
-                            )}
-                            style={{
-                              width: 24,
-                              height: 24,
-                              marginRight: 8,
-                              objectFit: "contain",
-                            }}
-                          />
-                          {getEmbedderName(datasource.attributes.embed_vendor)}
-                        </Box>
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {datasource.attributes.privacy_score}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        {datasource.attributes.tags.map((tag) => (
-                          <Chip
-                            key={tag.id}
-                            label={tag.attributes.name}
-                            size="small"
-                            sx={{ mr: 0.5, mb: 0.5 }}
-                          />
-                        ))}
-                      </StyledTableCell>
-                      <StyledTableCell>
-                        <FiberManualRecordIcon
-                          sx={{
-                            color: datasource.attributes.active
-                              ? "green"
-                              : "red",
-                          }}
-                        />
-                      </StyledTableCell>
-                      <StyledTableCell align="right">
-                        <Can permission={P.DATASOURCES_WRITE}>
-                          <IconButton
-                            onClick={(event) => handleMenuOpen(event, datasource)}
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
-                        </Can>
-                      </StyledTableCell>
-                    </StyledTableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <PaginationControls
-                page={page}
-                pageSize={pageSize}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
+          <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+          <Can permission={P.DATASOURCES_WRITE}>
+            {(canWrite) => (
+              <DataTable
+                {...tableProps}
+                ariaLabel="Data sources"
+                searchPlaceholder="Search data sources by name..."
+                columns={columns}
+                data={datasources}
+                loading={loading}
+                onRowClick={handleDatasourceClick}
+                actions={canWrite ? rowActions : undefined}
+                {...(canWrite ? bulk.selectionProps : {})}
+                bulkActions={canWrite ? bulkActions : undefined}
+                emptyState={
+                  !searchTerm ? (
+                    <EmptyStateWidget
+                      title="No vector DBs yet"
+                      description="Vector data sources are used to store and retrieve data to enhance LLM response effectiveness. These can be created using embedding providers that vectorize the content you wish to search, and make for an excellent way to enhance your chat room value for your users, or to better inform responses in your AI Applications."
+                      buttonText="Add data source"
+                      buttonIcon={<AddIcon />}
+                      onButtonClick={canWrite ? handleAddDatasource : undefined}
+                    />
+                  ) : undefined
+                }
               />
-            </StyledPaper>
-          )}
+            )}
+          </Can>
         </ContentBox>
       </>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem
-          onClick={() =>
-            navigate(`/admin/datasources/edit/${selectedDatasource?.id}`)
-          }
-        >
-          Edit data source
-        </MenuItem>
-        <MenuItem onClick={() => handleCloneDatasource(selectedDatasource)}>
-          Clone data source
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setDeleteTarget(selectedDatasource);
-            handleMenuClose();
-          }}
-        >
-          Delete data source
-        </MenuItem>
-        <MenuItem onClick={() => handleToggleActive(selectedDatasource)}>
-          {selectedDatasource?.attributes.active ? "Deactivate" : "Activate"}{" "}
-          data source
-        </MenuItem>
-      </Menu>
 
       <DeleteConfirmationDialog
         open={Boolean(deleteTarget)}
@@ -416,20 +285,18 @@ const DatasourceList = () => {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath="datasources"
+        objectLabel="data source"
+        objectLabelPlural="data sources"
+        items={bulk.deleteDialogItems}
+        consequence="Deleting them removes them from all of those; apps and chats that use them lose access to their data."
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
+
+      <FeedbackSnackbar {...snackbarProps} />
     </>
   );
 };

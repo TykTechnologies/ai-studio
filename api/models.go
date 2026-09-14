@@ -489,20 +489,23 @@ type AppResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name            string                 `json:"name"`
-		Description     string                 `json:"description"`
-		UserID          uint                   `json:"user_id"`
-		CredentialID    uint                   `json:"credential_id"`
-		DatasourceIDs   []uint                 `json:"datasource_ids"`
-		LLMIDs          []uint                 `json:"llm_ids"`
-		ToolIDs         []uint                 `json:"tool_ids"`
-		MonthlyBudget   *float64               `json:"monthly_budget"`
-		BudgetStartDate *time.Time             `json:"budget_start_date"`
-		IsActive        bool                   `json:"is_active"` // live switch (apps:publish)
-		IsOrphaned      bool                   `json:"is_orphaned"`
-		Metadata        map[string]interface{} `json:"metadata,omitempty"`
-		Namespace       string                 `json:"namespace,omitempty"`
-		PluginResources []PluginResourceOutput `json:"plugin_resources,omitempty"`
+		Name         string `json:"name"`
+		Description  string `json:"description"`
+		UserID       uint   `json:"user_id"`
+		CredentialID uint   `json:"credential_id"`
+		// CredentialActive is the state of the app's credential, null when the
+		// app has none, so the apps list can show it without a credentials fetch.
+		CredentialActive *bool                  `json:"credential_active"`
+		DatasourceIDs    []uint                 `json:"datasource_ids"`
+		LLMIDs           []uint                 `json:"llm_ids"`
+		ToolIDs          []uint                 `json:"tool_ids"`
+		MonthlyBudget    *float64               `json:"monthly_budget"`
+		BudgetStartDate  *time.Time             `json:"budget_start_date"`
+		IsActive         bool                   `json:"is_active"` // live switch (apps:publish)
+		IsOrphaned       bool                   `json:"is_orphaned"`
+		Metadata         map[string]interface{} `json:"metadata,omitempty"`
+		Namespace        string                 `json:"namespace,omitempty"`
+		PluginResources  []PluginResourceOutput `json:"plugin_resources,omitempty"`
 	} `json:"attributes"`
 }
 

@@ -38,11 +38,16 @@ func (f *Filter) Delete(db *gorm.DB) error {
 }
 
 // GetAll retrieves all filters
-func (f *Filter) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) ([]Filter, int64, int, error) {
+func (f *Filter) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) ([]Filter, int64, int, error) {
 	var filters []Filter
 	var totalCount int64
 	query := db.Model(&Filter{})
 
+	// Optional search/sort scopes (services.ListOptions); applied before the
+	// count so X-Total-Count reflects the filtered set.
+	for _, scope := range scopes {
+		query = scope(query)
+	}
 	if err := query.Count(&totalCount).Error; err != nil {
 		return nil, 0, 0, err
 	}

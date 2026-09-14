@@ -311,14 +311,20 @@ func (a *API) deleteModelPrice(c *gin.Context) {
 // @Tags model-prices
 // @Accept json
 // @Produce json
+// @Param search query string false "Case-insensitive substring match on name and description fields"
+// @Param sort query string false "Sort field, prefix with - for descending. One of: id, name (model_name), vendor, created_at, updated_at"
 // @Success 200 {array} ModelPriceResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /model-prices [get]
 // @Security BearerAuth
 func (a *API) getAllModelPrices(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	opts, ok := parseListQuery(c, modelPriceSortFields)
+	if !ok {
+		return
+	}
 
-	modelPrices, totalCount, totalPages, err := a.service.GetAllModelPrices(pageSize, pageNumber, all)
+	modelPrices, totalCount, totalPages, err := a.service.GetAllModelPrices(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

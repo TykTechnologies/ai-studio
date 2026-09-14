@@ -221,10 +221,15 @@ func (r *ModelRouter) Delete(db *gorm.DB) error {
 }
 
 // GetAll retrieves all ModelRouters with pagination
-func (r *ModelRouters) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+func (r *ModelRouters) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&ModelRouter{}).Preload("Pools.Vendors.LLM").Preload("Pools.Vendors.Mappings")
 
+	// Optional search/sort scopes (services.ListOptions); applied before the
+	// count so X-Total-Count reflects the filtered set.
+	for _, scope := range scopes {
+		query = scope(query)
+	}
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
 	}

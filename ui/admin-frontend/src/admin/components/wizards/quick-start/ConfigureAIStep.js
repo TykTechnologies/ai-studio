@@ -19,7 +19,7 @@ import CustomSelectBadge from '../../common/CustomSelectBadge';
 import Icon from '../../../../components/common/Icon';
 import RadioSelectionGroup from '../../common/RadioSelectionGroup';
 import { getVendorCodes, getVendorName, getVendorLogo, vendorRequiresAccessDetails } from '../../../utils/vendorLogos';
-import { PRIVACY_LEVEL_SCORES, PRIVACY_LEVEL_OPTIONS, PRIVACY_BADGE_CONFIGS } from './utils';
+import { PRIVACY_LEVEL_SCORES, PRIVACY_LEVEL_OPTIONS, PRIVACY_BADGE_CONFIGS, privacyLevelKeyForScore } from './utils';
 
 const ConfigureAIStep = () => {
   const {
@@ -121,9 +121,8 @@ const ConfigureAIStep = () => {
         llmProvider: selectedLlm.attributes.vendor,
         apiEndpoint: selectedLlm.attributes.api_endpoint,
         apiKey: selectedLlm.attributes.api_key,
-        privacyLevel: Object.keys(PRIVACY_LEVEL_SCORES).find(
-          key => PRIVACY_LEVEL_SCORES[key] === selectedLlm.attributes.privacy_score
-        ) || 'public'
+        // Band lookup, not an exact match: an LLM saved with 40 is Internal.
+        privacyLevel: privacyLevelKeyForScore(selectedLlm.attributes.privacy_score)
       });
     }
   };

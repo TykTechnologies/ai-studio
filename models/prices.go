@@ -75,10 +75,15 @@ func (mp *ModelPrice) Delete(db *gorm.DB) error {
 }
 
 // GetAll retrieves all ModelPrices
-func (mps *ModelPrices) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+func (mps *ModelPrices) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&ModelPrice{})
 
+	// Optional search/sort scopes (services.ListOptions); applied before the
+	// count so X-Total-Count reflects the filtered set.
+	for _, scope := range scopes {
+		query = scope(query)
+	}
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
 	}

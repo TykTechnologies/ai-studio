@@ -47,8 +47,8 @@ describe("LLMDetailModal", () => {
     expect(screen.getByText("Default model:")).toBeInTheDocument();
     expect(screen.getByText("gpt-4o", { selector: "p" })).toBeInTheDocument();
     expect(screen.getByText("gpt-4o-*")).toBeInTheDocument();
-    expect(screen.getByText("40")).toBeInTheDocument();
-    expect(screen.getByText("(0 lowest – 100 highest)")).toBeInTheDocument();
+    // Privacy reads as the named level plus the score, same chip as the admin.
+    expect(screen.getByTestId("privacy-level-chip")).toHaveTextContent("Internal · 40");
     expect(screen.getByText("Vendor:")).toBeInTheDocument();
   });
 

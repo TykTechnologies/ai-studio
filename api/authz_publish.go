@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
@@ -95,4 +96,22 @@ func (a *API) publishGateOpen(c *gin.Context, objectType, objectID string, pendi
 	}
 	writeMetadataValidationResponse(c, result)
 	return false
+}
+
+// publishGateError is publishGateOpen for callers that report per object
+// instead of answering the request (bulk activate): nil when the object may
+// go live, otherwise a *governed_metadata.ValidationError whose message
+// names the first missing field. Community Edition has no gate.
+func (a *API) publishGateError(ctx context.Context, objectType, objectID string) error {
+	if !governed_metadata.IsEnterpriseAvailable() {
+		return nil
+	}
+	result, err := a.governedMetadata().ValidateForPublish(ctx, objectType, objectID, nil)
+	if err != nil {
+		return err
+	}
+	if result == nil || result.Valid {
+		return nil
+	}
+	return &governed_metadata.ValidationError{Result: result}
 }

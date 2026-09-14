@@ -528,9 +528,10 @@ func (s *Service) GetLLMByName(name string) (*models.LLM, error) {
 	return llm, nil
 }
 
-func (s *Service) GetAllLLMs(pageSize int, pageNumber int, all bool) (models.LLMs, int64, int, error) {
+func (s *Service) GetAllLLMs(pageSize int, pageNumber int, all bool, opts ...ListOptions) (models.LLMs, int64, int, error) {
 	var llms models.LLMs
-	totalCount, totalPages, err := llms.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := llms.GetAll(s.DB, pageSize, pageNumber, all,
+		firstListOptions(opts).Scopes("name", "short_description", "vendor")...)
 	if err != nil {
 		return nil, 0, 0, err
 	}

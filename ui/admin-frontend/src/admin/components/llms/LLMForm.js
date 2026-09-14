@@ -49,6 +49,8 @@ import {
 } from "../../../components/unsaved-changes";
 import { useEdition } from "../../context/EditionContext";
 import PublishSwitch from "../rbac/PublishSwitch";
+import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
+import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
 import { P } from "../../rbac/permissions";
 import pluginService from "../../services/pluginService";
 import PluginConfigDialog from './PluginConfigDialog';
@@ -373,7 +375,7 @@ const LLMForm = () => {
     const newErrors = {};
     if (!llm.name.trim()) newErrors.name = "Name is required";
     if (!llm.vendor.trim()) newErrors.vendor = "Vendor is required";
-    if (llm.privacy_score < 0 || llm.privacy_score > 100)
+    if (!isValidPrivacyScore(llm.privacy_score))
       newErrors.privacy_score = "Privacy level must be between 0 and 100";
     // Mirror the server's waterfall rules so a bad rung is named here first.
     const llmsById = Object.fromEntries(availableLLMs.map((l) => [String(l.id), l]));
@@ -761,25 +763,13 @@ const LLMForm = () => {
               </Grid>
             </Grid>
             <Grid item xs={12}>
-              <Typography variant="subtitle2" gutterBottom>
-                Privacy levels
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLM providers with lower privacy levels can’t access higher-level data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
-              </Typography>
-              <TextField
-                fullWidth
-                name="privacy_score"
-                type="number"
+              {/* One privacy control everywhere (UX review M4): a named level
+                  with the 0–100 score alongside. */}
+              <PrivacyLevelInput
                 value={llm.privacy_score}
-                onChange={handleChange}
+                onChange={(score) => setLLM((prev) => ({ ...prev, privacy_score: score }))}
                 error={!!errors.privacy_score}
                 helperText={errors.privacy_score}
-                inputProps={{
-                  min: 0,
-                  max: 100,
-                  step: 1,
-                }}
               />
             </Grid>
             <Grid item xs={12}>

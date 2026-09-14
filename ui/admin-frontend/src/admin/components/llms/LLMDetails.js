@@ -1,4 +1,7 @@
 import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
+import Section from "../common/Section";
+import UsedBySection from "../common/UsedBySection";
+import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
@@ -13,7 +16,6 @@ import {
   IconButton,
   Tooltip,
   Link,
-  Divider,
   Table,
   TableBody,
   TableContainer,
@@ -27,7 +29,6 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { CredentialStatusNotice } from "./CredentialStatusIndicator";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import DownloadIcon from "@mui/icons-material/Download";
 import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
 import { useEdition } from "../../context/EditionContext";
@@ -48,7 +49,6 @@ import DateRangePicker from "../../components/common/DateRangePicker";
 import PaginationControls from "../common/PaginationControls";
 import usePagination from "../../hooks/usePagination";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
   FieldLabel,
@@ -142,12 +142,6 @@ ChartJS.register(
   ChartTooltip,
   Legend,
   TimeScale,
-);
-
-const SectionTitle = ({ children }) => (
-  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
-    {children}
-  </Typography>
 );
 
 const LLMDetails = () => {
@@ -410,34 +404,32 @@ const LLMDetails = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>Token Usage</SectionTitle>
-        <Box height={300} mb={4}>
-          <Line options={tokenChartOptions} data={tokenChartData} />
-        </Box>
+        <Section title="Token Usage">
+          <Box height={300} mb={4}>
+            <Line options={tokenChartOptions} data={tokenChartData} />
+          </Box>
+        </Section>
 
-        <SectionTitle>Cost</SectionTitle>
-        <Box height={300} mb={4}>
-          <Line options={costChartOptions} data={costChartData} />
-        </Box>
-        <Box mt={2}>
-          <DateRangePicker
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={setStartDate}
-            onEndDateChange={setEndDate}
-            onUpdate={fetchVendorUsage}
-            updateMode="immediate"
-          />
-        </Box>
+        <Section title="Cost">
+          <Box height={300} mb={4}>
+            <Line options={costChartOptions} data={costChartData} />
+          </Box>
+          <Box mt={2}>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={setStartDate}
+              onEndDateChange={setEndDate}
+              onUpdate={fetchVendorUsage}
+              updateMode="immediate"
+            />
+          </Box>
+        </Section>
 
-        <StyledPaper elevation={3} style={{ padding: "20px", marginTop: "20px", marginBottom: "20px" }}>
-          <Box display="flex" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={1} mb={1}>
-            <Box>
-              <Typography variant="h6">Models in use</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Every model this provider served in the selected period. Click a model to see which apps are calling it.
-              </Typography>
-            </Box>
+        <Section
+          title="Models in use"
+          description="Every model this provider served in the selected period. Click a model to see which apps are calling it."
+          actions={
             <Button
               size="small"
               startIcon={<PriceChangeIcon />}
@@ -445,7 +437,8 @@ const LLMDetails = () => {
             >
               Manage model prices
             </Button>
-          </Box>
+          }
+        >
           {vendorModelCostData.length > 0 ? (
             <>
               <TableContainer sx={{ overflowX: "auto" }}>
@@ -542,273 +535,261 @@ const LLMDetails = () => {
               </Typography>
             </Box>
           )}
-        </StyledPaper>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>LLM Description</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Active:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>
-              <FiberManualRecordIcon
-                sx={{
-                  color: llm.attributes.active ? "green" : "red",
-                  verticalAlign: "middle",
-                  marginRight: 1,
-                }}
-              />
-              {llm.attributes.active ? "Yes" : "No"}
-            </FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Body Logging Disabled:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{llm.attributes.dont_log_bodies ? "Yes" : "No"}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Short Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{llm.attributes.short_description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Vendor:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <img
-                src={getVendorLogo(llm.attributes.vendor)}
-                alt={getVendorName(llm.attributes.vendor)}
-                style={{
-                  width: 24,
-                  height: 24,
-                  marginRight: 8,
-                  objectFit: "contain",
-                }}
-              />
-              <FieldValue>{getVendorName(llm.attributes.vendor)}</FieldValue>
-            </Box>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Privacy Level:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <FieldValue>{llm.attributes.privacy_score}</FieldValue>
-              <Tooltip
-                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM provider for data source sharing."
-                placement="top"
-              >
-                <HelpOutlineIcon
-                  sx={{ ml: 1, fontSize: 20, color: "text.secondary" }}
+        <Section title="LLM Description">
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Active:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>
+                <FiberManualRecordIcon
+                  sx={{
+                    color: llm.attributes.active ? "green" : "red",
+                    verticalAlign: "middle",
+                    marginRight: 1,
+                  }}
                 />
-              </Tooltip>
-            </Box>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Monthly Budget:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>
-              {formatBudgetDisplay({
-                monthlyBudget: llm.attributes.monthly_budget,
-                currentUsage: budgetUsageData?.current_usage,
-                percentage: budgetUsageData?.percentage,
-                budgetStartDate: llm.attributes.budget_start_date || budgetUsageData?.start_date
-              })}
-            </FieldValue>
-          </Grid>
-        </Grid>
-
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>Access Details</SectionTitle>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          Some LLMs do not require an API Key for access, or have a default URL
-          (for example Anthropic and OpenAI). If you have an LLM provider that
-          is not on the list, but provides an OpenAPI compatible API, you can
-          use the compatible vendor setting and override the default URL.
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>API Endpoint:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <FieldValue>
-                {llm.attributes.api_endpoint || apiEndpointPlaceholder}
+                {llm.attributes.active ? "Yes" : "No"}
               </FieldValue>
-              {llm.attributes.api_endpoint && (
-                <Tooltip title="Copy to clipboard" placement="top">
-                  <IconButton
-                    onClick={() =>
-                      copyToClipboard(
-                        llm.attributes.api_endpoint,
-                        "API Endpoint",
-                      )
-                    }
-                  >
-                    <ContentCopyIcon />
-                  </IconButton>
-                </Tooltip>
-              )}
-            </Box>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>API Key:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Body Logging Disabled:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{llm.attributes.dont_log_bodies ? "Yes" : "No"}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Short Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{llm.attributes.short_description}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Vendor:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <img
+                  src={getVendorLogo(llm.attributes.vendor)}
+                  alt={getVendorName(llm.attributes.vendor)}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    marginRight: 8,
+                    objectFit: "contain",
+                  }}
+                />
+                <FieldValue>{getVendorName(llm.attributes.vendor)}</FieldValue>
+              </Box>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Privacy Level:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <PrivacyLevelChip score={llm.attributes.privacy_score} />
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Monthly Budget:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
               <FieldValue>
-                {llm.attributes.api_key ? "*".repeat(20) : apiKeyPlaceholder}
+                {formatBudgetDisplay({
+                  monthlyBudget: llm.attributes.monthly_budget,
+                  currentUsage: budgetUsageData?.current_usage,
+                  percentage: budgetUsageData?.percentage,
+                  budgetStartDate: llm.attributes.budget_start_date || budgetUsageData?.start_date
+                })}
               </FieldValue>
-              {llm.attributes.api_key && (
-                <Tooltip title="Copy to clipboard" placement="top">
-                  <IconButton
-                    onClick={() =>
-                      copyToClipboard(llm.attributes.api_key, "API Key")
-                    }
-                  >
-                    <ContentCopyIcon />
-                  </IconButton>
-                </Tooltip>
+            </Grid>
+          </Grid>
+        </Section>
+
+        <UsedBySection resourcePath="llms" id={id} objectLabel="LLM provider" />
+
+        <Section title="Access Details">
+          <Typography variant="body2" color="text.secondary" paragraph>
+            Some LLMs do not require an API Key for access, or have a default URL
+            (for example Anthropic and OpenAI). If you have an LLM provider that
+            is not on the list, but provides an OpenAPI compatible API, you can
+            use the compatible vendor setting and override the default URL.
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>API Endpoint:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <FieldValue>
+                  {llm.attributes.api_endpoint || apiEndpointPlaceholder}
+                </FieldValue>
+                {llm.attributes.api_endpoint && (
+                  <Tooltip title="Copy to clipboard" placement="top">
+                    <IconButton
+                      onClick={() =>
+                        copyToClipboard(
+                          llm.attributes.api_endpoint,
+                          "API Endpoint",
+                        )
+                      }
+                    >
+                      <ContentCopyIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>API Key:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <FieldValue>
+                  {llm.attributes.api_key ? "*".repeat(20) : apiKeyPlaceholder}
+                </FieldValue>
+                {llm.attributes.api_key && (
+                  <Tooltip title="Copy to clipboard" placement="top">
+                    <IconButton
+                      onClick={() =>
+                        copyToClipboard(llm.attributes.api_key, "API Key")
+                      }
+                    >
+                      <ContentCopyIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+              {/* Says whether the key can actually resolve. A provider pointing
+                  at an empty bootstrap secret used to render as fully healthy. */}
+              <Box sx={{ mt: 1 }}>
+                <CredentialStatusNotice
+                  status={llm.attributes.credential_status}
+                  reference={llm.attributes.credential_ref}
+                />
+              </Box>
+            </Grid>
+          </Grid>
+        </Section>
+
+        <Section title="Model Configuration">
+          <Typography variant="body2" color="text.secondary" paragraph>
+            The following model patterns are allowed for this LLM. These patterns
+            are used to validate model requests through the API Gateway.
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Default Model:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>
+                {llm.attributes.default_model || "No default model set"}
+              </FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Allowed Models:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              {llm.attributes.allowed_models &&
+                llm.attributes.allowed_models.length > 0 ? (
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                  {llm.attributes.allowed_models.map((model, index) => (
+                    <Chip
+                      key={index}
+                      label={model}
+                      color="primary"
+                      variant="outlined"
+                      sx={{
+                        backgroundColor: theme.palette.background.paper,
+                        "& .MuiChip-label": {
+                          color: theme.palette.text.primary,
+                        },
+                      }}
+                    />
+                  ))}
+                </Box>
+              ) : (
+                // An empty list is not a deny-all: it permits everything.
+                <FieldValue>All models allowed (no patterns specified)</FieldValue>
               )}
-            </Box>
-            {/* Says whether the key can actually resolve. A provider pointing
-                at an empty bootstrap secret used to render as fully healthy. */}
-            <Box sx={{ mt: 1 }}>
-              <CredentialStatusNotice
-                status={llm.attributes.credential_status}
-                reference={llm.attributes.credential_ref}
-              />
-            </Box>
-          </Grid>
-        </Grid>
-
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>Model Configuration</SectionTitle>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          The following model patterns are allowed for this LLM. These patterns
-          are used to validate model requests through the API Gateway.
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Default Model:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>
-              {llm.attributes.default_model || "No default model set"}
-            </FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Allowed Models:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            {llm.attributes.allowed_models &&
-              llm.attributes.allowed_models.length > 0 ? (
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                {llm.attributes.allowed_models.map((model, index) => (
-                  <Chip
-                    key={index}
-                    label={model}
-                    color="primary"
-                    variant="outlined"
-                    sx={{
-                      backgroundColor: theme.palette.background.paper,
-                      "& .MuiChip-label": {
-                        color: theme.palette.text.primary,
-                      },
-                    }}
-                  />
-                ))}
-              </Box>
-            ) : (
-              // An empty list is not a deny-all: it permits everything.
-              <FieldValue>All models allowed (no patterns specified)</FieldValue>
-            )}
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ display: "block", mt: 1 }}
-            >
-              These patterns use regex matching to determine which models are
-              allowed, matched anywhere in the model name. For example,
-              "gpt-4.*" allows all GPT-4 models — and also matches
-              "legacy-gpt-4o". Anchor with ^ and $ to match the whole name.
-            </Typography>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Failover:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            {llm.attributes.failover?.targets?.length ? (
-              <Box data-testid="llm-failover-waterfall">
-                {llm.attributes.failover.targets.map((t, index) => (
-                  <FieldValue key={index}>
-                    {index + 1}. {llmNames[t.llm_id] || `LLM #${t.llm_id}`} &rarr; {t.model}
-                  </FieldValue>
-                ))}
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                  Tried in order when this LLM's upstream fails. Apps allowed to
-                  use this LLM inherit access to these fallbacks.
-                </Typography>
-              </Box>
-            ) : (
-              <FieldValue>No failover configured</FieldValue>
-            )}
-          </Grid>
-        </Grid>
-
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>Portal Display Information</SectionTitle>
-        <Typography variant="body2" color="text.secondary" paragraph>
-          The following settings will be used in the Portal UI that your
-          end-users / developers will see when browsing for LLMs to use.
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Logo URL:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <img
-                src={llm.attributes.logo_url}
-                alt="LLM Logo"
-                style={{
-                  width: 50,
-                  height: 50,
-                  marginRight: 8,
-                  objectFit: "contain",
-                }}
-              />
-              <Box
-                component="a"
-                href={llm.attributes.logo_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{
-                  maxWidth: "300px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                  textDecoration: "none",
-                  color: "inherit",
-                  "&:hover": {
-                    textDecoration: "underline"
-                  }
-                }}
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", mt: 1 }}
               >
-                {llm.attributes.logo_url}
-              </Box>
-            </Box>
+                These patterns use regex matching to determine which models are
+                allowed, matched anywhere in the model name. For example,
+                "gpt-4.*" allows all GPT-4 models — and also matches
+                "legacy-gpt-4o". Anchor with ^ and $ to match the whole name.
+              </Typography>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Failover:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              {llm.attributes.failover?.targets?.length ? (
+                <Box data-testid="llm-failover-waterfall">
+                  {llm.attributes.failover.targets.map((t, index) => (
+                    <FieldValue key={index}>
+                      {index + 1}. {llmNames[t.llm_id] || `LLM #${t.llm_id}`} &rarr; {t.model}
+                    </FieldValue>
+                  ))}
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                    Tried in order when this LLM's upstream fails. Apps allowed to
+                    use this LLM inherit access to these fallbacks.
+                  </Typography>
+                </Box>
+              ) : (
+                <FieldValue>No failover configured</FieldValue>
+              )}
+            </Grid>
           </Grid>
-        </Grid>
+        </Section>
+
+        <Section title="Portal Display Information">
+          <Typography variant="body2" color="text.secondary" paragraph>
+            The following settings will be used in the Portal UI that your
+            end-users / developers will see when browsing for LLMs to use.
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Logo URL:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <img
+                  src={llm.attributes.logo_url}
+                  alt="LLM Logo"
+                  style={{
+                    width: 50,
+                    height: 50,
+                    marginRight: 8,
+                    objectFit: "contain",
+                  }}
+                />
+                <Box
+                  component="a"
+                  href={llm.attributes.logo_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    maxWidth: "300px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    textDecoration: "none",
+                    color: "inherit",
+                    "&:hover": {
+                      textDecoration: "underline"
+                    }
+                  }}
+                >
+                  {llm.attributes.logo_url}
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
+        </Section>
 
         <GovernedMetadataSummary
           objectType="llm"
@@ -816,29 +797,28 @@ const LLMDetails = () => {
           status={llm.governed_metadata_status}
         />
 
-        <Divider sx={{ my: 3 }} />
-
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <SectionTitle>Proxy Logs</SectionTitle>
-          {isEnterprise && (
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={() => setExportModalOpen(true)}
-              size="small"
-            >
-              Export
-            </Button>
-          )}
-        </Box>
-        <Box sx={{ mb: 2, maxWidth: 400 }}>
-          <SearchInput
-            value={proxyLogSearchTerm}
-            onChange={handleProxyLogSearch}
-            placeholder="Search request or response..."
-          />
-        </Box>
-        <StyledPaper>
+        <Section
+          title="Proxy Logs"
+          actions={
+            isEnterprise && (
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={() => setExportModalOpen(true)}
+                size="small"
+              >
+                Export
+              </Button>
+            )
+          }
+        >
+          <Box sx={{ mb: 2, maxWidth: 400 }}>
+            <SearchInput
+              value={proxyLogSearchTerm}
+              onChange={handleProxyLogSearch}
+              placeholder="Search request or response..."
+            />
+          </Box>
           <TableContainer sx={{ maxWidth: "100%", overflowX: "auto" }}>
             <Table sx={{ tableLayout: "fixed", width: "100%" }}>
               <TableHead>
@@ -914,7 +894,7 @@ const LLMDetails = () => {
             onPageChange={handlePageChange}
             onPageSizeChange={handlePageSizeChange}
           />
-        </StyledPaper>
+        </Section>
 
         <Box
           mt={4}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { PROVIDER_TYPES } from '../constants';
+import PrivacyLevelInput from '../../../common/privacy/PrivacyLevelInput';
 import {
   Box,
   Typography,
@@ -17,13 +18,17 @@ const ConfigureTool = ({
   importMethod = PROVIDER_TYPES.DIRECT_IMPORT // default to direct import if not specified
 }) => {
   const handleChange = (field) => (event) => {
-    let value = event.target.value;
-    if (field === 'privacy_score') {
-      value = Math.min(Math.max(parseInt(value) || 0, 0), 100);
-    }
     onConfigChange({
       ...toolConfig,
-      [field]: value
+      [field]: event.target.value
+    });
+  };
+
+  // The number arrives already clamped to 0–100 (or "" while cleared).
+  const handlePrivacyChange = (score) => {
+    onConfigChange({
+      ...toolConfig,
+      privacy_score: score
     });
   };
 
@@ -67,15 +72,12 @@ const ConfigureTool = ({
         required
       />
 
-      <TextField
-        fullWidth
-        label="Privacy Level"
-        type="number"
-        value={toolConfig.privacy_score}
-        onChange={handleChange('privacy_score')}
-        margin="normal"
-        inputProps={{ min: 0, max: 100 }}
-      />
+      <Box sx={{ mt: 2, mb: 1 }}>
+        <PrivacyLevelInput
+          value={toolConfig.privacy_score}
+          onChange={handlePrivacyChange}
+        />
+      </Box>
 
       {(importMethod === PROVIDER_TYPES.TYK_DASHBOARD || importMethod === PROVIDER_TYPES.DIRECT_IMPORT) && (
         <>

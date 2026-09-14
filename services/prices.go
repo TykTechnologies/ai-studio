@@ -128,9 +128,10 @@ func (s *Service) DeleteModelPrice(id uint) error {
 }
 
 // GetAllModelPrices retrieves all model prices
-func (s *Service) GetAllModelPrices(pageSize int, pageNumber int, all bool) (models.ModelPrices, int64, int, error) {
+func (s *Service) GetAllModelPrices(pageSize int, pageNumber int, all bool, opts ...ListOptions) (models.ModelPrices, int64, int, error) {
 	var modelPrices models.ModelPrices
-	totalCount, totalPages, err := modelPrices.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := modelPrices.GetAll(s.DB, pageSize, pageNumber, all,
+		firstListOptions(opts).Scopes("model_name", "vendor")...)
 	if err != nil {
 		return nil, 0, 0, err
 	}

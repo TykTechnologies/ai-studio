@@ -66,10 +66,15 @@ func (d *Datasource) Delete(db *gorm.DB) error {
 }
 
 // Get all datasources
-func (d *Datasources) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool) (int64, int, error) {
+func (d *Datasources) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) (int64, int, error) {
 	var totalCount int64
 	query := db.Model(&Datasource{})
 
+	// Optional search/sort scopes (services.ListOptions); applied before the
+	// count so X-Total-Count reflects the filtered set.
+	for _, scope := range scopes {
+		query = scope(query)
+	}
 	if err := query.Count(&totalCount).Error; err != nil {
 		return 0, 0, err
 	}

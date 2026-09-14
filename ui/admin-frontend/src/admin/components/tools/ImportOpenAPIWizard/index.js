@@ -38,7 +38,9 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
     description: "",
     tool_type: "REST",
     oas_spec: "",
-    privacy_score: 0,
+    // 25 is the top of the Public band, the same default the quick-start
+    // uses; the create hook falls back to it too.
+    privacy_score: 25,
     auth_schema_name: "",
     auth_key: "",
     auth_key_prefilled: false,
@@ -255,7 +257,7 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
       description: "",
       tool_type: "REST",
       oas_spec: "",
-      privacy_score: 0,
+      privacy_score: 25,
       auth_schema_name: "",
       auth_key: "",
       auth_key_prefilled: false,

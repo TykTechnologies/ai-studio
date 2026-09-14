@@ -1,39 +1,26 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  Typography,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Menu,
-  MenuItem,
-  Snackbar,
-  Box,
-  Stack,
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import { Typography, Alert, Box, Stack } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DownloadIcon from "@mui/icons-material/Download";
+import DataTable from "../components/common/DataTable";
+import ActiveStatusDot from "../components/common/ActiveStatusDot";
+import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
 import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
+import BulkDeleteConfirmationDialog from "../components/common/BulkDeleteConfirmationDialog";
+import BulkResultAlert from "../components/common/BulkResultAlert";
+import FeedbackSnackbar, { useFeedbackSnackbar } from "../components/common/FeedbackSnackbar";
 import ImportOpenAPIWizard from "../components/tools/ImportOpenAPIWizard";
 import {
-  StyledPaper,
   TitleBox,
   ContentBox,
-  StyledTableCell,
-  StyledTableHeaderCell,
-  StyledTableRow,
   PrimaryButton,
   PrimaryOutlineButton,
 } from "../styles/sharedStyles";
-import PaginationControls from "../components/common/PaginationControls";
-import usePagination from "../hooks/usePagination";
+import useListQuery from "../hooks/useListQuery";
+import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import useConfig from "../hooks/useConfig";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
@@ -44,37 +31,16 @@ const ToolList = () => {
   const [tools, setTools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [selectedTool, setSelectedTool] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [importWizardOpen, setImportWizardOpen] = useState(false);
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const { notify, snackbarProps } = useFeedbackSnackbar();
 
-  const {
-    page,
-    pageSize,
-    totalPages,
-    handlePageChange,
-    handlePageSizeChange,
-    updatePaginationData,
-  } = usePagination();
+  const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
   const fetchTools = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/tools", {
-        params: {
-          page,
-          page_size: pageSize,
-          sort_by: sortConfig.key,
-          sort_direction: sortConfig.direction,
-        },
-      });
+      const response = await apiClient.get("/tools", { params: queryParams });
       setTools(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -86,59 +52,34 @@ const ToolList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sortConfig, updatePaginationData]);
+  }, [queryParams, updatePaginationData]);
 
   useEffect(() => {
     fetchTools();
   }, [fetchTools]);
 
-  const handleMenuOpen = (event, tool) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedTool(tool);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const bulk = useBulkActions({
+    items: tools,
+    resource: "tools",
+    singular: "tool",
+    plural: "tools",
+    notify,
+    refresh: fetchTools,
+  });
 
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/tools/${id}`);
-      setSnackbar({
-        open: true,
-        message: "Tool deleted successfully",
-        severity: "success",
-      });
+      notify("Tool deleted successfully");
       fetchTools();
     } catch (error) {
       console.error("Error deleting tool", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete tool",
-        severity: "error",
-      });
+      notify("Failed to delete tool", "error");
     }
-    handleMenuClose();
   };
 
   const handleToolClick = (tool) => {
     navigate(`/admin/tools/${tool.id}`);
-  };
-
-  const handleCloseSnackbar = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  const handleSort = (key) => {
-    let direction = "asc";
-    if (sortConfig.key === key && sortConfig.direction === "asc") {
-      direction = "desc";
-    }
-    setSortConfig({ key, direction });
   };
 
   const handleAddTool = () => {
@@ -147,28 +88,51 @@ const ToolList = () => {
 
   const handleImportTool = async (toolData) => {
     try {
-      setSnackbar({
-        open: true,
-        message: "Tool imported successfully",
-        severity: "success",
-      });
+      notify("Tool imported successfully");
       // Navigate to the tool details page
       navigate(`/admin/tools/${toolData.id}`);
     } catch (error) {
       console.error("Error importing tool", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to import tool",
-        severity: "error",
-      });
+      notify("Failed to import tool", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading && tools.length === 0) {
-    return <CircularProgress />;
-  }
+  const columns = useMemo(() => [
+    { field: "name", headerName: "Name", sortable: true, renderCell: (tool) => tool.attributes.name },
+    { field: "description", headerName: "Description", renderCell: (tool) => tool.attributes.description },
+    {
+      field: "privacy_score",
+      headerName: "Privacy Level",
+      sortable: true,
+      renderCell: (tool) => <PrivacyLevelChip score={tool.attributes.privacy_score} />,
+    },
+    {
+      field: "active",
+      headerName: "Active",
+      sortable: true,
+      renderCell: (tool) => <ActiveStatusDot active={tool.attributes.active !== false} />,
+    },
+  ], []);
+
+  // The row toggle goes through the same bulk endpoint as the toolbar so the
+  // list and the tool form (which has the switch) agree on what "active" is.
+  const runBulk = bulk.run;
+  const rowActions = useMemo(() => [
+    { key: "edit", label: "Edit tool", onClick: (tool) => navigate(`/admin/tools/edit/${tool.id}`) },
+    { key: "delete", label: "Delete tool", onClick: (tool) => setDeleteTarget(tool) },
+    {
+      key: "toggle",
+      label: (tool) => `${tool?.attributes?.active !== false ? "Deactivate" : "Activate"} tool`,
+      onClick: (tool) => runBulk(tool.attributes.active !== false ? "deactivate" : "activate", [tool]),
+    },
+  ], [navigate, runBulk]);
+
+  const bulkActions = useMemo(
+    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: true }),
+    [bulk.run, bulk.requestDelete],
+  );
 
   if (error && tools.length === 0) {
     return <Alert severity="error">{error}</Alert>;
@@ -198,105 +162,56 @@ const ToolList = () => {
         </Stack>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Tools are external services that enhance the AI's capabilities by providing access to additional data and functions within chat rooms. Defined by the OpenAPI specification, you can specify which operations the LLM can use to fulfill user requests effectively.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Tools are external services that enhance the AI's capabilities by providing access to additional data and functions within chat rooms. Defined by the OpenAPI specification, you can specify which operations the LLM can use to fulfill user requests effectively.</Typography>
       </Box>
       <ContentBox>
-        {tools.length === 0 ? (
-          <EmptyStateWidget
-            title="No tools added yet"
-            description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request."
-            learnMoreLink={getDocsLink("tools")}
-            actions={
-              <>
-                <PrimaryOutlineButton
-                  variant="contained"
-                  startIcon={<DownloadIcon />}
-                  onClick={() => setImportWizardOpen(true)}
-                >
-                  Import OpenAPI
-                </PrimaryOutlineButton>
-                <Can permission={P.TOOLS_WRITE}>
-                  <PrimaryButton
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleAddTool}
-                  >
-                    Add tool
-                  </PrimaryButton>
-                </Can>
-              </>
-            }
-          />
-        ) : (
-          <StyledPaper>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <StyledTableHeaderCell onClick={() => handleSort("name")}>
-                    Name
-                  </StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Description</StyledTableHeaderCell>
-                  <StyledTableHeaderCell
-                    onClick={() => handleSort("privacy_score")}
-                  >
-                    Privacy Level
-                  </StyledTableHeaderCell>
-                  <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {tools.map((tool) => (
-                  <StyledTableRow
-                    key={tool.id}
-                    onClick={() => handleToolClick(tool)}
-                    sx={{ cursor: "pointer" }}
-                  >
-                    <StyledTableCell>{tool.attributes.name}</StyledTableCell>
-                    <StyledTableCell>{tool.attributes.description}</StyledTableCell>
-                    <StyledTableCell>{tool.attributes.privacy_score}</StyledTableCell>
-                    <StyledTableCell align="right">
-                      <Can permission={P.TOOLS_WRITE}>
-                        <IconButton
-                          onClick={(event) => handleMenuOpen(event, tool)}
+        <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
+        <Can permission={P.TOOLS_WRITE}>
+          {(canWrite) => (
+            <DataTable
+              {...tableProps}
+              ariaLabel="Tools"
+              searchPlaceholder="Search tools by name..."
+              columns={columns}
+              data={tools}
+              loading={loading}
+              onRowClick={handleToolClick}
+              actions={canWrite ? rowActions : undefined}
+              {...(canWrite ? bulk.selectionProps : {})}
+              bulkActions={canWrite ? bulkActions : undefined}
+              emptyState={
+                !searchTerm ? (
+                  <EmptyStateWidget
+                    title="No tools added yet"
+                    description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request."
+                    learnMoreLink={getDocsLink("tools")}
+                    actions={
+                      <>
+                        <PrimaryOutlineButton
+                          variant="contained"
+                          startIcon={<DownloadIcon />}
+                          onClick={() => setImportWizardOpen(true)}
                         >
-                          <MoreVertIcon />
-                        </IconButton>
-                      </Can>
-                    </StyledTableCell>
-                  </StyledTableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <PaginationControls
-              page={page}
-              pageSize={pageSize}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              onPageSizeChange={handlePageSizeChange}
+                          Import OpenAPI
+                        </PrimaryOutlineButton>
+                        {canWrite && (
+                          <PrimaryButton
+                            variant="contained"
+                            startIcon={<AddIcon />}
+                            onClick={handleAddTool}
+                          >
+                            Add tool
+                          </PrimaryButton>
+                        )}
+                      </>
+                    }
+                  />
+                ) : undefined
+              }
             />
-          </StyledPaper>
-        )}
+          )}
+        </Can>
       </ContentBox>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem
-          onClick={() => navigate(`/admin/tools/edit/${selectedTool?.id}`)}
-        >
-          Edit tool
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setDeleteTarget(selectedTool);
-            handleMenuClose();
-          }}
-        >
-          Delete tool
-        </MenuItem>
-      </Menu>
 
       <ImportOpenAPIWizard
         open={importWizardOpen}
@@ -318,20 +233,18 @@ const ToolList = () => {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <BulkDeleteConfirmationDialog
+        open={bulk.deleteDialogOpen}
+        resourcePath="tools"
+        objectLabel="tool"
+        objectLabelPlural="tools"
+        items={bulk.deleteDialogItems}
+        consequence="Deleting them removes them from all of those; chats and agents that call them lose the tools."
+        onConfirm={bulk.confirmDelete}
+        onCancel={bulk.cancelDelete}
+      />
+
+      <FeedbackSnackbar {...snackbarProps} />
     </>
   );
 };

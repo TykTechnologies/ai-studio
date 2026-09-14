@@ -1,4 +1,7 @@
 import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
+import Section from "../common/Section";
+import UsedBySection from "../common/UsedBySection";
+import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
@@ -7,8 +10,6 @@ import {
   CircularProgress,
   Box,
   Grid,
-  Divider,
-  Tooltip,
   List,
   ListItem,
   ListItemText,
@@ -16,8 +17,8 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import DataUsageIcon from "@mui/icons-material/DataUsage";
+import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import { Line, Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -55,12 +56,6 @@ ChartJS.register(
   Legend,
   TimeScale,
   Filler,
-);
-
-const SectionTitle = ({ children }) => (
-  <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
-    {children}
-  </Typography>
 );
 
 const NoDataMessage = ({ message }) => (
@@ -220,127 +215,132 @@ const ToolDetails = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
-        <SectionTitle>Tool Operations Usage Analytics</SectionTitle>
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <ChartPaper elevation={3}>
-              <Typography variant="h6" gutterBottom>
-                Tool Operations Usage Over Time
-              </Typography>
-              {toolOperationsUsageData ? (
-                <Line options={toolOperationsChartOptions} data={toolOperationsChartData} />
-              ) : (
-                <NoDataMessage message="No tool operations usage data available for the selected period." />
-              )}
-            </ChartPaper>
+        <Section title="Tool Operations Usage Analytics">
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <ChartPaper elevation={3}>
+                <Typography variant="h6" gutterBottom>
+                  Tool Operations Usage Over Time
+                </Typography>
+                {toolOperationsUsageData ? (
+                  <Line options={toolOperationsChartOptions} data={toolOperationsChartData} />
+                ) : (
+                  <NoDataMessage message="No tool operations usage data available for the selected period." />
+                )}
+              </ChartPaper>
+            </Grid>
           </Grid>
-        </Grid>
-        <Box mt={2} mb={4}>
-          <DateRangePicker
-            startDate={startDate}
-            endDate={endDate}
-            onStartDateChange={handleStartDateChange}
-            onEndDateChange={handleEndDateChange}
-          />
-        </Box>
+          <Box mt={2} mb={4}>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={handleStartDateChange}
+              onEndDateChange={handleEndDateChange}
+            />
+          </Box>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>Tool Information</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Name:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{tool.attributes.name}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Description:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{tool.attributes.description}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Privacy Level:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <FieldValue>{tool.attributes.privacy_score}</FieldValue>
-              <Tooltip
-                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the tool."
-                placement="top"
-              >
-                <HelpOutlineIcon
-                  sx={{ ml: 1, fontSize: 20, color: "text.secondary" }}
+        <Section title="Tool Information">
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Name:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{tool.attributes.name}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Description:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{tool.attributes.description}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Privacy Level:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <PrivacyLevelChip score={tool.attributes.privacy_score} />
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Tool Type:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>REST</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Active:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              {/* Same dot idiom as the LLM provider page. */}
+              <FieldValue data-testid="tool-active">
+                <FiberManualRecordIcon
+                  sx={{
+                    color: tool.attributes.active ? "green" : "red",
+                    verticalAlign: "middle",
+                    marginRight: 1,
+                  }}
                 />
-              </Tooltip>
-            </Box>
+                {tool.attributes.active ? "Yes" : "No"}
+              </FieldValue>
+            </Grid>
           </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Tool Type:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>REST</FieldValue>
-          </Grid>
-        </Grid>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
+        <UsedBySection resourcePath="tools" id={id} objectLabel="tool" />
 
-        <SectionTitle>Authentication Details</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={3}>
-            <FieldLabel>Auth Schema Name:</FieldLabel>
+        <Section title="Authentication Details">
+          <Grid container spacing={2}>
+            <Grid item xs={3}>
+              <FieldLabel>Auth Schema Name:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>{tool.attributes.auth_schema_name}</FieldValue>
+            </Grid>
+            <Grid item xs={3}>
+              <FieldLabel>Auth Key:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <FieldValue>
+                {tool.attributes.auth_key ? "*".repeat(20) : "Not set"}
+              </FieldValue>
+            </Grid>
           </Grid>
-          <Grid item xs={9}>
-            <FieldValue>{tool.attributes.auth_schema_name}</FieldValue>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Auth Key:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>
-              {tool.attributes.auth_key ? "*".repeat(20) : "Not set"}
-            </FieldValue>
-          </Grid>
-        </Grid>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>OpenAPI Specification</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <FieldValue>
-              {tool.attributes.oas_spec
-                ? "OpenAPI Specification is set"
-                : "OpenAPI Specification is not set"}
-            </FieldValue>
+        <Section title="OpenAPI Specification">
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <FieldValue>
+                {tool.attributes.oas_spec
+                  ? "OpenAPI Specification is set"
+                  : "OpenAPI Specification is not set"}
+              </FieldValue>
+            </Grid>
           </Grid>
-        </Grid>
+        </Section>
 
-        <Divider sx={{ my: 3 }} />
-
-        <SectionTitle>Operations</SectionTitle>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            {operations.length > 0 ? (
-              <List sx={{ listStyleType: "decimal", pl: 4 }}>
-                {operations.map((operation, index) => (
-                  <ListItem key={index} sx={{ display: "list-item" }}>
-                    <ListItemText
-                      primary={
-                        <Typography sx={{ fontFamily: "monospace" }}>
-                          {operation}
-                        </Typography>
-                      }
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            ) : (
-              <FieldValue>No operations set for this tool.</FieldValue>
-            )}
+        <Section title="Operations">
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              {operations.length > 0 ? (
+                <List sx={{ listStyleType: "decimal", pl: 4 }}>
+                  {operations.map((operation, index) => (
+                    <ListItem key={index} sx={{ display: "list-item" }}>
+                      <ListItemText
+                        primary={
+                          <Typography sx={{ fontFamily: "monospace" }}>
+                            {operation}
+                          </Typography>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              ) : (
+                <FieldValue>No operations set for this tool.</FieldValue>
+              )}
+            </Grid>
           </Grid>
-        </Grid>
+        </Section>
 
         <GovernedMetadataSummary
           objectType="tool"

@@ -648,6 +648,9 @@ func (a *API) setupRoutes() {
 	v1.GET("/llms/min-privacy-score", authz.Read("llms"), a.getLLMsByMinPrivacyScore)
 	v1.GET("/llms/privacy-score-range", authz.Read("llms"), a.getLLMsByPrivacyScoreRange)
 	v1.GET("/llms/:id/dependents", authz.Read("llms"), a.getLLMDependents)
+	// Bulk actions resolve their permission from the body: publish for
+	// activate/deactivate, delete for delete (bulk_handlers.go).
+	v1.HandleFn("POST", "/llms/bulk", bulkActionPermission("llms"), a.bulkLLMs)
 
 	// Catalogue routes
 	v1.POST("/catalogues", authz.Write("catalogues"), a.createCatalogue)
@@ -660,6 +663,7 @@ func (a *API) setupRoutes() {
 	v1.POST("/catalogues/:id/llms", authz.Write("catalogues"), a.addLLMToCatalogue)
 	v1.DELETE("/catalogues/:id/llms/:llmId", authz.Delete("catalogues"), a.removeLLMFromCatalogue)
 	v1.GET("/catalogues/:id/llms", authz.Read("catalogues"), a.listCatalogueLLMs)
+	v1.GET("/catalogues/:id/groups", authz.Read("catalogues"), a.getCatalogueGroups)
 
 	// Tag routes
 	v1.POST("/tags", authz.Write("tags"), a.createTag)
@@ -684,6 +688,7 @@ func (a *API) setupRoutes() {
 	v1.POST("/datasources/:id/process-embeddings", authz.Execute("datasources"), a.ProcessFileEmbeddingHandler)
 	v1.POST("/datasources/:id/clone", authz.Write("datasources"), a.cloneDatasource)
 	v1.GET("/datasources/:id/dependents", authz.Read("datasources"), a.getDatasourceDependents)
+	v1.HandleFn("POST", "/datasources/bulk", bulkActionPermission("datasources"), a.bulkDatasources)
 
 	// Data Catalogue routes
 	v1.POST("/data-catalogues", authz.Write("data-catalogues"), a.createDataCatalogue)
@@ -698,6 +703,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/data-catalogues/:id/datasources/:datasourceId", authz.Delete("data-catalogues"), a.removeDatasourceFromDataCatalogue)
 	v1.GET("/data-catalogues/by-tag", authz.Read("data-catalogues"), a.getDataCataloguesByTag)
 	v1.GET("/data-catalogues/by-datasource", authz.Read("data-catalogues"), a.getDataCataloguesByDatasource)
+	v1.GET("/data-catalogues/:id/groups", authz.Read("data-catalogues"), a.getDataCatalogueGroups)
 
 	// ToolCatalogue routes
 	v1.POST("/tool-catalogues", authz.Write("tool-catalogues"), a.createToolCatalogue)
@@ -712,6 +718,7 @@ func (a *API) setupRoutes() {
 	v1.POST("/tool-catalogues/:id/tags", authz.Write("tool-catalogues"), a.addTagToToolCatalogue)
 	v1.DELETE("/tool-catalogues/:id/tags/:tagId", authz.Delete("tool-catalogues"), a.removeTagFromToolCatalogue)
 	v1.GET("/tool-catalogues/:id/tags", authz.Read("tool-catalogues"), a.getToolCatalogueTags)
+	v1.GET("/tool-catalogues/:id/groups", authz.Read("tool-catalogues"), a.getToolCatalogueGroups)
 
 	// Credential routes
 	v1.POST("/credentials", authz.Write("credentials"), a.createCredential)
@@ -739,6 +746,8 @@ func (a *API) setupRoutes() {
 	v1.GET("/apps", authz.Read("apps"), a.listApps)
 	v1.GET("/apps/search", authz.Read("apps"), a.searchApps)
 	v1.GET("/apps/count", authz.Read("apps"), a.countApps)
+	v1.GET("/apps/:id/dependents", authz.Read("apps"), a.getAppDependents)
+	v1.HandleFn("POST", "/apps/bulk", bulkActionPermission("apps"), a.bulkApps)
 	v1.GET("/users/:id/apps/count", authz.Read("apps"), a.countAppsByUserID) // Note: Param is "id" here
 
 	// App-Tool routes
@@ -819,6 +828,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/tools/:id/filters", authz.Read("tools"), a.getToolFilters)
 	v1.PUT("/tools/:id/filters", authz.Write("tools"), a.setToolFilters)
 	v1.GET("/tools/:id/dependents", authz.Read("tools"), a.getToolDependents)
+	v1.HandleFn("POST", "/tools/bulk", bulkActionPermission("tools"), a.bulkTools)
 
 	// Provider routes
 	providerAPI := NewProviderAPI(a)
@@ -847,6 +857,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/filters", authz.Read("filters"), a.listFilters)
 	v1.POST("/filters/test", authz.Execute("filters"), a.testFilter)
 	v1.GET("/filters/:id/dependents", authz.Read("filters"), a.getFilterDependents)
+	v1.HandleFn("POST", "/filters/bulk", bulkActionPermission("filters"), a.bulkFilters)
 
 	// Plugin routes
 	v1.POST("/plugins", authz.Write("plugins"), a.createPlugin)
@@ -925,6 +936,7 @@ func (a *API) setupRoutes() {
 	v1.GET("/model-routers", authz.Read("model-routers"), a.listModelRouters)
 	v1.PATCH("/model-routers/:id/toggle", authz.Publish("model-routers"), a.toggleModelRouterActive)
 	v1.GET("/model-routers/:id/dependents", authz.Read("model-routers"), a.getModelRouterDependents)
+	v1.HandleFn("POST", "/model-routers/bulk", bulkActionPermission("model-routers"), a.bulkModelRouters)
 
 	// Marketplace routes (only register if marketplace service is available)
 	if a.service.MarketplaceService != nil {
@@ -1114,6 +1126,7 @@ func (a *API) setupRoutes() {
 	v1.DELETE("/secrets/:id", authz.Delete("secrets"), a.deleteSecret)
 	v1.GET("/secrets", authz.Read("secrets"), a.listSecrets)
 	v1.GET("/secrets/:id/dependents", authz.Read("secrets"), a.getSecretDependents)
+	v1.HandleFn("POST", "/secrets/bulk", bulkActionPermission("secrets"), a.bulkSecrets)
 
 	// Branding routes
 	// Public endpoints (for frontend config loading and asset serving)

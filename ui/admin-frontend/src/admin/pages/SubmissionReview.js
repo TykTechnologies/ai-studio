@@ -36,6 +36,7 @@ import {
   SecondaryLinkButton,
 } from "../styles/sharedStyles";
 import StatusChip from "../components/submissions/StatusChip";
+import PrivacyLevelChip from "../components/common/privacy/PrivacyLevelChip";
 import { getResourceTypeLabel } from "../components/submissions/resourceTypeLabel";
 import PluginPayloadView from "../components/submissions/PluginPayloadView";
 
@@ -361,9 +362,12 @@ const SubmissionReview = () => {
               <Typography variant="h6" gutterBottom>
                 Privacy
               </Typography>
-              <Typography variant="body2">
-                <strong>Suggested score:</strong> {submission.suggested_privacy}
-              </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography variant="body2">
+                  <strong>Suggested level:</strong>
+                </Typography>
+                <PrivacyLevelChip score={submission.suggested_privacy} />
+              </Box>
               {submission.privacy_justification && (
                 <Typography variant="body2" sx={{ mt: 0.5 }}>
                   <strong>Justification:</strong>{" "}
@@ -763,9 +767,10 @@ const SubmissionReview = () => {
       >
         <DialogTitle>Approve Submission</DialogTitle>
         <DialogContent>
-          <Typography id="final-privacy-label" gutterBottom sx={{ mt: 1 }}>
-            Set final privacy level
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1, mb: 1 }}>
+            <Typography id="final-privacy-label">Set final privacy level</Typography>
+            <PrivacyLevelChip score={finalPrivacyScore} />
+          </Box>
           {/* Unlabelled, and drag-only, for the value that decides whether the
               resource can ever be paired with a provider. */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>

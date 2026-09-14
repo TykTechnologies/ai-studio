@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import Section from "../common/Section";
+import UsedBySection from "../common/UsedBySection";
 import {
   Box,
   Typography,
@@ -25,7 +27,6 @@ import {
   ContentBox,
   PrimaryButton,
   SecondaryLinkButton,
-  StyledPaper,
 } from "../../styles/sharedStyles";
 
 const ModelRouterDetails = () => {
@@ -141,10 +142,7 @@ const ModelRouterDetails = () => {
         <Grid container spacing={3}>
           {/* Basic Information */}
           <Grid item xs={12}>
-            <StyledPaper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Basic Information
-              </Typography>
+            <Section title="Basic Information" sx={{ mb: 0 }}>
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
                   <Typography variant="body2" color="text.secondary">
@@ -181,15 +179,12 @@ const ModelRouterDetails = () => {
                   </Typography>
                 </Grid>
               </Grid>
-            </StyledPaper>
+            </Section>
           </Grid>
 
           {/* Endpoint Information */}
           <Grid item xs={12}>
-            <StyledPaper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Endpoint
-              </Typography>
+            <Section title="Endpoint" sx={{ mb: 0 }}>
               <Box
                 sx={{
                   bgcolor: "grey.100",
@@ -207,109 +202,114 @@ const ModelRouterDetails = () => {
                 Send OpenAI-compatible chat completion requests to this endpoint.
                 The model name in your request will be matched against pool patterns.
               </Typography>
-            </StyledPaper>
+            </Section>
+          </Grid>
+
+          {/* Used by */}
+          <Grid item xs={12}>
+            <UsedBySection resourcePath="model-routers" id={id} objectLabel="model router" sx={{ mb: 0 }} />
           </Grid>
 
           {/* Pools */}
           <Grid item xs={12}>
-            <Typography variant="h6" gutterBottom>
-              Model Pools ({attributes.pools?.length || 0})
-            </Typography>
-            {attributes.pools?.map((pool, index) => (
-              <Card key={index} variant="outlined" sx={{ mb: 2 }}>
-                <CardContent>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <Typography variant="subtitle1">{pool.name}</Typography>
-                        <Box sx={{ display: "flex", gap: 1 }}>
-                          <Chip
-                            label={`Pattern: ${pool.model_pattern}`}
-                            size="small"
-                            variant="outlined"
-                          />
-                          <Chip
-                            label={pool.selection_algorithm === "round_robin" ? "Round Robin" : "Weighted"}
-                            size="small"
-                            color="primary"
-                          />
-                          <Chip
-                            label={`Priority: ${pool.priority}`}
-                            size="small"
-                          />
+            <Section title={`Model Pools (${attributes.pools?.length || 0})`} sx={{ mb: 0 }}>
+              {attributes.pools?.map((pool, index) => (
+                <Card key={index} variant="outlined" sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <Typography variant="subtitle1">{pool.name}</Typography>
+                          <Box sx={{ display: "flex", gap: 1 }}>
+                            <Chip
+                              label={`Pattern: ${pool.model_pattern}`}
+                              size="small"
+                              variant="outlined"
+                            />
+                            <Chip
+                              label={pool.selection_algorithm === "round_robin" ? "Round Robin" : "Weighted"}
+                              size="small"
+                              color="primary"
+                            />
+                            <Chip
+                              label={`Priority: ${pool.priority}`}
+                              size="small"
+                            />
+                          </Box>
                         </Box>
-                      </Box>
-                    </Grid>
+                      </Grid>
 
-                    {/* Vendors Table */}
-                    <Grid item xs={12}>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Vendors ({pool.vendors?.length || 0})
-                      </Typography>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>LLM</TableCell>
-                            <TableCell>Vendor</TableCell>
-                            {pool.selection_algorithm === "weighted" && (
-                              <TableCell>Weight</TableCell>
-                            )}
-                            <TableCell>Status</TableCell>
-                            <TableCell>Mappings</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {pool.vendors?.map((vendor, vIndex) => (
-                            <TableRow key={vIndex}>
-                              <TableCell>
-                                {vendor.llm?.name || `LLM #${vendor.llm_id}`}
-                              </TableCell>
-                              <TableCell>
-                                <Chip label={vendor.llm?.vendor || "unknown"} size="small" />
-                              </TableCell>
+                      {/* Vendors Table */}
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                          Vendors ({pool.vendors?.length || 0})
+                        </Typography>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>LLM</TableCell>
+                              <TableCell>Vendor</TableCell>
                               {pool.selection_algorithm === "weighted" && (
-                                <TableCell>{vendor.weight}</TableCell>
+                                <TableCell>Weight</TableCell>
                               )}
-                              <TableCell>
-                                <Chip
-                                  icon={
-                                    <FiberManualRecordIcon
-                                      sx={{
-                                        fontSize: 10,
-                                        color: vendor.active ? "green" : "red",
-                                      }}
-                                    />
-                                  }
-                                  label={vendor.active ? "Active" : "Inactive"}
-                                  size="small"
-                                  variant="outlined"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                {vendor.mappings?.length > 0 ? (
-                                  <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-                                    {vendor.mappings.map((mapping, mIndex) => (
-                                      <Box key={mIndex} sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
-                                        <Chip label={mapping.source_model} size="small" sx={{ fontSize: "0.7rem" }} />
-                                        <Typography variant="caption">→</Typography>
-                                        <Chip label={mapping.target_model} size="small" color="primary" sx={{ fontSize: "0.7rem" }} />
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                ) : (
-                                  <Typography variant="caption" color="text.secondary">None</Typography>
-                                )}
-                              </TableCell>
+                              <TableCell>Status</TableCell>
+                              <TableCell>Mappings</TableCell>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </Grid>
+                          </TableHead>
+                          <TableBody>
+                            {pool.vendors?.map((vendor, vIndex) => (
+                              <TableRow key={vIndex}>
+                                <TableCell>
+                                  {vendor.llm?.name || `LLM #${vendor.llm_id}`}
+                                </TableCell>
+                                <TableCell>
+                                  <Chip label={vendor.llm?.vendor || "unknown"} size="small" />
+                                </TableCell>
+                                {pool.selection_algorithm === "weighted" && (
+                                  <TableCell>{vendor.weight}</TableCell>
+                                )}
+                                <TableCell>
+                                  <Chip
+                                    icon={
+                                      <FiberManualRecordIcon
+                                        sx={{
+                                          fontSize: 10,
+                                          color: vendor.active ? "green" : "red",
+                                        }}
+                                      />
+                                    }
+                                    label={vendor.active ? "Active" : "Inactive"}
+                                    size="small"
+                                    variant="outlined"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {vendor.mappings?.length > 0 ? (
+                                    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+                                      {vendor.mappings.map((mapping, mIndex) => (
+                                        <Box key={mIndex} sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+                                          <Chip label={mapping.source_model} size="small" sx={{ fontSize: "0.7rem" }} />
+                                          <Typography variant="caption">→</Typography>
+                                          <Chip label={mapping.target_model} size="small" color="primary" sx={{ fontSize: "0.7rem" }} />
+                                        </Box>
+                                      ))}
+                                    </Box>
+                                  ) : (
+                                    <Typography variant="caption" color="text.secondary">None</Typography>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </Grid>
 
-                  </Grid>
-                </CardContent>
-              </Card>
-            ))}
+                    </Grid>
+                  </CardContent>
+                </Card>
+              ))}
+            </Section>
+
           </Grid>
         </Grid>
       </ContentBox>

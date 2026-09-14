@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import Section from "../common/Section";
+import UsedBySection from "../common/UsedBySection";
 import {
   Typography,
   CircularProgress,
@@ -97,41 +99,45 @@ const SecretDetails = () => {
         </Box>
       </TitleBox>
       <ContentBox>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
-            <Grid container spacing={2}>
-              <Grid item xs={4}>
-                <FieldLabel>Variable Name:</FieldLabel>
-              </Grid>
-              <Grid item xs={8}>
-                <FieldValue>{secret.attributes.var_name}</FieldValue>
-              </Grid>
+        <Section title="Secret">
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Grid container spacing={2}>
+                <Grid item xs={4}>
+                  <FieldLabel>Variable Name:</FieldLabel>
+                </Grid>
+                <Grid item xs={8}>
+                  <FieldValue>{secret.attributes.var_name}</FieldValue>
+                </Grid>
 
-              <Grid item xs={4}>
-                <FieldLabel>Value:</FieldLabel>
-              </Grid>
-              <Grid item xs={8}>
-                <Box display="flex" alignItems="center">
-                  <FieldValue
-                    sx={{
-                      fontFamily: showSecret ? "inherit" : "monospace",
-                      letterSpacing: showSecret ? "inherit" : "0.1em",
-                    }}
-                  >
-                    {formatSecretValue(secret.attributes.value)}
-                  </FieldValue>
-                  <IconButton
-                    onClick={toggleSecretVisibility}
-                    size="small"
-                    sx={{ ml: 1 }}
-                  >
-                    {showSecret ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </Box>
+                <Grid item xs={4}>
+                  <FieldLabel>Value:</FieldLabel>
+                </Grid>
+                <Grid item xs={8}>
+                  <Box display="flex" alignItems="center">
+                    <FieldValue
+                      sx={{
+                        fontFamily: showSecret ? "inherit" : "monospace",
+                        letterSpacing: showSecret ? "inherit" : "0.1em",
+                      }}
+                    >
+                      {formatSecretValue(secret.attributes.value)}
+                    </FieldValue>
+                    <IconButton
+                      onClick={toggleSecretVisibility}
+                      size="small"
+                      sx={{ ml: 1 }}
+                    >
+                      {showSecret ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                  </Box>
+                </Grid>
               </Grid>
             </Grid>
           </Grid>
-        </Grid>
+        </Section>
+
+        <UsedBySection resourcePath="secrets" id={id} objectLabel="secret" />
 
         <Box mt={4}>
           <Alert severity="info">

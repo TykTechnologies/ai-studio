@@ -7,6 +7,7 @@ import { getVendorName, getVendorLogo } from "../../admin/utils/vendorLogos";
 import { generateSlug } from "../../admin/components/wizards/quick-start/utils";
 import { getConfig } from "../../config";
 import { PrimaryButton } from "../../admin/styles/sharedStyles";
+import PrivacyLevelChip from "../../admin/components/common/privacy/PrivacyLevelChip";
 
 // The "More" modal on a portal LLM card. It used to show the heading and the
 // vendor and nothing else (UX review F-22 / Q16), so a developer deciding
@@ -97,12 +98,9 @@ const LLMDetailModal = ({ llm, open, handleClose, onBuildApp }) => {
 
       <Box sx={{ mt: 2 }}>
         <FieldLabel>Privacy level:</FieldLabel>
-        <Typography>
-          {hasPrivacy ? attrs.privacy_score : "Not set"}
-          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-            (0 lowest – 100 highest)
-          </Typography>
-        </Typography>
+        <Box sx={{ mt: 0.5 }}>
+          <PrivacyLevelChip score={hasPrivacy ? attrs.privacy_score : null} />
+        </Box>
       </Box>
 
       <Box sx={{ mt: 2 }}>
