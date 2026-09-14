@@ -27,12 +27,15 @@ const ConfirmationDialog = ({
   backgroundColor,
   borderColor,
   primaryButtonComponent = "primary",
+  cancelLabel = "Cancel",
+  "data-testid": testId,
 }) => {
   return (
     <Dialog
       open={open}
       onClose={onClose || onCancel}
       PaperProps={{
+        "data-testid": testId,
         sx: {
           bgcolor: backgroundColor,
           border: "2px solid",
@@ -51,9 +54,11 @@ const ConfirmationDialog = ({
             <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
                 {message}
             </Typography>
-            <Typography sx={{mt: 2}} variant="bodyMediumDefault" color="text.defaultSubdued">
-                {confirmText}
-            </Typography>
+            {confirmText && (
+              <Typography sx={{mt: 2}} variant="bodyMediumDefault" color="text.defaultSubdued">
+                  {confirmText}
+              </Typography>
+            )}
         </DialogContent>
         <IconButton onClick={onClose || onCancel} size="small" sx={{ p: 0 }}>
           <CloseIcon />
@@ -70,7 +75,7 @@ const ConfirmationDialog = ({
             mt: 2,
             mb: 1,
         }}>
-            <SecondaryOutlineButton onClick={onCancel}>Cancel</SecondaryOutlineButton>
+            <SecondaryOutlineButton onClick={onCancel}>{cancelLabel}</SecondaryOutlineButton>
             {primaryButtonComponent === "danger" ? (
               <DangerButton onClick={onConfirm}>
                 {buttonLabel}

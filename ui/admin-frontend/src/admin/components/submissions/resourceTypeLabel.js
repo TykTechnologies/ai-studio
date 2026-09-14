@@ -12,7 +12,7 @@ import ExtensionIcon from "@mui/icons-material/Extension";
 export const getResourceTypeLabel = (submission) => {
   switch (submission?.resource_type) {
     case "datasource":
-      return "Data Source";
+      return "Data source";
     case "tool":
       return "Tool";
     case "plugin":

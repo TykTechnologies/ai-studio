@@ -29,7 +29,7 @@ const CatalogueBadges = ({ catalogues, dataCatalogues, toolCatalogues }) => {
 
       {hasMore && (
         <Box>
-          <Tooltip title={`${totalCount - MAX_BADGES} more catalogues`}>
+          <Tooltip title={`${totalCount - MAX_BADGES} more catalogs`}>
             <Typography variant="bodySmallDefault" sx={{ ml: 0.5 }}>
               +{totalCount - MAX_BADGES}
             </Typography>

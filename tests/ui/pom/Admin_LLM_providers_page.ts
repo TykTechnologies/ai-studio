@@ -35,9 +35,9 @@ export class AdminLLMProvidersPage extends PageTemplate {
     readonly ApiKeyInput: Locator;
     readonly PortalDisplayInformationButton: Locator;
     readonly LogoUrlInput: Locator;
-    /** The form's "Active" switch (formerly "Enabled in Proxy"). */
+    /** The form's "Active" switch. */
     readonly ActiveCheckbox: Locator;
-    /** The list's "Active" column header (formerly "Proxied"). */
+    /** The list's "Active" column header. */
     readonly ActiveColumnHeader: Locator;
     readonly FiltersButton: Locator;
     readonly SaveButton: Locator;
@@ -49,7 +49,7 @@ export class AdminLLMProvidersPage extends PageTemplate {
     constructor(page: Page) {
         super(page);
         this.Table = new TableWrapper('table', this.page);
-        this.AddLLMButton = this.page.getByText('Add LLM').first();
+        this.AddLLMButton = this.page.getByText('Add LLM provider').first();
         this.ProviderNameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.ShortDescriptionInput = this.page.getByRole('textbox', { name: 'Short Description' });
         this.LongDescriptionInput = this.page.getByRole('textbox', { name: 'Long Description' });
@@ -67,11 +67,11 @@ export class AdminLLMProvidersPage extends PageTemplate {
         this.ActiveCheckbox = this.page.getByRole('checkbox', { name: 'Active' });
         this.ActiveColumnHeader = this.page.getByRole('columnheader', { name: 'Active' });
         this.FiltersButton = this.page.getByRole('button', { name: 'Filters' });
-        this.SaveButton = this.page.getByRole('button', { name: 'Add LLM' });
+        this.SaveButton = this.page.getByRole('button', { name: 'Add LLM provider' });
         this.CancelButton = this.page.getByRole('button', { name: 'Cancel' });
-        this.EditProviderButton = this.page.getByRole('menuitem', { name: 'Edit LLM' });
-        this.DeactivateProviderButton = this.page.getByRole('menuitem', { name: 'Deactivate LLM' });
-        this.BackToLLMsLink = this.page.getByRole('link', { name: 'Back to LLMs' });
+        this.EditProviderButton = this.page.getByRole('menuitem', { name: 'Edit LLM provider' });
+        this.DeactivateProviderButton = this.page.getByRole('menuitem', { name: 'Deactivate LLM provider' });
+        this.BackToLLMsLink = this.page.getByRole('link', { name: 'Back to LLM providers' });
     }
 
     async goto() {

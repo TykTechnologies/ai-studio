@@ -35,6 +35,15 @@ const TransferList = ({
   onLoadMore,
   hasMore = false,
   isLoadingMore = false,
+  // Singular noun used in copy ("Loading more users..."); was hardcoded to "users".
+  itemLabel = "item",
+  // Optional accessor for a human-readable name, used for the per-row
+  // "Add {name}" / "Remove {name}" aria-labels.
+  getItemName,
+  // Accessible name and placeholder for the search box.
+  searchLabel,
+  searchPlaceholder = "Search",
+  disabled = false,
 }) => {
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -66,6 +75,8 @@ const TransferList = ({
           idField={idField}
           isLeftSide={true}
           onRemoveItem={handleRemoveItem}
+          getItemName={getItemName}
+          disabled={disabled}
         />
       </TransferBox>
 
@@ -81,11 +92,13 @@ const TransferList = ({
         {enableSearch && (
           <SearchContainer>
             <StyledTextField
-              placeholder="Search"
+              placeholder={searchPlaceholder}
               variant="outlined"
               fullWidth
               value={searchTerm}
               onChange={handleSearchChange}
+              disabled={disabled}
+              inputProps={searchLabel ? { "aria-label": searchLabel } : undefined}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -114,6 +127,8 @@ const TransferList = ({
               idField={idField}
               isLeftSide={false}
               onAddItem={handleAddItem}
+              getItemName={getItemName}
+              disabled={disabled}
             />
           </InfiniteScrollContainer>
         )}
@@ -121,7 +136,7 @@ const TransferList = ({
         {isLoadingMore && !isSearching && (
           <Box display="flex" justifyContent="center" p={2}>
             <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
-              Loading more users...
+              Loading more {itemLabel}s...
             </Typography>
           </Box>
         )}

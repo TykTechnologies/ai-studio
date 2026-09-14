@@ -32,6 +32,12 @@ export class AdminUsersPage extends PageTemplate {
     readonly RollAPIKeyButton: Locator;
     readonly APIKeyValue: Locator;
     readonly APIKeyCopyButton: Locator;
+    // Teams are a RelationshipPicker (compact) on the form: current teams
+    // are chips with a "Remove {name}" icon, the add control is the
+    // Autocomplete labelled "Add team". Membership changes only persist when
+    // the form is saved ("Update user" / "Add user").
+    readonly AddTeamInput: Locator;
+    readonly CreateNewTeamButton: Locator;
 
     constructor(page: Page) {
         super(page);
@@ -52,6 +58,27 @@ export class AdminUsersPage extends PageTemplate {
         this.RollAPIKeyButton = this.page.getByRole('button', { name: 'Roll API Key' });
         this.APIKeyValue = this.page.locator('div:has-text("API Key") + div');
         this.APIKeyCopyButton = this.page.getByTestId('ContentCopyIcon');
+        this.AddTeamInput = this.page.getByRole('combobox', { name: 'Add team' });
+        this.CreateNewTeamButton = this.page.getByRole('button', { name: 'Create a new team' });
+    }
+
+    /** Chip for a team the user is currently in (present only while selected). */
+    teamChip(team: string): Locator {
+        return this.page.getByTestId('relationship-picker').locator('.MuiChip-root').filter({ hasText: team });
+    }
+
+    /** Type into the "Add team" Autocomplete and pick the option; it becomes a chip at once. */
+    async addTeam(team: string) {
+        await this.AddTeamInput.click();
+        await this.AddTeamInput.fill(team);
+        await this.page.getByRole('option', { name: team, exact: true }).click();
+        await this.teamChip(team).waitFor();
+    }
+
+    /** Remove a team via its chip's delete icon. */
+    async removeTeam(team: string) {
+        await this.page.getByLabel(`Remove ${team}`).click();
+        await this.teamChip(team).waitFor({ state: 'detached' });
     }
 
     async goto() {

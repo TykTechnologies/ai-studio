@@ -26,10 +26,15 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 import {
   getVendorName,
   getVendorLogo,
@@ -78,8 +83,25 @@ const ModelPriceForm = () => {
     message: "",
     severity: "success",
   });
+  const [loaded, setLoaded] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Unsaved-changes tracking over the editable price fields.
+  const { markSaved } = useUnsavedForm(
+    {
+      model_name: price.model_name,
+      vendor: price.vendor,
+      cpit: price.cpit,
+      cpt: price.cpt,
+      cache_write_pt: price.cache_write_pt,
+      cache_read_pt: price.cache_read_pt,
+      currency: price.currency,
+    },
+    { ready: !id || loaded }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/model-prices"));
 
   useEffect(() => {
     if (id) {
@@ -98,6 +120,7 @@ const ModelPriceForm = () => {
         cache_write_pt_million: response.data.data.attributes.cache_write_pt * 1000000,
         cache_read_pt_million: response.data.data.attributes.cache_read_pt * 1000000,
       });
+      setLoaded(true);
     } catch (error) {
       console.error("Error fetching Model Price", error);
       setSnackbar({
@@ -172,6 +195,7 @@ const ModelPriceForm = () => {
         await apiClient.post("/model-prices", priceData);
       }
 
+      markSaved();
       navigate("/admin/model-prices", {
         state: {
           snackbar: {
@@ -366,6 +390,9 @@ const ModelPriceForm = () => {
 
           <Box mt={4}>
             <Box display="flex" gap={2}>
+              <SecondaryOutlineButton onClick={handleCancel}>
+                Cancel
+              </SecondaryOutlineButton>
               <PrimaryButton variant="contained" type="submit">
                 {id ? "Update Model Price" : "Add Model Price"}
               </PrimaryButton>

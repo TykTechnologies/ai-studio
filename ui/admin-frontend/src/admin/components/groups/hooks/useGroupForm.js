@@ -5,17 +5,43 @@ import { handleApiError } from "../../../services/utils/errorHandler";
 import { CACHE_KEYS } from "../../../utils/constants";
 import { syncSubjectRoles } from "../../../services/rbacService";
 import { getIdentity } from "../../../utils/identityStore";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+  deepEqual,
+} from "../../../../components/unsaved-changes";
+
+const sortedIds = (items, key = "id") =>
+  (items || []).map((item) => String(item[key])).sort();
 
 export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [], initialToolCatalogs = []) => {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  // True once an existing team is on screen; the unsaved-changes baseline is
+  // taken then (at once for a new team).
+  const [loaded, setLoaded] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState([]);
+  // The membership as stored, so the picker's late-arriving initial report
+  // (GroupMembersSection fetches it on its own) is not read as an edit.
+  const [initialMemberIds, setInitialMemberIds] = useState([]);
   
   const [selectedCatalogs, setSelectedCatalogs] = useState(initialCatalogs);
   const [selectedDataCatalogs, setSelectedDataCatalogs] = useState(initialDataCatalogs);
   const [selectedToolCatalogs, setSelectedToolCatalogs] = useState(initialToolCatalogs);
   // Roles bound to the team (Enterprise); ids only.
   const [selectedRoleIds, setSelectedRoleIds] = useState([]);
+  // Plugin resource instances per type, as reported by
+  // GroupPluginResourcesSection: { "<pluginId>:<slug>": [instanceId] }.
+  // Stays null until the section has loaded, so a save never wipes
+  // assignments the user could not see.
+  const [pluginResourceSelections, setPluginResourceSelectionsState] = useState(null);
+  // The section's first report is what the server holds; only a later
+  // difference from it is a user change.
+  const [initialPluginResourceSelections, setInitialPluginResourceSelections] = useState(null);
+  const setPluginResourceSelections = useCallback((selections) => {
+    setPluginResourceSelectionsState(selections);
+    setInitialPluginResourceSelections((prev) => (prev === null ? selections : prev));
+  }, []);
 
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -23,8 +49,40 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     severity: "success",
   });
   const [warningDialogOpen, setWarningDialogOpen] = useState(false);
-  
+
   const navigate = useNavigate();
+
+  // Unsaved-changes tracking. Members and plugin resources arrive from their
+  // sections after mount, so each is folded in as "differs from what was
+  // loaded" rather than as a raw value the baseline could catch half-loaded:
+  // the members list only counts once the picker has caught up with the
+  // stored membership.
+  const currentMemberIds = sortedIds(selectedUsers);
+  const [membersSynced, setMembersSynced] = useState(!id);
+  useEffect(() => {
+    if (!membersSynced && loaded && deepEqual(currentMemberIds, initialMemberIds)) {
+      setMembersSynced(true);
+    }
+  }, [membersSynced, loaded, currentMemberIds, initialMemberIds]);
+  const { markSaved } = useUnsavedForm(
+    {
+      name,
+      memberIds: membersSynced ? currentMemberIds : initialMemberIds,
+      catalogIds: sortedIds(selectedCatalogs, "value"),
+      dataCatalogIds: sortedIds(selectedDataCatalogs, "value"),
+      toolCatalogIds: sortedIds(selectedToolCatalogs, "value"),
+      roleIds: [...selectedRoleIds].map(String).sort(),
+      pluginResourcesChanged:
+        initialPluginResourceSelections !== null &&
+        !deepEqual(initialPluginResourceSelections, pluginResourceSelections),
+    },
+    { ready: !id || loaded }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = useCallback(
+    () => confirmNavigation(() => navigate("/admin/groups")),
+    [confirmNavigation, navigate]
+  );
 
   const fetchGroup = useCallback(async () => {
     if (!id) return;
@@ -59,6 +117,16 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
 
       setSelectedRoleIds((response.data.attributes.roles || []).map(r => Number(r.id)));
 
+      // Stored membership, for the unsaved-changes baseline (the members
+      // section loads the same list for display).
+      try {
+        const members = await teamsService.getTeamUsers(id, { all: true });
+        setInitialMemberIds(sortedIds(members?.data || []));
+      } catch (membersError) {
+        console.error("Error fetching team members", membersError);
+      }
+
+      setLoaded(true);
       setLoading(false);
     } catch (error) {
       console.error("Error fetching group", error);
@@ -123,6 +191,12 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
         }));
       }
 
+      // Plugin resources live behind their own endpoint; only send them when
+      // the section reported a selection (see pluginResourceSelections).
+      if (pluginResourceSelections && groupId) {
+        await teamsService.updateGroupPluginResources(groupId, pluginResourceSelections);
+      }
+
       // Enterprise: make the team's role bindings match the selection.
       if (getIdentity()?.rbacEnabled && groupId) {
         const { failed } = await syncSubjectRoles("group", groupId, selectedRoleIds);
@@ -136,6 +210,7 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
           return;
         }
       }
+      markSaved();
       navigate("/admin/groups");
     } catch (error) {
       console.error("Error saving group", error);
@@ -148,7 +223,7 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     } finally {
       setLoading(false);
     }
-  }, [id, name, selectedUsers, selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs, selectedRoleIds, navigate]);
+  }, [id, name, selectedUsers, selectedCatalogs, selectedDataCatalogs, selectedToolCatalogs, selectedRoleIds, pluginResourceSelections, navigate, markSaved]);
 
   const handleDeleteClick = useCallback(() => {
     setWarningDialogOpen(true);
@@ -167,6 +242,8 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
         message: "Team deleted successfully",
         timestamp: Date.now()
       }));
+      // The team is gone; nothing typed can be saved any more.
+      markSaved();
       navigate("/admin/groups");
     } catch (error) {
       console.error("Error deleting team:", error);
@@ -180,12 +257,13 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
       setWarningDialogOpen(false);
       setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id, navigate, markSaved]);
 
   return useMemo(() => ({
     name,
     setName,
     loading,
+    handleCancel,
     selectedUsers,
     setSelectedUsers,
     selectedCatalogs,
@@ -196,6 +274,8 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
     setSelectedToolCatalogs,
     selectedRoleIds,
     setSelectedRoleIds,
+    pluginResourceSelections,
+    setPluginResourceSelections,
     handleSubmit,
     snackbar,
     handleCloseSnackbar,
@@ -206,11 +286,14 @@ export const useGroupForm = (id, initialCatalogs = [], initialDataCatalogs = [],
   }), [
     name,
     loading,
+    handleCancel,
+    setPluginResourceSelections,
     selectedUsers,
     selectedCatalogs,
     selectedDataCatalogs,
     selectedToolCatalogs,
     selectedRoleIds,
+    pluginResourceSelections,
     snackbar,
     warningDialogOpen,
     handleSubmit,

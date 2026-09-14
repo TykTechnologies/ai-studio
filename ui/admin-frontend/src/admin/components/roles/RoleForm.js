@@ -9,7 +9,9 @@ import {
   TitleContentBox,
   PrimaryButton,
   DangerOutlineButton,
+  SecondaryOutlineButton,
 } from '../../styles/sharedStyles';
+import { useUnsavedForm, useConfirmNavigation } from '../../../components/unsaved-changes';
 import Section from '../common/Section';
 import ConfirmationDialog from '../common/ConfirmationDialog';
 import EnterpriseFeatureBadge from '../common/EnterpriseFeatureBadge';
@@ -31,6 +33,14 @@ const RoleForm = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   const notify = (message, severity = 'success') => setSnackbar({ open: true, message, severity });
+
+  // Unsaved-changes tracking; the permission Set is compared as a sorted list.
+  const { markSaved } = useUnsavedForm(
+    { name, description, permissions: [...permissions].sort() },
+    { ready: !loading }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate('/admin/roles'));
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -65,10 +75,12 @@ const RoleForm = () => {
       if (id) {
         await updateRole(id, payload);
         notify('Role updated');
+        markSaved();
         navigate(`/admin/roles/${id}`);
       } else {
         const created = await createRole(payload);
         notify('Role created');
+        markSaved();
         navigate(`/admin/roles/${created.id}`);
       }
     } catch (err) {
@@ -142,6 +154,7 @@ const RoleForm = () => {
           </Section>
 
           <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 3, gap: 2 }}>
+            <SecondaryOutlineButton onClick={handleCancel}>Cancel</SecondaryOutlineButton>
             <PrimaryButton type="submit" disabled={saving || !name.trim()}>
               {id ? 'Update role' : 'Create role'}
             </PrimaryButton>

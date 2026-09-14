@@ -45,9 +45,9 @@ describe("useGroupDetail", () => {
         attributes: {
           name: "Test Group",
           users: [{ id: "user1", name: "User One" }],
-          catalogues: [{ id: "cat1", name: "Catalogue One" }],
-          data_catalogues: [{ id: "data_cat1", name: "Data Catalogue One" }],
-          tool_catalogues: [{ id: "tool_cat1", name: "Tool Catalogue One" }],
+          catalogues: [{ id: "cat1", name: "Catalog One" }],
+          data_catalogues: [{ id: "data_cat1", name: "Data Catalog One" }],
+          tool_catalogues: [{ id: "tool_cat1", name: "Tool Catalog One" }],
         },
       },
     };

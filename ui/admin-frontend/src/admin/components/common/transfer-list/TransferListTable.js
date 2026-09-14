@@ -25,7 +25,10 @@ const TransferListTable = ({
   isLeftSide,
   onAddItem,
   onRemoveItem,
+  getItemName,
+  disabled = false,
 }) => {
+  const nameOf = (item) => (getItemName ? getItemName(item) : item.name);
   return (
     <Table style={{ width: "100%", tableLayout: "fixed" }}>
       <TableHead>
@@ -59,7 +62,7 @@ const TransferListTable = ({
       <TableBody>
         {items.length > 0 ? (
           items.map((item) => (
-            <StyledTableRow key={item[idField]}>
+            <StyledTableRow key={item[idField]} data-item-id={item[idField]}>
               {columns.map((column) => (
                 <StyledTableCell
                   key={`${item[idField]}-${column.field}`}
@@ -94,11 +97,19 @@ const TransferListTable = ({
                 style={{ whiteSpace: "nowrap" }}
               >
                 {isLeftSide ? (
-                  <RemoveButton onClick={() => onRemoveItem(item)}>
+                  <RemoveButton
+                    onClick={() => onRemoveItem(item)}
+                    aria-label={`Remove ${nameOf(item) ?? ""}`.trim()}
+                    disabled={disabled}
+                  >
                     <CloseIcon />
                   </RemoveButton>
                 ) : (
-                  <AddButton onClick={() => onAddItem(item)}>
+                  <AddButton
+                    onClick={() => onAddItem(item)}
+                    aria-label={`Add ${nameOf(item) ?? ""}`.trim()}
+                    disabled={disabled}
+                  >
                     <AddIcon />
                   </AddButton>
                 )}

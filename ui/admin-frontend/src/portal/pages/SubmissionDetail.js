@@ -140,12 +140,12 @@ const SubmissionDetail = () => {
               Governance
             </Typography>
             <Typography variant="body2">
-              <strong>Suggested privacy score:</strong>{" "}
+              <strong>Suggested privacy level:</strong>{" "}
               {submission.suggested_privacy}
             </Typography>
             {submission.final_privacy_score != null && (
               <Typography variant="body2">
-                <strong>Final privacy score:</strong>{" "}
+                <strong>Final privacy level:</strong>{" "}
                 {submission.final_privacy_score}
               </Typography>
             )}
@@ -334,7 +334,7 @@ const SubmissionDetail = () => {
           <PrimaryOutlineButton
             onClick={() => navigate("/portal/dashboard")}
           >
-            View in Catalogue
+            View in Catalog
           </PrimaryOutlineButton>
         )}
       </Box>

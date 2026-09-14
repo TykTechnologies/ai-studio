@@ -158,7 +158,7 @@ const SubmissionReview = () => {
             // Say what approval actually did: it publishes into Default, and the
             // resource is not live until an administrator activates it.
             message: isPluginSubmission
-              ? "Submission approved. The resource was created in the plugin and access is governed by the plugin's group settings."
+              ? "Submission approved. The resource was created in the plugin and access is governed by the plugin's team settings."
               : "Submission approved. The resource was created, added to the Default catalog, and is inactive until you activate it.",
             severity: "success",
           },
@@ -764,7 +764,7 @@ const SubmissionReview = () => {
         <DialogTitle>Approve Submission</DialogTitle>
         <DialogContent>
           <Typography id="final-privacy-label" gutterBottom sx={{ mt: 1 }}>
-            Set final privacy score
+            Set final privacy level
           </Typography>
           {/* Unlabelled, and drag-only, for the value that decides whether the
               resource can ever be paired with a provider. */}
@@ -788,7 +788,7 @@ const SubmissionReview = () => {
                 if (Number.isNaN(v)) return;
                 setFinalPrivacyScore(Math.min(100, Math.max(0, v)));
               }}
-              inputProps={{ min: 0, max: 100, "aria-label": "Final privacy score" }}
+              inputProps={{ min: 0, max: 100, "aria-label": "Final privacy level" }}
               sx={{ width: 96 }}
             />
           </Box>

@@ -86,8 +86,9 @@ describe("AppDetailView credential state", () => {
 
     renderView();
 
+    // The notice and the status chip use the same words (utils/appStatus.js).
     await waitFor(() => {
-      expect(screen.getByText("Waiting for approval")).toBeInTheDocument();
+      expect(screen.getByRole("alert")).toHaveTextContent("Awaiting approval");
     });
     expect(screen.getByText(/401 Unauthorized/)).toBeInTheDocument();
     // One status for the App. The page used to say "Inactive" in App
@@ -109,7 +110,7 @@ describe("AppDetailView credential state", () => {
     await waitFor(() => {
       expect(screen.getByText("Key ID:")).toBeInTheDocument();
     });
-    expect(screen.queryByText("Waiting for approval")).not.toBeInTheDocument();
+    expect(screen.queryByText("Awaiting approval")).not.toBeInTheDocument();
     expect(screen.queryByText("Pending approval")).not.toBeInTheDocument();
     expect(screen.getByTestId("app-status")).toHaveTextContent("Active");
   });

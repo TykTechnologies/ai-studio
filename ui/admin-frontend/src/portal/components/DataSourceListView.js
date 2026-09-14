@@ -100,7 +100,7 @@ const DataSourceListView = () => {
       }}
     >
       <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
-        Available Data Sources
+        Available data sources
       </Typography>
       <Grid container spacing={3}>
         {dataSources.map((dataSource) => (

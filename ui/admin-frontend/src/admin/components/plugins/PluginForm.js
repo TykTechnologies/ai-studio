@@ -28,11 +28,16 @@ import StarIcon from '@mui/icons-material/Star';
 import EditIcon from '@mui/icons-material/Edit';
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
   StyledAccordion,
 } from '../../styles/sharedStyles';
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from '../../../components/unsaved-changes';
 import pluginService, { PluginService } from '../../services/pluginService';
 import EdgeAvailabilitySection from '../common/EdgeAvailabilitySection';
 import PublishSwitch from "../rbac/PublishSwitch";
@@ -70,6 +75,16 @@ const PluginForm = ({ mode = 'create' }) => {
   // Configuration as JSON string for editing
   const [configJson, setConfigJson] = useState('{}');
   const [configError, setConfigError] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // Unsaved-changes tracking. The raw configuration text is included so an
+  // edit that is not (yet) valid JSON still counts as a change.
+  const { markSaved } = useUnsavedForm(
+    { ...formData, configJson },
+    { ready: !isEdit || loaded }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate('/admin/plugins'));
 
   // Accordion expansion state
   const [accordionExpanded, setAccordionExpanded] = useState(false);
@@ -110,6 +125,7 @@ const PluginForm = ({ mode = 'create' }) => {
 
         // Store original command for change detection
         setOriginalCommand(plugin.command);
+        setLoaded(true);
       }
     } catch (error) {
       console.error('Error fetching plugin:', error);
@@ -313,6 +329,7 @@ const PluginForm = ({ mode = 'create' }) => {
         await pluginService.createPlugin(submissionData);
       }
 
+      markSaved();
       navigate('/admin/plugins', {
         state: { snackbar: { message: isEdit ? 'Plugin updated successfully' : 'Plugin created successfully', severity: 'success' } },
       });
@@ -613,7 +630,10 @@ const PluginForm = ({ mode = 'create' }) => {
             </AccordionDetails>
           </StyledAccordion>
 
-          <Box mt={4}>
+          <Box mt={4} display="flex" gap={2}>
+            <SecondaryOutlineButton onClick={handleCancel}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryButton variant="contained" type="submit">
               {isEdit ? 'Update plugin' : 'Add plugin'}
             </PrimaryButton>

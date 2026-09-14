@@ -1,63 +1,38 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 import ActionModal from "../../../components/common/ActionModal";
-import TransferList from "../../../components/common/transfer-list/TransferList";
+import RelationshipPicker from "../../../components/common/relationship-picker";
 import { Box, CircularProgress } from "@mui/material";
 import { TEAM_MEMBERS_TRANSFER_LIST_COLUMNS } from "../utils/transferListConfig";
 import { teamsService } from "../../../services/teamsService";
 import { useTransferListSelectedUsers } from "../../../hooks/useTransferListSelectedUsers";
-import { useTransferListAvailableUsers } from "../../../hooks/useTransferListAvailableUsers";
+import {
+  createTeamMembersSource,
+  teamMemberName,
+  teamMemberEmail,
+} from "../../../components/groups/utils/teamMembersSource";
 
-const ManageTeamMembersModal = ({ 
-  open, 
-  onClose, 
-  group, 
+const ManageTeamMembersModal = ({
+  open,
+  onClose,
+  group,
   onSuccess,
-  onError 
+  onError
 }) => {
   const [saving, setSaving] = useState(false);
 
+  // Current members come from the server once; from then on the picker is the
+  // source of truth and Save sends whatever it holds.
   const {
     members: selectedUsers,
-    addMember: addUser,
-    removeMember: removeUser,
+    setMembers: setSelectedUsers,
     loading: membersLoading,
   } = useTransferListSelectedUsers({ groupId: group?.id });
 
-  const { 
-    items: availableUsers, 
-    loading, 
-    isSearching, 
-    hasMore, 
-    isLoadingMore,
-    searchTerm,
-    loadMore, 
-    search,
-    addItem,
-    removeItem
-  } = useTransferListAvailableUsers({
-    groupId: group?.id,
-    pageSize: 10,
-    searchDebounceMs: 500,
-    excludeIds: selectedUsers.map(u => u.id)
-  });
-
-  const handleSearchChange = useCallback((searchTerm) => {
-    search(searchTerm);
-  }, [search]);
-
-  const handleAddUser = useCallback((user) => {
-    addUser(user);
-    removeItem(user);
-  }, [addUser, removeItem]);
-
-  const handleRemoveUser = useCallback((user) => {
-    removeUser(user);
-    addItem(user);
-  }, [removeUser, addItem]);
+  const source = useMemo(() => createTeamMembersSource(group?.id), [group?.id]);
 
   const handleSave = async () => {
     if (!group) return;
-    
+
     setSaving(true);
     try {
       const userIds = selectedUsers.map(user => parseInt(user.id, 10));
@@ -71,7 +46,7 @@ const ManageTeamMembersModal = ({
     }
   };
 
-  const isLoading = membersLoading || (loading && availableUsers.length === 0);
+  const isLoading = membersLoading;
 
   return (
     <ActionModal
@@ -87,27 +62,21 @@ const ManageTeamMembersModal = ({
           <CircularProgress />
         </Box>
       ) : (
-        <TransferList
-          availableItems={availableUsers}
-          selectedItems={selectedUsers}
+        <RelationshipPicker
+          variant="dual"
+          label="Team members"
+          itemLabel="user"
+          value={selectedUsers}
+          onChange={setSelectedUsers}
+          source={source}
           columns={TEAM_MEMBERS_TRANSFER_LIST_COLUMNS}
-          leftTitle="Current members"
-          leftSubtitle="Users currently on this team"
-          rightTitle="Add members"
-          rightSubtitle="Add users to this team"
-          enableSearch={true}
-          searchTerm={searchTerm}
-          onSearchTermChange={handleSearchChange}
-          isSearching={isSearching}
-          onAdd={handleAddUser}
-          onRemove={handleRemoveUser}
-          onLoadMore={loadMore}
-          hasMore={hasMore}
-          isLoadingMore={isLoadingMore}
+          getOptionLabel={teamMemberName}
+          getOptionSecondary={teamMemberEmail}
+          disabled={saving}
         />
       )}
     </ActionModal>
   );
 };
 
-export default ManageTeamMembersModal; 
+export default ManageTeamMembersModal;

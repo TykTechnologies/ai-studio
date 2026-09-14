@@ -3,33 +3,25 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   Typography,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Chip,
   Snackbar,
   Alert,
   CircularProgress,
 } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
-import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { commitPendingSelection } from "../../utils/pendingSelection";
+import RelationshipPicker from "../common/relationship-picker";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 
 const DataCatalogForm = () => {
   const [catalog, setCatalog] = useState({
@@ -40,10 +32,8 @@ const DataCatalogForm = () => {
   });
   const [datasources, setDatasources] = useState([]);
   const [availableDatasources, setAvailableDatasources] = useState([]);
-  const [selectedDatasource, setSelectedDatasource] = useState("");
   const [tags, setTags] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
-  const [selectedTag, setSelectedTag] = useState("");
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -52,6 +42,21 @@ const DataCatalogForm = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Unsaved-changes tracking: the editable fields plus both pickers.
+  const { markSaved } = useUnsavedForm(
+    {
+      name: catalog.name,
+      short_description: catalog.short_description,
+      long_description: catalog.long_description,
+      icon: catalog.icon,
+      datasourceIds: datasources.map((ds) => String(ds.id)).sort(),
+      tagIds: tags.map((tag) => String(tag.id)).sort(),
+    },
+    { ready: !loading }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/catalogs/data"));
 
   useEffect(() => {
     const fetchData = async () => {
@@ -97,22 +102,10 @@ const DataCatalogForm = () => {
     e.preventDefault();
     setLoading(true);
 
-    // The + buttons are accelerators, not the commit. Fold in anything left in
-    // either picker rather than silently saving a catalog without it.
-    const desiredDatasources = commitPendingSelection(
-      datasources,
-      selectedDatasource,
-      availableDatasources,
-    );
-    const desiredTags = commitPendingSelection(tags, selectedTag, availableTags);
-    if (desiredDatasources !== datasources) {
-      setDatasources(desiredDatasources);
-      setSelectedDatasource("");
-    }
-    if (desiredTags !== tags) {
-      setTags(desiredTags);
-      setSelectedTag("");
-    }
+    // The pickers add to their lists the moment an option is chosen; there is
+    // no pending "+" step, so what is on screen is exactly what gets saved.
+    const desiredDatasources = datasources;
+    const desiredTags = tags;
 
     const catalogData = {
       data: {
@@ -135,6 +128,7 @@ const DataCatalogForm = () => {
       await updateDatasources(catalogId, desiredDatasources);
       await updateTags(catalogId, desiredTags);
 
+      markSaved();
       navigate("/admin/catalogs/data", {
         state: { snackbar: { message: `Data catalog ${id ? "updated" : "created"} successfully`, severity: "success" } },
       });
@@ -149,8 +143,7 @@ const DataCatalogForm = () => {
     }
   };
 
-  // Takes the desired list explicitly so the caller can include a selection the
-  // user picked but never added with the + button.
+  // Takes the desired list explicitly rather than reading state from the closure.
   const updateDatasources = async (catalogId, desiredDatasources) => {
     const originalDatasources = catalog.datasources || [];
 
@@ -191,34 +184,6 @@ const DataCatalogForm = () => {
         });
       }
     }
-  };
-
-  const handleAddDatasource = () => {
-    const next = commitPendingSelection(
-      datasources,
-      selectedDatasource,
-      availableDatasources,
-    );
-    if (next !== datasources) {
-      setDatasources(next);
-      setSelectedDatasource("");
-    }
-  };
-
-  const handleRemoveDatasource = (datasourceId) => {
-    setDatasources(datasources.filter((ds) => ds.id !== datasourceId));
-  };
-
-  const handleAddTag = () => {
-    const next = commitPendingSelection(tags, selectedTag, availableTags);
-    if (next !== tags) {
-      setTags(next);
-      setSelectedTag("");
-    }
-  };
-
-  const handleRemoveTag = (tagId) => {
-    setTags(tags.filter((t) => t.id !== tagId));
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -289,97 +254,31 @@ const DataCatalogForm = () => {
             onChange={handleChange}
           />
 
-          <Typography variant="h6" sx={{ mt: 2 }}>
-            Data Sources:
-          </Typography>
-          <List>
-            {datasources.map((ds) => (
-              <ListItem key={ds.id}>
-                <ListItemText primary={ds.attributes.name} />
-                <ListItemSecondaryAction>
-                  <IconButton
-                    edge="end"
-                    aria-label="delete"
-                    onClick={() => handleRemoveDatasource(ds.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItem>
-            ))}
-          </List>
-
-          <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
-            <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel id="datacatalogform-add-data-source-label">Add Data Source</InputLabel>
-              <Select
-                labelId="datacatalogform-add-data-source-label"
-                value={selectedDatasource}
-                onChange={(e) => setSelectedDatasource(e.target.value)}
-                label="Add Data Source"
-              >
-                {availableDatasources
-                  .filter((ds) => !datasources.find((d) => d.id === ds.id))
-                  .map((ds) => (
-                    <MenuItem key={ds.id} value={ds.id}>
-                      {ds.attributes.name}
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={handleAddDatasource}
-              disabled={!selectedDatasource}
-              aria-label="Add data source to catalog"
-            >
-              <AddIcon />
-            </Button>
+          <Box sx={{ mt: 3 }}>
+            <RelationshipPicker
+              label="Data sources in this catalog"
+              itemLabel="data source"
+              value={datasources}
+              onChange={setDatasources}
+              options={availableDatasources}
+              getOptionLabel={(ds) => ds.attributes?.name ?? ""}
+            />
           </Box>
 
-          <Typography variant="h6" sx={{ mt: 2 }}>
-            Tags:
-          </Typography>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
-            {tags.map((tag) => (
-              <Chip
-                key={tag.id}
-                label={tag.attributes.name}
-                onDelete={() => handleRemoveTag(tag.id)}
-              />
-            ))}
+          <Box sx={{ mt: 3 }}>
+            <RelationshipPicker
+              label="Tags"
+              itemLabel="tag"
+              value={tags}
+              onChange={setTags}
+              options={availableTags}
+              getOptionLabel={(tag) => tag.attributes?.name ?? ""}
+            />
           </Box>
-
-          <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
-            <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel id="datacatalogform-add-tag-label">Add Tag</InputLabel>
-              <Select
-                labelId="datacatalogform-add-tag-label"
-                value={selectedTag}
-                onChange={(e) => setSelectedTag(e.target.value)}
-                label="Add Tag"
-              >
-                {availableTags
-                  .filter((t) => !tags.find((tag) => tag.id === t.id))
-                  .map((t) => (
-                    <MenuItem key={t.id} value={t.id}>
-                      {t.attributes.name}
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={handleAddTag}
-              disabled={!selectedTag}
-              aria-label="Add tag to catalog"
-            >
-              <AddIcon />
-            </Button>
-          </Box>
-          <Box mt={3}>
+          <Box mt={3} display="flex" gap={2}>
+            <SecondaryOutlineButton onClick={handleCancel}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryButton type="submit" variant="contained" color="primary">
               {id ? "Update catalog" : "Create catalog"}
             </PrimaryButton>

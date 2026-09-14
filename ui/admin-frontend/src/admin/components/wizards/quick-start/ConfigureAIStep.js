@@ -405,7 +405,7 @@ const ConfigureAIStep = () => {
                   }
                 }}
               >
-                Privacy levels control LLM access based on data sensitivity. Lower-level models can't access higher-security data or tools. Set the privacy level to limit the highest data sensitivity this model can access.
+                Privacy levels control LLM access based on data sensitivity. LLM providers with a lower privacy level can't access higher-security data or tools. Set the privacy level to limit the highest data sensitivity this LLM provider can access.
               </Typography>
               <CustomSelect
                 name="privacyLevel"

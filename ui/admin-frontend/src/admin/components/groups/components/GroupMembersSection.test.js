@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import GroupMembersSection from './GroupMembersSection';
 
@@ -9,33 +9,23 @@ jest.mock('@mui/material/styles', () => require('../../../../test-utils/mui-mock
 jest.mock('@mui/material', () => require('../../../../test-utils/mui-mocks').muiMaterialMock);
 jest.mock('../../common/CollapsibleSection', () => require('../../../../test-utils/component-mocks').collapsibleSectionMock);
 jest.mock('../../common/CustomSelectBadge', () => require('../../../../test-utils/component-mocks').customSelectBadgeMock);
-jest.mock('../../common/transfer-list/TransferList', () => require('../../../../test-utils/component-mocks').transferListMock);
+jest.mock('../../common/relationship-picker', () => require('../../../../test-utils/component-mocks').relationshipPickerMock);
+
+const mockSetMembers = jest.fn();
+const mockMembers = [{ id: '3', attributes: { name: 'Bob Johnson', email: 'bob@example.com', role: 'Chat user' } }];
 
 jest.mock('../../../hooks/useTransferListSelectedUsers', () => ({
-  useTransferListSelectedUsers: ({ groupId }) => ({
-    members: [{ id: '3', attributes: { name: 'Bob Johnson', email: 'bob@example.com', role: 'Chat user' } }],
+  useTransferListSelectedUsers: () => ({
+    members: mockMembers,
+    setMembers: mockSetMembers,
     addMember: jest.fn(),
     removeMember: jest.fn()
   })
 }));
 
-jest.mock('../../../hooks/useTransferListAvailableUsers', () => ({
-  useTransferListAvailableUsers: () => {
-    return {
-      items: [
-        { id: '1', attributes: { name: 'John Doe', email: 'john@example.com', role: 'Admin' } },
-        { id: '2', attributes: { name: 'Jane Smith', email: 'jane@example.com', role: 'Developer' } }
-      ],
-      isSearching: false,
-      hasMore: true,
-      isLoadingMore: false,
-      searchTerm: '',
-      loadMore: jest.fn(),
-      search: jest.fn(),
-      addItem: jest.fn(),
-      removeItem: jest.fn()
-    };
-  }
+const mockGetUsers = jest.fn();
+jest.mock('../../../services/userService', () => ({
+  getUsers: (...args) => mockGetUsers(...args)
 }));
 
 jest.mock('../../../pages/groups/utils/transferListConfig', () => ({
@@ -54,29 +44,60 @@ jest.mock('../utils/roleBadgeConfig', () => ({
   }
 }));
 
+const pickerMock = require('../../../../test-utils/component-mocks').relationshipPickerMock;
+
 describe('GroupMembersSection Component', () => {
   const mockOnSelectedUsersChange = jest.fn();
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
-    require('../../../../test-utils/component-mocks').transferListMock.clearLastProps();
+    pickerMock.clearLastProps();
+    mockGetUsers.mockResolvedValue({ data: [], totalPages: 0 });
   });
-  
-  test('renders TransferList with correct props', () => {
+
+  test('renders a dual RelationshipPicker for users, driven by the members hook', () => {
     render(
       <GroupMembersSection
         groupId="group-123"
         onSelectedUsersChange={mockOnSelectedUsersChange}
       />
     );
-    
-    const lastProps = require('../../../../test-utils/component-mocks').transferListMock.getLastProps();
-    expect(lastProps.leftTitle).toBe("Current members");
-    expect(lastProps.rightTitle).toBe("Add members");
-    expect(lastProps.enableSearch).toBe(true);
+
+    const picker = screen.getByTestId('relationship-picker');
+    expect(picker).toHaveAttribute('data-variant', 'dual');
+    expect(picker).toHaveAttribute('data-item-label', 'user');
+    expect(picker).toHaveAttribute('aria-label', 'Team members');
+
+    const lastProps = pickerMock.getLastProps();
+    expect(lastProps.value).toEqual(mockMembers);
+    expect(lastProps.onChange).toBe(mockSetMembers);
     expect(lastProps.columns).toBeDefined();
+    expect(lastProps.getOptionLabel(mockMembers[0])).toBe('Bob Johnson');
+    expect(lastProps.getOptionSecondary(mockMembers[0])).toBe('bob@example.com');
   });
-  
+
+  test('feeds the picker a paged source that excludes the team and searches', async () => {
+    mockGetUsers.mockResolvedValue({
+      data: [{ id: '1', attributes: { name: 'John Doe' } }],
+      totalPages: 3
+    });
+
+    render(<GroupMembersSection groupId="group-123" />);
+
+    const { source } = pickerMock.getLastProps();
+    const result = await source.search('jo', 2);
+
+    expect(mockGetUsers).toHaveBeenCalledWith(2, {
+      exclude_group_id: 'group-123',
+      page_size: 10,
+      search: 'jo'
+    });
+    expect(result).toEqual({
+      items: [{ id: '1', attributes: { name: 'John Doe' } }],
+      hasMore: true
+    });
+  });
+
   test('renders CollapsibleSection with correct title', () => {
     render(
       <GroupMembersSection
@@ -84,31 +105,23 @@ describe('GroupMembersSection Component', () => {
         onSelectedUsersChange={mockOnSelectedUsersChange}
       />
     );
-    
+
     const collapsibleSection = screen.getByTestId('collapsible-section');
     expect(collapsibleSection).toHaveAttribute('data-title', 'Manage team members');
     expect(collapsibleSection).toHaveAttribute('data-default-expanded', 'false');
   });
-  
-  test('receives items from hooks and passes them to TransferList', () => {
+
+  test('reports the current members to the form and forwards picker changes', () => {
     render(
       <GroupMembersSection
         groupId="group-123"
         onSelectedUsersChange={mockOnSelectedUsersChange}
       />
     );
-    
-    const expectedAvailableItems = [
-      { id: '1', attributes: { name: 'John Doe', email: 'john@example.com', role: 'Admin' } },
-      { id: '2', attributes: { name: 'Jane Smith', email: 'jane@example.com', role: 'Developer' } }
-    ];
-    
-    const expectedSelectedItems = [
-      { id: '3', attributes: { name: 'Bob Johnson', email: 'bob@example.com', role: 'Chat user' } }
-    ];
-    
-    const lastProps = require('../../../../test-utils/component-mocks').transferListMock.getLastProps();
-    expect(lastProps.availableItems).toEqual(expectedAvailableItems);
-    expect(lastProps.selectedItems).toEqual(expectedSelectedItems);
+
+    expect(mockOnSelectedUsersChange).toHaveBeenCalledWith(mockMembers);
+
+    fireEvent.click(screen.getByTestId('relationship-picker-remove'));
+    expect(mockSetMembers).toHaveBeenCalledWith([]);
   });
 });

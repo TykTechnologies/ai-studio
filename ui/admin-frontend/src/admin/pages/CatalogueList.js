@@ -84,7 +84,7 @@ const CatalogueList = memo(() => {
       setError("");
     } catch (error) {
       console.error("Error fetching catalogues", error);
-      setError("Failed to load catalogues");
+      setError("Failed to load catalogs");
     } finally {
       setLoading(false);
     }
@@ -270,7 +270,7 @@ const CatalogueList = memo(() => {
                 <TableHead>
                   <TableRow>
                     <StyledTableHeaderCell>Name</StyledTableHeaderCell>
-                    <StyledTableHeaderCell>LLMs</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>LLM providers</StyledTableHeaderCell>
                     <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>
@@ -343,8 +343,8 @@ const CatalogueList = memo(() => {
       <Dialog open={modalOpen} onClose={handleCloseModal}>
         <DialogTitle>
           {modalType === "add"
-            ? "Add LLM to Catalog"
-            : "Remove LLM from Catalog"}
+            ? "Add LLM provider to catalog"
+            : "Remove LLM provider from catalog"}
         </DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>

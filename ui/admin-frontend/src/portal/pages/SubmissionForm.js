@@ -33,7 +33,15 @@ import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import validator from "@rjsf/validator-ajv8";
-import { PrimaryButton, PrimaryOutlineButton } from "../../admin/styles/sharedStyles";
+import {
+  PrimaryButton,
+  PrimaryOutlineButton,
+  SecondaryOutlineButton,
+} from "../../admin/styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../components/unsaved-changes";
 import {
   fetchVendors,
   getEmbedderDefaultModel,
@@ -84,6 +92,9 @@ const SubmissionForm = () => {
   const [attestationChecks, setAttestationChecks] = useState({});
   const [embedders, setEmbedders] = useState([]);
   const [loading, setLoading] = useState(false);
+  // True once an existing submission is on screen; a failed load never
+  // becomes "ready", so the empty form is not mistaken for user edits.
+  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
   const [duplicateWarning, setDuplicateWarning] = useState(null);
@@ -104,6 +115,22 @@ const SubmissionForm = () => {
     message: "",
     severity: "success",
   });
+
+  // Unsaved-changes tracking across everything the contributor can edit.
+  // Both "Save Draft" and "Submit for Review" call markSaved() on success.
+  const { markSaved } = useUnsavedForm(
+    {
+      resourceType,
+      pluginResourceTypeId,
+      payload,
+      pluginExtraJson,
+      meta,
+      attestationChecks,
+    },
+    { ready: !isEdit || loaded }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleBack = () => confirmNavigation(() => navigate("/portal/contributions"));
 
   useEffect(() => {
     const loadVendors = async () => {
@@ -151,6 +178,7 @@ const SubmissionForm = () => {
         notes: data.notes || "",
         data_cutoff_date: data.data_cutoff_date || "",
       });
+      setLoaded(true);
     } catch (error) {
       setSnackbar({
         open: true,
@@ -384,9 +412,9 @@ const SubmissionForm = () => {
       }
     }
 
-    // Privacy score range validation
+    // Privacy level range validation
     if (meta.suggested_privacy < 0 || meta.suggested_privacy > 100) {
-      newErrors.suggested_privacy = "Privacy score must be between 0 and 100";
+      newErrors.suggested_privacy = "Privacy level must be between 0 and 100";
     }
 
     setErrors(newErrors);
@@ -475,6 +503,8 @@ const SubmissionForm = () => {
           : "Draft saved",
         severity: "success",
       });
+      // A saved draft is saved: nothing left to lose on the redirect.
+      markSaved();
       setTimeout(() => navigate("/portal/contributions"), 1500);
     } catch (error) {
       // A schema violation comes back as one error per failing field; show
@@ -515,7 +545,7 @@ const SubmissionForm = () => {
       <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/portal/contributions")}
+          onClick={handleBack}
           color="inherit"
         >
           Back to My Contributions
@@ -540,7 +570,7 @@ const SubmissionForm = () => {
             label="Resource Type"
             onChange={(e) => handleResourceTypeChange(e.target.value)}
             renderValue={(value) => {
-              if (value === "datasource") return "Data Source";
+              if (value === "datasource") return "Data source";
               if (value === "tool") return "Tool (OpenAPI)";
               const t = pluginTypes.find(
                 (pt) => `${PLUGIN_TYPE_PREFIX}${pt.id}` === value
@@ -548,7 +578,7 @@ const SubmissionForm = () => {
               return t ? `${t.name} (${t.plugin_name})` : value;
             }}
           >
-            <MenuItem value="datasource">Data Source</MenuItem>
+            <MenuItem value="datasource">Data source</MenuItem>
             <MenuItem value="tool">Tool (OpenAPI)</MenuItem>
             {pluginTypes.map((t) => (
               <MenuItem key={t.id} value={`${PLUGIN_TYPE_PREFIX}${t.id}`}>
@@ -1107,7 +1137,7 @@ const SubmissionForm = () => {
             </Accordion>
           )}
 
-          {/* Privacy score */}
+          {/* Privacy level */}
           <Accordion defaultExpanded sx={{ mt: 2 }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="h6">Privacy & Governance</Typography>
@@ -1116,7 +1146,7 @@ const SubmissionForm = () => {
               <Grid container spacing={2}>
                 <Grid item xs={12}>
                   <Typography id="suggested-privacy-label" gutterBottom>
-                    Suggested Privacy Score
+                    Suggested privacy level
                   </Typography>
                   {/* The slider carried no accessible name, and a value that
                       decides whether the resource can ever be used deserves a
@@ -1146,7 +1176,7 @@ const SubmissionForm = () => {
                           Math.min(100, Math.max(0, v))
                         );
                       }}
-                      inputProps={{ min: 0, max: 100, "aria-label": "Suggested privacy score" }}
+                      inputProps={{ min: 0, max: 100, "aria-label": "Suggested privacy level" }}
                       sx={{ width: 96 }}
                     />
                   </Box>
@@ -1307,6 +1337,9 @@ const SubmissionForm = () => {
 
           {/* Action buttons */}
           <Box sx={{ mt: 4, display: "flex", gap: 2 }}>
+            <SecondaryOutlineButton onClick={handleBack} disabled={saving}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryOutlineButton
               onClick={() => handleSave(false)}
               disabled={saving}

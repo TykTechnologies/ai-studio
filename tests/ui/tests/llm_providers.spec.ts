@@ -10,7 +10,7 @@ test('Add LLM provider', async ({ loginPage, adminLLMProvidersPage, adminMainPag
 
     await adminMainPage.dismissQuickStartModal();
     await adminMainPage.navigateToLLMProviders();
-    // The list's on/off column is "Active" (it said "Proxied").
+    // The list's on/off column is "Active".
     await expect(adminLLMProvidersPage.ActiveColumnHeader).toBeVisible();
     await adminLLMProvidersPage.AddLLMButton.click();
     await adminLLMProvidersPage.ProviderNameInput.fill(LLMProviderName);

@@ -48,7 +48,7 @@ describe('findParentItemsForPath', () => {
         },
         {
           id: 'groups',
-          text: 'Groups',
+          text: 'Teams',
           path: '/admin/groups',
         }
       ],

@@ -18,6 +18,9 @@ const ActionModal = ({
   onClose,
   onPrimaryAction,
   onSecondaryAction,
+  // Disables the primary action (e.g. while saving or loading). Callers were
+  // already passing this; it was previously ignored.
+  disabled = false,
 }) => {
   return (
     <StyledActionDialog open={open} onClose={onClose}>
@@ -39,7 +42,7 @@ const ActionModal = ({
         <SecondaryOutlineButton onClick={onSecondaryAction || onClose}>
           {secondaryButtonLabel}
         </SecondaryOutlineButton>
-        <PrimaryButton onClick={onPrimaryAction}>
+        <PrimaryButton onClick={onPrimaryAction} disabled={disabled}>
           {primaryButtonLabel}
         </PrimaryButton>
       </StyledDialogActions>

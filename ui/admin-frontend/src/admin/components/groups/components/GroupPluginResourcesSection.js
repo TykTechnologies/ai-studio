@@ -1,23 +1,20 @@
 import React, { useState, useEffect } from "react";
-import {
-  Box,
-  Typography,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Chip,
-  CircularProgress,
-} from "@mui/material";
+import { Box, Typography, CircularProgress } from "@mui/material";
 import apiClient from "../../../utils/apiClient";
+import RelationshipPicker from "../../common/relationship-picker";
 
 /**
- * GroupPluginResourcesSection renders a multi-select for each registered
+ * GroupPluginResourcesSection renders a RelationshipPicker for each registered
  * plugin resource type, allowing admins to assign plugin resource instances
  * to a group for access control.
  *
  * This replaces the Catalogue pattern for plugin resources — instances map
  * directly to groups without an intermediate catalogue layer.
+ *
+ * The selection is reported through `onChange` as
+ * `{ "<pluginId>:<slug>": [instanceId] }` and saved by the team form
+ * (PUT /groups/:id/plugin-resources). It is only reported once the resource
+ * types have loaded, so a save never clears assignments the user never saw.
  */
 const GroupPluginResourcesSection = ({ groupId, onChange }) => {
   const [resourceTypes, setResourceTypes] = useState([]);
@@ -76,12 +73,13 @@ const GroupPluginResourcesSection = ({ groupId, onChange }) => {
     load();
   }, [groupId]);
 
-  // Notify parent of changes
+  // Notify parent of changes -- but only once we know what the section
+  // shows. Reporting `{}` before the types load would make the form save an
+  // empty assignment list.
   useEffect(() => {
-    if (onChange) {
-      onChange(selections);
-    }
-  }, [selections, onChange]);
+    if (loading || resourceTypes.length === 0) return;
+    onChange?.(selections);
+  }, [selections, onChange, loading, resourceTypes.length]);
 
   if (loading) {
     return (
@@ -108,42 +106,28 @@ const GroupPluginResourcesSection = ({ groupId, onChange }) => {
       {resourceTypes.map((rt) => {
         const key = `${rt.plugin_id}:${rt.slug}`;
         const typeInstances = instances[key] || [];
-        const selected = selections[key] || [];
-        // One label id per resource type -- see AppForm: a literal id inside a
-        // map repeats on every row and breaks the association it exists for.
-        const labelId = `grouppluginresourcessection-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}-label`;
+        const selectedIds = selections[key] || [];
+        // Selected ids are resolved against the loaded instances; an id whose
+        // instance did not load is still shown (by id) rather than dropped.
+        const selectedInstances = selectedIds.map(
+          (val) => typeInstances.find((i) => i.id === val) || { id: val, name: val },
+        );
 
         return (
-          <FormControl fullWidth key={key} sx={{ mb: 2 }}>
-            <InputLabel id={labelId}>{rt.name}</InputLabel>
-            <Select
-              labelId={labelId}
-              multiple
-              value={selected}
-              onChange={(e) => {
+          <Box key={key} sx={{ mb: 3 }}>
+            <RelationshipPicker
+              label={rt.name}
+              itemLabel={rt.name}
+              value={selectedInstances}
+              options={typeInstances}
+              onChange={(items) => {
                 setSelections((prev) => ({
                   ...prev,
-                  [key]: e.target.value,
+                  [key]: items.map((i) => i.id),
                 }));
               }}
-              renderValue={(sel) => (
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                  {sel.map((val) => {
-                    const inst = typeInstances.find((i) => i.id === val);
-                    return (
-                      <Chip key={val} label={inst ? inst.name : val} />
-                    );
-                  })}
-                </Box>
-              )}
-            >
-              {typeInstances.map((inst) => (
-                <MenuItem key={inst.id} value={inst.id}>
-                  {inst.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+            />
+          </Box>
         );
       })}
     </Box>

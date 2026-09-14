@@ -86,7 +86,7 @@ const DatasourceList = () => {
       setError("");
     } catch (error) {
       console.error("Error fetching datasources", error);
-      setError("Failed to load datasources");
+      setError("Failed to load data sources");
     } finally {
       setLoading(false);
     }
@@ -116,7 +116,7 @@ const DatasourceList = () => {
       await apiClient.delete(`/datasources/${id}`);
       setSnackbar({
         open: true,
-        message: "Datasource deleted successfully",
+        message: "Data source deleted successfully",
         severity: "success",
       });
       fetchDatasources();
@@ -124,7 +124,7 @@ const DatasourceList = () => {
       console.error("Error deleting datasource", error);
       setSnackbar({
         open: true,
-        message: "Failed to delete datasource",
+        message: "Failed to delete data source",
         severity: "error",
       });
     }
@@ -147,7 +147,7 @@ const DatasourceList = () => {
       await apiClient.patch(`/datasources/${datasource.id}`, updatedDatasource);
       setSnackbar({
         open: true,
-        message: `Datasource ${
+        message: `Data source ${
           updatedDatasource.data.attributes.active ? "activated" : "deactivated"
         } successfully`,
         severity: "success",
@@ -157,7 +157,7 @@ const DatasourceList = () => {
       console.error("Error toggling datasource active state", error);
       setSnackbar({
         open: true,
-        message: "Failed to update datasource active state",
+        message: "Failed to update data source active state",
         severity: "error",
       });
     }
@@ -172,7 +172,7 @@ const DatasourceList = () => {
 
       setSnackbar({
         open: true,
-        message: "Datasource cloned successfully",
+        message: "Data source cloned successfully",
         severity: "success",
       });
 
@@ -181,7 +181,7 @@ const DatasourceList = () => {
       console.error("Error cloning datasource:", error);
       setSnackbar({
         open: true,
-        message: "Failed to clone datasource",
+        message: "Failed to clone data source",
         severity: "error",
       });
     }
@@ -242,7 +242,7 @@ const DatasourceList = () => {
             <EmptyStateWidget
               title="No vector DBs yet"
               description="Vector data sources are used to store and retrieve data to enhance LLM response effectiveness. These can be created using embedding providers that vectorize the content you wish to search, and make for an excellent way to enhance your chat room value for your users, or to better inform responses in your AI Applications."
-              buttonText="Add Datasource"
+              buttonText="Add data source"
               buttonIcon={<AddIcon />}
               onButtonClick={handleAddDatasource}
             />

@@ -10,7 +10,7 @@ import {
 describe("getResourceTypeLabel", () => {
   it("labels the built-in types", () => {
     expect(getResourceTypeLabel({ resource_type: "datasource" })).toBe(
-      "Data Source"
+      "Data source"
     );
     expect(getResourceTypeLabel({ resource_type: "tool" })).toBe("Tool");
   });

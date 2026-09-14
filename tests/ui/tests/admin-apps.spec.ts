@@ -32,7 +32,7 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
     await adminAppsPage.Table.clickRowByText(app_name);
     await adminAppsPage.ApproveThisAppButton.click();
     await adminAppsPage.expectPopupAppApproved();
-    await expect(page.getByText('Yes')).toBeVisible(); // checking if status changed to active
+    await adminAppsPage.expectDetailStatus('Active');
   });
 
   await test.step('Get key and secret', async () => {
@@ -46,7 +46,7 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
 
   await test.step('Delete app', async () => {
     await adminMainPage.navigateToApps();
-    await adminAppsPage.expectAppStatus(app_name, /Active|Approved/);
+    await adminAppsPage.expectAppStatus(app_name, 'Active');
     await adminAppsPage.Table.deleteRowWithText(app_name);
     await adminAppsPage.expectPopupAppDeleted();
     await adminAppsPage.Table.expectRowWithTextNotExists(app_name);

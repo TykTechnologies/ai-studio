@@ -8,7 +8,8 @@ import {
   ContentBox,
   TitleContentBox,
   PrimaryButton,
-  DangerOutlineButton
+  DangerOutlineButton,
+  SecondaryOutlineButton
 } from "../../styles/sharedStyles";
 import ConfirmationDialog from "../../components/common/ConfirmationDialog";
 
@@ -44,7 +45,9 @@ const GroupForm = () => {
     setSelectedToolCatalogs,
     selectedRoleIds,
     setSelectedRoleIds,
+    setPluginResourceSelections,
     handleSubmit,
+    handleCancel,
     snackbar,
     handleCloseSnackbar,
     warningDialogOpen,
@@ -129,10 +132,14 @@ const GroupForm = () => {
           )}
 
           {!isGatewayOnly && (
-            <GroupPluginResourcesSection groupId={id} />
+            <GroupPluginResourcesSection
+              groupId={id}
+              onChange={setPluginResourceSelections}
+            />
           )}
 
           <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 3, gap: 2 }}>
+            <SecondaryOutlineButton type="button" onClick={handleCancel}>Cancel</SecondaryOutlineButton>
             <PrimaryButton type="submit" disabled={formLoading || !name.trim()}>
               {id ? "Update team" : "Create team"}
             </PrimaryButton>

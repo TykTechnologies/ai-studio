@@ -39,6 +39,7 @@ import {
   StyledTableCell,
   StyledTableRow,
 } from "../styles/sharedStyles";
+import { useUnsavedForm } from "../../components/unsaved-changes";
 import FieldDefinitionDialog, { FIELD_TYPES } from "../components/metadata/FieldDefinitionDialog";
 import {
   getMetadataSchema,
@@ -76,6 +77,21 @@ const MetadataSchemaForm = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
 
   const readOnly = isPluginSourcedSchema(schema);
+
+  // Unsaved-changes tracking. The Cancel link below is an ordinary anchor,
+  // which the provider's click guard already covers.
+  const { markSaved } = useUnsavedForm(
+    {
+      name: schema.name,
+      slug: schema.slug,
+      description: schema.description,
+      applies_to: schema.applies_to,
+      enforcement: schema.enforcement,
+      active: schema.active,
+      fields: schema.fields,
+    },
+    { ready: !loading }
+  );
 
   useEffect(() => {
     (async () => {
@@ -154,6 +170,7 @@ const MetadataSchemaForm = () => {
       } else {
         await createMetadataSchema(payload);
       }
+      markSaved();
       navigate("/admin/metadata/schemas", {
         state: { snackbar: { message: id ? "Schema updated" : "Schema created", severity: "success" } },
       });

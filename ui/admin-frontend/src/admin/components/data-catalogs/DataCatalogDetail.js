@@ -100,7 +100,7 @@ const DataCatalogDetail = () => {
 
         <Divider sx={{ my: 3 }} />
 
-        <SectionTitle>Data Sources</SectionTitle>
+        <SectionTitle>Data sources</SectionTitle>
         <List>
           {catalog.attributes.datasources &&
           catalog.attributes.datasources.length > 0 ? (

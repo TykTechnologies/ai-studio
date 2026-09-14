@@ -406,7 +406,7 @@ const LLMDetails = () => {
           onClick={() => navigate("/admin/llms")}
           color="inherit"
         >
-          Back to LLMs
+          Back to LLM providers
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -600,7 +600,7 @@ const LLMDetails = () => {
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FieldValue>{llm.attributes.privacy_score}</FieldValue>
               <Tooltip
-                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM for Data Source sharing."
+                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the LLM provider for data source sharing."
                 placement="top"
               >
                 <HelpOutlineIcon

@@ -339,7 +339,7 @@ const AssignOwnerStep = () => {
 
                   <Box sx={{ mb: 6 }}>
                     <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
-                      Role*
+                      Account type*
                     </Typography>
                     <CustomSelect
                       name="role"

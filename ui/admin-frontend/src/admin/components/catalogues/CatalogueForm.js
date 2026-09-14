@@ -3,38 +3,30 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   Typography,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Snackbar,
   Alert,
   CircularProgress,
 } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
-import AddIcon from "@mui/icons-material/Add";
-import { commitPendingSelection } from "../../utils/pendingSelection";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import RelationshipPicker from "../common/relationship-picker";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 
 const CatalogueForm = () => {
   const [catalogue, setCatalogue] = useState({ name: "" });
   const [llms, setLLMs] = useState([]);
   const [availableLLMs, setAvailableLLMs] = useState([]);
-  const [selectedLLM, setSelectedLLM] = useState("");
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -43,6 +35,14 @@ const CatalogueForm = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Unsaved-changes tracking: the name plus the picker's membership.
+  const { markSaved } = useUnsavedForm(
+    { name: catalogue.name, llmIds: llms.map((llm) => String(llm.id)).sort() },
+    { ready: !loading }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/catalogs/llms"));
 
   useEffect(() => {
     const fetchData = async () => {
@@ -85,14 +85,9 @@ const CatalogueForm = () => {
     e.preventDefault();
     setLoading(true);
 
-    // The + button is an accelerator, not the commit. A selection the user made
-    // and left in the picker is still something they asked for, so fold it in
-    // rather than silently saving a catalog without it.
-    const desiredLLMs = commitPendingSelection(llms, selectedLLM, availableLLMs);
-    if (desiredLLMs !== llms) {
-      setLLMs(desiredLLMs);
-      setSelectedLLM("");
-    }
+    // The picker adds to `llms` the moment an option is chosen; there is no
+    // pending "+" step, so what is on screen is exactly what gets saved.
+    const desiredLLMs = llms;
 
     const catalogueData = {
       data: {
@@ -114,6 +109,7 @@ const CatalogueForm = () => {
       // Now handle LLM additions/removals
       await updateCatalogueLLMs(catalogueId, desiredLLMs);
 
+      markSaved();
       navigate("/admin/catalogs/llms", {
         state: { snackbar: { message: `Catalog ${id ? "updated" : "created"} successfully`, severity: "success" } },
       });
@@ -129,8 +125,7 @@ const CatalogueForm = () => {
   };
 
   // Takes the desired LLM list explicitly rather than reading `llms` from the
-  // closure, so the caller can include a selection the user picked but never
-  // added with the + button.
+  // closure.
   const updateCatalogueLLMs = async (catalogueId, desiredLLMs) => {
     try {
       const currentLLMs = id
@@ -155,29 +150,17 @@ const CatalogueForm = () => {
 
       setSnackbar({
         open: true,
-        message: "LLMs updated successfully",
+        message: "LLM providers updated successfully",
         severity: "success",
       });
     } catch (error) {
       console.error("Error updating catalog LLMs", error);
       setSnackbar({
         open: true,
-        message: "Error updating LLMs",
+        message: "Error updating LLM providers",
         severity: "error",
       });
     }
-  };
-
-  const handleAddLLM = () => {
-    const next = commitPendingSelection(llms, selectedLLM, availableLLMs);
-    if (next !== llms) {
-      setLLMs(next);
-      setSelectedLLM("");
-    }
-  };
-
-  const handleRemoveLLM = (llmId) => {
-    setLLMs(llms.filter((llm) => llm.id !== llmId));
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -221,56 +204,21 @@ const CatalogueForm = () => {
             required
           />
 
-          <Typography variant="h6" sx={{ mt: 2 }}>
-            LLMs in this Catalog:
-          </Typography>
-          <List>
-            {llms.map((llm) => (
-              <ListItem key={llm.id}>
-                <ListItemText primary={llm.attributes.name} />
-                <ListItemSecondaryAction>
-                  <IconButton
-                    edge="end"
-                    aria-label="delete"
-                    onClick={() => handleRemoveLLM(llm.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItem>
-            ))}
-          </List>
-
-          <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
-            <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel id="catalogueform-add-llm-label">Add LLM</InputLabel>
-              <Select
-                labelId="catalogueform-add-llm-label"
-                value={selectedLLM}
-                onChange={(e) => setSelectedLLM(e.target.value)}
-                label="Add LLM"
-              >
-                {availableLLMs
-                  .filter((llm) => !llms.find((l) => l.id === llm.id))
-                  .map((llm) => (
-                    <MenuItem key={llm.id} value={llm.id}>
-                      {llm.attributes.name}
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={handleAddLLM}
-              disabled={!selectedLLM}
-              aria-label="Add LLM provider to catalog"
-            >
-              <AddIcon />
-            </Button>
+          <Box sx={{ mt: 3 }}>
+            <RelationshipPicker
+              label="LLM providers in this catalog"
+              itemLabel="LLM provider"
+              value={llms}
+              onChange={setLLMs}
+              options={availableLLMs}
+              getOptionLabel={(llm) => llm.attributes?.name ?? ""}
+            />
           </Box>
 
-          <Box mt={3}>
+          <Box mt={3} display="flex" gap={2}>
+            <SecondaryOutlineButton onClick={handleCancel}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryButton type="submit" variant="contained" color="primary">
               {id ? "Update catalog" : "Create catalog"}
             </PrimaryButton>

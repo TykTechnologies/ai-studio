@@ -35,12 +35,18 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
   StyledAccordion,
 } from "../../styles/sharedStyles";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import RelationshipPicker from "../common/relationship-picker";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 import { useEdition } from "../../context/EditionContext";
 import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
@@ -101,6 +107,8 @@ const LLMForm = () => {
   
   const [filtersLoading, setFiltersLoading] = useState(true);
   const [, setPluginsLoading] = useState(true);
+  // True once the LLM being edited is on screen (always true for a new one).
+  const [loaded, setLoaded] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -126,6 +134,29 @@ const LLMForm = () => {
   const theme = useTheme();
   const { isEnterprise } = useEdition();
   const [newModel, setNewModel] = useState("");
+
+  // Unsaved-changes tracking over everything the form saves (the LLM record,
+  // its ordered plugins, governed metadata and the Bedrock credentials).
+  // markSaved() runs before the post-save redirect so the guard stays quiet.
+  const { markSaved } = useUnsavedForm(
+    { llm, governedMetadata, awsCreds },
+    { ready: !id || loaded },
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/llms"));
+
+  // The Filters picker works on full filter objects; the form keeps the id
+  // list the API expects.
+  const selectedFilters = (llm.filters || []).map(
+    (filterId) =>
+      (filters || []).find((f) => String(f.id) === String(filterId)) || {
+        id: filterId,
+        attributes: { name: "Unknown Filter" },
+      },
+  );
+  const handleFiltersChange = (items) => {
+    setLLM((prev) => ({ ...prev, filters: items.map((f) => String(f.id)) }));
+  };
 
   useEffect(() => {
     setVendors(getVendorCodes());
@@ -250,6 +281,8 @@ const LLMForm = () => {
         message: "Failed to fetch LLM details",
         severity: "error",
       });
+    } finally {
+      setLoaded(true);
     }
   };
 
@@ -425,8 +458,9 @@ const LLMForm = () => {
         });
       }
 
+      markSaved();
       navigate("/admin/llms", {
-        state: { snackbar: { message: id ? "LLM updated successfully" : "LLM created successfully", severity: "success" } },
+        state: { snackbar: { message: id ? "LLM provider updated successfully" : "LLM provider created successfully", severity: "success" } },
       });
     } catch (error) {
       if (error.response?.status === 422) {
@@ -473,7 +507,7 @@ const LLMForm = () => {
           to="/admin/llms"
           color="inherit"
         >
-          Back to LLMs
+          Back to LLM providers
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
@@ -731,7 +765,7 @@ const LLMForm = () => {
                 Privacy levels
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLMs providers with lower privacy levels can’t access higher-level, data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
+                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLM providers with lower privacy levels can’t access higher-level data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
               </Typography>
               <TextField
                 fullWidth
@@ -878,39 +912,13 @@ const LLMForm = () => {
                 ) : filters.length === 0 ? (
                   <Typography>No filters available.</Typography>
                 ) : (
-                  <FormControl fullWidth>
-                    <InputLabel id="llmform-filters-label">Filters</InputLabel>
-                    <Select
-                      labelId="llmform-filters-label"
-                      multiple
-                      name="filters"
-                      value={llm.filters || []}
-                      onChange={handleChange}
-                      renderValue={(selected) => (
-                        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                          {selected.map((value) => {
-                            const filter = filters.find((f) => f.id === value);
-                            return (
-                              <Chip
-                                key={value}
-                                label={
-                                  filter
-                                    ? filter.attributes.name
-                                    : "Unknown Filter"
-                                }
-                              />
-                            );
-                          })}
-                        </Box>
-                      )}
-                    >
-                      {filters.map((filter) => (
-                        <MenuItem key={filter.id} value={filter.id.toString()}>
-                          {filter.attributes.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+                  <RelationshipPicker
+                    itemLabel="filter"
+                    value={selectedFilters}
+                    onChange={handleFiltersChange}
+                    options={filters}
+                    getOptionLabel={(filter) => filter?.attributes?.name ?? "Unknown Filter"}
+                  />
                 )}
               </AccordionDetails>
             </StyledAccordion>
@@ -1045,9 +1053,12 @@ const LLMForm = () => {
               Fix the following before saving: {Object.values(errors).join("; ")}
             </Alert>
           )}
-          <Box mt={4}>
+          <Box mt={4} display="flex" gap={2}>
+            <SecondaryOutlineButton onClick={handleCancel}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryButton variant="contained" type="submit">
-              {id ? "Update LLM" : "Add LLM"}
+              {id ? "Update LLM provider" : "Add LLM provider"}
             </PrimaryButton>
           </Box>
         </Box>

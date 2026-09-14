@@ -302,7 +302,7 @@ describe('AssignOwnerStep Component', () => {
     expect(screen.getByText('Name*')).toBeInTheDocument();
     expect(screen.getByText('Email*')).toBeInTheDocument();
     expect(screen.getByText('Password*')).toBeInTheDocument();
-    expect(screen.getByText('Role*')).toBeInTheDocument();
+    expect(screen.getByText('Account type*')).toBeInTheDocument();
     
     // Continue button should be disabled (form is empty)
     const continueButton = screen.getByTestId('primary-button');

@@ -134,9 +134,9 @@ describe('GroupDetail', () => {
       { id: 'user1', attributes: { name: 'User One', email: 'user1@example.com', role: 'Admin' } },
       { id: 'user2', attributes: { name: 'User Two', email: 'user2@example.com', role: 'Chat user' } },
     ];
-    const mockCatalogues = [{ id: 'cat1', attributes: { name: 'Catalogue One' } }];
-    const mockDataCatalogues = [{ id: 'dataCat1', attributes: { name: 'Data Catalogue One' } }];
-    const mockToolCatalogues = [{ id: 'toolCat1', attributes: { name: 'Tool Catalogue One' } }];
+    const mockCatalogues = [{ id: 'cat1', attributes: { name: 'Catalog One' } }];
+    const mockDataCatalogues = [{ id: 'dataCat1', attributes: { name: 'Data Catalog One' } }];
+    const mockToolCatalogues = [{ id: 'toolCat1', attributes: { name: 'Tool Catalog One' } }];
 
     beforeEach(() => {
       mockUseGroupDetail.mockReturnValue({
@@ -171,9 +171,9 @@ describe('GroupDetail', () => {
       expect(screen.getByText('user2@example.com')).toBeInTheDocument();
       expect(screen.getByText('Chat user')).toBeInTheDocument();
       
-      expect(screen.getByText('Catalogue One')).toBeInTheDocument();
-      expect(screen.getByText('Data Catalogue One')).toBeInTheDocument();
-      expect(screen.getByText('Tool Catalogue One')).toBeInTheDocument();
+      expect(screen.getByText('Catalog One')).toBeInTheDocument();
+      expect(screen.getByText('Data Catalog One')).toBeInTheDocument();
+      expect(screen.getByText('Tool Catalog One')).toBeInTheDocument();
     });
 
     test('renders group details without catalogs in gateway-only mode', () => {
@@ -190,9 +190,9 @@ describe('GroupDetail', () => {
       expect(screen.getByText('User One')).toBeInTheDocument();
       expect(screen.getByText('user1@example.com')).toBeInTheDocument();
       
-      expect(screen.queryByText('Catalogue One')).not.toBeInTheDocument();
-      expect(screen.queryByText('Data Catalogue One')).not.toBeInTheDocument();
-      expect(screen.queryByText('Tool Catalogue One')).not.toBeInTheDocument();
+      expect(screen.queryByText('Catalog One')).not.toBeInTheDocument();
+      expect(screen.queryByText('Data Catalog One')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tool Catalog One')).not.toBeInTheDocument();
     });
 
     test('navigates to edit page on "Edit team" button click', () => {

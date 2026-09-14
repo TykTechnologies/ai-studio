@@ -110,7 +110,7 @@ const DatasourceDetails = () => {
   };
 
   if (loading) return <CircularProgress />;
-  if (!datasource) return <Typography>Datasource not found</Typography>;
+  if (!datasource) return <Typography>Data source not found</Typography>;
 
   return (
     <>
@@ -192,7 +192,7 @@ const DatasourceDetails = () => {
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FieldValue>{datasource.attributes.privacy_score}</FieldValue>
               <Tooltip
-                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the datasource."
+                title="Privacy level is a value between 0 and 100, where 0 is the lowest and 100 is the highest. This determines the privacy level of the data source."
                 placement="top"
               >
                 <HelpOutlineIcon
@@ -361,7 +361,7 @@ const DatasourceDetails = () => {
                 <Box sx={{ display: "flex", alignItems: "center" }}>
                   <img
                     src={datasource.attributes.icon}
-                    alt="Datasource Icon"
+                    alt="Data source icon"
                     style={{
                       width: 50,
                       height: 50,

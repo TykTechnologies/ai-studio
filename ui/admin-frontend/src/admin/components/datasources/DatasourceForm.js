@@ -44,8 +44,13 @@ import {
   ContentBox,
   PrimaryButton,
   StyledAccordion,
-  SecondaryLinkButton
+  SecondaryLinkButton,
+  SecondaryOutlineButton,
 } from "../../styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 import {
   getVendorData,
   getVectorStoreHelpText,
@@ -103,6 +108,7 @@ const DatasourceForm = () => {
   const { id } = useParams();
   const [vectorStoreHelpText, setVectorStoreHelpText] = useState("");
   const [embedderHelpText, setEmbedderHelpText] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -132,11 +138,12 @@ const DatasourceForm = () => {
             getVectorStoreHelpText(datasourceData.db_source_type),
           );
           setEmbedderHelpText(getEmbedderHelpText(datasourceData.embed_vendor));
+          setLoaded(true);
         } catch (error) {
           console.error("Error fetching datasource:", error);
           setSnackbar({
             open: true,
-            message: "Failed to fetch datasource data. Please try again.",
+            message: "Failed to fetch data source data. Please try again.",
             severity: "error",
           });
         }
@@ -312,6 +319,35 @@ const DatasourceForm = () => {
   const [governedMetadata, setGovernedMetadata] = useState({});
   const [metadataErrors, setMetadataErrors] = useState({});
 
+  // Unsaved-changes tracking over the editable fields (the fetched record also
+  // carries files and timestamps; file uploads commit on their own).
+  const { markSaved } = useUnsavedForm(
+    {
+      name: datasource.name,
+      short_description: datasource.short_description,
+      long_description: datasource.long_description,
+      db_source_type: datasource.db_source_type,
+      embed_vendor: datasource.embed_vendor,
+      privacy_score: datasource.privacy_score,
+      db_conn_string: datasource.db_conn_string,
+      db_conn_api_key: datasource.db_conn_api_key,
+      embed_api_key: datasource.embed_api_key,
+      embed_url: datasource.embed_url,
+      embed_model: datasource.embed_model,
+      icon: datasource.icon,
+      url: datasource.url,
+      active: datasource.active,
+      tags: datasource.tags,
+      db_name: datasource.db_name,
+      user_id: datasource.user_id,
+      namespace: datasource.namespace,
+      governed_metadata: governedMetadata,
+    },
+    { ready: !id || loaded }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/datasources"));
+
   // Fields in the order they appear, so a failed submit scrolls to the first
   // thing the user actually needs to fix. Without this the submit button sits
   // below the fold and a validation failure looks like a button that does
@@ -362,11 +398,12 @@ const DatasourceForm = () => {
         await apiClient.post("/datasources", datasourceData);
       }
 
+      markSaved();
       navigate("/admin/datasources", {
         state: {
           snackbar: {
             message: id
-              ? "Datasource updated successfully"
+              ? "Data source updated successfully"
               : "Data source created and added to the Default data catalog. It is inactive until you activate it.",
             severity: "success",
           },
@@ -387,7 +424,7 @@ const DatasourceForm = () => {
       console.error("Error saving datasource", error);
       setSnackbar({
         open: true,
-        message: "Failed to save datasource. Please try again.",
+        message: "Failed to save data source. Please try again.",
         severity: "error",
       });
     }
@@ -612,7 +649,7 @@ const DatasourceForm = () => {
                 Privacy levels
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLMs providers with lower privacy levels can’t access higher-level, data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
+                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLM providers with lower privacy levels can’t access higher-level data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
               </Typography>
               <TextField
                 fullWidth
@@ -904,7 +941,10 @@ const DatasourceForm = () => {
             defaultExpanded={false}
           />
 
-          <Box mt={4}>
+          <Box mt={4} display="flex" gap={2}>
+            <SecondaryOutlineButton onClick={handleCancel}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryButton variant="contained" type="submit">
               {id ? "Update data source" : "Add data source"}
             </PrimaryButton>

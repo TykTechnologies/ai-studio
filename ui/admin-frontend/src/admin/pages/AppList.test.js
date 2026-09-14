@@ -23,6 +23,7 @@ const apps = [
   { id: "1", attributes: { name: "Approved App", description: "", user_id: 1, credential_id: 11 } },
   { id: "2", attributes: { name: "Waiting App", description: "", user_id: 1, credential_id: 12 } },
   { id: "3", attributes: { name: "Bare App", description: "", user_id: 1, credential_id: null } },
+  { id: "4", attributes: { name: "Off App", description: "", user_id: 1, credential_id: 11, is_active: false } },
 ];
 
 const renderList = () =>
@@ -38,7 +39,7 @@ describe("AppList status labels and approval", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     apiClient.get.mockImplementation((url) => {
-      if (url === "/apps") return Promise.resolve({ data: { data: apps }, headers: { "x-total-count": "3", "x-total-pages": "1" } });
+      if (url === "/apps") return Promise.resolve({ data: { data: apps }, headers: { "x-total-count": "4", "x-total-pages": "1" } });
       if (url === "/credentials")
         return Promise.resolve({
           data: {
@@ -56,11 +57,14 @@ describe("AppList status labels and approval", () => {
 
   const rowFor = async (name) => (await screen.findByText(name)).closest("tr");
 
-  it("uses the Approved / Awaiting approval / No credential labels", async () => {
+  it("uses the Active / Awaiting approval / No credential / Disabled labels", async () => {
     renderList();
-    await waitFor(() => expect(within(screen.getByText("Approved App").closest("tr")).getByText("Approved")).toBeInTheDocument());
+    await waitFor(() => expect(within(screen.getByText("Approved App").closest("tr")).getByText("Active")).toBeInTheDocument());
     expect(within(await rowFor("Waiting App")).getByText("Awaiting approval")).toBeInTheDocument();
     expect(within(await rowFor("Bare App")).getByText("No credential")).toBeInTheDocument();
+    // A switched-off App is Disabled whatever its credential says, as in the portal.
+    expect(within(await rowFor("Off App")).getByText("Disabled")).toBeInTheDocument();
+    expect(screen.queryByText("Approved")).not.toBeInTheDocument();
     expect(screen.queryByText("Inactive")).not.toBeInTheDocument();
     expect(screen.queryByText("Pending")).not.toBeInTheDocument();
   });
@@ -82,7 +86,7 @@ describe("AppList status labels and approval", () => {
   it("does not offer Approve credentials on an approved app", async () => {
     renderList();
     const approved = await rowFor("Approved App");
-    await waitFor(() => expect(within(approved).getByText("Approved")).toBeInTheDocument());
+    await waitFor(() => expect(within(approved).getByText("Active")).toBeInTheDocument());
     fireEvent.click(within(approved).getByRole("button"));
     await screen.findByRole("menuitem", { name: /Disable credentials/ });
     expect(screen.queryByRole("menuitem", { name: /Approve credentials/ })).not.toBeInTheDocument();

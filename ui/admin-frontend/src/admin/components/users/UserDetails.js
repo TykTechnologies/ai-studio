@@ -41,6 +41,8 @@ import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
 import { useEdition } from "../../context/EditionContext";
 import { usePermissions } from "../../context/PermissionsContext";
 import RoleBadge from "../roles/RoleBadge";
+import CustomSelectBadge from "../common/CustomSelectBadge";
+import { roleBadgeConfigs } from "../groups/utils/roleBadgeConfig";
 import EffectivePermissionsList from "../roles/EffectivePermissionsList";
 import CollapsibleSection from "../common/CollapsibleSection";
 import Can from "../rbac/Can";
@@ -397,10 +399,11 @@ const UserDetails = () => {
           ) : (
             <>
               <Grid item xs={3}>
-                <FieldLabel>Admin:</FieldLabel>
+                <FieldLabel>Account type:</FieldLabel>
               </Grid>
               <Grid item xs={9}>
-                <FieldValue>{user.attributes.is_admin ? "Yes" : "No"}</FieldValue>
+                {/* Same badge as the Users list and the team member tables. */}
+                <CustomSelectBadge config={roleBadgeConfigs[user.attributes.role] || roleBadgeConfigs["Chat user"]} />
               </Grid>
             </>
           )}

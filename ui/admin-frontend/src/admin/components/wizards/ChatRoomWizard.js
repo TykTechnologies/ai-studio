@@ -33,7 +33,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
   const stepHelpText = {
     0: "Configure the LLM vendor details. Select the vendor, set a name for the LLM, and specify the privacy level. For some vendors, you'll need to provide an API endpoint and key.",
     1: "Set up call settings for the LLM. Choose a model preset and customize the system prompt that guides the AI's behavior.",
-    2: "Create a group and catalogue for organizing your chat rooms. The group will contain the catalogue, which in turn will contain the LLM.",
+    2: "Create a team and catalog for organizing your chat rooms. The team will contain the catalog, which in turn will contain the LLM provider.",
     3: "Name your chat room. This is the name that users will see when accessing the chat.",
     4: "Review and confirm your chat room creation.",
   };
@@ -65,7 +65,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
     modelPreset: "default",
     systemPrompt:
       "You are a helpful AI assistant. Answer the user's questions to the best of your ability.",
-    groupName: "My Group",
+    groupName: "My team",
     catalogueName: "My Catalog",
     chatRoomName: "My Chat Room",
   });
@@ -75,7 +75,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
   const steps = [
     "LLM Vendor Details",
     "Call Settings",
-    "Team & Catalogue Details",
+    "Team & Catalog Details",
     "Chat Room Details",
     "Finish",
   ];
@@ -333,7 +333,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
                   <TextField
                     fullWidth
                     margin="normal"
-                    label="Catalogue Name"
+                    label="Catalog Name"
                     name="catalogueName"
                     value={formData.catalogueName}
                     onChange={handleInputChange}

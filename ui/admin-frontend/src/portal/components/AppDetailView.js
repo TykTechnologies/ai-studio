@@ -577,7 +577,7 @@ const AppDetailView = () => {
             <AppStatusChip status={getAppStatusFromApp(app)} />
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Data Sources:</FieldLabel>
+            <FieldLabel>Data sources:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box display="flex" flexWrap="wrap" gap={1}>
@@ -593,7 +593,7 @@ const AppDetailView = () => {
             <Box display="flex" flexWrap="wrap" gap={1}>
               {appLLMs.length > 0 ? appLLMs.map((llm) => (
                 <Chip key={llm.id} label={llm.attributes.name} />
-              )) : <Typography variant="body2">No LLMs associated.</Typography>}
+              )) : <Typography variant="body2">No LLM providers associated.</Typography>}
             </Box>
           </Grid>
           <Grid item xs={3}>
@@ -663,7 +663,7 @@ const AppDetailView = () => {
             was not yet live -- so the state was discovered as a 401. */}
         {!app.attributes.credential.active && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            <AlertTitle>Waiting for approval</AlertTitle>
+            <AlertTitle>Awaiting approval</AlertTitle>
             This credential is not active yet. An administrator has to approve
             this app before the key below will work — requests made with it
             will be rejected with <strong>401 Unauthorized</strong> until then.
@@ -1215,7 +1215,7 @@ const AppDetailView = () => {
       </Paper>
 
       <Paper sx={{ p: 3, mt: 3 }}>
-        <SectionTitle>Data Source Access Details</SectionTitle>
+        <SectionTitle>Data source access details</SectionTitle>
         {appDatasources.length > 0 ? (
           appDatasources.map((datasource) => (
             <Card key={datasource.id} sx={{ mb: 3 }}>
@@ -1236,13 +1236,13 @@ const AppDetailView = () => {
                   Endpoint
                 </Typography>
                 <Typography variant="body2" sx={{ mb: 2 }}>
-                  Use the following URL to search this datasource.
+                  Use the following URL to search this data source.
                 </Typography>
 
                 <Box sx={{ display: "flex", alignItems: "center" }}>
                   <FieldLabel sx={{ minWidth: "100px" }}>Search API:</FieldLabel>
                   <Box>
-                    <Tooltip title="Send a POST request with a JSON body containing 'query' and 'n' fields to search this datasource">
+                    <Tooltip title="Send a POST request with a JSON body containing 'query' and 'n' fields to search this data source">
                       <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
                     </Tooltip>
                   </Box>
@@ -1409,7 +1409,7 @@ const AppDetailView = () => {
             </Card>
           ))
         ) : (
-          <Typography variant="body1">No datasources associated with this app.</Typography>
+          <Typography variant="body1">No data sources associated with this app.</Typography>
         )}
       </Paper>
 

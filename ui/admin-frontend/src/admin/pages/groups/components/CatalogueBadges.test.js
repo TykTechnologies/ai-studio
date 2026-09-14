@@ -134,10 +134,10 @@ describe('CatalogueBadges', () => {
     expect(mockTooltip).toHaveBeenCalledTimes(1);
     // Check props passed to the last call of mockTooltip
     const lastTooltipCall = mockTooltip.mock.calls[mockTooltip.mock.calls.length - 1][0];
-    expect(lastTooltipCall.title).toBe('2 more catalogues');
+    expect(lastTooltipCall.title).toBe('2 more catalogs');
 
     // Additionally, we can check if our mock rendered the data-title (optional, depends on mock structure)
-    expect(tooltipElement).toHaveAttribute('data-title', '2 more catalogues');
+    expect(tooltipElement).toHaveAttribute('data-title', '2 more catalogs');
   });
 
   test('renders a mix of catalogue types correctly with Tooltip for overflow', () => {
@@ -160,9 +160,9 @@ describe('CatalogueBadges', () => {
     const mockTooltip = getMockTooltipImplementation();
     expect(mockTooltip).toHaveBeenCalledTimes(1);
     const lastTooltipCall = mockTooltip.mock.calls[mockTooltip.mock.calls.length - 1][0];
-    expect(lastTooltipCall.title).toBe('1 more catalogues');
+    expect(lastTooltipCall.title).toBe('1 more catalogs');
 
-    expect(tooltipElement).toHaveAttribute('data-title', '1 more catalogues');
+    expect(tooltipElement).toHaveAttribute('data-title', '1 more catalogs');
   });
 
   test('renders only data and tool catalogues when llm catalogues are empty, with Tooltip for overflow', () => {
@@ -184,8 +184,8 @@ describe('CatalogueBadges', () => {
     const mockTooltip = getMockTooltipImplementation();
     expect(mockTooltip).toHaveBeenCalledTimes(1);
     const lastTooltipCall = mockTooltip.mock.calls[mockTooltip.mock.calls.length - 1][0];
-    expect(lastTooltipCall.title).toBe('1 more catalogues');
+    expect(lastTooltipCall.title).toBe('1 more catalogs');
     
-    expect(tooltipElement).toHaveAttribute('data-title', '1 more catalogues');
+    expect(tooltipElement).toHaveAttribute('data-title', '1 more catalogs');
   });
 }); 

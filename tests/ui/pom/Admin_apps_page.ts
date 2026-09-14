@@ -19,8 +19,13 @@ export class AdminAppsPage extends PageTemplate {
     readonly NameInput: Locator;
     readonly DescriptionInput: Locator;
     readonly UserDropDown: DropDownWrapper;
-    readonly LlmDropDown: DropDownWrapper;
-    readonly ToolDropDown: DropDownWrapper; // Added for tools
+    // LLMs / data sources / tools are RelationshipPickers (compact): selected
+    // items are chips, the add control is the Autocomplete labelled
+    // "Add LLM provider" / "Add data source" / "Add tool", and removal is
+    // the chip's "Remove {name}" icon. Changes persist when the form is saved.
+    readonly AddLlmInput: Locator;
+    readonly AddDataSourceInput: Locator;
+    readonly AddToolInput: Locator;
     readonly MonthlyBudgetInput: Locator;
     readonly BudgetStartDateInput: Locator;
     readonly SaveButton: Locator; // More generic name for the save/submit button on the form
@@ -40,8 +45,9 @@ export class AdminAppsPage extends PageTemplate {
         this.NameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.DescriptionInput = this.page.getByRole('textbox', { name: 'Description' });
         this.UserDropDown = new DropDownWrapper('#mui-component-select-user_id', page); // Assuming specific ID, adjust if needed
-        this.LlmDropDown = new DropDownWrapper('#mui-component-select-llm_ids', page); // More robust selector for CustomSelectMany
-        this.ToolDropDown = new DropDownWrapper('#mui-component-select-tool_ids', page); // More robust selector for CustomSelectMany
+        this.AddLlmInput = this.page.getByRole('combobox', { name: 'Add LLM provider' });
+        this.AddDataSourceInput = this.page.getByRole('combobox', { name: 'Add data source' });
+        this.AddToolInput = this.page.getByRole('combobox', { name: 'Add tool' });
         this.MonthlyBudgetInput = this.page.getByRole('spinbutton', { name: 'Monthly Budget' });
         this.BudgetStartDateInput = this.page.getByRole('textbox', { name: 'Budget Start Date' });
         this.SaveButton = this.page.getByRole('button', { name: 'Add app' });
@@ -61,11 +67,16 @@ export class AdminAppsPage extends PageTemplate {
 
     /**
      * Asserts the Status cell of the named app's row. Values: "Active",
-     * "Awaiting approval" (credential exists, not yet approved) and
-     * "No credential" (UX review Q3; formerly "Approved" / "Inactive" / "Pending").
+     * "Awaiting approval" (credential exists, not yet approved), "No credential"
+     * and "Disabled" (the app's live switch is off) -- the same words the portal uses.
      */
     async expectAppStatus(appName: string, status: string | RegExp) {
         await expect(this.Table.element.locator(`tbody tr:has-text("${appName}")`).first()).toContainText(status);
+    }
+
+    /** Asserts the Status line on the app detail page (same words as the list). */
+    async expectDetailStatus(status: string) {
+        await expect(this.page.getByTestId('app-status')).toHaveText(status);
     }
 
     /** Approves the app's credentials from the list's row menu. */
@@ -74,15 +85,46 @@ export class AdminAppsPage extends PageTemplate {
         await this.page.getByRole('menuitem', { name: 'Approve credentials' }).click();
     }
 
+    /** Chip for a member currently selected in any of the form's pickers. */
+    relationshipChip(name: string): Locator {
+        return this.page.getByTestId('relationship-picker').locator('.MuiChip-root').filter({ hasText: name });
+    }
+
+    /** Type into a picker's Autocomplete and pick the option; it becomes a chip at once. */
+    private async pickRelationship(input: Locator, name: string) {
+        await input.click();
+        await input.fill(name);
+        await this.page.getByRole('option', { name, exact: true }).click();
+        await this.relationshipChip(name).waitFor();
+    }
+
+    async addLlm(name: string) {
+        await this.pickRelationship(this.AddLlmInput, name);
+    }
+
+    async addDataSource(name: string) {
+        await this.pickRelationship(this.AddDataSourceInput, name);
+    }
+
+    async addTool(name: string) {
+        await this.pickRelationship(this.AddToolInput, name);
+    }
+
+    /** Remove a member via its chip's delete icon (any picker on the form). */
+    async removeRelationship(name: string) {
+        await this.page.getByLabel(`Remove ${name}`).click();
+        await this.relationshipChip(name).waitFor({ state: 'detached' });
+    }
+
     async addApp(params: AppParams) {
         await this.AddAppButton.click();
         await this.NameInput.fill(params.name);
         await this.DescriptionInput.fill(params.description);
         await this.UserDropDown.setValue(params.user);
-        await this.LlmDropDown.setValue(params.llm);
+        await this.addLlm(params.llm);
         if (params.tools && params.tools.length > 0) {
             for (const toolName of params.tools) {
-                await this.ToolDropDown.setValue(toolName);
+                await this.addTool(toolName);
             }
         }
         await this.MonthlyBudgetInput.fill(params.monthlyBudget);

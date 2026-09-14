@@ -5,6 +5,16 @@ import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import { createTheme } from "@mui/material";
 import SecretForm from "./SecretForm";
+import {
+  UnsavedChangesProvider,
+  useUnsavedChanges,
+} from "../../../components/unsaved-changes";
+
+jest.mock("../../../components/common/Icon", () => {
+  return function MockIcon(props) {
+    return <div data-testid="mock-icon">{props.name}</div>;
+  };
+});
 
 // Mock apiClient
 jest.mock("../../utils/apiClient", () => {
@@ -217,5 +227,86 @@ describe("SecretForm Component", () => {
       name: /Update secret/i,
     });
     expect(submitButton).not.toBeDisabled();
+  });
+
+  describe("unsaved changes", () => {
+    // Reads the provider's registry so the test can see what the form declared.
+    const DirtyProbe = () => {
+      const { isDirty } = useUnsavedChanges();
+      return <span data-testid="registry-dirty">{String(isDirty)}</span>;
+    };
+
+    const renderGuarded = () =>
+      render(
+        <UnsavedChangesProvider>
+          <SecretForm />
+          <DirtyProbe />
+        </UnsavedChangesProvider>,
+        { wrapper: Wrapper }
+      );
+
+    test("has a Cancel button that returns to the list when clean", () => {
+      renderGuarded();
+      const cancel = screen.getByRole("button", { name: "Cancel" });
+      expect(cancel).toBeInTheDocument();
+      fireEvent.click(cancel);
+      expect(mockNavigate).toHaveBeenCalledWith("/admin/secrets");
+      expect(screen.queryByTestId("unsaved-changes-dialog")).toBeNull();
+    });
+
+    test("is clean until the user types, then dirty", () => {
+      renderGuarded();
+      expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false");
+      fireEvent.change(screen.getByLabelText(/Variable Name/i), {
+        target: { value: "MY_KEY" },
+      });
+      expect(screen.getByTestId("registry-dirty")).toHaveTextContent("true");
+    });
+
+    test("Cancel prompts while dirty and only leaves after confirmation", async () => {
+      renderGuarded();
+      fireEvent.change(screen.getByLabelText(/Variable Name/i), {
+        target: { value: "MY_KEY" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(await screen.findByTestId("unsaved-changes-dialog")).toBeInTheDocument();
+      expect(mockNavigate).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Leave without saving" }));
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/admin/secrets"));
+    });
+
+    test("loading an existing secret does not count as a change", async () => {
+      mockId = "42";
+      apiClient.get.mockResolvedValue({
+        data: { data: { attributes: { var_name: "EXISTING_KEY", value: "$SECRET/EXISTING_KEY" } } },
+      });
+      renderGuarded();
+      await screen.findByDisplayValue("EXISTING_KEY");
+      expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false");
+
+      fireEvent.change(screen.getByLabelText(/Variable Name/i), {
+        target: { value: "RENAMED_KEY" },
+      });
+      expect(screen.getByTestId("registry-dirty")).toHaveTextContent("true");
+    });
+
+    test("a successful save marks the form clean before redirecting", async () => {
+      renderGuarded();
+      fireEvent.change(screen.getByLabelText(/Variable Name/i), {
+        target: { value: "MY_KEY" },
+      });
+      fireEvent.change(screen.getByLabelText(/Secret Value/i), {
+        target: { value: "my-secret-123" },
+      });
+      expect(screen.getByTestId("registry-dirty")).toHaveTextContent("true");
+
+      fireEvent.click(screen.getByRole("button", { name: /Add secret/i }));
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+      // useNavigate is mocked, so the form stays mounted and its state is visible.
+      await waitFor(() =>
+        expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false")
+      );
+    });
   });
 });

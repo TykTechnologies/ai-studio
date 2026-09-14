@@ -4,23 +4,29 @@ import {
   Container,
   Typography,
   TextField,
-  Button,
   Box,
-  Chip,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Alert,
   CircularProgress,
   Card,
   CardContent,
 } from "@mui/material";
 import pubClient from "../../admin/utils/pubClient";
-import { PrimaryButton } from "../../admin/styles/sharedStyles";
+import {
+  PrimaryButton,
+  SecondaryOutlineButton,
+} from "../../admin/styles/sharedStyles";
+import RelationshipPicker from "../../admin/components/common/relationship-picker";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../components/unsaved-changes";
+
+const jsonApiName = (item) => item?.attributes?.name ?? "";
 
 const AppBuilder = () => {
-  const [appName, setAppName] = useState("My New App");
+  // No placeholder name: the field is required and a default of "My New App"
+  // was being submitted as-is.
+  const [appName, setAppName] = useState("");
   const [description, setDescription] = useState("");
   const [dataSources, setDataSources] = useState([]);
   const [llms, setLLMs] = useState([]);
@@ -30,16 +36,35 @@ const AppBuilder = () => {
   const [selectedTools, setSelectedTools] = useState([]);
   const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
   const [pluginResourceSelections, setPluginResourceSelections] = useState({});
-  const [currentPluginResource, setCurrentPluginResource] = useState({});
-  const [currentDataSource, setCurrentDataSource] = useState("");
-  const [currentLLM, setCurrentLLM] = useState("");
-  const [currentTool, setCurrentTool] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Unsaved-changes tracking. The baseline is taken once the option lists
+  // (and any ?llm= / ?datasource= / ?tool= preselection) are on screen, so
+  // arriving from a resource page never counts as a change. markSaved()
+  // runs before the success screen replaces the form.
+  const { markSaved } = useUnsavedForm(
+    {
+      appName,
+      description,
+      dataSourceIds: selectedDataSources.map((ds) => String(ds.id)),
+      llmIds: selectedLLMs.map((llm) => String(llm.id)),
+      toolIds: selectedTools.map((tool) => String(tool.id)),
+      pluginResourceIds: Object.fromEntries(
+        Object.entries(pluginResourceSelections).map(([key, items]) => [
+          key,
+          items.map((item) => String(item.id)),
+        ]),
+      ),
+    },
+    { ready: !isLoading },
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/portal/apps"));
 
   useEffect(() => {
     const fetchData = async () => {
@@ -90,45 +115,6 @@ const AppBuilder = () => {
     fetchData();
   }, [location.search]);
 
-  const handleAddDataSource = () => {
-    if (
-      currentDataSource &&
-      !selectedDataSources.some((ds) => ds.id === currentDataSource)
-    ) {
-      const dataSource = dataSources.find((ds) => ds.id === currentDataSource);
-      setSelectedDataSources([...selectedDataSources, dataSource]);
-      setCurrentDataSource("");
-    }
-  };
-
-  const handleAddLLM = () => {
-    if (currentLLM && !selectedLLMs.some((llm) => llm.id === currentLLM)) {
-      const llm = llms.find((l) => l.id === currentLLM);
-      setSelectedLLMs([...selectedLLMs, llm]);
-      setCurrentLLM("");
-    }
-  };
-
-  const handleRemoveDataSource = (id) => {
-    setSelectedDataSources(selectedDataSources.filter((ds) => ds.id !== id));
-  };
-
-  const handleRemoveLLM = (id) => {
-    setSelectedLLMs(selectedLLMs.filter((llm) => llm.id !== id));
-  };
-
-  const handleAddTool = () => {
-    if (currentTool && !selectedTools.some((tool) => tool.id === currentTool)) {
-      const tool = tools.find((t) => t.id === currentTool);
-      setSelectedTools([...selectedTools, tool]);
-      setCurrentTool("");
-    }
-  };
-
-  const handleRemoveTool = (id) => {
-    setSelectedTools(selectedTools.filter((tool) => tool.id !== id));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -157,6 +143,7 @@ const AppBuilder = () => {
           plugin_resources: pluginResourcesPayload,
         }),
       });
+      markSaved();
       setIsSubmitted(true);
     } catch (err) {
       console.error("Error creating app:", err);
@@ -258,183 +245,59 @@ const AppBuilder = () => {
               margin="normal"
             />
             <Box sx={{ mt: 3, mb: 2 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Data Sources (Optional)
-              </Typography>
-              <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-                <FormControl fullWidth sx={{ mr: 1 }}>
-                  <InputLabel id="appbuilder-select-data-source-label">Select Data Source</InputLabel>
-                  <Select
-                    labelId="appbuilder-select-data-source-label"
-                    value={currentDataSource}
-                    onChange={(e) => setCurrentDataSource(e.target.value)}
-                    label="Select Data Source"
-                  >
-                    {dataSources.map((ds) => (
-                      <MenuItem key={ds.id} value={ds.id}>
-                        {ds.attributes.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Button onClick={handleAddDataSource} variant="outlined">
-                  Add
-                </Button>
-              </Box>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                {selectedDataSources.map((ds) => (
-                  <Chip
-                    key={ds.id}
-                    label={ds.attributes.name}
-                    onDelete={() => handleRemoveDataSource(ds.id)}
-                  />
-                ))}
-              </Box>
+              <RelationshipPicker
+                label="Data sources (optional)"
+                itemLabel="data source"
+                value={selectedDataSources}
+                onChange={setSelectedDataSources}
+                options={dataSources}
+                getOptionLabel={jsonApiName}
+              />
             </Box>
             <Box sx={{ mt: 3, mb: 2 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                LLMs (Optional)
-              </Typography>
-              <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-                <FormControl fullWidth sx={{ mr: 1 }}>
-                  <InputLabel id="appbuilder-select-llm-label">Select LLM</InputLabel>
-                  <Select
-                    labelId="appbuilder-select-llm-label"
-                    value={currentLLM}
-                    onChange={(e) => setCurrentLLM(e.target.value)}
-                    label="Select LLM"
-                  >
-                    {llms.map((llm) => (
-                      <MenuItem key={llm.id} value={llm.id}>
-                        {llm.attributes.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Button onClick={handleAddLLM} variant="outlined">
-                  Add
-                </Button>
-              </Box>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                {selectedLLMs.map((llm) => (
-                  <Chip
-                    key={llm.id}
-                    label={llm.attributes.name}
-                    onDelete={() => handleRemoveLLM(llm.id)}
-                  />
-                ))}
-              </Box>
+              <RelationshipPicker
+                label="LLM providers (optional)"
+                itemLabel="LLM provider"
+                value={selectedLLMs}
+                onChange={setSelectedLLMs}
+                options={llms}
+                getOptionLabel={jsonApiName}
+              />
             </Box>
             <Box sx={{ mt: 3, mb: 2 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Tools (Optional)
-              </Typography>
-              <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-                <FormControl fullWidth sx={{ mr: 1 }}>
-                  <InputLabel id="appbuilder-select-tool-label">Select Tool</InputLabel>
-                  <Select
-                    labelId="appbuilder-select-tool-label"
-                    value={currentTool}
-                    onChange={(e) => setCurrentTool(e.target.value)}
-                    label="Select Tool"
-                  >
-                    {tools.map((tool) => (
-                      <MenuItem key={tool.id} value={tool.id}>
-                        {tool.attributes.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Button onClick={handleAddTool} variant="outlined">
-                  Add
-                </Button>
-              </Box>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                {selectedTools.map((tool) => (
-                  <Chip
-                    key={tool.id}
-                    label={tool.attributes.name}
-                    onDelete={() => handleRemoveTool(tool.id)}
-                  />
-                ))}
-              </Box>
+              <RelationshipPicker
+                label="Tools (optional)"
+                itemLabel="tool"
+                value={selectedTools}
+                onChange={setSelectedTools}
+                options={tools}
+                getOptionLabel={jsonApiName}
+              />
             </Box>
-            {/* Dynamic Plugin Resource Sections */}
+            {/* Dynamic Plugin Resource Sections: one picker per resource
+                type; selections are the full instance objects. */}
             {pluginResourceTypes.map((rt) => {
               const key = `${rt.plugin_id}:${rt.slug}`;
               const instances = rt.instances || [];
               const selected = pluginResourceSelections[key] || [];
-              const currentVal = currentPluginResource[key] || "";
-              const labelId = `appbuilder-plugin-resource-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}-label`;
 
               if (instances.length === 0) return null;
 
               return (
                 <Box key={key} sx={{ mt: 3, mb: 2 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    {rt.name} (Optional)
-                  </Typography>
-                  <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-                    <FormControl fullWidth sx={{ mr: 1 }}>
-                      <InputLabel id={labelId}>Select {rt.name}</InputLabel>
-                      <Select
-                        labelId={labelId}
-                        value={currentVal}
-                        onChange={(e) =>
-                          setCurrentPluginResource((prev) => ({
-                            ...prev,
-                            [key]: e.target.value,
-                          }))
-                        }
-                        label={`Select ${rt.name}`}
-                      >
-                        {instances.map((inst) => (
-                          <MenuItem key={inst.id} value={inst.id}>
-                            {inst.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <Button
-                      onClick={() => {
-                        if (
-                          currentVal &&
-                          !selected.some((s) => s.id === currentVal)
-                        ) {
-                          const inst = instances.find(
-                            (i) => i.id === currentVal,
-                          );
-                          if (inst) {
-                            setPluginResourceSelections((prev) => ({
-                              ...prev,
-                              [key]: [...selected, inst],
-                            }));
-                            setCurrentPluginResource((prev) => ({
-                              ...prev,
-                              [key]: "",
-                            }));
-                          }
-                        }
-                      }}
-                      variant="outlined"
-                    >
-                      Add
-                    </Button>
-                  </Box>
-                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                    {selected.map((inst) => (
-                      <Chip
-                        key={inst.id}
-                        label={inst.name}
-                        onDelete={() =>
-                          setPluginResourceSelections((prev) => ({
-                            ...prev,
-                            [key]: selected.filter((s) => s.id !== inst.id),
-                          }))
-                        }
-                      />
-                    ))}
-                  </Box>
+                  <RelationshipPicker
+                    label={`${rt.name} (Optional)`}
+                    itemLabel={rt.name.toLowerCase()}
+                    value={selected}
+                    onChange={(items) =>
+                      setPluginResourceSelections((prev) => ({
+                        ...prev,
+                        [key]: items,
+                      }))
+                    }
+                    options={instances}
+                    getOptionLabel={(inst) => inst?.name ?? ""}
+                  />
                 </Box>
               );
             })}
@@ -446,15 +309,19 @@ const AppBuilder = () => {
               approved, you will be able to start building your app using the
               credentials provided.
             </Alert>
-            <PrimaryButton
-              type="submit"
-              variant="contained"
-              color="primary"
-              disabled={!isFormValid}
-              sx={{ mt: 2 }}
-            >
-              Create App
-            </PrimaryButton>
+            <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
+              <SecondaryOutlineButton onClick={handleCancel}>
+                Cancel
+              </SecondaryOutlineButton>
+              <PrimaryButton
+                type="submit"
+                variant="contained"
+                color="primary"
+                disabled={!isFormValid}
+              >
+                Create App
+              </PrimaryButton>
+            </Box>
           </Box>
         </CardContent>
       </Card>
