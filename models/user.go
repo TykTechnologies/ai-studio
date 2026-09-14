@@ -135,13 +135,29 @@ func RevokeAPIKey(db *gorm.DB, userID uint) error {
 // Column update: a Save of a struct carrying false would work, but an
 // insert would not (default:true), so every writer goes through here.
 func SetEmailNotificationsEnabled(db *gorm.DB, userID uint, enabled bool) error {
-	return db.Model(&User{}).Where("id = ?", userID).Update("email_notifications_enabled", enabled).Error
+	return SetNotificationPreferences(db, userID, nil, &enabled)
+}
+
+// SetNotificationPreferences stores whichever of the two notification
+// flags are given (nil leaves a flag alone) in one column update.
+func SetNotificationPreferences(db *gorm.DB, userID uint, inApp, email *bool) error {
+	updates := map[string]interface{}{}
+	if inApp != nil {
+		updates["notifications_enabled"] = *inApp
+	}
+	if email != nil {
+		updates["email_notifications_enabled"] = *email
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return db.Model(&User{}).Where("id = ?", userID).Updates(updates).Error
 }
 
 // SetNotificationsEnabled stores the in-app (admin fan-out) notification
 // flag. Column update: see TouchAPIKeyUse.
 func SetNotificationsEnabled(db *gorm.DB, userID uint, enabled bool) error {
-	return db.Model(&User{}).Where("id = ?", userID).Update("notifications_enabled", enabled).Error
+	return SetNotificationPreferences(db, userID, &enabled, nil)
 }
 
 // SetDisabled flips the account switch. Disabling also drops the live

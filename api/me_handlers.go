@@ -93,24 +93,22 @@ func (a *API) updateMyPreferences(c *gin.Context) {
 		return
 	}
 
-	// Column updates: a whole-struct Save would race the login and key-use
-	// stamps, and an insert-style write would trip the default:true column.
+	if req.NotificationsEnabled != nil && *req.NotificationsEnabled && !u.IsAdmin {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError("notifications can only be enabled for admin users"))
+		return
+	}
+
+	// One column update for both flags: a whole-struct Save would race the
+	// login and key-use stamps, and an insert-style write would trip the
+	// default:true column.
+	if err := models.SetNotificationPreferences(a.config.DB, u.ID, req.NotificationsEnabled, req.EmailNotificationsEnabled); err != nil {
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		return
+	}
 	if req.NotificationsEnabled != nil {
-		if *req.NotificationsEnabled && !u.IsAdmin {
-			helpers.SendErrorResponse(c, helpers.NewBadRequestError("notifications can only be enabled for admin users"))
-			return
-		}
-		if err := models.SetNotificationsEnabled(a.config.DB, u.ID, *req.NotificationsEnabled); err != nil {
-			helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
-			return
-		}
 		u.NotificationsEnabled = *req.NotificationsEnabled
 	}
 	if req.EmailNotificationsEnabled != nil {
-		if err := models.SetEmailNotificationsEnabled(a.config.DB, u.ID, *req.EmailNotificationsEnabled); err != nil {
-			helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
-			return
-		}
 		u.EmailNotificationsEnabled = *req.EmailNotificationsEnabled
 	}
 

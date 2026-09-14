@@ -1,8 +1,10 @@
 package services
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -69,15 +71,76 @@ var pendingChangeSources = []pendingChangeSource{
 	{typ: "access_token", model: &models.AccessToken{}, nameExpr: "client_id", namespaced: false},
 }
 
-// pendingChangeRow is the projection scanned from each source table. The
-// time columns are selected as plain columns (no aggregates) so SQLite
-// hands them back as time values.
+// pendingChangeRow is one row of the UNION ALL over the source tables.
+// The time columns come back through a compound select, which on SQLite
+// drops the declared column type, so they are scanned by changeTime rather
+// than time.Time. Total is COUNT(*) OVER () on the unlimited row set.
 type pendingChangeRow struct {
+	Typ       string
 	ID        uint
 	Name      string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt gorm.DeletedAt
+	CreatedAt changeTime
+	UpdatedAt changeTime
+	DeletedAt changeTime
+	Total     int64
+}
+
+// changeTime scans a time column whether the driver hands back a time.Time
+// (Postgres, SQLite with a declared type) or the raw TEXT SQLite stores
+// (compound selects lose the declared type). Valid is false for NULL.
+type changeTime struct {
+	Time  time.Time
+	Valid bool
+}
+
+// sqliteTimeFormats are the layouts go-sqlite3 writes and accepts.
+var sqliteTimeFormats = []string{
+	"2006-01-02 15:04:05.999999999-07:00",
+	"2006-01-02T15:04:05.999999999-07:00",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02T15:04:05.999999999",
+	"2006-01-02 15:04:05",
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04",
+	"2006-01-02T15:04",
+	"2006-01-02",
+	time.RFC3339Nano,
+}
+
+func (t *changeTime) Scan(v interface{}) error {
+	switch x := v.(type) {
+	case nil:
+		*t = changeTime{}
+		return nil
+	case time.Time:
+		*t = changeTime{Time: x, Valid: true}
+		return nil
+	case []byte:
+		return t.parse(string(x))
+	case string:
+		return t.parse(x)
+	}
+	return fmt.Errorf("pending changes: cannot scan %T into a time", v)
+}
+
+// Value satisfies driver.Valuer so GORM treats the struct as a scalar
+// column rather than a relation; the type is never written back.
+func (t changeTime) Value() (driver.Value, error) {
+	if !t.Valid {
+		return nil, nil
+	}
+	return t.Time, nil
+}
+
+func (t *changeTime) parse(s string) error {
+	s = strings.TrimSuffix(s, "Z")
+	for _, layout := range sqliteTimeFormats {
+		if parsed, err := time.ParseInLocation(layout, s, time.UTC); err == nil {
+			*t = changeTime{Time: parsed, Valid: true}
+			return nil
+		}
+	}
+	return fmt.Errorf("pending changes: unrecognised time %q", s)
 }
 
 // GetPendingChanges lists what changed in the namespace since its last
@@ -99,100 +162,102 @@ func (s *SyncStatusService) GetPendingChanges(namespace string) (*PendingChanges
 		return nil, err
 	}
 
+	rows, err := s.pendingRows(namespace, result.Since)
+	if err != nil {
+		return nil, err
+	}
+
 	var changes []PendingChange
-	for _, src := range pendingChangeSources {
-		rows, err := s.pendingRowsFor(src, namespace, result.Since)
-		if err != nil {
-			return nil, err
-		}
-		classified := 0
-		for _, row := range rows {
-			if change, ok := classifyPendingChange(row, result.Since); ok {
-				classified++
-				changes = append(changes, PendingChange{
-					Type:   src.typ,
-					ID:     row.ID,
-					Name:   row.Name,
-					Change: change.kind,
-					At:     change.at,
-				})
-			}
-		}
-		// Each source is fetched newest-first and capped at maxPendingChanges,
-		// so a full page means the table may hold more: count those rather
-		// than load them, since only the newest maxPendingChanges overall are
-		// returned anyway.
-		if len(rows) < maxPendingChanges {
-			result.Total += classified
-		} else {
-			n, err := s.pendingCountFor(src, namespace, result.Since)
-			if err != nil {
-				return nil, err
-			}
-			result.Total += int(n)
+	for _, row := range rows {
+		result.Total = int(row.Total)
+		if change, ok := classifyPendingChange(row, result.Since); ok {
+			changes = append(changes, PendingChange{
+				Type:   row.Typ,
+				ID:     row.ID,
+				Name:   row.Name,
+				Change: change.kind,
+				At:     change.at,
+			})
 		}
 	}
 
+	// The database orders by the column the change time is derived from;
+	// re-sort on the derived value so ties and created-then-updated rows
+	// land in a stable newest-first order.
 	sort.SliceStable(changes, func(i, j int) bool {
 		return changes[i].At.After(changes[j].At)
 	})
 
-	if len(changes) > maxPendingChanges {
-		changes = changes[:maxPendingChanges]
-	}
 	if changes != nil {
 		result.Changes = changes
 	}
 	return result, nil
 }
 
-// pendingQueryFor builds the candidate-row query of one source. Soft-deleted
-// rows are included (Unscoped) only when there is a reference point to
+// pendingRows runs one query over every source table: a UNION ALL of the
+// per-table candidate selects, ordered newest-first by the time the change
+// will be reported with (deletion time for a deleted row, otherwise its
+// last update) and capped at maxPendingChanges, with the uncapped count
+// carried on every row by a window function. Each branch filters on its
+// own indexed columns before the union, so the cap and the count cost one
+// round-trip rather than one or two per table.
+//
+// Soft-deleted rows are included only when there is a reference point to
 // compare their deletion against. The time filter uses updated_at and
-// deleted_at only: GORM stamps updated_at alongside created_at on insert, so
-// a row created after the push is also updated after it, and a soft delete
-// leaves updated_at alone. Both columns are indexed
-// (EnsurePendingChangeIndexes), which keeps the OR to two index scans.
-func (s *SyncStatusService) pendingQueryFor(src pendingChangeSource, namespace string, since *time.Time) *gorm.DB {
-	query := s.db.Model(src.model)
-
-	if src.namespaced {
-		if namespace == "" {
-			query = query.Where("namespace = ''")
-		} else {
-			query = query.Where("(namespace = '' OR namespace = ?)", namespace)
+// deleted_at only: GORM stamps updated_at alongside created_at on insert,
+// so a row created after the push is also updated after it, and a soft
+// delete leaves updated_at alone.
+func (s *SyncStatusService) pendingRows(namespace string, since *time.Time) ([]pendingChangeRow, error) {
+	branches := make([]string, 0, len(pendingChangeSources))
+	args := make([]interface{}, 0, 3*len(pendingChangeSources))
+	for _, src := range pendingChangeSources {
+		table, err := tableOf(s.db, src.model)
+		if err != nil {
+			return nil, err
 		}
+
+		// Bind order within a branch: type literal, then the WHERE markers.
+		args = append(args, src.typ)
+		where := make([]string, 0, 2)
+		if src.namespaced {
+			if namespace == "" {
+				where = append(where, "namespace = ''")
+			} else {
+				where = append(where, "(namespace = '' OR namespace = ?)")
+				args = append(args, namespace)
+			}
+		}
+		if since == nil {
+			where = append(where, "deleted_at IS NULL")
+		} else {
+			where = append(where, "(updated_at > ? OR deleted_at > ?)")
+			args = append(args, *since, *since)
+		}
+
+		branches = append(branches, fmt.Sprintf(
+			"SELECT ? AS typ, %s AS name, id, created_at, updated_at, deleted_at FROM %s WHERE %s",
+			src.nameExpr, table, strings.Join(where, " AND ")))
 	}
 
-	if since != nil {
-		query = query.Unscoped().
-			Where("(updated_at > ? OR deleted_at > ?)", *since, *since)
-	}
-	return query
-}
+	sql := "SELECT c.*, COUNT(*) OVER () AS total FROM (" +
+		strings.Join(branches, " UNION ALL ") +
+		") AS c ORDER BY COALESCE(c.deleted_at, c.updated_at) DESC LIMIT ?"
+	args = append(args, maxPendingChanges)
 
-// pendingRowsFor fetches the newest maxPendingChanges candidate rows of one
-// source. The order key is the time of the change the row will be reported
-// with (deletion time for a deleted row, otherwise its last update), so the
-// per-source pages merge into the correct overall newest-first list.
-func (s *SyncStatusService) pendingRowsFor(src pendingChangeSource, namespace string, since *time.Time) ([]pendingChangeRow, error) {
 	var rows []pendingChangeRow
-	err := s.pendingQueryFor(src, namespace, since).
-		Select(src.nameExpr + " AS name, id, created_at, updated_at, deleted_at").
-		Order("COALESCE(deleted_at, updated_at) DESC").
-		Limit(maxPendingChanges).
-		Scan(&rows).Error
-	if err != nil {
+	if err := s.db.Raw(sql, args...).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil
 }
 
-// pendingCountFor counts the candidate rows of one source.
-func (s *SyncStatusService) pendingCountFor(src pendingChangeSource, namespace string, since *time.Time) (int64, error) {
-	var n int64
-	err := s.pendingQueryFor(src, namespace, since).Count(&n).Error
-	return n, err
+// tableOf resolves the table a model maps to.
+func tableOf(db *gorm.DB, model interface{}) (string, error) {
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(model); err != nil {
+		return "", fmt.Errorf("pending changes: parse %T: %w", model, err)
+	}
+	return stmt.Schema.Table, nil
 }
 
 // EnsurePendingChangeIndexes creates the updated_at index each source table
@@ -203,11 +268,10 @@ func EnsurePendingChangeIndexes(db *gorm.DB) error {
 		return nil // tests build a Service without a database
 	}
 	for _, src := range pendingChangeSources {
-		stmt := &gorm.Statement{DB: db}
-		if err := stmt.Parse(src.model); err != nil {
-			return fmt.Errorf("pending changes: parse %s model: %w", src.typ, err)
+		table, err := tableOf(db, src.model)
+		if err != nil {
+			return err
 		}
-		table := stmt.Schema.Table
 		sql := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_updated_at ON %s (updated_at)", table, table)
 		if err := db.Exec(sql).Error; err != nil {
 			return fmt.Errorf("pending changes: index %s.updated_at: %w", table, err)
@@ -230,7 +294,7 @@ func classifyPendingChange(row pendingChangeRow, since *time.Time) (pendingChang
 		if row.DeletedAt.Valid {
 			return pendingChangeKind{}, false
 		}
-		return pendingChangeKind{kind: PendingChangeCreated, at: row.CreatedAt}, true
+		return pendingChangeKind{kind: PendingChangeCreated, at: row.CreatedAt.Time}, true
 	}
 	switch {
 	case row.DeletedAt.Valid && row.DeletedAt.Time.After(*since):
@@ -238,10 +302,10 @@ func classifyPendingChange(row pendingChangeRow, since *time.Time) (pendingChang
 	case row.DeletedAt.Valid:
 		// Deleted before the push: already gone from the edge's view.
 		return pendingChangeKind{}, false
-	case row.CreatedAt.After(*since):
-		return pendingChangeKind{kind: PendingChangeCreated, at: row.CreatedAt}, true
-	case row.UpdatedAt.After(*since):
-		return pendingChangeKind{kind: PendingChangeUpdated, at: row.UpdatedAt}, true
+	case row.CreatedAt.Time.After(*since):
+		return pendingChangeKind{kind: PendingChangeCreated, at: row.CreatedAt.Time}, true
+	case row.UpdatedAt.Time.After(*since):
+		return pendingChangeKind{kind: PendingChangeUpdated, at: row.UpdatedAt.Time}, true
 	}
 	return pendingChangeKind{}, false
 }

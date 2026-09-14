@@ -381,22 +381,38 @@ func (s *NotificationService) MarkAsRead(userID uint, notificationID uint) error
 // ListUserNotifications returns one page of the user's notifications,
 // newest first, with the total for that filter. unreadOnly restricts the
 // page and the total to unread ones.
-func (s *NotificationService) ListUserNotifications(userID uint, limit, offset int, unreadOnly bool) ([]models.Notification, int64, error) {
-	query := s.db.Model(&models.Notification{}).Where("user_id = ?", userID)
-	if unreadOnly {
-		query = query.Where("read = ?", false)
+// NotificationCounts is the size of a user's inbox: every notification,
+// and the unread ones.
+type NotificationCounts struct {
+	Total  int64
+	Unread int64
+}
+
+// ListUserNotifications returns one page of the user's notifications,
+// newest first, plus the inbox counts. With unreadOnly the page holds only
+// unread notifications and Total equals Unread. The counts come from one
+// aggregate query, the page from one select.
+func (s *NotificationService) ListUserNotifications(userID uint, limit, offset int, unreadOnly bool) ([]models.Notification, NotificationCounts, error) {
+	var counts NotificationCounts
+	err := s.db.Model(&models.Notification{}).
+		Select("COUNT(*) AS total, COALESCE(SUM(CASE WHEN read = ? THEN 1 ELSE 0 END), 0) AS unread", false).
+		Where("user_id = ?", userID).
+		Scan(&counts).Error
+	if err != nil {
+		return nil, counts, fmt.Errorf("error counting notifications: %v", err)
 	}
 
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, fmt.Errorf("error counting notifications: %v", err)
+	query := s.db.Where("user_id = ?", userID)
+	if unreadOnly {
+		query = query.Where("read = ?", false)
+		counts.Total = counts.Unread
 	}
 
 	notifications := make([]models.Notification, 0)
 	if err := query.Order("sent_at DESC").Limit(limit).Offset(offset).Find(&notifications).Error; err != nil {
-		return nil, 0, fmt.Errorf("error retrieving notifications: %v", err)
+		return nil, counts, fmt.Errorf("error retrieving notifications: %v", err)
 	}
-	return notifications, total, nil
+	return notifications, counts, nil
 }
 
 // GetUserNotifications retrieves notifications for a specific user

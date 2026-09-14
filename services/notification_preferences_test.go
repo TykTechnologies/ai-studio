@@ -111,16 +111,20 @@ func TestListUserNotifications_MetaAndMarkAsReadOwnership(t *testing.T) {
 		require.NoError(t, db.Create(&n).Error)
 	}
 
-	list, total, err := svc.ListUserNotifications(a.ID, 2, 0, false)
+	list, counts, err := svc.ListUserNotifications(a.ID, 2, 0, false)
 	require.NoError(t, err)
-	assert.Equal(t, int64(3), total)
+	assert.Equal(t, services.NotificationCounts{Total: 3, Unread: 2}, counts)
 	require.Len(t, list, 2)
 	assert.Equal(t, "a3", list[0].Title)
 
-	list, total, err = svc.ListUserNotifications(a.ID, 10, 0, true)
+	list, counts, err = svc.ListUserNotifications(a.ID, 10, 0, true)
 	require.NoError(t, err)
-	assert.Equal(t, int64(2), total)
+	assert.Equal(t, services.NotificationCounts{Total: 2, Unread: 2}, counts)
 	assert.Len(t, list, 2)
+
+	_, counts, err = svc.ListUserNotifications(424242, 10, 0, false)
+	require.NoError(t, err)
+	assert.Equal(t, services.NotificationCounts{}, counts, "an empty inbox counts as zero, not NULL")
 
 	var b1 models.Notification
 	require.NoError(t, db.Where("title = ?", "b1").First(&b1).Error)

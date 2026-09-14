@@ -51,26 +51,17 @@ func (h *NotificationHandlers) ListNotifications(c *gin.Context) {
 	unreadOnly := c.Query("unread") == "true"
 
 	currentUser := user.(*models.User)
-	notifications, total, err := h.notificationService.ListUserNotifications(currentUser.ID, limit, offset, unreadOnly)
+	notifications, counts, err := h.notificationService.ListUserNotifications(currentUser.ID, limit, offset, unreadOnly)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-	// An unread-only listing has already counted the unread rows.
-	unread := total
-	if !unreadOnly {
-		unread, err = h.notificationService.GetUnreadCount(currentUser.ID)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"data": notifications,
 		"meta": gin.H{
-			"total":  total,
-			"unread": unread,
+			"total":  counts.Total,
+			"unread": counts.Unread,
 			"limit":  limit,
 			"offset": offset,
 		},
