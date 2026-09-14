@@ -16,16 +16,22 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 
 const SecretForm = () => {
   const [formData, setFormData] = useState({
     var_name: "",
     value: "",
   });
+  const [loaded, setLoaded] = useState(false);
   const [valueModified, setValueModified] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [errors, setErrors] = useState({});
@@ -36,6 +42,13 @@ const SecretForm = () => {
   });
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Unsaved-changes tracking: the baseline is taken once the secret is on
+  // screen (or at once for a new secret); markSaved() runs before the
+  // post-save redirect so the guard stays quiet on the way out.
+  const { markSaved } = useUnsavedForm(formData, { ready: !id || loaded });
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/secrets"));
 
   useEffect(() => {
     if (id) {
@@ -51,6 +64,7 @@ const SecretForm = () => {
         var_name: secretData.var_name,
         value: secretData.value,
       });
+      setLoaded(true);
     } catch (error) {
       console.error("Error fetching secret", error);
       setSnackbar({
@@ -118,6 +132,7 @@ const SecretForm = () => {
         await apiClient.post("/secrets", secretData);
       }
 
+      markSaved();
       navigate("/admin/secrets", {
         state: {
           snackbar: {
@@ -215,13 +230,18 @@ const SecretForm = () => {
               </Box>
             </Grid>
             <Grid item xs={12}>
-              <PrimaryButton
-                variant="contained"
-                type="submit"
-                disabled={!formData.var_name || (!id && !formData.value)}
-              >
-                {id ? "Update secret" : "Add secret"}
-              </PrimaryButton>
+              <Box display="flex" gap={2}>
+                <SecondaryOutlineButton onClick={handleCancel}>
+                  Cancel
+                </SecondaryOutlineButton>
+                <PrimaryButton
+                  variant="contained"
+                  type="submit"
+                  disabled={!formData.var_name || (!id && !formData.value)}
+                >
+                  {id ? "Update secret" : "Add secret"}
+                </PrimaryButton>
+              </Box>
             </Grid>
           </Grid>
         </Box>

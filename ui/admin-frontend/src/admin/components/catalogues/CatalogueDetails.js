@@ -103,7 +103,7 @@ const CatalogueDetails = () => {
 
         <Divider sx={{ my: 3 }} />
 
-        <SectionTitle>LLMs in this Catalog</SectionTitle>
+        <SectionTitle>LLM providers in this catalog</SectionTitle>
         <List>
           {llms.length > 0 ? (
             llms.map((llm) => (
@@ -119,7 +119,7 @@ const CatalogueDetails = () => {
             ))
           ) : (
             <ListItem>
-              <ListItemText primary="No LLMs in this catalog" />
+              <ListItemText primary="No LLM providers in this catalog" />
             </ListItem>
           )}
         </List>

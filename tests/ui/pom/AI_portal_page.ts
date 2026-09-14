@@ -1,5 +1,4 @@
 import { Locator, Page, expect } from '@playwright/test';
-import { DropDownWrapper } from '@wrappers/DropDownWrapper';
 import { TableWrapper } from '@wrappers/TableWrapper';
 import { PageTemplate } from './Page_template';
 
@@ -22,8 +21,12 @@ export class AIPortalPage extends PageTemplate {
     readonly CreateappButton: Locator;
     readonly NameInput: Locator;
     readonly DescriptionInput: Locator;
-    readonly LlmDropDown: DropDownWrapper;
-    readonly AddLlmButton: Locator;
+    // The builder's resources are RelationshipPickers (compact): the add
+    // control is the Autocomplete labelled "Add LLM provider" / "Add data source" /
+    // "Add tool", selected items are chips with a "Remove {name}" icon.
+    readonly AddLlmInput: Locator;
+    readonly AddDataSourceInput: Locator;
+    readonly AddToolInput: Locator;
     readonly MonthlyBudgetInput: Locator;
     readonly CreateAppButton: Locator;
     readonly CancelButton: Locator;
@@ -55,8 +58,9 @@ export class AIPortalPage extends PageTemplate {
         this.CreateappButton = this.page.getByRole('button', { name: 'Create app' });
         this.NameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.DescriptionInput = this.page.getByRole('textbox', { name: 'Description' });
-        this.LlmDropDown = new DropDownWrapper(this.page.locator('form div').filter({ hasText: 'LLMs (Optional)Select' }).getByRole('combobox'), page);
-        this.AddLlmButton = this.page.getByRole('button', { name: 'Add' }).nth(1);
+        this.AddLlmInput = this.page.getByRole('combobox', { name: 'Add LLM provider' });
+        this.AddDataSourceInput = this.page.getByRole('combobox', { name: 'Add data source' });
+        this.AddToolInput = this.page.getByRole('combobox', { name: 'Add tool' });
         this.MonthlyBudgetInput = this.page.getByRole('spinbutton', { name: 'Monthly Budget' });
         this.CreateAppButton = this.page.getByRole('button', { name: 'Create app' });
         this.CancelButton = this.page.getByRole('button', { name: 'Cancel' });
@@ -82,11 +86,42 @@ export class AIPortalPage extends PageTemplate {
         await this.page.goto('/portal/apps');
     }
 
+    /** Chip for a resource currently selected in any of the builder's pickers. */
+    relationshipChip(name: string): Locator {
+        return this.page.getByTestId('relationship-picker').locator('.MuiChip-root').filter({ hasText: name });
+    }
+
+    /** Type into a picker's Autocomplete and pick the option; it becomes a chip at once. */
+    private async pickRelationship(input: Locator, name: string) {
+        await input.click();
+        await input.fill(name);
+        await this.page.getByRole('option', { name, exact: true }).click();
+        await this.relationshipChip(name).waitFor();
+    }
+
+    async addLlm(name: string) {
+        await this.pickRelationship(this.AddLlmInput, name);
+    }
+
+    async addDataSource(name: string) {
+        await this.pickRelationship(this.AddDataSourceInput, name);
+    }
+
+    async addTool(name: string) {
+        await this.pickRelationship(this.AddToolInput, name);
+    }
+
+    /** Remove a resource via its chip's delete icon. */
+    async removeRelationship(name: string) {
+        await this.page.getByLabel(`Remove ${name}`).click();
+        await this.relationshipChip(name).waitFor({ state: 'detached' });
+    }
+
     async createApp(params: AppParams) {
         await this.CreateappButton.click();
         await this.NameInput.fill(params.name);
         await this.DescriptionInput.fill(params.description);
-        await this.LlmDropDown.setValue(params.llm);
+        await this.addLlm(params.llm);
         if (params.monthlyBudget) {
             await this.MonthlyBudgetInput.fill(params.monthlyBudget);
         }

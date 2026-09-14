@@ -159,6 +159,18 @@ describe('TransferList Component', () => {
       />
     );
     
+    expect(screen.getByText('Loading more items...')).toBeInTheDocument();
+  });
+
+  test('uses itemLabel in the loading more copy', () => {
+    render(
+      <TransferList
+        isLoadingMore={true}
+        isSearching={false}
+        itemLabel="user"
+      />
+    );
+    
     expect(screen.getByText('Loading more users...')).toBeInTheDocument();
   });
 });

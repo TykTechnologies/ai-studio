@@ -33,11 +33,16 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
   StyledAccordion,
 } from "../../styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
@@ -61,11 +66,17 @@ const ModelRouterForm = () => {
     severity: "success",
   });
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const navigate = useNavigate();
   const { id } = useParams();
   const isEditMode = !!id;
   const { isEnterprise } = useEdition();
+
+  // Unsaved-changes tracking over the whole router, pools included.
+  const { markSaved } = useUnsavedForm(router, { ready: !isEditMode || loaded });
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/model-routers"));
 
   useEffect(() => {
     fetchLLMs();
@@ -97,6 +108,7 @@ const ModelRouterForm = () => {
         pools: data.attributes.pools || [],
       });
       setSlugManuallyEdited(true); // Don't auto-generate slug in edit mode
+      setLoaded(true);
     } catch (error) {
       console.error("Error fetching router:", error);
       setSnackbar({
@@ -366,6 +378,7 @@ const ModelRouterForm = () => {
         await apiClient.post("/model-routers", payload);
       }
 
+      markSaved();
       navigate("/admin/model-routers", {
         state: {
           snackbar: {
@@ -402,9 +415,14 @@ const ModelRouterForm = () => {
             {isEditMode ? "Edit Model Router" : "Create Model Router"}
           </Typography>
         </Box>
-        <PrimaryButton variant="contained" onClick={handleSubmit}>
-          {isEditMode ? "Update" : "Create"}
-        </PrimaryButton>
+        <Box sx={{ display: "flex", gap: 2 }}>
+          <SecondaryOutlineButton onClick={handleCancel}>
+            Cancel
+          </SecondaryOutlineButton>
+          <PrimaryButton variant="contained" onClick={handleSubmit}>
+            {isEditMode ? "Update" : "Create"}
+          </PrimaryButton>
+        </Box>
       </TitleBox>
 
       <ContentBox>

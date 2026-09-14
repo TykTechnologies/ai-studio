@@ -15,8 +15,7 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     await aiPortalPage.CreateANewAppButton.click();
     await aiPortalPage.NameInput.fill(app_name);
     await aiPortalPage.DescriptionInput.fill(app_description);
-    await aiPortalPage.LlmDropDown.setValue('Anthropic');
-    await aiPortalPage.AddLlmButton.click();
+    await aiPortalPage.addLlm('Anthropic');
     await aiPortalPage.CreateappButton.click();
     await aiPortalPage.ViewYourAppsButton.click();
     await aiPortalPage.Table.expectRowWithTextExists(app_name);
@@ -31,7 +30,7 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     await adminAppsPage.Table.clickRowByText(app_name);
     await adminAppsPage.ApproveThisAppButton.click();
     await adminAppsPage.expectPopupAppApproved();
-    await expect(page.getByText('Yes')).toBeVisible(); // checking if status changed to active
+    await adminAppsPage.expectDetailStatus('Active');
   });
 
   await test.step('Get key and secret', async () => {

@@ -91,5 +91,25 @@ export const teamsService = {
       console.error("Error updating team catalogs:", error);
       throw error;
     }
+  },
+
+  // Replaces the team's plugin resource access. `selections` is the map the
+  // GroupPluginResourcesSection reports: { "<pluginId>:<slug>": [instanceId] }.
+  updateGroupPluginResources: async (id, selections) => {
+    const resources = Object.entries(selections || {}).map(([key, instanceIds]) => {
+      const sep = key.indexOf(":");
+      return {
+        plugin_id: parseInt(key.slice(0, sep), 10),
+        resource_type_slug: key.slice(sep + 1),
+        instance_ids: instanceIds || [],
+      };
+    });
+    try {
+      const response = await apiClient.put(`/groups/${id}/plugin-resources`, { resources });
+      return response.data;
+    } catch (error) {
+      console.error("Error updating team plugin resources:", error);
+      throw error;
+    }
   }
 };

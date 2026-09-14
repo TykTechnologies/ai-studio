@@ -247,7 +247,7 @@ const AgentList = () => {
                   <StyledTableHeaderCell>Description</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Plugin</StyledTableHeaderCell>
                   <StyledTableHeaderCell>App</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Groups</StyledTableHeaderCell>
+                  <StyledTableHeaderCell>Teams</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Status</StyledTableHeaderCell>
                   <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                 </TableRow>

@@ -122,6 +122,7 @@ describe('UserDetails Component', () => {
                 name: 'Admin User',
                 email: 'admin@example.com',
                 is_admin: true,
+                role: 'Admin',
                 show_chat: true,
                 show_portal: true,
                 email_verified: true,
@@ -166,8 +167,8 @@ describe('UserDetails Component', () => {
     expect(screen.getByText('Admin User')).toBeInTheDocument();
     expect(screen.getByText('Email:')).toBeInTheDocument();
     expect(screen.getByText('admin@example.com')).toBeInTheDocument();
-    expect(screen.getByText('Admin:')).toBeInTheDocument();
-    expect(screen.getByText('Yes')).toBeInTheDocument();
+    expect(screen.getByText('Account type:')).toBeInTheDocument();
+    expect(screen.getByText('Admin')).toBeInTheDocument();
 
     // Check that the AccessToSSOConfig field is displayed for admin users
     // Check that the AccessToSSOConfig field is displayed for admin users
@@ -190,6 +191,7 @@ describe('UserDetails Component', () => {
                 name: 'Admin User',
                 email: 'admin@example.com',
                 is_admin: true,
+                role: 'Admin',
                 show_chat: true,
                 show_portal: true,
                 email_verified: true,
@@ -250,6 +252,7 @@ describe('UserDetails Component', () => {
                 name: 'Regular User',
                 email: 'user@example.com',
                 is_admin: false,
+                role: 'Developer',
                 show_chat: true,
                 show_portal: true,
                 email_verified: true,
@@ -294,8 +297,8 @@ describe('UserDetails Component', () => {
     expect(screen.getByText('Regular User')).toBeInTheDocument();
     expect(screen.getByText('Email:')).toBeInTheDocument();
     expect(screen.getByText('user@example.com')).toBeInTheDocument();
-    expect(screen.getByText('Admin:')).toBeInTheDocument();
-    expect(screen.getByText('No')).toBeInTheDocument();
+    expect(screen.getByText('Account type:')).toBeInTheDocument();
+    expect(screen.getByText('Developer')).toBeInTheDocument();
 
     // Check that the AccessToSSOConfig field is NOT displayed for non-admin users
     expect(screen.queryByText('Access to IdP configuration:')).not.toBeInTheDocument();

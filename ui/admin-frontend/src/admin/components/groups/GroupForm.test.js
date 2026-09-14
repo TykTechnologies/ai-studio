@@ -120,6 +120,20 @@ jest.mock('./components/GroupCatalogsSection', () => ({
   )
 }));
 
+jest.mock('./components/GroupPluginResourcesSection', () => ({
+  __esModule: true,
+  default: props => (
+    <div data-testid="mock-plugin-resources-section">
+      <button
+        data-testid="mock-change-plugin-resources"
+        onClick={() => props.onChange && props.onChange({ '7:vector-store': ['vs-1'] })}
+      >
+        Set Plugin Resources
+      </button>
+    </div>
+  )
+}));
+
 // Mock Material UI components
 jest.mock('@mui/material', () => ({
   Typography: ({ children, variant, ...props }) => (
@@ -203,6 +217,15 @@ jest.mock('../../styles/sharedStyles', () => ({
       {children}
     </button>
   ),
+  SecondaryOutlineButton: ({ children, onClick, ...props }) => (
+    <button
+      data-testid="mock-secondary-outline-button"
+      onClick={onClick}
+      {...props}
+    >
+      {children}
+    </button>
+  ),
 }));
 
 describe('GroupForm Component', () => {
@@ -212,11 +235,13 @@ describe('GroupForm Component', () => {
   const mockHandleDeleteClick = jest.fn();
   const mockHandleCancelDelete = jest.fn();
   const mockHandleConfirmDelete = jest.fn();
+  const mockHandleCancel = jest.fn();
   const mockSetName = jest.fn();
   const mockSetSelectedUsers = jest.fn();
   const mockSetSelectedCatalogs = jest.fn();
   const mockSetSelectedDataCatalogs = jest.fn();
   const mockSetSelectedToolCatalogs = jest.fn();
+  const mockSetPluginResourceSelections = jest.fn();
   
   const mockFetchUsers = jest.fn();
   const mockHandleUsersChange = jest.fn();
@@ -237,7 +262,9 @@ describe('GroupForm Component', () => {
     setSelectedDataCatalogs: mockSetSelectedDataCatalogs,
     selectedToolCatalogs: [{ value: '3', label: 'Tool Catalog 1' }],
     setSelectedToolCatalogs: mockSetSelectedToolCatalogs,
+    setPluginResourceSelections: mockSetPluginResourceSelections,
     handleSubmit: mockHandleSubmit,
+    handleCancel: mockHandleCancel,
     snackbar: { open: false, message: '', severity: 'success' },
     handleCloseSnackbar: mockHandleCloseSnackbar,
     warningDialogOpen: false,
@@ -300,6 +327,19 @@ describe('GroupForm Component', () => {
     // Delete button should not be present in create mode
     const dangerButtons = screen.queryAllByTestId('mock-danger-outline-button');
     expect(dangerButtons.length).toBe(0);
+  });
+
+  test('has a Cancel button that hands off to the form hook', () => {
+    require('react-router-dom').useParams.mockImplementation(() => ({}));
+
+    render(<GroupForm />);
+
+    const cancelButton = screen.getByTestId('mock-secondary-outline-button');
+    expect(cancelButton).toHaveTextContent('Cancel');
+    fireEvent.click(cancelButton);
+    expect(mockHandleCancel).toHaveBeenCalledTimes(1);
+    // Cancel is not a submit.
+    expect(mockHandleSubmit).not.toHaveBeenCalled();
   });
 
   test('renders the component in edit mode', () => {
@@ -541,6 +581,16 @@ describe('GroupForm Component', () => {
     
     // Check if the data catalogs change handlers were called
     expect(mockSetSelectedDataCatalogs).toHaveBeenCalled();
+  });
+
+  test('wires the plugin resources section into the form state', () => {
+    require('react-router-dom').useParams.mockImplementation(() => ({ id: '123' }));
+
+    render(<GroupForm />);
+
+    fireEvent.click(screen.getByTestId('mock-change-plugin-resources'));
+
+    expect(mockSetPluginResourceSelections).toHaveBeenCalledWith({ '7:vector-store': ['vs-1'] });
   });
 
   test('handles tool catalog selection changes', () => {

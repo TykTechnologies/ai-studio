@@ -127,7 +127,7 @@ describe("SubmissionDetail", () => {
     expect(screen.getByText("System Prompt")).toBeInTheDocument();
     expect(screen.getByText("Be helpful.")).toBeInTheDocument();
     expect(screen.getByText("agent-9f3c")).toBeInTheDocument();
-    expect(screen.queryByText("View in Catalogue")).not.toBeInTheDocument();
+    expect(screen.queryByText("View in Catalog")).not.toBeInTheDocument();
   });
 
   it("shows resource configuration for datasource", async () => {

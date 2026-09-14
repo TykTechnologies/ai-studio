@@ -178,8 +178,8 @@ const AppListView = () => {
                 <StyledTableHeaderCell>Name</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Description</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Status</StyledTableHeaderCell>
-                <StyledTableHeaderCell>Data Sources</StyledTableHeaderCell>
-                <StyledTableHeaderCell>LLMs</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Data sources</StyledTableHeaderCell>
+                <StyledTableHeaderCell>LLM providers</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Tools</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Actions</StyledTableHeaderCell>
               </TableRow>

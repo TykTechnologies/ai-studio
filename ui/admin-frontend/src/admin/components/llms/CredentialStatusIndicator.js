@@ -10,7 +10,7 @@ import LockIcon from "@mui/icons-material/Lock";
  *
  * A brand-new instance bootstraps OPENAI_KEY and ANTHROPIC_KEY as secrets with
  * *empty values*, then seeds providers pointing at them with active: true. The
- * list rendered a green "Proxied" dot regardless, so the instance looked fully
+ * list rendered a green Active dot regardless, so the instance looked fully
  * configured, the first real call failed, and nothing in the UI pointed at the
  * dangling reference. This is the signpost that was missing.
  *

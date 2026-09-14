@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import GroupCatalogsSection from './GroupCatalogsSection';
 
@@ -35,33 +35,7 @@ jest.mock('../../common/CollapsibleSection', () => ({
   )
 }));
 
-jest.mock('../../common/CustomSelectMany', () => ({
-  __esModule: true,
-  default: ({ value, onChange, options, disabled, chipVariant, ...props }) => (
-    <div
-      data-testid="custom-select-many"
-      data-disabled={disabled}
-      data-chip-variant={chipVariant}
-      // Expose onChange handler directly on the div for testing
-      onClick={() => {}}
-      {...props}
-    >
-      <select
-        multiple
-        value={value || []}
-        disabled={disabled}
-        onChange={(e) => onChange && onChange(Array.from(e.target.selectedOptions).map(o => o.value))}
-      >
-        {options && options.map(option => (
-          <option key={option.id} value={option.id}>
-            {option.name}
-          </option>
-        ))}
-      </select>
-      <span data-testid="options-count">{options ? options.length : 0}</span>
-    </div>
-  )
-}));
+jest.mock('../../common/relationship-picker', () => require('../../../../test-utils/component-mocks').relationshipPickerMock);
 
 jest.mock('../../common/CustomNote', () => ({
   __esModule: true,
@@ -75,33 +49,29 @@ jest.mock('../../common/CustomNote', () => ({
 // Component under test is imported at the top of the file
 
 describe('GroupCatalogsSection Component', () => {
-  // Mock data
+  // Mock data: catalogs are { value, label } pairs, as useCatalogsSelection shapes them.
   const mockCatalogs = [
-    { id: '1', name: 'LLM Catalog 1' },
-    { id: '2', name: 'LLM Catalog 2' },
+    { value: '1', label: 'LLM Catalog 1' },
+    { value: '2', label: 'LLM Catalog 2' },
   ];
-  
+
   const mockDataCatalogs = [
-    { id: '3', name: 'Data Catalog 1' },
-    { id: '4', name: 'Data Catalog 2' },
+    { value: '3', label: 'Data Catalog 1' },
+    { value: '4', label: 'Data Catalog 2' },
   ];
-  
+
   const mockToolCatalogs = [
-    { id: '5', name: 'Tool Catalog 1' },
-    { id: '6', name: 'Tool Catalog 2' },
+    { value: '5', label: 'Tool Catalog 1' },
+    { value: '6', label: 'Tool Catalog 2' },
   ];
-  
+
   const mockCallbacks = {
     onCatalogsChange: jest.fn(),
     onDataCatalogsChange: jest.fn(),
     onToolCatalogsChange: jest.fn(),
   };
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  test('renders a collapsible section with the correct title', () => {
+  const renderSection = (overrides = {}) =>
     render(
       <GroupCatalogsSection
         catalogs={mockCatalogs}
@@ -114,9 +84,17 @@ describe('GroupCatalogsSection Component', () => {
         selectedToolCatalogs={[]}
         onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
         features={{ feature_portal: true, feature_chat: true }}
+        {...overrides}
       />
     );
-    
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('renders a collapsible section with the correct title', () => {
+    renderSection();
+
     const section = screen.getByTestId('collapsible-section');
     expect(section).toBeInTheDocument();
     expect(section).toHaveAttribute('data-title', 'Add catalogs');
@@ -124,199 +102,105 @@ describe('GroupCatalogsSection Component', () => {
   });
 
   test('displays CustomNote when there are no catalogs', () => {
-    render(
-      <GroupCatalogsSection
-        catalogs={[]}
-        selectedCatalogs={[]}
-        onCatalogsChange={mockCallbacks.onCatalogsChange}
-        dataCatalogs={[]}
-        selectedDataCatalogs={[]}
-        onDataCatalogsChange={mockCallbacks.onDataCatalogsChange}
-        toolCatalogs={[]}
-        selectedToolCatalogs={[]}
-        onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
-        features={{ feature_portal: true, feature_chat: true }}
-      />
-    );
-    
+    renderSection({ catalogs: [], dataCatalogs: [], toolCatalogs: [] });
+
     const note = screen.getByTestId('custom-note');
     expect(note).toBeInTheDocument();
     expect(note).toHaveTextContent(
       'Currently, there are no catalogs available. To create a new one, please go to the Catalogs.'
     );
-    
-    // Verify the select components are not rendered
-    expect(screen.queryAllByTestId('custom-select-many')).toHaveLength(0);
+
+    // Verify the pickers are not rendered
+    expect(screen.queryAllByTestId('relationship-picker')).toHaveLength(0);
   });
 
-  test('renders three catalog sections when catalogs are available', () => {
-    render(
-      <GroupCatalogsSection
-        catalogs={mockCatalogs}
-        selectedCatalogs={[]}
-        onCatalogsChange={mockCallbacks.onCatalogsChange}
-        dataCatalogs={mockDataCatalogs}
-        selectedDataCatalogs={[]}
-        onDataCatalogsChange={mockCallbacks.onDataCatalogsChange}
-        toolCatalogs={mockToolCatalogs}
-        selectedToolCatalogs={[]}
-        onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
-        features={{ feature_portal: true, feature_chat: true }}
-      />
-    );
-    
+  test('renders three compact pickers when catalogs are available', () => {
+    renderSection();
+
     // Check that the note is not displayed
     expect(screen.queryByTestId('custom-note')).not.toBeInTheDocument();
-    
-    // Check if all three CustomSelectMany components are rendered
-    const selectComponents = screen.getAllByTestId('custom-select-many');
-    expect(selectComponents).toHaveLength(3);
-    
-    // Check section titles
-    const typographyElements = screen.getAllByTestId('typography');
-    expect(typographyElements.some(el => el.textContent === 'LLM providers catalogs')).toBeTruthy();
-    expect(typographyElements.some(el => el.textContent === 'Data sources catalogs')).toBeTruthy();
-    expect(typographyElements.some(el => el.textContent === 'Tools catalogs')).toBeTruthy();
+
+    // One compact RelationshipPicker per catalog type, headed by its label
+    const pickers = screen.getAllByTestId('relationship-picker');
+    expect(pickers).toHaveLength(3);
+    expect(pickers.map((p) => p.getAttribute('aria-label'))).toEqual([
+      'LLM providers catalogs',
+      'Data sources catalogs',
+      'Tools catalogs',
+    ]);
+    pickers.forEach((p) => expect(p).toHaveAttribute('data-variant', 'compact'));
+    expect(pickers.map((p) => p.getAttribute('data-item-label'))).toEqual([
+      'LLM catalog',
+      'data catalog',
+      'tool catalog',
+    ]);
   });
 
-  test('correctly passes options to CustomSelectMany components', () => {
-    render(
-      <GroupCatalogsSection
-        catalogs={mockCatalogs}
-        selectedCatalogs={[]}
-        onCatalogsChange={mockCallbacks.onCatalogsChange}
-        dataCatalogs={mockDataCatalogs}
-        selectedDataCatalogs={[]}
-        onDataCatalogsChange={mockCallbacks.onDataCatalogsChange}
-        toolCatalogs={mockToolCatalogs}
-        selectedToolCatalogs={[]}
-        onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
-        features={{ feature_portal: true, feature_chat: true }}
-      />
-    );
-    
-    const optionsCounts = screen.getAllByTestId('options-count');
-    
-    // Check if the correct number of options are passed to each CustomSelectMany
+  test('correctly passes options to the pickers', () => {
+    renderSection();
+
+    const optionsCounts = screen.getAllByTestId('relationship-picker-options-count');
+
+    // Check if the correct number of options are passed to each picker
     expect(optionsCounts[0].textContent).toBe('2'); // LLM catalogs
     expect(optionsCounts[1].textContent).toBe('2'); // Data catalogs
     expect(optionsCounts[2].textContent).toBe('2'); // Tool catalogs
   });
 
-  test('calls onChange callbacks when selections change', () => {
-    render(
-      <GroupCatalogsSection
-        catalogs={mockCatalogs}
-        selectedCatalogs={[]}
-        onCatalogsChange={mockCallbacks.onCatalogsChange}
-        dataCatalogs={mockDataCatalogs}
-        selectedDataCatalogs={[]}
-        onDataCatalogsChange={mockCallbacks.onDataCatalogsChange}
-        toolCatalogs={mockToolCatalogs}
-        selectedToolCatalogs={[]}
-        onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
-        features={{ feature_portal: true, feature_chat: true }}
-      />
-    );
-    
-    mockCallbacks.onCatalogsChange(['1']);
-    expect(mockCallbacks.onCatalogsChange).toHaveBeenCalled();
-    
-    mockCallbacks.onDataCatalogsChange(['3']);
-    expect(mockCallbacks.onDataCatalogsChange).toHaveBeenCalled();
-    
-    mockCallbacks.onToolCatalogsChange(['5']);
-    expect(mockCallbacks.onToolCatalogsChange).toHaveBeenCalled();
+  test('calls onChange callbacks with the full new selection when a picker changes', () => {
+    renderSection();
+
+    const addButtons = screen.getAllByTestId('relationship-picker-add');
+    fireEvent.click(addButtons[0]);
+    expect(mockCallbacks.onCatalogsChange).toHaveBeenCalledWith([mockCatalogs[0]]);
+
+    fireEvent.click(addButtons[1]);
+    expect(mockCallbacks.onDataCatalogsChange).toHaveBeenCalledWith([mockDataCatalogs[0]]);
+
+    fireEvent.click(addButtons[2]);
+    expect(mockCallbacks.onToolCatalogsChange).toHaveBeenCalledWith([mockToolCatalogs[0]]);
   });
 
-  test('correctly passes selected values to CustomSelectMany components', () => {
-    render(
-      <GroupCatalogsSection
-        catalogs={mockCatalogs}
-        selectedCatalogs={['1']}
-        onCatalogsChange={mockCallbacks.onCatalogsChange}
-        dataCatalogs={mockDataCatalogs}
-        selectedDataCatalogs={['3']}
-        onDataCatalogsChange={mockCallbacks.onDataCatalogsChange}
-        toolCatalogs={mockToolCatalogs}
-        selectedToolCatalogs={['5']}
-        onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
-        features={{ feature_portal: true, feature_chat: true }}
-      />
-    );
-    
-    const selectComponents = screen.getAllByTestId('custom-select-many');
-    
-    // Check data attributes to verify proper values are passed
-    // LLM catalogs
-    expect(selectComponents[0]).toHaveAttribute('data-chip-variant', 'llm');
-    const llmSelect = within(selectComponents[0]).getByRole('listbox');
-    expect(llmSelect).toHaveValue(['1']);
-    
-    // Data catalogs
-    expect(selectComponents[1]).toHaveAttribute('data-chip-variant', 'data');
-    const dataSelect = within(selectComponents[1]).getByRole('listbox');
-    expect(dataSelect).toHaveValue(['3']);
-    
-    // Tool catalogs
-    expect(selectComponents[2]).toHaveAttribute('data-chip-variant', 'tool');
-    const toolSelect = within(selectComponents[2]).getByRole('listbox');
-    expect(toolSelect).toHaveValue(['5']);
+  test('correctly passes selected values to the pickers, keyed by value', () => {
+    renderSection({
+      selectedCatalogs: [mockCatalogs[0]],
+      selectedDataCatalogs: [mockDataCatalogs[0]],
+      selectedToolCatalogs: [mockToolCatalogs[0]],
+    });
+
+    const items = screen.getAllByTestId('relationship-picker-item');
+    expect(items).toHaveLength(3);
+    expect(items[0]).toHaveAttribute('data-item-id', '1');
+    expect(items[0]).toHaveTextContent('LLM Catalog 1');
+    expect(items[1]).toHaveAttribute('data-item-id', '3');
+    expect(items[1]).toHaveTextContent('Data Catalog 1');
+    expect(items[2]).toHaveAttribute('data-item-id', '5');
+    expect(items[2]).toHaveTextContent('Tool Catalog 1');
   });
 
-  test('disables CustomSelectMany components when loading is true', () => {
-    render(
-      <GroupCatalogsSection
-        catalogs={mockCatalogs}
-        selectedCatalogs={[]}
-        onCatalogsChange={mockCallbacks.onCatalogsChange}
-        dataCatalogs={mockDataCatalogs}
-        selectedDataCatalogs={[]}
-        onDataCatalogsChange={mockCallbacks.onDataCatalogsChange}
-        toolCatalogs={mockToolCatalogs}
-        selectedToolCatalogs={[]}
-        onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
-        loading={true}
-        features={{ feature_portal: true, feature_chat: true }}
-      />
-    );
-    
-    const selectManyComponents = screen.getAllByTestId('custom-select-many');
-    selectManyComponents.forEach(component => {
+  test('disables the pickers when loading is true', () => {
+    renderSection({ loading: true });
+
+    screen.getAllByTestId('relationship-picker').forEach(component => {
       expect(component).toHaveAttribute('data-disabled', 'true');
     });
-    
-    const selectElements = screen.getAllByRole('listbox');
-    selectElements.forEach(select => {
-      expect(select).toBeDisabled();
+    screen.getAllByTestId('relationship-picker-add').forEach((button) => {
+      expect(button).toBeDisabled();
     });
   });
 
-  test('displays CustomNote when only some catalog types are empty', () => {
-    render(
-      <GroupCatalogsSection
-        catalogs={mockCatalogs}
-        selectedCatalogs={[]}
-        onCatalogsChange={mockCallbacks.onCatalogsChange}
-        dataCatalogs={[]}
-        selectedDataCatalogs={[]}
-        onDataCatalogsChange={mockCallbacks.onDataCatalogsChange}
-        toolCatalogs={[]}
-        selectedToolCatalogs={[]}
-        onToolCatalogsChange={mockCallbacks.onToolCatalogsChange}
-        features={{ feature_portal: true, feature_chat: true }}
-      />
-    );
-    
+  test('shows all three pickers when only some catalog types are empty', () => {
+    renderSection({ dataCatalogs: [], toolCatalogs: [] });
+
     // Even with only LLM catalogs present, we should see all three sections
     const note = screen.queryByTestId('custom-note');
     expect(note).not.toBeInTheDocument();
-    
-    const selectComponents = screen.getAllByTestId('custom-select-many');
-    expect(selectComponents).toHaveLength(3);
-    
+
+    const pickers = screen.getAllByTestId('relationship-picker');
+    expect(pickers).toHaveLength(3);
+
     // Check that the first section has options but others don't
-    const optionsCounts = screen.getAllByTestId('options-count');
+    const optionsCounts = screen.getAllByTestId('relationship-picker-options-count');
     expect(optionsCounts[0].textContent).toBe('2');
     expect(optionsCounts[1].textContent).toBe('0');
     expect(optionsCounts[2].textContent).toBe('0');
@@ -331,12 +215,12 @@ describe('GroupCatalogsSection Component', () => {
         features={{ feature_portal: true, feature_chat: true }}
       />
     );
-    
+
     // Should display the note when catalogs are undefined
     const note = screen.getByTestId('custom-note');
     expect(note).toBeInTheDocument();
-    
-    // Shouldn't have any select components
-    expect(screen.queryAllByTestId('custom-select-many')).toHaveLength(0);
+
+    // Shouldn't have any pickers
+    expect(screen.queryAllByTestId('relationship-picker')).toHaveLength(0);
   });
 });

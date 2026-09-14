@@ -164,7 +164,7 @@ const FilterList = memo(() => {
         <ContentBox>
           <EnterpriseFeatureBadge
             feature="Advanced Request Filtering & Scripting"
-            description="Create custom filters and middleware using Tengo scripting to process and modify data before it reaches the LLM or after tool execution. Remove PII, enforce policies, and transform data with powerful scripting capabilities."
+            description="Create custom filters using Tengo scripting to process and modify data before it reaches the LLM or after tool execution. Remove PII, enforce policies, and transform data with powerful scripting capabilities."
           />
         </ContentBox>
       </>

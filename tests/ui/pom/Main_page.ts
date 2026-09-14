@@ -43,8 +43,8 @@ export class MainPage {
         this.AccessButton = this.page.getByRole('button', { name: 'Access' });
         this.SettingsButton = this.page.getByRole('button', { name: 'Settings' });
         this.UsersLink = this.page.getByRole('link', { name: 'Users' });
-        this.UserGroupsLink = this.page.getByRole('link', { name: 'User groups' });
-        this.FiltersMiddlewareLink = this.page.getByRole('link', { name: 'Filters & Middleware' });
+        this.UserGroupsLink = this.page.getByRole('link', { name: 'Teams' });
+        this.FiltersMiddlewareLink = this.page.getByRole('link', { name: 'Filters' });
         this.SecretsLink = this.page.getByRole('link', { name: 'Secrets' });
         this.AiPortalButton = this.page.getByRole('button', { name: 'AI Portal' });
         this.AppsLink = this.page.getByRole('link', { name: 'Apps' });

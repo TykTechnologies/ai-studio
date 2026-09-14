@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
 import {
   TextField,
@@ -13,7 +13,6 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Chip,
   Switch,
   FormControlLabel,
   InputAdornment,
@@ -25,13 +24,33 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
   StyledAccordion,
 } from "../../styles/sharedStyles";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
+import RelationshipPicker from "../common/relationship-picker";
 import { useEdition } from "../../context/EditionContext";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
+
+// The app stores relationships as id arrays (llm_ids, datasource_ids,
+// tool_ids, plugin resource instance ids) and the API payload keeps that
+// shape. The RelationshipPicker works on full items, so these two helpers
+// translate at the edge: ids -> items for `value`, items -> ids on change. An
+// id whose object is not in the loaded list (deleted, or the list has not
+// arrived yet) is kept as a placeholder so saving never silently drops it.
+const itemsForIds = (ids, list, idOf, placeholder) =>
+  (ids || []).map((id) => {
+    const found = (list || []).find((item) => String(idOf(item)) === String(id));
+    return found || placeholder(id);
+  });
+
+const jsonApiName = (item) => item?.attributes?.name ?? String(item?.id ?? "");
 
 const AppForm = () => {
   const [app, setApp] = useState({
@@ -56,6 +75,7 @@ const AppForm = () => {
   const [pluginResourceTypes, setPluginResourceTypes] = useState([]);
   const [pluginResourceInstances, setPluginResourceInstances] = useState({}); // { "pluginId:slug": [...instances] }
   const [pluginResourceSelections, setPluginResourceSelections] = useState({}); // { "pluginId:slug": [...selectedIds] }
+  const [loaded, setLoaded] = useState(false);
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -65,6 +85,17 @@ const AppForm = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { isEnterprise } = useEdition(); // Get edition info
+
+  // Unsaved-changes tracking over every field the form saves. The credential
+  // "Active" switch is deliberately absent: it PATCHes on click and is
+  // labelled as such, so it must never make the form look dirty.
+  const dirtyValues = useMemo(
+    () => ({ app, metadataJSON, pluginResourceSelections }),
+    [app, metadataJSON, pluginResourceSelections],
+  );
+  const { markSaved } = useUnsavedForm(dirtyValues, { ready: !id || loaded });
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/apps"));
 
   const fetchCredential = useCallback(async (credentialId) => {
     try {
@@ -116,6 +147,8 @@ const AppForm = () => {
         message: "Failed to fetch app details",
         severity: "error",
       });
+    } finally {
+      setLoaded(true);
     }
   }, [id, fetchCredential]);
 
@@ -255,10 +288,24 @@ const AppForm = () => {
     setApp(prev => ({ ...prev, budget_start_date: value }));
   };
 
-  const handleMultiSelectChange = (e) => {
-    const { name, value } = e.target;
-    setApp({ ...app, [name]: value });
+  // A RelationshipPicker hands back the full selected items; the form keeps
+  // the id array the API expects.
+  const handleRelationshipChange = (name) => (items) => {
+    setApp((prev) => ({ ...prev, [name]: items.map((item) => String(item.id)) }));
   };
+
+  const selectedLLMs = useMemo(
+    () => itemsForIds(app.llm_ids, llms, (l) => l.id, (id) => ({ id, attributes: { name: String(id) } })),
+    [app.llm_ids, llms],
+  );
+  const selectedDatasources = useMemo(
+    () => itemsForIds(app.datasource_ids, datasources, (d) => d.id, (id) => ({ id, attributes: { name: String(id) } })),
+    [app.datasource_ids, datasources],
+  );
+  const selectedTools = useMemo(
+    () => itemsForIds(app.tool_ids, availableTools, (t) => t.id, (id) => ({ id, attributes: { name: String(id) } })),
+    [app.tool_ids, availableTools],
+  );
 
   const handleNamespaceChange = (namespaces) => {
     // Convert array to comma-delimited string, or empty string for global
@@ -331,6 +378,7 @@ const AppForm = () => {
         await apiClient.post("/apps", appData);
       }
 
+      markSaved();
       navigate("/admin/apps", {
         state: { snackbar: { message: id ? "App updated successfully" : "App created successfully", severity: "success" } },
       });
@@ -415,35 +463,14 @@ const AppForm = () => {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel id="appform-llms-label">LLMs</InputLabel>
-                <Select
-                  labelId="appform-llms-label"
-                  multiple
-                  name="llm_ids"
-                  value={app.llm_ids}
-                  onChange={handleMultiSelectChange}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {selected.map((value) => {
-                        const llm = llms.find((l) => l.id === value);
-                        return (
-                          <Chip
-                            key={value}
-                            label={llm ? llm.attributes.name : value}
-                          />
-                        );
-                      })}
-                    </Box>
-                  )}
-                >
-                  {llms.map((llm) => (
-                    <MenuItem key={llm.id} value={llm.id.toString()}>
-                      {llm.attributes.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <RelationshipPicker
+                label="LLM providers"
+                itemLabel="LLM provider"
+                value={selectedLLMs}
+                onChange={handleRelationshipChange("llm_ids")}
+                options={llms}
+                getOptionLabel={jsonApiName}
+              />
             </Grid>
             <Grid item xs={12}>
               <Grid container spacing={2}>
@@ -508,138 +535,59 @@ const AppForm = () => {
               </Grid>
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel id="appform-datasources-label">Datasources</InputLabel>
-                <Select
-                  labelId="appform-datasources-label"
-                  multiple
-                  name="datasource_ids"
-                  value={app.datasource_ids}
-                  onChange={handleMultiSelectChange}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {selected.map((value) => {
-                        const datasource = datasources.find(
-                          (ds) => ds.id === value,
-                        );
-                        return (
-                          <Chip
-                            key={value}
-                            label={
-                              datasource ? datasource.attributes.name : value
-                            }
-                          />
-                        );
-                      })}
-                    </Box>
-                  )}
-                >
-                  {datasources.map((datasource) => (
-                    <MenuItem
-                      key={datasource.id}
-                      value={datasource.id.toString()}
-                    >
-                      {datasource.attributes.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <RelationshipPicker
+                label="Data sources"
+                itemLabel="data source"
+                value={selectedDatasources}
+                onChange={handleRelationshipChange("datasource_ids")}
+                options={datasources}
+                getOptionLabel={jsonApiName}
+              />
             </Grid>
             <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel id="appform-tools-label">Tools</InputLabel>
-                <Select
-                  labelId="appform-tools-label"
-                  multiple
-                  name="tool_ids"
-                  value={app.tool_ids}
-                  onChange={handleMultiSelectChange}
-                  renderValue={(selected) => (
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {selected.map((value) => {
-                        const tool = availableTools.find(
-                          (t) => t.id.toString() === value,
-                        );
-                        return (
-                          <Chip
-                            key={value}
-                            label={
-                              tool ? tool.attributes.name : value
-                            }
-                          />
-                        );
-                      })}
-                    </Box>
-                  )}
-                >
-                  {availableTools.map((tool) => (
-                    <MenuItem
-                      key={tool.id}
-                      value={tool.id.toString()}
-                    >
-                      {tool.attributes.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <RelationshipPicker
+                label="Tools"
+                itemLabel="tool"
+                value={selectedTools}
+                onChange={handleRelationshipChange("tool_ids")}
+                options={availableTools}
+                getOptionLabel={jsonApiName}
+              />
             </Grid>
 
-            {/* Dynamic Plugin Resource Type Sections */}
+            {/* Dynamic Plugin Resource Type Sections: one picker per resource
+                type, keyed "pluginId:slug". Selections stay as instance-id
+                arrays so the plugin_resources payload is unchanged. */}
             {pluginResourceTypes.map((rt) => {
               const key = `${rt.plugin_id}:${rt.slug}`;
               const instances = pluginResourceInstances[key] || [];
-              const selected = pluginResourceSelections[key] || [];
-              // This renders inside a map, so a literal label id would repeat
-              // once per resource type and leave every label after the first
-              // pointing at the first select.
-              const labelId = `appform-plugin-resource-${key.replace(/[^a-zA-Z0-9_-]/g, "-")}-label`;
+              const selected = itemsForIds(
+                pluginResourceSelections[key],
+                instances,
+                (inst) => inst.id,
+                (instId) => ({ id: instId, name: String(instId) }),
+              );
 
               return (
                 <Grid item xs={12} key={key}>
-                  <FormControl fullWidth>
-                    <InputLabel id={labelId}>{rt.name}</InputLabel>
-                    <Select
-                      labelId={labelId}
-                      multiple
-                      value={selected}
-                      onChange={(e) => {
-                        setPluginResourceSelections((prev) => ({
-                          ...prev,
-                          [key]: e.target.value,
-                        }));
-                      }}
-                      renderValue={(sel) => (
-                        <Box
-                          sx={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: 0.5,
-                          }}
-                        >
-                          {sel.map((val) => {
-                            const inst = instances.find(
-                              (i) => i.id === val,
-                            );
-                            return (
-                              <Chip
-                                key={val}
-                                label={inst ? inst.name : val}
-                              />
-                            );
-                          })}
-                        </Box>
-                      )}
-                    >
-                      {instances.map((inst) => (
-                        <MenuItem key={inst.id} value={inst.id}>
-                          {inst.name}
-                          {rt.has_privacy_score &&
-                            inst.privacy_score > 0 &&
-                            ` (Privacy: ${inst.privacy_score})`}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+                  <RelationshipPicker
+                    label={rt.name}
+                    itemLabel={rt.name.toLowerCase()}
+                    value={selected}
+                    onChange={(items) => {
+                      setPluginResourceSelections((prev) => ({
+                        ...prev,
+                        [key]: items.map((inst) => inst.id),
+                      }));
+                    }}
+                    options={instances}
+                    getOptionLabel={(inst) => inst?.name ?? String(inst?.id ?? "")}
+                    getOptionSecondary={(inst) =>
+                      rt.has_privacy_score && inst.privacy_score > 0
+                        ? `Privacy: ${inst.privacy_score}`
+                        : undefined
+                    }
+                  />
                 </Grid>
               );
             })}
@@ -690,8 +638,19 @@ const AppForm = () => {
                           color="primary"
                         />
                       }
-                      label="Active"
+                      label="Credentials active (approved)"
                     />
+                    {/* This switch PATCHes the credential on click, unlike
+                        the rest of the form which waits for Update (UX
+                        review F-03). Say so where the control is. */}
+                    <Typography
+                      variant="bodySmallDefault"
+                      color="text.defaultSubdued"
+                      component="div"
+                      data-testid="credential-active-caption"
+                    >
+                      Applies immediately
+                    </Typography>
                   </Grid>
                 </Grid>
               </AccordionDetails>
@@ -741,7 +700,10 @@ const AppForm = () => {
             </AccordionDetails>
           </StyledAccordion>
 
-          <Box mt={4}>
+          <Box mt={4} display="flex" gap={2}>
+            <SecondaryOutlineButton onClick={handleCancel}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryButton variant="contained" type="submit">
               {id ? "Update app" : "Add app"}
             </PrimaryButton>

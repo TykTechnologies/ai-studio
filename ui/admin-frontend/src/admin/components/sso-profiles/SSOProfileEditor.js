@@ -19,10 +19,15 @@ import {
   PrimaryButton,
   SecondaryLinkButton,
   DangerOutlineButton,
+  SecondaryOutlineButton,
   ResponsiveTitleBox,
   TitleContentBox,
   ActionButtonsBox
 } from "../../styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 import { CACHE_KEYS } from "../../utils/constants";
 
 const SSOProfileEditor = () => {
@@ -42,6 +47,12 @@ const SSOProfileEditor = () => {
     severity: "success",
   });
   const [warningDialogOpen, setWarningDialogOpen] = useState(false);
+
+  // Unsaved-changes tracking on the editor text; the baseline is taken once
+  // an existing profile has loaded (at once for a new one).
+  const { markSaved } = useUnsavedForm({ editorContent }, { ready: !loading });
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/sso-profiles"));
 
   const fetchProfileData = useCallback(async () => {
     try {
@@ -75,7 +86,8 @@ const SSOProfileEditor = () => {
           message: "Identity provider profile updated successfully",
           timestamp: Date.now()
         }));
-        
+
+        markSaved();
         navigate("/admin/sso-profiles");
       } else {
         await apiClient.post("/sso-profiles", payload);
@@ -83,10 +95,11 @@ const SSOProfileEditor = () => {
         localStorage.setItem(CACHE_KEYS.SSO_NOTIFICATION, JSON.stringify({
           operation: "create",
           title: "Your Identity provider profile has been created!",
-          message: "After users register with SSO, you'll need to assign them a role in their user details to control their access and permissions.",
+          message: "After users register with SSO, you'll need to assign them a role or account type in their user details to control their access and permissions.",
           timestamp: Date.now()
         }));
 
+        markSaved();
         navigate("/admin/sso-profiles");
       }
     } catch (error) {
@@ -124,7 +137,9 @@ const SSOProfileEditor = () => {
         message: "Identity provider profile deleted successfully",
         timestamp: Date.now()
       }));
-      
+
+      // The profile is gone; whatever was typed can no longer be saved.
+      markSaved();
       navigate("/admin/sso-profiles");
     } catch (error) {
       console.error("Error deleting Identity provider profile", error);
@@ -186,6 +201,9 @@ const SSOProfileEditor = () => {
                 Delete profile
               </DangerOutlineButton>
             )}
+            <SecondaryOutlineButton onClick={handleCancel}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryButton
               variant="contained"
               onClick={handleSave}

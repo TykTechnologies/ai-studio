@@ -223,7 +223,7 @@ const ChatList = () => {
                     >
                       LLM Settings
                     </StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Groups</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Teams</StyledTableHeaderCell>
                     <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>
                 </TableHead>

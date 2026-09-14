@@ -1,11 +1,15 @@
 import React, { useState } from "react";
 import { Box, Typography, CircularProgress } from "@mui/material";
 import ActionModal from "../../../components/common/ActionModal";
-import CustomSelectMany from "../../../components/common/CustomSelectMany";
+import RelationshipPicker from "../../../components/common/relationship-picker";
 import { useCatalogsModal } from "../hooks/useCatalogsModal";
 import { teamsService } from "../../../services/teamsService";
 import { calculateGroupCatalogPayload } from "../../../services/utils/teamsServiceUtils";
 import { getFeatureFlags } from "../../../utils/featureUtils";
+
+// Catalog options and selections are `{ value, label }` pairs (see
+// useCatalogsSelection), hence idField="value" and the label accessor.
+const catalogLabel = (catalog) => catalog?.label ?? "";
 
 const ManageGroupCatalogsModal = ({ 
   open, 
@@ -79,43 +83,43 @@ const ManageGroupCatalogsModal = ({
           
           {isPortalEnabled && (
             <Box sx={{ mb: 3 }}>
-              <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
-                LLM providers catalogs
-              </Typography>
-              <CustomSelectMany
+              <RelationshipPicker
+                label="LLM providers catalogs"
+                itemLabel="LLM catalog"
+                idField="value"
                 value={selectedCatalogs}
                 onChange={setSelectedCatalogs}
                 options={catalogs}
+                getOptionLabel={catalogLabel}
                 disabled={saving}
-                chipVariant="llm"
               />
             </Box>
           )}
           
           <Box sx={{ mb: 3 }}>
-            <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
-              Data sources catalogs
-            </Typography>
-            <CustomSelectMany
+            <RelationshipPicker
+              label="Data sources catalogs"
+              itemLabel="data catalog"
+              idField="value"
               value={selectedDataCatalogs}
               onChange={setSelectedDataCatalogs}
               options={dataCatalogs}
+              getOptionLabel={catalogLabel}
               disabled={saving}
-              chipVariant="data"
             />
           </Box>
           
           {isChatEnabled && (
             <Box sx={{ mb: 2 }}>
-              <Typography variant="headingSmall" color="text.primary" sx={{ mb: 1 }}>
-                Tools catalogs
-              </Typography>
-              <CustomSelectMany
+              <RelationshipPicker
+                label="Tools catalogs"
+                itemLabel="tool catalog"
+                idField="value"
                 value={selectedToolCatalogs}
                 onChange={setSelectedToolCatalogs}
                 options={toolCatalogs}
+                getOptionLabel={catalogLabel}
                 disabled={saving}
-                chipVariant="tool"
               />
             </Box>
           )}

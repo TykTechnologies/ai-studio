@@ -15,10 +15,15 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import Editor from "react-simple-code-editor";
 import { highlight, languages } from "prismjs/components/prism-core";
@@ -42,8 +47,24 @@ const FilterForm = () => {
     message: "",
     severity: "success",
   });
+  const [loaded, setLoaded] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Unsaved-changes tracking over the editable fields only (the fetched
+  // filter also carries ids and timestamps, which never change here).
+  const { markSaved } = useUnsavedForm(
+    {
+      name: filter.name,
+      description: filter.description,
+      script: filter.script,
+      response_filter: filter.response_filter,
+      namespace: filter.namespace,
+    },
+    { ready: !id || loaded }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/filters"));
 
   useEffect(() => {
     if (id) {
@@ -61,6 +82,7 @@ const FilterForm = () => {
         response_filter: filterData.response_filter || false, // Response filter flag
         namespace: filterData.namespace || "",
       });
+      setLoaded(true);
     } catch (error) {
       console.error("Error fetching filter", error);
       setSnackbar({
@@ -124,6 +146,7 @@ const FilterForm = () => {
         await apiClient.post("/filters", filterData);
       }
 
+      markSaved();
       navigate("/admin/filters", {
         state: {
           snackbar: {
@@ -268,7 +291,10 @@ const FilterForm = () => {
             defaultExpanded={false}
           />
 
-          <Box mt={4}>
+          <Box mt={4} display="flex" gap={2}>
+            <SecondaryOutlineButton onClick={handleCancel}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryButton variant="contained" type="submit">
               {id ? "Update filter" : "Add filter"}
             </PrimaryButton>

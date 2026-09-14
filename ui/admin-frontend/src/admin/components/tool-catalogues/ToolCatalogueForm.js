@@ -3,26 +3,25 @@ import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import {
   TextField,
-  Button,
   Box,
   Typography,
   CircularProgress,
   Snackbar,
   Alert,
-  Chip,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { commitPendingSelection } from "../../utils/pendingSelection";
+import RelationshipPicker from "../common/relationship-picker";
 import {
   SecondaryLinkButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 
 const ToolCatalogueForm = () => {
   const [catalogue, setCatalogue] = useState({
@@ -32,14 +31,17 @@ const ToolCatalogueForm = () => {
     icon: "",
   });
   const [tools, setTools] = useState([]);
-  const [removedTools, setRemovedTools] = useState([]);
   const [availableTools, setAvailableTools] = useState([]);
-  const [selectedTool, setSelectedTool] = useState("");
   const [tags, setTags] = useState([]);
-  const [removedTags, setRemovedTags] = useState([]);
   const [availableTags, setAvailableTags] = useState([]);
-  const [selectedTag, setSelectedTag] = useState("");
+  // The membership as loaded from the server, so save can diff against it
+  // instead of tracking removals as they happen.
+  const [loadedTools, setLoadedTools] = useState([]);
+  const [loadedTags, setLoadedTags] = useState([]);
   const [loading, setLoading] = useState(false);
+  // True once an existing catalog is on screen (`loading` here is the save
+  // spinner, not the fetch).
+  const [loaded, setLoaded] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -48,6 +50,21 @@ const ToolCatalogueForm = () => {
 
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Unsaved-changes tracking: the editable fields plus both pickers.
+  const { markSaved } = useUnsavedForm(
+    {
+      name: catalogue.name,
+      short_description: catalogue.short_description,
+      long_description: catalogue.long_description,
+      icon: catalogue.icon,
+      toolIds: tools.map((tool) => String(tool.id)).sort(),
+      tagIds: tags.map((tag) => String(tag.id)).sort(),
+    },
+    { ready: !id || loaded }
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/catalogs/tools"));
 
   useEffect(() => {
     if (id) {
@@ -64,6 +81,9 @@ const ToolCatalogueForm = () => {
         setCatalogue(response.data.data.attributes);
         setTools(response.data.data.attributes.tools || []);
         setTags(response.data.data.attributes.tags || []);
+        setLoadedTools(response.data.data.attributes.tools || []);
+        setLoadedTags(response.data.data.attributes.tags || []);
+        setLoaded(true);
       } else {
         throw new Error("Unexpected API response structure");
       }
@@ -98,22 +118,10 @@ const ToolCatalogueForm = () => {
     e.preventDefault();
     setLoading(true);
 
-    // The + buttons are accelerators, not the commit. Fold in anything left in
-    // either picker rather than silently saving a catalogue without it.
-    const desiredTools = commitPendingSelection(
-      tools,
-      selectedTool,
-      availableTools,
-    );
-    const desiredTags = commitPendingSelection(tags, selectedTag, availableTags);
-    if (desiredTools !== tools) {
-      setTools(desiredTools);
-      setSelectedTool("");
-    }
-    if (desiredTags !== tags) {
-      setTags(desiredTags);
-      setSelectedTag("");
-    }
+    // The pickers add to their lists the moment an option is chosen; there is
+    // no pending "+" step, so what is on screen is exactly what gets saved.
+    const desiredTools = tools;
+    const desiredTags = tags;
 
     const catalogueData = {
       data: {
@@ -147,6 +155,7 @@ const ToolCatalogueForm = () => {
       await updateTools(newCatalogueId, desiredTools);
       await updateTags(newCatalogueId, desiredTags);
 
+      markSaved();
       navigate("/admin/catalogs/tools", {
         state: { snackbar: { message: `Tool catalogue ${id ? "updated" : "created"} successfully`, severity: "success" } },
       });
@@ -162,20 +171,23 @@ const ToolCatalogueForm = () => {
     }
   };
 
-  // Takes the desired list explicitly so the caller can include a selection the
-  // user picked but never added with the + button.
+  // Diffs the desired list against what was loaded: removes what is gone and
+  // adds what is new. Re-posting an existing member is avoided so the save is
+  // idempotent.
   const updateTools = async (catalogueId, desiredTools) => {
     try {
       // Remove tools
-      for (const toolId of removedTools) {
-        await apiClient.delete(
-          `/tool-catalogues/${catalogueId}/tools/${toolId}`,
-        );
+      for (const tool of loadedTools) {
+        if (!desiredTools.find((t) => t.id === tool.id)) {
+          await apiClient.delete(
+            `/tool-catalogues/${catalogueId}/tools/${tool.id}`,
+          );
+        }
       }
 
       // Add new tools
       for (const tool of desiredTools) {
-        if (!tool.id.startsWith("temp_")) {
+        if (!loadedTools.find((t) => t.id === tool.id)) {
           await apiClient.post(`/tool-catalogues/${catalogueId}/tools`, {
             data: { id: tool.id, type: "Tool" },
           });
@@ -190,13 +202,15 @@ const ToolCatalogueForm = () => {
   const updateTags = async (catalogueId, desiredTags) => {
     try {
       // Remove tags
-      for (const tagId of removedTags) {
-        await apiClient.delete(`/tool-catalogues/${catalogueId}/tags/${tagId}`);
+      for (const tag of loadedTags) {
+        if (!desiredTags.find((t) => t.id === tag.id)) {
+          await apiClient.delete(`/tool-catalogues/${catalogueId}/tags/${tag.id}`);
+        }
       }
 
       // Add new tags
       for (const tag of desiredTags) {
-        if (!tag.id.startsWith("temp_")) {
+        if (!loadedTags.find((t) => t.id === tag.id)) {
           await apiClient.post(`/tool-catalogues/${catalogueId}/tags`, {
             data: { id: tag.id, type: "Tag" },
           });
@@ -205,36 +219,6 @@ const ToolCatalogueForm = () => {
     } catch (error) {
       console.error(`Error updating tags for catalogue ${catalogueId}`, error);
       throw error;
-    }
-  };
-
-  const handleAddTool = () => {
-    const next = commitPendingSelection(tools, selectedTool, availableTools);
-    if (next !== tools) {
-      setTools(next);
-      setSelectedTool("");
-    }
-  };
-
-  const handleRemoveTool = (toolId) => {
-    setTools(tools.filter((t) => t.id !== toolId));
-    if (!toolId.startsWith("temp_")) {
-      setRemovedTools([...removedTools, toolId]);
-    }
-  };
-
-  const handleAddTag = () => {
-    const next = commitPendingSelection(tags, selectedTag, availableTags);
-    if (next !== tags) {
-      setTags(next);
-      setSelectedTag("");
-    }
-  };
-
-  const handleRemoveTag = (tagId) => {
-    setTags(tags.filter((t) => t.id !== tagId));
-    if (!tagId.startsWith("temp_")) {
-      setRemovedTags([...removedTags, tagId]);
     }
   };
 
@@ -253,7 +237,7 @@ const ToolCatalogueForm = () => {
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate("/admin/catalogs/tools")}
+          onClick={handleCancel}
           color="inherit"
         >
           Back to catalogs
@@ -300,98 +284,47 @@ const ToolCatalogueForm = () => {
             onChange={handleChange}
           />
 
-          <Typography variant="h6" sx={{ mt: 2 }}>
-            Tools
-          </Typography>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
-            {tools.map((tool) => (
-              <Chip
-                key={tool.id}
-                label={tool.attributes.name}
-                onDelete={() => handleRemoveTool(tool.id)}
-              />
-            ))}
-          </Box>
-          <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-            <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel id="toolcatalogueform-add-tool-label">Add Tool</InputLabel>
-              <Select
-                labelId="toolcatalogueform-add-tool-label"
-                value={selectedTool}
-                onChange={(e) => setSelectedTool(e.target.value)}
-                label="Add Tool"
-              >
-                {availableTools
-                  .filter((t) => !tools.find((tool) => tool.id === t.id))
-                  .map((tool) => (
-                    <MenuItem key={tool.id} value={tool.id}>
-                      {tool.attributes.name}
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-            <Button
-              variant="contained"
-              onClick={handleAddTool}
-              aria-label="Add tool to catalogue"
-            >
-              Add
-            </Button>
+          <Box sx={{ mt: 3 }}>
+            <RelationshipPicker
+              label="Tools in this catalog"
+              itemLabel="tool"
+              value={tools}
+              onChange={setTools}
+              options={availableTools}
+              getOptionLabel={(tool) => tool.attributes?.name ?? ""}
+            />
           </Box>
 
-          <Typography variant="h6" sx={{ mt: 2 }}>
-            Tags
-          </Typography>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 2 }}>
-            {tags.map((tag) => (
-              <Chip
-                key={tag.id}
-                label={tag.attributes.name}
-                onDelete={() => handleRemoveTag(tag.id)}
-              />
-            ))}
-          </Box>
-          <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-            <FormControl fullWidth sx={{ mr: 1 }}>
-              <InputLabel id="toolcatalogueform-add-tag-label">Add Tag</InputLabel>
-              <Select
-                labelId="toolcatalogueform-add-tag-label"
-                value={selectedTag}
-                onChange={(e) => setSelectedTag(e.target.value)}
-                label="Add Tag"
-              >
-                {availableTags
-                  .filter((t) => !tags.find((tag) => tag.id === t.id))
-                  .map((tag) => (
-                    <MenuItem key={tag.id} value={tag.id}>
-                      {tag.attributes.name}
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-            <Button
-              variant="contained"
-              onClick={handleAddTag}
-              aria-label="Add tag to catalogue"
-            >
-              Add
-            </Button>
+          <Box sx={{ mt: 3, mb: 3 }}>
+            <RelationshipPicker
+              label="Tags"
+              itemLabel="tag"
+              value={tags}
+              onChange={setTags}
+              options={availableTags}
+              getOptionLabel={(tag) => tag.attributes?.name ?? ""}
+            />
           </Box>
 
-          <PrimaryButton
-            type="submit"
-            variant="contained"
-            color="primary"
-            disabled={loading}
-          >
-            {loading ? (
-              <CircularProgress size={24} />
-            ) : id ? (
-              "Update catalog"
-            ) : (
-              "Create catalog"
-            )}
-          </PrimaryButton>
+          <Box display="flex" gap={2}>
+            <SecondaryOutlineButton onClick={handleCancel} disabled={loading}>
+              Cancel
+            </SecondaryOutlineButton>
+            <PrimaryButton
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={loading}
+            >
+              {loading ? (
+                <CircularProgress size={24} />
+              ) : id ? (
+                "Update catalog"
+              ) : (
+                "Create catalog"
+              )}
+            </PrimaryButton>
+          </Box>
         </Box>
       </ContentBox>
       <Snackbar

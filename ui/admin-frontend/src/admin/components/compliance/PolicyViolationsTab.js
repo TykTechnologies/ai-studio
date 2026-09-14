@@ -108,7 +108,7 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
       case "model_access":
         return "Model Access";
       case "privacy_score":
-        return "Privacy Score";
+        return "Privacy level";
       case "budget_exceeded":
         return "Budget Exceeded";
       case "auth_failure":

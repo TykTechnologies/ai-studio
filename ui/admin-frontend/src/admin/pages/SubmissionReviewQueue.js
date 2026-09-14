@@ -146,7 +146,7 @@ const SubmissionReviewQueue = () => {
               onChange={(e) => setTypeFilter(e.target.value)}
             >
               <MenuItem value="">All Types</MenuItem>
-              <MenuItem value="datasource">Data Source</MenuItem>
+              <MenuItem value="datasource">Data source</MenuItem>
               <MenuItem value="tool">Tool</MenuItem>
               <MenuItem value="plugin">Plugin Resource</MenuItem>
             </Select>

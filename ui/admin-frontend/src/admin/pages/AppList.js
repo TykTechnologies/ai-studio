@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
 import apiClient from "../utils/apiClient";
 import { deactivateCredential } from "../services/appService";
+import { APP_STATUS, APP_STATUS_ORDER, getAppStatus } from "../../utils/appStatus";
 import SearchInput from "../components/common/SearchInput";
 import {
   Table,
@@ -108,10 +109,8 @@ const AppList = () => {
           const statusA = getApprovalStatus(a);
           const statusB = getApprovalStatus(b);
           
-          // Define order: Approved > Awaiting approval > No credential
-          const statusOrder = { "Approved": 0, "Awaiting approval": 1, "No credential": 2 };
-          
-          const comparison = statusOrder[statusA] - statusOrder[statusB];
+          // Order: Active > Awaiting approval > No credential > Disabled
+          const comparison = APP_STATUS_ORDER[statusA] - APP_STATUS_ORDER[statusB];
           return sortOrder === "asc" ? comparison : -comparison;
         });
       }
@@ -199,19 +198,16 @@ const AppList = () => {
     setAnchorEl(null);
   };
 
+  // Same words as the portal (utils/appStatus.js): Active, Awaiting approval,
+  // No credential, Disabled.
   const getApprovalStatus = (app) => {
     const credentialId = app.attributes.credential_id;
-    
-    if (!credentialId) {
-      return "No credential";
-    }
-    
-    const credential = credentials[credentialId];
-    if (!credential) {
-      return "No credential";
-    }
-    
-    return credential.active ? "Approved" : "Awaiting approval";
+    const credential = credentialId ? credentials[credentialId] : null;
+    return getAppStatus({
+      isActive: app.attributes.is_active,
+      hasCredential: Boolean(credential),
+      credentialActive: credential?.active,
+    });
   };
 
   const getUserDisplay = (app) => {
@@ -497,7 +493,7 @@ const AppList = () => {
         >
           Edit app
         </MenuItem>
-        {selectedApp && getApprovalStatus(selectedApp) === "Awaiting approval" && (
+        {selectedApp && getApprovalStatus(selectedApp) === APP_STATUS.AWAITING_APPROVAL && (
           <MenuItem onClick={() => handleApproveCredentials(selectedApp)}>
             <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />
             Approve credentials
@@ -505,7 +501,7 @@ const AppList = () => {
         )}
         <MenuItem
           onClick={() => handleDisableCredentials(selectedApp)}
-          disabled={!selectedApp || getApprovalStatus(selectedApp) !== "Approved"}
+          disabled={!selectedApp || getApprovalStatus(selectedApp) !== APP_STATUS.ACTIVE}
         >
           <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />
           Disable credentials

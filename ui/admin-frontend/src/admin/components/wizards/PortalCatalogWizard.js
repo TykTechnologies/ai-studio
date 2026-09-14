@@ -30,7 +30,7 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
     modelPreset: "default",
     systemPrompt:
       "You are a helpful AI assistant. Answer the user's questions to the best of your ability.",
-    groupName: "My Group",
+    groupName: "My team",
     catalogueName: "My Catalog",
   });
 
@@ -39,7 +39,7 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
   const steps = [
     "LLM Vendor Details",
     "Call Settings",
-    "Team & Catalogue Details",
+    "Team & Catalog Details",
     "Completion",
   ];
 
@@ -259,7 +259,7 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
             <TextField
               fullWidth
               margin="normal"
-              label="Catalogue Name"
+              label="Catalog Name"
               name="catalogueName"
               value={formData.catalogueName}
               onChange={handleInputChange}

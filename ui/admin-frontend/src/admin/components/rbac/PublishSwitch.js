@@ -8,7 +8,7 @@ import { permissionLabel } from '../../rbac/permissions';
  * permission. Without it the control is disabled and explains why; the API
  * rejects the change as well, so this is a courtesy, not the enforcement.
  *
- *   <PublishSwitch permission={P.LLMS_PUBLISH} checked={llm.active} onChange={...} name="active" label="Enabled in Proxy" />
+ *   <PublishSwitch permission={P.LLMS_PUBLISH} checked={llm.active} onChange={...} name="active" label="Active" />
  */
 const PublishSwitch = ({ permission, label, checked, onChange, name, disabled = false, control = 'switch', ...rest }) => {
   const { can } = usePermissions();

@@ -37,7 +37,7 @@ const LLMListView = () => {
         setLoading(false);
       } catch (err) {
         console.error("Error fetching LLMs:", err);
-        setError("Failed to fetch LLMs. Please try again later.");
+        setError("Failed to fetch LLM providers. Please try again later.");
         setLoading(false);
       }
     };

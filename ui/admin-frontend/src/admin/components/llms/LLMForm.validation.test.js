@@ -56,7 +56,7 @@ describe("LLMForm validation and layout", () => {
 
   it("renders in-page errors on an empty submit instead of relying on the browser", async () => {
     renderForm();
-    fireEvent.click(await screen.findByRole("button", { name: "Add LLM" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add LLM provider" }));
     await waitFor(() => expect(screen.getByTestId("llm-form-errors")).toBeInTheDocument());
     expect(screen.getByTestId("llm-form-errors")).toHaveTextContent("Name is required");
     expect(screen.getByTestId("llm-form-errors")).toHaveTextContent("Vendor is required");
@@ -68,7 +68,7 @@ describe("LLMForm validation and layout", () => {
 
   it("shows Access Details expanded with the credential hint, and labels the live switch Active", async () => {
     renderForm();
-    await screen.findByRole("button", { name: "Add LLM" });
+    await screen.findByRole("button", { name: "Add LLM provider" });
     // Expanded by default: the fields are in the DOM without clicking the accordion.
     expect(screen.getByLabelText("API Endpoint")).toBeVisible();
     expect(screen.getByLabelText("API Key")).toBeVisible();
@@ -89,10 +89,10 @@ describe("LLMForm validation and layout", () => {
     fireEvent.mouseDown(screen.getByLabelText(/Vendor/));
     const option = await screen.findAllByRole("option");
     fireEvent.click(option[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/admin/llms", {
-        state: { snackbar: { message: "LLM created successfully", severity: "success" } },
+        state: { snackbar: { message: "LLM provider created successfully", severity: "success" } },
       }),
     );
   });

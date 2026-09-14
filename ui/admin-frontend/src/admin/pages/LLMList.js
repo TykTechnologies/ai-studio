@@ -102,7 +102,7 @@ const LLMList = () => {
       await apiClient.delete(`/llms/${id}`);
       setSnackbar({
         open: true,
-        message: "LLM deleted successfully",
+        message: "LLM provider deleted successfully",
         severity: "success",
       });
       fetchLLMs();
@@ -183,7 +183,7 @@ const LLMList = () => {
               startIcon={<AddIcon />}
               onClick={handleAddLLM}
             >
-              Add LLM
+              Add LLM provider
             </PrimaryButton>
           </Can>
         </TitleBox>
@@ -195,7 +195,7 @@ const LLMList = () => {
             <EmptyStateWidget
               title="Want to start working with your favourite LLM?"
               description="Click the button below to add a new LLM configuration to use in your chat room."
-              buttonText="Add LLM"
+              buttonText="Add LLM provider"
               buttonIcon={<AddIcon />}
               onButtonClick={handleAddLLM}
             />
@@ -254,7 +254,7 @@ const LLMList = () => {
                       </StyledTableCell>
                       <StyledTableCell>{llm.attributes.privacy_score}</StyledTableCell>
                       <StyledTableCell>
-                        {/* The dot alone said "Proxied" even when the provider
+                        {/* The dot alone read as live even when the provider
                             pointed at an empty secret, so a fresh instance
                             looked fully configured and the first call failed. */}
                         <CredentialStatusDot
@@ -296,7 +296,7 @@ const LLMList = () => {
         <MenuItem
           onClick={() => navigate(`/admin/llms/edit/${selectedLLM?.id}`)}
         >
-          Edit LLM
+          Edit LLM provider
         </MenuItem>
         <MenuItem
           onClick={() => {
@@ -304,19 +304,19 @@ const LLMList = () => {
             handleMenuClose();
           }}
         >
-          Delete LLM
+          Delete LLM provider
         </MenuItem>
         <MenuItem onClick={() => handleToggleActive(selectedLLM)}>
-          {selectedLLM?.attributes.active ? "Deactivate" : "Activate"} LLM
+          {selectedLLM?.attributes.active ? "Deactivate" : "Activate"} LLM provider
         </MenuItem>
       </Menu>
 
       <DeleteConfirmationDialog
         open={Boolean(deleteTarget)}
         resourcePath="llms"
-        objectLabel="LLM"
+        objectLabel="LLM provider"
         item={deleteTarget ? { id: deleteTarget.id, name: deleteTarget.attributes?.name } : null}
-        consequence="Deleting it removes it from all of them; apps that only have this LLM will stop working."
+        consequence="Deleting it removes it from all of them; apps that only have this LLM provider will stop working."
         onConfirm={() => {
           const id = deleteTarget?.id;
           setDeleteTarget(null);

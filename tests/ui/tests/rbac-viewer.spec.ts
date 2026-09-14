@@ -72,7 +72,7 @@ test('Viewer-derived role is read-only in the administration UI', async ({
     await adminMainPage.dismissQuickStartModal();
     await adminMainPage.navigateToLLMProviders();
     await expect(adminRolesPage.pageTitle('LLM providers')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add LLM' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Add LLM provider' })).toHaveCount(0);
 
     // A create form reached by URL shows the denial panel, not a blank page.
     await adminRolesPage.gotoAdminPath('/admin/llms/new');

@@ -71,7 +71,7 @@ const ToolCatalogueList = memo(() => {
       setError("");
     } catch (error) {
       console.error("Error fetching tool catalogues", error);
-      setError("Failed to load tool catalogues");
+      setError("Failed to load tool catalogs");
     } finally {
       setLoading(false);
     }
@@ -95,7 +95,7 @@ const ToolCatalogueList = memo(() => {
       await apiClient.delete(`/tool-catalogues/${id}`);
       setSnackbar({
         open: true,
-        message: "Tool catalogue deleted successfully",
+        message: "Tool catalog deleted successfully",
         severity: "success",
       });
       fetchToolCatalogues();
@@ -103,7 +103,7 @@ const ToolCatalogueList = memo(() => {
       console.error("Error deleting tool catalogue", error);
       setSnackbar({
         open: true,
-        message: "Failed to delete tool catalogue",
+        message: "Failed to delete tool catalog",
         severity: "error",
       });
     }

@@ -53,7 +53,7 @@ describe("buildDependentsMessage", () => {
       "filter",
     );
     expect(message).toBe(
-      "Used by 1 app (A), 1 LLM (B) and 1 agent (C). Deleting it removes it from all of them.",
+      "Used by 1 app (A), 1 LLM provider (B) and 1 agent (C). Deleting it removes it from all of them.",
     );
   });
 

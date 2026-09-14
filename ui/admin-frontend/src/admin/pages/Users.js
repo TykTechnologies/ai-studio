@@ -40,6 +40,8 @@ import AddIcon from "@mui/icons-material/Add";
 import PaginationControls from "../components/common/PaginationControls";
 import { usePermissions } from "../context/PermissionsContext";
 import RoleBadge from "../components/roles/RoleBadge";
+import CustomSelectBadge from "../components/common/CustomSelectBadge";
+import { roleBadgeConfigs } from "../components/groups/utils/roleBadgeConfig";
 import usePagination from "../hooks/usePagination";
 import useSystemFeatures from "../hooks/useSystemFeatures";
 import Can from "../components/rbac/Can";
@@ -458,7 +460,7 @@ const Users = memo(() => {
                     }}
                     sx={{ cursor: 'pointer' }}
                   >
-                    Is Admin {sortField === "is_admin" && (sortOrder === "asc" ? "↑" : "↓")}
+                    Account type {sortField === "is_admin" && (sortOrder === "asc" ? "↑" : "↓")}
                   </StyledTableHeaderCell>
                 )}
                 <StyledTableHeaderCell align="right">
@@ -496,7 +498,7 @@ const Users = memo(() => {
                     <StyledTableCell>
                       {rbacEnabled
                         ? (user.attributes.roles || []).map((role) => <RoleBadge key={role.id} role={role} />)
-                        : (user.attributes.is_admin ? "Yes" : "No")}
+                        : <CustomSelectBadge config={roleBadgeConfigs[user.attributes.role] || roleBadgeConfigs["Chat user"]} />}
                     </StyledTableCell>
                     <StyledTableCell align="right">
                       <Can anyOf={[P.USERS_WRITE, P.GROUPS_WRITE]}>

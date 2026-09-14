@@ -24,7 +24,6 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
-  MenuItem,
 } from "@mui/material";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -34,12 +33,18 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import {
   PrimaryOutlineButton,
+  SecondaryOutlineButton,
   TitleBox,
   ContentBox,
   PrimaryButton,
   StyledAccordion,
   SecondaryLinkButton
 } from "../../styles/sharedStyles";
+import RelationshipPicker from "../common/relationship-picker";
+import {
+  useUnsavedForm,
+  useConfirmNavigation,
+} from "../../../components/unsaved-changes";
 import { styled } from "@mui/system";
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import { parseOpenAPIOperations } from "../../utils/openapiOperations";
@@ -256,21 +261,29 @@ const ToolForm = () => {
   const [oasSpecError, setOasSpecError] = useState(null);
   const [files, setFiles] = useState([]);
   const [availableFilters, setAvailableFilters] = useState([]);
-  const [selectedFilter, setSelectedFilter] = useState("");
+  // Filters and dependencies are edited in the form and committed on save:
+  // the submit handler diffs the selection against what was loaded and issues
+  // the per-relationship POST/DELETE calls after the tool itself is saved.
+  // (They used to commit on click, out of step with the rest of the form.)
   const [toolFilters, setToolFilters] = useState([]);
+  const [loadedFilterIds, setLoadedFilterIds] = useState([]);
   const navigate = useNavigate();
   const { id } = useParams();
   const fileInputRef = useRef(null);
   const [availableTools, setAvailableTools] = useState([]);
-  const [selectedTool, setSelectedTool] = useState("");
   const [toolDependencies, setToolDependencies] = useState([]);
+  const [loadedDependencyIds, setLoadedDependencyIds] = useState([]);
+  // True once every part of the tool being edited is on screen.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (id) {
-      fetchTool();
-      fetchToolOperations();
-      fetchToolFilters();
-      fetchToolDependencies();
+      Promise.all([
+        fetchTool(),
+        fetchToolOperations(),
+        fetchToolFilters(),
+        fetchToolDependencies(),
+      ]).finally(() => setLoaded(true));
     }
     fetchAvailableTools();
     fetchAvailableFilters();
@@ -296,7 +309,9 @@ const ToolForm = () => {
   const fetchToolDependencies = async () => {
     try {
       const response = await apiClient.get(`/tools/${id}/dependencies`);
-      setToolDependencies(response.data.data || []);
+      const deps = response.data.data || [];
+      setToolDependencies(deps);
+      setLoadedDependencyIds(deps.map((dep) => String(dep.id)));
     } catch (error) {
       console.error("Error fetching tool dependencies", error);
       setToolDependencies([]);
@@ -308,58 +323,48 @@ const ToolForm = () => {
     }
   };
 
-  const handleAddDependency = async () => {
-    if (!selectedTool) return;
+  // Turns a dependency POST failure into the message the old click-to-add
+  // flow showed, so the circular-reference case is still named.
+  const dependencyErrorMessage = (error) => {
+    let errorMessage = "Failed to add dependency";
 
-    try {
-      await apiClient.post(`/tools/${id}/dependencies/${selectedTool}`);
-      await fetchToolDependencies();
-      setSelectedTool("");
-      setSnackbar({
-        open: true,
-        message: "Dependency added successfully",
-        severity: "success",
-      });
-    } catch (error) {
-      let errorMessage = "Failed to add dependency";
-
-      // Handle specific error messages
-      if (error.response?.data?.errors?.[0]?.detail) {
-        const detail = error.response.data.errors[0].detail;
-        if (detail.includes("circular reference")) {
-          errorMessage =
-            "Cannot add this dependency: it would create a circular reference";
-        } else if (detail.includes("cannot depend on itself")) {
-          errorMessage = "A tool cannot depend on itself";
-        }
+    // Handle specific error messages
+    if (error.response?.data?.errors?.[0]?.detail) {
+      const detail = error.response.data.errors[0].detail;
+      if (detail.includes("circular reference")) {
+        errorMessage =
+          "Cannot add this dependency: it would create a circular reference";
+      } else if (detail.includes("cannot depend on itself")) {
+        errorMessage = "A tool cannot depend on itself";
       }
-
-      console.error("Error adding dependency", error);
-      setSnackbar({
-        open: true,
-        message: errorMessage,
-        severity: "error",
-      });
     }
+    return errorMessage;
   };
 
-  const handleRemoveDependency = async (dependencyId) => {
-    try {
-      await apiClient.delete(`/tools/${id}/dependencies/${dependencyId}`);
-      await fetchToolDependencies();
-      setSnackbar({
-        open: true,
-        message: "Dependency removed successfully",
-        severity: "success",
-      });
-    } catch (error) {
-      console.error("Error removing dependency", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to remove dependency",
-        severity: "error",
-      });
+  // Commits the Dependencies picker: adds what was selected since load and
+  // removes what was deselected. Runs after the tool record is saved.
+  const syncDependencies = async (toolId) => {
+    const selectedIds = toolDependencies.map((dep) => String(dep.id));
+    const toAdd = selectedIds.filter((depId) => !loadedDependencyIds.includes(depId));
+    const toRemove = loadedDependencyIds.filter((depId) => !selectedIds.includes(depId));
+
+    for (const depId of toAdd) {
+      try {
+        await apiClient.post(`/tools/${toolId}/dependencies/${depId}`);
+      } catch (error) {
+        console.error("Error adding dependency", error);
+        throw new Error(dependencyErrorMessage(error));
+      }
     }
+    for (const depId of toRemove) {
+      try {
+        await apiClient.delete(`/tools/${toolId}/dependencies/${depId}`);
+      } catch (error) {
+        console.error("Error removing dependency", error);
+        throw new Error("Failed to remove dependency");
+      }
+    }
+    setLoadedDependencyIds(selectedIds);
   };
 
   // Governed metadata (Enterprise): values live beside the object and are
@@ -427,7 +432,9 @@ const ToolForm = () => {
     try {
       const response = await apiClient.get(`/tools/${id}/filters`);
       // Make sure we're accessing the correct part of the response
-      setToolFilters(response.data.data || []); // Add fallback to empty array
+      const loadedFilters = response.data.data || []; // Add fallback to empty array
+      setToolFilters(loadedFilters);
+      setLoadedFilterIds(loadedFilters.map((filter) => String(filter.id)));
     } catch (error) {
       console.error("Error fetching tool filters", error);
       setToolFilters([]); // Set to empty array on error
@@ -489,46 +496,44 @@ const ToolForm = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleAddFilter = async () => {
-    if (!selectedFilter) return;
+  // Commits the Filters picker the same way as syncDependencies.
+  const syncFilters = async (toolId) => {
+    const selectedIds = toolFilters.map((filter) => String(filter.id));
+    const toAdd = selectedIds.filter((filterId) => !loadedFilterIds.includes(filterId));
+    const toRemove = loadedFilterIds.filter((filterId) => !selectedIds.includes(filterId));
 
-    try {
-      await apiClient.post(`/tools/${id}/filters/${selectedFilter}`);
-      await fetchToolFilters(); // Refresh the list
-      setSelectedFilter(""); // Reset selection
-      setSnackbar({
-        open: true,
-        message: "Filter added successfully",
-        severity: "success",
-      });
-    } catch (error) {
-      console.error("Error adding filter", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to add filter",
-        severity: "error",
-      });
+    for (const filterId of toAdd) {
+      try {
+        await apiClient.post(`/tools/${toolId}/filters/${filterId}`);
+      } catch (error) {
+        console.error("Error adding filter", error);
+        throw new Error("Failed to add filter");
+      }
     }
+    for (const filterId of toRemove) {
+      try {
+        await apiClient.delete(`/tools/${toolId}/filters/${filterId}`);
+      } catch (error) {
+        console.error("Error removing filter", error);
+        throw new Error("Failed to remove filter");
+      }
+    }
+    setLoadedFilterIds(selectedIds);
   };
 
-  const handleRemoveFilter = async (filterId) => {
-    try {
-      await apiClient.delete(`/tools/${id}/filters/${filterId}`);
-      await fetchToolFilters(); // Refresh the list
-      setSnackbar({
-        open: true,
-        message: "Filter removed successfully",
-        severity: "success",
-      });
-    } catch (error) {
-      console.error("Error removing filter", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to remove filter",
-        severity: "error",
-      });
-    }
-  };
+  // Unsaved-changes tracking over everything the form saves. Uploaded files
+  // are excluded: the upload itself commits on selection.
+  const { markSaved } = useUnsavedForm(
+    {
+      tool,
+      governedMetadata,
+      dependencyIds: toolDependencies.map((dep) => String(dep.id)),
+      filterIds: toolFilters.map((filter) => String(filter.id)),
+    },
+    { ready: !id || loaded },
+  );
+  const confirmNavigation = useConfirmNavigation();
+  const handleCancel = () => confirmNavigation(() => navigate("/admin/tools"));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -547,20 +552,39 @@ const ToolForm = () => {
       },
     };
 
+    // Set once the tool record itself is saved, so a failure in the
+    // relationship calls that follow can be reported as what it is.
+    let savedToolId = null;
     try {
       if (id) {
         await apiClient.patch(`/tools/${id}`, toolData);
+        savedToolId = id;
         await updateToolOperations();
       } else {
         const response = await apiClient.post("/tools", toolData);
         const newToolId = response.data.data.id;
+        savedToolId = newToolId;
         await updateToolOperations(newToolId);
       }
 
+      await syncDependencies(savedToolId);
+      await syncFilters(savedToolId);
+
+      markSaved();
       navigate("/admin/tools", {
         state: { snackbar: { message: id ? "Tool updated successfully" : "Tool created successfully", severity: "success" } },
       });
     } catch (error) {
+      if (savedToolId && !error.response) {
+        // The tool is saved; only a dependency or filter change was refused.
+        console.error("Error saving tool relationships", error);
+        setSnackbar({
+          open: true,
+          message: `${error.message}. The tool itself was saved.`,
+          severity: "error",
+        });
+        return;
+      }
       if (error.response?.status === 422) {
         const fieldErrors = extractGovernedMetadataErrors(error);
         setMetadataErrors(fieldErrors);
@@ -726,7 +750,7 @@ const ToolForm = () => {
                 Privacy levels
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLMs providers with lower privacy levels can’t access higher-level, data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
+                Privacy levels define how data is protected by controlling LLM access based on its sensitivity. LLM providers with lower privacy levels can’t access higher-level data sources and tools, ensuring secure and appropriate data handling. Set a privacy level (0 lowest - 100 highest).
               </Typography>
               <TextField
                 fullWidth
@@ -809,50 +833,14 @@ const ToolForm = () => {
               </Typography>
               <Grid container spacing={3}>
                 <Grid item xs={12}>
-                  <List>
-                    {toolDependencies.map((dependency) => (
-                      <ListItem key={dependency.id}>
-                        <ListItemText
-                          primary={dependency.attributes.name}
-                          secondary={dependency.attributes.description}
-                        />
-                        <ListItemSecondaryAction>
-                          <IconButton
-                            edge="end"
-                            aria-label="delete"
-                            onClick={() =>
-                              handleRemoveDependency(dependency.id)
-                            }
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                    ))}
-                  </List>
-
-                  <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-                    <TextField
-                      select
-                      label="Add Dependency"
-                      value={selectedTool}
-                      onChange={(e) => setSelectedTool(e.target.value)}
-                      sx={{ flexGrow: 1 }}
-                    >
-                      {availableTools.map((tool) => (
-                        <MenuItem key={tool.id} value={tool.id}>
-                          {tool.attributes.name}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                    <Button
-                      variant="contained"
-                      onClick={handleAddDependency}
-                      disabled={!selectedTool}
-                    >
-                      Add
-                    </Button>
-                  </Box>
+                  <RelationshipPicker
+                    itemLabel="dependency"
+                    value={toolDependencies}
+                    onChange={setToolDependencies}
+                    options={availableTools}
+                    getOptionLabel={(dependency) => dependency?.attributes?.name ?? ""}
+                    getOptionSecondary={(dependency) => dependency?.attributes?.description}
+                  />
                 </Grid>
               </Grid>
             </AccordionDetails>
@@ -860,11 +848,11 @@ const ToolForm = () => {
 
           <StyledAccordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography>Middleware</Typography>
+              <Typography>Filters</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" color="text.secondary" paragraph>
-                Middleware scripts are filters that govern this tool's traffic.
+                Filters govern this tool's traffic.
                 A <strong>request</strong> filter runs on the arguments being
                 sent to the tool, so it can redact sensitive information before
                 it leaves, or block the call so the tool is never contacted. A{" "}
@@ -874,49 +862,14 @@ const ToolForm = () => {
               </Typography>
               <Grid container spacing={3}>
                 <Grid item xs={12}>
-                  <List>
-                    {toolFilters.map((filter) => (
-                      <ListItem key={filter.id}>
-                        <ListItemText
-                          primary={filter.attributes.name}
-                          secondary={filterDirectionLabel(filter)}
-                        />
-                        <ListItemSecondaryAction>
-                          <IconButton
-                            edge="end"
-                            aria-label="delete"
-                            onClick={() => handleRemoveFilter(filter.id)}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                    ))}
-                  </List>
-
-                  <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-                    <TextField
-                      select
-                      label="Add Filter"
-                      value={selectedFilter}
-                      onChange={(e) => setSelectedFilter(e.target.value)}
-                      sx={{ flexGrow: 1 }}
-                    >
-                      {(availableFilters || []).map((filter) => (
-                        <MenuItem key={filter.id} value={filter.id}>
-                          {filter.attributes.name} —{" "}
-                          {filterDirectionLabel(filter)}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                    <Button
-                      variant="contained"
-                      onClick={handleAddFilter}
-                      disabled={!selectedFilter}
-                    >
-                      Add
-                    </Button>
-                  </Box>
+                  <RelationshipPicker
+                    itemLabel="filter"
+                    value={toolFilters}
+                    onChange={setToolFilters}
+                    options={availableFilters || []}
+                    getOptionLabel={(filter) => filter?.attributes?.name ?? ""}
+                    getOptionSecondary={filterDirectionLabel}
+                  />
                 </Grid>
               </Grid>
             </AccordionDetails>
@@ -1025,7 +978,10 @@ const ToolForm = () => {
             defaultExpanded={false}
           />
 
-          <Box mt={4}>
+          <Box mt={4} display="flex" gap={2}>
+            <SecondaryOutlineButton onClick={handleCancel}>
+              Cancel
+            </SecondaryOutlineButton>
             <PrimaryButton variant="contained" type="submit">
               {id ? "Update tool" : "Add tool"}
             </PrimaryButton>

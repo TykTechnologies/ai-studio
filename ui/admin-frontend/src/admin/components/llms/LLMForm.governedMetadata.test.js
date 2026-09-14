@@ -92,7 +92,7 @@ describe("LLMForm governed metadata embedding", () => {
     fireEvent.mouseDown(await screen.findByLabelText(/Risk tier/));
     fireEvent.click(await screen.findByRole("option", { name: "High" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalled());
     const [url, body] = apiClient.post.mock.calls[0];
     expect(url).toBe("/llms");
@@ -114,7 +114,7 @@ describe("LLMForm governed metadata embedding", () => {
     await screen.findByText("Governance Metadata");
     await fillRequired();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
     expect(await screen.findByText("Risk tier is required")).toBeInTheDocument();
     expect(screen.getByText(/Governance metadata failed validation/)).toBeInTheDocument();
     expect(screen.queryByText(/Failed to save LLM/)).not.toBeInTheDocument();

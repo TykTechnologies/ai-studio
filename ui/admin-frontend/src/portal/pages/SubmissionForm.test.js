@@ -164,7 +164,7 @@ describe("SubmissionForm with plugin resource types", () => {
     renderWithProviders(<SubmissionForm />);
     const listbox = await openTypeSelect();
 
-    expect(within(listbox).getByText("Data Source")).toBeInTheDocument();
+    expect(within(listbox).getByText("Data source")).toBeInTheDocument();
     expect(within(listbox).getByText("Tool (OpenAPI)")).toBeInTheDocument();
     expect(within(listbox).getByText("Agent")).toBeInTheDocument();
     expect(within(listbox).getByText("Prompt")).toBeInTheDocument();

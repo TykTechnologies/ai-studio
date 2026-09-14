@@ -13,14 +13,20 @@ import adminTheme from "../admin/theme";
 import { DRAWER_WIDTH, CONTENT_MAX_WIDTH } from "../constants/layout";
 import useSystemFeatures from "../admin/hooks/useSystemFeatures";
 import { usePermissions } from "../admin/context/PermissionsContext";
+import {
+  UnsavedChangesProvider,
+  useConfirmNavigation,
+} from "../components/unsaved-changes";
 
-const MainLayout = () => {
+const MainLayoutContent = () => {
   const { features } = useSystemFeatures();
   const { identity, isFullAdmin, hasAdminAccess } = usePermissions();
   const [currentTab, setCurrentTab] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
+  // Prompts before leaving a form with unsaved changes (see handleTabChange).
+  const confirmNavigation = useConfirmNavigation();
   // Identity comes from the single /common/me fetch in App.js.
   const entitlements = identity?.raw?.attributes || null;
 
@@ -116,23 +122,28 @@ const MainLayout = () => {
   }, [location.pathname, loading]);
 
   const handleTabChange = (tab) => {
-    setCurrentTab(tab);
+    // Switching tabs swaps the whole layout branch, which unmounts the page
+    // being edited, so the tab state only changes once the user has agreed
+    // to leave (or nothing was dirty).
+    confirmNavigation(() => {
+      setCurrentTab(tab);
 
-    const storedPath = getStoredPath(tab);
+      const storedPath = getStoredPath(tab);
 
-    switch (tab) {
-      case "chat":
-        navigate(storedPath || "/chat/dashboard");
-        break;
-      case "portal":
-        navigate(storedPath || "/portal/dashboard");
-        break;
-      case "admin":
-        navigate(storedPath || "/admin");
-        break;
-      default:
-        break;
-    }
+      switch (tab) {
+        case "chat":
+          navigate(storedPath || "/chat/dashboard");
+          break;
+        case "portal":
+          navigate(storedPath || "/portal/dashboard");
+          break;
+        case "admin":
+          navigate(storedPath || "/admin");
+          break;
+        default:
+          break;
+      }
+    });
   };
 
   if (loading) return null;
@@ -154,7 +165,7 @@ const MainLayout = () => {
   );
 
   return (
-    <ThemeProvider theme={adminTheme}>
+    <>
       {/* Success toasts handed over by forms that navigate right after saving */}
       <RouteSnackbar />
       {currentTab === "admin" ? (
@@ -199,8 +210,19 @@ const MainLayout = () => {
           </Box>
         </Box>
       )}
-    </ThemeProvider>
+    </>
   );
 };
+
+// The unsaved-changes provider sits inside the theme (its dialog is themed)
+// and outside the layout content, so the top tabs, the drawers and every
+// routed page share one registry of dirty forms.
+const MainLayout = () => (
+  <ThemeProvider theme={adminTheme}>
+    <UnsavedChangesProvider>
+      <MainLayoutContent />
+    </UnsavedChangesProvider>
+  </ThemeProvider>
+);
 
 export default MainLayout;

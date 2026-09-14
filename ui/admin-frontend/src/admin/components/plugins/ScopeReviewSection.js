@@ -34,7 +34,7 @@ const SCOPE_CATEGORIES = {
     color: 'success',
   },
   'tools': {
-    label: 'Tools & Data Sources',
+    label: 'Tools & data sources',
     description: 'Access to tools and data source configurations',
     color: 'warning',
   },
@@ -50,7 +50,7 @@ const SCOPE_CATEGORIES = {
     color: 'success',
   },
   'datasource': {
-    label: 'Datasource Object Hooks',
+    label: 'Data source object hooks',
     description: 'Intercept and modify datasource create, update, and delete operations',
     color: 'info',
   },
@@ -99,12 +99,12 @@ const SCOPE_DESCRIPTIONS = {
   'llm.after_delete': 'Hook called after deleting an LLM configuration',
 
   // Datasource object hooks
-  'datasource.before_create': 'Hook called before creating a new datasource',
-  'datasource.after_create': 'Hook called after creating a new datasource',
-  'datasource.before_update': 'Hook called before updating a datasource',
-  'datasource.after_update': 'Hook called after updating a datasource',
-  'datasource.before_delete': 'Hook called before deleting a datasource',
-  'datasource.after_delete': 'Hook called after deleting a datasource',
+  'datasource.before_create': 'Hook called before creating a new data source',
+  'datasource.after_create': 'Hook called after creating a new data source',
+  'datasource.before_update': 'Hook called before updating a data source',
+  'datasource.after_update': 'Hook called after updating a data source',
+  'datasource.before_delete': 'Hook called before deleting a data source',
+  'datasource.after_delete': 'Hook called after deleting a data source',
 
   // Tool object hooks
   'tool.before_create': 'Hook called before creating a new tool',

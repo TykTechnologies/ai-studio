@@ -20,8 +20,8 @@ describe('PublishSwitch', () => {
   it('is enabled and toggles when the user holds publish', () => {
     withPermissions([P.LLMS_WRITE, P.LLMS_PUBLISH]);
     const onChange = jest.fn();
-    render(<PublishSwitch permission={P.LLMS_PUBLISH} checked={false} onChange={onChange} name="active" label="Enabled in Proxy" />);
-    const input = screen.getByLabelText('Enabled in Proxy');
+    render(<PublishSwitch permission={P.LLMS_PUBLISH} checked={false} onChange={onChange} name="active" label="Active" />);
+    const input = screen.getByLabelText('Active');
     expect(input).not.toBeDisabled();
     fireEvent.click(input);
     expect(onChange).toHaveBeenCalled();
@@ -31,8 +31,8 @@ describe('PublishSwitch', () => {
   it('is disabled and explains the missing permission for a writer without publish', () => {
     withPermissions([P.LLMS_WRITE]);
     const onChange = jest.fn();
-    render(<PublishSwitch permission={P.LLMS_PUBLISH} checked={true} onChange={onChange} name="active" label="Enabled in Proxy" />);
-    const input = screen.getByLabelText('Enabled in Proxy');
+    render(<PublishSwitch permission={P.LLMS_PUBLISH} checked={true} onChange={onChange} name="active" label="Active" />);
+    const input = screen.getByLabelText('Active');
     expect(input).toBeDisabled();
     expect(input).toBeChecked();
     expect(screen.getByTestId('publish-switch-locked')).toBeInTheDocument();

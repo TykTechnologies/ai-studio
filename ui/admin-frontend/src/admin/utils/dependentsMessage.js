@@ -8,7 +8,7 @@ import apiClient from "./apiClient";
 const DEPENDENT_GROUPS = [
   { key: "apps", singular: "app", plural: "apps" },
   { key: "catalogues", singular: "catalog", plural: "catalogs" },
-  { key: "llms", singular: "LLM", plural: "LLMs" },
+  { key: "llms", singular: "LLM provider", plural: "LLM providers" },
   { key: "tools", singular: "tool", plural: "tools" },
   { key: "datasources", singular: "data source", plural: "data sources" },
   { key: "agents", singular: "agent", plural: "agents" },

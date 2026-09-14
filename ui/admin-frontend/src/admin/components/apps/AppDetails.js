@@ -63,6 +63,7 @@ import IconButton from "@mui/material/IconButton";
 import DownloadIcon from "@mui/icons-material/Download";
 import ExportProxyLogsModal from "../common/ExportProxyLogsModal";
 import { useEdition } from "../../context/EditionContext";
+import { getAppStatus } from "../../../utils/appStatus";
 
 ChartJS.register(
   CategoryScale,
@@ -713,7 +714,7 @@ const AppDetails = () => {
             </FieldValue>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>LLMs:</FieldLabel>
+            <FieldLabel>LLM providers:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box display="flex" flexWrap="wrap" gap={1}>
@@ -723,7 +724,7 @@ const AppDetails = () => {
             </Box>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>Datasources:</FieldLabel>
+            <FieldLabel>Data sources:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box display="flex" flexWrap="wrap" gap={1}>
@@ -856,11 +857,15 @@ const AppDetails = () => {
                 </Box>
               </Grid>
               <Grid item xs={3}>
-                <FieldLabel>Active:</FieldLabel>
+                <FieldLabel>Status:</FieldLabel>
               </Grid>
               <Grid item xs={9}>
-                <FieldValue>
-                  {credential.attributes.active ? "Yes" : "No"}
+                {/* Same words as the apps list and the portal (utils/appStatus.js). */}
+                <FieldValue data-testid="app-status">
+                  {getAppStatus({
+                    isActive: app?.attributes?.is_active,
+                    credentialActive: credential.attributes.active,
+                  })}
                 </FieldValue>
               </Grid>
               {!credential.attributes.active && (

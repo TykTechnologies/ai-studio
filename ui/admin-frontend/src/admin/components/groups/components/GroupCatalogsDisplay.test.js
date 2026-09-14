@@ -54,7 +54,7 @@ jest.mock('../utils/groupDetailConfig', () => {
       const types = [];
       if (!features || features.llm !== false) {
         types.push({
-          label: 'LLM Catalogues',
+          label: 'LLM providers',
           variant: 'llm',
           items: catalogues || [],
           show: true
@@ -62,7 +62,7 @@ jest.mock('../utils/groupDetailConfig', () => {
       }
       if (!features || features.data !== false) {
         types.push({
-          label: 'Data Catalogues',
+          label: 'Data sources',
           variant: 'data',
           items: dataCatalogues || [],
           show: true
@@ -70,7 +70,7 @@ jest.mock('../utils/groupDetailConfig', () => {
       }
       if (!features || features.tool !== false) {
         types.push({
-          label: 'Tool Catalogues',
+          label: 'Tools',
           variant: 'tool',
           items: toolCatalogues || [],
           show: true
@@ -79,9 +79,9 @@ jest.mock('../utils/groupDetailConfig', () => {
       return types;
     },
     GROUP_CATALOGS_DEFAULTS: {
-      title: 'Catalogues',
+      title: 'Catalogs',
       defaultExpanded: true,
-      emptyMessage: 'No catalogues assigned to this team.',
+      emptyMessage: 'No catalogs are currently assigned to this team.',
     }
   };
 });
@@ -144,9 +144,9 @@ describe('GroupCatalogsDisplay Component', () => {
     
     const catalogTypeLabels = screen.getAllByTestId('catalog-type-label');
     expect(catalogTypeLabels).toHaveLength(3);
-    expect(catalogTypeLabels[0]).toHaveTextContent('LLM Catalogues');
-    expect(catalogTypeLabels[1]).toHaveTextContent('Data Catalogues');
-    expect(catalogTypeLabels[2]).toHaveTextContent('Tool Catalogues');
+    expect(catalogTypeLabels[0]).toHaveTextContent('LLM providers');
+    expect(catalogTypeLabels[1]).toHaveTextContent('Data sources');
+    expect(catalogTypeLabels[2]).toHaveTextContent('Tools');
     
     const chips = screen.getAllByTestId('styled-chip');
     expect(chips).toHaveLength(3);
@@ -230,10 +230,10 @@ describe('GroupCatalogsDisplay Component', () => {
     
     const catalogTypeLabels = screen.getAllByTestId('catalog-type-label');
     expect(catalogTypeLabels).toHaveLength(2);
-    expect(catalogTypeLabels[0]).toHaveTextContent('Data Catalogues');
-    expect(catalogTypeLabels[1]).toHaveTextContent('Tool Catalogues');
+    expect(catalogTypeLabels[0]).toHaveTextContent('Data sources');
+    expect(catalogTypeLabels[1]).toHaveTextContent('Tools');
     
-    expect(screen.queryByText('LLM Catalogues')).not.toBeInTheDocument();
+    expect(screen.queryByText('LLM providers')).not.toBeInTheDocument();
   });
 
   test('uses custom title when provided', () => {

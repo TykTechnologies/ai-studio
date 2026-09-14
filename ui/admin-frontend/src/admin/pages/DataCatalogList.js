@@ -172,7 +172,7 @@ const DataCatalogList = () => {
                   <TableRow>
                     <StyledTableHeaderCell>Name</StyledTableHeaderCell>
                     <StyledTableHeaderCell>Description</StyledTableHeaderCell>
-                    <StyledTableHeaderCell>Data Sources</StyledTableHeaderCell>
+                    <StyledTableHeaderCell>Data sources</StyledTableHeaderCell>
                     <StyledTableHeaderCell>Tags</StyledTableHeaderCell>
                     <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                   </TableRow>

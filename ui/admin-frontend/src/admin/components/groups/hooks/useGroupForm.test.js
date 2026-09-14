@@ -13,8 +13,17 @@ jest.mock('../../../services/teamsService', () => ({
     createTeam: jest.fn(),
     updateTeam: jest.fn(),
     deleteTeam: jest.fn(),
+    updateGroupPluginResources: jest.fn(),
+    getTeamUsers: jest.fn(),
   }
 }));
+
+// Reads the unsaved-changes registry the hook reports into.
+const { UnsavedChangesProvider, useUnsavedChanges } = require('../../../../components/unsaved-changes');
+const DirtyProbe = () => {
+  const { isDirty } = useUnsavedChanges();
+  return <div data-testid="registry-dirty">{String(isDirty)}</div>;
+};
 
 // Mock useNavigate
 const mockNavigate = jest.fn();
@@ -121,6 +130,17 @@ const TestComponent = ({
       >
         Set Tool Catalogs
       </button>
+
+      <button
+        data-testid="set-plugin-resources"
+        onClick={() => hookResult.setPluginResourceSelections({ '7:vector-store': ['vs-1', 'vs-2'] })}
+      >
+        Set Plugin Resources
+      </button>
+
+      <button data-testid="cancel" onClick={() => hookResult.handleCancel()}>
+        Cancel
+      </button>
     </div>
   );
 };
@@ -165,10 +185,72 @@ describe('useGroupForm Hook', () => {
     teamsService.createTeam.mockResolvedValue({});
     teamsService.updateTeam.mockResolvedValue({});
     teamsService.deleteTeam.mockResolvedValue({});
+    teamsService.getTeamUsers.mockResolvedValue({ data: [{ id: '1', name: 'User 1' }, { id: '2', name: 'User 2' }] });
   });
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  describe('unsaved changes', () => {
+    const renderGuarded = (props) =>
+      render(
+        <UnsavedChangesProvider>
+          <TestComponent {...props} />
+          <DirtyProbe />
+        </UnsavedChangesProvider>
+      );
+
+    test('a new team is clean until edited, and Cancel leaves at once when clean', () => {
+      renderGuarded();
+      expect(screen.getByTestId('registry-dirty').textContent).toBe('false');
+
+      fireEvent.click(screen.getByTestId('cancel'));
+      expect(mockNavigate).toHaveBeenCalledWith('/admin/groups');
+
+      fireEvent.change(screen.getByTestId('name-input'), { target: { value: 'Ops' } });
+      expect(screen.getByTestId('registry-dirty').textContent).toBe('true');
+    });
+
+    test('loading an existing team and the members section reporting the stored members is not a change', async () => {
+      renderGuarded({ id: '123' });
+      await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+      expect(screen.getByTestId('registry-dirty').textContent).toBe('false');
+
+      // GroupMembersSection reports the stored membership after its own fetch;
+      // the same ids as stored must not read as an edit ...
+      act(() => {
+        screen.getByTestId('set-users').click();
+      });
+      // set-users hands over { id: '123' }, which differs from the stored 1,2:
+      // before the picker has caught up with the stored list it is ignored.
+      expect(screen.getByTestId('registry-dirty').textContent).toBe('false');
+    });
+
+    test('changing a catalog selection on an existing team is a change, and saving clears it', async () => {
+      teamsService.updateTeam.mockResolvedValue({});
+      renderGuarded({ id: '123' });
+      await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+
+      fireEvent.click(screen.getByTestId('set-catalogs'));
+      expect(screen.getByTestId('registry-dirty').textContent).toBe('true');
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('submit-form'));
+      });
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/admin/groups'));
+      expect(screen.getByTestId('registry-dirty').textContent).toBe('false');
+    });
+
+    test('the plugin resources section first report is the baseline, a later change counts', async () => {
+      renderGuarded();
+      // First report: what the server holds.
+      fireEvent.click(screen.getByTestId('set-plugin-resources'));
+      expect(screen.getByTestId('registry-dirty').textContent).toBe('false');
+      // Same content again: still clean.
+      fireEvent.click(screen.getByTestId('set-plugin-resources'));
+      expect(screen.getByTestId('registry-dirty').textContent).toBe('false');
+    });
   });
 
   test('initializes with default values when no parameters are provided', () => {
@@ -380,6 +462,37 @@ describe('useGroupForm Hook', () => {
 
     // Snackbar should not be open for success messages
     expect(screen.getByTestId('snackbar-open').textContent).toBe('false');
+  });
+
+  test('saves plugin resource selections only when the section reported them', async () => {
+    teamsService.updateTeam.mockResolvedValue({});
+    teamsService.updateGroupPluginResources.mockResolvedValue({});
+
+    render(<TestComponent id="123" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').textContent).toBe('false');
+    });
+
+    // Nothing reported: the endpoint is never called, so a form that never
+    // showed the section cannot wipe existing assignments.
+    fireEvent.click(screen.getByTestId('submit-form'));
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/admin/groups');
+    });
+    expect(teamsService.updateGroupPluginResources).not.toHaveBeenCalled();
+
+    // Reported: sent after the team itself is saved.
+    mockNavigate.mockClear();
+    fireEvent.click(screen.getByTestId('set-plugin-resources'));
+    fireEvent.click(screen.getByTestId('submit-form'));
+    await waitFor(() => {
+      expect(teamsService.updateGroupPluginResources).toHaveBeenCalledWith('123', {
+        '7:vector-store': ['vs-1', 'vs-2']
+      });
+    });
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/admin/groups');
+    });
   });
 
   test('handles form submission errors', async () => {
