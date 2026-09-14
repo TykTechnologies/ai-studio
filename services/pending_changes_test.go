@@ -189,8 +189,8 @@ func TestEnsurePendingChangeIndexes_IsIdempotent(t *testing.T) {
 	db := apitest.SetupTestDB(t)
 	require.NoError(t, services.EnsurePendingChangeIndexes(db))
 	require.NoError(t, services.EnsurePendingChangeIndexes(db), "second run is a no-op")
-	assert.True(t, db.Migrator().HasIndex(&models.LLM{}, "idx_llms_updated_at"))
-	assert.True(t, db.Migrator().HasIndex(&models.AccessToken{}, "idx_access_tokens_updated_at"))
+	assert.True(t, db.Migrator().HasIndex(&models.LLM{}, "idx_llms_ns_updated_at"), "namespaced tables index (namespace, updated_at)")
+	assert.True(t, db.Migrator().HasIndex(&models.AccessToken{}, "idx_access_tokens_updated_at"), "global tables index updated_at alone")
 }
 
 // A table with more changes than the cap returns the newest ones and still

@@ -260,9 +260,11 @@ func tableOf(db *gorm.DB, model interface{}) (string, error) {
 	return stmt.Schema.Table, nil
 }
 
-// EnsurePendingChangeIndexes creates the updated_at index each source table
-// needs for the since-last-push filter (gorm.Model indexes deleted_at
-// already). Idempotent; run once at start-up after the tables exist.
+// EnsurePendingChangeIndexes creates the index each source table needs for
+// the since-last-push filter: (namespace, updated_at) where the query also
+// narrows by namespace, plain (updated_at) on global tables (gorm.Model
+// indexes deleted_at already). Idempotent; run once at start-up after the
+// tables exist.
 func EnsurePendingChangeIndexes(db *gorm.DB) error {
 	if db == nil {
 		return nil // tests build a Service without a database
@@ -272,12 +274,22 @@ func EnsurePendingChangeIndexes(db *gorm.DB) error {
 		if err != nil {
 			return err
 		}
-		sql := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s_updated_at ON %s (updated_at)", table, table)
+		name, columns := pendingChangeIndex(table, src.namespaced)
+		sql := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s %s", name, table, columns)
 		if err := db.Exec(sql).Error; err != nil {
-			return fmt.Errorf("pending changes: index %s.updated_at: %w", table, err)
+			return fmt.Errorf("pending changes: index %s: %w", name, err)
 		}
 	}
 	return nil
+}
+
+// pendingChangeIndex names the index EnsurePendingChangeIndexes creates for
+// a table and lists its columns.
+func pendingChangeIndex(table string, namespaced bool) (name, columns string) {
+	if namespaced {
+		return fmt.Sprintf("idx_%s_ns_updated_at", table), "(namespace, updated_at)"
+	}
+	return fmt.Sprintf("idx_%s_updated_at", table), "(updated_at)"
 }
 
 type pendingChangeKind struct {

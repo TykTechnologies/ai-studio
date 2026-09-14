@@ -21,9 +21,11 @@ type Notification struct {
 	Type           string         `json:"type"`                               // e.g. "budget_alert", "system_update", etc.
 	Title          string         `json:"title"`
 	Content        string         `json:"content"`
-	UserID         uint           `json:"user_id"`
-	Read           bool           `json:"read"`    // For UI display
-	SentAt         time.Time      `json:"sent_at"` // When the notification was sent
+	// The inbox is always read per user, newest first: one composite index
+	// serves the page query, the unread badge and the counts.
+	UserID uint      `json:"user_id" gorm:"index:idx_notifications_user_sent,priority:1"`
+	Read   bool      `json:"read"`                                                        // For UI display
+	SentAt time.Time `json:"sent_at" gorm:"index:idx_notifications_user_sent,priority:2"` // When the notification was sent
 	// Link is the in-app path the notification points at, e.g.
 	// "/admin/apps/3"; empty when there is nothing to open.
 	Link string `json:"link"`
