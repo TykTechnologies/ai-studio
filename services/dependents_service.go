@@ -250,7 +250,7 @@ func (s *Service) GetModelRouterDependents(routerID uint) (*Dependents, error) {
 // GetSecretDependents lists the LLMs, tools and datasources that read a
 // secret through a $SECRET/<name> reference.
 func (s *Service) GetSecretDependents(varName string) (*Dependents, error) {
-	refs, err := s.secretReferences(varName)
+	refs, err := s.secretReferences([]string{varName})
 	if err != nil {
 		return nil, err
 	}
@@ -276,16 +276,26 @@ func (s *Service) GetSecretDependents(varName string) (*Dependents, error) {
 // maintain (see models.SecretReference), so the secrets list is one indexed
 // query however many objects exist.
 func (s *Service) SecretReferences() (map[string][]SecretReference, error) {
-	return s.secretReferences("")
+	return s.secretReferences(nil)
 }
 
-// secretReferences is SecretReferences narrowed to one secret when varName
-// is non-empty.
-func (s *Service) secretReferences(varName string) (map[string][]SecretReference, error) {
+// SecretReferencesByNames is SecretReferences restricted to the given secret
+// names: the secrets list calls it for the page it is about to render, so
+// the query is bounded by the page size rather than by the whole index.
+func (s *Service) SecretReferencesByNames(names []string) (map[string][]SecretReference, error) {
+	if len(names) == 0 {
+		return map[string][]SecretReference{}, nil
+	}
+	return s.secretReferences(names)
+}
+
+// secretReferences is SecretReferences narrowed to the given secret names;
+// an empty list means every secret.
+func (s *Service) secretReferences(names []string) (map[string][]SecretReference, error) {
 	q := s.DB.Model(&models.SecretReference{}).
 		Order("secret_name, object_type, object_id")
-	if varName != "" {
-		q = q.Where("secret_name = ?", varName)
+	if len(names) > 0 {
+		q = q.Where("secret_name IN ?", names)
 	}
 	var rows []models.SecretReference
 	if err := q.Find(&rows).Error; err != nil {

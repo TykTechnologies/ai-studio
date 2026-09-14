@@ -70,7 +70,7 @@ func (a *API) createSecret(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeSecret(secret, a.secretReferences())})
+	c.JSON(http.StatusCreated, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})
 }
 
 // @Summary Get a secret by ID
@@ -111,7 +111,7 @@ func (a *API) getSecret(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferences())})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})
 }
 
 // @Summary Update a secret
@@ -185,7 +185,7 @@ func (a *API) updateSecret(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferences())})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})
 }
 
 // @Summary Delete a secret
@@ -262,7 +262,7 @@ func (a *API) listSecrets(c *gin.Context) {
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 
 	response := SecretListResponse{
-		Data: serializeSecrets(secrets, a.secretReferences()),
+		Data: serializeSecrets(secrets, a.secretReferencesFor(secretVarNames(secrets))),
 		Meta: struct {
 			TotalCount int64 `json:"total_count"`
 			TotalPages int   `json:"total_pages"`
@@ -282,13 +282,27 @@ func (a *API) listSecrets(c *gin.Context) {
 // secretReferences returns, keyed by secret name, the objects that read each
 // secret. A failure to scan is logged and treated as "no references" so the
 // secrets list still renders; the value is only advisory.
-func (a *API) secretReferences() map[string][]services.SecretReference {
-	refs, err := a.service.SecretReferences()
+// secretReferencesFor resolves the objects that read each of the named
+// secrets. Callers pass only the secrets they are about to render (the
+// current page, or the single secret of a get/create/update), so the query
+// against the secret_references index is bounded by that set. A lookup
+// failure degrades to "no known consumers" rather than failing the request.
+func (a *API) secretReferencesFor(names []string) map[string][]services.SecretReference {
+	refs, err := a.service.SecretReferencesByNames(names)
 	if err != nil {
 		log.Warnf("Failed to resolve secret references: %v", err)
 		return map[string][]services.SecretReference{}
 	}
 	return refs
+}
+
+// secretVarNames lists the names of the secrets on a page.
+func secretVarNames(list []secrets.Secret) []string {
+	names := make([]string, 0, len(list))
+	for _, s := range list {
+		names = append(names, s.VarName)
+	}
+	return names
 }
 
 func serializeSecret(secret *secrets.Secret, refs map[string][]services.SecretReference) SecretResponse {

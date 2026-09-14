@@ -374,3 +374,25 @@ func TestSecretReferenceIndex_FollowsWrites(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, refs["CRM_TOKEN"], 1, "the backfill repairs the index")
 }
+
+// The secrets list asks only for the names on its page, so the lookup is
+// bounded by the page rather than the whole index.
+func TestSecretReferencesByNames_IsScopedToTheRequestedNames(t *testing.T) {
+	db := setupDependentsTestDB(t)
+	s := NewService(db)
+
+	require.NoError(t, db.Create(&models.LLM{Name: "A", APIKey: "$SECRET/ALPHA", Active: true}).Error)
+	require.NoError(t, db.Create(&models.LLM{Name: "B", APIKey: "$SECRET/BETA", Active: true}).Error)
+	require.NoError(t, db.Create(&models.Tool{Name: "C", AuthKey: "$SECRET/GAMMA", Active: true}).Error)
+
+	page, err := s.SecretReferencesByNames([]string{"ALPHA", "GAMMA", "UNUSED"})
+	require.NoError(t, err)
+	assert.Len(t, page, 2, "only the requested names that have consumers are returned")
+	assert.Len(t, page["ALPHA"], 1)
+	assert.Len(t, page["GAMMA"], 1)
+	assert.NotContains(t, page, "BETA")
+
+	empty, err := s.SecretReferencesByNames(nil)
+	require.NoError(t, err)
+	assert.Empty(t, empty, "no names means no lookup, not every secret")
+}
