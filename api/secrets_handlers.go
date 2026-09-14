@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -69,7 +70,7 @@ func (a *API) createSecret(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeSecret(secret)})
+	c.JSON(http.StatusCreated, gin.H{"data": serializeSecret(secret, a.secretReferences())})
 }
 
 // @Summary Get a secret by ID
@@ -110,7 +111,7 @@ func (a *API) getSecret(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferences())})
 }
 
 // @Summary Update a secret
@@ -184,7 +185,7 @@ func (a *API) updateSecret(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferences())})
 }
 
 // @Summary Delete a secret
@@ -261,7 +262,7 @@ func (a *API) listSecrets(c *gin.Context) {
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 
 	response := SecretListResponse{
-		Data: serializeSecrets(secrets),
+		Data: serializeSecrets(secrets, a.secretReferences()),
 		Meta: struct {
 			TotalCount int64 `json:"total_count"`
 			TotalPages int   `json:"total_pages"`
@@ -278,24 +279,41 @@ func (a *API) listSecrets(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func serializeSecret(secret *secrets.Secret) SecretResponse {
-	return SecretResponse{
-		Type: "secrets",
-		ID:   strconv.FormatUint(uint64(secret.ID), 10),
-		Attributes: struct {
-			Value   string `json:"value"`
-			VarName string `json:"var_name"`
-		}{
-			Value:   secret.GetValue(), // Use GetValue() to handle reference format
-			VarName: secret.VarName,
-		},
+// secretReferences returns, keyed by secret name, the objects that read each
+// secret. A failure to scan is logged and treated as "no references" so the
+// secrets list still renders; the value is only advisory.
+func (a *API) secretReferences() map[string][]services.SecretReference {
+	refs, err := a.service.SecretReferences()
+	if err != nil {
+		log.Warnf("Failed to resolve secret references: %v", err)
+		return map[string][]services.SecretReference{}
 	}
+	return refs
 }
 
-func serializeSecrets(secrets []secrets.Secret) []SecretResponse {
+func serializeSecret(secret *secrets.Secret, refs map[string][]services.SecretReference) SecretResponse {
+	response := SecretResponse{
+		Type: "secrets",
+		ID:   strconv.FormatUint(uint64(secret.ID), 10),
+	}
+	response.Attributes.Value = secret.GetValue() // Use GetValue() to handle reference format
+	response.Attributes.VarName = secret.VarName
+	response.Attributes.HasValue = secret.HasValue()
+	response.Attributes.ReferencedBy = make([]SecretReferenceResponse, 0, len(refs[secret.VarName]))
+	for _, ref := range refs[secret.VarName] {
+		response.Attributes.ReferencedBy = append(response.Attributes.ReferencedBy, SecretReferenceResponse{
+			Type: ref.Type,
+			ID:   ref.ID,
+			Name: ref.Name,
+		})
+	}
+	return response
+}
+
+func serializeSecrets(secrets []secrets.Secret, refs map[string][]services.SecretReference) []SecretResponse {
 	result := make([]SecretResponse, len(secrets))
 	for i, secret := range secrets {
-		result[i] = serializeSecret(&secret)
+		result[i] = serializeSecret(&secret, refs)
 	}
 	return result
 }

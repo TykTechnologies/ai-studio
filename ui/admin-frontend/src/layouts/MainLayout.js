@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import { Box, Container } from "@mui/material";
 import TopNavigation from "../components/common/TopNavigation";
+import RouteSnackbar from "../components/common/RouteSnackbar";
 import AdminLayout from "../admin/components/layout/MainLayout";
 import ChatDrawer from "../admin/components/layout/ChatDrawer";
 import PortalDrawer from "../admin/components/layout/PortalDrawer";
@@ -154,6 +155,8 @@ const MainLayout = () => {
 
   return (
     <ThemeProvider theme={adminTheme}>
+      {/* Success toasts handed over by forms that navigate right after saving */}
+      <RouteSnackbar />
       {currentTab === "admin" ? (
         <Box sx={{ display: "flex", flexDirection: "column" }}>
           {topNav}

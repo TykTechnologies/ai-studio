@@ -168,6 +168,8 @@ describe("SecretForm Component", () => {
     await waitFor(() => {
       expect(apiClient.get).toHaveBeenCalledWith("/secrets/42");
     });
+    // The submit button stays disabled until the fetched name is in the form.
+    await screen.findByDisplayValue("EXISTING_KEY");
 
     // Change the value field
     fireEvent.change(screen.getByLabelText(/Secret Value/i), {

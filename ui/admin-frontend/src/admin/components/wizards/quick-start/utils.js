@@ -114,7 +114,9 @@ const formatBody = {
   }`
 };
 
-export const getCurlExample = (llmProvider = 'openai', llmName = 'OpenAI') => {
+// `secret` is optional: when given, the real app secret replaces the
+// YOUR_SECRET placeholder so the example can be run as-is.
+export const getCurlExample = (llmProvider = 'openai', llmName = 'OpenAI', secret = '') => {
   const promptText = "Generate a template OpenAPI Specification (OAS) for a simple TODO API.";
   const temperature = 0.7;
   const maxTokens = 1000;
@@ -129,9 +131,11 @@ export const getCurlExample = (llmProvider = 'openai', llmName = 'OpenAI') => {
   const fullEndpointPath = config.getEndpointPath(endpoint, defaultModel);
   const headers = config.headers();
   
-  return `curl -X POST "${fullEndpointPath}" \\
+  const command = `curl -X POST "${fullEndpointPath}" \\
   ${headers.join(' \\\n  ')} \\
   -d '${requestBody}'`;
+
+  return secret ? command.split('YOUR_SECRET').join(secret) : command;
 };
 
 export const validateEmail = (email) => {

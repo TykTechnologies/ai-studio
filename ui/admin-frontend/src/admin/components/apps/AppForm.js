@@ -331,13 +331,9 @@ const AppForm = () => {
         await apiClient.post("/apps", appData);
       }
 
-      setSnackbar({
-        open: true,
-        message: id ? "App updated successfully" : "App created successfully",
-        severity: "success",
+      navigate("/admin/apps", {
+        state: { snackbar: { message: id ? "App updated successfully" : "App created successfully", severity: "success" } },
       });
-
-      setTimeout(() => navigate("/admin/apps"), 2000);
     } catch (error) {
       console.error("Error saving app", error);
       setSnackbar({

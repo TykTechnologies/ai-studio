@@ -20,6 +20,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
 import {
   TitleBox,
   StyledPaper,
@@ -41,6 +42,7 @@ const ModelRouterList = () => {
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedRouter, setSelectedRouter] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -283,7 +285,12 @@ const ModelRouterList = () => {
         >
           Edit Router
         </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedRouter?.id)}>
+        <MenuItem
+          onClick={() => {
+            setDeleteTarget(selectedRouter);
+            handleMenuClose();
+          }}
+        >
           Delete Router
         </MenuItem>
         <Can permission={P.MODEL_ROUTERS_PUBLISH}>
@@ -292,6 +299,20 @@ const ModelRouterList = () => {
           </MenuItem>
         </Can>
       </Menu>
+
+      <DeleteConfirmationDialog
+        open={Boolean(deleteTarget)}
+        resourcePath="model-routers"
+        objectLabel="model router"
+        item={deleteTarget ? { id: deleteTarget.id, name: deleteTarget.attributes?.name } : null}
+        consequence="Deleting it removes it from all of them; requests routed through it will fail."
+        onConfirm={() => {
+          const id = deleteTarget?.id;
+          setDeleteTarget(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <Snackbar
         open={snackbar.open}

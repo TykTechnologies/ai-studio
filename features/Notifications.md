@@ -30,7 +30,7 @@ The Midsommar Notification System provides a centralized mechanism for managing 
     *   *Dependency:* Uses `notifications.MailService` for email dispatch.
     *   *Dependency:* Interacts with `Database` (`notifications` table) for storage and deduplication.
 *   **Database (`models/`):**
-    *   `notifications` (`models/notifications.go`): Stores individual `Notification` records (recipient `UserID`, `NotificationID`, `Type`, `Title`, `Content`, `Read` status, `SentAt`).
+    *   `notifications` (`models/notifications.go`): Stores individual `Notification` records (recipient `UserID`, `NotificationID`, `Type`, `Title`, `Content`, `Link`, `Read` status, `SentAt`).
     *   `users` (`models/user.go`): Stores user info, including `Email`, `IsAdmin`, and `NotificationsEnabled` flags.
 *   **Calling Services:**
     *   `BudgetService` (`services/budget_service.go`): Triggers `"budget_alert"` notifications.
@@ -96,8 +96,9 @@ flowchart TD
 
 **3. Implementation Details**
 
-*   **Notification Model (`models/Notification`):** Stores `NotificationID` (unique string for deduplication), `Type` (string like "budget\_alert"), `Title`, `Content`, recipient `UserID`, `Read` status (bool), `SentAt` (time).
-*   **Recipient Targeting (`NotificationService.Notify`):** Uses `userFlags` (specific `UserID` or `models.NotifyAdmins`). Queries `users` table for admins where `is_admin = true` AND `notifications_enabled = true`. A specific `UserID` is extracted by clearing the admin flag (`userID := userFlags &^ models.NotifyAdmins`).
+*   **Notification Model (`models/Notification`):** Stores `NotificationID` (unique string for deduplication), `Type` (string like "budget\_alert"), `Title`, `Content`, `Link` (in-app path such as `/admin/apps/3`, serialised as `link`, empty when there is nothing to open), recipient `UserID`, `Read` status (bool), `SentAt` (time).
+*   **Recipient Targeting (`NotificationService.NotifyWithOptions`, behind `Notify`, `NotifyTemplate` and `NotifyDirect`):** Uses `userFlags` (specific `UserID` or `models.NotifyAdmins`). Queries `users` table for admins where `is_admin = true` AND `notifications_enabled = true`. A specific `UserID` is extracted by clearing the admin flag (`userID := userFlags &^ models.NotifyAdmins`). `NotifyOptions.ActorID` names the user who performed the action; they are never a recipient (an administrator is not told about the app they created, a user is not told they registered).
+*   **In-app content vs email body (`NotifyOptions.Summary`):** The in-app record stores a plain one-line summary; the rendered email template is only used as the email body. When no summary is given, `stripEmailFraming` removes the `Subject:` line, greeting, sign-off and "do not reply" boilerplate from the rendered template before storing it. `NotifyOptions.SkipEmail` stores the record without mailing (used when the caller has already emailed through another path, e.g. credential approval).
 *   **Deduplication (`NotificationService.Send`):** Checks for existing `NotificationID` in `notifications` table using a `gorm.First` query before inserting. Skips if `result.Error == nil`.
 *   **Email Sending (`notifications.MailService`):** Uses `go-mail/mail`, requires SMTP config (`fromEmail`, `smtpHost`, etc.). Errors are logged (`fmt.Printf`).
 *   **Template Rendering (`NotificationService.renderTemplate`):** Uses Go's `html/template`, searches for templates first by exact path, then by walking up directories to find `templates/<templateName>`.

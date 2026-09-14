@@ -118,15 +118,16 @@ const SecretForm = () => {
         await apiClient.post("/secrets", secretData);
       }
 
-      setSnackbar({
-        open: true,
-        message: id
-          ? "Secret updated successfully"
-          : "Secret created successfully",
-        severity: "success",
+      navigate("/admin/secrets", {
+        state: {
+          snackbar: {
+            message: id
+              ? "Secret updated successfully"
+              : "Secret created successfully",
+            severity: "success",
+          },
+        },
       });
-
-      setTimeout(() => navigate("/admin/secrets"), 2000);
     } catch (error) {
       console.error("Error saving secret", error);
       setSnackbar({

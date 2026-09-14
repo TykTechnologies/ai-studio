@@ -111,16 +111,12 @@ const CatalogueForm = () => {
         catalogueId = response.data.data.id;
       }
 
-      setSnackbar({
-        open: true,
-        message: `Catalog ${id ? "updated" : "created"} successfully`,
-        severity: "success",
-      });
-
       // Now handle LLM additions/removals
       await updateCatalogueLLMs(catalogueId, desiredLLMs);
 
-      setTimeout(() => navigate("/admin/catalogs/llms"), 2000);
+      navigate("/admin/catalogs/llms", {
+        state: { snackbar: { message: `Catalog ${id ? "updated" : "created"} successfully`, severity: "success" } },
+      });
     } catch (error) {
       console.error("Error saving catalog", error);
       setSnackbar({

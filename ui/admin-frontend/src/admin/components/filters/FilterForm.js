@@ -124,15 +124,16 @@ const FilterForm = () => {
         await apiClient.post("/filters", filterData);
       }
 
-      setSnackbar({
-        open: true,
-        message: id
-          ? "Filter updated successfully"
-          : "Filter created successfully",
-        severity: "success",
+      navigate("/admin/filters", {
+        state: {
+          snackbar: {
+            message: id
+              ? "Filter updated successfully"
+              : "Filter created successfully",
+            severity: "success",
+          },
+        },
       });
-
-      setTimeout(() => navigate("/admin/filters"), 2000);
     } catch (error) {
       console.error("Error saving filter", error);
       setSnackbar({

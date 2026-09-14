@@ -1064,6 +1064,7 @@ type AppDetailResponse struct {
 		MonthlyBudget   *float64         `json:"monthly_budget"`
 		BudgetStartDate *time.Time       `json:"budget_start_date"`
 		IsOrphaned      bool             `json:"is_orphaned"`
+		IsActive        bool             `json:"is_active"`
 		Credential      CredentialDetail `json:"credential"`
 	} `json:"attributes"`
 }
@@ -1201,7 +1202,22 @@ type SecretResponse struct {
 	Attributes struct {
 		Value   string `json:"value"`
 		VarName string `json:"var_name"`
+		// HasValue says whether the secret holds a non-empty value without
+		// exposing it, so the list can flag a placeholder that was never
+		// filled in.
+		HasValue bool `json:"has_value"`
+		// ReferencedBy lists the objects that read this secret through a
+		// $SECRET/<name> reference. Always present, empty when nothing does.
+		ReferencedBy []SecretReferenceResponse `json:"referenced_by"`
 	} `json:"attributes"`
+}
+
+// SecretReferenceResponse is one object that references a secret
+// @Description Secret reference model
+type SecretReferenceResponse struct {
+	Type string `json:"type"`
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
 }
 
 // SecretListResponse represents the paginated response for listing secrets

@@ -42,7 +42,7 @@ describe("CredentialStatusDot", () => {
     renderWithTheme(
       <CredentialStatusDot active status="unresolved" reference="OPENAI_KEY" />
     );
-    expect(screen.getByTitle("Proxied")).toBeInTheDocument();
+    expect(screen.getByTitle("Active")).toBeInTheDocument();
     expect(screen.getByTitle("Credential unresolved")).toBeInTheDocument();
   });
 

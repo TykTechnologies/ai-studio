@@ -171,8 +171,9 @@ func TestDataCatalogueEndpoints(t *testing.T) {
 	var datasourceResponse map[string][]DataCatalogueResponse
 	err = json.Unmarshal(w.Body.Bytes(), &datasourceResponse)
 	assert.NoError(t, err)
-	// Note: Datasource is auto-assigned to "Default" catalogue when created
-	assert.Len(t, datasourceResponse["data"], 2) // Test catalogue + Default catalogue
+	// Note: In Community Edition the datasource is auto-assigned to "Default"
+	// when created; Enterprise builds leave it in no catalogue until granted.
+	assert.Len(t, datasourceResponse["data"], 1+defaultCatalogueAutoAdds()) // Test catalogue (+ Default in CE)
 	// Verify our updated catalogue is in the results
 	var foundUpdated bool
 	for _, dc := range datasourceResponse["data"] {
@@ -358,14 +359,15 @@ func TestDataCatalogueEndpoints_MultipleDataCatalogues(t *testing.T) {
 	addDatasourceToDataCatalogue(dc2ID, ds2.ID)
 
 	// Test Get Data Catalogues by Datasource
-	// Note: Datasources are auto-assigned to "Default" catalogue when created
+	// Note: In Community Edition datasources are auto-assigned to "Default"
+	// when created; Enterprise builds leave them in no catalogue until granted.
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/data-catalogues/by-datasource?datasourceId=%d", ds1.ID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var ds1Response map[string][]DataCatalogueResponse
 	err = json.Unmarshal(w.Body.Bytes(), &ds1Response)
 	assert.NoError(t, err)
-	assert.Len(t, ds1Response["data"], 3) // dc1 + dc2 + Default
+	assert.Len(t, ds1Response["data"], 2+defaultCatalogueAutoAdds()) // dc1 + dc2 (+ Default in CE)
 
 	w = performRequest(api.router, "GET", fmt.Sprintf("/api/v1/data-catalogues/by-datasource?datasourceId=%d", ds2.ID), nil)
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -373,5 +375,5 @@ func TestDataCatalogueEndpoints_MultipleDataCatalogues(t *testing.T) {
 	var ds2Response map[string][]DataCatalogueResponse
 	err = json.Unmarshal(w.Body.Bytes(), &ds2Response)
 	assert.NoError(t, err)
-	assert.Len(t, ds2Response["data"], 2) // dc2 + Default
+	assert.Len(t, ds2Response["data"], 1+defaultCatalogueAutoAdds()) // dc2 (+ Default in CE)
 }

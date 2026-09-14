@@ -135,13 +135,9 @@ const DataCatalogForm = () => {
       await updateDatasources(catalogId, desiredDatasources);
       await updateTags(catalogId, desiredTags);
 
-      setSnackbar({
-        open: true,
-        message: `Data catalog ${id ? "updated" : "created"} successfully`,
-        severity: "success",
+      navigate("/admin/catalogs/data", {
+        state: { snackbar: { message: `Data catalog ${id ? "updated" : "created"} successfully`, severity: "success" } },
       });
-
-      setTimeout(() => navigate("/admin/catalogs/data"), 2000);
     } catch (error) {
       console.error("Error saving data catalog", error);
       setSnackbar({

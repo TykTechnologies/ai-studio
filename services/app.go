@@ -105,7 +105,15 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 			AppDetailsURL:  fmt.Sprintf("/admin/apps/%d", app.ID),
 		}
 		notificationID := fmt.Sprintf("new_app_%d_%d", app.ID, time.Now().UnixNano())
-		if err := s.NotificationService.Notify(notificationID, "New App Created on AI Portal", "admin-app-notification.tmpl", data, models.NotifyAdmins); err != nil {
+		// The owner is the actor: an administrator creating their own app is
+		// not told about it, and the in-app record is a one-line summary that
+		// links to the app rather than the email body.
+		if err := s.NotificationService.NotifyTemplate(notificationID, "New App Created on AI Portal", "admin-app-notification.tmpl", data, models.NotifyAdmins, NotifyOptions{
+			Type:    "app",
+			Link:    fmt.Sprintf("/admin/apps/%d", app.ID),
+			ActorID: userID,
+			Summary: fmt.Sprintf("%s created the app \"%s\".", user.Name, app.Name),
+		}); err != nil {
 			// Ignore notification errors - they shouldn't fail app creation
 			fmt.Printf("Error sending admin notification: %v\n", err)
 		}

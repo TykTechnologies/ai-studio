@@ -24,6 +24,8 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
     });
     await adminAppsPage.expectPopupAppCreated();
     await adminAppsPage.Table.expectRowWithTextExists(app_name);
+    // A new app's credential awaits approval; the list said "Inactive".
+    await adminAppsPage.expectAppStatus(app_name, 'Awaiting approval');
   });
 
   await test.step('Approve app', async () => {
@@ -44,6 +46,7 @@ test('Apps on admin page', async ({ page, loginPage, adminMainPage, adminAppsPag
 
   await test.step('Delete app', async () => {
     await adminMainPage.navigateToApps();
+    await adminAppsPage.expectAppStatus(app_name, /Active|Approved/);
     await adminAppsPage.Table.deleteRowWithText(app_name);
     await adminAppsPage.expectPopupAppDeleted();
     await adminAppsPage.Table.expectRowWithTextNotExists(app_name);

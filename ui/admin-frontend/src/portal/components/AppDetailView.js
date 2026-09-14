@@ -34,6 +34,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { getConfig } from "../../config";
 import { DangerButton, SecondaryLinkButton } from "../../admin/styles/sharedStyles";
 import pubClient from "../../admin/utils/pubClient";
+import AppStatusChip, { getAppStatusFromApp } from "./AppStatusChip";
 import { Line } from "react-chartjs-2";
 import DateRangePicker from "../../admin/components/common/DateRangePicker";
 
@@ -321,7 +322,15 @@ const AppDetailView = () => {
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">{error}</Typography>;
   if (!app) return <Typography>App not found</Typography>;
-  
+
+  // Where the budget came from. The API does not record it today, and the
+  // portal's app builder has no budget field, so any budget on a portal App
+  // is the platform default. If the backend starts reporting budget_source,
+  // only the default-derived values keep the "(platform default)" label.
+  const budgetSource = app.attributes.budget_source;
+  const budgetIsPlatformDefault =
+    !budgetSource || budgetSource === "platform_default" || budgetSource === "default";
+
   const appLLMs = accessibleLLMs.filter((llm) =>
     (app.attributes.llm_ids || []).includes(Number(llm.id))
   );
@@ -563,9 +572,9 @@ const AppDetailView = () => {
             <FieldLabel>Status:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
-            <FieldValue>
-              {app.attributes.credential.active ? "Active" : "Inactive"}
-            </FieldValue>
+            {/* The one status for the App. It used to say "Inactive" here and
+                "Pending approval" beside the credential for the same App. */}
+            <AppStatusChip status={getAppStatusFromApp(app)} />
           </Grid>
           <Grid item xs={3}>
             <FieldLabel>Data Sources:</FieldLabel>
@@ -613,13 +622,28 @@ const AppDetailView = () => {
             </React.Fragment>
           ))}
           <Grid item xs={3}>
-            <FieldLabel>Monthly Budget:</FieldLabel>
+            {/* The portal's app builder has no budget field, so a budget on a
+                portal App was never chosen by the developer: it is the
+                platform's DEFAULT_APP_BUDGET applied on creation (or a value an
+                administrator set later). Say where it came from rather than
+                presenting "$100" as something the developer decided. */}
+            <FieldLabel>
+              {app.attributes.monthly_budget && budgetIsPlatformDefault
+                ? "Monthly budget (platform default):"
+                : "Monthly Budget:"}
+            </FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box>
               <FieldValue>
                 {app.attributes.monthly_budget ? `$${app.attributes.monthly_budget}` : 'No budget limit'}
               </FieldValue>
+              {app.attributes.monthly_budget && budgetIsPlatformDefault && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                  Applied automatically from the platform&apos;s default app budget.
+                  An administrator can change it.
+                </Typography>
+              )}
               {budgetUsageData?.current_usage != null && budgetUsageData?.start_date && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                   Current usage: ${budgetUsageData.current_usage.toFixed(2)} ({budgetUsageData.percentage?.toFixed(1) || 0}%) since {new Date(budgetUsageData.start_date).toLocaleDateString() || 'N/A'}
@@ -683,21 +707,6 @@ const AppDetailView = () => {
                 <ContentCopyIcon />
               </IconButton>
             </Box>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Status:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <Chip
-              size="small"
-              label={
-                app.attributes.credential.active
-                  ? "Active"
-                  : "Pending approval"
-              }
-              color={app.attributes.credential.active ? "success" : "warning"}
-              variant="outlined"
-            />
           </Grid>
         </Grid>
 

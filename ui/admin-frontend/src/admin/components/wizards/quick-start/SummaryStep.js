@@ -11,8 +11,10 @@ import {
 } from '@mui/material';
 import { useQuickStart } from './QuickStartContext';
 import { ActionsContainer } from './styles';
-import { PrimaryButton, SecondaryLinkButton } from '../../../styles/sharedStyles';
+import { PrimaryButton } from '../../../styles/sharedStyles';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { 
@@ -26,7 +28,6 @@ const SummaryStep = () => {
   const {
     goToNextStep,
     goToPreviousStep,
-    skipQuickStart,
     llmData,
     ownerData,
     appData,
@@ -34,6 +35,13 @@ const SummaryStep = () => {
   } = useQuickStart();
   
   const [curlExpanded, setCurlExpanded] = useState(false);
+  // One show/hide state covers the Secret row and the curl example.
+  const [showSecret, setShowSecret] = useState(false);
+  const maskedSecret = '••••••••••••••••';
+  const curlCommand = getCurlExample(llmData.llmProvider, llmData.name, credentialData.secret) || '';
+  const displayedCurl = credentialData.secret && !showSecret
+    ? curlCommand.split(credentialData.secret).join(maskedSecret)
+    : curlCommand;
   const [copyTooltips, setCopyTooltips] = useState({
     keyID: false,
     secret: false,
@@ -259,8 +267,8 @@ const SummaryStep = () => {
                 alignItems: "center",
                 mt: { xs: 0.5, sm: 0 }
               }}>
-                <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mr: 1 }}>
-                  {credentialData.secret ? '••••••••••••••••' : 'Not available'}
+                <Typography variant="bodyLargeDefault" color="text.defaultSubdued" sx={{ mr: 1, wordBreak: 'break-all' }}>
+                  {credentialData.secret ? (showSecret ? credentialData.secret : maskedSecret) : 'Not available'}
                 </Typography>
                 {credentialData.secret && (
                   <IconButton 
@@ -283,6 +291,15 @@ const SummaryStep = () => {
                         <Typography variant="caption">Copied!</Typography>
                       </Box>
                     )}
+                {credentialData.secret && (
+                  <IconButton
+                    size="small"
+                    aria-label={showSecret ? 'Hide secret' : 'Show secret'}
+                    onClick={() => setShowSecret(!showSecret)}
+                  >
+                    {showSecret ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                  </IconButton>
+                )}
                   </IconButton>
                 )}
               </Box>
@@ -589,9 +606,11 @@ const SummaryStep = () => {
             </Typography>
             <IconButton 
               size="small" 
+              aria-label="Copy curl example"
               onClick={(e) => {
                 e.stopPropagation();
-                copyToClipboard(getCurlExample(llmData.llmProvider, llmData.name), 'curl');
+                // Always copy the runnable command, whatever the mask state.
+                copyToClipboard(curlCommand, 'curl');
               }}
               sx={{
                 ml: 1,
@@ -640,32 +659,24 @@ const SummaryStep = () => {
                   wordBreak: 'break-word'
                 }}
               >
-                {getCurlExample(llmData.llmProvider, llmData.name)}
+                {displayedCurl}
               </Typography>
             </Paper>
           </Collapse>
         </Box>
       </Box>
       
+      {/* No "Skip quick start" here: the app already exists at this point. */}
       <ActionsContainer sx={{
         flexWrap: 'wrap',
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-end',
         alignItems: 'center',
         gap: 2,
         width: '100%',
         padding: { xs: 2, sm: 0 },
         mt: 2
       }}>
-        <SecondaryLinkButton
-          onClick={skipQuickStart}
-          sx={{
-            minWidth: '120px',
-            flex: { xs: '1 1 100%', sm: '0 1 auto' }
-          }}
-        >
-          Skip quick start
-        </SecondaryLinkButton>
         <Box sx={{
           display: 'flex',
           gap: 2,

@@ -8,6 +8,7 @@ const EmptyStateWidget = ({
   title,
   description,
   learnMoreLink,
+  actions,
 }) => (
   <Paper
     sx={{
@@ -34,6 +35,11 @@ const EmptyStateWidget = ({
       <Typography variant="bodyLargeDefault" color="text.defaultSubdued" paragraph>
         {description}
       </Typography>
+      {actions && (
+        <Box mt={1} display="flex" justifyContent="center" alignItems="center" gap={2} flexWrap="wrap">
+          {actions}
+        </Box>
+      )}
       <Box mt={2} display="flex" justifyContent="center" alignItems="center">
         <Link
           variant="bodyLargeMedium"

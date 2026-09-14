@@ -45,7 +45,7 @@ const GroupsTable = ({
 
   const cataloguesColumn = {
     field: "attributes.catalogues",
-    headerName: "Catalogues",
+    headerName: "Catalogs",
     renderCell: (item) => {
       const catalogues = isPortalEnabled
         ? item.attributes.catalogue_names || []

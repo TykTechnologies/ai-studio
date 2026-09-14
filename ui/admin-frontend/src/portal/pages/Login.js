@@ -59,7 +59,7 @@ const Login = () => {
         // Determine which dashboard to show based on permissions. Anyone
         // holding an administrative role lands on the administration surface.
         if (is_admin) {
-          window.location.href = "/admin/dash";
+          window.location.href = "/admin";
         } else if (has_admin_access) {
           window.location.href = "/admin";
         } else if (ui_options?.show_portal) {

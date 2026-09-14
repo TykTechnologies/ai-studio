@@ -20,6 +20,8 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     await aiPortalPage.CreateappButton.click();
     await aiPortalPage.ViewYourAppsButton.click();
     await aiPortalPage.Table.expectRowWithTextExists(app_name);
+    // My Apps has a Status column: a fresh app's credential awaits approval.
+    await aiPortalPage.expectAppStatusInList(app_name, 'Awaiting approval');
   });
 
   await test.step('Approve app', async () => {
@@ -36,7 +38,11 @@ test('Apps on AI Portal page', async ({ page, loginPage, aiPortalPage, adminApps
     await adminAppsPage.logOut();
     await loginPage.login(config.dev_user_email, config.password);
     await aiPortalPage.AppsMenuButton.click();
+    await aiPortalPage.expectAppStatusInList(app_name, 'Active');
     await aiPortalPage.Table.clickRowByText(app_name);
+    // The detail page shows the one status (it said "Inactive" and "Pending
+    // approval" for the same app before approval).
+    await aiPortalPage.expectAppStatus('Active');
     keyID = await aiPortalPage.getKeyId();
     restUrl = await aiPortalPage.getRestUrl();
     console.log('keyID:', keyID);

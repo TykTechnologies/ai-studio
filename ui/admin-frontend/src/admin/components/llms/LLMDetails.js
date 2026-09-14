@@ -552,7 +552,16 @@ const LLMDetails = () => {
             <FieldLabel>Active:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
-            <FieldValue>{llm.attributes.active ? "Yes" : "No"}</FieldValue>
+            <FieldValue>
+              <FiberManualRecordIcon
+                sx={{
+                  color: llm.attributes.active ? "green" : "red",
+                  verticalAlign: "middle",
+                  marginRight: 1,
+                }}
+              />
+              {llm.attributes.active ? "Yes" : "No"}
+            </FieldValue>
           </Grid>
           <Grid item xs={3}>
             <FieldLabel>Body Logging Disabled:</FieldLabel>
@@ -798,21 +807,6 @@ const LLMDetails = () => {
                 {llm.attributes.logo_url}
               </Box>
             </Box>
-          </Grid>
-          <Grid item xs={3}>
-            <FieldLabel>Loaded into Gateway:</FieldLabel>
-          </Grid>
-          <Grid item xs={9}>
-            <FieldValue>
-              <FiberManualRecordIcon
-                sx={{
-                  color: llm.attributes.active ? "green" : "red",
-                  verticalAlign: "middle",
-                  marginRight: 1,
-                }}
-              />
-              {llm.attributes.active ? "Active" : "Inactive"}
-            </FieldValue>
           </Grid>
         </Grid>
 

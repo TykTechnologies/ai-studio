@@ -59,6 +59,21 @@ export class AdminAppsPage extends PageTemplate {
         await this.page.goto('/admin/apps');
     }
 
+    /**
+     * Asserts the Status cell of the named app's row. Values: "Active",
+     * "Awaiting approval" (credential exists, not yet approved) and
+     * "No credential" (UX review Q3; formerly "Approved" / "Inactive" / "Pending").
+     */
+    async expectAppStatus(appName: string, status: string | RegExp) {
+        await expect(this.Table.element.locator(`tbody tr:has-text("${appName}")`).first()).toContainText(status);
+    }
+
+    /** Approves the app's credentials from the list's row menu. */
+    async approveCredentialsFromList(appName: string) {
+        await this.Table.element.locator(`tbody tr:has-text("${appName}") button`).click();
+        await this.page.getByRole('menuitem', { name: 'Approve credentials' }).click();
+    }
+
     async addApp(params: AppParams) {
         await this.AddAppButton.click();
         await this.NameInput.fill(params.name);

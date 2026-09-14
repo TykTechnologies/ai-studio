@@ -20,6 +20,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
 import DownloadIcon from "@mui/icons-material/Download";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
 import ImportOpenAPIWizard from "../components/tools/ImportOpenAPIWizard";
 import {
   StyledPaper,
@@ -33,16 +34,19 @@ import {
 } from "../styles/sharedStyles";
 import PaginationControls from "../components/common/PaginationControls";
 import usePagination from "../hooks/usePagination";
+import useConfig from "../hooks/useConfig";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
 
 const ToolList = () => {
   const navigate = useNavigate();
+  const { getDocsLink } = useConfig();
   const [tools, setTools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedTool, setSelectedTool] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [importWizardOpen, setImportWizardOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -200,10 +204,28 @@ const ToolList = () => {
         {tools.length === 0 ? (
           <EmptyStateWidget
             title="No tools added yet"
-            description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request. Click the button below to add a new tool configuration."
-            buttonText="Add Tool"
-            buttonIcon={<AddIcon />}
-            onButtonClick={handleAddTool}
+            description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request."
+            learnMoreLink={getDocsLink("tools")}
+            actions={
+              <>
+                <PrimaryOutlineButton
+                  variant="contained"
+                  startIcon={<DownloadIcon />}
+                  onClick={() => setImportWizardOpen(true)}
+                >
+                  Import OpenAPI
+                </PrimaryOutlineButton>
+                <Can permission={P.TOOLS_WRITE}>
+                  <PrimaryButton
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={handleAddTool}
+                  >
+                    Add tool
+                  </PrimaryButton>
+                </Can>
+              </>
+            }
           />
         ) : (
           <StyledPaper>
@@ -266,7 +288,12 @@ const ToolList = () => {
         >
           Edit tool
         </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedTool?.id)}>
+        <MenuItem
+          onClick={() => {
+            setDeleteTarget(selectedTool);
+            handleMenuClose();
+          }}
+        >
           Delete tool
         </MenuItem>
       </Menu>
@@ -275,6 +302,20 @@ const ToolList = () => {
         open={importWizardOpen}
         onClose={() => setImportWizardOpen(false)}
         onImport={handleImportTool}
+      />
+
+      <DeleteConfirmationDialog
+        open={Boolean(deleteTarget)}
+        resourcePath="tools"
+        objectLabel="tool"
+        item={deleteTarget ? { id: deleteTarget.id, name: deleteTarget.attributes?.name } : null}
+        consequence="Deleting it removes it from all of them; chats and agents that call it lose the tool."
+        onConfirm={() => {
+          const id = deleteTarget?.id;
+          setDeleteTarget(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
       />
 
       <Snackbar

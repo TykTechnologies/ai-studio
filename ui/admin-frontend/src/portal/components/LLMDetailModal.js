@@ -1,50 +1,149 @@
 import React from "react";
-import { Modal, Box, Typography, Button } from "@mui/material";
+import { Box, Typography, Chip, IconButton, Button, Tooltip } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import DetailModal from "./DetailModal";
+import GovernedMetadataBadges from "./GovernedMetadataBadges";
+import { getVendorName, getVendorLogo } from "../../admin/utils/vendorLogos";
+import { generateSlug } from "../../admin/components/wizards/quick-start/utils";
+import { getConfig } from "../../config";
+import { PrimaryButton } from "../../admin/styles/sharedStyles";
 
-const style = {
-  position: "absolute",
-  top: "50%",
-  left: "50%",
-  transform: "translate(-50%, -50%)",
-  width: 400,
-  bgcolor: "background.paper",
-  border: "2px solid #000",
-  boxShadow: 24,
-  p: 4,
+// The "More" modal on a portal LLM card. It used to show the heading and the
+// vendor and nothing else (UX review F-22 / Q16), so a developer deciding
+// whether to build on an LLM had to create an App first to learn which
+// models it serves, how private it is, or what URL to call. Everything the
+// catalogue entry carries that helps that decision is shown here, with the
+// OpenAI-compatible base URL ready to copy and the Build App action to hand.
+
+const FieldLabel = ({ children }) => (
+  <Typography variant="subtitle2" color="text.secondary">
+    {children}
+  </Typography>
+);
+
+/**
+ * The OpenAI-compatible base URL for an LLM slug: `<proxyURL>/ai/<slug>/v1`.
+ * proxyURL comes from /auth/config; the fallback mirrors AppDetailView so the
+ * two pages never disagree about the host.
+ */
+export const openAICompatibleBaseUrl = (llmName) => {
+  const config = getConfig();
+  const proxyUrl =
+    config.proxyURL || `${window.location.protocol}//${window.location.hostname}:9090`;
+  return `${proxyUrl.replace(/\/+$/, "")}/ai/${generateSlug(llmName)}/v1`;
 };
-const LLMDetailModal = ({
-  llm,
-  open,
-  handleClose,
-  modalStyle,
-  headerStyle,
-}) => {
+
+const LLMDetailModal = ({ llm, open, handleClose, onBuildApp }) => {
+  if (!llm) return null;
+  const attrs = llm.attributes || {};
+  const allowedModels = Array.isArray(attrs.allowed_models) ? attrs.allowed_models : [];
+  const baseUrl = openAICompatibleBaseUrl(attrs.name || "");
+  const hasPrivacy = typeof attrs.privacy_score === "number";
+
+  const copyBaseUrl = () => {
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(baseUrl).catch(() => undefined);
+    }
+  };
+
   return (
-    <Modal
-      open={open}
-      onClose={handleClose}
-      aria-labelledby="modal-modal-title"
-      aria-describedby="modal-modal-description"
-    >
-      <Box sx={{ ...style, ...modalStyle }}>
-        <Box sx={headerStyle}>
-          <Typography id="modal-modal-title" variant="h6" component="h2">
-            {llm.attributes.name}
-          </Typography>
-        </Box>
-        <Box sx={{ p: 3 }}>
-          <Typography id="modal-modal-description" sx={{ mt: 2 }}>
-            Vendor: {llm.attributes.vendor}
-          </Typography>
-          <Typography sx={{ mt: 2 }}>
-            {llm.attributes.long_description}
-          </Typography>
-          <Button onClick={handleClose} sx={{ mt: 2 }}>
-            Close
-          </Button>
-        </Box>
+    <DetailModal open={open} handleClose={handleClose} title={attrs.name}>
+      {attrs.short_description && (
+        <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+          {attrs.short_description}
+        </Typography>
+      )}
+      {attrs.long_description && (
+        <Typography variant="body1" sx={{ mt: 1 }}>
+          {attrs.long_description}
+        </Typography>
+      )}
+
+      <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
+        <FieldLabel>Vendor:</FieldLabel>
+        <img
+          src={getVendorLogo(attrs.vendor)}
+          alt={getVendorName(attrs.vendor)}
+          style={{
+            width: 24,
+            height: 24,
+            marginLeft: 8,
+            marginRight: 8,
+            objectFit: "contain",
+          }}
+        />
+        <Typography>{getVendorName(attrs.vendor)}</Typography>
       </Box>
-    </Modal>
+
+      <Box sx={{ mt: 2 }}>
+        <FieldLabel>Default model:</FieldLabel>
+        <Typography>{attrs.default_model || "Not set"}</Typography>
+      </Box>
+
+      <Box sx={{ mt: 2 }}>
+        <FieldLabel>Allowed models:</FieldLabel>
+        {allowedModels.length > 0 ? (
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 0.5 }}>
+            {allowedModels.map((pattern) => (
+              <Chip key={pattern} label={pattern} size="small" />
+            ))}
+          </Box>
+        ) : (
+          <Typography variant="body2">
+            Any model the vendor serves (no restriction configured).
+          </Typography>
+        )}
+      </Box>
+
+      <Box sx={{ mt: 2 }}>
+        <FieldLabel>Privacy level:</FieldLabel>
+        <Typography>
+          {hasPrivacy ? attrs.privacy_score : "Not set"}
+          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+            (0 lowest – 100 highest)
+          </Typography>
+        </Typography>
+      </Box>
+
+      <Box sx={{ mt: 2 }}>
+        <FieldLabel>OpenAI-compatible base URL:</FieldLabel>
+        <Box sx={{ display: "flex", alignItems: "center", mt: 0.5 }}>
+          <Typography
+            component="code"
+            variant="body2"
+            sx={{
+              fontFamily: "monospace",
+              bgcolor: "action.hover",
+              p: 1,
+              borderRadius: 1,
+              flexGrow: 1,
+              wordBreak: "break-all",
+            }}
+          >
+            {baseUrl}
+          </Typography>
+          <Tooltip title="Copy base URL">
+            <IconButton aria-label="Copy base URL" size="small" onClick={copyBaseUrl}>
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+        <Typography variant="caption" color="text.secondary">
+          Requests need an App credential; build an App to get one.
+        </Typography>
+      </Box>
+
+      <GovernedMetadataBadges items={llm.governed_metadata} sx={{ mt: 2 }} />
+
+      <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 3 }}>
+        <Button onClick={handleClose}>Close</Button>
+        {onBuildApp && (
+          <PrimaryButton variant="contained" onClick={() => onBuildApp(llm.id)}>
+            Build App
+          </PrimaryButton>
+        )}
+      </Box>
+    </DetailModal>
   );
 };
 

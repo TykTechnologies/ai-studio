@@ -46,15 +46,13 @@ func (s *Service) HandleUserDeletionForUGCTx(db *gorm.DB, userID uint) error {
 		title := fmt.Sprintf("Community resources orphaned: %d resources need reassignment", orphanedCount)
 		notificationID := fmt.Sprintf("ugc_orphan_%d", userID)
 
-		if err := s.NotificationService.Notify(
-			notificationID, title, "",
-			map[string]interface{}{
-				"user_id":        userID,
-				"user_name":      user.Name,
-				"user_email":     user.Email,
-				"orphaned_count": orphanedCount,
-			},
+		// No email template exists for this; the content is composed here.
+		content := fmt.Sprintf("%s (%s) was deleted. %d community resource(s) they contributed were deactivated and need a new owner.",
+			user.Name, user.Email, orphanedCount)
+		if err := s.NotificationService.NotifyWithOptions(
+			notificationID, title, content,
 			models.NotifyAdmins,
+			NotifyOptions{Type: "submission"},
 		); err != nil {
 			logger.Warn(fmt.Sprintf("Failed to notify admins of orphaned UGC resources: %v", err))
 		}

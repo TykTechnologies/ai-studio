@@ -22,7 +22,7 @@ const pubClient = require("../../admin/utils/pubClient").default;
 
 // The component uses `response.data` directly as the app object, and the
 // accessible-* endpoints as plain arrays.
-const appFixture = (credentialActive, llmIds = []) => ({
+const appFixture = (credentialActive, llmIds = [], extra = {}) => ({
   data: {
     id: "1",
     type: "apps",
@@ -39,6 +39,7 @@ const appFixture = (credentialActive, llmIds = []) => ({
       tool_ids: [],
       plugin_resources: [],
       monthly_budget: null,
+      ...extra,
     },
   },
 });
@@ -89,7 +90,12 @@ describe("AppDetailView credential state", () => {
       expect(screen.getByText("Waiting for approval")).toBeInTheDocument();
     });
     expect(screen.getByText(/401 Unauthorized/)).toBeInTheDocument();
-    expect(screen.getByText("Pending approval")).toBeInTheDocument();
+    // One status for the App. The page used to say "Inactive" in App
+    // Information and "Pending approval" beside the credential for the same
+    // App (UX review F-04 / Q4).
+    expect(screen.getByTestId("app-status")).toHaveTextContent("Awaiting approval");
+    expect(screen.queryByText("Inactive")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pending approval")).not.toBeInTheDocument();
   });
 
   it("shows no pending notice once the credential is active", async () => {
@@ -105,6 +111,79 @@ describe("AppDetailView credential state", () => {
     });
     expect(screen.queryByText("Waiting for approval")).not.toBeInTheDocument();
     expect(screen.queryByText("Pending approval")).not.toBeInTheDocument();
+    expect(screen.getByTestId("app-status")).toHaveTextContent("Active");
+  });
+
+  it("reports a switched-off App as Disabled whatever its credential says", async () => {
+    pubClient.get.mockImplementation((url) => {
+      if (url === "/common/apps/1")
+        return Promise.resolve(appFixture(true, [], { is_active: false }));
+      return Promise.resolve({ data: [] });
+    });
+
+    renderView();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("app-status")).toHaveTextContent("Disabled");
+    });
+  });
+});
+
+// A portal App silently receives DEFAULT_APP_BUDGET (UX review F-09, D6): the
+// developer never chose it because the app builder has no budget field, so
+// the page has to say where the figure came from.
+describe("AppDetailView budget origin", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockConfig = { apiUrl: "http://localhost", proxyUrl: "http://localhost:9090" };
+    pubClient.get.mockResolvedValue({ data: [] });
+  });
+
+  it("labels a budget the developer did not choose as the platform default", async () => {
+    pubClient.get.mockImplementation((url) => {
+      if (url === "/common/apps/1")
+        return Promise.resolve(appFixture(true, [], { monthly_budget: 100 }));
+      return Promise.resolve({ data: [] });
+    });
+
+    renderView();
+
+    await waitFor(() => {
+      expect(screen.getByText("Monthly budget (platform default):")).toBeInTheDocument();
+    });
+    expect(screen.getByText("$100")).toBeInTheDocument();
+    expect(screen.getByText(/default app budget/)).toBeInTheDocument();
+  });
+
+  it("keeps the plain label when the backend reports a chosen budget", async () => {
+    pubClient.get.mockImplementation((url) => {
+      if (url === "/common/apps/1")
+        return Promise.resolve(
+          appFixture(true, [], { monthly_budget: 25, budget_source: "custom" })
+        );
+      return Promise.resolve({ data: [] });
+    });
+
+    renderView();
+
+    await waitFor(() => {
+      expect(screen.getByText("Monthly Budget:")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/platform default/)).not.toBeInTheDocument();
+  });
+
+  it("says there is no limit when no budget is set", async () => {
+    pubClient.get.mockImplementation((url) => {
+      if (url === "/common/apps/1") return Promise.resolve(appFixture(true));
+      return Promise.resolve({ data: [] });
+    });
+
+    renderView();
+
+    await waitFor(() => {
+      expect(screen.getByText("No budget limit")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Monthly Budget:")).toBeInTheDocument();
   });
 });
 

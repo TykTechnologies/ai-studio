@@ -362,15 +362,16 @@ const DatasourceForm = () => {
         await apiClient.post("/datasources", datasourceData);
       }
 
-      setSnackbar({
-        open: true,
-        message: id
-          ? "Datasource updated successfully"
-          : "Data source created and added to the Default data catalog. It is inactive until you activate it.",
-        severity: "success",
+      navigate("/admin/datasources", {
+        state: {
+          snackbar: {
+            message: id
+              ? "Datasource updated successfully"
+              : "Data source created and added to the Default data catalog. It is inactive until you activate it.",
+            severity: "success",
+          },
+        },
       });
-
-      setTimeout(() => navigate("/admin/datasources"), 2000);
     } catch (error) {
       if (error.response?.status === 422) {
         const fieldErrors = extractGovernedMetadataErrors(error);

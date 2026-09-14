@@ -82,7 +82,8 @@ func (s *Service) CreateDatasourceWithDB(db *gorm.DB, name, shortDesc, longDesc,
 		return nil, err
 	}
 
-	// Auto-assign to Default data catalogue if not in any catalogue.
+	// Auto-assign to Default data catalogue if not in any catalogue (Community
+	// Edition only; Enterprise leaves catalogue membership to the admin).
 	//
 	// Runs on `db` for the same reason the tool path does: callers pass a
 	// transaction (submission approval), and using s.DB here takes a second
@@ -497,7 +498,15 @@ func (s *Service) RemoveFileFromDatasource(dsID uint, fileStoreID uint) error {
 // ask Association("DataCatalogues"), and models.Datasource declares no such
 // field -- the relation is only DataCatalogue.Datasources -- so the count came
 // back 0 for a datasource already in a catalogue and the guard never fired.
+//
+// Community Edition only: in Enterprise builds catalogues are the access
+// control, so the datasource stays out of every catalogue until an
+// administrator grants it; see autoAddToDefaultCatalogue.
 func (s *Service) ensureDatasourceInDefaultCatalogueTx(db *gorm.DB, datasource *models.Datasource) error {
+	if !autoAddToDefaultCatalogue() {
+		return nil
+	}
+
 	var count int64
 	if err := db.Table("data_catalogue_data_sources").
 		Where("datasource_id = ?", datasource.ID).Count(&count).Error; err != nil {

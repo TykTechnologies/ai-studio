@@ -83,7 +83,16 @@ describe("MetadataSchemaForm interactions", () => {
     expect(payload.fields.map((f) => [f.key, f.order])).toEqual([["three", 1], ["two", 2]]);
     expect(payload.fields[1].label).toBe("Second");
     expect(payload.description).toBe("d");
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/admin/metadata/schemas"), { timeout: 3000 });
+    await waitFor(
+      () =>
+        expect(mockNavigate).toHaveBeenCalledWith(
+          "/admin/metadata/schemas",
+          expect.objectContaining({
+            state: { snackbar: { message: "Schema updated", severity: "success" } },
+          }),
+        ),
+      { timeout: 3000 },
+    );
   });
 
   it("choosing All object types clears specific ones and vice versa", async () => {

@@ -20,6 +20,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AddIcon from "@mui/icons-material/Add";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import EmptyStateWidget from "../components/common/EmptyStateWidget";
+import DeleteConfirmationDialog from "../components/common/DeleteConfirmationDialog";
 import {
   TitleBox,
   ContentBox,
@@ -49,6 +50,7 @@ const DatasourceList = () => {
   const [error, setError] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedDatasource, setSelectedDatasource] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -386,7 +388,12 @@ const DatasourceList = () => {
         <MenuItem onClick={() => handleCloneDatasource(selectedDatasource)}>
           Clone data source
         </MenuItem>
-        <MenuItem onClick={() => handleDelete(selectedDatasource?.id)}>
+        <MenuItem
+          onClick={() => {
+            setDeleteTarget(selectedDatasource);
+            handleMenuClose();
+          }}
+        >
           Delete data source
         </MenuItem>
         <MenuItem onClick={() => handleToggleActive(selectedDatasource)}>
@@ -394,6 +401,20 @@ const DatasourceList = () => {
           data source
         </MenuItem>
       </Menu>
+
+      <DeleteConfirmationDialog
+        open={Boolean(deleteTarget)}
+        resourcePath="datasources"
+        objectLabel="data source"
+        item={deleteTarget ? { id: deleteTarget.id, name: deleteTarget.attributes?.name } : null}
+        consequence="Deleting it removes it from all of them; apps and chats that use it lose access to its data."
+        onConfirm={() => {
+          const id = deleteTarget?.id;
+          setDeleteTarget(null);
+          handleDelete(id);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       <Snackbar
         open={snackbar.open}

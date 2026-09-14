@@ -18,6 +18,9 @@ type Notification struct {
 	UserID         uint
 	Read           bool      // For UI display
 	SentAt         time.Time // When the notification was sent
+	// Link is the in-app path the notification points at, e.g.
+	// "/admin/apps/3"; empty when there is nothing to open.
+	Link string `json:"link"`
 }
 
 // TableName specifies the table name for the Notification model

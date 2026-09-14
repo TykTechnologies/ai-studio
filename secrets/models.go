@@ -111,6 +111,28 @@ func (s *Secret) GetValue() string {
 	return s.Value
 }
 
+// HasValue reports whether the secret holds a non-empty value, without
+// exposing it. Works on a row as stored (encrypted) and on one that has
+// already been decrypted: an encrypted empty string is a real ciphertext, so
+// the stored form has to be decrypted to know it is empty, while a decrypted
+// value is simply checked for emptiness.
+func (s *Secret) HasValue() bool {
+	if s.Value == "" {
+		return false
+	}
+	key := os.Getenv(midsommarSecret)
+	if key == "" {
+		return true
+	}
+	plaintext, err := decrypt(key, s.Value)
+	if err != nil {
+		// Not a ciphertext we wrote (already decrypted by GetSecretByID/
+		// GetSecretByVarName), so the value itself is the answer.
+		return true
+	}
+	return plaintext != ""
+}
+
 var midsommarSecret = "TYK_AI_SECRET_KEY"
 
 // encrypt encrypts a value with the current scheme: a 32-byte key derived

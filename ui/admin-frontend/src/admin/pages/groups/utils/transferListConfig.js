@@ -26,7 +26,7 @@ export const TEAM_MEMBERS_TRANSFER_LIST_COLUMNS = [
   },
   {
     field: "role",
-    headerName: "Role",
+    headerName: "Account type",
     width: { md: '45%', lg: '35%' },
     renderCell: (item) => (
       <CustomSelectBadge config={roleBadgeConfigs[item.attributes?.role] || roleBadgeConfigs["Chat user"]} />

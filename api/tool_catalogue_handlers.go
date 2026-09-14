@@ -600,8 +600,16 @@ func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
 		return
 	}
 
+	// Portal users only see live tools; inactive ones stay admin-only.
+	active := make(models.Tools, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Active {
+			active = append(active, tool)
+		}
+	}
+
 	// Use secure response format that hides sensitive fields
-	c.JSON(http.StatusOK, a.withToolGovernedMetadata(toSecureToolResponses(tools), true))
+	c.JSON(http.StatusOK, a.withToolGovernedMetadata(toSecureToolResponses(active), true))
 }
 
 // @Summary Get tool documentation by ID

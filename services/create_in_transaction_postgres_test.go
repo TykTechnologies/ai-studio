@@ -102,11 +102,12 @@ func TestCreateToolWithDB_InTransaction_DoesNotDeadlock(t *testing.T) {
 
 	assert.NoError(t, tx.Commit().Error, "the transaction must still be committable")
 
-	// The tool is published into Default, which is what the auto-assignment is
-	// for -- proving the call did the work rather than merely not hanging.
+	// In Community Edition the tool is published into Default, which is what
+	// the auto-assignment is for -- proving the call did the work rather than
+	// merely not hanging. Enterprise builds skip the auto-add entirely.
 	var count int64
 	assert.NoError(t, s.DB.Table("tool_catalogue_tools").Where("tool_id = ?", tool.ID).Count(&count).Error)
-	assert.EqualValues(t, 1, count, "tool should be in exactly one (Default) catalogue")
+	assert.EqualValues(t, defaultCatalogueAutoAdds(), count, "tool should be in the Default catalogue in CE and in none in Enterprise")
 }
 
 func TestCreateDatasourceWithDB_InTransaction_DoesNotDeadlock(t *testing.T) {
@@ -137,7 +138,7 @@ func TestCreateDatasourceWithDB_InTransaction_DoesNotDeadlock(t *testing.T) {
 
 	var count int64
 	assert.NoError(t, s.DB.Table("data_catalogue_data_sources").Where("datasource_id = ?", ds.ID).Count(&count).Error)
-	assert.EqualValues(t, 1, count, "datasource should be in exactly one (Default) catalogue")
+	assert.EqualValues(t, defaultCatalogueAutoAdds(), count, "datasource should be in the Default catalogue in CE and in none in Enterprise")
 }
 
 // A second call must not add the resource to Default twice. The guard that
@@ -159,5 +160,5 @@ func TestEnsureInDefaultCatalogue_IsIdempotent(t *testing.T) {
 
 	var count int64
 	assert.NoError(t, s.DB.Table("tool_catalogue_tools").Where("tool_id = ?", tool.ID).Count(&count).Error)
-	assert.EqualValues(t, 1, count, "a repeated ensure call must not duplicate the membership")
+	assert.EqualValues(t, defaultCatalogueAutoAdds(), count, "a repeated ensure call must not duplicate the membership (and Enterprise never adds one)")
 }

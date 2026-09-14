@@ -154,8 +154,9 @@ const MetadataSchemaForm = () => {
       } else {
         await createMetadataSchema(payload);
       }
-      setSnackbar({ open: true, message: id ? "Schema updated" : "Schema created", severity: "success" });
-      setTimeout(() => navigate("/admin/metadata/schemas"), 1500);
+      navigate("/admin/metadata/schemas", {
+        state: { snackbar: { message: id ? "Schema updated" : "Schema created", severity: "success" } },
+      });
     } catch (err) {
       setSnackbar({ open: true, message: err.message || "Failed to save schema", severity: "error" });
     } finally {

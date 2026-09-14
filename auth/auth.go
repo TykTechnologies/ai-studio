@@ -657,7 +657,14 @@ func (a *AuthService) notifyAdmin(user *models.User) error {
 	}
 
 	notificationID := fmt.Sprintf("new_user_%d_%d", user.ID, time.Now().UnixNano())
-	return a.NotificationService.Notify(notificationID, "New User Registration on AI Portal", "admin-notify.tmpl", data, models.NotifyAdmins)
+	// The registering user is the actor, so the first administrator is not
+	// notified about their own registration.
+	return a.NotificationService.NotifyTemplate(notificationID, "New User Registration on AI Portal", "admin-notify.tmpl", data, models.NotifyAdmins, services.NotifyOptions{
+		Type:    "user",
+		Link:    fmt.Sprintf("/admin/users/%d", user.ID),
+		ActorID: user.ID,
+		Summary: fmt.Sprintf("%s (%s) registered on the portal.", user.Name, user.Email),
+	})
 }
 
 func (a *AuthService) SendEmail(to, subject, body string) error {

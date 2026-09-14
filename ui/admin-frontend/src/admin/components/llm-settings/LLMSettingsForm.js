@@ -196,15 +196,16 @@ const LLMSettingsForm = () => {
         await apiClient.post("/llm-settings", settingData);
       }
 
-      setSnackbar({
-        open: true,
-        message: id
-          ? "LLM Call Settings updated successfully"
-          : "LLM Call Settings created successfully",
-        severity: "success",
+      navigate("/admin/llm-settings", {
+        state: {
+          snackbar: {
+            message: id
+              ? "LLM Call Settings updated successfully"
+              : "LLM Call Settings created successfully",
+            severity: "success",
+          },
+        },
       });
-
-      setTimeout(() => navigate("/admin/llm-settings"), 2000);
     } catch (error) {
       console.error("Error saving LLM Call Settings", error);
       setSnackbar({
