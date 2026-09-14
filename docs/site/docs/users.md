@@ -27,13 +27,24 @@ The table contains user-specific data displayed in rows and organized into the f
 - **Email**:
   The user's email address, which serves as their primary contact and login credential.
 
-- **Is Admin**:
+- **Origin**:
+  How the account was created: **Self-registered**, **Admin-created** or **SSO** (provisioned on first identity-provider login). Origin never changes afterwards, so a user who registered before SSO was switched on stays **Self-registered** even though they now log in through the IdP.
+
+- **API key**:
+  **Issued** when the user holds an API key, **None** otherwise. Only self-registered users receive a key automatically; SSO-provisioned users cannot be issued one unless the deployment sets `ALLOW_SSO_USER_API_KEYS=true`.
+
+- **Status**:
+  **Active** or **Disabled**. A disabled user cannot sign in or use an API key until an administrator enables them again.
+
+- **Is Admin** (Community Edition) / **Roles** (Enterprise Edition):
   Indicates whether the user has administrative privileges.
   - **Yes**: The user has admin access and can perform higher-level management tasks.
   - **No**: The user does not have admin privileges and is limited to standard user capabilities.
 
 - **Actions**:
-  A menu (represented by three dots) that allows administrators to perform additional actions for each user, such as editing user details, managing permissions, or removing a user from the system.
+  A menu (represented by three dots) that allows administrators to add the user to a team, edit user details, **disable or enable** the account, or remove the user from the system.
+
+Beside the search box, three filters narrow the list by **Origin**, **API key** (Issued / None) and **Status** (Active / Disabled). Combine them to answer questions such as "which SSO-provisioned users still hold an API key" or "which accounts are disabled".
 
 ---
 

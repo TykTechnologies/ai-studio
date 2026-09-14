@@ -48,6 +48,7 @@ type Query struct {
 	StatusClass  int    // 2, 4 or 5 → 2xx, 4xx, 5xx
 	IP           string // exact match
 	RequestID    string // exact match
+	AuthMethod   string // exact match: "session" or "api_key"
 	Search       string // case-insensitive substring over action, url, user, resource name, ip
 
 	Page     int // 1-based

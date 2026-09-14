@@ -269,6 +269,8 @@ func main() {
 		TIBEnabled:             appConf.TIBEnabled,
 		TIBAPISecret:           appConf.TIBAPISecret,
 		OCIConfig:              appConf.OCIPlugins.ToOCILibConfig(), // OCI config for plugin security
+		AllowSSOUserAPIKeys:    appConf.AllowSSOUserAPIKeys,
+		SSOAPIKeyLiveness:      appConf.SSOAPIKeyLiveness,
 	}
 
 	authService := auth.NewAuthService(config, mailService, service, notificationService)

@@ -79,6 +79,7 @@ func SetupTestAuthConfig(db *gorm.DB, service *services.Service) *auth.Config {
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
 		TestMode:            true,
+		SyncAPIKeyTouch:     true, // no background writers against the shared test DB
 	}
 }
 

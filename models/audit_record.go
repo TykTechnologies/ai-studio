@@ -49,6 +49,10 @@ type AuditRecord struct {
 	UserEmail string `gorm:"size:255;index:idx_audit_user_email" json:"user"`
 	UserName  string `gorm:"size:255" json:"user_name"`
 	UserAgent string `gorm:"size:512" json:"user_agent,omitempty"`
+	// AuthMethod is how the actor authenticated: "session" (browser
+	// cookie) or "api_key" (user API key); empty for unauthenticated
+	// requests such as failed logins.
+	AuthMethod string `gorm:"size:16;index:idx_audit_auth_method" json:"auth_method,omitempty"`
 
 	// What happened
 	Action string `gorm:"size:128;index:idx_audit_action" json:"action"`

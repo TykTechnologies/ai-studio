@@ -253,6 +253,14 @@ func (cv *CredentialValidator) Middleware(next http.Handler) http.Handler {
 					respondWithError(w, http.StatusInternalServerError, "Could not retrieve user for token", err, false)
 					return
 				}
+				if user.Disabled {
+					log.Warn().
+						Uint("token_id", accessToken.ID).
+						Uint("user_id", user.ID).
+						Msg("OAuth token rejected: user account is disabled")
+					respondWithError(w, http.StatusForbidden, "user account is disabled", nil, true)
+					return
+				}
 
 				oauthClient, err := cv.service.GetOAuthClient(accessToken.ClientID)
 				if err != nil {

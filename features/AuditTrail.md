@@ -77,7 +77,9 @@ The `API` struct holds `auditService` and a cached `auditHandler`. The middlewar
 
 ### Model (`models.AuditRecord`)
 
-Plain struct, not `gorm.Model`: no soft-delete column, no update path. Indexed on `timestamp`, `request_id`, `ip`, `user_id`, `user_email`, `action`, `method`, `route`, `status`, and `(resource_type, resource_id)`.
+Plain struct, not `gorm.Model`: no soft-delete column, no update path. Indexed on `timestamp`, `request_id`, `ip`, `user_id`, `user_email`, `auth_method`, `action`, `method`, `route`, `status`, and `(resource_type, resource_id)`.
+
+`AuthMethod` is how the actor authenticated: `session` (browser cookie) or `api_key` (user API key, header or `?token=`), read from the gin context key `models.AuthMethodContextKey` that `auth.GetAuthenticatedUser` sets. It is empty on the login routes, where the handler creates the session itself. Filter with `auth_method=` on `/api/v1/audit/records`, `/summary` and `/export`; the CSV export and the file sink's text line (`auth=api_key`) carry it too.
 
 `Diff`, `RequestDump` and `ResponseDump` are `models.RawJSON` (a string column that marshals to the API as the JSON value itself, or `null` when empty).
 
@@ -85,7 +87,7 @@ Plain struct, not `gorm.Model`: no soft-delete column, no update path. Indexed o
 
 `classify(method, fullPath)` turns the matched gin route template into `{Action, ResourceType, ResourceKey, ResourceParam, Auth, IsCreate}`.
 
-1. An explicit table keyed `"METHOD /template"` covers authentication routes and operations whose generic name would read badly (`Roll User API Key`, `Reset App Budget`, `Clear Plugin Data`, ...).
+1. An explicit table keyed `"METHOD /template"` covers authentication routes and operations whose generic name would read badly (`Roll User API Key`, `Revoke User API Key`, `Disable User`, `Enable User`, `Reset App Budget`, `Clear Plugin Data`, ...).
 2. Everything else is derived from route shape after stripping the prefix (`/api/v1/`, `/common/`, `/api/v1/admin/`, ...):
 
 | Shape | Action |
@@ -123,7 +125,7 @@ Method policy: `POST/PUT/PATCH/DELETE` always; `GET` only when `RecordReads` or 
 
 Body handling: the request body is buffered only for detailed recording or auth events (to capture the attempted email on a failed login), only for JSON/form content types, and only up to 1 MB; it is always restored for the handler. The response is teed through a bounded `bodyCapture` writer for every recorded request, because that is where created ids (`data.id`) and error messages live.
 
-Actor: `c.Get("user")` after the chain; on auth routes without a user, the email from the login payload. `Login`/`SSO Login` with status ≥ 400 becomes `Login Failed`/`SSO Login Failed`.
+Actor: `c.Get("user")` after the chain, plus `auth_method` from the context; on auth routes without a user, the email from the login payload. `Login`/`SSO Login` with status ≥ 400 becomes `Login Failed`/`SSO Login Failed`.
 
 Request id: inbound `X-Request-ID` (≤ 64 chars, no whitespace/quotes) or a UUID; set on the response (Go canonicalises it to `X-Request-Id`) and in the gin context as `audit_request_id`.
 

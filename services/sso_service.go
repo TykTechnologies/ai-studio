@@ -232,13 +232,20 @@ func (s *SSOService) provisioningProfile(tx *gorm.DB, profileID string) *models.
 
 func (s *SSOService) createUserWithTx(tx *gorm.DB, email, name string, profile *models.Profile) (*models.User, error) {
 	showPortal, showChat := profile.ProvisioningDefaults()
+	// Built without NewUser() on purpose: an identity-provider account is
+	// issued no API key (see ALLOW_SSO_USER_API_KEYS) and no password.
 	newUser := &models.User{
 		Email:         email,
 		Name:          name,
 		EmailVerified: true,
 		ShowPortal:    showPortal,
 		ShowChat:      showChat,
+		AuthSource:    models.AuthSourceSSO,
 	}
+	if profile != nil {
+		newUser.SSOProfileID = profile.ProfileID
+	}
+	newUser.StampLogin(models.LoginMethodSSO)
 
 	if err := newUser.Create(tx); err != nil {
 		slog.Error("Failed to create user", "email", email, "error", err)
@@ -301,15 +308,24 @@ func (s *SSOService) HandleSSO(login *NonceTokenRequest) (*models.User, error) {
 
 			existingUser = newUser
 			isNewUser = true
+		} else if existingUser.Disabled {
+			// Checked before any mutation: a disabled account keeps its
+			// state exactly as the administrator left it.
+			slog.Warn("SSO login refused for disabled account", "email", emailAddress)
+			return helpers.NewForbiddenError("Account disabled, contact your administrator")
 		}
 
-		if existingUser.Name != displayName || !existingUser.EmailVerified {
+		if !isNewUser {
 			existingUser.Name = displayName
 			existingUser.EmailVerified = true
+			existingUser.StampLogin(models.LoginMethodSSO)
+			if existingUser.SSOProfileID == "" {
+				existingUser.SSOProfileID = login.ProfileID
+			}
 
 			if err := existingUser.Update(tx); err != nil {
-				slog.Error("Failed to update user name", "email", emailAddress, "error", err)
-				return helpers.NewInternalServerError("Failed to update user name")
+				slog.Error("Failed to update user on SSO login", "email", emailAddress, "error", err)
+				return helpers.NewInternalServerError("Failed to update user")
 			}
 		}
 

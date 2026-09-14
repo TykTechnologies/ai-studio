@@ -61,7 +61,7 @@ func (s *NotificationService) NotifyDirect(notificationID string, notifType stri
 		// Send to admin users
 		var adminIDs []uint
 		if err := s.db.Model(&models.User{}).
-			Where("is_admin = ? AND notifications_enabled = ?", true, true).
+			Where("is_admin = ? AND notifications_enabled = ? AND disabled = ?", true, true, false).
 			Pluck("id", &adminIDs).Error; err != nil {
 			return fmt.Errorf("error finding admin users: %v", err)
 		}

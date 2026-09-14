@@ -110,7 +110,7 @@ func TestHandleNonceRequest(t *testing.T) {
 }
 
 func TestHandleSSO(t *testing.T) {
-	api, r, _ := setupSSOTestService(t)
+	api, r, db := setupSSOTestService(t)
 	r.GET("/sso", api.handleSSO)
 
 	t.Run("Missing nonce token", func(t *testing.T) {
@@ -138,6 +138,23 @@ func TestHandleSSO(t *testing.T) {
 		w := performRequest(r, "GET", "/sso?nonce="+*nonceToken, nil)
 		assert.Equal(t, http.StatusFound, w.Code)
 		assert.Equal(t, "/", w.Header().Get("Location"))
+	})
+
+	t.Run("Disabled user is refused and gets no session", func(t *testing.T) {
+		require.NoError(t, db.Create(&models.User{Email: "disabled@example.com", Name: "Old", Disabled: true}).Error)
+		nonceToken, err := api.ssoService.GenerateNonce(sso.NonceTokenRequest{
+			ForSection: "dashboard", EmailAddress: "disabled@example.com", DisplayName: "New", GroupID: "1",
+		})
+		require.NoError(t, err)
+
+		w := performRequest(r, "GET", "/sso?nonce="+*nonceToken, nil)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+		assert.Empty(t, w.Header().Get("Set-Cookie"), "no session for a disabled account")
+
+		var stored models.User
+		require.NoError(t, db.Where("email = ?", "disabled@example.com").First(&stored).Error)
+		assert.Equal(t, "Old", stored.Name, "nothing about the account is updated")
+		assert.Nil(t, stored.LastLoginAt)
 	})
 }
 

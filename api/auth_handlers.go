@@ -1213,6 +1213,14 @@ func (a *API) handleOAuthToken(c *gin.Context) {
 	}
 	// If no PKCE was used (CodeChallengeMethod is empty), skip PKCE validation
 
+	// The code was minted by a user; if that account has since been
+	// disabled it must not be exchangeable for the app's secret.
+	if codeUser, err := a.service.GetUserByID(storedAuthCode.UserID); err != nil || codeUser.Disabled {
+		log.Printf("Token endpoint: user %d for auth code is unavailable or disabled", storedAuthCode.UserID)
+		c.JSON(http.StatusBadRequest, OAuthErrorResponse{Error: "invalid_grant", ErrorDescription: "Authorizing user is not active."})
+		return
+	}
+
 	err_mark_used := authCodeService.MarkAuthCodeAsUsed(code)
 	if err_mark_used != nil {
 		log.Printf("Token endpoint: Failed to mark auth code %s as used: %v", code, err_mark_used)

@@ -44,6 +44,25 @@ import usePagination from "../hooks/usePagination";
 import useSystemFeatures from "../hooks/useSystemFeatures";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import { authSourceLabel, setUserDisabled } from "../services/userService";
+import { Chip } from "@mui/material";
+
+const ORIGIN_OPTIONS = [
+  { value: "", label: "Any origin" },
+  { value: "sso", label: "SSO" },
+  { value: "local", label: "Self-registered" },
+  { value: "admin", label: "Admin-created" },
+];
+const API_KEY_OPTIONS = [
+  { value: "", label: "Any" },
+  { value: "true", label: "Issued" },
+  { value: "false", label: "None" },
+];
+const STATUS_OPTIONS = [
+  { value: "", label: "Any" },
+  { value: "false", label: "Active" },
+  { value: "true", label: "Disabled" },
+];
 
 const Users = memo(() => {
   const navigate = useNavigate();
@@ -67,6 +86,10 @@ const Users = memo(() => {
   const [newGroupName, setNewGroupName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
+  // Origin / API key / status filters; "" means any.
+  const [originFilter, setOriginFilter] = useState("");
+  const [apiKeyFilter, setApiKeyFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const isFirstRender = useRef(true);
   const { features } = useSystemFeatures();
 
@@ -101,6 +124,9 @@ const Users = memo(() => {
       if (debouncedSearchTerm && debouncedSearchTerm.length >= 2) {
         params.search = debouncedSearchTerm;
       }
+      if (originFilter) params.auth_source = originFilter;
+      if (apiKeyFilter) params.has_api_key = apiKeyFilter;
+      if (statusFilter) params.disabled = statusFilter;
 
       const response = await apiClient.get("/users", { params });
       setUsers(response.data.data || []);
@@ -114,7 +140,7 @@ const Users = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, updatePaginationData, sortField, sortOrder, debouncedSearchTerm]);
+  }, [page, pageSize, updatePaginationData, sortField, sortOrder, debouncedSearchTerm, originFilter, apiKeyFilter, statusFilter]);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -130,14 +156,14 @@ const Users = memo(() => {
     fetchGroups();
   }, [fetchUsers, fetchGroups]);
 
-  // Reset to page 1 when search term changes (but not on initial render)
+  // Reset to page 1 when search term or a filter changes (but not on initial render)
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
     handlePageChange(1);
-  }, [debouncedSearchTerm, handlePageChange]);
+  }, [debouncedSearchTerm, originFilter, apiKeyFilter, statusFilter, handlePageChange]);
 
   const handleSearch = useCallback((value) => {
     setSearchTerm(value);
@@ -176,6 +202,28 @@ const Users = memo(() => {
   const handleUserClick = useCallback((user) => {
     navigate(`/admin/users/${user.id}`);
   }, [navigate]);
+
+  const handleToggleDisabled = async () => {
+    if (!selectedUser) return;
+    const disable = !selectedUser.attributes.disabled;
+    try {
+      await setUserDisabled(selectedUser.id, disable);
+      setSnackbar({
+        open: true,
+        message: disable ? "User disabled" : "User enabled",
+        severity: "success",
+      });
+      fetchUsers();
+    } catch (error) {
+      console.error("Error updating user status", error);
+      setSnackbar({
+        open: true,
+        message: error?.message || (disable ? "Failed to disable user" : "Failed to enable user"),
+        severity: "error",
+      });
+    }
+    handleMenuClose();
+  };
 
   const handleAddToGroup = useCallback(() => {
     if (groups.length === 0) {
@@ -293,12 +341,53 @@ const Users = memo(() => {
         </Can>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Box sx={{ mb: 2, maxWidth: 400 }}>
-          <SearchInput
-            value={searchTerm}
-            onChange={handleSearch}
-            placeholder="Search by name or email..."
-          />
+        <Box sx={{ mb: 2, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "center" }}>
+          <Box sx={{ width: 400, maxWidth: "100%" }}>
+            <SearchInput
+              value={searchTerm}
+              onChange={handleSearch}
+              placeholder="Search by name or email..."
+            />
+          </Box>
+          <TextField
+            select
+            size="small"
+            label="Origin"
+            value={originFilter}
+            onChange={(e) => setOriginFilter(e.target.value)}
+            sx={{ minWidth: 160 }}
+            inputProps={{ "data-testid": "users-filter-origin" }}
+          >
+            {ORIGIN_OPTIONS.map((o) => (
+              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="API key"
+            value={apiKeyFilter}
+            onChange={(e) => setApiKeyFilter(e.target.value)}
+            sx={{ minWidth: 130 }}
+            inputProps={{ "data-testid": "users-filter-api-key" }}
+          >
+            {API_KEY_OPTIONS.map((o) => (
+              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            sx={{ minWidth: 130 }}
+            inputProps={{ "data-testid": "users-filter-status" }}
+          >
+            {STATUS_OPTIONS.map((o) => (
+              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+            ))}
+          </TextField>
         </Box>
         <StyledPaper>
           <Table>
@@ -340,6 +429,25 @@ const Users = memo(() => {
                 >
                   Email Verified {sortField === "email_verified" && (sortOrder === "asc" ? "↑" : "↓")}
                 </StyledTableHeaderCell>
+                <StyledTableHeaderCell
+                  onClick={() => {
+                    setSortOrder(sortField === "auth_source" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                    setSortField("auth_source");
+                  }}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  Origin {sortField === "auth_source" && (sortOrder === "asc" ? "↑" : "↓")}
+                </StyledTableHeaderCell>
+                <StyledTableHeaderCell>API key</StyledTableHeaderCell>
+                <StyledTableHeaderCell
+                  onClick={() => {
+                    setSortOrder(sortField === "disabled" ? (sortOrder === "asc" ? "desc" : "asc") : "asc");
+                    setSortField("disabled");
+                  }}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  Status {sortField === "disabled" && (sortOrder === "asc" ? "↑" : "↓")}
+                </StyledTableHeaderCell>
                 {rbacEnabled ? (
                   <StyledTableHeaderCell>Roles</StyledTableHeaderCell>
                 ) : (
@@ -372,6 +480,19 @@ const Users = memo(() => {
                     <StyledTableCell>
                       {user.attributes.email_verified ? "Yes" : "No"}
                     </StyledTableCell>
+                    <StyledTableCell data-testid={`user-origin-${user.id}`}>
+                      {authSourceLabel(user.attributes.auth_source)}
+                    </StyledTableCell>
+                    <StyledTableCell data-testid={`user-api-key-${user.id}`}>
+                      {user.attributes.has_api_key ? "Issued" : "None"}
+                    </StyledTableCell>
+                    <StyledTableCell data-testid={`user-status-${user.id}`}>
+                      {user.attributes.disabled ? (
+                        <Chip label="Disabled" size="small" color="warning" variant="outlined" />
+                      ) : (
+                        <Chip label="Active" size="small" color="success" variant="outlined" />
+                      )}
+                    </StyledTableCell>
                     <StyledTableCell>
                       {rbacEnabled
                         ? (user.attributes.roles || []).map((role) => <RoleBadge key={role.id} role={role} />)
@@ -390,7 +511,7 @@ const Users = memo(() => {
                 ))
               ) : (
                 <TableRow>
-                  <StyledTableCell colSpan={6}>No users found</StyledTableCell>
+                  <StyledTableCell colSpan={9}>No users found</StyledTableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -418,6 +539,11 @@ const Users = memo(() => {
           >
             Edit user
           </MenuItem>
+          <Can permission={P.USERS_WRITE}>
+            <MenuItem onClick={handleToggleDisabled} data-testid="user-toggle-disabled">
+              {selectedUser?.attributes?.disabled ? "Enable user" : "Disable user"}
+            </MenuItem>
+          </Can>
           <MenuItem onClick={() => handleDelete(selectedUser?.id)}>
             Delete user
           </MenuItem>

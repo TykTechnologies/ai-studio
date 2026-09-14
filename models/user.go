@@ -19,6 +19,30 @@ const (
 	RoleChatUser        = "Chat user"
 )
 
+// AuthSource records how a user account came to exist. It is set once, at
+// creation, and never changes on later logins: a self-registered user who
+// now signs in through the identity provider is still "local" in origin.
+const (
+	AuthSourceLocal = "local" // self-registration
+	AuthSourceAdmin = "admin" // created by an administrator through the console or API
+	AuthSourceSSO   = "sso"   // provisioned on first login through an identity provider
+)
+
+// LoginMethod values recorded in LastLoginMethod.
+const (
+	LoginMethodPassword = "password"
+	LoginMethodSSO      = "sso"
+)
+
+// AuthMethodContextKey is the gin context key under which the auth
+// middleware records how a request was authenticated, so consumers that
+// cannot import the auth package (the audit trail) can still read it.
+const (
+	AuthMethodContextKey = "auth_method"
+	AuthMethodSession    = "session" // browser session cookie
+	AuthMethodAPIKey     = "api_key" // user API key (header or ?token=)
+)
+
 type User struct {
 	gorm.Model
 	ID                   uint   `json:"id" gorm:"primaryKey"`
@@ -39,20 +63,108 @@ type User struct {
 	NotificationsEnabled bool    `json:"notifications_enabled"` // Permission to receive notifications about new users, app requests etc.
 	Groups               []Group `json:"groups" gorm:"many2many:user_groups;"`
 
+	// Provenance and activity. AuthSource is one of the AuthSource*
+	// constants; SSOProfileID is the identity provider profile that
+	// provisioned the user (or last signed them in, when the origin was
+	// not SSO). The NOT NULL defaults matter: AutoMigrate adds these
+	// columns to existing rows and a NULL would otherwise fall through
+	// every equality filter.
+	AuthSource       string     `json:"auth_source" gorm:"size:16;not null;default:'';index"`
+	SSOProfileID     string     `json:"sso_profile_id" gorm:"size:64"`
+	LastLoginAt      *time.Time `json:"last_login_at"`
+	LastLoginMethod  string     `json:"last_login_method" gorm:"size:16"`
+	APIKeyLastUsedAt *time.Time `json:"api_key_last_used_at"`
+
+	// Disabled accounts cannot authenticate by any means (session, API
+	// key, password, SSO, OAuth) until an administrator re-enables them.
+	Disabled   bool       `json:"disabled" gorm:"not null;default:false;index"`
+	DisabledAt *time.Time `json:"disabled_at"`
+
 	// Plugin-stored metadata
 	Metadata JSONMap `json:"metadata" gorm:"type:json"`
 }
 
 type Users []User
 
+// NewUser is the self-registration constructor: it issues an API key and
+// stamps the local origin. Admin and SSO creation build the struct directly
+// and deliberately issue no key.
 func NewUser() *User {
 	u := &User{
 		ShowPortal: true,
 		ShowChat:   true,
+		AuthSource: AuthSourceLocal,
 	}
 
 	u.GenerateAPIKey()
 	return u
+}
+
+// StampLogin records a completed interactive login on the struct; the
+// caller persists it (SetUserSession's Save, or the SSO transaction).
+func (u *User) StampLogin(method string) {
+	now := time.Now()
+	u.LastLoginAt = &now
+	u.LastLoginMethod = method
+}
+
+// IsSSOOrigin reports whether the account was provisioned by an identity
+// provider.
+func (u *User) IsSSOOrigin() bool {
+	return u.AuthSource == AuthSourceSSO
+}
+
+// TouchAPIKeyUse records that the user's API key authenticated a request.
+// It is a column update so it never races a whole-struct Save elsewhere.
+func TouchAPIKeyUse(db *gorm.DB, userID uint) error {
+	return db.Model(&User{}).Where("id = ?", userID).Update("api_key_last_used_at", time.Now()).Error
+}
+
+// RevokeAPIKey clears the user's API key. Column update: see TouchAPIKeyUse.
+func RevokeAPIKey(db *gorm.DB, userID uint) error {
+	return db.Model(&User{}).Where("id = ?", userID).Update("api_key", "").Error
+}
+
+// SetDisabled flips the account switch. Disabling also drops the live
+// session and any pending password reset so the lock-out is immediate.
+func SetDisabled(db *gorm.DB, userID uint, disabled bool) error {
+	updates := map[string]interface{}{
+		"disabled":    disabled,
+		"disabled_at": gorm.Expr("NULL"),
+	}
+	if disabled {
+		updates["disabled_at"] = time.Now()
+		updates["session_token"] = ""
+		updates["reset_token"] = ""
+	}
+	return db.Model(&User{}).Where("id = ?", userID).Updates(updates).Error
+}
+
+// BackfillAuthSource classifies rows created before AuthSource existed.
+// Only rows with an empty (or NULL, on Postgres) auth_source are touched,
+// so it is idempotent and safe to run on every start. The order matters:
+// SSO-provisioned users are the only ones with no password hash; admin-
+// created users have a password but were never issued a key; everyone
+// else registered. An admin-created user whose key was later rolled, or
+// an SSO user who set a password through the reset flow, is misread as
+// "local"; administrators can correct auth_source through the API.
+func BackfillAuthSource(db *gorm.DB) error {
+	unset := "COALESCE(auth_source, '') = ''"
+	steps := []struct {
+		where  string
+		source string
+	}{
+		{"COALESCE(password, '') = ''", AuthSourceSSO},
+		{"COALESCE(api_key, '') = ''", AuthSourceAdmin},
+		{"1 = 1", AuthSourceLocal},
+	}
+	for _, step := range steps {
+		if err := db.Model(&User{}).Where(unset).Where(step.where).
+			Update("auth_source", step.source).Error; err != nil {
+			return fmt.Errorf("backfill auth_source=%s: %w", step.source, err)
+		}
+	}
+	return nil
 }
 
 // AdminFlag exposes IsAdmin to packages that cannot import models (see
@@ -81,7 +193,13 @@ func (u *User) Get(db *gorm.DB, id uint, preloads ...string) error {
 	return query.First(u, id).Error
 }
 
+// GetByAPIKey looks a user up by API key. An empty key never matches: users
+// created by an administrator or through SSO have no key, and a blank
+// comparison would otherwise select the first of them.
 func (u *User) GetByAPIKey(db *gorm.DB, apiKey string) error {
+	if apiKey == "" {
+		return gorm.ErrRecordNotFound
+	}
 	return db.Where("api_key = ?", apiKey).First(u).Error
 }
 
@@ -344,6 +462,11 @@ type UserQueryParams struct {
 	PageNumber     int
 	All            bool
 	Sort           string
+
+	// Optional filters; nil / empty means "any".
+	AuthSource string
+	HasAPIKey  *bool
+	Disabled   *bool
 }
 
 func (u *Users) QueryUsers(db *gorm.DB, params UserQueryParams) (int64, int, error) {
@@ -352,6 +475,22 @@ func (u *Users) QueryUsers(db *gorm.DB, params UserQueryParams) (int64, int, err
 	if params.Search != "" {
 		searchTerm := "%" + params.Search + "%"
 		query = query.Where("email LIKE ? OR name LIKE ?", searchTerm, searchTerm)
+	}
+
+	if params.AuthSource != "" {
+		query = query.Where("auth_source = ?", params.AuthSource)
+	}
+
+	if params.HasAPIKey != nil {
+		if *params.HasAPIKey {
+			query = query.Where("COALESCE(api_key, '') <> ''")
+		} else {
+			query = query.Where("COALESCE(api_key, '') = ''")
+		}
+	}
+
+	if params.Disabled != nil {
+		query = query.Where("disabled = ?", *params.Disabled)
 	}
 
 	if params.ExcludeGroupID > 0 {
