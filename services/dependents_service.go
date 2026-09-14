@@ -1,10 +1,7 @@
 package services
 
 import (
-	"fmt"
-	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
@@ -62,8 +59,6 @@ type SecretReference struct {
 	ID   uint   `json:"id"`
 	Name string `json:"name"`
 }
-
-const secretRefPrefix = "$SECRET/"
 
 // dependentRefs runs one "who references X" join and returns id/name pairs.
 //
@@ -275,153 +270,30 @@ func (s *Service) GetSecretDependents(varName string) (*Dependents, error) {
 	return d.finalize(), nil
 }
 
-// SecretReferences scans every credential field that may hold a
-// $SECRET/<name> reference and returns, keyed by secret name, the objects
-// that reference it. One scan serves both the secrets list (which needs the
-// consumers of every secret) and the per-secret dependents endpoint.
-//
-// Fields checked: LLM api_key, api_endpoint and string metadata values
-// (Bedrock keys live there); tool auth_key; datasource db_conn_api_key and
-// embed_api_key. Each object appears at most once per secret.
-//
-// The database does the narrowing: only rows whose credential columns start
-// with the $SECRET/ prefix (or whose JSON metadata contains it) are loaded,
-// so the cost is proportional to the number of secret-backed objects, not to
-// the size of the tables.
+// SecretReferences returns, keyed by secret name, the objects that read
+// each secret through a $SECRET/<name> reference. It is served from the
+// secret_references index that the LLM, tool and datasource model hooks
+// maintain (see models.SecretReference), so the secrets list is one indexed
+// query however many objects exist.
 func (s *Service) SecretReferences() (map[string][]SecretReference, error) {
 	return s.secretReferences("")
 }
 
 // secretReferences is SecretReferences narrowed to one secret when varName
-// is non-empty: the credential columns are matched for equality with the
-// exact reference and the JSON metadata for the quoted reference, so the
-// per-secret dependents endpoint touches only the rows that name it.
+// is non-empty.
 func (s *Service) secretReferences(varName string) (map[string][]SecretReference, error) {
-	// exactRef is the literal reference for one secret; prefix matching is
-	// used when every secret is wanted. LIKE wildcards in secret names are
-	// escaped so a name such as OPENAI_KEY matches only itself.
-	const escape = " ESCAPE '\\'"
-	var (
-		colMatch  string // predicate for a plain credential column
-		jsonMatch string // predicate for the serialised metadata map
-		colArgs   []interface{}
-		jsonArg   interface{}
-	)
-	if varName == "" {
-		colMatch = "%s LIKE ?" + escape
-		colArgs = []interface{}{likeEscape(secretRefPrefix) + "%"}
-		jsonMatch = "CAST(%s AS TEXT) LIKE ?" + escape
-		jsonArg = "%" + likeEscape(secretRefPrefix) + "%"
-	} else {
-		colMatch = "%s = ?"
-		colArgs = []interface{}{secretRefPrefix + varName}
-		jsonMatch = "CAST(%s AS TEXT) LIKE ?" + escape
-		jsonArg = "%\"" + likeEscape(secretRefPrefix+varName) + "\"%"
+	q := s.DB.Model(&models.SecretReference{}).
+		Order("secret_name, object_type, object_id")
+	if varName != "" {
+		q = q.Where("secret_name = ?", varName)
 	}
-	col := func(name string) (string, []interface{}) { return fmt.Sprintf(colMatch, name), colArgs }
-	jsonCol := func(name string) (string, []interface{}) { return fmt.Sprintf(jsonMatch, name), []interface{}{jsonArg} }
-
+	var rows []models.SecretReference
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, err
+	}
 	out := map[string][]SecretReference{}
-	seen := map[string]map[string]bool{} // secret name -> "type:id"
-
-	add := func(name string, ref SecretReference) {
-		key := ref.Type + ":" + strconv.FormatUint(uint64(ref.ID), 10)
-		if seen[name] == nil {
-			seen[name] = map[string]bool{}
-		}
-		if seen[name][key] {
-			return
-		}
-		seen[name][key] = true
-		out[name] = append(out[name], ref)
-	}
-
-	keyMatch, keyArgs := col("api_key")
-	endpointMatch, endpointArgs := col("api_endpoint")
-	metaMatch, metaArgs := jsonCol("metadata")
-	var llms []models.LLM
-	llmArgs := append(append(append([]interface{}{}, keyArgs...), endpointArgs...), metaArgs...)
-	if err := s.DB.Select("id", "name", "api_key", "api_endpoint", "metadata").
-		Where("("+keyMatch+") OR ("+endpointMatch+") OR ("+metaMatch+")", llmArgs...).
-		Order("id").Find(&llms).Error; err != nil {
-		return nil, err
-	}
-	for _, llm := range llms {
-		ref := SecretReference{Type: "llm", ID: llm.ID, Name: llm.Name}
-		for _, v := range []string{llm.APIKey, llm.APIEndpoint} {
-			if name, ok := secretNameFromReference(v); ok && (varName == "" || name == varName) {
-				add(name, ref)
-			}
-		}
-		for _, v := range llm.Metadata {
-			if str, isStr := v.(string); isStr {
-				if name, ok := secretNameFromReference(str); ok && (varName == "" || name == varName) {
-					add(name, ref)
-				}
-			}
-		}
-	}
-
-	authMatch, authArgs := col("auth_key")
-	var tools []models.Tool
-	if err := s.DB.Select("id", "name", "auth_key").
-		Where(authMatch, authArgs...).
-		Order("id").Find(&tools).Error; err != nil {
-		return nil, err
-	}
-	for _, tool := range tools {
-		if name, ok := secretNameFromReference(tool.AuthKey); ok && (varName == "" || name == varName) {
-			add(name, SecretReference{Type: "tool", ID: tool.ID, Name: tool.Name})
-		}
-	}
-
-	dbKeyMatch, dbKeyArgs := col("db_conn_api_key")
-	embedMatch, embedArgs := col("embed_api_key")
-	var datasources []models.Datasource
-	dsArgs := append(append([]interface{}{}, dbKeyArgs...), embedArgs...)
-	if err := s.DB.Select("id", "name", "db_conn_api_key", "embed_api_key").
-		Where("("+dbKeyMatch+") OR ("+embedMatch+")", dsArgs...).
-		Order("id").Find(&datasources).Error; err != nil {
-		return nil, err
-	}
-	for _, ds := range datasources {
-		ref := SecretReference{Type: "datasource", ID: ds.ID, Name: ds.Name}
-		for _, v := range []string{ds.DBConnAPIKey, ds.EmbedAPIKey} {
-			if name, ok := secretNameFromReference(v); ok && (varName == "" || name == varName) {
-				add(name, ref)
-			}
-		}
-	}
-
-	for name := range out {
-		refs := out[name]
-		sort.SliceStable(refs, func(i, j int) bool {
-			if refs[i].Type != refs[j].Type {
-				return refs[i].Type < refs[j].Type
-			}
-			return refs[i].ID < refs[j].ID
-		})
+	for _, r := range rows {
+		out[r.SecretName] = append(out[r.SecretName], SecretReference{Type: r.ObjectType, ID: r.ObjectID, Name: r.ObjectName})
 	}
 	return out, nil
-}
-
-// likeEscape escapes the LIKE wildcards (and the escape character itself) in
-// a literal so it can be embedded in a pattern that runs with ESCAPE '\'.
-func likeEscape(literal string) string {
-	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-	return r.Replace(literal)
-}
-
-// secretNameFromReference returns the secret name a $SECRET/<name> reference
-// points at. Anything else (inline keys, $ENV/ references, empty) is not a
-// secret reference.
-func secretNameFromReference(value string) (string, bool) {
-	if !strings.HasPrefix(value, secretRefPrefix) {
-		return "", false
-	}
-	name := strings.TrimPrefix(value, secretRefPrefix)
-	if name == "" {
-		return "", false
-	}
-	return name, true
 }

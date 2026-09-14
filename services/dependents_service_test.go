@@ -322,3 +322,55 @@ func TestGetToolCatalogueActiveTools(t *testing.T) {
 	_, err = s.GetToolCatalogueActiveTools(catalogue.ID + 100)
 	assert.Error(t, err)
 }
+
+// The secret reference index follows every write path: create, a full
+// update, a partial update through a loaded model, the metadata-only update,
+// delete, and a startup backfill over rows written behind the hooks' back.
+func TestSecretReferenceIndex_FollowsWrites(t *testing.T) {
+	db := setupDependentsTestDB(t)
+	s := NewService(db)
+
+	llm := &models.LLM{Name: "Prod", APIKey: "$SECRET/OPENAI_KEY", Active: true}
+	require.NoError(t, db.Create(llm).Error)
+	refs, err := s.SecretReferences()
+	require.NoError(t, err)
+	assert.Len(t, refs["OPENAI_KEY"], 1, "create indexes the reference")
+
+	// Full update: the reference moves to the new secret.
+	llm.APIKey = "$SECRET/OPENAI_KEY_V2"
+	require.NoError(t, db.Save(llm).Error)
+	refs, err = s.SecretReferences()
+	require.NoError(t, err)
+	assert.Empty(t, refs["OPENAI_KEY"])
+	assert.Len(t, refs["OPENAI_KEY_V2"], 1)
+
+	// Partial update of an unrelated column keeps the reference (the hook
+	// re-reads the row rather than trusting the partial struct).
+	require.NoError(t, db.Model(llm).Update("active", false).Error)
+	refs, err = s.SecretReferences()
+	require.NoError(t, err)
+	assert.Len(t, refs["OPENAI_KEY_V2"], 1)
+
+	// Metadata-only update through the service adds a second secret.
+	require.NoError(t, s.UpdateLLMMetadata(llm.ID, models.JSONMap{"aws_secret_access_key": "$SECRET/AWS_SECRET"}))
+	refs, err = s.SecretReferences()
+	require.NoError(t, err)
+	assert.Len(t, refs["AWS_SECRET"], 1)
+	assert.Len(t, refs["OPENAI_KEY_V2"], 1)
+
+	// Soft delete clears both.
+	require.NoError(t, db.Delete(llm).Error)
+	refs, err = s.SecretReferences()
+	require.NoError(t, err)
+	assert.Empty(t, refs)
+
+	// A row written without hooks (raw SQL) is picked up by the backfill.
+	require.NoError(t, db.Exec("INSERT INTO tools (name, slug, auth_key, active, created_at, updated_at) VALUES ('Raw', 'raw', '$SECRET/CRM_TOKEN', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)").Error)
+	refs, err = s.SecretReferences()
+	require.NoError(t, err)
+	assert.Empty(t, refs["CRM_TOKEN"], "raw inserts bypass the hooks")
+	require.NoError(t, models.BackfillSecretReferences(db))
+	refs, err = s.SecretReferences()
+	require.NoError(t, err)
+	assert.Len(t, refs["CRM_TOKEN"], 1, "the backfill repairs the index")
+}
