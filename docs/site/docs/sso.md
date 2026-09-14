@@ -57,12 +57,21 @@ When SSO is enabled:
 8.  Group memberships are updated based on configured mapping rules.
 9.  The user is logged into Tyk AI Studio.
 
+A user that an administrator has disabled in Tyk AI Studio is refused at step 7, before anything about the account is updated.
+
+## Provisioned Users, API Keys and Offboarding
+
+*   **Origin:** A user created by SSO is recorded with the origin **SSO** and the profile that provisioned them. The Users list shows and filters on origin, so IdP-provisioned accounts can be told apart from self-registered or admin-created ones. A user who registered before SSO was enabled keeps their original origin; their last login shows the method used.
+*   **No password, no API key:** SSO-provisioned users are created without a local password and without an API key. Administrators cannot issue them a key unless `ALLOW_SSO_USER_API_KEYS=true` is set; the console hides the option otherwise.
+*   **Key liveness:** When keys are allowed, an SSO user's key only works while they have signed in through the identity provider within `SSO_API_KEY_LIVENESS` (default `720h`, 30 days; `0` disables the check). A user removed at the IdP therefore loses API access automatically after the window, without any IdP integration.
+*   **Offboarding:** Removing or disabling the user at the IdP stops new SSO logins. To cut off everything at once, including an active browser session, an issued API key and the credentials of apps the user owns, disable the user in Tyk AI Studio (Users → row menu → Disable user). There is no SCIM endpoint yet, so this step is manual.
+
 ## Benefits
 
 *   **Improved User Experience:** One less password to remember.
 *   **Enhanced Security:** Leverages established IdP security policies.
 *   **Centralized Control:** User access can often be managed centrally via the IdP.
-*   **Simplified Onboarding/Offboarding:** User access to Tyk AI Studio can be tied to their status in the central IdP.
+*   **Simplified Onboarding/Offboarding:** Users are provisioned on first login, and API access for SSO users is tied to recent IdP logins. See "Provisioned Users, API Keys and Offboarding" above for what remains a manual step.
 
 ## SSO Profile Management API
 

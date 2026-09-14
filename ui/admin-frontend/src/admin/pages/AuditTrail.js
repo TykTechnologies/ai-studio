@@ -162,6 +162,10 @@ const RecordDetails = ({ record, full }) => {
         <Detail label="Resource" value={rec.resource_type ? `${rec.resource_type} ${rec.resource_id || ""}`.trim() : ""} />
         <Detail label="Resource name" value={rec.resource_name} />
         <Detail label="User ID" value={rec.user_id ? String(rec.user_id) : ""} />
+        <Detail
+          label="Auth method"
+          value={rec.auth_method === "api_key" ? "API key" : rec.auth_method === "session" ? "Browser session" : ""}
+        />
         <Detail label="User agent" value={rec.user_agent} />
         <Detail label="Duration" value={rec.duration_ms !== undefined ? `${rec.duration_ms} ms` : ""} />
         {rec.error && (
@@ -229,6 +233,7 @@ const AuditTrail = () => {
     resourceType: "",
     method: "",
     statusClass: "",
+    authMethod: "",
     search: "",
   });
   const [filters, setFilters] = useState(draft);
@@ -248,6 +253,7 @@ const AuditTrail = () => {
     if (filters.resourceType) p.resource_type = filters.resourceType;
     if (filters.method) p.method = filters.method;
     if (filters.statusClass) p.status_class = filters.statusClass;
+    if (filters.authMethod) p.auth_method = filters.authMethod;
     if (filters.search) p.search = filters.search;
     return p;
   }, [startDate, endDate, filters]);
@@ -312,7 +318,7 @@ const AuditTrail = () => {
   };
 
   const clearFilters = () => {
-    const empty = { user: "", action: "", resourceType: "", method: "", statusClass: "", search: "" };
+    const empty = { user: "", action: "", resourceType: "", method: "", statusClass: "", authMethod: "", search: "" };
     setDraft(empty);
     setFilters(empty);
     setPage(0);
@@ -600,7 +606,22 @@ const AuditTrail = () => {
                 ))}
               </TextField>
             </Grid>
-            <Grid item xs={12} sm={8} md={8}>
+            <Grid item xs={6} sm={3} md={2}>
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Auth method"
+                value={draft.authMethod}
+                onChange={(e) => setDraft({ ...draft, authMethod: e.target.value })}
+                inputProps={{ "data-testid": "audit-filter-auth-method" }}
+              >
+                <MenuItem value="">Any</MenuItem>
+                <MenuItem value="session">Browser session</MenuItem>
+                <MenuItem value="api_key">API key</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={8} md={6}>
               <TextField
                 fullWidth
                 size="small"

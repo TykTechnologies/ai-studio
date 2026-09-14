@@ -89,6 +89,8 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		return nil, err
 	}
 
+	// Administrator-created accounts are deliberately built without
+	// NewUser(): they get no API key until one is explicitly issued.
 	user := &models.User{
 		Email:                dto.Email,
 		Name:                 dto.Name,
@@ -98,6 +100,7 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		EmailVerified:        dto.EmailVerified,
 		NotificationsEnabled: dto.NotificationsEnabled,
 		AccessToSSOConfig:    dto.AccessToSSOConfig,
+		AuthSource:           models.AuthSourceAdmin,
 	}
 
 	if err := user.SetPassword(dto.Password); err != nil {
@@ -144,6 +147,9 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		}
 	}
 
+	// Provenance is not a plugin's to rewrite.
+	user.AuthSource = models.AuthSourceAdmin
+
 	if err := user.Create(s.DB); err != nil {
 		return nil, err
 	}
@@ -187,6 +193,9 @@ func (s *Service) GetUserByID(id uint, preload ...string) (*models.User, error) 
 }
 
 func (a *Service) GetUserByAPIKey(apiKey string) (*models.User, error) {
+	if apiKey == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
 	user := models.NewUser()
 	if err := user.GetByAPIKey(a.DB, apiKey); err != nil {
 		return nil, err
@@ -204,7 +213,89 @@ func (a *Service) GenerateAPIKeyForUser(id uint) error {
 		return err
 	}
 
-	return user.Update(a.DB)
+	// Column update: a whole-struct Save here would clobber the login and
+	// key-use stamps written concurrently by the auth middleware.
+	return a.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("api_key", user.APIKey).Error
+}
+
+// RevokeAPIKeyForUser clears the user's API key; the key stops working
+// immediately and the user shows as having none issued.
+func (a *Service) RevokeAPIKeyForUser(id uint) error {
+	if _, err := a.GetUserByID(id); err != nil {
+		return err
+	}
+	return models.RevokeAPIKey(a.DB, id)
+}
+
+// SetUserDisabled switches an account off or on. Disabling drops the live
+// session and any pending reset token, and deactivates the credentials of
+// every app the user owns so their gateway access stops with them; those
+// credentials are not re-activated on enable (an administrator does that
+// per app, as after a deletion). The caller cannot disable themselves,
+// the super admin, or (Enterprise) the last Owner.
+func (s *Service) SetUserDisabled(actorID, id uint, disabled bool) (*models.User, error) {
+	user, err := s.GetUserByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if disabled {
+		if id == actorID {
+			return nil, helpers.NewForbiddenError("you cannot disable your own account")
+		}
+		if s.Authz().Enabled() {
+			last, err := s.Authz().IsLastOwner(context.Background(), user.ID)
+			if err != nil {
+				return nil, err
+			}
+			if last {
+				return nil, helpers.NewForbiddenError("the last Owner cannot be disabled")
+			}
+		} else if user.GetRole() == models.RoleSuperAdmin {
+			return nil, helpers.NewForbiddenError("super admin user cannot be disabled")
+		}
+	}
+
+	err = s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := models.SetDisabled(tx, id, disabled); err != nil {
+			return err
+		}
+		if !disabled {
+			return nil
+		}
+		var userApps []models.App
+		if err := tx.Where("user_id = ?", id).Find(&userApps).Error; err != nil {
+			return fmt.Errorf("failed to find user's apps: %w", err)
+		}
+		for _, app := range userApps {
+			if app.CredentialID == 0 {
+				continue
+			}
+			var credential models.Credential
+			if err := tx.First(&credential, app.CredentialID).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					continue
+				}
+				return fmt.Errorf("failed to find credential for app %d: %w", app.ID, err)
+			}
+			if err := credential.Deactivate(tx); err != nil {
+				return fmt.Errorf("failed to deactivate credential for app %d: %w", app.ID, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	user, err = s.GetUserByID(id, "Groups")
+	if err != nil {
+		return nil, err
+	}
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitUserUpdated(user, user.ID, actorID)
+	}
+	return user, nil
 }
 
 func (s *Service) GetUserByEmail(email string) (*models.User, error) {
@@ -442,6 +533,7 @@ func (s *Service) DeleteUser(user *models.User) error {
 var (
 	LoginFailedError      = errors.New("login failed")
 	EmailNotVerifiedError = errors.New("email not verified")
+	UserDisabledError     = errors.New("account disabled")
 )
 
 func (s *Service) AuthenticateUser(email, password string) (*models.User, error) {
@@ -456,6 +548,10 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 
 	if !user.EmailVerified {
 		return nil, EmailNotVerifiedError
+	}
+
+	if user.Disabled {
+		return nil, UserDisabledError
 	}
 
 	return user, nil
@@ -582,6 +678,12 @@ type ListUsersParams struct {
 	PageNumber     int
 	All            bool
 	Sort           string
+
+	// Optional filters: origin (models.AuthSource*), whether a key is
+	// issued, and the disabled switch. nil / empty means "any".
+	AuthSource string
+	HasAPIKey  *bool
+	Disabled   *bool
 }
 
 func (s *Service) ListUsers(params ListUsersParams) (models.Users, int64, int, error) {
@@ -594,6 +696,9 @@ func (s *Service) ListUsers(params ListUsersParams) (models.Users, int64, int, e
 		PageNumber:     params.PageNumber,
 		All:            params.All,
 		Sort:           params.Sort,
+		AuthSource:     params.AuthSource,
+		HasAPIKey:      params.HasAPIKey,
+		Disabled:       params.Disabled,
 	}
 
 	totalCount, totalPages, err := users.QueryUsers(s.DB, modelParams)

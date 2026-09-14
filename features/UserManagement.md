@@ -150,15 +150,28 @@ type User struct {
     - If `false`: Chat interface is hidden from the user.
     - Returned as part of UI options in entitlements.
 
-12. **APIKey**: Unique key for API authentication.
-    - Generated automatically on user creation.
-    - Can be rotated via dedicated endpoint.
-    - Used for programmatic access to the API.
+12. **APIKey**: Unique key for API authentication (`Authorization: Bearer <key>` or `?token=`).
+    - Issued automatically only on **self-registration** (`models.NewUser()`). Administrator-created and SSO-provisioned accounts have no key until one is explicitly issued with `POST /users/{id}/roll-api-key`.
+    - Revoked with `DELETE /users/{id}/api-key`; the user then shows `has_api_key: false` and the console says "No API key issued" rather than a masked placeholder.
+    - Never issued to an SSO-provisioned user (`auth_source = sso`) unless `ALLOW_SSO_USER_API_KEYS=true`; the roll endpoint returns 403 and the console hides the button.
+    - An empty key never authenticates: `GetByAPIKey("")` returns not-found, so keyless accounts cannot be matched by a blank credential.
+    - Used for programmatic access to the management API with the user's full permissions; see `APIKeyLastUsedAt` and the audit trail's `auth_method` for monitoring.
 
 13. **NotificationsEnabled**: Boolean flag for admin notifications.
     - If `true` and user is admin: Receives system notifications (new user registrations, etc.).
     - If `false`: Does not receive system notifications.
     - First user (admin) has this automatically set to `true`.
+    - Disabled administrators are skipped.
+
+14. **AuthSource**: How the account came to exist: `local` (self-registration), `admin` (created through the console or API) or `sso` (provisioned on first identity-provider login). Set once at creation and never changed by later logins. Rows that predate the column are classified on startup by `models.BackfillAuthSource`: no password hash → `sso`, password but no key → `admin`, otherwise `local` (an admin-created user whose key was later rolled, or an SSO user who set a password through the reset flow, reads as `local`).
+
+15. **SSOProfileID**: The identity-provider profile that provisioned the user, or, for a non-SSO account, the first profile they signed in through. Set once.
+
+16. **LastLoginAt / LastLoginMethod**: Stamped on every interactive login (`password` or `sso`). API key use does not count as a login.
+
+17. **APIKeyLastUsedAt**: Stamped when the API key authenticates a request, at most once per five minutes per user (`auth.Config.APIKeyTouchInterval`), written off the request path as a column update.
+
+18. **Disabled / DisabledAt**: The account switch. A disabled user is refused by every authentication path: session cookie, API key (header and query), password login (401 "Account disabled, contact your administrator"), SSO login (403, before any name/group/verification mutation), OAuth access tokens on the gateway, the OAuth token exchange, and password reset. `POST /users/{id}/disable` also clears the live session and any pending reset token and deactivates the credentials of apps the user owns; `POST /users/{id}/enable` restores the account but not those credentials. The caller cannot disable themselves, the super admin, or (Enterprise) the last Owner. Column updates only: `User.Update` is a whole-struct `Save`, so lifecycle writes must never go through it.
 
 ## 4. User Roles & Permissions
 
@@ -301,9 +314,11 @@ func (ue *UserEntitlements) HasToolAccess(toolID uint) bool {
   - `/common/me` - Get current user with entitlements
 
 * **User Management:**
-  - `/users` - List/create users
+  - `/users` - List/create users. List filters: `search`, `auth_source` (`local|admin|sso`), `has_api_key` (`true|false`), `disabled` (`true|false`), plus `sort`/pagination.
   - `/users/{id}` - Get/update/delete specific user
-  - `/users/{id}/roll-api-key` - Regenerate API key
+  - `/users/{id}/roll-api-key` - Issue or regenerate the API key (403 for SSO-provisioned users unless `ALLOW_SSO_USER_API_KEYS=true`)
+  - `DELETE /users/{id}/api-key` - Revoke the API key
+  - `/users/{id}/disable`, `/users/{id}/enable` - Account switch (see field 18)
   - `/users/{id}/catalogues` - List accessible catalogues
   - `/users/{id}/groups` - List user's groups
 
@@ -364,6 +379,12 @@ func (ue *UserEntitlements) HasToolAccess(toolID uint) bool {
 **Authentication Flows:**
 - Browser authentication with secure cookies
 - API authentication with API keys
+- Both are refused for a disabled account. For SSO-provisioned users an API key is additionally only honoured while the user has completed an SSO login within `SSO_API_KEY_LIVENESS` (default `720h`, `0` disables the window), so a user the IdP has switched off loses key access without any IdP integration.
+- `auth.GetAuthenticatedUser` records the credential type in the gin context under `models.AuthMethodContextKey` (`session` or `api_key`); the Enterprise audit trail stores it as `auth_method`.
+
+**Console (Users list and detail):**
+- List columns: Origin (Self-registered / Admin-created / SSO), API key (Issued / None), Status (Active / Disabled), with matching filter selects beside the search box; row menu offers Disable/Enable.
+- Detail page: Status chip with toggle, Origin (and provisioning profile), Last login (and method), API key state with Issue / Regenerate / Revoke and "Last used".
 
 **Resource Access Control:**
 - Adding resources to groups grants access to all group members

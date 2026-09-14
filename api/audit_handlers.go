@@ -108,6 +108,7 @@ func parseAuditQuery(c *gin.Context) (audit.Query, error) {
 	q.Method = strings.ToUpper(strings.TrimSpace(c.Query("method")))
 	q.IP = strings.TrimSpace(c.Query("ip"))
 	q.RequestID = strings.TrimSpace(c.Query("req_id"))
+	q.AuthMethod = strings.TrimSpace(c.Query("auth_method"))
 	q.Search = strings.TrimSpace(c.Query("search"))
 
 	for _, field := range []struct {
@@ -117,7 +118,7 @@ func parseAuditQuery(c *gin.Context) (audit.Query, error) {
 	}{
 		{"user", &q.UserEmail, 255}, {"action", &q.Action, 128}, {"resource_type", &q.ResourceType, 64},
 		{"resource_id", &q.ResourceID, 255}, {"method", &q.Method, 16}, {"ip", &q.IP, 64},
-		{"req_id", &q.RequestID, 64}, {"search", &q.Search, 255},
+		{"req_id", &q.RequestID, 64}, {"auth_method", &q.AuthMethod, 16}, {"search", &q.Search, 255},
 	} {
 		if len(*field.val) > field.max {
 			return q, fmt.Errorf("%s is too long", field.name)

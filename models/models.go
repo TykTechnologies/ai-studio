@@ -112,6 +112,11 @@ func InitModels(db *gorm.DB) error {
 		return err
 	}
 
+	// Migration: classify users created before auth_source existed.
+	if err := BackfillAuthSource(db); err != nil {
+		return err
+	}
+
 	// Migration: Populate Tool.Slug for existing records
 	// This ensures tools created before the Slug field was added get their slugs computed
 	var toolCount int64

@@ -61,6 +61,7 @@ func (suite *AuthServiceTestSuite) SetupTest() {
 		FrontendURL:         "http://example.com",
 		RegistrationAllowed: true,
 		AdminEmail:          "admin@example.com",
+		SyncAPIKeyTouch:     true, // no background writers against the per-test :memory: DB
 	}
 	mockMailService := newMockMailService()
 	suite.authService = auth.NewAuthService(&config, mockMailService, suite.service, notificationService)

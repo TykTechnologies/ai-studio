@@ -46,6 +46,18 @@ import CollapsibleSection from "../common/CollapsibleSection";
 import Can from "../rbac/Can";
 import { P } from "../../rbac/permissions";
 import { getEffectivePermissions } from "../../services/rbacService";
+import {
+  authSourceLabel,
+  formatLastLogin,
+  revokeApiKey,
+  rollApiKey,
+  setUserDisabled,
+} from "../../services/userService";
+import useConfig from "../../hooks/useConfig";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import BlockIcon from "@mui/icons-material/Block";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import { Chip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button } from "@mui/material";
 
 const UserDetails = () => {
   const { isEnterprise } = useEdition();
@@ -60,9 +72,11 @@ const UserDetails = () => {
   const [chatSearchTerm, setChatSearchTerm] = useState("");
   const [debouncedChatSearch] = useDebounce(chatSearchTerm, 500);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [confirmRevokeOpen, setConfirmRevokeOpen] = useState(false);
   const isFirstSearchRender = useRef(true);
   const { id } = useParams();
   const navigate = useNavigate();
+  const { config } = useConfig();
 
   const {
     page,
@@ -88,27 +102,64 @@ const UserDetails = () => {
     }
   };
 
-  const handleRollApiKey = async () => {
-    try {
-      const response = await apiClient.post(`/users/${id}/roll-api-key`);
-      setUser(response.data.data);
-      setSnackbarMessage("API Key successfully regenerated");
-      setShowSnackbar(true);
-    } catch (error) {
-      console.error("Error rolling API key", error);
-      setSnackbarMessage("Failed to regenerate API Key");
-      setShowSnackbar(true);
-    }
-  };
-
   // The server only returns another user's key to callers who may manage
-  // users; otherwise it sends a hint (the last four characters).
+  // users; otherwise it sends a hint (the last four characters). A user
+  // with no key issued (admin-created, SSO-provisioned, or revoked) has
+  // has_api_key=false and shows no mask at all.
+  const hasApiKey = Boolean(
+    user?.attributes?.has_api_key || user?.attributes?.api_key || user?.attributes?.api_key_hint
+  );
   const canSeeApiKey = Boolean(user?.attributes?.api_key);
   const maskedApiKey = user?.attributes?.api_key
     ? `${user.attributes.api_key.substring(0, 4)}${"*".repeat(20)}${user.attributes.api_key.slice(-4)}`
     : user?.attributes?.api_key_hint
       ? `${"*".repeat(24)}${user.attributes.api_key_hint}`
       : "********";
+  // Identity-provider accounts cannot be issued a key unless the operator
+  // opted in (ALLOW_SSO_USER_API_KEYS); hide the button rather than 403.
+  const isSSOUser = user?.attributes?.auth_source === "sso";
+  const canIssueApiKey = !isSSOUser || Boolean(config?.allowSSOUserAPIKeys);
+
+  const handleRollApiKey = async () => {
+    try {
+      const updated = await rollApiKey(id);
+      setUser(updated);
+      setSnackbarMessage(hasApiKey ? "API Key successfully regenerated" : "API Key issued");
+      setShowSnackbar(true);
+    } catch (error) {
+      console.error("Error rolling API key", error);
+      setSnackbarMessage(error?.message || "Failed to regenerate API Key");
+      setShowSnackbar(true);
+    }
+  };
+
+  const handleRevokeApiKey = async () => {
+    setConfirmRevokeOpen(false);
+    try {
+      const updated = await revokeApiKey(id);
+      setUser(updated);
+      setSnackbarMessage("API Key revoked");
+      setShowSnackbar(true);
+    } catch (error) {
+      console.error("Error revoking API key", error);
+      setSnackbarMessage(error?.message || "Failed to revoke API Key");
+      setShowSnackbar(true);
+    }
+  };
+
+  const handleToggleDisabled = async () => {
+    const disable = !user?.attributes?.disabled;
+    try {
+      const updated = await setUserDisabled(id, disable);
+      setUser(updated);
+      setSnackbarMessage(disable ? "User disabled" : "User enabled");
+      setShowSnackbar(true);
+    } catch (error) {
+      console.error("Error updating user status", error);
+      setSnackbarMessage(error?.message || (disable ? "Failed to disable user" : "Failed to enable user"));
+      setShowSnackbar(true);
+    }
+  };
 
   useEffect(() => {
     if (!rbacEnabled || !id) return undefined;
@@ -214,30 +265,120 @@ const UserDetails = () => {
           </Grid>
 
           <Grid item xs={3}>
+            <FieldLabel>Status:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <Box display="flex" alignItems="center" gap={1}>
+              {user.attributes.disabled ? (
+                <Chip label="Disabled" size="small" color="warning" variant="outlined" data-testid="user-status-chip" />
+              ) : (
+                <Chip label="Active" size="small" color="success" variant="outlined" data-testid="user-status-chip" />
+              )}
+              {user.attributes.disabled && user.attributes.disabled_at && (
+                <FieldValue>since {new Date(user.attributes.disabled_at).toLocaleString()}</FieldValue>
+              )}
+              <Can permission={P.USERS_WRITE}>
+                <Tooltip title={user.attributes.disabled ? "Enable user" : "Disable user (blocks every login and API key)"}>
+                  <IconButton
+                    onClick={handleToggleDisabled}
+                    size="small"
+                    color={user.attributes.disabled ? "success" : "warning"}
+                    data-testid="user-toggle-disabled"
+                  >
+                    {user.attributes.disabled ? <CheckCircleOutlineIcon /> : <BlockIcon />}
+                  </IconButton>
+                </Tooltip>
+              </Can>
+            </Box>
+          </Grid>
+
+          <Grid item xs={3}>
+            <FieldLabel>Origin:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue data-testid="user-origin">
+              {authSourceLabel(user.attributes.auth_source)}
+              {user.attributes.sso_profile_id ? ` (profile ${user.attributes.sso_profile_id})` : ""}
+            </FieldValue>
+          </Grid>
+
+          <Grid item xs={3}>
+            <FieldLabel>Last login:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue data-testid="user-last-login">{formatLastLogin(user.attributes)}</FieldValue>
+          </Grid>
+
+          <Grid item xs={3}>
             <FieldLabel>API Key:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box display="flex" alignItems="center">
-              <FieldValue>{maskedApiKey}</FieldValue>
-              {canSeeApiKey && (
-                <Tooltip title="Copy API Key">
-                  <IconButton onClick={handleCopyApiKey} size="small">
-                    <ContentCopyIcon />
-                  </IconButton>
-                </Tooltip>
+              {hasApiKey ? (
+                <>
+                  <FieldValue>{maskedApiKey}</FieldValue>
+                  {canSeeApiKey && (
+                    <Tooltip title="Copy API Key">
+                      <IconButton onClick={handleCopyApiKey} size="small">
+                        <ContentCopyIcon />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  <Can permission={P.USERS_WRITE}>
+                    <Tooltip title="Regenerate API Key">
+                      <IconButton
+                        onClick={handleRollApiKey}
+                        size="small"
+                        color="primary"
+                        data-testid="user-roll-api-key"
+                      >
+                        <RefreshIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Revoke API Key">
+                      <IconButton
+                        onClick={() => setConfirmRevokeOpen(true)}
+                        size="small"
+                        color="error"
+                        data-testid="user-revoke-api-key"
+                      >
+                        <DeleteOutlineIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Can>
+                </>
+              ) : (
+                <>
+                  <FieldValue data-testid="user-no-api-key">No API key issued</FieldValue>
+                  <Can permission={P.USERS_WRITE}>
+                    {canIssueApiKey ? (
+                      <Button
+                        onClick={handleRollApiKey}
+                        size="small"
+                        variant="outlined"
+                        sx={{ ml: 2 }}
+                        data-testid="user-issue-api-key"
+                      >
+                        Issue API key
+                      </Button>
+                    ) : (
+                      <Tooltip title="Set ALLOW_SSO_USER_API_KEYS=true to permit API keys for SSO-provisioned users">
+                        <FieldValue sx={{ ml: 2, fontStyle: "italic" }} data-testid="user-sso-no-api-key">
+                          (not available for SSO-provisioned users)
+                        </FieldValue>
+                      </Tooltip>
+                    )}
+                  </Can>
+                </>
               )}
-              <Can permission={P.USERS_WRITE}>
-              <Tooltip title="Regenerate API Key">
-                <IconButton
-                  onClick={handleRollApiKey}
-                  size="small"
-                  color="primary"
-                >
-                  <RefreshIcon />
-                </IconButton>
-              </Tooltip>
-              </Can>
             </Box>
+            {hasApiKey && (
+              <FieldValue data-testid="user-api-key-last-used">
+                Last used: {user.attributes.api_key_last_used_at
+                  ? new Date(user.attributes.api_key_last_used_at).toLocaleString()
+                  : "never"}
+              </FieldValue>
+            )}
           </Grid>
 
           {rbacEnabled ? (
@@ -420,6 +561,21 @@ const UserDetails = () => {
           </>
         )}
 
+        <Dialog open={confirmRevokeOpen} onClose={() => setConfirmRevokeOpen(false)}>
+          <DialogTitle>Revoke API key?</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Any integration using this user's API key will stop working immediately.
+              A new key can be issued later.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmRevokeOpen(false)}>Cancel</Button>
+            <Button onClick={handleRevokeApiKey} color="error" variant="contained" data-testid="user-revoke-api-key-confirm">
+              Revoke
+            </Button>
+          </DialogActions>
+        </Dialog>
         <ExportProxyLogsModal
           open={exportModalOpen}
           onClose={() => setExportModalOpen(false)}
