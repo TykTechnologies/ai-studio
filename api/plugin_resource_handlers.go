@@ -3,13 +3,10 @@ package api
 import (
 	"encoding/json"
 	"html"
-	"log"
 	"net/http"
 	"strconv"
-	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -95,114 +92,39 @@ func (a *API) getUserAccessiblePluginResources(c *gin.Context) {
 	}
 	currentUser := user.(*models.User)
 
-	types, err := a.service.GetPluginResourceTypes()
-	if err != nil || len(types) == 0 {
+	// One visibility rule for the AppBuilder and the portal catalog
+	// (portal_catalog_handlers.go): types with the instances this caller may
+	// use. Nil means nothing is registered or the plugin manager is down.
+	resourceTypes, err := a.accessiblePluginResourceInstances(c, currentUser)
+	if err != nil || resourceTypes == nil {
 		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
 		return
 	}
 
-	// For non-admins, batch-fetch all accessible plugin resources in one query
-	// to avoid N+1 per resource type.
-	var accessibleByType map[uint]map[string]bool
-	if !authz.Can(c, authz.Write("groups")) {
-		allAccessible, err := a.service.GetAllAccessiblePluginResources(currentUser.ID)
-		if err != nil {
-			// Fail-closed: if we can't determine access, return empty
-			log.Printf("Warning: failed to fetch accessible plugin resources for user %d: %v", currentUser.ID, err)
-			c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
-			return
+	result := make([]gin.H, 0, len(resourceTypes))
+	for _, rt := range resourceTypes {
+		objectType := models.PluginResourceObjectType(rt.Type.PluginID, rt.Type.Slug)
+		instances := make([]gin.H, 0, len(rt.Instances))
+		for _, inst := range rt.Instances {
+			item := gin.H{
+				"id":            inst.Id,
+				"name":          sanitizeString(inst.Name),
+				"description":   sanitizeString(inst.Description),
+				"privacy_score": inst.PrivacyScore,
+			}
+			if rec := rt.Governed[inst.Id]; rec != nil {
+				item["governed_metadata"] = a.portalGovernedView(objectType, rec)
+			}
+			instances = append(instances, item)
 		}
-		accessibleByType = make(map[uint]map[string]bool)
-		for _, gpr := range allAccessible {
-			if accessibleByType[gpr.PluginResourceTypeID] == nil {
-				accessibleByType[gpr.PluginResourceTypeID] = make(map[string]bool)
-			}
-			accessibleByType[gpr.PluginResourceTypeID][gpr.InstanceID] = true
-		}
-	}
-
-	// Fetch instances from all plugins concurrently
-	type typeResult struct {
-		Index     int
-		Instances []gin.H
-	}
-	resultCh := make(chan typeResult, len(types))
-	var wg sync.WaitGroup
-
-	for i, rt := range types {
-		if a.service.AIStudioPluginManager == nil {
-			resultCh <- typeResult{Index: i, Instances: nil}
-			continue
-		}
-		wg.Add(1)
-		go func(idx int, rt models.PluginResourceType) {
-			defer wg.Done()
-			var instances []gin.H
-
-			protoInstances, err := a.service.AIStudioPluginManager.ListResourceInstances(rt.PluginID, rt.Slug)
-			if err != nil {
-				resultCh <- typeResult{Index: idx, Instances: nil}
-				return
-			}
-
-			// Filter by pre-fetched access set for non-admins
-			accessibleSet := accessibleByType[rt.ID] // nil for admins
-
-			// Governed metadata (Enterprise): portal-visible fields only, display-ready.
-			var governed map[string]*models.ObjectMetadata
-			objectType := models.PluginResourceObjectType(rt.PluginID, rt.Slug)
-			if rt.SupportsMetadata {
-				ids := make([]string, 0, len(protoInstances))
-				for _, inst := range protoInstances {
-					ids = append(ids, inst.Id)
-				}
-				governed = a.governedMetadataFor(objectType, ids)
-			}
-
-			for _, inst := range protoInstances {
-				if !inst.IsActive {
-					continue
-				}
-				if accessibleSet != nil && !accessibleSet[inst.Id] {
-					continue
-				}
-				item := gin.H{
-					"id":            inst.Id,
-					"name":          sanitizeString(inst.Name),
-					"description":   sanitizeString(inst.Description),
-					"privacy_score": inst.PrivacyScore,
-				}
-				if rec := governed[inst.Id]; rec != nil {
-					item["governed_metadata"] = a.portalGovernedView(objectType, rec)
-				}
-				instances = append(instances, item)
-			}
-			resultCh <- typeResult{Index: idx, Instances: instances}
-		}(i, rt)
-	}
-
-	// Close channel after all goroutines complete
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	// Collect results into ordered slice
-	instancesByIndex := make(map[int][]gin.H)
-	for tr := range resultCh {
-		instancesByIndex[tr.Index] = tr.Instances
-	}
-
-	result := make([]gin.H, 0, len(types))
-	for i, rt := range types {
 		result = append(result, gin.H{
-			"plugin_id":         rt.PluginID,
-			"slug":              rt.Slug,
-			"name":              sanitizeString(rt.Name),
-			"description":       sanitizeString(rt.Description),
-			"icon":              sanitizeString(rt.Icon),
-			"supports_metadata": rt.SupportsMetadata,
-			"instances":         instancesByIndex[i],
+			"plugin_id":         rt.Type.PluginID,
+			"slug":              rt.Type.Slug,
+			"name":              sanitizeString(rt.Type.Name),
+			"description":       sanitizeString(rt.Type.Description),
+			"icon":              sanitizeString(rt.Type.Icon),
+			"supports_metadata": rt.Type.SupportsMetadata,
+			"instances":         instances,
 		})
 	}
 

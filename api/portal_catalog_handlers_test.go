@@ -1,0 +1,312 @@
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// The portal's unified catalog must show exactly what the per-catalog pages
+// showed, and nothing more: active objects in catalogs attached to one of
+// the caller's teams. These tests build two teams with different catalogs
+// and check that the second team's objects, inactive objects and objects in
+// no catalog never reach the first user.
+
+func portalGet(t *testing.T, handler gin.HandlerFunc, user *models.User, params ...gin.Param) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c.Set("user", user)
+	c.Params = params
+	handler(c)
+	return w
+}
+
+func idOf(id uint) string { return fmt.Sprintf("%d", id) }
+
+// giveUserTeam puts the user in a new team that owns the given catalogs.
+func giveUserTeam(t *testing.T, service interface {
+	CreateGroup(name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error)
+}, name string, userID uint, llmCats, dataCats, toolCats []uint) {
+	t.Helper()
+	_, err := service.CreateGroup(name, []uint{userID}, llmCats, dataCats, toolCats)
+	require.NoError(t, err)
+}
+
+func TestPortalCatalog_RespectsVisibility(t *testing.T) {
+	api, db, service := setupTestAPIForCommonTests(t)
+
+	user := createTestUser(t, service)
+	other := createTestUserWithSettings(t, service, "other@example.com", "Other", false, true, true, true, false)
+
+	// user's team: one LLM catalog, one data catalog, one tool catalog.
+	llmCat := createTestCatalogue(t, service)
+	dataCat := createTestDataCatalogue(t, service)
+	toolCat := createTestToolCatalogue(t, service)
+	giveUserTeam(t, service, "Platform", user.ID, []uint{llmCat.ID}, []uint{dataCat.ID}, []uint{toolCat.ID})
+
+	// other's team: a second LLM catalog the first user is not in.
+	otherCat, err := service.CreateCatalogue("Other Catalogue")
+	require.NoError(t, err)
+	giveUserTeam(t, service, "Marketing", other.ID, []uint{otherCat.ID}, nil, nil)
+
+	visibleLLM := createTestLLM(t, service, "Visible LLM")
+	require.NoError(t, service.AddLLMToCatalogue(visibleLLM.ID, llmCat.ID))
+	draftLLM, err := service.CreateLLM("Draft LLM", "api_key", "https://api.example.com",
+		80, "Not yet approved", "Long desc", "", models.OPENAI, false, nil, "", []string{}, nil, nil, false, nil, nil)
+	require.NoError(t, err)
+	require.NoError(t, service.AddLLMToCatalogue(draftLLM.ID, llmCat.ID))
+	hiddenLLM := createTestLLM(t, service, "Other Team LLM")
+	require.NoError(t, service.AddLLMToCatalogue(hiddenLLM.ID, otherCat.ID))
+	// In no catalog at all (Enterprise no longer auto-adds to Default).
+	createTestLLM(t, service, "Uncatalogued LLM")
+
+	visibleDS := createTestDatasource(t, service, "Visible DS")
+	require.NoError(t, service.AddDatasourceToDataCatalogue(dataCat.ID, visibleDS.ID))
+	createTestDatasource(t, service, "Uncatalogued DS")
+
+	visibleTool := createTestTool(t, service, "Visible Tool")
+	require.NoError(t, service.AddToolToToolCatalogue(visibleTool.ID, toolCat.ID))
+	offTool := createTestTool(t, service, "Switched Off Tool")
+	require.NoError(t, service.AddToolToToolCatalogue(offTool.ID, toolCat.ID))
+	require.NoError(t, db.Model(&models.Tool{}).Where("id = ?", offTool.ID).Update("active", false).Error)
+
+	w := portalGet(t, api.getPortalCatalog, user)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var response CatalogListResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+
+	names := map[string]string{}
+	for _, item := range response.Data {
+		names[item.Type+":"+item.Attributes.Name] = item.ID
+	}
+	assert.Equal(t, map[string]string{
+		"llm:Visible LLM":       idOf(visibleLLM.ID),
+		"datasource:Visible DS": idOf(visibleDS.ID),
+		"tool:Visible Tool":     idOf(visibleTool.ID),
+	}, names)
+
+	assert.Equal(t, 3, response.Meta.Total)
+	assert.Equal(t, map[string]int{"llm": 1, "datasource": 1, "tool": 1, "plugin_resource": 0}, response.Meta.Counts)
+
+	// Each item names the catalogs it is reachable through, and the filter
+	// options list only the caller's catalogs.
+	for _, item := range response.Data {
+		require.Len(t, item.Attributes.Catalogs, 1, item.Attributes.Name)
+		assert.NotNil(t, item.Attributes.PrivacyScore)
+		assert.NotNil(t, item.Attributes.CreatedAt)
+	}
+	catalogNames := []string{}
+	for _, option := range response.Meta.Catalogs {
+		catalogNames = append(catalogNames, option.Type+":"+option.Name)
+	}
+	assert.ElementsMatch(t, []string{"llm:Test Catalogue", "datasource:Test Data Catalogue", "tool:Test Tool Catalogue"}, catalogNames)
+
+	// The other user sees only their own team's LLM.
+	w = portalGet(t, api.getPortalCatalog, other)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Len(t, response.Data, 1)
+	assert.Equal(t, "Other Team LLM", response.Data[0].Attributes.Name)
+}
+
+func TestPortalCatalog_DetailEndpoints(t *testing.T) {
+	api, _, service := setupTestAPIForCommonTests(t)
+
+	user := createTestUser(t, service)
+	llmCat := createTestCatalogue(t, service)
+	dataCat := createTestDataCatalogue(t, service)
+	toolCat := createTestToolCatalogue(t, service)
+	giveUserTeam(t, service, "Platform", user.ID, []uint{llmCat.ID}, []uint{dataCat.ID}, []uint{toolCat.ID})
+
+	llm, err := service.CreateLLM("Acme OpenAI", "api_key", "https://api.example.com",
+		40, "Fast general model", "Long desc", "", models.OPENAI, true, nil,
+		"gpt-4o", []string{"gpt-4o", "^gpt-4o-mini$"}, nil, nil, false,
+		models.JSONMap{"region": "eu", "api_token": "plain-secret"}, nil)
+	require.NoError(t, err)
+	require.NoError(t, service.AddLLMToCatalogue(llm.ID, llmCat.ID))
+	hidden := createTestLLM(t, service, "Hidden LLM")
+
+	ds := createTestDatasource(t, service, "Visible DS")
+	require.NoError(t, service.AddDatasourceToDataCatalogue(dataCat.ID, ds.ID))
+	tool := createTestTool(t, service, "Visible Tool")
+	require.NoError(t, service.AddToolToToolCatalogue(tool.ID, toolCat.ID))
+
+	// Price table for the vendor: the allow list admits gpt-4o and
+	// gpt-4o-mini, not o1.
+	_, err = service.CreateModelPrice("gpt-4o", "openai", 0.00001, 0.0000025, 0, 0, "USD")
+	require.NoError(t, err)
+	_, err = service.CreateModelPrice("gpt-4o-mini", "openai", 0.0000006, 0.00000015, 0, 0, "USD")
+	require.NoError(t, err)
+	_, err = service.CreateModelPrice("o1", "openai", 0.00006, 0.000015, 0, 0, "USD")
+	require.NoError(t, err)
+
+	t.Run("LLM detail lists models with prices and redacts metadata secrets", func(t *testing.T) {
+		w := portalGet(t, api.getPortalCatalogLLM, user, gin.Param{Key: "id", Value: idOf(llm.ID)})
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var response CatalogItemResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		attrs := response.Data.Attributes
+		assert.Equal(t, "Acme OpenAI", attrs.Name)
+		assert.Equal(t, "openai", attrs.Kind)
+		assert.Equal(t, []string{"gpt-4o", "^gpt-4o-mini$"}, attrs.AllowedModels)
+
+		require.Len(t, attrs.Models, 2)
+		assert.Equal(t, "gpt-4o", attrs.Models[0].Name)
+		assert.True(t, attrs.Models[0].IsDefault)
+		require.NotNil(t, attrs.Models[0].InputPricePerMillion)
+		assert.InDelta(t, 2.5, *attrs.Models[0].InputPricePerMillion, 0.0001)
+		assert.InDelta(t, 10, *attrs.Models[0].OutputPricePerMillion, 0.0001)
+		assert.Equal(t, "gpt-4o-mini", attrs.Models[1].Name)
+		assert.False(t, attrs.Models[1].IsDefault)
+
+		assert.Equal(t, "eu", attrs.Metadata["region"])
+		assert.NotEqual(t, "plain-secret", attrs.Metadata["api_token"])
+	})
+
+	t.Run("LLM outside the caller's catalogs is not found", func(t *testing.T) {
+		w := portalGet(t, api.getPortalCatalogLLM, user, gin.Param{Key: "id", Value: idOf(hidden.ID)})
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("data source and tool detail", func(t *testing.T) {
+		w := portalGet(t, api.getPortalCatalogDatasource, user, gin.Param{Key: "id", Value: idOf(ds.ID)})
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var response CatalogItemResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		assert.Equal(t, "datasource", response.Data.Type)
+		assert.Equal(t, "source_type", response.Data.Attributes.Kind)
+		assert.Equal(t, "embed_model", response.Data.Attributes.EmbedModel)
+
+		w = portalGet(t, api.getPortalCatalogTool, user, gin.Param{Key: "id", Value: idOf(tool.ID)})
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		assert.Equal(t, "tool", response.Data.Type)
+		assert.Equal(t, models.ToolTypeREST, response.Data.Attributes.Kind)
+
+		w = portalGet(t, api.getPortalCatalogTool, user, gin.Param{Key: "id", Value: "999999"})
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+func TestCatalogModels_AllowListAndPrices(t *testing.T) {
+	llm := &models.LLM{DefaultModel: "claude-3-5-sonnet", AllowedModels: []string{"claude-3.*"}}
+	prices := models.ModelPrices{
+		{ModelName: "claude-3-5-sonnet", Vendor: "anthropic", CPIT: 0.000003, CPT: 0.000015, Currency: "USD"},
+		{ModelName: "claude-3-haiku", Vendor: "anthropic", CPIT: 0.00000025, CPT: 0.00000125, Currency: "USD"},
+		{ModelName: "claude-2", Vendor: "anthropic", CPIT: 0.000008, CPT: 0.000024, Currency: "USD"},
+	}
+	got := catalogModels(llm, prices)
+	names := []string{}
+	for _, m := range got {
+		names = append(names, m.Name)
+	}
+	// Default first, then priced models the pattern admits, alphabetically;
+	// the regex pattern itself is not listed as a model.
+	assert.Equal(t, []string{"claude-3-5-sonnet", "claude-3-haiku"}, names)
+	assert.True(t, got[0].IsDefault)
+	require.NotNil(t, got[1].InputPricePerMillion)
+	assert.InDelta(t, 0.25, *got[1].InputPricePerMillion, 0.0001)
+
+	// No allow list: every priced model is offered.
+	open := catalogModels(&models.LLM{DefaultModel: "claude-2"}, prices)
+	assert.Len(t, open, 3)
+	assert.Equal(t, "claude-2", open[0].Name)
+}
+
+func TestUserAppsUsageSummary(t *testing.T) {
+	api, db, service := setupTestAPIForCommonTests(t)
+	// Proxy logs live outside InitModels (the analytics writer migrates them).
+	require.NoError(t, db.AutoMigrate(&models.ProxyLog{}))
+
+	user := createTestUser(t, service)
+	other := createTestUserWithSettings(t, service, "other@example.com", "Other", false, true, true, true, false)
+	llmCat := createTestCatalogue(t, service)
+	addCatalogueToUserGroup(t, service, user.ID, llmCat.ID)
+	llm := createTestLLM(t, service, "LLM")
+	require.NoError(t, service.AddLLMToCatalogue(llm.ID, llmCat.ID))
+
+	budget := 100.0
+	mine, err := service.CreateApp("Mine", "", user.ID, nil, []uint{llm.ID}, nil, &budget, nil, nil)
+	require.NoError(t, err)
+	quiet, err := service.CreateApp("Quiet", "", user.ID, nil, []uint{llm.ID}, nil, nil, nil, nil)
+	require.NoError(t, err)
+	theirs, err := service.CreateApp("Theirs", "", other.ID, nil, []uint{llm.ID}, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	now := time.Now()
+	logs := []models.ProxyLog{
+		{AppID: mine.ID, TimeStamp: now.Add(-48 * time.Hour), ResponseCode: 200},
+		{AppID: mine.ID, TimeStamp: now.Add(-2 * time.Hour), ResponseCode: 200},
+		// A failover rung is not a request of its own.
+		{AppID: mine.ID, TimeStamp: now.Add(-1 * time.Hour), ResponseCode: 200, FailoverAttempt: 1},
+		// Older than the window: counts for last access, not for requests_30d.
+		{AppID: mine.ID, TimeStamp: now.Add(-45 * 24 * time.Hour), ResponseCode: 200},
+		{AppID: theirs.ID, TimeStamp: now.Add(-1 * time.Hour), ResponseCode: 200},
+	}
+	for i := range logs {
+		require.NoError(t, db.Create(&logs[i]).Error)
+	}
+
+	w := portalGet(t, api.getUserAppsUsageSummary, user)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var response AppUsageSummaryResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Len(t, response.Data, 2)
+	_, leaked := response.Data[idOf(theirs.ID)]
+	assert.False(t, leaked, "another user's app must not be summarised")
+
+	active := response.Data[idOf(mine.ID)]
+	require.NotNil(t, active.LastAccessAt)
+	assert.WithinDuration(t, now.Add(-1*time.Hour), *active.LastAccessAt, time.Minute)
+	assert.Equal(t, int64(2), active.Requests30d)
+	require.NotNil(t, active.MonthlyBudget)
+	assert.Equal(t, 100.0, *active.MonthlyBudget)
+	require.NotNil(t, active.Percentage)
+
+	idle := response.Data[idOf(quiet.ID)]
+	assert.Nil(t, idle.LastAccessAt)
+	assert.Equal(t, int64(0), idle.Requests30d)
+	assert.Nil(t, idle.MonthlyBudget)
+	assert.Nil(t, idle.Percentage)
+}
+
+// The portal budget endpoint answered for any app id; it must refuse apps
+// the caller does not own unless they may read analytics.
+func TestBudgetUsageForApp_OwnershipOnPortalRoute(t *testing.T) {
+	api, _, service := setupTestAPIForCommonTests(t)
+
+	owner := createTestUser(t, service)
+	stranger := createTestUserWithSettings(t, service, "stranger@example.com", "Stranger", false, true, true, true, false)
+	admin := createTestUserWithSettings(t, service, "admin@example.com", "Admin", true, true, true, true, false)
+	llmCat := createTestCatalogue(t, service)
+	addCatalogueToUserGroup(t, service, owner.ID, llmCat.ID)
+	llm := createTestLLM(t, service, "LLM")
+	require.NoError(t, service.AddLLMToCatalogue(llm.ID, llmCat.ID))
+	app, err := service.CreateApp("Mine", "", owner.ID, nil, []uint{llm.ID}, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	call := func(user *models.User) int {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/analytics/budget-usage-for-app?app_id=%d", app.ID), nil)
+		c.Set("user", user)
+		api.getBudgetUsageForApp(c)
+		return w.Code
+	}
+
+	assert.Equal(t, http.StatusOK, call(owner))
+	assert.Equal(t, http.StatusForbidden, call(stranger))
+	assert.Equal(t, http.StatusOK, call(admin))
+}
