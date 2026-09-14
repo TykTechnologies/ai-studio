@@ -2,13 +2,13 @@ package api
 
 import (
 	"net/http"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/net/html"
 	"gorm.io/gorm"
 )
 
@@ -17,10 +17,11 @@ import (
 // The database-backed types (LLM providers, data sources, tools) are
 // filtered in SQL on top of the composable accessible-object queries
 // (models.Accessible*Query), and counted for the facets with aggregates, so
-// the rows loaded are the ones that match. When the request is fixed to one
-// of those types the ordering and the page are SQL too; the mixed "all"
-// view merges the matching rows of every type in memory (plugin resources
-// come from their plugins over RPC and are filtered here in any case).
+// the rows loaded are the ones that match. Ordering and paging are SQL as
+// well: ORDER BY / LIMIT / OFFSET on the one table when the request is fixed
+// to a type, and on a UNION ALL of the three tables' matching rows for the
+// mixed "all" view. Plugin resources come from their plugins over RPC, are
+// matched here by the same rule, and follow the database items in a page.
 // Query string:
 //
 //	q          case-insensitive terms; every term must appear somewhere in
@@ -437,19 +438,29 @@ func sortKindFacets(kinds []CatalogKindFacet) {
 
 // --- output hygiene ---------------------------------------------------------
 
-var markupPattern = regexp.MustCompile(`<[^>]*>`)
-
 // cleanText removes markup from an administrator- or submitter-authored
-// string before it leaves the API. The portal renders these as text (React
-// escapes them), so this is defence in depth for any other consumer of the
-// endpoint; unlike entity-encoding it leaves apostrophes and ampersands as
-// typed, so "Martin's GPT" and "R&D" read as written.
+// string before it leaves the API, using the HTML tokenizer rather than a
+// pattern: tags, comments and doctype tokens are dropped and only text
+// tokens are kept, so malformed or nested markup ("<scr<script>ipt>")
+// cannot slip through. Text is kept as typed -- entities are not decoded,
+// so a literal "&lt;" stays "&lt;" and never becomes a tag, and apostrophes
+// and ampersands are not encoded, so "Martin's GPT" and "R&D" read as
+// written. The portal renders these as text (React escapes them); this is
+// defence in depth for any other consumer of the endpoint.
 func cleanText(s string) string {
-	if !strings.ContainsAny(s, "<>") {
+	if !strings.Contains(s, "<") {
 		return s
 	}
-	s = markupPattern.ReplaceAllString(s, "")
-	return strings.NewReplacer("<", "", ">", "").Replace(s)
+	tokenizer := html.NewTokenizer(strings.NewReader(s))
+	var out strings.Builder
+	for {
+		switch tokenizer.Next() {
+		case html.ErrorToken:
+			return strings.TrimSpace(out.String())
+		case html.TextToken:
+			out.Write(tokenizer.Raw())
+		}
+	}
 }
 
 func cleanTexts(values []string) []string {
@@ -461,4 +472,68 @@ func cleanTexts(values []string) []string {
 		out[i] = cleanText(v)
 	}
 	return out
+}
+
+// --- the mixed view: one SQL page across every database type ----------------
+
+// unionRef is one row of the mixed view's page: which type and id, in order.
+type unionRef struct {
+	ItemType string
+	ItemID   uint
+}
+
+// unionSelect projects the type's filtered rows onto the columns the mixed
+// view orders and pages on, so the three tables can be combined with
+// UNION ALL and the database can apply ORDER BY / LIMIT / OFFSET to the
+// union instead of the application merging every matching row.
+func (src catalogSource) unionSelect(db *gorm.DB, userID uint, q catalogQuery) *gorm.DB {
+	return src.base(db, userID).Scopes(src.scope(q)).
+		Select("'" + src.typ + "' AS item_type, " + src.table + ".id AS item_id, " +
+			src.table + ".name AS item_name, " + src.table + ".created_at AS item_created, " +
+			src.privacyCol + " AS item_privacy").
+		Group(src.table + ".id")
+}
+
+// unionOrder is the ORDER BY for the union; ties break on type and id so
+// paging is stable.
+func unionOrder(sortKey string) string {
+	switch sortKey {
+	case "name":
+		return "LOWER(item_name) ASC, item_type ASC, item_id ASC"
+	case "privacy_asc":
+		return "item_privacy ASC, LOWER(item_name) ASC, item_type ASC, item_id ASC"
+	case "privacy_desc":
+		return "item_privacy DESC, LOWER(item_name) ASC, item_type ASC, item_id ASC"
+	default:
+		return "item_created DESC, LOWER(item_name) ASC, item_type ASC, item_id ASC"
+	}
+}
+
+// unionPage counts the database rows matching the query across the given
+// sources and returns the refs of one page of them, in sort order. The
+// subqueries are passed to the driver as such; UNION ALL without
+// parentheses is the form both SQLite and PostgreSQL accept.
+func unionPage(db *gorm.DB, userID uint, q catalogQuery, sources []*catalogSource, offset, limit int) ([]unionRef, int, error) {
+	if len(sources) == 0 {
+		return nil, 0, nil
+	}
+	parts := make([]string, 0, len(sources))
+	subqueries := make([]interface{}, 0, len(sources))
+	for _, src := range sources {
+		parts = append(parts, "?")
+		subqueries = append(subqueries, src.unionSelect(db, userID, q))
+	}
+	union := strings.Join(parts, " UNION ALL ")
+
+	var total int64
+	if err := db.Raw("SELECT COUNT(*) FROM ("+union+") AS u", subqueries...).Scan(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 || offset >= int(total) {
+		return []unionRef{}, int(total), nil
+	}
+	var refs []unionRef
+	args := append(append([]interface{}{}, subqueries...), limit, offset)
+	err := db.Raw("SELECT item_type, item_id FROM ("+union+") AS u ORDER BY "+unionOrder(q.Sort)+" LIMIT ? OFFSET ?", args...).Scan(&refs).Error
+	return refs, int(total), err
 }

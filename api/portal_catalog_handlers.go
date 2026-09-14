@@ -569,33 +569,88 @@ func (a *API) getPortalCatalog(c *gin.Context) {
 		return
 	}
 
-	// Every type, or plugin resources: each database type contributes its
-	// SQL-filtered rows, plugin resources are matched here, and the union is
-	// ordered and paged.
-	matched := []CatalogItem{}
+	// Every type, or plugin resources. The database types are combined with
+	// UNION ALL and counted, ordered and paged by the database; plugin
+	// resources (listed by their plugins over RPC) are matched here and come
+	// after the database items, so a page is the database page followed by
+	// whatever plugin resources fall into the same window.
+	sources := []*catalogSource{}
 	for i := range catalogSources {
-		src := &catalogSources[i]
-		if !src.applies(query) {
-			continue
+		if catalogSources[i].applies(query) {
+			sources = append(sources, &catalogSources[i])
 		}
-		items, err := a.loadCatalogItems(user, src, src.scope(query), catalogPage{})
-		if err != nil {
-			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
-			return
-		}
-		matched = append(matched, items...)
 	}
+	pluginMatched := []CatalogItem{}
 	if query.Type == "" || query.Type == CatalogItemPluginResource {
 		for i := range pluginItems {
 			if query.matches(&pluginItems[i]) {
-				matched = append(matched, pluginItems[i])
+				pluginMatched = append(pluginMatched, pluginItems[i])
 			}
 		}
+		sortCatalogItems(pluginMatched, query.Sort)
 	}
-	sortCatalogItems(matched, query.Sort)
-	pageItems, totalPages := pageOf(matched, query.Page, query.PageSize)
-	meta.Total, meta.TotalPages = len(matched), totalPages
+	offset := (query.Page - 1) * query.PageSize
+	refs, dbTotal, err := unionPage(a.service.DB, user.ID, query, sources, offset, query.PageSize)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	pageItems, err := a.loadCatalogRefs(user, refs)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	if remaining := query.PageSize - len(pageItems); remaining > 0 && len(pluginMatched) > 0 {
+		start := offset - dbTotal
+		if start < 0 {
+			start = 0
+		}
+		if start < len(pluginMatched) {
+			end := start + remaining
+			if end > len(pluginMatched) {
+				end = len(pluginMatched)
+			}
+			pageItems = append(pageItems, pluginMatched[start:end]...)
+		}
+	}
+	total := dbTotal + len(pluginMatched)
+	meta.Total, meta.TotalPages = total, totalPagesFor(total, query.PageSize)
 	c.JSON(http.StatusOK, CatalogListResponse{Data: pageItems, Meta: meta})
+}
+
+// loadCatalogRefs loads the items a union page refers to, one query per
+// type present, and returns them in the page's order.
+func (a *API) loadCatalogRefs(user *models.User, refs []unionRef) ([]CatalogItem, error) {
+	items := []CatalogItem{}
+	if len(refs) == 0 {
+		return items, nil
+	}
+	idsByType := map[string][]uint{}
+	for _, ref := range refs {
+		idsByType[ref.ItemType] = append(idsByType[ref.ItemType], ref.ItemID)
+	}
+	byKey := map[string]CatalogItem{}
+	for typ, ids := range idsByType {
+		src := catalogSourceFor(typ)
+		if src == nil {
+			continue
+		}
+		loaded, err := a.loadCatalogItems(user, src, func(db *gorm.DB) *gorm.DB {
+			return db.Where(src.table+".id IN ?", ids)
+		}, catalogPage{})
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range loaded {
+			byKey[item.Type+":"+item.ID] = item
+		}
+	}
+	for _, ref := range refs {
+		if item, ok := byKey[ref.ItemType+":"+uintID(ref.ItemID)]; ok {
+			items = append(items, item)
+		}
+	}
+	return items, nil
 }
 
 // findCatalogItem answers a detail request for a database-backed type: the

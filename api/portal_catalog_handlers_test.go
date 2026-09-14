@@ -441,3 +441,24 @@ func TestPortalCatalog_QuerySortAndPage(t *testing.T) {
 		assert.Equal(t, catalogMaxPageSize, list("page_size=5000").Meta.PageSize)
 	})
 }
+
+// Names and descriptions are stripped of markup with the HTML tokenizer:
+// tags (however malformed) go, text stays exactly as typed.
+func TestCleanText(t *testing.T) {
+	cases := map[string]string{
+		"Acme OpenAI":                              "Acme OpenAI",
+		"Martin's GPT & R&D":                       "Martin's GPT & R&D",
+		"<script>alert(1)</script>Acme":            "alert(1)Acme",
+		"<scr<script>ipt>alert(1)</script>":        "ipt>alert(1)",
+		"<img src=x onerror=alert(1)>Vision":       "Vision",
+		"a <!-- comment --> b":                     "a  b",
+		"&lt;b&gt;literal&lt;/b&gt;":               "&lt;b&gt;literal&lt;/b&gt;",
+		"1 < 2 and 3 > 2":                          "1 < 2 and 3 > 2",
+		"<a href=\"javascript:alert(1)\">link</a>": "link",
+	}
+	for in, want := range cases {
+		assert.Equal(t, want, cleanText(in), in)
+	}
+	assert.Equal(t, []string{"gpt-4o", "x"}, cleanTexts([]string{"gpt-4o", "<b>x</b>"}))
+	assert.Equal(t, []string{}, cleanTexts(nil))
+}

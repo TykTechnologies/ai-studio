@@ -1305,17 +1305,27 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 	// The portal route (/analytics/budget-usage-for-app) is open to every
 	// signed-in user, so a caller may only read their own apps unless they
 	// hold analytics read (the admin route's permission, which resolves to
-	// the wildcard for administrators).
-	if user, exists := c.Get("user"); exists {
-		if u, ok := user.(*models.User); ok && u != nil && app.UserID != u.ID && !authz.Can(c, authz.Read("analytics")) {
-			c.JSON(http.StatusForbidden, models.ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Forbidden", Detail: "You don't have permission to access this app's budget"}},
-			})
-			return
-		}
+	// the wildcard for administrators). No identifiable caller is a refusal,
+	// not a pass, so a misconfigured middleware chain cannot open the data.
+	caller, _ := c.Get("user")
+	u, ok := caller.(*models.User)
+	if !ok || u == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unauthorized", Detail: "User not found in context"}},
+		})
+		return
+	}
+	if app.UserID != u.ID && !authz.Can(c, authz.Read("analytics")) {
+		c.JSON(http.StatusForbidden, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Forbidden", Detail: "You don't have permission to access this app's budget"}},
+		})
+		return
 	}
 
 	now := time.Now()
