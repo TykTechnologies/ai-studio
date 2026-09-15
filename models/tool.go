@@ -1,6 +1,8 @@
 package models
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -44,7 +46,66 @@ type Tools []Tool
 
 const (
 	ToolTypeREST = "REST"
+	// ToolTypeClient is a human-in-the-loop tool: the model calls it like any
+	// function, but it is executed by the person in the chat UI (a form or an
+	// approval) rather than by the server. Its definition lives in OASSpec as
+	// a ClientToolDefinition JSON document.
+	ToolTypeClient = "CLIENT"
 )
+
+// ClientToolUI tells the chat UI how to collect the tool's result.
+type ClientToolUI struct {
+	// Kind is "form" (the user fills ResponseSchema) or "approval" (the user
+	// approves or rejects what the model asked for).
+	Kind string `json:"kind"`
+	// ResponseSchema is the JSON schema of the value the user provides for
+	// kind "form". Optional; a single free-text field is used when absent.
+	ResponseSchema map[string]interface{} `json:"response_schema,omitempty"`
+	// Title and Description label the card shown to the user.
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// ClientToolDefinition is the OASSpec payload of a ToolTypeClient tool.
+type ClientToolDefinition struct {
+	// Parameters is the JSON schema of the arguments the model supplies.
+	Parameters map[string]interface{} `json:"parameters"`
+	UI         ClientToolUI           `json:"ui"`
+}
+
+// ClientDefinition parses the tool's client-tool definition. Missing pieces
+// get usable defaults: an empty object schema and an approval UI.
+func (t *Tool) ClientDefinition() (*ClientToolDefinition, error) {
+	def := &ClientToolDefinition{}
+	if raw := strings.TrimSpace(t.OASSpec); raw != "" {
+		if err := json.Unmarshal([]byte(raw), def); err != nil {
+			// The API stores specs base64-encoded; accept that form too.
+			decoded, decErr := base64.StdEncoding.DecodeString(raw)
+			if decErr != nil || json.Unmarshal(decoded, def) != nil {
+				return nil, fmt.Errorf("invalid client tool definition: %w", err)
+			}
+		}
+	}
+	if def.Parameters == nil {
+		def.Parameters = map[string]interface{}{"type": "object", "properties": map[string]interface{}{}}
+	}
+	if def.UI.Kind == "" {
+		def.UI.Kind = "approval"
+	}
+	return def, nil
+}
+
+// ClientOperation is the function name the model sees for a client tool:
+// the first configured operation, else the tool's slug.
+func (t *Tool) ClientOperation() string {
+	if ops := t.GetOperations(); len(ops) > 0 && strings.TrimSpace(ops[0]) != "" {
+		return strings.TrimSpace(ops[0])
+	}
+	if t.Slug != "" {
+		return t.Slug
+	}
+	return slug.Make(t.Name)
+}
 
 func NewTool() *Tool {
 	return &Tool{}

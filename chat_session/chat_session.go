@@ -78,6 +78,7 @@ type ChatSession struct {
 	subMu       sync.Mutex                  // guards subs
 	subs        map[string]*eventSubscriber // run id -> subscriber
 	streamMuted int                         // >0 while side calls to the model must not stream (see muteStreaming)
+	clientState *clientToolState            // parked client tool calls (see client_tools.go)
 }
 
 type ChatResponse struct {
@@ -412,7 +413,11 @@ func (cs *ChatSession) Start() error {
 					continue
 				}
 				if !continued {
-					cs.finishRun(FinishStop)
+					if cs.AwaitingClientTools() {
+						cs.finishRun(FinishToolCalls)
+					} else {
+						cs.finishRun(FinishStop)
+					}
 				}
 			}
 		}
@@ -426,6 +431,13 @@ func (cs *ChatSession) Start() error {
 // queue (so the turn continues in HandleLLMResponse) and false when the turn
 // ended here.
 func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
+	if len(msg.ToolResults) > 0 {
+		return cs.resumeWithToolResults(msg.ToolResults)
+	}
+	// A new message (or regenerate) while client calls are parked: close
+	// them out so the stored history stays valid for the model.
+	cs.abandonPendingClientCalls()
+
 	if msg.Regenerate {
 		return cs.regenerateTurn()
 	}
@@ -672,6 +684,15 @@ func (cs *ChatSession) prepareTools() []llms.Tool {
 				tools = append(tools, asToolDef...)
 				ids[t.Name] = struct{}{}
 			}
+
+		case models.ToolTypeClient:
+			def, err := clientToolDefinition(t)
+			if err != nil {
+				cs.sendError(fmt.Errorf("error creating client tool definition: %v", err))
+				continue
+			}
+			tools = append(tools, def)
+			ids[t.Name] = struct{}{}
 
 		default:
 			cs.sendError(fmt.Errorf("unknown tool type: %s", t.ToolType))
@@ -1036,6 +1057,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool,
 	}
 
 	toolCall := false
+	parked := 0
 	toolCallRequest := llms.MessageContent{
 		Role:  llms.ChatMessageTypeAI,
 		Parts: []llms.ContentPart{},
@@ -1054,7 +1076,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool,
 		}
 
 		if len(reply.ToolCalls) > 0 {
-			cs.handleToolCalls(reply, &toolCallRequest, &toolCallResult)
+			parked += cs.handleToolCalls(reply, &toolCallRequest, &toolCallResult)
 			toolCall = true
 		}
 	}
@@ -1133,46 +1155,23 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) (continued bool,
 		}
 		cs.noteAssistantMessageID(cs.chatHistory.LastMessageID())
 
+		if parked > 0 {
+			// Some calls belong to the user. Keep the server-side results
+			// aside; they are persisted together with the user's answers when
+			// the turn resumes. The turn ends here with FinishToolCalls.
+			cs.parkTurn(toolCallResult)
+			_ = history
+			return false, nil
+		}
+
 		err = cs.chatHistory.AddMessage(ctx, toolCallResult)
 		if err != nil {
 			cs.sendError(fmt.Errorf("error adding tool call to history: %v", err))
 			return false, err
 		}
 
-		// Get updated history with tool call and result
-		history, err = cs.getMessages()
-		if err != nil {
-			cs.sendError(fmt.Errorf("error getting updated history: %v", err))
-			return false, err
-		}
-
-		// Regenerate options from current session state instead of using w.Opts
-		// This ensures we have the correct tools and settings after NATS deserialization
-		tools := cs.prepareTools()
-		currentOpts := cs.getOptions(cs.chatRef.LLMSettings, tools)
-
-		// Check token length and get LLM response based on updated history
-		history = cs.PreflightTokenLengthCheck(history)
-
-		// Reset streaming buffer/index for new request
-		cs.streamBuffer = ""
-		cs.streamChunkIndex = 0
-		cs.streamFilterBlocked = false
-		cs.resetStreamed()
-
-		resp, err := cs.caller.GenerateContent(cs.runCtx(), history, currentOpts...)
-		if err != nil {
-			cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
-			return false, err
-		}
-
-		// Send the new LLM response to continue the conversation
-		// Note: We still use nil for Opts since they'll be regenerated when needed
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		if err := cs.queue.PublishLLMResponse(ctx, &LLMResponseWrapper{Response: resp, Opts: nil}); err != nil {
-			cs.sendError(fmt.Errorf("could not queue LLM response after tool call: %v", err))
-			return false, err
+		if !cs.callModelAfterTools() {
+			return false, fmt.Errorf("model call after tool results failed")
 		}
 		return true, nil
 	}
@@ -1545,7 +1544,10 @@ func (cs *ChatSession) handleToolError(errMsg string, toolCallID string, functio
 	toolResult.Parts = append(toolResult.Parts, toolResp)
 }
 
-func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, toolResult *llms.MessageContent) {
+// handleToolCalls executes the server-side tools a reply asked for, appending
+// the requests to toolCall and the results to toolResult. Client tools are
+// parked instead (see client_tools.go); the return value is how many were.
+func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, toolResult *llms.MessageContent) (parked int) {
 	currentTools := cs.snapshotTools()
 	for i, _ := range choice.ToolCalls {
 		t := choice.ToolCalls[i]
@@ -1572,6 +1574,10 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 
 		toolDefIndex := ""
 		for i, tool := range currentTools {
+			if tool.ToolType == models.ToolTypeClient && tool.ClientOperation() == t.FunctionCall.Name {
+				toolDefIndex = i
+				break
+			}
 			asList := strings.Split(tool.AvailableOperations, ",")
 			for _, op := range asList {
 				if op == t.FunctionCall.Name {
@@ -1591,10 +1597,18 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 			continue
 		}
 
-		if toolDef.ToolType == models.ToolTypeREST {
+		switch toolDef.ToolType {
+		case models.ToolTypeREST:
 			cs.executeRESTToolCall(t, toolDef, toolResult)
+		case models.ToolTypeClient:
+			cs.parkClientCall(t)
+			parked++
+		default:
+			// Unknown types are skipped without a result part (existing behaviour).
+			slog.Warn("skipping tool call for unsupported tool type", "tool", toolDef.Name, "type", toolDef.ToolType)
 		}
 	}
+	return parked
 }
 
 // executeRESTToolCall runs a single REST tool call end to end: governance

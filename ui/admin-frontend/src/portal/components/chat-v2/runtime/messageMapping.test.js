@@ -1,4 +1,5 @@
 import {
+  isResume,
   toThreadMessageLike,
   extractText,
   extractFileRefs,
@@ -97,5 +98,29 @@ describe('buildRunBody', () => {
   it('does not rewind when the parent id is unknown', () => {
     const body = buildRunBody([user('u1', 'hi'), ai('a-unknown'), user('u2', 'next')], new Map([['u1', '10']]), '11');
     expect(body.after_message_id).toBeUndefined();
+  });
+});
+
+describe('buildRunBody (client tools)', () => {
+  it('sends tool results when resuming a parked assistant turn', () => {
+    const last = {
+      id: 'a1', role: 'assistant',
+      content: [
+        { type: 'text', text: 'Confirm?' },
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'ask-approval', args: {}, result: { approved: true } },
+        { type: 'tool-call', toolCallId: 'call_2', toolName: 'getWeather', args: {}, result: { temp: 1 } },
+        { type: 'tool-call', toolCallId: 'call_3', toolName: 'ask-form', args: {} },
+      ],
+    };
+    const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'go' }] }];
+    const body = buildRunBody(messages, new Map(), null, new Set(['ask-approval', 'ask-form']), last);
+    expect(body).toEqual({ tool_results: [{ tool_call_id: 'call_1', result: '{"approved":true}', is_error: false }] });
+  });
+
+  it('treats an unanswered parked message as a fresh turn', () => {
+    const current = { id: 'a1', role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'c', toolName: 'ask-form', args: {} }] };
+    const messages = [{ id: 'u1', role: 'user', content: [{ type: 'text', text: 'go' }] }];
+    expect(isResume(current, new Set(['ask-form']))).toBe(false);
+    expect(buildRunBody(messages, new Map(), null, new Set(['ask-form']), current)).toEqual({ message: 'go', file_refs: [] });
   });
 });

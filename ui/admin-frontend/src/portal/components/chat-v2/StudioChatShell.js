@@ -75,7 +75,8 @@ const Layout = ({ title, subtitle, icon, onBack, onNewChat, sidebar, hideFileUpl
  */
 const StudioChatShell = ({ session, endpoints, onRunError, ...layoutProps }) => {
   const viewportRef = useRef(null);
-  const runtime = useStudioRuntime({ sessionId: session.session_id, endpoints, onRunError });
+  const clientToolNames = useMemo(() => (session.client_tools || []).map((t) => t.name), [session.client_tools]);
+  const runtime = useStudioRuntime({ sessionId: session.session_id, endpoints, clientToolNames, onRunError });
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <Layout viewportRef={viewportRef} {...layoutProps} />

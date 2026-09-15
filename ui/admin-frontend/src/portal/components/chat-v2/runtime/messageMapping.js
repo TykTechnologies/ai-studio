@@ -62,6 +62,19 @@ export const extractFileRefs = (message) => {
 };
 
 /**
+ * True when the assistant message the runtime is about to continue holds
+ * answered client (human-in-the-loop) tool calls.
+ */
+export const isResume = (currentAssistant, humanToolNames = new Set()) =>
+  Boolean(
+    currentAssistant &&
+      humanToolNames.size > 0 &&
+      (currentAssistant.content || []).some(
+        (p) => p.type === 'tool-call' && p.result !== undefined && humanToolNames.has(p.toolName),
+      ),
+  );
+
+/**
  * Decides what to ask the backend for, given the thread assistant-ui wants
  * to run and what we know about the persisted history.
  *
@@ -69,9 +82,24 @@ export const extractFileRefs = (message) => {
  * @param {Map<string,string>} idMap    runtime message id -> backend row id
  * @param {string|null} backendHead     backend row id of the last persisted message
  */
-export const buildRunBody = (messages, idMap, backendHead) => {
+export const buildRunBody = (messages, idMap, backendHead, humanToolNames = new Set(), currentAssistant = null) => {
   const last = messages[messages.length - 1];
   if (!last) throw new Error('nothing to run');
+
+  if (isResume(currentAssistant, humanToolNames)) {
+    // Resuming a turn parked on client (human-in-the-loop) tools: send the
+    // answers the user gave in the tool cards. The runtime hands us the
+    // parked assistant message separately (unstable_getMessage), not as the
+    // last thread message.
+    const tool_results = currentAssistant.content
+      .filter((p) => p.type === 'tool-call' && p.result !== undefined && humanToolNames.has(p.toolName))
+      .map((p) => ({
+        tool_call_id: p.toolCallId,
+        result: typeof p.result === 'string' ? p.result : JSON.stringify(p.result),
+        is_error: Boolean(p.isError),
+      }));
+    return { tool_results };
+  }
 
   if (last.role === 'user' && idMap.has(last.id)) {
     // Reload of an assistant reply: the user turn already exists server-side.

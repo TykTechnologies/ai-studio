@@ -34,7 +34,10 @@ type V2SessionResponse struct {
 	Tools       []V2ToolSummary    `json:"tools"`
 	Datasources []V2SourceSummary  `json:"datasources"`
 	ClientTools []V2ClientToolInfo `json:"client_tools"`
-	Chat        V2ChatSummary      `json:"chat"`
+	// PendingToolCallIDs lists client tool calls still waiting for an answer
+	// when a session is resumed, so the UI can offer them again.
+	PendingToolCallIDs []string      `json:"pending_tool_call_ids,omitempty"`
+	Chat               V2ChatSummary `json:"chat"`
 }
 
 type V2ToolSummary struct {
@@ -142,6 +145,12 @@ func sessionResponse(cs *chat_session.ChatSession, chat *models.Chat) V2SessionR
 	for _, ds := range cs.GetCurrentDatasources() {
 		resp.Datasources = append(resp.Datasources, V2SourceSummary{ID: ds.ID, Name: ds.Name, ShortDescription: ds.ShortDescription})
 	}
+	for _, ct := range cs.ClientTools() {
+		schema, _ := json.Marshal(ct.Schema)
+		ui, _ := json.Marshal(ct.UI)
+		resp.ClientTools = append(resp.ClientTools, V2ClientToolInfo{Name: ct.Name, Description: ct.Description, Schema: schema, UI: ui})
+	}
+	resp.PendingToolCallIDs = cs.PendingClientCallIDs()
 	return resp
 }
 
@@ -288,11 +297,8 @@ func (a *API) runChatTurnV2(c *gin.Context) {
 		jsonError(c, http.StatusBadRequest, "Invalid input", err.Error())
 		return
 	}
-	if len(req.ToolResults) > 0 {
-		jsonError(c, http.StatusBadRequest, "Unsupported", "client tool results are not supported yet")
-		return
-	}
-	if !req.Regenerate && strings.TrimSpace(req.Message) == "" && len(req.FileRefs) == 0 {
+	resuming := len(req.ToolResults) > 0
+	if !resuming && !req.Regenerate && strings.TrimSpace(req.Message) == "" && len(req.FileRefs) == 0 {
 		jsonError(c, http.StatusBadRequest, "Invalid input", "message is required")
 		return
 	}
@@ -326,6 +332,23 @@ func (a *API) runChatTurnV2(c *gin.Context) {
 	}
 	defer cs.UnlockRun()
 
+	var toolResults []models.ToolResult
+	if resuming {
+		if !cs.AwaitingClientTools() {
+			jsonError(c, http.StatusConflict, "Nothing to resume", "No client tool call is waiting for a result")
+			return
+		}
+		for _, r := range req.ToolResults {
+			result := strings.TrimSpace(string(r.Result))
+			// A JSON string is unwrapped so the model sees the text itself.
+			var s string
+			if json.Unmarshal(r.Result, &s) == nil {
+				result = s
+			}
+			toolResults = append(toolResults, models.ToolResult{ToolCallID: r.ToolCallID, Result: result, IsError: r.IsError})
+		}
+	}
+
 	if req.Regenerate && afterID == nil {
 		last, err := a.service.LastUserMessageID(sessionID)
 		if err != nil {
@@ -350,7 +373,7 @@ func (a *API) runChatTurnV2(c *gin.Context) {
 	defer unsubscribe()
 
 	select {
-	case cs.Input() <- &models.UserMessage{Payload: req.Message, FileRef: req.FileRefs, RunID: runID, Regenerate: req.Regenerate}:
+	case cs.Input() <- &models.UserMessage{Payload: req.Message, FileRef: req.FileRefs, RunID: runID, Regenerate: req.Regenerate, ToolResults: toolResults}:
 	case <-c.Request.Context().Done():
 		return
 	case <-time.After(10 * time.Second):

@@ -15,16 +15,20 @@ import { toThreadMessageLike, buildRunBody } from './messageMapping';
  *  - attachments: uploads files to the session so they become file_refs on
  *    the next message (chat rooms only)
  */
-export const useStudioRuntime = ({ sessionId, endpoints, onRunError }) => {
+export const useStudioRuntime = ({ sessionId, endpoints, clientToolNames = [], onRunError }) => {
   // runtime message id -> backend row id, plus the backend's last row id.
   const idMap = useRef(new Map());
   const backendHead = useRef(null);
+  const humanToolNames = useMemo(() => new Set(clientToolNames), [clientToolNames]);
 
   const adapter = useMemo(
     () => ({
-      async *run({ messages, abortSignal, unstable_assistantMessageId }) {
+      async *run({ messages, abortSignal, unstable_assistantMessageId, unstable_getMessage }) {
         const last = messages[messages.length - 1];
-        const body = buildRunBody(messages, idMap.current, backendHead.current);
+        const current = typeof unstable_getMessage === 'function' ? unstable_getMessage() : null;
+        const body = buildRunBody(messages, idMap.current, backendHead.current, humanToolNames, current);
+        // When resuming after client tool answers the runtime keeps the
+        // parked message's parts itself and appends what we yield.
 
         let ids = null;
         let stream;
@@ -75,7 +79,7 @@ export const useStudioRuntime = ({ sessionId, endpoints, onRunError }) => {
         }
       },
     }),
-    [sessionId, endpoints, onRunError],
+    [sessionId, endpoints, onRunError, humanToolNames],
   );
 
   const history = useMemo(
@@ -120,7 +124,10 @@ export const useStudioRuntime = ({ sessionId, endpoints, onRunError }) => {
     };
   }, [sessionId, endpoints]);
 
-  return useLocalRuntime(adapter, { adapters: { history, ...(attachments ? { attachments } : {}) } });
+  return useLocalRuntime(adapter, {
+    adapters: { history, ...(attachments ? { attachments } : {}) },
+    unstable_humanToolNames: clientToolNames.length ? clientToolNames : undefined,
+  });
 };
 
 export default useStudioRuntime;

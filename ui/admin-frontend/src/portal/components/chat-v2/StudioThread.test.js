@@ -27,11 +27,11 @@ const session = {
 };
 
 /** A runtime whose adapter streams a fixed reply with a tool call and a status part. */
-const Harness = ({ adapter }) => {
-  const runtime = useLocalRuntime(adapter);
+const Harness = ({ adapter, runtimeOptions, sessionOverride }) => {
+  const runtime = useLocalRuntime(adapter, runtimeOptions);
   return (
     <ThemeProvider theme={generateTheme()}>
-      <ChatUiProvider session={session} userName="Martin">
+      <ChatUiProvider session={sessionOverride || session} userName="Martin">
         <AssistantRuntimeProvider runtime={runtime}>
           <StudioThread />
         </AssistantRuntimeProvider>
@@ -87,5 +87,57 @@ describe('StudioThread', () => {
     expect(screen.queryByText(/Welcome to Support chat/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByText(/Hide System and Context Messages/));
     expect(screen.queryByTestId('status-chip')).not.toBeInTheDocument();
+  });
+});
+
+describe('StudioThread human-in-the-loop', () => {
+  it('renders an approval card for a parked client tool and resumes with the answer', async () => {
+    const runs = [];
+    const adapter = {
+      async *run({ messages, unstable_getMessage }) {
+        runs.push({ last: messages[messages.length - 1], current: unstable_getMessage() });
+        if (runs.length === 1) {
+          yield {
+            content: [
+              { type: 'text', text: 'I need your approval.' },
+              { type: 'tool-call', toolCallId: 'call_1', toolName: 'ask-approval', args: { action: 'delete the report' }, argsText: '{"action":"delete the report"}' },
+            ],
+            status: { type: 'requires-action', reason: 'tool-calls' },
+          };
+          return;
+        }
+        // The runtime keeps the parked parts and appends what we yield.
+        yield {
+          content: [{ type: 'text', text: 'Deleted.' }],
+          status: { type: 'complete', reason: 'stop' },
+        };
+      },
+    };
+    const hitlSession = {
+      ...session,
+      client_tools: [{ name: 'ask-approval', description: 'Approve the action', ui: { kind: 'approval', title: 'Approve?' } }],
+    };
+    render(<Harness adapter={adapter} runtimeOptions={{ unstable_humanToolNames: ['ask-approval'] }} sessionOverride={hitlSession} />);
+
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Delete the report' } });
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Send message'));
+    });
+
+    const card = await screen.findByTestId('human-tool-card');
+    expect(card).toHaveTextContent('Approve?');
+    expect(card).toHaveTextContent('delete the report');
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Approve'));
+    });
+
+    await waitFor(() => expect(screen.getByText('Deleted.')).toBeInTheDocument());
+    expect(runs).toHaveLength(2);
+    expect(runs[1].last.role).toBe('user');
+    expect(runs[1].current.role).toBe('assistant');
+    const answered = runs[1].current.content.find((p) => p.type === 'tool-call');
+    expect(answered.result).toEqual({ approved: true, comment: '' });
+    expect(screen.getByTestId('human-tool-answered')).toHaveTextContent('answered');
   });
 });
