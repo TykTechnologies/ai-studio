@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -345,7 +346,7 @@ func (a *API) runChatTurnV2(c *gin.Context) {
 	}
 	defer release()
 
-	if !cs.TryLockRun() {
+	if !lockRunWithin(c.Request.Context(), cs.TryLockRun, runLockWait) {
 		jsonError(c, http.StatusConflict, "Run in progress", "Another turn is being processed for this session")
 		return
 	}
@@ -442,6 +443,33 @@ func (a *API) runChatTurnV2(c *gin.Context) {
 }
 
 // uiStreamWriter turns ChatEvents into AI SDK UI-message-stream chunks.
+// runLockWait is how long a run request waits for the previous turn's
+// handler to let go of the session before it is refused. Clients send the
+// next turn the moment the previous stream ends ([DONE] is written before
+// the handler returns and unlocks), so a resume or a quick follow-up can
+// arrive a few milliseconds early; refusing it with 409 would surface as an
+// error card for nothing.
+const runLockWait = 3 * time.Second
+
+// lockRunWithin polls tryLock until it succeeds, the timeout passes, or the
+// request is cancelled.
+func lockRunWithin(ctx context.Context, tryLock func() bool, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if tryLock() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
 type uiStreamWriter struct {
 	w        http.ResponseWriter
 	flusher  http.Flusher

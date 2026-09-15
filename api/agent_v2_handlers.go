@@ -274,7 +274,7 @@ func (a *API) runAgentTurnV2(c *gin.Context) {
 	}
 	defer release()
 
-	if !as.TryLockRun() {
+	if !lockRunWithin(c.Request.Context(), as.TryLockRun, runLockWait) {
 		jsonError(c, http.StatusConflict, "Run in progress", "Another turn is being processed for this session")
 		return
 	}
