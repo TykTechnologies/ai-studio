@@ -109,7 +109,7 @@ func init() {
 	RegisterSpec(Spec{
 		Name:        ProviderAzurePII,
 		DisplayName: "Azure AI Language PII",
-		Description: "Named-entity PII detection with server-side redaction. Detectors are Azure PII categories; name specific categories or 'all'.",
+		Description: "Named-entity PII detection with server-side redaction. Detectors are Azure PII categories; name specific categories or 'all'. Note that 'all' includes PersonType, Organization and DateTime, which match ordinary prose such as job titles and dates, so prefer an explicit list for blocking policies.",
 		Redacts:     true,
 		Detectors: azurePIIDetectors(
 			"all", "Person", "PersonType", "PhoneNumber", "Organization", "Address", "Email", "URL", "IPAddress",

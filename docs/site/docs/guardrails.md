@@ -128,7 +128,7 @@ Detectors: `prompt_attack` (Prompt Shields) and the moderation categories `Hate`
 
 ### Azure AI Language PII {#azure-pii}
 
-Named-entity PII with server-side redaction. Detectors are Azure PII categories (`Person`, `PhoneNumber`, `Email`, `CreditCardNumber`, `USSocialSecurityNumber`, ...) or `all`, with a confidence threshold. Connection: `endpoint` (cloud or the Text PII container), `api_key`, `language`, optional `domain` (`phi`).
+Named-entity PII with server-side redaction. Detectors are Azure PII categories (`Person`, `PhoneNumber`, `Email`, `CreditCardNumber`, `USSocialSecurityNumber`, ...) or `all`, with a confidence threshold. `all` also covers `PersonType`, `Organization` and `DateTime`, which match ordinary prose (a job title such as "lighthouse keeper" is a `PersonType`), so name the categories explicitly for a blocking policy. Connection: `endpoint` (cloud or the Text PII container), `api_key`, `language`, optional `domain` (`phi`).
 
 ### Amazon Bedrock Guardrails {#bedrock}
 

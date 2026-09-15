@@ -337,7 +337,11 @@ func loadGuardrailAzurePII() (GuardrailProviderConfig, string) {
 			"api_key":  key,
 			"language": envOr("VT_GUARD_AZURE_PII_LANGUAGE", "en"),
 		}),
-		Detectors: []string{"all"},
+		// An explicit high-signal set, as a deployment would use it. "all" also
+		// covers PersonType, Organization and DateTime, which fire on ordinary
+		// prose ("lighthouse keeper" is a PersonType) and would fail the
+		// benign preflight for reasons that are not a contract problem.
+		Detectors: []string{"Person", "PhoneNumber", "Email", "Address", "CreditCardNumber", "USSocialSecurityNumber"},
 		Expect:    map[GuardrailScenario]bool{GuardrailPII: true},
 		Redacts:   true,
 		KeyField:  "api_key",
