@@ -80,7 +80,6 @@ All LLM endpoints require admin authentication.
       "retry_count": 3,
       "is_active": true,
       "monthly_budget": 1000.0,
-      "rate_limit_rpm": 100,
       "metadata": {},
       "created_at": "2024-01-01T00:00:00Z",
       "updated_at": "2024-01-01T00:00:00Z"
@@ -111,7 +110,6 @@ All LLM endpoints require admin authentication.
   "retry_count": 3,
   "is_active": true,
   "monthly_budget": 1000.0,
-  "rate_limit_rpm": 100,
   "metadata": {}
 }
 ```
@@ -156,7 +154,6 @@ All LLM endpoints require admin authentication.
   "retry_count": 5,
   "is_active": false,
   "monthly_budget": 2000.0,
-  "rate_limit_rpm": 200,
   "metadata": {"updated": true}
 }
 ```
@@ -209,7 +206,6 @@ Soft deletes the LLM (sets deleted_at timestamp).
       "is_active": true,
       "monthly_budget": 500.0,
       "budget_reset_day": 1,
-      "rate_limit_rpm": 1000,
       "allowed_ips": ["203.0.113.1", "203.0.113.2"],
       "created_at": "2024-01-01T00:00:00Z",
       "updated_at": "2024-01-01T00:00:00Z"
@@ -230,7 +226,6 @@ Soft deletes the LLM (sets deleted_at timestamp).
   "owner_email": "user@company.com",
   "monthly_budget": 100.0,
   "budget_reset_day": 1,
-  "rate_limit_rpm": 100,
   "allowed_ips": ["203.0.113.1"],
   "llm_ids": [1, 2, 3]
 }
@@ -255,7 +250,6 @@ Soft deletes the LLM (sets deleted_at timestamp).
   "is_active": true,
   "monthly_budget": 200.0,
   "budget_reset_day": 15,
-  "rate_limit_rpm": 500,
   "allowed_ips": ["203.0.113.1", "203.0.113.2"]
 }
 ```
@@ -742,15 +736,18 @@ Authorization: Bearer <app-token>
 
 ## Rate Limiting
 
-### App-Level Rate Limiting
-- Configured via `rate_limit_rpm` in app configuration
-- Applied across all LLM requests for the application
-- Returns 429 status when exceeded
+The microgateway does not enforce request or token rate limits itself. The
+`rate_limit_rpm` field that the App and LLM management API accepts is stored
+but never read; it is kept only for wire compatibility and will be removed.
 
-### LLM-Level Rate Limiting
-- Configured via `rate_limit_rpm` in LLM configuration
-- Applied to specific LLM provider requests
-- Takes precedence over app-level limits
+Rate limiting is provided by plugins so that limits, counters and their
+dashboard live in one place:
+
+- `examples/plugins/studio/llm-rate-limiter-multiphase/` enforces requests
+  per minute, tokens per minute and concurrency per app, user and model, with
+  a Studio dashboard for configuring limits (PostAuth + Response + UI Provider)
+- `microgateway/plugins/examples/rate_limiter/` is a minimal pre-auth RPM
+  limiter for the microgateway
 
 ## Budget Enforcement
 

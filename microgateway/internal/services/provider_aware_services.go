@@ -289,13 +289,6 @@ func (s *ProviderAwareFilterService) UpdateLLMFilters(llmID uint, filterIDs []ui
 	return fmt.Errorf("LLM filter updates not supported on edge instances")
 }
 
-// ExecuteFilter executes a filter script (simplified for edge instances)
-func (s *ProviderAwareFilterService) ExecuteFilter(filterID uint, payload map[string]interface{}) (map[string]interface{}, error) {
-	// Edge instances execute filters locally without database updates
-	// This is a placeholder - actual filter execution would be implemented
-	return payload, nil
-}
-
 // ProviderAwarePluginService implements PluginServiceInterface using ConfigurationProvider
 type ProviderAwarePluginService struct {
 	provider providers.ConfigurationProvider

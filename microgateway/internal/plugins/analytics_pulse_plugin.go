@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -38,6 +39,12 @@ type AnalyticsPulsePlugin struct {
 	lastPulseTime   time.Time
 	ctx             context.Context
 	cancel          context.CancelFunc
+	// sending is set while a pulse (and its retry ladder) is in flight so the
+	// timer and a buffer-full trigger never run sendPulse concurrently.
+	sending atomic.Bool
+	// retryInterval is RetryIntervalSecs as a duration; tests set it directly
+	// so a retry ladder can be exercised in milliseconds.
+	retryInterval time.Duration
 
 	// Statistics
 	totalRecordsSent uint64
@@ -151,6 +158,7 @@ func NewAnalyticsPulsePlugin(
 		cancel:         cancel,
 		sequenceNumber: 1,
 		lastPulseTime:  time.Now(),
+		retryInterval:  time.Duration(pluginConfig.RetryIntervalSecs) * time.Second,
 	}
 
 	log.Debug().
@@ -344,14 +352,22 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 	p.analyticsBuffer = append(p.analyticsBuffer, event)
 	p.analyticsMetadata = append(p.analyticsMetadata, metadata)
 
-	// Check if buffer is getting full
-	totalBuffered := len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer)
+	// Check if buffer is getting full. While the last pulse is still inside
+	// its backoff a full buffer must not fire pulse after pulse at a hub that
+	// has just failed; the timer picks the data up once the interval passes.
+	totalBuffered := p.totalBufferedLocked()
 	if totalBuffered >= p.config.MaxBufferSize {
-		log.Warn().
-			Int("total_buffered", totalBuffered).
-			Int("max_buffer_size", p.config.MaxBufferSize).
-			Msg("Analytics buffer is full, triggering immediate pulse")
-		go p.sendPulseNow()
+		if p.inBackoffLocked(time.Now()) {
+			log.Debug().
+				Int("total_buffered", totalBuffered).
+				Msg("Analytics buffer is full but the last pulse failed recently - waiting for backoff")
+		} else {
+			log.Warn().
+				Int("total_buffered", totalBuffered).
+				Int("max_buffer_size", p.config.MaxBufferSize).
+				Msg("Analytics buffer is full, triggering immediate pulse")
+			go p.sendPulseNow()
+		}
 	}
 
 	log.Debug().
@@ -456,74 +472,264 @@ func (p *AnalyticsPulsePlugin) sendPulseNow() {
 	p.schedulePulse()
 }
 
-// sendPulse creates and sends an analytics pulse to control server
-func (p *AnalyticsPulsePlugin) sendPulse() {
-	p.bufferMutex.Lock()
+// pulseSnapshot is one pulse's worth of buffered data, taken out of the
+// buffers under the lock so it can be sent without holding them. If the send
+// fails it is put back in front of whatever arrived in the meantime.
+type pulseSnapshot struct {
+	analytics  []database.AnalyticsEvent
+	metadata   []AnalyticsMetadata
+	budget     []BudgetUsageBuffer
+	proxy      []ProxyLogBuffer
+	compliance []ComplianceEventBuffer
+	toolCalls  []ToolCallBuffer
+}
 
-	// Check if there's any data to send
-	if len(p.analyticsBuffer) == 0 && len(p.budgetBuffer) == 0 && len(p.proxyBuffer) == 0 &&
-		len(p.complianceBuffer) == 0 && len(p.toolCallBuffer) == 0 {
+func (s *pulseSnapshot) empty() bool {
+	return len(s.analytics) == 0 && len(s.budget) == 0 && len(s.proxy) == 0 &&
+		len(s.compliance) == 0 && len(s.toolCalls) == 0
+}
+
+// totalBufferedLocked counts every record waiting for a pulse. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) totalBufferedLocked() int {
+	return len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) +
+		len(p.complianceBuffer) + len(p.toolCallBuffer)
+}
+
+// retryWait is the pause between attempts of one pulse, and the backoff after
+// a pulse has failed for good.
+func (p *AnalyticsPulsePlugin) retryWait() time.Duration {
+	if p.retryInterval > 0 {
+		return p.retryInterval
+	}
+	return time.Duration(p.config.RetryIntervalSecs) * time.Second
+}
+
+// inBackoffLocked reports whether the last pulse failed less than one retry
+// interval ago. Caller holds bufferMutex (lastError is written under it).
+func (p *AnalyticsPulsePlugin) inBackoffLocked(now time.Time) bool {
+	return p.lastError != nil && now.Sub(p.lastErrorTime) < p.retryWait()
+}
+
+// stopping reports whether the plugin has been told to shut down.
+func (p *AnalyticsPulsePlugin) stopping() bool {
+	return p.ctx != nil && p.ctx.Err() != nil
+}
+
+// takeSnapshotLocked moves everything buffered into a snapshot. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) takeSnapshotLocked() pulseSnapshot {
+	snap := pulseSnapshot{
+		analytics:  append([]database.AnalyticsEvent(nil), p.analyticsBuffer...),
+		metadata:   append([]AnalyticsMetadata(nil), p.analyticsMetadata...),
+		budget:     append([]BudgetUsageBuffer(nil), p.budgetBuffer...),
+		proxy:      append([]ProxyLogBuffer(nil), p.proxyBuffer...),
+		compliance: append([]ComplianceEventBuffer(nil), p.complianceBuffer...),
+		toolCalls:  append([]ToolCallBuffer(nil), p.toolCallBuffer...),
+	}
+	p.analyticsBuffer = p.analyticsBuffer[:0]
+	p.analyticsMetadata = p.analyticsMetadata[:0]
+	p.budgetBuffer = p.budgetBuffer[:0]
+	p.proxyBuffer = p.proxyBuffer[:0]
+	p.complianceBuffer = p.complianceBuffer[:0]
+	p.toolCallBuffer = p.toolCallBuffer[:0]
+	return snap
+}
+
+// restoreSnapshotLocked puts an unsent snapshot back at the front of the
+// buffers (it is older than anything buffered since), drops records that have
+// aged past EdgeRetentionHours, and trims the buffers to MaxBufferSize by
+// discarding the oldest records. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) restoreSnapshotLocked(snap pulseSnapshot, now time.Time) {
+	cutoff := now.Add(-time.Duration(p.config.EdgeRetentionHours) * time.Hour)
+	fresh := func(ts time.Time) bool { return p.config.EdgeRetentionHours <= 0 || !ts.Before(cutoff) }
+
+	// Analytics events and their metadata are paired by index; keep them in step.
+	analytics := make([]database.AnalyticsEvent, 0, len(snap.analytics))
+	metadata := make([]AnalyticsMetadata, 0, len(snap.analytics))
+	for i, ev := range snap.analytics {
+		if !fresh(ev.TimeStamp) {
+			continue
+		}
+		analytics = append(analytics, ev)
+		if i < len(snap.metadata) {
+			metadata = append(metadata, snap.metadata[i])
+		} else {
+			metadata = append(metadata, AnalyticsMetadata{})
+		}
+	}
+	budget := snap.budget[:0:0]
+	for _, b := range snap.budget {
+		if fresh(b.Timestamp) {
+			budget = append(budget, b)
+		}
+	}
+	proxy := snap.proxy[:0:0]
+	for _, pr := range snap.proxy {
+		if fresh(pr.LastRequest) {
+			proxy = append(proxy, pr)
+		}
+	}
+	compliance := snap.compliance[:0:0]
+	for _, ce := range snap.compliance {
+		if fresh(ce.Timestamp) {
+			compliance = append(compliance, ce)
+		}
+	}
+	toolCalls := snap.toolCalls[:0:0]
+	for _, tc := range snap.toolCalls {
+		if fresh(tc.Timestamp) {
+			toolCalls = append(toolCalls, tc)
+		}
+	}
+
+	expired := (len(snap.analytics) - len(analytics)) + (len(snap.budget) - len(budget)) +
+		(len(snap.proxy) - len(proxy)) + (len(snap.compliance) - len(compliance)) +
+		(len(snap.toolCalls) - len(toolCalls))
+
+	p.analyticsBuffer = append(analytics, p.analyticsBuffer...)
+	p.analyticsMetadata = append(metadata, p.analyticsMetadata...)
+	p.budgetBuffer = append(budget, p.budgetBuffer...)
+	p.proxyBuffer = append(proxy, p.proxyBuffer...)
+	p.complianceBuffer = append(compliance, p.complianceBuffer...)
+	p.toolCallBuffer = append(toolCalls, p.toolCallBuffer...)
+
+	// Trim to the cap, oldest first. Kinds are drained in order of how much
+	// the hub loses without them: a proxy summary is a rollup of an analytics
+	// event, a budget record is what spend enforcement runs on.
+	dropped := 0
+	if max := p.config.MaxBufferSize; max > 0 {
+		trim := func(n int) int {
+			over := p.totalBufferedLocked() - max
+			if over <= 0 || n == 0 {
+				return 0
+			}
+			if over > n {
+				over = n
+			}
+			return over
+		}
+		if n := trim(len(p.proxyBuffer)); n > 0 {
+			p.proxyBuffer = p.proxyBuffer[n:]
+			dropped += n
+		}
+		if n := trim(len(p.analyticsBuffer)); n > 0 {
+			p.analyticsBuffer = p.analyticsBuffer[n:]
+			if n <= len(p.analyticsMetadata) {
+				p.analyticsMetadata = p.analyticsMetadata[n:]
+			}
+			dropped += n
+		}
+		if n := trim(len(p.toolCallBuffer)); n > 0 {
+			p.toolCallBuffer = p.toolCallBuffer[n:]
+			dropped += n
+		}
+		if n := trim(len(p.complianceBuffer)); n > 0 {
+			p.complianceBuffer = p.complianceBuffer[n:]
+			dropped += n
+		}
+		if n := trim(len(p.budgetBuffer)); n > 0 {
+			p.budgetBuffer = p.budgetBuffer[n:]
+			dropped += n
+		}
+	}
+
+	if expired > 0 || dropped > 0 {
+		log.Warn().
+			Int("expired", expired).
+			Int("dropped_over_cap", dropped).
+			Int("buffered", p.totalBufferedLocked()).
+			Msg("Analytics records discarded while the control server is unreachable")
+	}
+}
+
+// sendWithRetry sends one pulse, retrying transport failures up to MaxRetries
+// times with retryWait between attempts. Once the plugin is stopping only the
+// attempt in progress is made, so a shutdown does not sit through the ladder.
+func (p *AnalyticsPulsePlugin) sendWithRetry(pulse *pb.AnalyticsPulse, sequenceNum uint64) (*pb.AnalyticsPulseResponse, error) {
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.config.TimeoutSeconds)*time.Second)
+		resp, err := p.grpcClient.SendAnalyticsPulse(ctx, pulse)
+		cancel()
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		log.Warn().
+			Err(err).
+			Uint64("sequence", sequenceNum).
+			Int("attempt", attempt+1).
+			Int("max_retries", p.config.MaxRetries).
+			Msg("Failed to send analytics pulse")
+
+		if attempt >= p.config.MaxRetries || p.stopping() {
+			return nil, lastErr
+		}
+
+		var done <-chan struct{}
+		if p.ctx != nil {
+			done = p.ctx.Done()
+		}
+		select {
+		case <-time.After(p.retryWait()):
+		case <-done:
+			return nil, lastErr
+		}
+	}
+}
+
+// sendPulse creates and sends an analytics pulse to control server. Data is
+// only released once the hub has accepted it; a pulse the hub never received
+// goes back into the buffers for the next one.
+func (p *AnalyticsPulsePlugin) sendPulse() {
+	if !p.sending.CompareAndSwap(false, true) {
+		log.Debug().Msg("Analytics pulse already in flight - skipping")
+		return
+	}
+	defer p.sending.Store(false)
+
+	p.bufferMutex.Lock()
+	snap := p.takeSnapshotLocked()
+	if snap.empty() {
 		p.bufferMutex.Unlock()
 		log.Debug().Msg("No analytics data to pulse - skipping")
 		return
 	}
-
-	// Create snapshots and clear buffers
-	analyticsSnapshot := make([]database.AnalyticsEvent, len(p.analyticsBuffer))
-	copy(analyticsSnapshot, p.analyticsBuffer)
-	p.analyticsBuffer = p.analyticsBuffer[:0]
-
-	metadataSnapshot := make([]AnalyticsMetadata, len(p.analyticsMetadata))
-	copy(metadataSnapshot, p.analyticsMetadata)
-	p.analyticsMetadata = p.analyticsMetadata[:0]
-
-	budgetSnapshot := make([]BudgetUsageBuffer, len(p.budgetBuffer))
-	copy(budgetSnapshot, p.budgetBuffer)
-	p.budgetBuffer = p.budgetBuffer[:0]
-
-	proxySnapshot := make([]ProxyLogBuffer, len(p.proxyBuffer))
-	copy(proxySnapshot, p.proxyBuffer)
-	p.proxyBuffer = p.proxyBuffer[:0]
-
-	complianceSnapshot := make([]ComplianceEventBuffer, len(p.complianceBuffer))
-	copy(complianceSnapshot, p.complianceBuffer)
-	p.complianceBuffer = p.complianceBuffer[:0]
-
-	toolCallSnapshot := make([]ToolCallBuffer, len(p.toolCallBuffer))
-	copy(toolCallSnapshot, p.toolCallBuffer)
-	p.toolCallBuffer = p.toolCallBuffer[:0]
-
 	sequenceNum := p.sequenceNumber
 	p.sequenceNumber++
-
 	p.bufferMutex.Unlock()
 
 	// Build and send pulse
-	pulse := p.buildPulseMessage(analyticsSnapshot, metadataSnapshot, budgetSnapshot, proxySnapshot, complianceSnapshot, toolCallSnapshot, sequenceNum)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(p.config.TimeoutSeconds)*time.Second)
-	defer cancel()
+	pulse := p.buildPulseMessage(snap.analytics, snap.metadata, snap.budget, snap.proxy, snap.compliance, snap.toolCalls, sequenceNum)
 
 	log.Debug().
 		Uint64("sequence", sequenceNum).
-		Int("analytics_events", len(analyticsSnapshot)).
-		Int("budget_events", len(budgetSnapshot)).
-		Int("proxy_summaries", len(proxySnapshot)).
-		Int("compliance_events", len(complianceSnapshot)).
-		Int("tool_calls", len(toolCallSnapshot)).
+		Int("analytics_events", len(snap.analytics)).
+		Int("budget_events", len(snap.budget)).
+		Int("proxy_summaries", len(snap.proxy)).
+		Int("compliance_events", len(snap.compliance)).
+		Int("tool_calls", len(snap.toolCalls)).
 		Uint32("total_records", pulse.TotalRecords).
 		Msg("Sending analytics pulse to control server")
 
-	resp, err := p.grpcClient.SendAnalyticsPulse(ctx, pulse)
+	resp, err := p.sendWithRetry(pulse, sequenceNum)
 	if err != nil {
+		p.bufferMutex.Lock()
 		p.lastError = err
 		p.lastErrorTime = time.Now()
+		p.restoreSnapshotLocked(snap, p.lastErrorTime)
+		buffered := p.totalBufferedLocked()
+		p.bufferMutex.Unlock()
 		log.Error().
 			Err(err).
 			Uint64("sequence", sequenceNum).
-			Msg("Failed to send analytics pulse")
+			Int("buffered_for_retry", buffered).
+			Msg("Analytics pulse not delivered - data kept for the next pulse")
 		return
 	}
+
+	p.bufferMutex.Lock()
+	p.lastError = nil
+	p.bufferMutex.Unlock()
 
 	p.totalPulsesSent++
 	p.totalRecordsSent += uint64(pulse.TotalRecords)
@@ -535,6 +741,8 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 			Uint64("processed_records", resp.ProcessedRecords).
 			Msg("Analytics pulse sent successfully")
 	} else {
+		// The hub received the pulse and refused it. Retrying the same data
+		// would be refused again, so it is not restored.
 		log.Error().
 			Str("message", resp.Message).
 			Uint64("sequence", sequenceNum).

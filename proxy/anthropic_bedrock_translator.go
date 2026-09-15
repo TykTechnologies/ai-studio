@@ -1,12 +1,14 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -82,6 +84,46 @@ func (p *Proxy) resolveAnthropicModelID(w http.ResponseWriter, conf *models.LLM)
 	return modelID, true
 }
 
+// anthropicScreenRequest runs conf's request filters over the Anthropic-shaped
+// bridge body before it is translated to Converse. The /llm/call/ loopback hop
+// that runs them for every other vendor never happens for Bedrock, so the
+// bridge runs them itself. On a block it has already written the 400 (and
+// recorded the policy block and a ProxyLog) and returns false; otherwise it
+// returns the request and body as the filters left them.
+func (p *Proxy) anthropicScreenRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	conf *models.LLM,
+	app *models.App,
+	req *AnthropicMessagesRequest,
+	reqBody []byte,
+	modelID string,
+	timestamp time.Time,
+) (*AnthropicMessagesRequest, []byte, bool) {
+	if !p.hasRequestFilters(conf) {
+		return req, reqBody, true
+	}
+
+	filtered, err := p.runRequestFilters(conf, r, reqBody, requestFilterFormatAnthropic, modelID)
+	if err != nil {
+		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
+		fail := attemptFailure{err: err, status: http.StatusBadRequest, hasStatus: true}
+		p.goAnalyze(func() { recordBedrockFailedAttempt(conf, app, modelID, reqBody, fail, r, timestamp) })
+		respondWithAnthropicError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return nil, nil, false
+	}
+	if bytes.Equal(filtered, reqBody) {
+		return req, reqBody, true
+	}
+
+	var out AnthropicMessagesRequest
+	if err := json.Unmarshal(filtered, &out); err != nil {
+		respondWithAnthropicError(w, http.StatusBadRequest, "invalid_request_error", "request filter produced an invalid request")
+		return nil, nil, false
+	}
+	return &out, filtered, true
+}
+
 // handleBedrockAnthropicMessages handles a non-streaming /v1/messages request.
 func (p *Proxy) handleBedrockAnthropicMessages(w http.ResponseWriter, r *http.Request, conf *models.LLM, req *AnthropicMessagesRequest, reqBody []byte) {
 	timestamp := time.Now()
@@ -98,6 +140,11 @@ func (p *Proxy) handleBedrockAnthropicMessages(w http.ResponseWriter, r *http.Re
 	}
 
 	modelID, ok := p.resolveAnthropicModelID(w, conf)
+	if !ok {
+		return
+	}
+
+	req, reqBody, ok = p.anthropicScreenRequest(w, r, conf, app, req, reqBody, modelID, timestamp)
 	if !ok {
 		return
 	}
@@ -167,6 +214,13 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 	}
 
 	modelID, ok := p.resolveAnthropicModelID(w, conf)
+	if !ok {
+		return
+	}
+
+	// Before the SSE headers: a filter block is a real 400 with an error
+	// envelope, not a 200 whose only event says the request was refused.
+	req, reqBody, ok = p.anthropicScreenRequest(w, r, conf, app, req, reqBody, modelID, timestamp)
 	if !ok {
 		return
 	}

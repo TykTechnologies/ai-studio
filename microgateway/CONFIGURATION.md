@@ -56,7 +56,6 @@ The microgateway supports multiple configuration methods in order of precedence:
 | `GATEWAY_TIMEOUT` | 5m | Request timeout for upstream LLM calls (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | 10MB | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | 50MB | Maximum response body size |
-| `GATEWAY_DEFAULT_RATE_LIMIT` | 100 | Default requests per minute |
 | `GATEWAY_UNIFIED_ROUTER_PATH` | /v1 | Base path of the unified OpenAI-compatible endpoint (`{base}/chat/completions`, `{base}/completions`, `{base}/models`); move it when embedding in a host that owns `/v1` |
 | `GATEWAY_UNIFIED_ROUTER_DISABLED` | false | Remove the unified endpoint entirely; per-route endpoints (`/ai/`, `/llm/`, `/anthropic/`) are unaffected |
 | `GATEWAY_ENABLE_FILTERS` | true | Enable request/response filtering |
@@ -81,8 +80,19 @@ The microgateway supports multiple configuration methods in order of precedence:
 | `BCRYPT_COST` | 10 | bcrypt hashing cost |
 | `TOKEN_LENGTH` | 32 | Generated token length |
 | `SESSION_TIMEOUT` | 24h | Authentication session timeout |
-| `ENABLE_RATE_LIMITING` | true | Enable rate limiting |
 | `ENABLE_IP_WHITELIST` | false | Enable IP address whitelisting |
+
+### Edge Token Validation Cache (Hub-Spoke Mode)
+
+In edge mode API tokens are validated on demand against the hub and the result is cached locally.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EDGE_TOKEN_CACHE_ENABLED` | true | Cache on-demand token validation results |
+| `EDGE_TOKEN_CACHE_TTL` | 5m | How long a validation result is served without asking the hub again |
+| `EDGE_TOKEN_CACHE_MAX_SIZE` | 1000 | Maximum cached tokens (oldest entries are evicted first) |
+| `EDGE_TOKEN_CACHE_CLEANUP_INTERVAL` | 1m | How often expired entries are purged |
+| `EDGE_TOKEN_CACHE_STALE_GRACE` | 1h | How long past its TTL a cached result may still be served when the hub is **unreachable**. An explicit rejection from the hub is never bridged and evicts the entry. Set to `0` to fail closed on every cache miss while the hub is down |
 
 ### Observability Configuration
 
@@ -154,7 +164,6 @@ ENCRYPTION_KEY=production-encryption-key-32chars!
 DATABASE_TYPE=postgres
 DATABASE_DSN=postgres://mgw_user:secure_password@postgres:5432/microgateway?sslmode=require
 ANALYTICS_RETENTION_DAYS=365
-ENABLE_RATE_LIMITING=true
 ```
 
 ## Command Line Flags

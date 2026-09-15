@@ -174,10 +174,6 @@ BCRYPT_COST=10                    # bcrypt hashing cost
 ENABLE_TOKEN_VALIDATION=true
 TOKEN_CACHE_ENABLED=true
 TOKEN_CACHE_TTL=1h
-
-# Rate limiting
-ENABLE_RATE_LIMITING=true
-DEFAULT_RATE_LIMIT=100           # Requests per minute
 ```
 
 ## Admin Token Bootstrap

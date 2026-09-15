@@ -363,7 +363,7 @@ func TestChatSession_HandleToolCalls(t *testing.T) {
 
 	toolCall := &llms.MessageContent{}
 	toolResult := &llms.MessageContent{}
-	cs.handleToolCalls(choice, toolCall, toolResult)
+	cs.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 	assert.NotEmpty(t, toolResult.Parts, "Tool result should have parts")
 }
 

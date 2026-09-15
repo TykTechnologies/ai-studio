@@ -84,8 +84,24 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 
 	log.Debug().Str("token_prefix", tokenPrefix).Msg("HybridGatewayService: using on-demand token validation")
 
+	// A hub that cannot be reached is not a hub that said no. Within the
+	// configured grace an entry that has only just expired is still served,
+	// so a control-plane outage does not take every edge request down with
+	// it. An explicit rejection below never comes through here.
+	staleFallback := func(cause error) (*TokenValidationResult, error) {
+		if stale, age := h.getStaleFromCache(token); stale != nil {
+			log.Warn().
+				Str("token_prefix", tokenPrefix).
+				Dur("stale_for", age).
+				Err(cause).
+				Msg("Control instance unreachable - serving stale token validation result within grace")
+			return stale, nil
+		}
+		return nil, cause
+	}
+
 	if h.edgeClient == nil {
-		return nil, fmt.Errorf("edge client not available for on-demand token validation")
+		return staleFallback(fmt.Errorf("edge client not available for on-demand token validation"))
 	}
 
 	// Cast to edge client and make validation call
@@ -93,11 +109,13 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 		resp, err := edgeClient.ValidateTokenOnDemand(token)
 		if err != nil {
 			log.Debug().Err(err).Str("token_prefix", tokenPrefix).Msg("On-demand token validation failed")
-			return nil, fmt.Errorf("token validation failed: %w", err)
+			return staleFallback(fmt.Errorf("token validation failed: %w", err))
 		}
 
 		if !resp.Valid {
 			log.Debug().Str("token_prefix", tokenPrefix).Str("error", resp.ErrorMessage).Msg("Token validation rejected by control")
+			// The hub has spoken: whatever we cached for this token is no longer true.
+			h.removeFromCache(token)
 			return nil, fmt.Errorf("invalid token: %s", resp.ErrorMessage)
 		}
 
@@ -151,7 +169,7 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 		return result, nil
 	}
 
-	return nil, fmt.Errorf("edge client does not support token validation")
+	return staleFallback(fmt.Errorf("edge client does not support token validation"))
 }
 
 // GetAppByTokenID overrides to handle pseudo token IDs from on-demand validation
@@ -201,6 +219,51 @@ func (h *HybridGatewayService) getFromCache(token string) *TokenValidationResult
 	return entry.Result
 }
 
+// getStaleFromCache returns an expired entry that is still within the stale
+// grace, together with how long ago it expired. Only the hub-unreachable path
+// asks for one; a fresh entry is served by getFromCache before we get here.
+func (h *HybridGatewayService) getStaleFromCache(token string) (*TokenValidationResult, time.Duration) {
+	if !h.cacheConfig.TokenCacheEnabled || h.cacheConfig.TokenCacheStaleGrace <= 0 {
+		return nil, 0
+	}
+
+	h.cacheMutex.RLock()
+	defer h.cacheMutex.RUnlock()
+
+	entry, exists := h.tokenCache[token]
+	if !exists {
+		return nil, 0
+	}
+
+	now := time.Now()
+	if now.After(entry.ExpiresAt.Add(h.cacheConfig.TokenCacheStaleGrace)) {
+		return nil, 0
+	}
+
+	return entry.Result, now.Sub(entry.ExpiresAt)
+}
+
+// removeFromCache drops a token's cached result, fresh or stale.
+func (h *HybridGatewayService) removeFromCache(token string) {
+	if !h.cacheConfig.TokenCacheEnabled {
+		return
+	}
+
+	h.cacheMutex.Lock()
+	defer h.cacheMutex.Unlock()
+
+	delete(h.tokenCache, token)
+}
+
+// retireAt is the moment an entry is of no further use: its expiry plus the
+// stale grace during which it may still be served if the hub is unreachable.
+func (h *HybridGatewayService) retireAt(entry *TokenCacheEntry) time.Time {
+	if h.cacheConfig.TokenCacheStaleGrace <= 0 {
+		return entry.ExpiresAt
+	}
+	return entry.ExpiresAt.Add(h.cacheConfig.TokenCacheStaleGrace)
+}
+
 // storeInCache stores a token validation result in cache
 func (h *HybridGatewayService) storeInCache(token string, result *TokenValidationResult) {
 	if !h.cacheConfig.TokenCacheEnabled {
@@ -224,12 +287,18 @@ func (h *HybridGatewayService) storeInCache(token string, result *TokenValidatio
 	}
 }
 
-// evictOldestEntry removes the oldest cache entry (simple LRU)
+// evictOldestEntry removes the oldest cache entry (simple LRU). An entry that
+// is past its stale grace is useless on every path and goes first.
 func (h *HybridGatewayService) evictOldestEntry() {
 	var oldestToken string
 	var oldestTime time.Time
 
+	now := time.Now()
 	for token, entry := range h.tokenCache {
+		if now.After(h.retireAt(entry)) {
+			delete(h.tokenCache, token)
+			return
+		}
 		if oldestToken == "" || entry.CachedAt.Before(oldestTime) {
 			oldestToken = token
 			oldestTime = entry.CachedAt
@@ -256,7 +325,8 @@ func (h *HybridGatewayService) cacheCleanupWorker() {
 	}
 }
 
-// cleanupExpiredEntries removes expired entries from cache
+// cleanupExpiredEntries removes entries that are past expiry and past the
+// stale grace, so they can no longer be served on any path.
 func (h *HybridGatewayService) cleanupExpiredEntries() {
 	h.cacheMutex.Lock()
 	defer h.cacheMutex.Unlock()
@@ -265,7 +335,7 @@ func (h *HybridGatewayService) cleanupExpiredEntries() {
 	expiredCount := 0
 
 	for token, entry := range h.tokenCache {
-		if now.After(entry.ExpiresAt) {
+		if now.After(h.retireAt(entry)) {
 			delete(h.tokenCache, token)
 			expiredCount++
 		}

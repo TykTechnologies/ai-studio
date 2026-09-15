@@ -85,7 +85,6 @@ type GatewayConfig struct {
 	Timeout                   time.Duration `env:"GATEWAY_TIMEOUT" envDefault:"5m"`
 	MaxRequestSize            int64         `env:"GATEWAY_MAX_REQUEST_SIZE" envDefault:"10485760"`   // 10MB
 	MaxResponseSize           int64         `env:"GATEWAY_MAX_RESPONSE_SIZE" envDefault:"52428800"`  // 50MB
-	RateLimitRPM              int           `env:"GATEWAY_DEFAULT_RATE_LIMIT" envDefault:"100"`
 	EnableFilters             bool          `env:"GATEWAY_ENABLE_FILTERS" envDefault:"true"`
 	EnableAnalytics           bool          `env:"GATEWAY_ENABLE_ANALYTICS" envDefault:"true"`
 	// UnifiedRouterPath is the base path of the OpenRouter-style single endpoint
@@ -135,6 +134,11 @@ type HubSpokeConfig struct {
 	TokenCacheTTL        time.Duration `env:"EDGE_TOKEN_CACHE_TTL" envDefault:"5m"`
 	TokenCacheMaxSize    int           `env:"EDGE_TOKEN_CACHE_MAX_SIZE" envDefault:"1000"`
 	TokenCacheCleanupInt time.Duration `env:"EDGE_TOKEN_CACHE_CLEANUP_INTERVAL" envDefault:"1m"`
+	// TokenCacheStaleGrace is how long past its TTL a cached validation result
+	// may still be served when the hub cannot be reached (transport failure).
+	// An explicit rejection from the hub never falls back to a stale entry.
+	// 0 disables the grace: a cache miss while the hub is down fails closed.
+	TokenCacheStaleGrace time.Duration `env:"EDGE_TOKEN_CACHE_STALE_GRACE" envDefault:"1h"`
 
 	// gRPC message size limits (bytes). Default 16MB.
 	// Increase if config snapshots exceed the limit (many plugins, LLMs, tools, apps).
@@ -187,7 +191,6 @@ type SecurityConfig struct {
 	BCryptCost        int           `env:"BCRYPT_COST" envDefault:"10"`
 	TokenLength       int           `env:"TOKEN_LENGTH" envDefault:"32"`
 	SessionTimeout    time.Duration `env:"SESSION_TIMEOUT" envDefault:"24h"`
-	EnableRateLimiting bool          `env:"ENABLE_RATE_LIMITING" envDefault:"true"`
 	EnableIPWhitelist bool          `env:"ENABLE_IP_WHITELIST" envDefault:"false"`
 }
 

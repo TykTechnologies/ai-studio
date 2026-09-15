@@ -58,7 +58,7 @@ This provides **eventually-accurate** budget control. There may be a slight over
 
 *   **[Analytics & Monitoring](./analytics.md):** The Analytics system provides the cost data used to track spending against budgets. The current spent amount for a budget period is derived from aggregated analytics data.
 *   **[Model Pricing](./llm-management.md#model-pricing-system):** The pricing definitions are essential for the Analytics system to calculate costs accurately, which in turn feeds the Budget Control system.
-*   **[Notification System](./notifications.md):** Budgets trigger notifications when spending reaches defined thresholds. The system supports alerts at **50%**, **80%**, **90%**, and **100%** of the budget limit. Administrators receive notifications when these thresholds are crossed.
+*   **[Notification System](./notifications.md):** Budgets trigger notifications when spending reaches defined thresholds. Alerts are sent at **80%** (warning) and **100%** (limit reached) of the budget, once per threshold per budget period, to the App owner and administrators.
 
 ## Benefits
 

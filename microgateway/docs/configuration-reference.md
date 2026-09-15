@@ -60,7 +60,6 @@ TLS_KEY_PATH=/etc/certs/server.key
 | `GATEWAY_TIMEOUT` | duration | `5m` | Timeout for upstream LLM requests (high default for agentic workloads) |
 | `GATEWAY_MAX_REQUEST_SIZE` | bytes | `10MB` | Maximum request body size |
 | `GATEWAY_MAX_RESPONSE_SIZE` | bytes | `50MB` | Maximum response size |
-| `GATEWAY_DEFAULT_RATE_LIMIT` | int | `100` | Default requests per minute limit |
 | `GATEWAY_ENABLE_FILTERS` | bool | `true` | Enable filter processing |
 | `GATEWAY_ENABLE_ANALYTICS` | bool | `true` | Enable analytics collection |
 | `GATEWAY_UNIFIED_ROUTER_PATH` | string | `/v1` | Base path of the unified OpenAI-compatible endpoint (`{base}/chat/completions`, `{base}/completions`, `{base}/models`) |
@@ -211,15 +210,6 @@ GRPC_AUTH_TOKEN="new-secure-token"
 | `SECURITY_ENABLE_CSP` | bool | `true` | Enable Content Security Policy |
 | `SECURITY_ENABLE_CSRF` | bool | `true` | Enable CSRF protection |
 | `SECURITY_CORS_ORIGINS` | string | `*` | Allowed CORS origins |
-
-### Rate Limiting
-
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `RATE_LIMIT_ENABLED` | bool | `true` | Enable global rate limiting |
-| `RATE_LIMIT_REQUESTS` | int | `1000` | Requests per minute per IP |
-| `RATE_LIMIT_BURST` | int | `100` | Burst request allowance |
-| `RATE_LIMIT_CLEANUP_INTERVAL` | duration | `1m` | Cleanup interval for rate limiter |
 
 ## Observability Configuration
 
