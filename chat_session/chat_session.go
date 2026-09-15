@@ -70,13 +70,14 @@ type ChatSession struct {
 	streamFilterBlocked bool   // Indicates if streaming was blocked by a filter
 
 	// Lifecycle and v2 event support (see events.go).
-	outputMode OutputMode
-	stopOnce   sync.Once
-	runMu      sync.Mutex                  // held by a v2 run handler for the whole turn
-	stateMu    sync.Mutex                  // guards activeRun, tools, datasources, files
-	activeRun  *runState                   // turn being processed by the session goroutine
-	subMu      sync.Mutex                  // guards subs
-	subs       map[string]*eventSubscriber // run id -> subscriber
+	outputMode  OutputMode
+	stopOnce    sync.Once
+	runMu       sync.Mutex                  // held by a v2 run handler for the whole turn
+	stateMu     sync.Mutex                  // guards activeRun, tools, datasources, files
+	activeRun   *runState                   // turn being processed by the session goroutine
+	subMu       sync.Mutex                  // guards subs
+	subs        map[string]*eventSubscriber // run id -> subscriber
+	streamMuted int                         // >0 while side calls to the model must not stream (see muteStreaming)
 }
 
 type ChatResponse struct {
@@ -1302,7 +1303,9 @@ User message: %s`, userMessage)
 		llms.WithTemperature(0.7),
 	}
 
+	unmute := cs.muteStreaming()
 	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
+	unmute()
 	if err != nil {
 		return "", fmt.Errorf("error generating chat title: %v", err)
 	}
@@ -1741,6 +1744,9 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 }
 
 func (cs *ChatSession) streamingFunc(ctx context.Context, chunk []byte) error {
+	if cs.streamingMuted() {
+		return nil
+	}
 	// Try to parse as JSON to check if it's a final message
 	var msg llms.MessageContent
 	if err := json.Unmarshal(chunk, &msg); err != nil {

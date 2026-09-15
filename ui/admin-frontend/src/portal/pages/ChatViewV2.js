@@ -121,8 +121,15 @@ const ChatViewV2 = () => {
     setDatabases((prev) => prev.map((d) => ({ ...d, isSelected: dsIds.has(d.id) })));
   }, []);
 
+  // React StrictMode runs effects twice in development; without this guard
+  // two sessions would be created and one abandoned in the hub.
+  const inFlightRef = useRef(null);
+
   const startSession = useCallback(
     async (resumeId) => {
+      const key = `${chatId}:${resumeId || ''}`;
+      if (inFlightRef.current === key) return;
+      inFlightRef.current = key;
       setLoading(true);
       setFatal(null);
       try {
@@ -138,6 +145,7 @@ const ChatViewV2 = () => {
         const detail = err.response?.data?.errors?.[0]?.detail || err.message;
         setFatal(resumeId ? `Could not continue this conversation: ${detail}` : `Could not start a chat session: ${detail}`);
       } finally {
+        if (inFlightRef.current === key) inFlightRef.current = null;
         setLoading(false);
       }
     },

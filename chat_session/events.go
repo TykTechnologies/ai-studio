@@ -299,6 +299,29 @@ func (cs *ChatSession) Subscribe(runID string, buf int) (<-chan ChatEvent, func(
 	return sub.ch, unsubscribe
 }
 
+// muteStreaming makes streamingFunc drop chunks until the returned func is
+// called. Side calls to the model (title generation) reuse the driver, and
+// some drivers stream through the driver-level callback regardless of call
+// options; without this their chunks would leak into the user's reply.
+func (cs *ChatSession) muteStreaming() func() {
+	cs.stateMu.Lock()
+	cs.streamMuted++
+	cs.stateMu.Unlock()
+	return func() {
+		cs.stateMu.Lock()
+		if cs.streamMuted > 0 {
+			cs.streamMuted--
+		}
+		cs.stateMu.Unlock()
+	}
+}
+
+func (cs *ChatSession) streamingMuted() bool {
+	cs.stateMu.Lock()
+	defer cs.stateMu.Unlock()
+	return cs.streamMuted > 0
+}
+
 // runCtx is the context LLM calls should use: the active run's context when a
 // turn is in flight (cancellable per run), otherwise the session context.
 func (cs *ChatSession) runCtx() context.Context {
