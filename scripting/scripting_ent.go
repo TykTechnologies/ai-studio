@@ -24,6 +24,8 @@ func (sr *ScriptRunner) runScript(input *ScriptInput, serviceRef services.Servic
 		ChunkIndex:    input.ChunkIndex,
 		CurrentBuffer: input.CurrentBuffer,
 		StatusCode:    input.StatusCode,
+		IsFinal:       input.IsFinal,
+		Ctx:           input.Ctx,
 	}
 
 	// Call enterprise RunScript

@@ -1143,19 +1143,7 @@ func serializeFiltersForTool(filters []models.Filter) []FilterResponse {
 		result[i] = FilterResponse{
 			Type: "filters",
 			ID:   strconv.FormatUint(uint64(filter.ID), 10),
-			Attributes: struct {
-				Name           string `json:"name"`
-				Description    string `json:"description"`
-				Script         []byte `json:"script"`
-				ResponseFilter bool   `json:"response_filter"`
-				Namespace      string `json:"namespace"`
-			}{
-				Name:           filter.Name,
-				Description:    filter.Description,
-				Script:         filter.Script,
-				ResponseFilter: filter.ResponseFilter,
-				Namespace:      filter.Namespace,
-			},
+			Attributes: toFilterResponse(&filter).Attributes,
 		}
 	}
 	return result

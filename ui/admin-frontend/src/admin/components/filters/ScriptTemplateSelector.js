@@ -17,6 +17,69 @@ import {
 const TEMPLATES = {
   request: [
     {
+      id: "library-block-secrets",
+      name: "Built-in library: block credentials",
+      description: "Block requests carrying API keys, tokens or private keys, using tyk.detect",
+      script: `// Block requests that carry credentials, using the built-in pattern library.
+// tyk.detect(text, categories) returns one finding per match: detector,
+// category, label, severity and the span. Categories: secrets, pii,
+// injection, leak; or a single pattern id such as "pii.email".
+
+tyk := import("tyk")
+
+findings := []
+for msg in input.messages {
+    if msg.role == "user" {
+        findings = append(findings, tyk.detect(msg.content, ["secrets"])...)
+    }
+}
+
+detectors := []
+for f in findings {
+    detectors = append(detectors, f.detector)
+}
+
+output := {
+    block: len(findings) > 0,
+    payload: input.raw_input,
+    message: len(findings) > 0 ? "Request blocked: credentials detected" : "",
+    compliance_events: len(findings) > 0 ? [
+        {
+            event_type: "secret_detected",
+            severity: "critical",
+            description: "Blocked a request carrying credentials",
+            metadata: { "detectors": detectors }
+        }
+    ] : []
+}`,
+    },
+    {
+      id: "library-redact-pii",
+      name: "Built-in library: redact personal data",
+      description: "Redact validated PII (cards, IBANs, identifiers, contacts) from every message, using tyk.redact",
+      script: `// Redact personal data from every message with the built-in pattern
+// library. tyk.redact(input, categories, placeholder) rewrites each message
+// and rebuilds the vendor payload; {{type}} expands to the detector
+// (EMAIL, PAYMENT_CARD, ...), {{category}} to PII or SECRETS.
+
+tyk := import("tyk")
+
+redacted := tyk.redact(input, ["pii"], "[REDACTED:{{type}}]")
+
+output := {
+    block: false,
+    payload: redacted,
+    message: redacted != input.raw_input ? "Personal data redacted" : "",
+    compliance_events: redacted != input.raw_input ? [
+        {
+            event_type: "pii_redacted",
+            severity: "warning",
+            description: "Redacted personal data before the request left for the vendor"
+        }
+    ] : []
+}`,
+    },
+    {
       id: "pii-redaction",
       name: "PII Redaction",
       description: "Redact emails, phone numbers, and SSN using regex patterns",
@@ -143,9 +206,9 @@ blocked_patterns := [
     "how to hack",
     "bypass security",
 
-    // Commitments
-    "I promise to",
-    "I guarantee",
+    // Commitments (the text is lower-cased before matching, so keep these lower-case)
+    "i promise to",
+    "i guarantee",
     "definitely will happen"
 ]
 

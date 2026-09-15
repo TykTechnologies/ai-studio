@@ -920,6 +920,8 @@ type FilterConfig struct {
 	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	ResponseFilter bool                   `protobuf:"varint,11,opt,name=response_filter,json=responseFilter,proto3" json:"response_filter,omitempty"` // true = response filter, false = request filter
+	Kind           string                 `protobuf:"bytes,12,opt,name=kind,proto3" json:"kind,omitempty"`                                            // "script" (default) or "guardrail"
+	Config         string                 `protobuf:"bytes,13,opt,name=config,proto3" json:"config,omitempty"`                                        // JSON guardrails.Config for a guardrail filter, connection secrets resolved
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1029,6 +1031,20 @@ func (x *FilterConfig) GetResponseFilter() bool {
 		return x.ResponseFilter
 	}
 	return false
+}
+
+func (x *FilterConfig) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *FilterConfig) GetConfig() string {
+	if x != nil {
+		return x.Config
+	}
+	return ""
 }
 
 // PluginConfig represents a plugin configuration
@@ -2696,7 +2712,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x80\x03\n" +
+	"updated_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xac\x03\n" +
 	"\fFilterConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -2712,7 +2728,9 @@ const file_proto_common_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12'\n" +
-	"\x0fresponse_filter\x18\v \x01(\bR\x0eresponseFilter\"\xcf\x03\n" +
+	"\x0fresponse_filter\x18\v \x01(\bR\x0eresponseFilter\x12\x12\n" +
+	"\x04kind\x18\f \x01(\tR\x04kind\x12\x16\n" +
+	"\x06config\x18\r \x01(\tR\x06config\"\xcf\x03\n" +
 	"\fPluginConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +

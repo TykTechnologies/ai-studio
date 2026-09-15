@@ -726,6 +726,35 @@ test-vendors-filters: ## Live check that request filters run on the Bedrock /ai/
 test-vendors-harness: ## Run the credential-free unit tests that protect the conformance harness itself
 	go test -count=1 ./pkg/testinfra/vendorconformance/...
 
+# Guardrail provider conformance: drives every configured guardrail provider
+# (Lakera, Azure Content Safety, Azure Language PII, Presidio, Bedrock
+# Guardrails, a generic HTTP classifier) against the real service, directly and
+# then through the data plane as filters on a real vendor route.
+#   GUARDRAILS=lakera,azure_cs    VENDORS=openai   (both optional)
+
+.PHONY: test-guardrails
+test-guardrails: ## Live guardrail provider conformance (needs VT_GUARD_* in test-secrets/vendors.env; enterprise)
+	@if [ ! -f test-secrets/vendors.env ]; then \
+		echo "test-secrets/vendors.env not found."; \
+		echo "  cp test-secrets/vendors.env.example test-secrets/vendors.env"; \
+		exit 1; \
+	fi
+	@echo "Running guardrail provider conformance (direct provider calls)..."
+	VENDOR_TESTS_GUARDRAILS="$(GUARDRAILS)" \
+		go test -tags "vendorlive enterprise" -v -count=1 \
+		-timeout 15m ./tests/guardrailconformance/...
+	@echo "Running guardrail filters through the data plane..."
+	cd microgateway && VENDOR_TESTS_VENDORS="$(VENDORS)" \
+		VENDOR_TESTS_GUARDRAILS="$(GUARDRAILS)" \
+		go test -tags "vendorlive enterprise" -v -count=1 \
+		-timeout 15m -run 'TestGuardrail' ./tests/vendorconformance/...
+
+.PHONY: test-guardrails-preflight
+test-guardrails-preflight: ## Verify guardrail provider credentials with one benign probe each
+	VENDOR_TESTS_GUARDRAILS="$(GUARDRAILS)" \
+		go test -tags "vendorlive enterprise" -v -count=1 \
+		-timeout 5m -run 'TestGuardrailPreflight' ./tests/guardrailconformance/...
+
 # ============================================================================
 # Frontend Tests
 # ============================================================================

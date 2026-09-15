@@ -15,7 +15,9 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/plugins/interfaces"
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/lrucache"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/rs/zerolog/log"
@@ -858,12 +860,55 @@ func (a *GatewayServiceAdapter) GetFilterByID(id uint) (*models.Filter, error) {
 		return nil, err
 	}
 
-	return &models.Filter{
-		ID:          dbFilter.ID,
-		Name:        dbFilter.Name,
-		Description: dbFilter.Description,
-		Script:      []byte(dbFilter.Script),
-	}, nil
+	return convertDatabaseFilterToModel(dbFilter), nil
+}
+
+// convertDatabaseFilterToModel maps an edge filter row onto the shared
+// models.Filter the proxy's filter chain runs. Kind and Config are what make
+// a guardrail filter a guardrail filter at the edge; an invalid Config is
+// logged and left nil, which the runner reports as a misconfigured filter.
+func convertDatabaseFilterToModel(dbFilter *database.Filter) *models.Filter {
+	f := &models.Filter{
+		ID:             dbFilter.ID,
+		Name:           dbFilter.Name,
+		Description:    dbFilter.Description,
+		Script:         []byte(dbFilter.Script),
+		ResponseFilter: dbFilter.ResponseFilter,
+		Namespace:      dbFilter.Namespace,
+		Kind:           dbFilter.Kind,
+	}
+	// The hub's timestamps identify the filter version; the runner keys its
+	// prepared-config cache on ID and UpdatedAt.
+	f.CreatedAt = dbFilter.CreatedAt
+	f.UpdatedAt = dbFilter.UpdatedAt
+	if f.Kind == "" {
+		f.Kind = models.FilterKindScript
+	}
+	if f.Kind == models.FilterKindGuardrail {
+		f.Config = parsedGuardrailConfig(dbFilter)
+	}
+	return f
+}
+
+// Filters are materialised onto the LLM on every request, so the guardrail
+// config JSON the hub sent is parsed once per filter version and reused
+// from a bounded least-recently-used cache; concurrent first requests share
+// one parse. The map is read-only downstream (the runner marshals it back
+// out); a new UpdatedAt from the hub is a new entry.
+const parsedConfigsMax = 1024
+
+var parsedConfigs = lrucache.New[map[string]any](parsedConfigsMax)
+
+func parsedGuardrailConfig(dbFilter *database.Filter) map[string]any {
+	key := fmt.Sprintf("%d@%d:%d", dbFilter.ID, dbFilter.UpdatedAt.UnixNano(), len(dbFilter.Config))
+	cfg, err := parsedConfigs.Do(key, func() (map[string]any, error) {
+		return guardrails.ConfigFromJSON(dbFilter.Config)
+	})
+	if err != nil {
+		log.Error().Err(err).Uint("filter_id", dbFilter.ID).Msg("Guardrail filter config from hub is not valid JSON")
+		return nil
+	}
+	return cfg
 }
 
 // GetAllFilters returns all filters with pagination
@@ -881,15 +926,8 @@ func (a *GatewayServiceAdapter) GetAllFilters(pageSize int, pageNumber int, all 
 
 	// Convert database filters to models
 	modelFilters := make([]models.Filter, len(dbFilters))
-	for i, dbFilter := range dbFilters {
-		modelFilters[i] = models.Filter{
-			ID:             dbFilter.ID,
-			Name:           dbFilter.Name,
-			Description:    dbFilter.Description,
-			Script:         []byte(dbFilter.Script),
-			ResponseFilter: dbFilter.ResponseFilter,
-			Namespace:      dbFilter.Namespace,
-		}
+	for i := range dbFilters {
+		modelFilters[i] = *convertDatabaseFilterToModel(&dbFilters[i])
 	}
 
 	totalPages := 1
@@ -916,15 +954,8 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 
 	// Convert associated filters
 	filters := make([]*models.Filter, len(dbLLM.Filters))
-	for i, dbFilter := range dbLLM.Filters {
-		filters[i] = &models.Filter{
-			ID:             dbFilter.ID,
-			Name:           dbFilter.Name,
-			Description:    dbFilter.Description,
-			Script:         []byte(dbFilter.Script),
-			ResponseFilter: dbFilter.ResponseFilter,
-			Namespace:      dbFilter.Namespace,
-		}
+	for i := range dbLLM.Filters {
+		filters[i] = convertDatabaseFilterToModel(&dbLLM.Filters[i])
 	}
 
 	// Convert allowed models from JSON

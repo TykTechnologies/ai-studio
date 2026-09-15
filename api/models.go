@@ -712,36 +712,62 @@ type VendorListResponse struct {
 // @Description Filter input model
 type FilterInput struct {
 	Data struct {
-		Type       string `json:"type"`
-		Attributes struct {
-			Name           string `json:"name"`
-			Description    string `json:"description"`
-			Script         []byte `json:"script"`
-			ResponseFilter bool   `json:"response_filter"`
-			Namespace      string `json:"namespace"`
-		} `json:"attributes"`
+		Type       string                `json:"type"`
+		Attributes FilterInputAttributes `json:"attributes"`
 	} `json:"data"`
+}
+
+// FilterInputAttributes is the attribute block of a filter create or update
+// request. It mirrors FilterAttributes, the response block.
+// @Description Filter input attributes
+type FilterInputAttributes struct {
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Script         []byte `json:"script"`
+	ResponseFilter bool   `json:"response_filter"`
+	Namespace      string `json:"namespace"`
+	// Kind is "script" (default) or "guardrail".
+	Kind string `json:"kind"`
+	// Config is the guardrail configuration (provider, detectors,
+	// action, ...) for a guardrail filter.
+	Config map[string]interface{} `json:"config"`
+}
+
+// FilterAttributes is the attribute block of a filter response.
+// @Description Filter attributes
+type FilterAttributes struct {
+	Name           string                 `json:"name"`
+	Description    string                 `json:"description"`
+	Script         []byte                 `json:"script"`
+	ResponseFilter bool                   `json:"response_filter"`
+	Namespace      string                 `json:"namespace"`
+	Kind           string                 `json:"kind"`
+	Config         map[string]interface{} `json:"config,omitempty"`
 }
 
 // FilterResponse represents the response for filter-related operations
 // @Description Filter response model
 type FilterResponse struct {
-	Type       string `json:"type"`
-	ID         string `json:"id"`
-	Attributes struct {
-		Name           string `json:"name"`
-		Description    string `json:"description"`
-		Script         []byte `json:"script"`
-		ResponseFilter bool   `json:"response_filter"`
-		Namespace      string `json:"namespace"`
-	} `json:"attributes"`
+	Type       string           `json:"type"`
+	ID         string           `json:"id"`
+	Attributes FilterAttributes `json:"attributes"`
 }
 
-// FilterTestInput represents the input for testing a filter script
+// FilterTestInput represents the input for testing a filter. A script filter
+// sends Script; a guardrail filter sends Kind "guardrail" and Config, and the
+// test performs a real call to the configured provider.
 // @Description Filter test input model
 type FilterTestInput struct {
-	Script string                 `json:"script" binding:"required"`
-	Input  map[string]interface{} `json:"input" binding:"required"`
+	Script string                 `json:"script"`
+	Kind   string                 `json:"kind"`
+	Config map[string]interface{} `json:"config"`
+	// FilterID names the saved filter this test belongs to. A guardrail config
+	// whose connection holds $SECRET/ or $ENV/ references is only run when
+	// its connection block matches that saved filter's, so the test endpoint
+	// cannot be used to send a resolved secret to a caller-chosen endpoint.
+	FilterID       uint                   `json:"filter_id"`
+	ResponseFilter bool                   `json:"response_filter"`
+	Input          map[string]interface{} `json:"input" binding:"required"`
 }
 
 // FilterTestOutput represents the output of a filter test execution
