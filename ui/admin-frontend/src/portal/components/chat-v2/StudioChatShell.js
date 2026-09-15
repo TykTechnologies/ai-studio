@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Box, Button, Grid, IconButton, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import PrintIcon from '@mui/icons-material/Print';
@@ -9,6 +9,7 @@ import usePrintChat from '../chat/hooks/usePrintChat';
 import '../chat/printChat.css';
 import StudioThread from './StudioThread';
 import { useStudioRuntime } from './runtime/useStudioRuntime';
+import { loadPluginToolRenderers } from './pluginToolRenderers';
 
 const Layout = ({ title, subtitle, icon, onBack, onNewChat, sidebar, hideFileUpload, viewportRef }) => {
   const isEmpty = useAuiState((s) => s.thread.isEmpty);
@@ -77,6 +78,11 @@ const StudioChatShell = ({ session, endpoints, onRunError, ...layoutProps }) => 
   const viewportRef = useRef(null);
   const clientToolNames = useMemo(() => (session.client_tools || []).map((t) => t.name), [session.client_tools]);
   const runtime = useStudioRuntime({ sessionId: session.session_id, endpoints, clientToolNames, onRunError });
+  // Plugin-provided tool renderers load once per page; tools render with the
+  // default card until they arrive.
+  useEffect(() => {
+    loadPluginToolRenderers();
+  }, []);
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <Layout viewportRef={viewportRef} {...layoutProps} />

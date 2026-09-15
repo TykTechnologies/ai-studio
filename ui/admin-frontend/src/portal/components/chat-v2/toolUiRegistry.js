@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { makeHumanToolRenderer } from './parts/HumanToolCard';
 import { useChatUi } from './ChatUiContext';
 
@@ -15,11 +15,13 @@ import { useChatUi } from './ChatUiContext';
 const builtins = {};
 
 let pluginRenderers = {};
+let pluginVersion = 0;
 const listeners = new Set();
 
 export const registerPluginToolRenderers = (renderers) => {
   pluginRenderers = { ...pluginRenderers, ...renderers };
-  listeners.forEach((fn) => fn());
+  pluginVersion += 1;
+  listeners.forEach((fn) => fn(pluginVersion));
 };
 
 export const subscribeToolRenderers = (fn) => {
@@ -39,7 +41,10 @@ export const getToolUiRegistry = (clientTools = []) => {
 export const useToolUiRegistry = () => {
   const { session } = useChatUi();
   const clientTools = session?.client_tools;
-  return useMemo(() => getToolUiRegistry(clientTools || []), [clientTools]);
+  const [version, setVersion] = useState(pluginVersion);
+  useEffect(() => subscribeToolRenderers(setVersion), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => getToolUiRegistry(clientTools || []), [clientTools, version]);
 };
 
 export default builtins;
