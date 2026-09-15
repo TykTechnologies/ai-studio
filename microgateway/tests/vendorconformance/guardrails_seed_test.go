@@ -5,6 +5,7 @@ package vendorconformance
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	mgwdb "github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
@@ -94,6 +95,14 @@ func seedGuardrailed(db *gorm.DB, container *services.ServiceContainer, v vc.Ven
 		}
 	}
 	return llm, model, nil
+}
+
+// newRef tags one request so its analytics event can be found. The vendor
+// suite's "nonce-<n>" is not usable here: Lakera's profanity detector fires
+// on the word "nonce" (British slang), so a probe carrying it is never
+// clean.
+func newRef() string {
+	return fmt.Sprintf("ref-%d", time.Now().UnixNano())
 }
 
 // injectionDetectors narrows a provider to the detectors that classify prompt

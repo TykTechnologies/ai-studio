@@ -627,6 +627,26 @@ func (p *Proxy) cloudflareHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// hdrInternalHop is set by InternalRoutingTransport on the /ai/ -> /llm/call/
+// loopback. The langchaingo drivers that make that call keep an upstream
+// error's message only when the body is an OpenAI error envelope
+// ({"error":{"message":...}}); with the pass-through's own ErrorResponse
+// shape they drop it, so a request filter's block reason reached the caller
+// on the Bedrock direct paths but was reduced to "unexpected status code:
+// 400" for every other vendor.
+const hdrInternalHop = "X-Tyk-Internal-Hop"
+
+// respondPolicyBlock writes a request-filter block: the OpenAI envelope on
+// the loopback hop so the outer /ai/ handler can relay the reason, the
+// pass-through's ErrorResponse shape for direct callers.
+func respondPolicyBlock(w http.ResponseWriter, r *http.Request, err error) {
+	if r.Header.Get(hdrInternalHop) != "" {
+		respondWithOAIError(w, http.StatusBadRequest, "policy_violation", err, false)
+		return
+	}
+	respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
+}
+
 func respondWithError(w http.ResponseWriter, status int, message string, err error, wwwAuthenticate bool) {
 	slog.Error("api client error", "message", message, "status", status, "error", err)
 	response := ErrorResponse{Status: status, Message: message}
@@ -749,7 +769,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		p.goAnalyze(func() {
 			p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
 		})
-		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
+		respondPolicyBlock(w, r, err)
 		return
 	}
 	// Log what the filters let through, not what the caller sent: a filter
@@ -1455,7 +1475,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		p.goAnalyze(func() {
 			p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		})
-		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
+		respondPolicyBlock(w, r, err)
 		return
 	}
 	// Log what the filters let through, not what the caller sent (see the
@@ -1547,6 +1567,13 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	buffer := make([]byte, 1024)
 	var responses [][]byte
 	isErr := false
+	// clientGone is set when a write to the caller fails. The upstream still
+	// answered and billed for the tokens, so the exchange is logged with what
+	// arrived; only an upstream failure (isErr) leaves it out. The /ai/
+	// loopback makes this ordinary rather than rare: its driver closes the
+	// connection as soon as it has the finish event, so the last write here
+	// routinely fails after a complete response.
+	clientGone := false
 	chunkIndex := 0
 	hasResponseFilters := p.hasResponseFilters(llm)
 
@@ -1609,7 +1636,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 
 			// Filter passed or no filters - write chunk to client
 			if _, werr := w.Write(chunk); werr != nil {
-				isErr = true
+				clientGone = true
 				break
 			}
 			if f, ok := w.(http.Flusher); ok {
@@ -1621,7 +1648,15 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			break
 		}
 		if readErr != nil {
-			isErr = true
+			if r.Context().Err() != nil {
+				// The caller hung up: the server cancelled the request
+				// context, which cancelled the upstream read with it. That is
+				// the usual way a departed client shows up here, before any
+				// write to it has a chance to fail.
+				clientGone = true
+			} else {
+				isErr = true
+			}
 			break
 		}
 	}
@@ -1637,9 +1672,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		} else if blocked {
 			metrics.RecordPolicyBlock(r.Context(), "response_filter", "filter")
 			logger.Warnf("Streaming response blocked by filter at end of stream: %s", blockMsg)
-			w.Write(buildFilterBlockedErrorChunk(blockMsg))
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
+			if !clientGone {
+				w.Write(buildFilterBlockedErrorChunk(blockMsg))
+				if f, ok := w.(http.Flusher); ok {
+					f.Flush()
+				}
 			}
 			isErr = true
 			blockedResponseBody := buildFilterBlockedAnalyticsBody(blockMsg, chunkIndex, fullResponse.String())

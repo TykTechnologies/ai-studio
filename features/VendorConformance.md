@@ -552,6 +552,40 @@ every remote provider, because the chain runs them first.
 **Cost:** each direct probe is one provider call; the data-plane cases are
 four one-sentence completions on one vendor.
 
+**Findings from the first live run (2026-09-16, Lakera, Presidio, Bedrock):**
+
+- The `/ai/` shim reduced every request-filter block on the `/llm/call/`
+  loopback to "API returned unexpected status code: 400". The pass-through
+  answered a block with its own `ErrorResponse` shape, which the langchaingo
+  drivers cannot decode, so only the status survived; the Bedrock direct
+  paths, which block in-process, carried the reason. Fixed: the loopback
+  transport marks the hop (`X-Tyk-Internal-Hop`) and the inner handler
+  answers a block in the OpenAI envelope (`respondPolicyBlock`), so the outer
+  error now reads "... Policy error: {filter} - {message}" for every vendor.
+  Direct callers of `/llm/` keep the old shape.
+- Do not put the word "nonce" in a probe: Lakera's profanity detector fires
+  on it (British slang). The data-plane probes use "ref-{n}" markers, and
+  plain phrasing, because "reply with exactly ... and nothing else" and
+  "repeat the following back to me" are classified as prompt attacks, which
+  is the detector doing its job.
+- A streamed exchange whose caller left before the last frame was dropped
+  from the proxy log entirely. The pass-through streaming handler treated a
+  cancelled upstream read (the server cancels the request context when the
+  client hangs up) and a failed write to the client like an upstream failure
+  and skipped analytics. The `/ai/` loopback driver closes as soon as it has
+  the finish event, so on that path this was routine rather than rare, and
+  the suite's PII case found no event to read back. Fixed: the handler
+  distinguishes the caller leaving (`clientGone`) from the upstream failing
+  and logs the exchange with what arrived, pinned by
+  `proxy/streaming_client_gone_test.go`. The proxy-log poller also waits
+  thirty seconds rather than ten, since the loopback's chat-record merge can
+  trail the response.
+- A Bedrock guardrail only checks what it is configured for. The first
+  guardrail used had a Prompt Attack filter and no sensitive-information
+  policy (`sensitiveInformationPolicyUnits: 0` in the raw `ApplyGuardrail`
+  response), so `VT_GUARD_BEDROCK_EXPECT_PII=false` until PII entities are
+  added to it.
+
 ---
 
 ## 8. Related
