@@ -1192,3 +1192,23 @@ The Echo Agent demonstrates:
 - **[Plugin Development Workflow](plugins-development-workflow.md)** - Fast iteration setup
 - **[Plugin Deployment](plugins-deployment.md)** - Production deployment options
 - **[Apps Management](apps.md)** - Configure Apps for agent resource access
+
+
+## Chat UI integration (v2)
+
+Agents are used from the Chat Interface (`/chat/agent/:id`). With the assistant-ui based front end (`CHAT_UI_V2_ENABLED`, on by default) the browser talks to agents through the same per-turn API as chat rooms:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/common/agents/:id/sessions` | Create an agent session (or resume one with `{"session_id": "..."}` while it is still in memory). |
+| `POST` | `/common/agent-sessions/:session_id/runs` | Send `{"message": "..."}` and stream the reply as an AI SDK UI message stream. |
+| `POST` | `/common/agent-sessions/:session_id/cancel` | Abort the plugin stream of the current turn. |
+| `GET` | `/common/agent-sessions/:session_id/messages/v2` | The session's transcript (text, reasoning, tool calls and results). |
+
+Chunk types map onto the stream as follows: `CONTENT` → text deltas, `THINKING` → reasoning deltas, `TOOL_CALL` → a tool call (with `metadata.tool_name` and `metadata.parameters` as the arguments), `TOOL_RESULT` → the result of the most recent unanswered call with the same `tool_name`, `ERROR` → an error part, `DONE` or `is_final` → the end of the turn. Studio tags `TOOL_CALL`/`TOOL_RESULT` chunks with a `tool_call_id` so the UI can pair them; plugins do not need to.
+
+Agent sessions live in memory between turns for `CHAT_SESSION_IDLE_TTL` (default 10 minutes) and keep an in-memory transcript that is also passed to the plugin as `history` on every turn, so plugins no longer receive an empty history. The plugin SDK contract (`HandleAgentMessage`, `AgentMessageChunk`) is unchanged; the v1 SSE endpoints (`/common/agents/:id/stream`, `/common/agents/:id/message`) still work.
+
+### Custom tool renderers
+
+A portal plugin can draw specific tool calls in the chat (both for agents and chat rooms) with its own web component. Declare the `chat.tool_renderer` portal slot in the manifest with `component` items naming the tool (`tool`) and the element to mount; see the [Chat Interface](./chat-interface.md#custom-tool-renderers-from-plugins) documentation for the element contract.

@@ -13,6 +13,18 @@ if (typeof global.TextDecoder === 'undefined') {
   global.TextDecoder = TextDecoder;
 }
 
+// jsdom also omits the Web Streams API, which assistant-stream (the chat
+// streaming decoder) needs at import time. Node ships it under stream/web.
+{
+  // eslint-disable-next-line global-require
+  const webStreams = require('stream/web');
+  ['ReadableStream', 'WritableStream', 'TransformStream', 'TextDecoderStream', 'TextEncoderStream'].forEach((name) => {
+    if (typeof global[name] === 'undefined' && webStreams[name]) {
+      global[name] = webStreams[name];
+    }
+  });
+}
+
 // Mock use-debounce
 jest.mock('use-debounce', () => ({
   useDebouncedCallback: (fn) => fn,

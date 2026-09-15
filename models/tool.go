@@ -1,6 +1,8 @@
 package models
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -44,7 +46,90 @@ type Tools []Tool
 
 const (
 	ToolTypeREST = "REST"
+	// ToolTypeClient is a human-in-the-loop tool: the model calls it like any
+	// function, but it is executed by the person in the chat UI (a form or an
+	// approval) rather than by the server. Its definition lives in OASSpec as
+	// a ClientToolDefinition JSON document.
+	ToolTypeClient = "CLIENT"
 )
+
+const (
+	// ClientToolKindApproval shows Approve / Reject buttons.
+	ClientToolKindApproval = "approval"
+	// ClientToolKindForm shows a JSON-Schema form (ResponseSchema).
+	ClientToolKindForm = "form"
+	// ClientToolKindPresent is generative UI: the model composes cards,
+	// facts, tables, charts and forms from the built-in component
+	// vocabulary (see PresentToolSchema) and the chat draws them. The
+	// call resolves in the browser without user input.
+	ClientToolKindPresent = "present"
+)
+
+// ClientToolUI tells the chat UI how to collect the tool's result.
+type ClientToolUI struct {
+	// Kind is "form" (the user fills ResponseSchema), "approval" (the user
+	// approves or rejects what the model asked for) or "present"
+	// (generative UI drawn from the built-in vocabulary).
+	Kind string `json:"kind"`
+	// ResponseSchema is the JSON schema of the value the user provides for
+	// kind "form". Optional; a single free-text field is used when absent.
+	ResponseSchema map[string]interface{} `json:"response_schema,omitempty"`
+	// Title and Description label the card shown to the user.
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// ClientToolDefinition is the OASSpec payload of a ToolTypeClient tool.
+type ClientToolDefinition struct {
+	// Parameters is the JSON schema of the arguments the model supplies.
+	Parameters map[string]interface{} `json:"parameters"`
+	UI         ClientToolUI           `json:"ui"`
+}
+
+// ClientDefinition parses the tool's client-tool definition. Missing pieces
+// get usable defaults: an empty object schema and an approval UI.
+func (t *Tool) ClientDefinition() (*ClientToolDefinition, error) {
+	def := &ClientToolDefinition{}
+	if raw := strings.TrimSpace(t.OASSpec); raw != "" {
+		if err := json.Unmarshal([]byte(raw), def); err != nil {
+			// The API stores specs base64-encoded; accept that form too.
+			decoded, decErr := base64.StdEncoding.DecodeString(raw)
+			if decErr != nil || json.Unmarshal(decoded, def) != nil {
+				return nil, fmt.Errorf("invalid client tool definition: %w", err)
+			}
+		}
+	}
+	if def.UI.Kind == "" {
+		def.UI.Kind = ClientToolKindApproval
+	}
+	if def.UI.Kind == ClientToolKindPresent && len(def.Parameters) == 0 {
+		// The vocabulary schema is built in; admins do not author it.
+		spec, err := PresentToolSchema()
+		if err != nil {
+			return nil, fmt.Errorf("generative UI schema: %w", err)
+		}
+		def.Parameters = spec.Parameters
+		if def.UI.Description == "" {
+			def.UI.Description = spec.Description
+		}
+	}
+	if def.Parameters == nil {
+		def.Parameters = map[string]interface{}{"type": "object", "properties": map[string]interface{}{}}
+	}
+	return def, nil
+}
+
+// ClientOperation is the function name the model sees for a client tool:
+// the first configured operation, else the tool's slug.
+func (t *Tool) ClientOperation() string {
+	if ops := t.GetOperations(); len(ops) > 0 && strings.TrimSpace(ops[0]) != "" {
+		return strings.TrimSpace(ops[0])
+	}
+	if t.Slug != "" {
+		return t.Slug
+	}
+	return slug.Make(t.Name)
+}
 
 func NewTool() *Tool {
 	return &Tool{}

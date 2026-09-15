@@ -317,12 +317,28 @@ type UISlot struct {
 	Items []UISlotItem `json:"items"` // Items to mount in this slot
 }
 
+// PortalSlotChatToolRenderer is the portal slot whose "component" items
+// render tool calls in the chat UI: each item names the tool operation it
+// draws (Tool) and the web component to mount for it.
+const PortalSlotChatToolRenderer = "chat.tool_renderer"
+
 // UISlotItem represents an individual UI component or route
 type UISlotItem struct {
 	Type  string  `json:"type"`  // "route" or "component"
 	Path  string  `json:"path"`  // Route path
 	Title string  `json:"title"` // Display title
 	Mount UIMount `json:"mount"` // Mount configuration
+	// Tool is the tool operation name a chat.tool_renderer component draws.
+	Tool string `json:"tool,omitempty"`
+}
+
+// RendererKey returns the lookup key of a chat.tool_renderer item: the tool
+// operation it renders (Tool, or Path for manifests that used it).
+func (i UISlotItem) RendererKey() string {
+	if i.Tool != "" {
+		return i.Tool
+	}
+	return i.Path
 }
 
 // UIMount defines how a UI component should be mounted

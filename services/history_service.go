@@ -1,8 +1,10 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"gorm.io/gorm"
@@ -152,6 +154,96 @@ func (s *Service) EditUserMessage(sessionID string, messageID uint, newContent s
 	slog.Debug("Deleted messages", "count", result.RowsAffected)
 
 	return nil
+}
+
+// GetCMessagesForSessionPage returns up to limit messages of a session ending
+// just before the row id `before` (0 = the newest), oldest first, and whether
+// older rows exist. The v2 history endpoint pages backwards with it so a long
+// conversation is never loaded whole.
+func (s *Service) GetCMessagesForSessionPage(sessionID string, before uint, limit int) ([]models.CMessage, bool, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	q := s.DB.Where("session = ?", sessionID)
+	if before > 0 {
+		q = q.Where("id < ?", before)
+	}
+	var page []models.CMessage
+	// One extra row tells us whether there is more without a second query.
+	if err := q.Order("id desc").Limit(limit + 1).Find(&page).Error; err != nil {
+		return nil, false, err
+	}
+	hasMore := len(page) > limit
+	if hasMore {
+		page = page[:limit]
+	}
+	for i, j := 0, len(page)-1; i < j; i, j = i+1, j-1 {
+		page[i], page[j] = page[j], page[i]
+	}
+	return page, hasMore, nil
+}
+
+// GetCMessagesForSession returns every message of a session, oldest first.
+func (s *Service) GetCMessagesForSession(sessionID string) ([]models.CMessage, error) {
+	var messages []models.CMessage
+	err := s.DB.Where("session = ?", sessionID).Order("created_at asc, id asc").Find(&messages).Error
+	return messages, err
+}
+
+// LastUserMessageID returns the row id of the last user turn of a session, or
+// 0 when there is none. Human rows that carry only a [CONTEXT] block (tool
+// documentation injected on AddTool) do not count as a turn.
+func (s *Service) LastUserMessageID(sessionID string) (uint, error) {
+	messages, err := s.GetCMessagesForSession(sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to load messages: %w", err)
+	}
+	for i := len(messages) - 1; i >= 0; i-- {
+		var stored struct {
+			Role string `json:"role"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(messages[i].Content, &stored); err != nil || stored.Role != "human" {
+			continue
+		}
+		if _, userText, _ := models.SplitContext(stored.Text); strings.TrimSpace(userText) == "" {
+			continue
+		}
+		return messages[i].ID, nil
+	}
+	return 0, nil
+}
+
+// TruncateAfterMessage deletes every non-system message of a session whose id
+// is greater than afterID (afterID 0 clears the conversation while keeping the
+// system prompt). It is how an edit or a regenerate rewinds the stored
+// history. It returns the number of rows removed.
+func (s *Service) TruncateAfterMessage(sessionID string, afterID uint) (int64, error) {
+	messages, err := s.GetCMessagesForSession(sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to load messages: %w", err)
+	}
+	var ids []uint
+	for _, m := range messages {
+		if m.ID <= afterID {
+			continue
+		}
+		var stored struct {
+			Role string `json:"role"`
+		}
+		if err := json.Unmarshal(m.Content, &stored); err == nil && stored.Role == "system" {
+			continue
+		}
+		ids = append(ids, m.ID)
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	res := s.DB.Where("session = ? AND id IN ?", sessionID, ids).Delete(&models.CMessage{})
+	if res.Error != nil {
+		return 0, fmt.Errorf("failed to delete messages: %w", res.Error)
+	}
+	return res.RowsAffected, nil
 }
 
 // EditUserMessageByIndex removes messages from the specified index onwards

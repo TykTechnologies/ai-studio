@@ -17,6 +17,10 @@ import {
   Checkbox,
   FormControlLabel,
   FormGroup,
+  FormControl,
+  FormLabel,
+  Radio,
+  RadioGroup,
   AccordionSummary,
   AccordionDetails,
   IconButton,
@@ -53,6 +57,7 @@ import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
 import { usePermissions } from "../../context/PermissionsContext";
 import { parseOpenAPIOperations } from "../../utils/openapiOperations";
+import ClientToolEditor from "./client/ClientToolEditor";
 
 const SectionTitle = ({ children, tooltip }) => (
   <Box sx={{ display: "flex", alignItems: "center", mt: 3, mb: 2 }}>
@@ -246,6 +251,25 @@ const filterDirectionLabel = (filter) =>
     ? "Response filter — runs on the tool's result"
     : "Request filter — runs on arguments sent to the tool";
 
+const DEFAULT_CLIENT_PARAMETERS = JSON.stringify(
+  { type: "object", properties: { summary: { type: "string", description: "What the assistant wants the user to review" } }, required: ["summary"] },
+  null,
+  2,
+);
+
+const parseJSONObject = (text, label) => {
+  if (!text || !text.trim()) return { value: undefined, error: null };
+  try {
+    const value = JSON.parse(text);
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return { value: undefined, error: `${label} must be a JSON object` };
+    }
+    return { value, error: null };
+  } catch (e) {
+    return { value: undefined, error: `${label} is not valid JSON: ${e.message}` };
+  }
+};
+
 const ToolForm = () => {
   const { can } = usePermissions();
   const [tool, setTool] = useState({
@@ -260,6 +284,7 @@ const ToolForm = () => {
     auth_schema_name: "",
     auth_key: "",
     oas_spec: "",
+    tool_type: "REST",
     operations: [], // the API expects a string array; "" was rejected on create
     namespace: "",
   });
@@ -270,6 +295,18 @@ const ToolForm = () => {
     severity: "success",
   });
   const [oasSpecError, setOasSpecError] = useState(null);
+  // Client (human-in-the-loop) tools: the model calls them like a function,
+  // but the person in the chat answers (approval or form). The definition is
+  // stored in the spec field as JSON.
+  const [clientDef, setClientDef] = useState({
+    kind: "approval",
+    title: "",
+    description: "",
+    parameters: DEFAULT_CLIENT_PARAMETERS,
+    responseSchema: "",
+  });
+  const [clientDefErrors, setClientDefErrors] = useState({});
+  const isClient = tool.tool_type === "CLIENT";
   const [files, setFiles] = useState([]);
   const [availableFilters, setAvailableFilters] = useState([]);
   // Filters and dependencies are edited in the form and committed on save:
@@ -393,6 +430,20 @@ const ToolForm = () => {
         : "";
 
       setTool(fetchedTool);
+      if (fetchedTool.tool_type === "CLIENT") {
+        try {
+          const def = JSON.parse(fetchedTool.oas_spec || "{}");
+          setClientDef({
+            kind: def.ui?.kind || "approval",
+            title: def.ui?.title || "",
+            description: def.ui?.description || "",
+            parameters: JSON.stringify(def.parameters || {}, null, 2),
+            responseSchema: def.ui?.response_schema ? JSON.stringify(def.ui.response_schema, null, 2) : "",
+          });
+        } catch (e) {
+          // keep the defaults; the user can re-enter the definition
+        }
+      }
       setFiles(fetchedTool.file_stores || []);
       setGovernedMetadata(response.data.data.governed_metadata || {});
     } catch (error) {
@@ -496,6 +547,23 @@ const ToolForm = () => {
     setTool({ ...tool, namespace: namespaceString });
   };
 
+  const buildClientDefinition = () => {
+    const ui = { kind: clientDef.kind || "approval" };
+    if (clientDef.title.trim()) ui.title = clientDef.title.trim();
+    if (clientDef.description.trim()) ui.description = clientDef.description.trim();
+    if (ui.kind === "present") {
+      // Generative UI: the backend supplies the built-in vocabulary schema.
+      return { definition: { ui }, errors: {} };
+    }
+    const params = parseJSONObject(clientDef.parameters, "Parameters schema");
+    const response = parseJSONObject(clientDef.responseSchema, "Response schema");
+    if (response.value) ui.response_schema = response.value;
+    return {
+      definition: { parameters: params.value || { type: "object", properties: {} }, ui },
+      errors: { ...(params.error ? { parameters: params.error } : {}), ...(response.error ? { responseSchema: response.error } : {}) },
+    };
+  };
+
   const validateForm = () => {
     const newErrors = {};
     if (!tool.name.trim()) newErrors.name = "Name is required";
@@ -504,7 +572,12 @@ const ToolForm = () => {
     if (!isValidPrivacyScore(tool.privacy_score))
       newErrors.privacy_score = "Privacy level must be between 0 and 100";
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    let defErrors = {};
+    if (isClient) {
+      defErrors = buildClientDefinition().errors;
+      setClientDefErrors(defErrors);
+    }
+    return Object.keys(newErrors).length === 0 && Object.keys(defErrors).length === 0;
   };
 
   // Commits the Filters picker the same way as syncDependencies.
@@ -555,11 +628,16 @@ const ToolForm = () => {
         type: "Tool",
         attributes: {
           ...tool,
-          operations: selectedOperations,
+          operations: isClient ? [] : selectedOperations,
           privacy_score: Number(tool.privacy_score),
           active: Boolean(tool.active),
-          tool_type: "REST",
-          oas_spec: tool.oas_spec ? btoa(tool.oas_spec) : "",
+          tool_type: tool.tool_type || "REST",
+          // Client tools store their JSON definition in the spec field.
+          oas_spec: isClient
+            ? btoa(unescape(encodeURIComponent(JSON.stringify(buildClientDefinition().definition))))
+            : tool.oas_spec
+              ? btoa(tool.oas_spec)
+              : "",
           governed_metadata: governedMetadata,
         },
       },
@@ -751,12 +829,36 @@ const ToolForm = () => {
                 value={tool.description}
                 onChange={handleChange}
                 error={!!errors.description}
-                helperText={errors.description}
+                helperText={
+                  errors.description ||
+                  (isClient
+                    ? "Read by the assistant to decide when to use this tool: say what it is for and when to reach for it"
+                    : undefined)
+                }
                 multiline
                 rows={4}
                 required
                 autoComplete="off"
               />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl component="fieldset" data-testid="tool-type">
+                <FormLabel component="legend">Tool type</FormLabel>
+                <RadioGroup
+                  row
+                  name="tool_type"
+                  value={tool.tool_type || "REST"}
+                  onChange={(e) => setTool((prev) => ({ ...prev, tool_type: e.target.value }))}
+                >
+                  <FormControlLabel value="REST" control={<Radio />} label="REST API (OpenAPI)" />
+                  <FormControlLabel value="CLIENT" control={<Radio />} label="Client (human-in-the-loop)" />
+                </RadioGroup>
+                <Typography variant="caption" color="text.secondary">
+                  {isClient
+                    ? "The model calls this tool like a function; the person in the chat answers it with an approval or a form."
+                    : "The model calls operations of an HTTP API described by an OpenAPI specification."}
+                </Typography>
+              </FormControl>
             </Grid>
             <Grid item xs={12}>
               {/* One privacy control everywhere (UX review M4): a named level
@@ -784,6 +886,24 @@ const ToolForm = () => {
             </Grid>
           </Grid>
 
+          {isClient && (
+            <>
+              <SectionTitle tooltip="How the assistant asks, what it must state, and what the person in the chat answers. The preview on the right shows both sides.">
+                Client tool definition
+              </SectionTitle>
+              <ClientToolEditor
+                value={clientDef}
+                onChange={setClientDef}
+                errors={clientDefErrors}
+                toolName={tool.name}
+                toolDescription={tool.description}
+                onApplyPreset={(preset) => setTool((prev) => ({ ...prev, name: preset.name, description: preset.description }))}
+              />
+            </>
+          )}
+
+          {!isClient && (
+            <>
           <SectionTitle tooltip="Paste your OpenAPI Specification JSON or YAML here. This defines the structure and capabilities of your API.">
             OpenAPI Specification
           </SectionTitle>
@@ -835,6 +955,9 @@ const ToolForm = () => {
               )}
             </Grid>
           </Grid>
+
+            </>
+          )}
 
           <StyledAccordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -890,6 +1013,7 @@ const ToolForm = () => {
             </AccordionDetails>
           </StyledAccordion>
 
+          {!isClient && (
           <StyledAccordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography>Authentication Details</Typography>
@@ -925,6 +1049,7 @@ const ToolForm = () => {
               </Grid>
             </AccordionDetails>
           </StyledAccordion>
+          )}
 
           <StyledAccordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
