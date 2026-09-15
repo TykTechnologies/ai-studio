@@ -699,6 +699,8 @@ message ResourceTypeRegistrationProto {
     ResourceFormComponentProto form_component = 7;  // Optional custom form component
     bool supports_metadata = 8;          // Whether instances can carry governed metadata (Enterprise)
     string submission_schema = 9;        // JSON Schema (object) describing the submission payload
+    optional bool access_granted_via_app = 10;  // An App credential grants access to instances; unset = platform default
+    string portal_detail_path = 11;      // Portal path template for an instance, e.g. "/portal/plugins/x#/items/{id}"
 }
 
 message ResourceFormComponentProto {
@@ -725,6 +727,7 @@ message ResourceInstanceProto {
     int32 privacy_score = 4;             // 0-100 (only meaningful if type has privacy)
     bytes metadata = 5;                  // Opaque JSON metadata
     bool is_active = 6;                  // Whether instance is currently usable
+    optional bool access_granted_via_app = 7;  // Per-instance override of the type's access_granted_via_app; unset = inherit
 }
 
 message GetResourceInstanceRequest {

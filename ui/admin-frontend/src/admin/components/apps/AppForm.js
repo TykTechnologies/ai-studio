@@ -561,13 +561,21 @@ const AppForm = () => {
                 arrays so the plugin_resources payload is unchanged. */}
             {pluginResourceTypes.map((rt) => {
               const key = `${rt.plugin_id}:${rt.slug}`;
-              const instances = pluginResourceInstances[key] || [];
+              // Only instances an App credential grants access to are offered.
+              // An existing selection of anything else (bound before the type
+              // was classified) still shows as a chip so it can be removed,
+              // and is sent back unchanged, which the server accepts.
+              const instances = (pluginResourceInstances[key] || []).filter(
+                (inst) => inst.access_granted_via_app !== false,
+              );
               const selected = itemsForIds(
                 pluginResourceSelections[key],
                 instances,
                 (inst) => inst.id,
                 (instId) => ({ id: instId, name: String(instId) }),
               );
+
+              if (instances.length === 0 && selected.length === 0) return null;
 
               return (
                 <Grid item xs={12} key={key}>

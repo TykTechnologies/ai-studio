@@ -184,6 +184,8 @@ message ResourceTypeSpec {
     string form_component_entry = 8;     // JS entry point for the form component
     string submission_schema = 9;        // JSON Schema (object) for community submissions
     bool supports_metadata = 10;         // Instances can carry governed metadata (Enterprise)
+    optional bool access_granted_via_app = 11;  // An App credential grants access to instances; unset = platform default
+    string portal_detail_path = 12;      // Portal path template for an instance, "{id}" is replaced
 }
 
 message RegisterResourceTypesRequest {

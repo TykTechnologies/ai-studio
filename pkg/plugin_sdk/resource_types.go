@@ -49,6 +49,26 @@ type ResourceTypeRegistration struct {
 	// submitted payloads against it before accepting them. Only meaningful when
 	// SupportsSubmissions is true.
 	SubmissionSchema string
+
+	// AccessGrantedViaApp declares that an App credential is what grants
+	// access to instances of this type (for example servers proxied by the
+	// gateway, whose handler checks the App's plugin resource bindings).
+	// Only such types are offered in the App forms, show "Build app" in the
+	// portal catalog and travel in the gateway config snapshot. Types whose
+	// instances are informational, or gated by the plugin's own access
+	// request flow, should set this to false.
+	//
+	// When nil the platform applies its default: true when the plugin also
+	// declares the custom_endpoint hook, false otherwise.
+	AccessGrantedViaApp *bool
+
+	// PortalDetailPath is an optional path template to an instance's page in
+	// the portal, used by the unified catalog to link users to the plugin's
+	// own page when access is not granted through an App. "{id}" is replaced
+	// with the URL-escaped instance ID, e.g.
+	// "/portal/plugins/asset-catalog#/assets/{id}". Must be a same-origin
+	// path starting with "/".
+	PortalDetailPath string
 }
 
 // ResourceFormComponent declares a Web Component that the platform will render
@@ -90,6 +110,10 @@ type ResourceInstance struct {
 
 	// IsActive indicates if this instance is currently usable.
 	IsActive bool
+
+	// AccessGrantedViaApp optionally overrides the resource type's
+	// AccessGrantedViaApp for this one instance. Nil inherits the type value.
+	AccessGrantedViaApp *bool
 }
 
 // ResourceInstanceChangedEvent is the topic for instance change notifications.

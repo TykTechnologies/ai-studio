@@ -4,9 +4,12 @@ import {
   detailPath,
   hashString,
   initialsFor,
+  isAppGranted,
   kindFacetLabel,
   kindLabel,
   openAICompatibleBaseUrl,
+  secondaryActionLabel,
+  secondaryActionPath,
 } from "./catalog";
 
 let mockConfig = {};
@@ -50,6 +53,24 @@ describe("catalog utils", () => {
     expect(buildAppPath(items[0])).toBe("/portal/app/new?llm=1");
     expect(buildAppPath(items[2])).toBe("/portal/app/new?datasource=3");
     expect(buildAppPath(resource)).toBe("/portal/app/new?plugin_resource=7%3Aagent%3Aasset%3A9");
+  });
+
+  // Building an app only makes sense when an app credential is what grants
+  // access; items the providing plugin gates itself link there instead.
+  it("tells app-granted items from plugin-gated ones and where to send the latter", () => {
+    expect(isAppGranted(items[0])).toBe(true);
+    expect(isAppGranted(item("plugin_resource", "x", { resource_type: { plugin_id: 7, slug: "mcp", name: "MCP Servers" } }))).toBe(true);
+    const gated = item("plugin_resource", "ast_9", {
+      access_granted_via_app: false,
+      portal_detail_url: "/portal/plugins/asset-catalog#/assets/ast_9",
+      resource_type: { plugin_id: 7, slug: "agent", name: "Agent" },
+    });
+    expect(isAppGranted(gated)).toBe(false);
+    expect(secondaryActionPath(gated)).toBe("/portal/plugins/asset-catalog#/assets/ast_9");
+    expect(secondaryActionLabel(gated)).toBe("View in Agent");
+    const nowhere = item("plugin_resource", "ast_10", { access_granted_via_app: false });
+    expect(secondaryActionPath(nowhere)).toBeNull();
+    expect(secondaryActionLabel(nowhere)).toBe("View in plugin");
   });
 
   it("labels kind facets from the server label or the UI's vendor map", () => {

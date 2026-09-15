@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -54,6 +55,9 @@ type CatalogResourceType struct {
 	Slug     string `json:"slug"`
 	Name     string `json:"name"`
 	Icon     string `json:"icon,omitempty"`
+	// AccessGrantedViaApp is the type-level answer to "does an App credential
+	// grant access to these?"; the item carries the per-instance value.
+	AccessGrantedViaApp bool `json:"access_granted_via_app"`
 }
 
 // CatalogModelInfo is one model an LLM provider serves, as far as the platform
@@ -87,6 +91,14 @@ type CatalogItemAttributes struct {
 	Catalogs           []CatalogRef `json:"catalogs"`
 	CreatedAt          *time.Time   `json:"created_at"`
 	UpdatedAt          *time.Time   `json:"updated_at"`
+	// AccessGrantedViaApp says whether building an App is how a developer
+	// gets to use this item. Always true for LLM providers, data sources and
+	// tools; for plugin resources it is the type's resolved value with any
+	// per-instance override applied. When false the portal shows no
+	// "Build app" action and, if PortalDetailURL is set, links to the
+	// providing plugin's own page instead.
+	AccessGrantedViaApp bool   `json:"access_granted_via_app"`
+	PortalDetailURL     string `json:"portal_detail_url,omitempty"`
 
 	// LLM providers
 	DefaultModel  string   `json:"default_model,omitempty"`
@@ -310,18 +322,19 @@ func (a *API) loadCatalogItems(user *models.User, src *catalogSource, scope func
 
 func llmCatalogItem(llm *models.LLM) CatalogItem {
 	return CatalogItem{Type: CatalogItemLLM, ID: uintID(llm.ID), Attributes: CatalogItemAttributes{
-		Name:             cleanText(llm.Name),
-		ShortDescription: cleanText(llm.ShortDescription),
-		LongDescription:  cleanText(llm.LongDescription),
-		LogoURL:          llm.LogoURL,
-		Kind:             string(llm.Vendor),
-		PrivacyScore:     intPtr(llm.PrivacyScore),
-		Tags:             []string{},
-		Catalogs:         []CatalogRef{},
-		CreatedAt:        timePtr(llm.CreatedAt),
-		UpdatedAt:        timePtr(llm.UpdatedAt),
-		DefaultModel:     cleanText(llm.DefaultModel),
-		AllowedModels:    cleanTexts(llm.AllowedModels),
+		Name:                cleanText(llm.Name),
+		ShortDescription:    cleanText(llm.ShortDescription),
+		LongDescription:     cleanText(llm.LongDescription),
+		LogoURL:             llm.LogoURL,
+		Kind:                string(llm.Vendor),
+		PrivacyScore:        intPtr(llm.PrivacyScore),
+		Tags:                []string{},
+		Catalogs:            []CatalogRef{},
+		CreatedAt:           timePtr(llm.CreatedAt),
+		UpdatedAt:           timePtr(llm.UpdatedAt),
+		AccessGrantedViaApp: true,
+		DefaultModel:        cleanText(llm.DefaultModel),
+		AllowedModels:       cleanTexts(llm.AllowedModels),
 	}}
 }
 
@@ -331,35 +344,50 @@ func datasourceCatalogItem(ds *models.Datasource) CatalogItem {
 		tags = append(tags, cleanText(tag.Name))
 	}
 	return CatalogItem{Type: CatalogItemDatasource, ID: uintID(ds.ID), Attributes: CatalogItemAttributes{
-		Name:               cleanText(ds.Name),
-		ShortDescription:   cleanText(ds.ShortDescription),
-		LongDescription:    cleanText(ds.LongDescription),
-		LogoURL:            ds.Icon,
-		Kind:               ds.DBSourceType,
-		PrivacyScore:       intPtr(ds.PrivacyScore),
-		CommunitySubmitted: ds.CommunitySubmitted,
-		Tags:               tags,
-		Catalogs:           []CatalogRef{},
-		CreatedAt:          timePtr(ds.CreatedAt),
-		UpdatedAt:          timePtr(ds.UpdatedAt),
-		EmbedVendor:        string(ds.EmbedVendor),
-		EmbedModel:         cleanText(ds.EmbedModel),
+		Name:                cleanText(ds.Name),
+		ShortDescription:    cleanText(ds.ShortDescription),
+		LongDescription:     cleanText(ds.LongDescription),
+		LogoURL:             ds.Icon,
+		Kind:                ds.DBSourceType,
+		PrivacyScore:        intPtr(ds.PrivacyScore),
+		CommunitySubmitted:  ds.CommunitySubmitted,
+		Tags:                tags,
+		Catalogs:            []CatalogRef{},
+		CreatedAt:           timePtr(ds.CreatedAt),
+		UpdatedAt:           timePtr(ds.UpdatedAt),
+		AccessGrantedViaApp: true,
+		EmbedVendor:         string(ds.EmbedVendor),
+		EmbedModel:          cleanText(ds.EmbedModel),
 	}}
 }
 
 func toolCatalogItem(tool *models.Tool) CatalogItem {
 	return CatalogItem{Type: CatalogItemTool, ID: uintID(tool.ID), Attributes: CatalogItemAttributes{
-		Name:               cleanText(tool.Name),
-		ShortDescription:   cleanText(tool.Description),
-		Kind:               tool.ToolType,
-		PrivacyScore:       intPtr(tool.PrivacyScore),
-		CommunitySubmitted: tool.CommunitySubmitted,
-		Tags:               []string{},
-		Catalogs:           []CatalogRef{},
-		CreatedAt:          timePtr(tool.CreatedAt),
-		UpdatedAt:          timePtr(tool.UpdatedAt),
-		Operations:         cleanTexts(tool.GetOperations()),
+		Name:                cleanText(tool.Name),
+		ShortDescription:    cleanText(tool.Description),
+		Kind:                tool.ToolType,
+		PrivacyScore:        intPtr(tool.PrivacyScore),
+		CommunitySubmitted:  tool.CommunitySubmitted,
+		Tags:                []string{},
+		Catalogs:            []CatalogRef{},
+		CreatedAt:           timePtr(tool.CreatedAt),
+		UpdatedAt:           timePtr(tool.UpdatedAt),
+		AccessGrantedViaApp: true,
+		Operations:          cleanTexts(tool.GetOperations()),
 	}}
+}
+
+// portalDetailURL expands a resource type's portal detail path template for
+// one instance. "{id}" is replaced with the path-escaped instance ID; a
+// template without the placeholder is returned as is. Templates are
+// validated to be same-origin paths at registration
+// (services.ValidatePortalDetailPath).
+func portalDetailURL(template, instanceID string) string {
+	template = strings.TrimSpace(template)
+	if template == "" {
+		return ""
+	}
+	return strings.ReplaceAll(template, "{id}", url.PathEscape(instanceID))
 }
 
 // countCatalogItems counts the type's matching objects.
@@ -411,7 +439,7 @@ func (a *API) pluginResourceItems(c *gin.Context, user *models.User, only *servi
 	items := []CatalogItem{}
 	types := make([]CatalogResourceType, 0, len(resourceTypes))
 	for _, rt := range resourceTypes {
-		ref := CatalogResourceType{PluginID: rt.Type.PluginID, Slug: rt.Type.Slug, Name: sanitizeString(rt.Type.Name), Icon: sanitizeString(rt.Type.Icon)}
+		ref := CatalogResourceType{PluginID: rt.Type.PluginID, Slug: rt.Type.Slug, Name: sanitizeString(rt.Type.Name), Icon: sanitizeString(rt.Type.Icon), AccessGrantedViaApp: rt.Type.AccessGrantedViaApp}
 		types = append(types, ref)
 		kind := uintID(rt.Type.PluginID) + ":" + rt.Type.Slug
 		objectType := models.PluginResourceObjectType(rt.Type.PluginID, rt.Type.Slug)
@@ -436,6 +464,10 @@ func (a *API) pluginResourceItems(c *gin.Context, user *models.User, only *servi
 			}}
 			if rt.Type.HasPrivacyScore {
 				item.Attributes.PrivacyScore = intPtr(int(inst.PrivacyScore))
+			}
+			item.Attributes.AccessGrantedViaApp = models.EffectiveInstanceAccessGrantedViaApp(rt.Type.AccessGrantedViaApp, inst.AccessGrantedViaApp)
+			if !item.Attributes.AccessGrantedViaApp {
+				item.Attributes.PortalDetailURL = portalDetailURL(rt.Type.PortalDetailPath, inst.Id)
 			}
 			if governed != nil {
 				item.GovernedMetadata = a.portalGovernedView(objectType, governed[inst.Id])

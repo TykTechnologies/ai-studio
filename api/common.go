@@ -498,6 +498,11 @@ func (a *API) createUserApp(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Privacy Score Mismatch", Detail: err.Error()}}})
+		} else if errors.Is(err, services.ErrResourceNotAppGranted) {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Resource Not Available To Apps", Detail: err.Error()}}})
 		} else {
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`

@@ -946,6 +946,59 @@ type PluginResourceSelection struct {
 	InstanceIDs      []string `json:"instance_ids"`
 }
 
+// ErrResourceNotAppGranted is returned when an App would be bound to a plugin
+// resource instance that an App credential does not grant access to
+// (models.PluginResourceType.AccessGrantedViaApp is false and the instance
+// does not override it). Binding such a resource grants nothing, so the
+// platform refuses new bindings rather than record a promise it cannot keep.
+var ErrResourceNotAppGranted = errors.New("resource access is not granted through apps")
+
+// rejectNonAppGranted refuses instance IDs of a resource type that an App
+// credential does not grant access to. Instances already bound to appID (when
+// given) are exempt, so an update that resends an App's existing bindings, or
+// omits the type, keeps them; only new bindings are refused. Per-instance
+// overrides from the plugin are honoured when the plugin manager can be asked.
+func (s *Service) rejectNonAppGranted(appID *uint, prt *models.PluginResourceType, instanceIDs []string) error {
+	if prt == nil || len(instanceIDs) == 0 {
+		return nil
+	}
+	existing := map[string]bool{}
+	if appID != nil {
+		var rows []models.AppPluginResource
+		if err := s.DB.Where("app_id = ? AND plugin_resource_type_id = ?", *appID, prt.ID).Find(&rows).Error; err != nil {
+			return fmt.Errorf("load existing plugin resources for app %d: %w", *appID, err)
+		}
+		for _, r := range rows {
+			existing[r.InstanceID] = true
+		}
+	}
+	var details map[string]instanceDetail
+	for _, id := range instanceIDs {
+		if existing[id] {
+			continue
+		}
+		if prt.AccessGrantedViaApp {
+			// The type grants access; only an explicit instance override
+			// can revoke it, and that needs the plugin.
+			if details == nil {
+				details = s.fetchInstanceDetails(prt.PluginID, prt.Slug, instanceIDs)
+			}
+			if d, ok := details[id]; ok && !models.EffectiveInstanceAccessGrantedViaApp(true, d.AccessGrantedViaApp) {
+				return fmt.Errorf("%w: %s/%s instance %s", ErrResourceNotAppGranted, prt.Slug, prt.Name, id)
+			}
+			continue
+		}
+		if details == nil {
+			details = s.fetchInstanceDetails(prt.PluginID, prt.Slug, instanceIDs)
+		}
+		if d, ok := details[id]; ok && models.EffectiveInstanceAccessGrantedViaApp(false, d.AccessGrantedViaApp) {
+			continue
+		}
+		return fmt.Errorf("%w: %s/%s instance %s", ErrResourceNotAppGranted, prt.Slug, prt.Name, id)
+	}
+	return nil
+}
+
 // CreateAppWithResources creates an app with both built-in and plugin resource associations.
 // It extends CreateApp with plugin resource binding and generalized privacy validation.
 func (s *Service) CreateAppWithResources(
@@ -965,6 +1018,9 @@ func (s *Service) CreateAppWithResources(
 		prt, err := s.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
 		if err != nil {
 			return nil, fmt.Errorf("unknown resource type %s for plugin %d: %w", pr.ResourceTypeSlug, pr.PluginID, err)
+		}
+		if err := s.rejectNonAppGranted(nil, prt, pr.InstanceIDs); err != nil {
+			return nil, err
 		}
 		if !prt.HasPrivacyScore {
 			continue
@@ -1025,6 +1081,10 @@ func (s *Service) UpdateAppWithResources(
 		prt, err := s.GetPluginResourceTypeByPluginAndSlug(pr.PluginID, pr.ResourceTypeSlug)
 		if err != nil {
 			return nil, fmt.Errorf("unknown resource type %s for plugin %d: %w", pr.ResourceTypeSlug, pr.PluginID, err)
+		}
+		// Existing bindings survive; only new ones are subject to the check.
+		if err := s.rejectNonAppGranted(&id, prt, pr.InstanceIDs); err != nil {
+			return nil, err
 		}
 		if !prt.HasPrivacyScore {
 			continue

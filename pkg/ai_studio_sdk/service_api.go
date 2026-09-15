@@ -1816,7 +1816,9 @@ type ResourceTypeSpec struct {
 	FormComponentTag    string
 	FormComponentEntry  string
 	SubmissionSchema    string
-	SupportsMetadata    bool // instances can carry governed metadata (Enterprise)
+	SupportsMetadata    bool  // instances can carry governed metadata (Enterprise)
+	AccessGrantedViaApp *bool // an App credential grants access; nil = platform default
+	PortalDetailPath    string
 }
 
 // RegisterResourceTypes (re)registers the calling plugin's resource types.
@@ -1840,6 +1842,8 @@ func RegisterResourceTypes(ctx context.Context, specs []ResourceTypeSpec, deacti
 			FormComponentEntry:  s.FormComponentEntry,
 			SubmissionSchema:    s.SubmissionSchema,
 			SupportsMetadata:    s.SupportsMetadata,
+			AccessGrantedViaApp: s.AccessGrantedViaApp,
+			PortalDetailPath:    s.PortalDetailPath,
 		})
 	}
 

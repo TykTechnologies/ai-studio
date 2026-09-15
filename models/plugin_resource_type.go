@@ -23,8 +23,79 @@ type PluginResourceType struct {
 	SubmissionSchema    string `json:"submission_schema" gorm:"type:text"` // JSON Schema (object) for community submissions; empty = free-form
 	IsActive            bool   `json:"is_active" gorm:"default:true"`
 
+	// AccessGrantedViaApp is the resolved answer to "does an App credential
+	// grant access to instances of this type?". Only such types are offered
+	// in the App forms, show "Build app" in the portal catalog and travel in
+	// the gateway config snapshot. Resolved at registration time by
+	// ResolveAccessGrantedViaApp from the declared value and the plugin's
+	// hook types, so read paths never need the Plugin loaded.
+	AccessGrantedViaApp bool `json:"access_granted_via_app" gorm:"default:false"`
+	// AccessGrantedViaAppDeclared is what the plugin declared (nil = it left
+	// the platform to decide). Kept so a later registration can re-resolve.
+	AccessGrantedViaAppDeclared *bool `json:"-" gorm:"column:access_granted_via_app_declared"`
+	// PortalDetailPath is a same-origin path template to an instance's portal
+	// page; "{id}" is replaced with the escaped instance ID.
+	PortalDetailPath string `json:"portal_detail_path" gorm:"size:500"`
+
 	// Relationships
 	Plugin *Plugin `json:"plugin,omitempty" gorm:"foreignKey:PluginID"`
+}
+
+// ResolveAccessGrantedViaApp returns the effective AccessGrantedViaApp for a
+// resource type. An explicit declaration wins. Otherwise a plugin that serves
+// gateway custom endpoints and provides resources (the shape of a plugin that
+// proxies its resources and checks the App's bindings on each request) grants
+// access through App credentials; any other plugin does not.
+func ResolveAccessGrantedViaApp(declared *bool, plugin *Plugin) bool {
+	if declared != nil {
+		return *declared
+	}
+	if plugin == nil {
+		return false
+	}
+	hooks := resolutionHookTypes(plugin)
+	return hooks[HookTypeCustomEndpoint] && hooks[HookTypeResourceProvider]
+}
+
+// resolutionHookTypes is the set of hook types a plugin is known to declare:
+// the row's primary and list, plus the stored manifest's capabilities when
+// the row carries no list and the admin has not customised the hooks (a
+// freshly registered plugin's row can lag behind its manifest).
+func resolutionHookTypes(plugin *Plugin) map[string]bool {
+	hooks := map[string]bool{}
+	if plugin.HookType != "" {
+		hooks[plugin.HookType] = true
+	}
+	for _, h := range plugin.HookTypes {
+		hooks[h] = true
+	}
+	if len(plugin.HookTypes) > 0 || plugin.HookTypesCustomized || plugin.Manifest == nil {
+		return hooks
+	}
+	caps, _ := plugin.Manifest["capabilities"].(map[string]interface{})
+	if caps == nil {
+		return hooks
+	}
+	if primary, _ := caps["primary_hook"].(string); primary != "" {
+		hooks[primary] = true
+	}
+	if list, _ := caps["hooks"].([]interface{}); list != nil {
+		for _, h := range list {
+			if s, ok := h.(string); ok {
+				hooks[s] = true
+			}
+		}
+	}
+	return hooks
+}
+
+// EffectiveInstanceAccessGrantedViaApp applies an optional per-instance
+// override to the resolved type value.
+func EffectiveInstanceAccessGrantedViaApp(typeValue bool, override *bool) bool {
+	if override != nil {
+		return *override
+	}
+	return typeValue
 }
 
 type PluginResourceTypes []PluginResourceType

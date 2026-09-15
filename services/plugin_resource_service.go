@@ -43,6 +43,28 @@ func ValidateSubmissionSchema(schema string) error {
 	return nil
 }
 
+// ErrInvalidPortalDetailPath is returned when a resource type declares a
+// portal detail path that is not a same-origin path.
+var ErrInvalidPortalDetailPath = errors.New("invalid portal detail path")
+
+// ValidatePortalDetailPath checks that a resource type's portal detail path is
+// either empty or a same-origin path: it must start with a single "/" and
+// carry no scheme, so a plugin cannot turn the catalog's link into an
+// off-site or javascript: redirect. "{id}" is optional.
+func ValidatePortalDetailPath(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+		return fmt.Errorf("%w: must be a same-origin path starting with \"/\"", ErrInvalidPortalDetailPath)
+	}
+	if strings.Contains(path, "://") || strings.ContainsAny(path, " \t\r\n") {
+		return fmt.Errorf("%w: must not contain a scheme or whitespace", ErrInvalidPortalDetailPath)
+	}
+	return nil
+}
+
 // ValidatePayloadAgainstSchema validates a submission payload against a
 // resource type's submission schema. An empty schema accepts any payload.
 // Returns a single error listing every violation.
@@ -74,19 +96,46 @@ func ValidatePayloadAgainstSchema(schema string, payload map[string]interface{})
 // Called when a plugin is loaded and its manifest/capabilities are parsed.
 // After registration, reconciles default group access by fetching instances
 // from the plugin and ensuring new ones are assigned to the default group.
+//
+// The plugin row is loaded so AccessGrantedViaApp can be resolved from its
+// hook types when the registration leaves it undeclared; callers that already
+// hold the plugin should use RegisterPluginResourceTypesForPlugin.
 func (s *Service) RegisterPluginResourceTypes(pluginID uint, registrations []models.PluginResourceType) error {
+	var plugin models.Plugin
+	if err := s.DB.First(&plugin, pluginID).Error; err != nil {
+		return fmt.Errorf("load plugin %d for resource type registration: %w", pluginID, err)
+	}
+	return s.RegisterPluginResourceTypesForPlugin(&plugin, registrations)
+}
+
+// RegisterPluginResourceTypesForPlugin is RegisterPluginResourceTypes for a
+// caller that already holds the plugin row. Each registration's
+// AccessGrantedViaApp is resolved here (models.ResolveAccessGrantedViaApp)
+// from AccessGrantedViaAppDeclared and the plugin's hook types, and stored,
+// so every read path sees the effective value without loading the plugin.
+func (s *Service) RegisterPluginResourceTypesForPlugin(plugin *models.Plugin, registrations []models.PluginResourceType) error {
+	if plugin == nil {
+		return errors.New("plugin is required for resource type registration")
+	}
+	pluginID := plugin.ID
 	for _, reg := range registrations {
 		if err := ValidateSubmissionSchema(reg.SubmissionSchema); err != nil {
 			return fmt.Errorf("resource type %s: %w", reg.Slug, err)
 		}
+		if err := ValidatePortalDetailPath(reg.PortalDetailPath); err != nil {
+			return fmt.Errorf("resource type %s: %w", reg.Slug, err)
+		}
 	}
 	for _, reg := range registrations {
+		resolvedAccess := models.ResolveAccessGrantedViaApp(reg.AccessGrantedViaAppDeclared, plugin)
 		existing := &models.PluginResourceType{}
 		err := existing.GetByPluginAndSlug(s.DB, pluginID, reg.Slug)
 		if err != nil {
 			// Not found — create
 			reg.PluginID = pluginID
 			reg.IsActive = true
+			reg.AccessGrantedViaApp = resolvedAccess
+			reg.PortalDetailPath = strings.TrimSpace(reg.PortalDetailPath)
 			if err := reg.Create(s.DB); err != nil {
 				return fmt.Errorf("failed to create resource type %s: %w", reg.Slug, err)
 			}
@@ -101,6 +150,9 @@ func (s *Service) RegisterPluginResourceTypes(pluginID uint, registrations []mod
 			existing.FormComponentTag = reg.FormComponentTag
 			existing.FormComponentEntry = reg.FormComponentEntry
 			existing.SubmissionSchema = reg.SubmissionSchema
+			existing.AccessGrantedViaAppDeclared = reg.AccessGrantedViaAppDeclared
+			existing.AccessGrantedViaApp = resolvedAccess
+			existing.PortalDetailPath = strings.TrimSpace(reg.PortalDetailPath)
 			existing.IsActive = true
 			if err := existing.Update(s.DB); err != nil {
 				return fmt.Errorf("failed to update resource type %s: %w", reg.Slug, err)
@@ -273,6 +325,9 @@ type instanceDetail struct {
 	Name         string
 	PrivacyScore int
 	Metadata     []byte
+	// AccessGrantedViaApp is the instance's override of its type's value;
+	// nil inherits the type.
+	AccessGrantedViaApp *bool
 }
 
 // fetchInstanceDetails calls the plugin's ListResourceInstances RPC to get
@@ -294,9 +349,10 @@ func (s *Service) fetchInstanceDetails(pluginID uint, slug string, instanceIDs [
 	// Build lookup map
 	for _, inst := range instances {
 		details[inst.Id] = instanceDetail{
-			Name:         inst.Name,
-			PrivacyScore: int(inst.PrivacyScore),
-			Metadata:     inst.Metadata,
+			Name:                inst.Name,
+			PrivacyScore:        int(inst.PrivacyScore),
+			Metadata:            inst.Metadata,
+			AccessGrantedViaApp: inst.AccessGrantedViaApp,
 		}
 	}
 	return details

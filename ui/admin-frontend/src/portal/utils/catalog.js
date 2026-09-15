@@ -148,6 +148,25 @@ export const buildAppPath = (item) => {
 export const buildActionLabel = (item) =>
   item?.type === CATALOG_TYPES.DATASOURCE ? "Get access" : "Build app";
 
+/**
+ * Whether building an App is how a developer gets to use this item. The
+ * server sets access_granted_via_app on every catalog item (always true for
+ * LLM providers, data sources and tools); a missing field is treated as
+ * granted so older fixtures and responses keep the primary action.
+ */
+export const isAppGranted = (item) => attrs(item).access_granted_via_app !== false;
+
+/**
+ * Where to send a developer instead of the app builder when access is not
+ * granted through an App: the providing plugin's own page, if it declared
+ * one. Null when there is nowhere to go.
+ */
+export const secondaryActionPath = (item) => attrs(item).portal_detail_url || null;
+
+/** Wording for the secondary action, e.g. "View in Agent". */
+export const secondaryActionLabel = (item) =>
+  `View in ${attrs(item).resource_type?.name || "plugin"}`;
+
 /** Stable React key across types. */
 export const itemKey = (item) => `${item?.type}:${item?.id}`;
 

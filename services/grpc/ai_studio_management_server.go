@@ -1538,12 +1538,16 @@ func (s *AIStudioManagementServer) RegisterResourceTypes(ctx context.Context, re
 			FormComponentEntry:  spec.FormComponentEntry,
 			SubmissionSchema:    spec.SubmissionSchema,
 			SupportsMetadata:    spec.SupportsMetadata,
+			// proto3 optional: nil when the plugin did not declare it, so the
+			// platform default (hook-type heuristic) applies.
+			AccessGrantedViaAppDeclared: spec.AccessGrantedViaApp,
+			PortalDetailPath:            spec.PortalDetailPath,
 		})
 		keep = append(keep, slugValue)
 	}
 
-	if err := s.service.RegisterPluginResourceTypes(plugin.ID, types); err != nil {
-		if errors.Is(err, services.ErrInvalidSubmissionSchema) {
+	if err := s.service.RegisterPluginResourceTypesForPlugin(plugin, types); err != nil {
+		if errors.Is(err, services.ErrInvalidSubmissionSchema) || errors.Is(err, services.ErrInvalidPortalDetailPath) {
 			return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 		}
 		log.Error().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to register resource types")
