@@ -121,6 +121,14 @@ func filterErrorStatus(err error) int {
 	return http.StatusInternalServerError
 }
 
+// filterErrorDetail is the message that goes with filterErrorStatus.
+func filterErrorDetail(err error) string {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "Filter not found"
+	}
+	return err.Error()
+}
+
 // guardrailTestReferencesAllowed decides whether a guardrail test may run
 // with the connection block it was given. A config posted to the test
 // endpoint is the caller's own: resolving $SECRET/ or $ENV/ references into
@@ -195,18 +203,10 @@ func (a *API) getFilter(c *gin.Context) {
 
 	filter, err := a.service.GetFilterByID(uint(id))
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{"Not Found", "Filter not found"}}})
-			return
-		}
-
-		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+		c.JSON(filterErrorStatus(err), ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
-		}{{"Not Found", err.Error()}}})
+		}{{"Filter", filterErrorDetail(err)}}})
 		return
 	}
 
@@ -263,18 +263,10 @@ func (a *API) updateFilter(c *gin.Context) {
 
 	filter, err := a.service.UpdateFilterFromSpec(uint(id), filterSpecFromInput(input))
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{"Not Found", "Filter not found"}}})
-			return
-		}
-
 		c.JSON(filterErrorStatus(err), ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
-		}{{"Invalid filter", err.Error()}}})
+		}{{"Invalid filter", filterErrorDetail(err)}}})
 		return
 	}
 

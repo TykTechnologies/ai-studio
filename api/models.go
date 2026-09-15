@@ -712,20 +712,25 @@ type VendorListResponse struct {
 // @Description Filter input model
 type FilterInput struct {
 	Data struct {
-		Type       string `json:"type"`
-		Attributes struct {
-			Name           string `json:"name"`
-			Description    string `json:"description"`
-			Script         []byte `json:"script"`
-			ResponseFilter bool   `json:"response_filter"`
-			Namespace      string `json:"namespace"`
-			// Kind is "script" (default) or "guardrail".
-			Kind string `json:"kind"`
-			// Config is the guardrail configuration (provider, detectors,
-			// action, ...) for a guardrail filter.
-			Config map[string]interface{} `json:"config"`
-		} `json:"attributes"`
+		Type       string                `json:"type"`
+		Attributes FilterInputAttributes `json:"attributes"`
 	} `json:"data"`
+}
+
+// FilterInputAttributes is the attribute block of a filter create or update
+// request. It mirrors FilterAttributes, the response block.
+// @Description Filter input attributes
+type FilterInputAttributes struct {
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Script         []byte `json:"script"`
+	ResponseFilter bool   `json:"response_filter"`
+	Namespace      string `json:"namespace"`
+	// Kind is "script" (default) or "guardrail".
+	Kind string `json:"kind"`
+	// Config is the guardrail configuration (provider, detectors,
+	// action, ...) for a guardrail filter.
+	Config map[string]interface{} `json:"config"`
 }
 
 // FilterAttributes is the attribute block of a filter response.

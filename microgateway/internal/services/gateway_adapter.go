@@ -876,17 +876,50 @@ func convertDatabaseFilterToModel(dbFilter *database.Filter) *models.Filter {
 		Namespace:      dbFilter.Namespace,
 		Kind:           dbFilter.Kind,
 	}
+	// The hub's timestamps identify the filter version; the runner keys its
+	// prepared-config cache on ID and UpdatedAt.
+	f.CreatedAt = dbFilter.CreatedAt
+	f.UpdatedAt = dbFilter.UpdatedAt
 	if f.Kind == "" {
 		f.Kind = models.FilterKindScript
 	}
 	if f.Kind == models.FilterKindGuardrail {
-		cfg, err := guardrails.ConfigFromJSON(dbFilter.Config)
-		if err != nil {
-			log.Error().Err(err).Uint("filter_id", dbFilter.ID).Msg("Guardrail filter config from hub is not valid JSON")
-		}
-		f.Config = cfg
+		f.Config = parsedGuardrailConfig(dbFilter)
 	}
 	return f
+}
+
+// Filters are materialised onto the LLM on every request, so the guardrail
+// config JSON the hub sent is parsed once per filter version and reused. The
+// map is read-only downstream (the runner marshals it back out); a new
+// UpdatedAt from the hub is a new entry.
+var (
+	parsedConfigsMu sync.Mutex
+	parsedConfigs   = map[string]map[string]any{}
+)
+
+const parsedConfigsMax = 1024
+
+func parsedGuardrailConfig(dbFilter *database.Filter) map[string]any {
+	key := fmt.Sprintf("%d@%d:%d", dbFilter.ID, dbFilter.UpdatedAt.UnixNano(), len(dbFilter.Config))
+	parsedConfigsMu.Lock()
+	cfg, ok := parsedConfigs[key]
+	parsedConfigsMu.Unlock()
+	if ok {
+		return cfg
+	}
+	cfg, err := guardrails.ConfigFromJSON(dbFilter.Config)
+	if err != nil {
+		log.Error().Err(err).Uint("filter_id", dbFilter.ID).Msg("Guardrail filter config from hub is not valid JSON")
+		return nil
+	}
+	parsedConfigsMu.Lock()
+	if len(parsedConfigs) >= parsedConfigsMax {
+		parsedConfigs = map[string]map[string]any{}
+	}
+	parsedConfigs[key] = cfg
+	parsedConfigsMu.Unlock()
+	return cfg
 }
 
 // GetAllFilters returns all filters with pagination

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -55,7 +56,73 @@ const (
 	modeMessages
 )
 
-func (g *guardrailRunner) RunScript(input *ScriptInput, _ services.ServiceInterface) (*ScriptOutput, error) {
+// preparedGuardrail is a filter's config parsed, normalised and with its
+// connection references resolved, plus the provider built from it. Preparing
+// one means two JSON round trips, a catalogue check and a secret-store read
+// per reference, which is too much to repeat on every request for every
+// attached guardrail; prepared entries are kept per saved filter for
+// preparedTTL, so a rotated secret takes effect within that window.
+type preparedGuardrail struct {
+	cfg      guardrails.Config
+	provider guardrails.Provider
+	caps     guardrails.Capabilities
+	at       time.Time
+}
+
+const (
+	preparedTTL = 30 * time.Second
+	preparedMax = 1024
+)
+
+var (
+	preparedMu sync.Mutex
+	prepared   = map[string]*preparedGuardrail{}
+)
+
+// preparedKey identifies a saved filter version. A filter without an ID or
+// an update time (the test endpoint's temporary filter) is never cached.
+func preparedKey(f *models.Filter) string {
+	if f.ID == 0 || f.UpdatedAt.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf("%d@%d", f.ID, f.UpdatedAt.UnixNano())
+}
+
+func lookupPrepared(key string) (*preparedGuardrail, bool) {
+	if key == "" {
+		return nil, false
+	}
+	preparedMu.Lock()
+	defer preparedMu.Unlock()
+	p, ok := prepared[key]
+	if !ok || time.Since(p.at) > preparedTTL {
+		return nil, false
+	}
+	return p, true
+}
+
+func storePrepared(key string, p *preparedGuardrail) {
+	if key == "" {
+		return
+	}
+	preparedMu.Lock()
+	defer preparedMu.Unlock()
+	if len(prepared) >= preparedMax {
+		// Bounded by starting over: entries are cheap to rebuild and the
+		// cap is only reached by churn through very many filter versions.
+		prepared = map[string]*preparedGuardrail{}
+	}
+	prepared[key] = p
+}
+
+// prepare parses, normalises and resolves the filter's config and builds
+// its provider, from the cache when this filter version was prepared
+// recently. Errors are never cached.
+func (g *guardrailRunner) prepare() (*preparedGuardrail, error) {
+	key := preparedKey(g.filter)
+	if p, ok := lookupPrepared(key); ok {
+		return p, nil
+	}
 	cfg, err := guardrails.ParseConfig(g.filter.Config)
 	if err != nil {
 		return nil, fmt.Errorf("guardrail '%s': %w", g.filter.Name, err)
@@ -75,6 +142,16 @@ func (g *guardrailRunner) RunScript(input *ScriptInput, _ services.ServiceInterf
 	cfg.Connection = resolved
 
 	provider, err := guardrails.NewProvider(cfg)
+	if err != nil {
+		return &preparedGuardrail{cfg: cfg}, err
+	}
+	p := &preparedGuardrail{cfg: cfg, provider: provider, caps: provider.Capabilities(), at: time.Now()}
+	storePrepared(key, p)
+	return p, nil
+}
+
+func (g *guardrailRunner) RunScript(input *ScriptInput, _ services.ServiceInterface) (*ScriptOutput, error) {
+	p, err := g.prepare()
 	if errors.Is(err, guardrails.ErrNoProviders) {
 		warnNoProvidersOnce.Do(func() {
 			slog.Warn("guardrail filters are an Enterprise feature; attached guardrails are evaluated as pass-through")
@@ -82,9 +159,12 @@ func (g *guardrailRunner) RunScript(input *ScriptInput, _ services.ServiceInterf
 		return passThrough(input), nil
 	}
 	if err != nil {
-		return g.failed(input, cfg, err), nil
+		if p == nil {
+			return nil, err
+		}
+		return g.failed(input, p.cfg, err), nil
 	}
-	caps := provider.Capabilities()
+	cfg, provider, caps := p.cfg, p.provider, p.caps
 
 	if input.IsChunk && !shouldEvaluateChunk(input, cfg.EvaluateEvery(caps)) {
 		return passThrough(input), nil
