@@ -16,6 +16,7 @@ import (
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
@@ -26,6 +27,9 @@ import (
 	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/schema"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"gorm.io/gorm"
 )
 
@@ -886,7 +890,7 @@ func (cs *ChatSession) HandleLLMResponse(w *LLMResponseWrapper) error {
 		}
 
 		if len(reply.ToolCalls) > 0 {
-			cs.handleToolCalls(reply, &toolCallRequest, &toolCallResult)
+			cs.handleToolCalls(cs.ctx, reply, &toolCallRequest, &toolCallResult)
 			toolCall = true
 		}
 	}
@@ -1351,7 +1355,15 @@ func (cs *ChatSession) handleToolError(errMsg string, toolCallID string, functio
 	toolResult.Parts = append(toolResult.Parts, toolResp)
 }
 
-func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, toolResult *llms.MessageContent) {
+// handleToolCalls runs every tool call the model asked for. ctx is the
+// session's context (or a turn context derived from it): each call gets a
+// child span under it, is cancelled with it, and carries its trace context to
+// the tool backend, so tool latency shows up under the conversation's trace
+// rather than as disconnected work.
+func (cs *ChatSession) handleToolCalls(ctx context.Context, choice *llms.ContentChoice, toolCall, toolResult *llms.MessageContent) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	for i, _ := range choice.ToolCalls {
 		t := choice.ToolCalls[i]
 
@@ -1390,7 +1402,7 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 		}
 
 		if toolDef.ToolType == models.ToolTypeREST {
-			cs.executeRESTToolCall(t, toolDef, toolResult)
+			cs.executeRESTToolCall(ctx, t, toolDef, toolResult)
 		}
 	}
 }
@@ -1399,7 +1411,20 @@ func (cs *ChatSession) handleToolCalls(choice *llms.ContentChoice, toolCall, too
 // filters on the arguments, the call itself, then governance filters on the
 // response. Every failure path returns, so a blocked call contributes exactly
 // one error part to the result and never the payload it blocked.
-func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool, toolResult *llms.MessageContent) {
+func (cs *ChatSession) executeRESTToolCall(ctx context.Context, t llms.ToolCall, toolDef models.Tool, toolResult *llms.MessageContent) {
+	// One span per tool call, a child of whatever ctx carries. With tracing
+	// disabled this is a no-op span and costs nothing.
+	ctx, span := tracing.Tracer().Start(ctx, "execute_tool "+t.FunctionCall.Name,
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("gen_ai.operation.name", "execute_tool"),
+			attribute.String("gen_ai.tool.name", t.FunctionCall.Name),
+			attribute.String("gen_ai.tool.call.id", t.ID),
+			attribute.Int64("tyk.tool.id", int64(toolDef.ID)),
+		),
+	)
+	defer span.End()
+
 	opts := make([]universalclient.ClientOption, 0)
 	if toolDef.AuthKey != "" {
 		schemaName := toolDef.AuthSchemaName
@@ -1452,7 +1477,7 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 		slog.Info("[TOOL-CALL]", "[PARAMS]", t.FunctionCall.Arguments)
 	}
 
-	callArgs, block, err := scripting.RunToolInputFilters(cs.ctx, toolDef.Filters, cs.service, callArgs, identity)
+	callArgs, block, err := scripting.RunToolInputFilters(ctx, toolDef.Filters, cs.service, callArgs, identity)
 	if block != nil || err != nil {
 		// The model is told only that policy stopped the call. Naming the
 		// filter would map the governance configuration for anyone able to
@@ -1465,8 +1490,9 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 		return
 	}
 
-	resp, err := uc.CallOperation(t.FunctionCall.Name, callArgs.Parameters, callArgs.Payload, callArgs.Headers)
+	resp, err := uc.CallOperationWithContext(ctx, t.FunctionCall.Name, callArgs.Parameters, callArgs.Payload, callArgs.Headers)
 	if err != nil {
+		span.SetStatus(codes.Error, "tool call failed")
 		if config.Get("").EchoConversation {
 			slog.Info("[TOOL-CALL]", "[ERROR]", err)
 		}
@@ -1502,7 +1528,7 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 		cs.sendStatus("Running governance filters")
 	}
 
-	filtered, block, err := scripting.RunToolOutputFilters(cs.ctx, toolDef.Filters, cs.service, asStr, identity)
+	filtered, block, err := scripting.RunToolOutputFilters(ctx, toolDef.Filters, cs.service, asStr, identity)
 	if block != nil || err != nil {
 		slog.Info("tool response blocked",
 			"tool", toolDef.Name, "operation", t.FunctionCall.Name,
@@ -1529,7 +1555,7 @@ func (cs *ChatSession) executeRESTToolCall(t llms.ToolCall, toolDef models.Tool,
 	toolResult.Parts = append(toolResult.Parts, toolResp)
 
 	analytics.RecordToolCall(
-		context.Background(),
+		ctx,
 		t.FunctionCall.Name,
 		time.Now(),
 		int(t1.Sub(t0).Milliseconds()), toolDef.ID)

@@ -7,7 +7,7 @@ The microgateway provides comprehensive security features including encryption, 
 Security configuration features:
 - **Encryption**: AES-256 encryption for sensitive data storage
 - **Authentication**: JWT-based token authentication with scoping
-- **Access Control**: IP whitelisting and rate limiting
+- **Access Control**: IP whitelisting
 - **TLS Support**: HTTPS and gRPC TLS encryption
 - **Audit Logging**: Complete audit trail for security events
 - **Secret Management**: Secure handling of API keys and credentials
@@ -176,19 +176,11 @@ mgw app update 1 --allowed-ips="10.0.0.0/8,192.168.1.0/24"
 ```
 
 ### Rate Limiting
-```bash
-# Global rate limiting
-ENABLE_RATE_LIMITING=true
-DEFAULT_RATE_LIMIT=100      # Requests per minute
 
-# Rate limiting algorithms
-RATE_LIMIT_ALGORITHM=token_bucket  # token_bucket, sliding_window
-RATE_LIMIT_BURST_SIZE=200   # Burst capacity
-
-# Rate limiting storage
-RATE_LIMIT_STORAGE=memory   # memory, redis
-REDIS_URL=redis://localhost:6379  # If using Redis
-```
+The microgateway has no built-in rate limiter. Rate limiting is provided by
+plugins: `examples/plugins/studio/llm-rate-limiter-multiphase/` (requests,
+tokens and concurrency per app, user and model, with a Studio dashboard) and
+`microgateway/plugins/examples/rate_limiter/` (minimal pre-auth RPM).
 
 ### CORS Configuration
 ```bash
@@ -237,7 +229,6 @@ AUDIT_LOG_PATH=/var/log/microgateway/audit.log
 # Security event logging
 LOG_SECURITY_EVENTS=true
 LOG_AUTH_FAILURES=true
-LOG_RATE_LIMIT_VIOLATIONS=true
 LOG_IP_WHITELIST_VIOLATIONS=true
 ```
 
@@ -292,7 +283,6 @@ curl http://localhost:8080/metrics | grep security
 
 # Key security metrics:
 # - auth_failures_total
-# - rate_limit_violations_total
 # - ip_whitelist_violations_total
 # - token_validation_failures_total
 # - tls_handshake_failures_total
@@ -321,9 +311,6 @@ tail -f /var/log/microgateway/audit.log
 # Multiple failed authentication attempts
 grep "authentication_failure" /var/log/microgateway/audit.log | \
   awk '{print $5}' | sort | uniq -c | sort -nr
-
-# Rate limiting violations
-grep "rate_limit_violation" /var/log/microgateway/audit.log
 
 # Unusual access patterns
 mgw analytics events 1 --format=json | \
@@ -380,7 +367,6 @@ TRANSFER_APPROVAL_REQUIRED=true
 # Minimal security for development
 TLS_ENABLED=false
 ENABLE_IP_WHITELIST=false
-ENABLE_RATE_LIMITING=false
 JWT_SECRET=development-secret-key
 ENCRYPTION_KEY=development-key-32-characters!
 LOG_LEVEL=debug
@@ -401,7 +387,6 @@ MICROGATEWAY_ENCRYPTION_KEY=${MICROGATEWAY_ENCRYPTION_KEY}  # NEW: Hub-spoke enc
 BCRYPT_COST=12
 
 ENABLE_IP_WHITELIST=true
-ENABLE_RATE_LIMITING=true
 SECURITY_HEADERS_ENABLED=true
 
 # NEW: Plugin security
@@ -504,7 +489,6 @@ AUDIT_LOG_RETENTION_DAYS=2555  # 7 years
 
 # Access controls
 ENABLE_IP_WHITELIST=true
-ENABLE_RATE_LIMITING=true
 STRICT_SCOPE_ENFORCEMENT=true
 
 # Data protection
@@ -557,10 +541,6 @@ BUSINESS_ASSOCIATE_AGREEMENT=required
 grep "auth_failure" /var/log/microgateway/audit.log | \
   awk '{print $4}' | sort | uniq -c | sort -nr
 
-# Potential brute force attacks
-grep "rate_limit_violation" /var/log/microgateway/audit.log | \
-  awk '{print $4}' | sort | uniq -c | awk '$1 > 10'
-
 # Unusual access patterns
 mgw analytics events 1 --format=json | \
   jq '.data[] | select(.status_code == 401)' | \
@@ -571,7 +551,6 @@ mgw analytics events 1 --format=json | \
 ```bash
 # Set up security alerts
 # Failed authentication rate > 10/minute
-# Rate limiting violations > 100/hour
 # IP whitelist violations > 5/hour
 # Unusual geographic access patterns
 # Large number of requests from single IP
@@ -663,13 +642,6 @@ gosec ./...
 # Test authentication bypass
 curl -X GET http://localhost:8080/api/v1/llms
 # Should return 401 Unauthorized
-
-# Test rate limiting
-for i in {1..150}; do
-  curl -H "Authorization: Bearer $TOKEN" \
-    http://localhost:8080/api/v1/llms &
-done
-# Should trigger rate limiting at configured threshold
 
 # Test input validation
 curl -X POST http://localhost:8080/api/v1/llms \
@@ -832,9 +804,6 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/llms
 # Should work from allowed IPs, fail from others
 
-# Test rate limiting
-# Make rapid requests to trigger rate limiting
-# Should return 429 Too Many Requests
 ```
 
 ---

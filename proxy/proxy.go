@@ -734,7 +734,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
-		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
+		metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
 		// Error body for analytics should be constructed carefully if needed
 		p.goAnalyze(func() {
 			p.analyzeResponse(llm, app, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, r)
@@ -750,6 +750,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			p.analyzeResponse(llm, app, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, r)
 		})
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
+		return
+	}
+	// Log what the filters let through, not what the caller sent: a filter
+	// that redacts a prompt redacts it for the vendor AND for the proxy log.
+	if reqBody, err = helpers.CopyRequestBody(r); err != nil {
+		respStatus = http.StatusInternalServerError
+		respondWithError(w, http.StatusInternalServerError, "Failed to read filtered request body", err, false)
 		return
 	}
 
@@ -1434,7 +1441,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if _, _, err := p.budgetService.CheckBudget(app, llm); err != nil {
-		metrics.RecordPolicyBlock(r.Context(), "budget", "rate_limit")
+		metrics.RecordPolicyBlock(r.Context(), "budget", "budget")
 		p.goAnalyze(func() {
 			p.analyzeStreamingResponse(llm, app, r, http.StatusForbidden, []byte(fmt.Sprintf(`{"error":"budget exceeded: %s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		})
@@ -1449,6 +1456,13 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			p.analyzeStreamingResponse(llm, app, r, http.StatusBadRequest, []byte(fmt.Sprintf(`{"error":"policy_violation","detail":"%s"}`, err.Error())), reqBody, nil, time.Now(), "")
 		})
 		respondWithError(w, http.StatusBadRequest, err.Error(), err, false)
+		return
+	}
+	// Log what the filters let through, not what the caller sent (see the
+	// non-streaming handler).
+	if reqBody, err = helpers.CopyRequestBody(r); err != nil {
+		respStatus = http.StatusInternalServerError
+		respondWithError(w, http.StatusInternalServerError, "failed to read filtered streaming request body", err, false)
 		return
 	}
 
@@ -1775,6 +1789,10 @@ func (p *Proxy) GetLLM(name string) (*models.LLM, bool) {
 	llm, ok := p.llms[name]
 	return llm, ok
 }
+// screenProxyRequestByVendor runs the LLM's request filters over the native
+// pass-through request and then the vendor's own screening. On success r.Body
+// holds the body as the filters left it, so anything that logs the request
+// afterwards must re-read it rather than reuse a copy taken before this call.
 func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
 	bodyBytes, err := helpers.CopyRequestBody(r)
 	if err != nil {
@@ -1784,10 +1802,56 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 	// Extract model from context (set by modelValidationMiddleware)
 	modelName, _ := r.Context().Value("model_name").(string)
 
-	// Extract messages using the message extractor registry
-	messages, err := p.messageExtractorRegistry.Extract(string(llm.Vendor), r, bodyBytes)
+	bodyBytes, err = p.runRequestFilters(llm, r, bodyBytes, string(llm.Vendor), modelName)
 	if err != nil {
-		slog.Warn("Failed to extract messages for filter", "vendor", llm.Vendor, "error", err)
+		return err
+	}
+
+	// Update request body with final modified payload
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	r.ContentLength = int64(len(bodyBytes))
+
+	v, ok := switches.VendorMap[llm.Vendor]
+	if !ok {
+		return fmt.Errorf("vendor not found")
+	}
+	return v().ProxyScreenRequest(llm, r, isStreamingChannel)
+}
+
+// requestFilterFormat names the wire shape of a request body for the message
+// extractor and reconstructor registries. The native /llm/ pass-through uses
+// the LLM's own vendor name; the /ai/ and /anthropic/ bridges carry OpenAI- and
+// Anthropic-shaped bodies to a Bedrock LLM and must say so, or the filters
+// would be handed a Converse-format extractor for an OpenAI body.
+const (
+	requestFilterFormatOpenAI    = "openai"
+	requestFilterFormatAnthropic = "anthropic"
+)
+
+// hasRequestFilters reports whether llm has at least one request-side filter.
+func (p *Proxy) hasRequestFilters(llm *models.LLM) bool {
+	for _, filter := range llm.Filters {
+		if !filter.ResponseFilter {
+			return true
+		}
+	}
+	return false
+}
+
+// runRequestFilters runs llm's request filters (response filters are skipped)
+// in chain over bodyBytes, which is shaped as format, and returns the body as
+// the last filter left it. A block or a script error is returned as an error:
+// request filters fail closed. The request itself is not modified; callers
+// decide what to do with the returned body.
+func (p *Proxy) runRequestFilters(llm *models.LLM, r *http.Request, bodyBytes []byte, format, modelName string) ([]byte, error) {
+	if !p.hasRequestFilters(llm) {
+		return bodyBytes, nil
+	}
+
+	// Extract messages using the message extractor registry
+	messages, err := p.messageExtractorRegistry.Extract(format, r, bodyBytes)
+	if err != nil {
+		slog.Warn("Failed to extract messages for filter", "vendor", llm.Vendor, "format", format, "error", err)
 		messages = []llms.MessageContent{} // Continue with empty messages
 	}
 
@@ -1821,7 +1885,7 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 		runner := scripting.NewScriptRunner(filter.Script)
 		output, err := runner.RunScript(scriptInput, p.gatewayService)
 		if err != nil {
-			return fmt.Errorf("script error in filter '%s': %v", filter.Name, err)
+			return nil, fmt.Errorf("script error in filter '%s': %v", filter.Name, err)
 		}
 
 		// Record any compliance events reported by the script
@@ -1833,22 +1897,22 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 			if msg == "" {
 				msg = "blocked by policy"
 			}
-			return fmt.Errorf("Policy error: %s - %s", filter.Name, msg)
+			return nil, fmt.Errorf("Policy error: %s - %s", filter.Name, msg)
 		}
 
 		// Apply modifications to the request body for next filter
 		// Prefer Messages array if provided, otherwise use Payload
 		if len(output.Messages) > 0 {
 			// Use message reconstructor to rebuild vendor-specific JSON
-			reconstructed, err := p.messageReconstructorRegistry.Reconstruct(string(llm.Vendor), output.Messages, bodyBytes)
+			reconstructed, err := p.messageReconstructorRegistry.Reconstruct(format, output.Messages, bodyBytes)
 			if err != nil {
-				return fmt.Errorf("failed to reconstruct request in filter '%s': %v", filter.Name, err)
+				return nil, fmt.Errorf("failed to reconstruct request in filter '%s': %v", filter.Name, err)
 			}
 			scriptInput.RawInput = string(reconstructed)
 			bodyBytes = reconstructed
 
 			// Re-extract messages from reconstructed payload for next filter
-			if newMessages, err := p.messageExtractorRegistry.Extract(string(llm.Vendor), r, bodyBytes); err == nil {
+			if newMessages, err := p.messageExtractorRegistry.Extract(format, r, bodyBytes); err == nil {
 				scriptInput.Messages = newMessages
 			}
 		} else if output.Payload != "" && output.Payload != scriptInput.RawInput {
@@ -1856,21 +1920,13 @@ func (p *Proxy) screenProxyRequestByVendor(llm *models.LLM, r *http.Request, isS
 			bodyBytes = []byte(output.Payload)
 
 			// Re-extract messages from modified payload for next filter
-			if newMessages, err := p.messageExtractorRegistry.Extract(string(llm.Vendor), r, bodyBytes); err == nil {
+			if newMessages, err := p.messageExtractorRegistry.Extract(format, r, bodyBytes); err == nil {
 				scriptInput.Messages = newMessages
 			}
 		}
 	}
 
-	// Update request body with final modified payload
-	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-	r.ContentLength = int64(len(bodyBytes))
-
-	v, ok := switches.VendorMap[llm.Vendor]
-	if !ok {
-		return fmt.Errorf("vendor not found")
-	}
-	return v().ProxyScreenRequest(llm, r, isStreamingChannel)
+	return bodyBytes, nil
 }
 func (p *Proxy) analyzeStreamingResponse(llm *models.LLM, app *models.App, req *http.Request, code int, fullResponse []byte, reqBody []byte, chunks [][]byte, timestamp time.Time, contentEncoding string) {
 	AnalyzeStreamingResponse(p.gatewayService, llm, app, code, fullResponse, reqBody, req, chunks, timestamp, contentEncoding)

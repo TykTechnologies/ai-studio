@@ -74,7 +74,6 @@ var llmCreateCmd = &cobra.Command{
 		retries, _ := cmd.Flags().GetInt("retries")
 		active, _ := cmd.Flags().GetBool("active")
 		budget, _ := cmd.Flags().GetFloat64("budget")
-		rateLimit, _ := cmd.Flags().GetInt("rate-limit")
 		allowedModels, _ := cmd.Flags().GetStringSlice("allowed-models")
 
 		if name == "" {
@@ -98,7 +97,6 @@ var llmCreateCmd = &cobra.Command{
 			RetryCount:     retries,
 			IsActive:       active,
 			MonthlyBudget:  budget,
-			RateLimitRPM:   rateLimit,
 			AllowedModels:  allowedModels,
 		}
 
@@ -172,10 +170,6 @@ var llmUpdateCmd = &cobra.Command{
 		if cmd.Flags().Changed("budget") {
 			val, _ := cmd.Flags().GetFloat64("budget")
 			req.MonthlyBudget = &val
-		}
-		if cmd.Flags().Changed("rate-limit") {
-			val, _ := cmd.Flags().GetInt("rate-limit")
-			req.RateLimitRPM = &val
 		}
 		if cmd.Flags().Changed("allowed-models") {
 			val, _ := cmd.Flags().GetStringSlice("allowed-models")
@@ -528,7 +522,6 @@ func init() {
 	llmCreateCmd.Flags().Int("retries", 3, "retry count for failed requests")
 	llmCreateCmd.Flags().Bool("active", true, "whether LLM is active")
 	llmCreateCmd.Flags().Float64("budget", 0, "monthly budget limit")
-	llmCreateCmd.Flags().Int("rate-limit", 0, "requests per minute limit")
 	llmCreateCmd.Flags().StringSlice("allowed-models", nil, "regex patterns for allowed models (e.g. gpt-4.*,claude-.*)")
 	llmCreateCmd.MarkFlagRequired("name")
 	llmCreateCmd.MarkFlagRequired("vendor")
@@ -544,6 +537,5 @@ func init() {
 	llmUpdateCmd.Flags().Int("retries", 0, "retry count for failed requests")
 	llmUpdateCmd.Flags().Bool("active", true, "whether LLM is active")
 	llmUpdateCmd.Flags().Float64("budget", 0, "monthly budget limit")
-	llmUpdateCmd.Flags().Int("rate-limit", 0, "requests per minute limit")
 	llmUpdateCmd.Flags().StringSlice("allowed-models", nil, "regex patterns for allowed models (e.g. gpt-4.*,claude-.*)")
 }

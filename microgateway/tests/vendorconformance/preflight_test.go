@@ -183,6 +183,9 @@ func TestPreflightAuthRejectsAnonymous(t *testing.T) {
 
 // slugIsConfigured reports whether a route slug belongs to a configured vendor.
 func (h *harness) slugIsConfigured(slug string) bool {
+	if h.filteredBedrock != nil && slug == filteredBedrockSlug {
+		return true
+	}
 	for _, v := range h.cfg.Vendors {
 		if v.Slug() == slug {
 			return true

@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -38,6 +40,50 @@ func (p *Proxy) bedrockPrepare(r *http.Request, conf *models.LLM) (*models.App, 
 		return app, attemptFailure{err: fmt.Errorf("budget exceeded: %w", err), status: http.StatusForbidden, hasStatus: true}
 	}
 	return app, attemptFailure{}
+}
+
+// bedrockScreenRequest runs conf's request filters over the OpenAI-shaped
+// bridge body before it is translated to Converse. Every other vendor gets
+// this on the /llm/call/ loopback hop; Bedrock talks to the AWS SDK directly,
+// so the bridge has to run them itself. The request comes back as the filters
+// left it, decoded into a rung-local copy so one rung's filters never leak
+// into the next rung or the caller's request. A block is a 400 that never
+// fails over (4xx are the caller's problem, see shouldFailover) and is
+// recorded as a policy block and a ProxyLog exactly like the pass-through.
+func (p *Proxy) bedrockScreenRequest(
+	r *http.Request,
+	conf *models.LLM,
+	app *models.App,
+	req *ChatCompletionRequest,
+	reqBody []byte,
+	model string,
+	timestamp time.Time,
+) (*ChatCompletionRequest, []byte, attemptFailure) {
+	if !p.hasRequestFilters(conf) {
+		return req, reqBody, attemptFailure{}
+	}
+
+	filtered, err := p.runRequestFilters(conf, r, reqBody, requestFilterFormatOpenAI, model)
+	if err != nil {
+		metrics.RecordPolicyBlock(r.Context(), "request_filter", "firewall")
+		fail := attemptFailure{err: err, status: http.StatusBadRequest, hasStatus: true}
+		modelID := bedrockVendor.GetModelID(conf, model)
+		p.goAnalyze(func() { recordBedrockFailedAttempt(conf, app, modelID, reqBody, fail, r, timestamp) })
+		return nil, nil, fail
+	}
+	if bytes.Equal(filtered, reqBody) {
+		return req, reqBody, attemptFailure{}
+	}
+
+	var out ChatCompletionRequest
+	if err := json.Unmarshal(filtered, &out); err != nil {
+		return nil, nil, attemptFailure{
+			err:       fmt.Errorf("request filter produced an invalid request: %w", err),
+			status:    http.StatusBadRequest,
+			hasStatus: true,
+		}
+	}
+	return &out, filtered, attemptFailure{}
 }
 
 // bedrockConverseInput builds the client and the Converse request for model.
@@ -88,6 +134,11 @@ func (p *Proxy) bedrockChatCompletionAttempt(ctx context.Context, r *http.Reques
 	conf := a.conf
 
 	app, fail := p.bedrockPrepare(r, conf)
+	if fail.err != nil {
+		return nil, fail
+	}
+
+	req, reqBody, fail = p.bedrockScreenRequest(r, conf, app, req, reqBody, a.model, timestamp)
 	if fail.err != nil {
 		return nil, fail
 	}
@@ -157,6 +208,11 @@ func (p *Proxy) bedrockStreamAttempt(
 	conf := a.conf
 
 	app, fail := p.bedrockPrepare(r, conf)
+	if fail.err != nil {
+		return false, fail
+	}
+
+	req, reqBody, fail = p.bedrockScreenRequest(r, conf, app, req, reqBody, a.model, timestamp)
 	if fail.err != nil {
 		return false, fail
 	}

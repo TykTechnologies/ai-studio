@@ -270,10 +270,13 @@ make test-vendors SURFACES=shim,universal           # subset
 make test-vendors SCENARIOS=tools,tools_streaming   # subset
 make test-vendors-update-golden                     # refresh snapshots
 make test-vendors-drift                             # pre-flight + drift only, no assertions
+make test-vendors-filters                           # request filters on the Bedrock direct paths (see 7.10)
 ```
 
 All map to `go test -tags vendorlive -count=1 ./tests/vendorconformance/...`
-with the corresponding `VENDOR_TESTS_*` variables set.
+with the corresponding `VENDOR_TESTS_*` variables set. `test-vendors-filters`
+adds the `enterprise` tag: the community scripting runner does not execute
+filter scripts, so a CE build would report every filter as a no-op.
 
 ---
 
@@ -463,6 +466,35 @@ the scenario; the request builder and assertions are still there.
 `json_mode` is declared unsupported for Anthropic and Bedrock (no OpenAI-style
 `response_format`; structured output goes through tool use, which `tools`
 already covers).
+
+### 7.10 Request filters on the Bedrock direct paths
+
+Bedrock is the one vendor the `/ai/` shim and the `/anthropic/` bridge serve
+by calling the AWS SDK directly instead of looping back through `/llm/call/`,
+which is where every other vendor's request filters run. Until 2026-09-15
+those two paths ran response filters only, so a redacting or blocking request
+filter attached to a Bedrock LLM was silently skipped for OpenAI- and
+Anthropic-format callers. The proxy log also stored the caller's original
+body rather than the body the filters produced, on every vendor.
+
+`filters_live_test.go` (`TestBedrockRequestFilters`, tags `vendorlive` and
+`enterprise`) pins the fix against real Bedrock. The harness seeds a second
+Bedrock route, `vt-bedrock-filtered`, with one request filter that blocks a
+prompt containing `FORBIDDEN-TOPIC` and otherwise rewrites `SECRET-123` to
+`[REDACTED]`; the route is not in `cfg.Vendors`, so the matrix never sees it.
+For the shim and the bridge, buffered and streaming, it asserts:
+
+- a block is a 400 in the surface's own error envelope, carrying the filter's
+  message, before any vendor call (a streaming block never opens a stream);
+- the model never sees the secret (the completion cannot contain it);
+- the analytics event the gateway logged for that request (found by a nonce
+  in the prompt) holds `[REDACTED]` and not the secret, while a blocked
+  request is logged with the body that was refused.
+
+The bridge cases need `VT_BEDROCK_ANTHROPIC_MODEL`; the bridge speaks Converse,
+so any Bedrock model works there, not only Claude. The harness stores request
+bodies on analytics events (`MaxBodySize` in the gateway config) so the test
+can read them back; production defaults to 4 KB.
 
 ## 8. Related
 

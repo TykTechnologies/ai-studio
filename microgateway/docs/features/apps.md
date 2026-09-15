@@ -9,7 +9,6 @@ Application management features:
 - **LLM Access Control**: Flexible LLM association per application
 - **Independent Budgets**: Separate budget management per application
 - **Credential Management**: Secure key generation and rotation
-- **Rate Limiting**: Per-application request rate controls
 - **Usage Isolation**: Separate analytics and billing per application
 
 ## Application Concepts
@@ -19,7 +18,6 @@ An application represents a logical grouping of:
 - **LLM Access Rights**: Which LLM providers the app can use
 - **Budget Allocation**: Monthly spending limits
 - **Credentials**: Authentication keys for the app
-- **Rate Limits**: Request frequency controls
 - **Usage Analytics**: Isolated usage tracking
 
 ### Application Isolation
@@ -28,7 +26,6 @@ Each application has:
 - Independent budget tracking
 - Isolated analytics data
 - Configurable access controls
-- Individual rate limiting
 
 ## Creating Applications
 
@@ -50,7 +47,6 @@ mgw app create \
   --description="Main application" \
   --budget=5000.0 \
   --reset-day=1 \
-  --rate-limit=1000 \
   --allowed-ips="203.0.113.1,203.0.113.2" \
   --llm-ids="1,2,3"
 ```
@@ -65,7 +61,6 @@ mgw app create \
 --description="Description"   # Application description
 --budget=1000.0              # Monthly budget limit (0 = unlimited)
 --reset-day=1                # Budget reset day (1-28)
---rate-limit=100             # Requests per minute (0 = unlimited)
 --allowed-ips="ip1,ip2"      # Comma-separated IP whitelist
 --llm-ids="1,2,3"            # Comma-separated LLM IDs
 ```
@@ -104,8 +99,7 @@ mgw app update 1 --budget=2000.0
 # Update multiple settings
 mgw app update 1 \
   --budget=1500.0 \
-  --description="Updated description" \
-  --rate-limit=500
+  --description="Updated description"
 
 # Update IP whitelist
 mgw app update 1 --allowed-ips="203.0.113.1,203.0.113.5"
@@ -214,17 +208,6 @@ curl -X POST http://localhost:8080/llm/rest/gpt-4/chat/completions \
 --reset-day=15               # Reset on 15th of each month (1-28)
 ```
 
-### Rate Limiting
-```bash
-# Set rate limit
---rate-limit=100             # 100 requests per minute
-
-# Unlimited rate
---rate-limit=0               # No rate limiting
-
-# Rate limiting is enforced per application across all LLMs
-```
-
 ### IP Whitelisting
 ```bash
 # Single IP
@@ -249,7 +232,6 @@ mgw app create \
   --name="Development Team" \
   --email=dev@company.com \
   --budget=200.0 \
-  --rate-limit=50 \
   --llm-ids="3"  # Local Ollama model
 ```
 
@@ -260,7 +242,6 @@ mgw app create \
   --name="Production API" \
   --email=ops@company.com \
   --budget=10000.0 \
-  --rate-limit=1000 \
   --allowed-ips="prod-server-1,prod-server-2" \
   --llm-ids="1,2"  # OpenAI and Anthropic
 ```
@@ -272,7 +253,6 @@ mgw app create \
   --name="Customer ABC Corp" \
   --email=abc-corp@customer.com \
   --budget=500.0 \
-  --rate-limit=100 \
   --allowed-ips="customer-network" \
   --llm-ids="1,2,3"
 ```
@@ -284,7 +264,6 @@ mgw app create \
   --name="QA Testing" \
   --email=qa@company.com \
   --budget=50.0 \
-  --rate-limit=25 \
   --llm-ids="3"  # Local models for testing
 ```
 
@@ -366,7 +345,6 @@ curl -X POST http://localhost:8080/api/v1/apps \
     "description": "Created via API",
     "owner_email": "api@company.com",
     "monthly_budget": 500.0,
-    "rate_limit_rpm": 100,
     "llm_ids": [1, 2]
   }'
 
@@ -439,20 +417,6 @@ mgw app get 1 | grep budget
 
 # Review recent costs
 mgw analytics costs 1
-```
-
-### Rate Limiting Issues
-```bash
-# Check rate limit configuration
-mgw app get 1 | grep rate_limit
-
-# Monitor request rates
-mgw analytics summary 1 --format=json | \
-  jq '.data.requests_per_hour'
-
-# Review rate limit errors
-mgw analytics events 1 --format=json | \
-  jq '.data[] | select(.status_code == 429)'
 ```
 
 ---

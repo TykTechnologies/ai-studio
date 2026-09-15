@@ -255,3 +255,139 @@ func TestHybridGatewayService_storeAppFromPullOnMiss(t *testing.T) {
 		assert.Equal(t, "No Timestamps App", app.Name)
 	})
 }
+
+// fakeEdgeClient scripts what the hub answers to on-demand validation.
+type fakeEdgeClient struct {
+	resp  *pb.TokenValidationResponse
+	err   error
+	calls int
+}
+
+func (f *fakeEdgeClient) ValidateTokenOnDemand(string) (*pb.TokenValidationResponse, error) {
+	f.calls++
+	return f.resp, f.err
+}
+
+// seedExpiredEntry plants a validation result whose TTL ran out expiredFor ago.
+func seedExpiredEntry(h *HybridGatewayService, token string, expiredFor time.Duration) *TokenValidationResult {
+	result := &TokenValidationResult{TokenID: 42, TokenName: "seeded", AppID: 42}
+	h.cacheMutex.Lock()
+	defer h.cacheMutex.Unlock()
+	h.tokenCache[token] = &TokenCacheEntry{
+		Result:    result,
+		CachedAt:  time.Now().Add(-expiredFor - time.Minute),
+		ExpiresAt: time.Now().Add(-expiredFor),
+	}
+	return result
+}
+
+func newStaleGraceService(t *testing.T, grace time.Duration) *HybridGatewayService {
+	db, repo := setupHybridTestDB(t)
+	t.Cleanup(func() { database.Close(db) })
+	dbService := NewDatabaseGatewayService(db, repo)
+	// Built by hand so no cleanup goroutine runs during the test.
+	return &HybridGatewayService{
+		DatabaseGatewayService: dbService.(*DatabaseGatewayService),
+		tokenCache:             make(map[string]*TokenCacheEntry),
+		cacheConfig: config.HubSpokeConfig{
+			TokenCacheEnabled:    true,
+			TokenCacheTTL:        time.Minute,
+			TokenCacheMaxSize:    100,
+			TokenCacheStaleGrace: grace,
+		},
+		stopCleanup: make(chan bool),
+	}
+}
+
+// When the hub cannot be reached, a validation result that only just expired
+// keeps the edge serving. Before this the edge failed closed on the first
+// cache miss of an outage.
+func TestHybridGatewayService_ValidateAPIToken_StaleGrace(t *testing.T) {
+	t.Run("transport error within grace serves the stale entry", func(t *testing.T) {
+		h := newStaleGraceService(t, time.Hour)
+		seeded := seedExpiredEntry(h, "tok-stale", 10*time.Minute)
+		h.SetEdgeClient(&fakeEdgeClient{err: assert.AnError})
+
+		got, err := h.ValidateAPIToken("tok-stale")
+		require.NoError(t, err)
+		assert.Same(t, seeded, got)
+	})
+
+	t.Run("no edge client within grace serves the stale entry", func(t *testing.T) {
+		h := newStaleGraceService(t, time.Hour)
+		seeded := seedExpiredEntry(h, "tok-noclient", 10*time.Minute)
+
+		got, err := h.ValidateAPIToken("tok-noclient")
+		require.NoError(t, err)
+		assert.Same(t, seeded, got)
+	})
+
+	t.Run("transport error past grace fails closed", func(t *testing.T) {
+		h := newStaleGraceService(t, time.Hour)
+		seedExpiredEntry(h, "tok-old", 2*time.Hour)
+		h.SetEdgeClient(&fakeEdgeClient{err: assert.AnError})
+
+		got, err := h.ValidateAPIToken("tok-old")
+		require.Error(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("explicit rejection ignores the stale entry and evicts it", func(t *testing.T) {
+		h := newStaleGraceService(t, time.Hour)
+		seedExpiredEntry(h, "tok-revoked", 10*time.Minute)
+		h.SetEdgeClient(&fakeEdgeClient{resp: &pb.TokenValidationResponse{Valid: false, ErrorMessage: "revoked"}})
+
+		got, err := h.ValidateAPIToken("tok-revoked")
+		require.Error(t, err)
+		assert.Nil(t, got)
+		assert.Contains(t, err.Error(), "revoked")
+
+		h.cacheMutex.RLock()
+		_, still := h.tokenCache["tok-revoked"]
+		h.cacheMutex.RUnlock()
+		assert.False(t, still, "a rejected token must not linger in the cache")
+
+		// Even a later outage cannot resurrect it.
+		h.SetEdgeClient(&fakeEdgeClient{err: assert.AnError})
+		_, err = h.ValidateAPIToken("tok-revoked")
+		require.Error(t, err)
+	})
+
+	t.Run("grace of zero is fail-closed", func(t *testing.T) {
+		h := newStaleGraceService(t, 0)
+		seedExpiredEntry(h, "tok-nograce", time.Second)
+		h.SetEdgeClient(&fakeEdgeClient{err: assert.AnError})
+
+		got, err := h.ValidateAPIToken("tok-nograce")
+		require.Error(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("fresh entries never reach the hub", func(t *testing.T) {
+		h := newStaleGraceService(t, time.Hour)
+		client := &fakeEdgeClient{err: assert.AnError}
+		h.SetEdgeClient(client)
+		fresh := &TokenValidationResult{TokenID: 7, AppID: 7}
+		h.storeInCache("tok-fresh", fresh)
+
+		got, err := h.ValidateAPIToken("tok-fresh")
+		require.NoError(t, err)
+		assert.Same(t, fresh, got)
+		assert.Equal(t, 0, client.calls)
+	})
+
+	t.Run("cleanup keeps entries inside the grace and drops those past it", func(t *testing.T) {
+		h := newStaleGraceService(t, time.Hour)
+		seedExpiredEntry(h, "tok-keep", 10*time.Minute)
+		seedExpiredEntry(h, "tok-drop", 2*time.Hour)
+
+		h.cleanupExpiredEntries()
+
+		h.cacheMutex.RLock()
+		defer h.cacheMutex.RUnlock()
+		_, keep := h.tokenCache["tok-keep"]
+		_, drop := h.tokenCache["tok-drop"]
+		assert.True(t, keep)
+		assert.False(t, drop)
+	})
+}

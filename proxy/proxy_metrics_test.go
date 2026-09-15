@@ -167,7 +167,7 @@ func TestPolicyBlockMetric_DirectEmission(t *testing.T) {
 	metrics.Init()
 	ctx := context.Background()
 
-	metrics.RecordPolicyBlock(ctx, "budget", "rate_limit")
+	metrics.RecordPolicyBlock(ctx, "budget", "budget")
 	metrics.RecordPolicyBlock(ctx, "request_filter", "firewall")
 	metrics.RecordPolicyBlock(ctx, "response_filter", "filter")
 
@@ -181,7 +181,7 @@ func TestPolicyBlockMetric_DirectEmission(t *testing.T) {
 		ruleName  string
 		blockType string
 	}{
-		{"budget", "rate_limit"},
+		{"budget", "budget"},
 		{"request_filter", "firewall"},
 		{"response_filter", "filter"},
 	}

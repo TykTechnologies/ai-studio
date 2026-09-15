@@ -303,7 +303,6 @@ TLS_CERT_PATH=/etc/ssl/certs/microgateway.crt
 TLS_KEY_PATH=/etc/ssl/private/microgateway.key
 
 # Security Settings
-ENABLE_RATE_LIMITING=true
 ENABLE_IP_WHITELIST=true
 JWT_SECRET=<strong-random-secret-32chars+>
 ENCRYPTION_KEY=<strong-random-key-32chars>

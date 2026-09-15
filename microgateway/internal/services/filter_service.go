@@ -3,8 +3,6 @@ package services
 
 import (
 	"fmt"
-	"log/slog"
-	"runtime/debug"
 	"strings"
 	"time"
 
@@ -34,9 +32,6 @@ type FilterServiceInterface interface {
 	
 	// UpdateLLMFilters updates filter associations for an LLM
 	UpdateLLMFilters(llmID uint, filterIDs []uint) error
-	
-	// ExecuteFilter executes a filter script (placeholder for actual filter engine)
-	ExecuteFilter(filterID uint, payload map[string]interface{}) (map[string]interface{}, error)
 }
 
 // FilterService implements filter management
@@ -214,58 +209,4 @@ func (s *FilterService) UpdateLLMFilters(llmID uint, filterIDs []uint) error {
 
 		return nil
 	})
-}
-
-// ExecuteFilter executes a filter script (placeholder implementation)
-func (s *FilterService) ExecuteFilter(filterID uint, payload map[string]interface{}) (map[string]interface{}, error) {
-	// Get filter
-	filter, err := s.GetFilter(filterID)
-	if err != nil {
-		return nil, err
-	}
-
-	if !filter.IsActive {
-		return payload, nil // Pass through if filter is inactive
-	}
-
-	// Execute filter using Tengo scripting engine
-	result, err := s.executeFilterScript(filter, payload)
-	if err != nil {
-		return nil, fmt.Errorf("filter execution failed: %w", err)
-	}
-
-	// If result is false, the filter blocks the request
-	if !result {
-		return nil, fmt.Errorf("request blocked by filter: %s", filter.Name)
-	}
-
-	// Filter passed, return payload unchanged
-	return payload, nil
-}
-
-// executeFilterScript runs a filter script and converts any panic raised by
-// the script engine into an ordinary error.
-//
-// Tengo panics instead of returning an error for faults it does not model —
-// integer divide by zero being the common one. Filters run on the goroutine
-// serving the request, so an unrecovered panic would take the gateway process
-// down and with it every other tenant's traffic, over one malformed script.
-//
-// The behaviour itself lives in runFilterScript, implemented in the
-// edition-specific files (filter_service_ce.go and filter_service_ent.go):
-// CE always returns true (filters disabled), ENT executes the Tengo script.
-func (s *FilterService) executeFilterScript(filter *database.Filter, payload map[string]interface{}) (result bool, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("filter script panicked, converting to error",
-				"filter_name", filter.Name,
-				"filter_id", filter.ID,
-				"panic", r,
-				"stack", string(debug.Stack()))
-			result = false
-			err = fmt.Errorf("script panic: %v", r)
-		}
-	}()
-
-	return s.runFilterScript(filter, payload)
 }

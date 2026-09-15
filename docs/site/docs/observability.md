@@ -98,7 +98,7 @@ conventions, and keep their own names:
 | `aistudio_llm_requests_total` | `app_id`, `vendor`, `model`, `status_code` | Proxied requests |
 | `aistudio_llm_cost_total` | `vendor`, `model`, `app_id` | Cumulative cost |
 | `aistudio_llm_inflight_requests` | `vendor` | Requests in flight |
-| `aistudio_policy_blocks_total` | `rule_name`, `block_type` | Blocked by budget, firewall or filter |
+| `aistudio_policy_blocks_total` | `rule_name`, `block_type` | Blocked requests. `block_type` is `budget` (spend limit), `firewall` (request filter) or `filter` (response or tool filter) |
 | `aistudio_compliance_events_total` | `event_type`, `severity`, `filter_name` | Raised by filter scripts |
 | `aistudio_tool_calls_total` | `tool_name`, `app_id` | Tool / MCP invocations |
 

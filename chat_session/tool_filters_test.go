@@ -3,6 +3,7 @@
 package chat_session
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -90,7 +91,7 @@ func (f *chatToolFilterFixture) call(t *testing.T, arguments string) []llms.Tool
 	toolCall := &llms.MessageContent{Role: llms.ChatMessageTypeAI}
 	toolResult := &llms.MessageContent{Role: llms.ChatMessageTypeTool}
 
-	f.session.handleToolCalls(choice, toolCall, toolResult)
+	f.session.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 	responses := make([]llms.ToolCallResponse, 0, len(toolResult.Parts))
 	for _, part := range toolResult.Parts {
@@ -245,7 +246,7 @@ output := {block: blocked, message: "denied"}`, false)})
 	toolCall := &llms.MessageContent{Role: llms.ChatMessageTypeAI}
 	toolResult := &llms.MessageContent{Role: llms.ChatMessageTypeTool}
 
-	f.session.handleToolCalls(choice, toolCall, toolResult)
+	f.session.handleToolCalls(context.Background(), choice, toolCall, toolResult)
 
 	require.Len(t, toolResult.Parts, 2, "each tool call contributes exactly one result part")
 

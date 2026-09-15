@@ -239,7 +239,7 @@ Owners of published community resources can propose changes that go through the 
 ### Phase 2 — Robustness (backend complete)
 - ~~Credential validation / connection testing on submit + in review~~ (Done)
 - ~~Version tracking + rollback for published resource updates~~ (Done)
-- ~~Duplicate detection on submission~~ (Done)
+- Duplicate detection on submission (**not implemented** — no similarity or name-collision check exists in `services/submission_*.go`; a submission that duplicates a published resource is caught only by the admin reviewer)
 - ~~Orphan management when contributors leave~~ (Done — integrated into user deletion flow)
 - ~~"Nominate from existing app" shortcut~~ (Done)
 - Enhanced resource detail view (frontend only — backend data available)
