@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { makeHumanToolRenderer } from './parts/HumanToolCard';
+import { makePresentRenderer } from './parts/GenerativeUiCard';
 import { useChatUi } from './ChatUiContext';
 
 /**
@@ -9,8 +10,8 @@ import { useChatUi } from './ChatUiContext';
  * Three sources are merged, later ones winning:
  *  1. built-ins declared here,
  *  2. plugin-provided renderers (manifest slot `chat.tool_renderer`),
- *  3. the session's client (human-in-the-loop) tools, rendered as
- *     approval / form cards.
+ *  3. the session's client tools, rendered as approval / form cards
+ *     (human-in-the-loop) or as generative UI (kind "present").
  */
 const builtins = {};
 
@@ -32,7 +33,8 @@ export const subscribeToolRenderers = (fn) => {
 export const getToolUiRegistry = (clientTools = []) => {
   const human = {};
   clientTools.forEach((info) => {
-    if (info?.name) human[info.name] = makeHumanToolRenderer(info);
+    if (!info?.name) return;
+    human[info.name] = info.ui?.kind === 'present' ? makePresentRenderer(info) : makeHumanToolRenderer(info);
   });
   return { ...builtins, ...pluginRenderers, ...human };
 };

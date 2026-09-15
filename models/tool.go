@@ -53,10 +53,23 @@ const (
 	ToolTypeClient = "CLIENT"
 )
 
+const (
+	// ClientToolKindApproval shows Approve / Reject buttons.
+	ClientToolKindApproval = "approval"
+	// ClientToolKindForm shows a JSON-Schema form (ResponseSchema).
+	ClientToolKindForm = "form"
+	// ClientToolKindPresent is generative UI: the model composes cards,
+	// facts, tables, charts and forms from the built-in component
+	// vocabulary (see PresentToolSchema) and the chat draws them. The
+	// call resolves in the browser without user input.
+	ClientToolKindPresent = "present"
+)
+
 // ClientToolUI tells the chat UI how to collect the tool's result.
 type ClientToolUI struct {
-	// Kind is "form" (the user fills ResponseSchema) or "approval" (the user
-	// approves or rejects what the model asked for).
+	// Kind is "form" (the user fills ResponseSchema), "approval" (the user
+	// approves or rejects what the model asked for) or "present"
+	// (generative UI drawn from the built-in vocabulary).
 	Kind string `json:"kind"`
 	// ResponseSchema is the JSON schema of the value the user provides for
 	// kind "form". Optional; a single free-text field is used when absent.
@@ -86,11 +99,22 @@ func (t *Tool) ClientDefinition() (*ClientToolDefinition, error) {
 			}
 		}
 	}
+	if def.UI.Kind == "" {
+		def.UI.Kind = ClientToolKindApproval
+	}
+	if def.UI.Kind == ClientToolKindPresent && len(def.Parameters) == 0 {
+		// The vocabulary schema is built in; admins do not author it.
+		spec, err := PresentToolSchema()
+		if err != nil {
+			return nil, fmt.Errorf("generative UI schema: %w", err)
+		}
+		def.Parameters = spec.Parameters
+		if def.UI.Description == "" {
+			def.UI.Description = spec.Description
+		}
+	}
 	if def.Parameters == nil {
 		def.Parameters = map[string]interface{}{"type": "object", "properties": map[string]interface{}{}}
-	}
-	if def.UI.Kind == "" {
-		def.UI.Kind = "approval"
 	}
 	return def, nil
 }

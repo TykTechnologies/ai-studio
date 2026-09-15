@@ -548,11 +548,15 @@ const ToolForm = () => {
   };
 
   const buildClientDefinition = () => {
-    const params = parseJSONObject(clientDef.parameters, "Parameters schema");
-    const response = parseJSONObject(clientDef.responseSchema, "Response schema");
     const ui = { kind: clientDef.kind || "approval" };
     if (clientDef.title.trim()) ui.title = clientDef.title.trim();
     if (clientDef.description.trim()) ui.description = clientDef.description.trim();
+    if (ui.kind === "present") {
+      // Generative UI: the backend supplies the built-in vocabulary schema.
+      return { definition: { ui }, errors: {} };
+    }
+    const params = parseJSONObject(clientDef.parameters, "Parameters schema");
+    const response = parseJSONObject(clientDef.responseSchema, "Response schema");
     if (response.value) ui.response_schema = response.value;
     return {
       definition: { parameters: params.value || { type: "object", properties: {} }, ui },
@@ -890,10 +894,15 @@ const ToolForm = () => {
                     label="Interaction"
                     value={clientDef.kind}
                     onChange={(e) => setClientDef((prev) => ({ ...prev, kind: e.target.value }))}
-                    helperText="Approval shows Approve / Reject; Form collects the response schema below"
+                    helperText={
+                      clientDef.kind === "present"
+                        ? "The model composes cards, facts, tables, charts and forms from the built-in component vocabulary; no user input is needed"
+                        : "Approval shows Approve / Reject; Form collects the response schema below"
+                    }
                   >
                     <MenuItem value="approval">Approval</MenuItem>
                     <MenuItem value="form">Form</MenuItem>
+                    <MenuItem value="present">Generative UI (present)</MenuItem>
                   </TextField>
                 </Grid>
                 <Grid item xs={12} md={8}>
@@ -917,6 +926,16 @@ const ToolForm = () => {
                     autoComplete="off"
                   />
                 </Grid>
+                {clientDef.kind === "present" && (
+                  <Grid item xs={12}>
+                    <Typography variant="body2" color="text.secondary" data-testid="present-schema-note">
+                      The parameters schema is built in (the generative UI component vocabulary) and kept in step with the chat
+                      renderer, so there is nothing to author here. Name the tool <code>present</code> unless you have a reason
+                      not to: that is the name the model expects from the tool description.
+                    </Typography>
+                  </Grid>
+                )}
+                {clientDef.kind !== "present" && (
                 <Grid item xs={12}>
                   <StyledTextField
                     fullWidth
@@ -932,6 +951,7 @@ const ToolForm = () => {
                     inputProps={{ "data-testid": "client-parameters" }}
                   />
                 </Grid>
+                )}
                 {clientDef.kind === "form" && (
                   <Grid item xs={12}>
                     <StyledTextField

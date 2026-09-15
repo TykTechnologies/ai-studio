@@ -17,6 +17,7 @@ Both share the same `ChatSession` (`chat_session/chat_session.go`), persistence 
 *   **Real-time Communication:** Stream LLM responses to the browser (per-turn streams in v2, SSE in v1).
 *   **Extensibility:** Allow dynamic addition/removal of **Tools** and **Datasources** via the UI (`ChatSidebar`) during an active session.
 *   **Human-in-the-loop:** Let the model ask the person in the chat for an approval or a form answer through **client tools** (`models.ToolTypeClient`).
+*   **Generative UI:** A client tool of kind `present` (`models.ClientToolKindPresent`) lets the model compose cards, facts, tables, charts, alerts, lists and forms from the `@assistant-ui/react-generative-ui` vocabulary. The tool's schema is embedded in the backend (`models/generative_ui_present_schema.json`, regenerated with `ui/admin-frontend/scripts/gen-present-schema.mjs`); the chat renders the tree (`chat-v2/parts/GenerativeUiCard.js`), resolves the call with `{}` once the arguments have arrived, and turns `$action` payloads from interactive elements into the next user message.
 *   **Persistence:** Store chat history (`c_messages`) and session metadata (`chat_history_records`) for later retrieval, continuation, and administrative review.
 *   **Integration:** Work with **User Management**, **LLM Configuration**, **Tool/Datasource Catalogues**, **Filtering**, **File Storage**, **Plugins** (tool renderers) and **Analytics/Logging**.
 

@@ -97,6 +97,16 @@ The definition is stored in the tool's spec field as JSON:
 
 Approval answers are sent as `{"approved": true|false, "comment": "..."}`; form answers are the form's data.
 
+### Generative UI (the `present` tool)
+
+The third interaction kind, **Generative UI (present)**, lets the model compose its own interface instead of answering in prose: dashboards, cards, key figures, tables, charts, alerts, lists, images, forms and buttons, assembled from a fixed component vocabulary (the [assistant-ui generative UI library](https://www.assistant-ui.com/docs/tools/generative-ui)). The chat draws the tree the model produces; no user input is needed, so the call resolves by itself and the model carries on.
+
+To enable it, create a Client tool named `present`, choose **Generative UI (present)** as the interaction, and attach it to a chat room. The parameters schema is built in: it is generated from the installed library (`ui/admin-frontend/scripts/gen-present-schema.mjs` writes `models/generative_ui_present_schema.json`) so the model and the renderer always share the same vocabulary. A system prompt such as "Use the present tool whenever a visual layout would be clearer than text" makes the model reach for it more readily.
+
+Interactive elements (`Button`, `Select`, `Input`, `DatePicker`, `Checkbox`, `RadioGroup`, `Form`, clickable `ListViewItem`) carry an `$action` the model chooses. When the user activates one, its payload is sent back to the model as the next user message (`Action: <type> <input> <payload>`), so the model can respond to the choice.
+
+Prompts to try: "Show me a dashboard of this quarter's sales: three headline numbers, a bar chart by month and a table by region", "Present the pros and cons as two cards side by side", or "Build me a short form to collect a shipping address, then confirm it back".
+
 ## Custom tool renderers from plugins
 
 A portal plugin can replace the default tool card for particular tools with its own web component by declaring the `chat.tool_renderer` slot in its manifest:

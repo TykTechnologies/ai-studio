@@ -132,6 +132,25 @@ describe("ToolForm client (human-in-the-loop) tools", () => {
     });
   });
 
+  it("creates a generative UI (present) tool without a hand-written schema", async () => {
+    renderForm();
+    await screen.findByRole("button", { name: "Add tool" });
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "present" } });
+    fireEvent.change(screen.getByLabelText(/^Description/), { target: { value: "Draw UI" } });
+    fireEvent.click(screen.getByLabelText("Client (human-in-the-loop)"));
+
+    fireEvent.mouseDown(screen.getByLabelText(/Interaction/));
+    fireEvent.click(await screen.findByRole("option", { name: "Generative UI (present)" }));
+
+    // The schema editor is replaced by a note: the vocabulary is built in.
+    expect(screen.queryByTestId("client-parameters")).not.toBeInTheDocument();
+    expect(screen.getByTestId("present-schema-note")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add tool" }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/tools", expect.anything()));
+    expect(decodeSpec(lastPostAttributes().oas_spec)).toEqual({ ui: { kind: "present" } });
+  });
+
   it("refuses an invalid parameters schema", async () => {
     renderForm();
     await screen.findByRole("button", { name: "Add tool" });
