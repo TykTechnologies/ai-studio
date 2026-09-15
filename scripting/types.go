@@ -1,6 +1,8 @@
 package scripting
 
 import (
+	"context"
+
 	"github.com/tmc/langchaingo/llms"
 )
 
@@ -17,6 +19,13 @@ type ScriptInput struct {
 	ChunkIndex    int                     `json:"chunk_index"`    // Current chunk number (for streaming)
 	CurrentBuffer string                  `json:"current_buffer"` // Accumulated response text (for streaming)
 	StatusCode    int                     `json:"status_code"`    // HTTP status code from LLM
+
+	// Ctx, when set, bounds the execution: the script is aborted when the
+	// context is cancelled, in addition to the FILTER_SCRIPT_TIMEOUT limit.
+	// Call sites pass the request or session context so a caller that has
+	// gone away does not leave a script running on its behalf. Never
+	// serialised; it is not part of the script-visible input.
+	Ctx context.Context `json:"-"`
 }
 
 // ComplianceEventOutput represents a compliance event reported by a filter script.

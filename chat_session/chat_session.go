@@ -489,6 +489,7 @@ func (cs *ChatSession) processUserMessage(msg *models.UserMessage) bool {
 				"chat_id":    int64(cs.chatRef.ID),
 			},
 			IsChat: true,
+			Ctx:    cs.ctx,
 		}
 
 		output, err := sr.RunScript(scriptInput, cs.service)
@@ -860,6 +861,7 @@ func (cs *ChatSession) scanFiles(refs []string) (string, bool) {
 						"file_ref":   refs[i],
 					},
 					IsChat: true,
+					Ctx:    cs.ctx,
 				}
 
 				output, err := sr.RunScript(scriptInput, cs.service)

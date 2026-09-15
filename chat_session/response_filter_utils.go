@@ -58,6 +58,7 @@ func ExecuteResponseFilters(
 		ChunkIndex:    chunkIndex,
 		CurrentBuffer: currentBuffer,
 		StatusCode:    200, // Chat responses don't have HTTP status codes
+		Ctx:           ctx,
 	}
 
 	// Execute response filters in chain

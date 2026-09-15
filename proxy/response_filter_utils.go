@@ -88,6 +88,7 @@ func ExecuteResponseFilters(
 		ChunkIndex:    chunkIndex,
 		CurrentBuffer: currentBuffer,
 		StatusCode:    statusCode,
+		Ctx:           r.Context(),
 	}
 
 	// Execute response filters in chain

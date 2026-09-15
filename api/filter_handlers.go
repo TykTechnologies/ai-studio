@@ -309,9 +309,12 @@ func (a *API) testFilter(c *gin.Context) {
 		return
 	}
 
-	// Execute script with timeout
+	// Execute script with timeout. The context is also handed to the script
+	// runner, so on timeout the Tengo VM is aborted rather than left running
+	// after this handler has answered.
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
+	scriptInput.Ctx = ctx
 
 	// Channel to receive result
 	resultChan := make(chan struct {

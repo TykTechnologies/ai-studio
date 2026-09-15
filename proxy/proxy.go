@@ -1873,6 +1873,7 @@ func (p *Proxy) runRequestFilters(llm *models.LLM, r *http.Request, bodyBytes []
 			"request_id": r.Header.Get("X-Request-ID"),
 		},
 		IsChat: false,
+		Ctx:    r.Context(),
 	}
 
 	// Run REQUEST filters in chain (exclude response filters)

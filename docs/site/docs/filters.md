@@ -605,6 +605,25 @@ output := {
 
 ---
 
+## Runtime Limits and Outbound Calls (Enterprise)
+
+Filter scripts run on the goroutine that is serving the request, so every script is bounded. Each limit is an environment variable with a safe default and takes effect on the next execution without a restart.
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `FILTER_SCRIPT_TIMEOUT` | `5s` | Wall time for one script execution. The script is aborted and the filter reports `script timed out`. Request-side filters then fail closed, response-side filters fail open, exactly as for any other script error. `0` disables the bound. A bare integer is read as seconds. |
+| `FILTER_SCRIPT_MAX_ALLOCS` | `10000000` | Objects one execution may allocate in the script VM. `0` disables the bound. |
+| `FILTER_SCRIPT_ALLOW_OS` | `false` | Exposes Tengo's `os` module (environment variables, file system, process execution) to scripts. Off by default: a filter has no reason to read the process environment, which holds the secrets master key. Set to `true` only for scripts written against the old behaviour. |
+| `FILTER_HTTP_TIMEOUT` | `10s` | End-to-end time for one `tyk.makeHTTPRequest` call. |
+| `FILTER_HTTP_MAX_RESPONSE_BYTES` | `1048576` | Largest response body `tyk.makeHTTPRequest` will return. A larger body is an error, never a truncation, so a script never parses half a document. |
+| `FILTER_LLM_TIMEOUT` | `30s` | Time for one `tyk.llm` call. |
+
+`tyk.makeHTTPRequest` follows the same outbound policy as LLM upstreams: only `http` and `https`, the `LLM_UPSTREAM_ALLOWED_HOSTS` allowlist when set, and internal-address blocking at dial time when `LLM_UPSTREAM_BLOCK_INTERNAL=true` (with `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` for in-cluster classifiers). Redirects are checked against the same policy.
+
+`tyk.llm` resolves the target LLM's credential the way the gateway does, so an LLM whose key is stored as a `$SECRET/...` or `$ENV/...` reference works from a script.
+
+Scripts are compiled once and cached; each execution runs on its own copy, so runs never share state. The script's `input` is passed to the cached program at run time. The script-scoped context is also tied to the request or chat session that triggered the filter, so a caller that disconnects does not leave a script running.
+
 ---
 
 ## Tool Response Filters
