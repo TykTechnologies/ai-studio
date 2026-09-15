@@ -70,15 +70,15 @@ type ChatSession struct {
 	streamFilterBlocked bool   // Indicates if streaming was blocked by a filter
 
 	// Lifecycle and v2 event support (see events.go).
-	outputMode  OutputMode
-	stopOnce    sync.Once
-	runMu       sync.Mutex                  // held by a v2 run handler for the whole turn
-	stateMu     sync.Mutex                  // guards activeRun, tools, datasources, files
-	activeRun   *runState                   // turn being processed by the session goroutine
-	subMu       sync.Mutex                  // guards subs
-	subs        map[string]*eventSubscriber // run id -> subscriber
-	fanoutStarted bool                      // the events fan-out goroutine is running (see startEventFanout)
-	clientState *clientToolState            // parked client tool calls (see client_tools.go)
+	outputMode    OutputMode
+	stopOnce      sync.Once
+	runMu         sync.Mutex                  // held by a v2 run handler for the whole turn
+	stateMu       sync.Mutex                  // guards activeRun, tools, datasources, files
+	activeRun     *runState                   // turn being processed by the session goroutine
+	subMu         sync.Mutex                  // guards subs
+	subs          map[string]*eventSubscriber // run id -> subscriber
+	fanoutStarted bool                        // the events fan-out goroutine is running (see startEventFanout)
+	clientState   *clientToolState            // parked client tool calls (see client_tools.go)
 }
 
 type ChatResponse struct {
