@@ -207,10 +207,16 @@ func newNonce() string {
 // the response is written, so it is polled rather than read once.
 func waitForLoggedRequest(t *testing.T, h *harness, nonce string) mgwdb.AnalyticsEvent {
 	t.Helper()
+	return waitForLoggedRequestOn(t, h, h.filteredBedrock.ID, nonce)
+}
+
+// waitForLoggedRequestOn is waitForLoggedRequest for any route.
+func waitForLoggedRequestOn(t *testing.T, h *harness, llmID uint, nonce string) mgwdb.AnalyticsEvent {
+	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		var events []mgwdb.AnalyticsEvent
-		err := h.db.Where("llm_id = ? AND request_body LIKE ?", h.filteredBedrock.ID, "%"+nonce+"%").
+		err := h.db.Where("llm_id = ? AND request_body LIKE ?", llmID, "%"+nonce+"%").
 			Order("id desc").Limit(1).Find(&events).Error
 		// The gateway writes the event on another connection of the same
 		// shared-cache SQLite; a lock while it does so is a reason to poll
@@ -222,7 +228,7 @@ func waitForLoggedRequest(t *testing.T, h *harness, nonce string) mgwdb.Analytic
 			return events[0]
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no analytics event logged for request %s on llm %d", nonce, h.filteredBedrock.ID)
+			t.Fatalf("no analytics event logged for request %s on llm %d", nonce, llmID)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

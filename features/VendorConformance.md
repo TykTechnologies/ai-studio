@@ -271,6 +271,8 @@ make test-vendors SCENARIOS=tools,tools_streaming   # subset
 make test-vendors-update-golden                     # refresh snapshots
 make test-vendors-drift                             # pre-flight + drift only, no assertions
 make test-vendors-filters                           # request filters on the Bedrock direct paths (see 7.10)
+make test-guardrails                                # guardrail providers, direct and through the data plane (see 9)
+make test-guardrails-preflight                      # one benign probe per configured guardrail provider
 ```
 
 All map to `go test -tags vendorlive -count=1 ./tests/vendorconformance/...`
@@ -495,6 +497,62 @@ The bridge cases need `VT_BEDROCK_ANTHROPIC_MODEL`; the bridge speaks Converse,
 so any Bedrock model works there, not only Claude. The harness stores request
 bodies on analytics events (`MaxBodySize` in the gateway config) so the test
 can read them back; production defaults to 4 KB.
+
+## 9. Guardrail provider conformance
+
+The same idea applied to the guardrail providers (see `features/Filters.md`
+§3b): the unit tests in `enterprise/guardrails/providers` prove *our* side of
+each vendor contract against `httptest` fakes built from the vendors'
+documentation; this suite proves the *vendor's* side, with real credentials.
+
+**Config:** `pkg/testinfra/vendorconformance/guardrails.go` loads the
+`VT_GUARD_*` section of `test-secrets/vendors.env` into a
+`GuardrailsConfig`. The built-in library is always configured; each remote
+provider (`lakera`, `azure_cs`, `azure_pii`, `presidio`, `bedrock`, `http`)
+is skipped with a reason when its required variables are blank.
+`VENDOR_TESTS_GUARDRAILS` filters the set. Bedrock Guardrails falls back to the
+`VT_BEDROCK_*` credentials and region. Every provider config is rendered
+through the real `guardrails.Normalize`, so the suite cannot seed a filter the
+admin API would reject (pinned by a credential-free unit test).
+
+**Probes** (`Probe*` constants): a benign sentence, an explicit instruction
+override, a sentence with an email and a phone number, an AWS access key id.
+They are unambiguous on purpose: a miss is a real miss.
+
+**Layer 1, direct** (`tests/guardrailconformance/`, root module, tags
+`vendorlive && enterprise`): builds each provider through the registry and
+calls `Classify` with each probe. Assertions follow the provider's `Expect`
+map: injection for Lakera, Azure Content Safety, Bedrock (`EXPECT_INJECTION`)
+and an HTTP classifier with a prompt-attack detector; PII, with a rewrite that
+drops the email, for Azure PII, Presidio, Lakera and Bedrock (`EXPECT_PII`);
+the credential for the built-in library. Scenarios outside the map still run
+and are recorded, not asserted, because the provider's own policy decides
+(a Bedrock guardrail without a prompt-attack filter). Two extra checks:
+`moderation` proves Azure `text:analyze` returns all four categories (at
+threshold 0, on benign text); `auth_error` proves every key-bearing provider
+rejects a bad credential quickly and without echoing it, so a misconfigured
+filter can never pass everything silently. `TestGuardrailPreflight` is the
+one-probe credential check. Every verdict lands in
+`test-results/vendor-conformance/guardrails/<provider>-<scenario>.json` for
+review.
+
+**Layer 2, data plane** (`microgateway/tests/vendorconformance/guardrails_live_test.go`):
+the harness seeds a second route on the first configured vendor,
+`vt-<vendor>-guarded`, carrying edge `Filter` rows with `kind: guardrail` and
+the normalised config the hub would have pushed: built-in secrets (block) and
+PII (redact) first, then each remote provider expected to flag an injection,
+restricted to its injection detectors, then the built-in injection heuristics
+last. `TestGuardrailFilters` drives the `/ai/` shim: benign passes, the
+credential is a 400 before any vendor call (and before a stream opens), the
+email never reaches the model or the proxy log, and the injection is a 400
+whose message names the provider that blocked. With a remote provider
+configured, a block by the built-in heuristics is reported as a failure of
+every remote provider, because the chain runs them first.
+
+**Cost:** each direct probe is one provider call; the data-plane cases are
+four one-sentence completions on one vendor.
+
+---
 
 ## 8. Related
 

@@ -134,6 +134,10 @@ Named-entity PII with server-side redaction. Detectors are Azure PII categories 
 
 `ApplyGuardrail` against a guardrail defined in Bedrock. It works with any model, not only Bedrock-hosted ones. Detectors select which assessments count: `content` (including prompt attacks), `topic`, `word`, `sensitive_information` (PII and regexes; anonymised entities come back as masked text, so `redact` is available), `grounding`. Connection: `guardrail_id`, `guardrail_version` (`DRAFT` or a number), `region`, and optionally `access_key_id` and `secret_access_key` (otherwise the gateway's ambient AWS credentials are used).
 
+## Verifying a provider
+
+The filter form's **Test** panel runs a guardrail against sample input with a real provider call. For a repeatable check of every provider with real credentials, the repository ships a credential-gated conformance suite: fill in the `VT_GUARD_*` section of `test-secrets/vendors.env` and run `make test-guardrails` (see `features/VendorConformance.md`, section 9). It probes each provider directly with benign, injection, PII and credential texts, then attaches them as filters to a real LLM route and drives the gateway.
+
 ## Edge gateways
 
 Guardrail filters reach edges in the configuration snapshot like script filters do, with connection references resolved by the hub, since edges have no secret store. The same filter chain runs at the edge, so a guardrail behaves identically on both planes and its compliance events reach AI Studio on the analytics pulse.
